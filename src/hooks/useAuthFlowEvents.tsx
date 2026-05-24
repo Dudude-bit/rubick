@@ -176,7 +176,14 @@ export function useAuthFlowEvents() {
               const { id: toastId } = toastRef.current({
                 title: "Authentication started",
                 description: `Complete authentication in your browser for ${payload.context}. Click Cancel if you closed the browser tab.`,
-                duration: 180000, // 3 minutes - match backend timeout
+                // Auto-dismiss after 10 minutes — long enough for a
+                // realistic browser-auth flow (password manager,
+                // SSO redirect, MFA) but short enough that an
+                // abandoned attempt doesn't accumulate. The toast
+                // is also dismissed proactively on auth-flow-
+                // completed / -cancelled events (see closeWindow),
+                // so this is only a worst-case fallback.
+                duration: 10 * 60 * 1000,
                 action: React.createElement(
                   ToastAction,
                   {

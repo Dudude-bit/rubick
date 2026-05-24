@@ -20,20 +20,30 @@ use super::cred::{
     ExecTerminalParams,
 };
 
-/// How long the auth flow waits for the spawned exec plugin before
-/// giving up and killing the terminal session.
+/// Hard cap on how long the auth flow waits for the spawned exec
+/// plugin before giving up and killing the terminal session.
 ///
-/// Deliberately LONGER than kubelogin / kubectl-oidc_login's own
-/// `--authentication-timeout-sec` default of 180 s. If our timeout
-/// fired first (it used to be exactly 180 s — a dead heat), we'd kill
-/// the plugin a beat before it printed its own diagnostic line
-/// ("authentication error: ... context deadline exceeded") — leaving
-/// the user with an empty terminal and a useless "no JSON" error
-/// instead of the plugin's actual reason. Outlasting the plugin's
-/// timeout lets that line land in our captured stdout and surface in
-/// the error message. The extra 30 s also covers the plugin's own
-/// post-timeout HTTP-server shutdown before it exits.
-const AUTH_FLOW_TIMEOUT_SECS: u64 = 210;
+/// **Sized to outlast any reasonable plugin's own timeout**, not to
+/// race it. The previous design (210 s) tried to stay 30 s ahead of
+/// kubelogin / kubectl-oidc_login's then-current default of
+/// `--authentication-timeout-sec=180` — but pinning the relationship
+/// to a number that lives in someone else's source tree was fragile:
+/// the moment kubelogin (or whatever exec plugin a user has) bumps
+/// its default, we silently start killing it first again, swallowing
+/// its real error and leaving the user with the same useless "no
+/// JSON" toast that 210 s was meant to fix.
+///
+/// 30 minutes covers:
+///   * kubelogin 180 s default and any future bump (3-5x headroom)
+///   * cloud-CLI plugins (gke-gcloud-auth-plugin / aws-iam-authenticator)
+///     that occasionally take minutes on first-time MFA prompts
+///   * a real human walking away to fetch a YubiKey
+///
+/// The user is never trapped: the auth modal has a Cancel button
+/// (`cancel_auth_session` Tauri command → `cancel_rx` branch of the
+/// select! below), so the only thing this timeout protects against
+/// is a genuinely hung plugin holding system resources forever.
+const AUTH_FLOW_TIMEOUT_SECS: u64 = 30 * 60;
 
 pub(super) async fn run_exec_auth(
     state: &AppState,
@@ -513,19 +523,29 @@ mod preview_tests {
     use super::{preview_bytes, AUTH_FLOW_TIMEOUT_SECS};
 
     #[test]
-    fn auth_flow_timeout_outlasts_kubelogin_default() {
-        // kubelogin / kubectl-oidc_login default
-        // --authentication-timeout-sec is 180. Our loop timeout must
-        // be strictly greater, otherwise we race the plugin: killing
-        // it before it prints its own "context deadline exceeded"
-        // diagnostic leaves the user with an empty buffer and a
-        // useless "no JSON" error instead of the real reason.
-        const KUBELOGIN_DEFAULT_TIMEOUT_SECS: u64 = 180;
+    fn auth_flow_timeout_is_large_enough_to_outlast_any_reasonable_plugin() {
+        // We deliberately do NOT pin our timeout against a specific
+        // plugin's current default — that's how we got into trouble
+        // the first time (210 s vs kubelogin's 180 s would silently
+        // break the moment kubelogin bumped). Instead this asserts
+        // the invariant we actually care about: the timeout is large
+        // enough that a plugin with a *reasonable* internal timeout
+        // (kubelogin's 180 s, AWS IAM's ~10 min, anything in that
+        // ballpark) will always get to print its own diagnostic and
+        // exit before our killer fires.
+        //
+        // 15 minutes is the conservative lower bound — any plugin
+        // with a default longer than that is doing something exotic,
+        // and a user who hits this in practice should bump the
+        // constant intentionally rather than hide the regression
+        // behind a passing test.
+        const MIN_REASONABLE_TIMEOUT_SECS: u64 = 15 * 60;
         assert!(
-            AUTH_FLOW_TIMEOUT_SECS > KUBELOGIN_DEFAULT_TIMEOUT_SECS,
-            "auth flow timeout ({AUTH_FLOW_TIMEOUT_SECS}s) must outlast \
-             kubelogin's default ({KUBELOGIN_DEFAULT_TIMEOUT_SECS}s) so the \
-             plugin's own error message gets captured"
+            AUTH_FLOW_TIMEOUT_SECS >= MIN_REASONABLE_TIMEOUT_SECS,
+            "auth flow timeout is {AUTH_FLOW_TIMEOUT_SECS}s — too short \
+             to safely outlast common exec-plugin internal timeouts. \
+             Bump AUTH_FLOW_TIMEOUT_SECS to at least \
+             {MIN_REASONABLE_TIMEOUT_SECS}s (see its doc-comment for why)."
         );
     }
 
