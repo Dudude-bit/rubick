@@ -20,6 +20,52 @@ use super::cred::{
     ExecTerminalParams,
 };
 
+/// Timeout we inject into kubelogin-family exec plugins via
+/// `--authentication-timeout-sec` when the user hasn't set their own.
+///
+/// We pair this with [`AUTH_FLOW_TIMEOUT_SECS`] outer cap, but
+/// injecting an explicit value lets the plugin print its own clean
+/// "context deadline exceeded" error on a predictable schedule (3 min)
+/// rather than hanging until our 30-min cap eventually kills it.
+///
+/// 180 s matches kubelogin's own historical default — long enough for
+/// a real browser-auth flow (SSO, MFA), short enough to surface a
+/// stuck attempt while the user is still looking at the screen.
+const KUBELOGIN_INJECTED_AUTH_TIMEOUT_SECS: u64 = 180;
+
+/// Decide whether to add `--authentication-timeout-sec=<N>` to the
+/// args we hand to the exec plugin.
+///
+/// True only when both:
+///   * the command (by basename) is kubelogin or kubectl-oidc_login —
+///     including `kubectl oidc-login …` where kubectl invokes the
+///     plugin as a subcommand
+///   * the user hasn't already set `--authentication-timeout-sec`
+///     themselves (either form: `--flag=N` or `--flag N`)
+///
+/// For any other plugin (gke-gcloud-auth-plugin, aws-iam-authenticator,
+/// corporate exec plugins, …) we leave args alone — the flag would be
+/// rejected as unknown. Those plugins fall back to the 30-min outer
+/// cap, which is the right behaviour for a generic case.
+fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
+    let basename = std::path::Path::new(command)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(command);
+
+    let is_kubelogin_family = matches!(basename, "kubelogin" | "kubectl-oidc_login")
+        || (basename == "kubectl" && args.first().map(|a| a.as_str()) == Some("oidc-login"));
+
+    if !is_kubelogin_family {
+        return false;
+    }
+
+    let user_already_set = args.iter().any(|a| {
+        a == "--authentication-timeout-sec" || a.starts_with("--authentication-timeout-sec=")
+    });
+    !user_already_set
+}
+
 /// Hard cap on how long the auth flow waits for the spawned exec
 /// plugin before giving up and killing the terminal session.
 ///
@@ -300,7 +346,20 @@ async fn build_exec_terminal_params(
         .unwrap_or_else(|| command.clone());
 
     // Collect args
-    let args = exec.args.clone().unwrap_or_default();
+    let mut args = exec.args.clone().unwrap_or_default();
+
+    // For kubelogin family: inject a deterministic
+    // --authentication-timeout-sec so the plugin's own "context
+    // deadline exceeded" diagnostic fires on a predictable schedule
+    // (3 min) instead of hanging until our 30-min outer cap. Pure
+    // additive — never overrides a flag the user set in kubeconfig,
+    // never touches non-kubelogin plugins. See
+    // [`should_inject_kubelogin_timeout`] for the exact rules.
+    if should_inject_kubelogin_timeout(&resolved_command, &args) {
+        args.push(format!(
+            "--authentication-timeout-sec={KUBELOGIN_INJECTED_AUTH_TIMEOUT_SECS}"
+        ));
+    }
 
     // Collect env
     let mut env = HashMap::new();
@@ -516,6 +575,111 @@ fn cleanup_auth_artifacts(script_path: &PathBuf, url_file: &PathBuf, bin_dir: &P
     let _ = std::fs::remove_file(script_path);
     let _ = std::fs::remove_file(url_file);
     let _ = std::fs::remove_dir_all(bin_dir);
+}
+
+#[cfg(test)]
+mod inject_tests {
+    use super::should_inject_kubelogin_timeout;
+
+    fn args(strs: &[&str]) -> Vec<String> {
+        strs.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn injects_for_standalone_kubelogin() {
+        assert!(should_inject_kubelogin_timeout(
+            "kubelogin",
+            &args(&["get-token", "--oidc-issuer-url=https://x"]),
+        ));
+    }
+
+    #[test]
+    fn injects_for_kubectl_oidc_login_plugin_binary() {
+        // When the kubeconfig lists the plugin binary directly
+        // (`command: kubectl-oidc_login`).
+        assert!(should_inject_kubelogin_timeout(
+            "kubectl-oidc_login",
+            &args(&["get-token", "--oidc-issuer-url=https://x"]),
+        ));
+    }
+
+    #[test]
+    fn injects_for_kubectl_oidc_login_subcommand_form() {
+        // Most kubeconfigs in the wild use `command: kubectl` +
+        // `args: ["oidc-login", "get-token", …]`. kubectl just
+        // re-execs the plugin, but our flag injection has to land
+        // on the args list before kubectl hands it off.
+        assert!(should_inject_kubelogin_timeout(
+            "kubectl",
+            &args(&["oidc-login", "get-token", "--oidc-issuer-url=https://x",]),
+        ));
+    }
+
+    #[test]
+    fn detects_by_basename_when_command_is_full_path() {
+        assert!(should_inject_kubelogin_timeout(
+            "/opt/homebrew/bin/kubelogin",
+            &args(&["get-token"]),
+        ));
+        assert!(should_inject_kubelogin_timeout(
+            "/usr/local/bin/kubectl-oidc_login",
+            &args(&["get-token"]),
+        ));
+    }
+
+    #[test]
+    fn skips_when_user_set_explicit_timeout_with_equals() {
+        assert!(!should_inject_kubelogin_timeout(
+            "kubelogin",
+            &args(&["get-token", "--authentication-timeout-sec=300"]),
+        ));
+    }
+
+    #[test]
+    fn skips_when_user_set_explicit_timeout_with_space() {
+        // The `--flag VALUE` form is just as legal as `--flag=VALUE`
+        // and shows up in real kubeconfigs.
+        assert!(!should_inject_kubelogin_timeout(
+            "kubelogin",
+            &args(&["get-token", "--authentication-timeout-sec", "300"]),
+        ));
+    }
+
+    #[test]
+    fn skips_unrelated_exec_plugins() {
+        // gke / aws / oci / any corporate plugin won't recognise
+        // --authentication-timeout-sec and would crash on it. The
+        // outer 30-min cap is the right fallback for these.
+        assert!(!should_inject_kubelogin_timeout(
+            "gke-gcloud-auth-plugin",
+            &args(&[]),
+        ));
+        assert!(!should_inject_kubelogin_timeout(
+            "aws-iam-authenticator",
+            &args(&["token", "-i", "my-cluster"]),
+        ));
+        assert!(!should_inject_kubelogin_timeout(
+            "oci",
+            &args(&["ce", "cluster", "generate-token"]),
+        ));
+    }
+
+    #[test]
+    fn skips_kubectl_with_non_oidc_subcommand() {
+        // `command: kubectl` + something other than `oidc-login` is
+        // not a kubelogin invocation. Don't poison those args.
+        assert!(!should_inject_kubelogin_timeout(
+            "kubectl",
+            &args(&["get", "pods"]),
+        ));
+    }
+
+    #[test]
+    fn skips_when_args_are_empty_for_bare_kubectl() {
+        // Edge case — `command: kubectl` with no args at all isn't
+        // a plugin call.
+        assert!(!should_inject_kubelogin_timeout("kubectl", &args(&[])));
+    }
 }
 
 #[cfg(test)]
