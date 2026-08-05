@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { MetricBadge } from "@/components/ui/metric-card";
+import { MetricValue } from "@/components/ui/metric-value";
 
 // Shared types
 
@@ -175,7 +175,7 @@ export function TopPodsCard({
                       </div>
                       <p className="text-xs text-fg-mut">{item.namespace}</p>
                     </div>
-                    <MetricBadge
+                    <MetricValue
                       used={item.value}
                       type={type}
                       className="shrink-0"

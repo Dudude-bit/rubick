@@ -1,10 +1,7 @@
-import * as React from "react";
-import { hashString, cn } from "@/lib/utils";
-import { Badge } from "./badge";
-import { useThemeStore } from "@/stores/themeStore";
+import { cn } from "@/lib/utils";
 
 interface NodeBadgeProps {
-  /** The node name to display and generate color from */
+  /** The node name to display */
   nodeName: string;
   className?: string;
   /** Max width before truncation (default: max-w-[200px]) */
@@ -12,44 +9,27 @@ interface NodeBadgeProps {
 }
 
 /**
- * Badge component for displaying Kubernetes node names with consistent coloring.
- * Generates a stable color based on the node name hash, making it easy to
- * visually identify pods running on the same node.
+ * A node name in a table cell.
+ *
+ * Was a hue-hashed pill. The pill made a machine name look like a status,
+ * and a table of them turned into confetti; the node column is context,
+ * not a signal, so it now reads as quiet monospace text like the mock.
  */
 export function NodeBadge({
   nodeName,
   className,
   maxWidth = "max-w-[200px]",
 }: NodeBadgeProps) {
-  const { theme } = useThemeStore();
-  const hue = React.useMemo(() => hashString(nodeName) % 360, [nodeName]);
-
-  const isDark = React.useMemo(() => {
-    if (theme === "system") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return theme === "dark";
-  }, [theme]);
-
-  const style: React.CSSProperties = isDark
-    ? {
-        backgroundColor: `hsl(${hue} 50% 25%)`,
-        color: `hsl(${hue} 60% 75%)`,
-        borderColor: "transparent",
-      }
-    : {
-        backgroundColor: `hsl(${hue} 60% 90%)`,
-        color: `hsl(${hue} 70% 30%)`,
-        borderColor: "transparent",
-      };
-
   return (
-    <Badge
-      className={cn("truncate", maxWidth, className)}
-      style={style}
+    <span
+      className={cn(
+        "inline-block truncate align-bottom font-mono text-fg-mut",
+        maxWidth,
+        className
+      )}
       title={nodeName}
     >
       {nodeName}
-    </Badge>
+    </span>
   );
 }

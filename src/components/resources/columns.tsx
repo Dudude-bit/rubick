@@ -9,14 +9,19 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { MetricBadge } from "@/components/ui/metric-card";
+import { MetricValue } from "@/components/ui/metric-value";
 import { Eye, Trash2 } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+
+/** Resource names are identifiers — monospace so the random suffixes that
+ *  distinguish two pods of the same deployment line up column-wise. */
+const NAME_CLASS = "font-mono text-info";
 
 // Base resource interface for column constraints
 interface BaseResource {
@@ -65,15 +70,13 @@ export function createNameColumn<T extends BaseResource>(
     header: "Name",
     cell: ({ row }) =>
       options?.disableLink ? (
-        <span className={options?.className ?? "font-medium text-primary"}>
+        <span className={options?.className ?? NAME_CLASS}>
           {row.original.name}
         </span>
       ) : (
         <Link
           to={`${linkPrefix}/${row.original.namespace}/${row.original.name}`}
-          className={
-            options?.className ?? "font-medium text-primary hover:underline"
-          }
+          className={cn(options?.className ?? NAME_CLASS, "hover:underline")}
         >
           {row.original.name}
         </Link>
@@ -90,9 +93,7 @@ export function createSimpleNameColumn<
   return {
     accessorKey: "name",
     header: "Name",
-    cell: ({ row }) => (
-      <span className="font-medium text-primary">{row.original.name}</span>
-    ),
+    cell: ({ row }) => <span className={NAME_CLASS}>{row.original.name}</span>,
   };
 }
 
@@ -105,6 +106,9 @@ export function createNamespaceColumn<
   return {
     accessorKey: "namespace",
     header: "Namespace",
+    cell: ({ row }) => (
+      <span className="font-mono text-fg-mut">{row.original.namespace}</span>
+    ),
   };
 }
 
@@ -116,7 +120,11 @@ export function createAgeColumn<T extends WithCreatedAt>(): ColumnDef<T> {
   return {
     id: "age",
     header: "Age",
-    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
+    cell: ({ row }) => (
+      <span className="text-fg-fnt">
+        <RealtimeAge timestamp={row.original.createdAt} />
+      </span>
+    ),
   };
 }
 
@@ -131,13 +139,17 @@ export function createTimeAgoColumn<T>(
   return {
     id: header.toLowerCase().replace(/\s+/g, "-"),
     header,
-    cell: ({ row }) => <RealtimeAge timestamp={accessor(row.original)} />,
+    cell: ({ row }) => (
+      <span className="text-fg-fnt">
+        <RealtimeAge timestamp={accessor(row.original)} />
+      </span>
+    ),
   };
 }
 
 /**
- * Creates a CPU usage column with MetricBadge component
- * Uses smart percentage: limit > request > no percentage
+ * Creates a CPU usage column: the number with a dimmed unit, plus an
+ * inline bar when the container declares a limit.
  */
 export function createCpuColumn<
   T extends WithCpuUsage & Partial<WithCpuLimits>,
@@ -154,15 +166,15 @@ export function createCpuColumn<
         ? parseCPU(row.original.cpuLimits)
         : null;
       return (
-        <MetricBadge used={used} request={request} limit={limit} type="cpu" />
+        <MetricValue used={used} request={request} limit={limit} type="cpu" />
       );
     },
   };
 }
 
 /**
- * Creates a Memory usage column with MetricBadge component
- * Uses smart percentage: limit > request > no percentage
+ * Creates a Memory usage column: the number with a dimmed unit, plus an
+ * inline bar when the container declares a limit.
  */
 export function createMemoryColumn<
   T extends WithMemoryUsage & Partial<WithMemoryLimits>,
@@ -179,7 +191,7 @@ export function createMemoryColumn<
         ? parseMemory(row.original.memoryLimits)
         : null;
       return (
-        <MetricBadge
+        <MetricValue
           used={used}
           request={request}
           limit={limit}
@@ -222,7 +234,9 @@ export function createReplicasColumn<
       const { ready, desired } = row.original.replicas;
       const isHealthy = ready === desired;
       return (
-        <span className={isHealthy ? "text-green-500" : "text-yellow-500"}>
+        <span
+          className={cn("font-mono", isHealthy ? "text-fg-mid" : "text-warn")}
+        >
           {ready}/{desired}
         </span>
       );
@@ -299,7 +313,9 @@ export function createTypeBadgeColumn<T extends { type?: string }>(options?: {
   return {
     id: "type",
     header: options?.header ?? "Type",
-    cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge>,
+    cell: ({ row }) => (
+      <span className="text-fg-mid">{row.original.type ?? "-"}</span>
+    ),
   };
 }
 

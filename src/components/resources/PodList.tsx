@@ -58,14 +58,22 @@ export function PodList() {
       {
         id: "ready",
         header: "Ready",
-        cell: ({ row }) => formatReady(row.original.containers),
+        cell: ({ row }) => (
+          <span className="font-mono text-fg-mid">
+            {formatReady(row.original.containers)}
+          </span>
+        ),
       },
       {
         id: "restarts",
         header: "Restarts",
         cell: ({ row }) => (
           <span
-            className={row.original.restartCount > 5 ? "text-yellow-500" : ""}
+            className={
+              row.original.restartCount > 5
+                ? "font-mono text-warn"
+                : "font-mono text-fg-mut"
+            }
           >
             {row.original.restartCount}
           </span>
@@ -78,13 +86,18 @@ export function PodList() {
           row.original.nodeName ? (
             <NodeBadge nodeName={row.original.nodeName} />
           ) : (
-            <span className="text-muted-foreground">-</span>
+            <span className="text-fg-fnt">-</span>
           ),
       },
       {
         id: "ip",
         header: "IP",
-        cell: ({ row }) => row.original.podIp || "-",
+        cell: ({ row }) =>
+          row.original.podIp ? (
+            <span className="font-mono text-fg-mut">{row.original.podIp}</span>
+          ) : (
+            <span className="text-fg-fnt">-</span>
+          ),
       },
       createAgeColumn<PodWithMetrics>(),
     ],

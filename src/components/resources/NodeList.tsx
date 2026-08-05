@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { MetricBadge } from "@/components/ui/metric-card";
+import { MetricValue } from "@/components/ui/metric-value";
 import { useCallback, useMemo, useState } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -185,7 +185,7 @@ export function NodeList() {
             ? row.original.capacity.cpu
             : null;
           return (
-            <MetricBadge
+            <MetricValue
               used={metrics?.cpuMillicores ?? null}
               limit={capacity ? parseCPU(capacity) : null}
               type="cpu"
@@ -202,7 +202,7 @@ export function NodeList() {
             ? row.original.capacity.memory
             : null;
           return (
-            <MetricBadge
+            <MetricValue
               used={metrics?.memoryBytes ?? null}
               limit={capacity ? parseMemory(capacity) : null}
               type="memory"
