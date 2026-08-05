@@ -1,13 +1,14 @@
-// src/components/resources/ImagePullSecrets.tsx
 import { Section, SectionHeader } from "@/components/ui/section";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { ResourceType } from "@/lib/resource-registry";
+import { ResourceLink } from "./detail-blocks";
+
+/**
+ * The Secrets a pod pulls its images with.
+ *
+ * One name per row, on the canvas. The previous version drew a bordered chip
+ * per secret and linked each to `/configuration/secrets/...`, which is not a
+ * route — every chip was a dead end.
+ */
 
 interface ImagePullSecretsProps {
   secrets: string[];
@@ -18,52 +19,31 @@ export function ImagePullSecrets({
   secrets,
   namespace,
 }: ImagePullSecretsProps) {
-  const [isExpanded, setIsExpanded] = useState(secrets.length > 0);
-
   return (
-    <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
-      <Section>
-        <SectionHeader
-          title="Image Pull Secrets"
-          count={secrets.length}
-          actions={
-            <CollapsibleTrigger
-              aria-label={isExpanded ? "Collapse" : "Expand"}
-              className="text-fg-mut hover:text-fg"
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </CollapsibleTrigger>
-          }
-        />
-        <CollapsibleContent>
-          {secrets.length === 0 ? (
-            <p className="text-sm text-fg-mut">
-              No image pull secrets configured
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {secrets.map((secretName) => (
-                <Link
-                  key={secretName}
-                  to={
-                    namespace
-                      ? `/configuration/secrets/${namespace}/${secretName}`
-                      : "#"
-                  }
-                  className="flex items-center gap-2 text-sm border border-hair rounded px-3 py-1.5 hover:bg-hover transition-colors"
-                >
-                  <Lock className="h-3 w-3 text-warn" />
-                  <span className="font-mono text-xs">{secretName}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CollapsibleContent>
-      </Section>
-    </Collapsible>
+    <Section>
+      <SectionHeader title="Image pull secrets" count={secrets.length} />
+      {secrets.length === 0 ? (
+        <p className="py-1 text-xs text-fg-fnt">None configured</p>
+      ) : (
+        secrets.map((name) => (
+          <div
+            key={name}
+            className="border-b border-hair py-1 text-xs last:border-b-0"
+          >
+            {/* A Secret detail page is namespaced; without a namespace there
+             *  is nowhere to link to, so the name stands on its own. */}
+            {namespace ? (
+              <ResourceLink
+                kind={ResourceType.Secret}
+                name={name}
+                namespace={namespace}
+              />
+            ) : (
+              <span className="font-mono text-fg">{name}</span>
+            )}
+          </div>
+        ))
+      )}
+    </Section>
   );
 }
