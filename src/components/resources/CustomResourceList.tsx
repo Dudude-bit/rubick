@@ -2,12 +2,13 @@ import { useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useClusterStore } from "@/stores/clusterStore";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { statusRole } from "@/lib/status-role";
 import { usePlugin } from "@/lib/crd-plugins";
 import { getKindSpecificColumns } from "@/lib/crd-plugins/plugins";
 import { commands } from "@/lib/commands";
@@ -97,7 +98,7 @@ export function CustomResourceList({
       cell: ({ row }) => (
         <Link
           to={getDetailPath(row.original)}
-          className="font-medium text-primary hover:underline"
+          className="font-mono text-info hover:underline"
         >
           {row.original.name}
         </Link>
@@ -127,11 +128,10 @@ export function CustomResourceList({
             }
             // Default formatting with status config from plugin
             if (plugin?.status && typeof value === "string") {
-              const variant = plugin.status.getVariant(value);
-              return <Badge variant={variant}>{value}</Badge>;
+              return <StatusBadge status={value} />;
             }
             if (value === null || value === undefined) {
-              return <span className="text-muted-foreground">-</span>;
+              return <span className="text-fg-fnt">—</span>;
             }
             return String(value);
           },
@@ -277,7 +277,7 @@ function formatColumnValue(
   columnType: string
 ): React.ReactNode {
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground">-</span>;
+    return <span className="text-fg-fnt">—</span>;
   }
 
   switch (columnType) {
@@ -296,40 +296,26 @@ function formatColumnValue(
       );
 
     case "boolean":
-      return (
-        <Badge variant={value ? "default" : "secondary"}>{String(value)}</Badge>
-      );
+      // A CRD's booleans are settings, not lifecycle — `true` gets no pill.
+      return <span className="font-mono text-fg-mid">{String(value)}</span>;
 
     case "string":
     default:
-      // Check if it looks like a status
-      if (typeof value === "string") {
-        const lowerValue = value.toLowerCase();
-        if (
-          lowerValue === "true" ||
-          lowerValue === "ready" ||
-          lowerValue === "running" ||
-          lowerValue === "active" ||
-          lowerValue === "healthy"
-        ) {
-          return <Badge variant="default">{value}</Badge>;
-        }
-        if (
-          lowerValue === "false" ||
-          lowerValue === "notready" ||
-          lowerValue === "failed" ||
-          lowerValue === "error"
-        ) {
-          return <Badge variant="destructive">{value}</Badge>;
-        }
-        if (
-          lowerValue === "pending" ||
-          lowerValue === "progressing" ||
-          lowerValue === "unknown"
-        ) {
-          return <Badge variant="secondary">{value}</Badge>;
-        }
+      // A printer column whose value names a state the app already knows how
+      // to colour is the one case that earns a badge. The vocabulary lives in
+      // `statusRole`, so this no longer keeps a third copy of it.
+      if (typeof value === "string" && isKnownStatus(value)) {
+        return <StatusBadge status={value} />;
       }
-      return <span className="truncate max-w-[200px]">{String(value)}</span>;
+      return (
+        <span className="max-w-[200px] truncate text-fg-mid">
+          {String(value)}
+        </span>
+      );
   }
+}
+
+/** Only render a badge when the string is a state, not free text. */
+function isKnownStatus(value: string): boolean {
+  return statusRole(value) !== "neutral" || value.toLowerCase() === "unknown";
 }

@@ -6,10 +6,14 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Link } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { MetricValue } from "@/components/ui/metric-value";
+import { MetricValue, UnitValue } from "@/components/ui/metric-value";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Eye, Trash2 } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -202,6 +206,63 @@ export function createMemoryColumn<
   };
 }
 
+/** Kubernetes prints the short form; the long one is what people mean. */
+const ACCESS_MODE_NAME: Record<string, string> = {
+  RWO: "ReadWriteOnce",
+  ROX: "ReadOnlyMany",
+  RWX: "ReadWriteMany",
+  RWOP: "ReadWriteOncePod",
+};
+
+/**
+ * Access modes, as text.
+ *
+ * A mode is a fixed property of the volume, not a state it is in, so it gets
+ * no pill — the abbreviations are already the shortest form there is.
+ */
+export function createAccessModesColumn<
+  T extends { accessModes: string[] },
+>(): ColumnDef<T> {
+  return {
+    accessorKey: "accessModes",
+    header: "Access Modes",
+    cell: ({ row }) => {
+      const modes = row.original.accessModes;
+      if (modes.length === 0) return <span className="text-fg-fnt">—</span>;
+      return (
+        <Tooltip>
+          <TooltipTrigger className="font-mono text-fg-mid">
+            {modes.join(" ")}
+          </TooltipTrigger>
+          <TooltipContent>
+            {modes.map((mode) => (
+              <div key={mode} className="text-xs">
+                {ACCESS_MODE_NAME[mode] ?? mode}
+              </div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      );
+    },
+  };
+}
+
+/** Declared storage size, with the unit dimmed like every other quantity. */
+export function createCapacityColumn<
+  T extends { capacity?: string | null },
+>(): ColumnDef<T> {
+  return {
+    accessorKey: "capacity",
+    header: "Capacity",
+    cell: ({ row }) =>
+      row.original.capacity ? (
+        <UnitValue value={row.original.capacity} />
+      ) : (
+        <span className="text-fg-fnt">—</span>
+      ),
+  };
+}
+
 /**
  * Creates a status badge column
  */
@@ -245,7 +306,11 @@ export function createReplicasColumn<
 }
 
 /**
- * Creates a labels column showing badges
+ * Labels, as `key=value` text.
+ *
+ * A label is arbitrary user data, never a state, so pilling it put an
+ * outlined box around every `app=nginx` in the table and made the column
+ * heavier than the resource name beside it.
  */
 export function createLabelsColumn<T extends WithLabels>(options?: {
   maxDisplay?: number;
@@ -256,27 +321,28 @@ export function createLabelsColumn<T extends WithLabels>(options?: {
     header: "Labels",
     cell: ({ row }) => {
       const entries = Object.entries(row.original.labels);
+      if (entries.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
-        <div className="flex flex-wrap gap-1">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
           {entries.slice(0, maxDisplay).map(([key, value]) => (
-            <Badge key={key} variant="outline" className="text-xs">
-              {key}={value}
-            </Badge>
+            <span key={key} className="font-mono text-fg-mut">
+              {key}
+              <span className="text-fg-fnt">=</span>
+              {value}
+            </span>
           ))}
           {entries.length > maxDisplay && (
-            <Badge variant="secondary" className="text-xs">
+            <span className="text-fg-fnt">
               +{entries.length - maxDisplay} more
-            </Badge>
+            </span>
           )}
-        </div>
+        </span>
       );
     },
   };
 }
 
-/**
- * Creates a data keys column for ConfigMaps/Secrets
- */
+/** Data keys for ConfigMaps/Secrets. Identifiers, so mono and unboxed. */
 export function createDataKeysColumn<
   T extends { dataKeys?: string[] },
 >(options?: { maxDisplay?: number }): ColumnDef<T> {
@@ -286,19 +352,20 @@ export function createDataKeysColumn<
     header: "Keys",
     cell: ({ row }) => {
       const keys = row.original.dataKeys ?? [];
+      if (keys.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
-        <div className="flex flex-wrap gap-1">
-          {keys.slice(0, maxDisplay).map((key, i) => (
-            <Badge key={i} variant="secondary" className="text-xs">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+          {keys.slice(0, maxDisplay).map((key) => (
+            <span key={key} className="font-mono text-fg-mut">
               {key}
-            </Badge>
+            </span>
           ))}
           {keys.length > maxDisplay && (
-            <Badge variant="outline" className="text-xs">
+            <span className="text-fg-fnt">
               +{keys.length - maxDisplay} more
-            </Badge>
+            </span>
           )}
-        </div>
+        </span>
       );
     },
   };
@@ -370,9 +437,7 @@ export function createActionsColumn<T extends BaseResource>(
               <DropdownMenuItem
                 key={index}
                 className={
-                  action.variant === "destructive"
-                    ? "text-destructive"
-                    : undefined
+                  action.variant === "destructive" ? "text-err" : undefined
                 }
                 onClick={() => action.onClick?.(row.original)}
               >

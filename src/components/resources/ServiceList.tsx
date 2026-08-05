@@ -33,7 +33,7 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     cell: ({ row }) => {
       const ips = row.original.externalIps;
       if (!ips || ips.length === 0)
-        return <span className="text-muted-foreground">-</span>;
+        return <span className="text-fg-fnt">—</span>;
       return (
         <div className="flex flex-col gap-1">
           {ips.map((ip, i) => (

@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { NodeBadge } from "@/components/ui/node-badge";
 import { ColumnDef } from "@tanstack/react-table";
@@ -153,13 +152,13 @@ export function NodeList() {
         accessorKey: "roles",
         header: "Roles",
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {row.original.roles.map((role) => (
-              <Badge key={role} variant="outline" className="text-xs">
-                {role}
-              </Badge>
-            ))}
-          </div>
+          <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
+            {row.original.roles.length === 0 ? (
+              <span className="text-fg-fnt">—</span>
+            ) : (
+              row.original.roles.map((role) => <span key={role}>{role}</span>)
+            )}
+          </span>
         ),
       },
       {

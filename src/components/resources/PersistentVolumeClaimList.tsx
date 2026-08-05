@@ -1,16 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
-import { Eye, Trash2, Database } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  createAccessModesColumn,
+  createCapacityColumn,
+  createNamespaceColumn,
+} from "./columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
@@ -27,25 +26,19 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-muted-foreground" />
-        <Link
-          to={getResourceDetailUrl(
-            ResourceType.PersistentVolumeClaim,
-            row.original.name,
-            row.original.namespace
-          )}
-          className="font-medium text-primary hover:underline"
-        >
-          {row.original.name}
-        </Link>
-      </div>
+      <Link
+        to={getResourceDetailUrl(
+          ResourceType.PersistentVolumeClaim,
+          row.original.name,
+          row.original.namespace
+        )}
+        className="font-mono text-info hover:underline"
+      >
+        {row.original.name}
+      </Link>
     ),
   },
-  {
-    accessorKey: "namespace",
-    header: "Namespace",
-  },
+  createNamespaceColumn<PersistentVolumeClaimInfo>(),
   {
     accessorKey: "status",
     header: "Status",
@@ -54,42 +47,22 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     accessorKey: "volume",
     header: "Volume",
-    cell: ({ row }) => row.original.volume || "-",
-  },
-  {
-    accessorKey: "capacity",
-    header: "Capacity",
     cell: ({ row }) => (
-      <Badge variant="outline">{row.original.capacity || "N/A"}</Badge>
+      <span className="font-mono text-fg-mut">
+        {row.original.volume || "—"}
+      </span>
     ),
   },
-  {
-    accessorKey: "accessModes",
-    header: "Access Modes",
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        {row.original.accessModes.map((mode, i) => (
-          <Tooltip key={i}>
-            <TooltipTrigger>
-              <Badge variant="secondary" className="text-xs">
-                {mode}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              {mode === "RWO" && "ReadWriteOnce"}
-              {mode === "ROX" && "ReadOnlyMany"}
-              {mode === "RWX" && "ReadWriteMany"}
-              {mode === "RWOP" && "ReadWriteOncePod"}
-            </TooltipContent>
-          </Tooltip>
-        ))}
-      </div>
-    ),
-  },
+  createCapacityColumn<PersistentVolumeClaimInfo>(),
+  createAccessModesColumn<PersistentVolumeClaimInfo>(),
   {
     accessorKey: "storageClass",
     header: "Storage Class",
-    cell: ({ row }) => row.original.storageClass || "default",
+    cell: ({ row }) => (
+      <span className="text-fg-mut">
+        {row.original.storageClass || "default"}
+      </span>
+    ),
   },
   {
     accessorKey: "age",

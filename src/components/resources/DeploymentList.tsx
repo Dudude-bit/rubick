@@ -9,7 +9,6 @@ import {
   getResourceListUrl,
 } from "@/lib/navigation-utils";
 import { matchDeploymentPods, type ResourceMetrics } from "@/lib/metrics";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import {
@@ -36,9 +35,9 @@ const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "strategy",
     header: "Strategy",
     cell: ({ row }) => (
-      <Badge variant="outline">
+      <span className="text-fg-mut">
         {row.original.strategy || "RollingUpdate"}
-      </Badge>
+      </span>
     ),
   },
   {
