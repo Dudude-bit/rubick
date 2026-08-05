@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { Link } from "react-router-dom";
+import { CircleDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -79,7 +80,10 @@ export function ResourceRef({
   const { open } = usePeek();
   const { stem, tail } = splitName(name);
   const resolved = isResourceType(kind) ? toKind(kind) : null;
-  const Icon = resolved ? getResourceDefinition(resolved).icon : null;
+  // A kind the registry does not carry — ReplicaSet, a HelmRelease, any CRD
+  // an event names — still has to reserve the mark's width, or it sits flush
+  // left while every other row in the column is indented behind an icon.
+  const Icon = resolved ? getResourceDefinition(resolved).icon : CircleDashed;
 
   // Full spends the hue on identity, so the kind falls back to its icon;
   // minimal keeps that icon hue and nothing else; off tints nothing.
@@ -94,17 +98,15 @@ export function ResourceRef({
 
   const body = (
     <>
-      {Icon && (
-        <Icon
-          className={cn(
-            "h-2.5 w-2.5 flex-none self-center",
-            colouring === "off" && "text-fg-mut"
-          )}
-          style={kindStyle}
-          aria-hidden="true"
-          data-testid="resource-ref-icon"
-        />
-      )}
+      <Icon
+        className={cn(
+          "h-2.5 w-2.5 flex-none self-center",
+          colouring === "off" && "text-fg-mut"
+        )}
+        style={kindStyle}
+        aria-hidden="true"
+        data-testid="resource-ref-icon"
+      />
       <span className="truncate font-mono">
         {/* The kind reaches a screen reader either way — when it is shown as
             an icon only, the text still has to name it. */}
@@ -173,6 +175,11 @@ export function ResourceRef({
     <Link
       to={getResourceDetailUrl(kind, name, namespace)}
       onClick={handleClick}
+      // The name is split across spans so the tail can carry its own hue, and
+      // the accessible-name algorithm joins those spans with a space — which
+      // announces "k3d-agent -0" for a pod that is called neither. Naming the
+      // link outright is the only way the reader hears the real identifier.
+      aria-label={`${kind} ${name}`}
       className={cn(shell, "hover:bg-hover", className)}
     >
       {body}

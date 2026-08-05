@@ -121,6 +121,29 @@ describe("ResourceRef", () => {
       expect(screen.getByRole("link")).toHaveAccessibleName(/Pod/);
     });
 
+    // The hued tail is a second span, and the accessible-name algorithm puts a
+    // space between spans: "k3d-agent -0" is not the name of anything.
+    it.each([true, false])(
+      "announces exactly the kind and the real name (showKind=%s)",
+      (showKind) => {
+        wrap(
+          <ResourceRef kind="Node" name="k3d-agent-0" showKind={showKind} />
+        );
+        expect(screen.getByRole("link")).toHaveAccessibleName(
+          "Node k3d-agent-0"
+        );
+      }
+    );
+
+    // A ragged left edge is exactly what an icon column exists to prevent.
+    it.each(["ReplicaSet", "HelmRelease"])(
+      "reserves the mark's width for %s, which the registry does not carry",
+      (kind) => {
+        wrap(<ResourceRef kind={kind} name="traefik" namespace="ns" />);
+        expect(screen.getByTestId("resource-ref-icon")).toBeInTheDocument();
+      }
+    );
+
     it("still names the kind when it is not routable", () => {
       wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
       expect(screen.getByText("Pod", { exact: false })).toBeInTheDocument();
