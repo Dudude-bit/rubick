@@ -57,12 +57,12 @@ function TableSkeleton({
 /**
  * Skeleton for a block of key/value rows
  */
-interface CardSkeletonProps {
+interface BlockSkeletonProps {
   showHeader?: boolean;
   lines?: number;
 }
 
-function CardSkeleton({ showHeader = true, lines = 3 }: CardSkeletonProps) {
+function BlockSkeleton({ showHeader = true, lines = 3 }: BlockSkeletonProps) {
   return (
     <div className="space-y-2">
       {showHeader && <Skeleton className="h-3 w-32" />}
@@ -79,33 +79,19 @@ function CardSkeleton({ showHeader = true, lines = 3 }: CardSkeletonProps) {
 }
 
 /**
- * Skeleton for detail pages
+ * Skeleton for detail pages: title, tab strip, then blocks of rows.
  */
 interface DetailSkeletonProps {
-  rows?: number;
-  showHeader?: boolean;
-}
-
-function DetailSkeleton({ rows = 4, showHeader = true }: DetailSkeletonProps) {
-  return (
-    <DetailTabsSkeleton tabCount={3} rows={rows} showHeader={showHeader} />
-  );
-}
-
-/**
- * Skeleton for detail pages with tabs
- */
-interface DetailTabsSkeletonProps {
   tabCount?: number;
   rows?: number;
   showHeader?: boolean;
 }
 
-function DetailTabsSkeleton({
-  tabCount = 4,
+function DetailSkeleton({
+  tabCount = 3,
   rows = 4,
   showHeader = true,
-}: DetailTabsSkeletonProps) {
+}: DetailSkeletonProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-200" aria-hidden>
       {showHeader && <Skeleton className="h-3.5 w-64" />}
@@ -118,7 +104,7 @@ function DetailTabsSkeleton({
 
       <div className="grid gap-4 md:grid-cols-2">
         {Array.from({ length: rows }).map((_, i) => (
-          <CardSkeleton key={i} />
+          <BlockSkeleton key={i} />
         ))}
       </div>
     </div>
@@ -147,22 +133,6 @@ function StatsSkeleton({ count = 4 }: StatsSkeletonProps) {
 }
 
 /**
- * Skeleton for pages with a header and stats
- */
-interface HeaderStatsSkeletonProps {
-  stats?: number;
-}
-
-function HeaderStatsSkeleton({ stats = 4 }: HeaderStatsSkeletonProps) {
-  return (
-    <div className="space-y-4 animate-in fade-in duration-200">
-      <HeaderSkeleton />
-      <StatsSkeleton count={stats} />
-    </div>
-  );
-}
-
-/**
  * Skeleton for section headers with optional subtitle
  */
 interface HeaderSkeletonProps {
@@ -174,31 +144,6 @@ function HeaderSkeleton({ showSubtitle = true }: HeaderSkeletonProps) {
     <div className="space-y-1" aria-hidden>
       <Skeleton className="h-3.5 w-40" />
       {showSubtitle && <Skeleton className="h-2.5 w-64" />}
-    </div>
-  );
-}
-
-/**
- * Skeleton for list items
- */
-interface ListSkeletonProps {
-  count?: number;
-  showIcon?: boolean;
-}
-
-function ListSkeleton({ count = 5, showIcon = true }: ListSkeletonProps) {
-  return (
-    <div className="border-t border-hair" aria-hidden>
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-2 border-b border-hair px-1.5 py-1.5"
-        >
-          {showIcon && <Skeleton className="h-3.5 w-3.5 rounded-full" />}
-          <Skeleton className="h-2.5 w-2/5" />
-          <Skeleton className="ml-auto h-2.5 w-16" />
-        </div>
-      ))}
     </div>
   );
 }
@@ -253,13 +198,9 @@ function PageSkeleton({ className }: PageSkeletonProps) {
 export {
   Skeleton,
   TableSkeleton,
-  CardSkeleton,
   DetailSkeleton,
-  DetailTabsSkeleton,
   StatsSkeleton,
-  HeaderStatsSkeleton,
   HeaderSkeleton,
-  ListSkeleton,
   TextSkeleton,
   PageSkeleton,
 };

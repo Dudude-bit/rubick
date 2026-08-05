@@ -44,14 +44,14 @@ export function UnitValue({ value, className }: UnitValueProps) {
   );
 }
 
-export interface UsageBarProps {
+interface UsageBarProps {
   /** used / limit. Values above 1 are clamped for width, not for colour. */
   ratio: number;
   className?: string;
 }
 
 /** The inline fraction-of-limit bar that follows a metric. */
-export function UsageBar({ ratio, className }: UsageBarProps) {
+function UsageBar({ ratio, className }: UsageBarProps) {
   const width = Math.min(100, Math.max(0, ratio * 100));
   return (
     <span

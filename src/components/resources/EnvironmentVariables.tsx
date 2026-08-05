@@ -211,12 +211,10 @@ export function EnvironmentVariables({
   const hasSecrets =
     secretEnvVars.length > 0 || envFrom.some((ef) => ef.secretRef);
 
-  // Per-name parallel queries via useQueries. See VolumeMounts.tsx
-  // for the reasoning behind staleTime: Infinity + retry: false +
-  // silent ?? {} fallback — same shape applies here. The original
-  // `loadingConfigMaps` / `loadingSecrets` were single booleans (any
-  // in-flight); we derive them from `.some(isFetching)` to preserve
-  // that semantic.
+  // Per-name parallel queries via useQueries. A referenced ConfigMap or
+  // Secret may not be readable with the current access, so a failure is
+  // swallowed into `?? {}` rather than surfaced — the env row still renders,
+  // just without the resolved value.
   const configMapQueries = useQueries({
     queries: allConfigMapNames.map((name) => ({
       queryKey: ["configmap-data", namespace, name] as const,

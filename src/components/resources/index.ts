@@ -18,8 +18,6 @@ export * from "./ResourceDetailLayout";
 export { ResourceDetailHeader } from "./ResourceDetailHeader";
 export { YamlTabContent } from "./YamlTabContent";
 export { ReferencedBy } from "./ReferencedBy";
-export { VolumeMounts } from "./VolumeMounts";
 export { ImagePullSecrets } from "./ImagePullSecrets";
 export { EnvironmentVariables } from "./EnvironmentVariables";
-export { ContainerConfiguration } from "./ContainerConfiguration";
 export { PodListCard } from "./PodListCard";
