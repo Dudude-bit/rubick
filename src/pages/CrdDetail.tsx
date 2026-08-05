@@ -1,23 +1,39 @@
 import { useState } from "react";
-import { Section, SectionHeader } from "@/components/ui/section";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, List, Puzzle } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { SchemaViewer } from "@/components/crds/SchemaViewer";
 import { CustomResourceList } from "@/components/resources/CustomResourceList";
-import { RealtimeAge } from "@/components/ui/realtime";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  ConditionRows,
+  DetailAction,
+} from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { commands } from "@/lib/commands";
+import { cn } from "@/lib/utils";
 
 export function CrdDetail() {
   const { name } = useParams<{ name: string }>();
@@ -25,14 +41,14 @@ export function CrdDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("overview");
+  const copyToClipboard = useCopyToClipboard();
+  const [activeTab, setActiveTab] = useState("versions");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 
   const goBack = () =>
     navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
 
-  // Fetch CRD details
   const {
     data: crd,
     isLoading,
@@ -50,7 +66,6 @@ export function CrdDetail() {
     enabled: !!decodedName,
   });
 
-  // Fetch YAML
   const { data: yaml } = useQuery({
     queryKey: ["crd-yaml", decodedName],
     queryFn: async () => {
@@ -64,7 +79,6 @@ export function CrdDetail() {
     enabled: !!decodedName && activeTab === "yaml",
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!decodedName) return;
@@ -91,178 +105,102 @@ export function CrdDetail() {
     },
   });
 
-  const copyYaml = () => {
-    if (yaml) {
-      navigator.clipboard.writeText(yaml);
-      toast({
-        title: "Copied",
-        description: "YAML copied to clipboard",
-      });
-    }
-  };
-
-  // Get storage version
   const storageVersion = crd?.versions.find((v) => v.storage);
-  const currentVersion = selectedVersion
-    ? crd?.versions.find((v) => v.name === selectedVersion)
-    : storageVersion;
+  const activeVersionName = selectedVersion ?? storageVersion?.name ?? null;
+  const currentVersion =
+    crd?.versions.find((v) => v.name === activeVersionName) ?? storageVersion;
 
-  // Build tabs
+  const conditions = (crd?.conditions ?? []).map((c) => ({
+    type: c.conditionType,
+    status: c.status,
+    reason: c.reason,
+    message: c.message,
+    lastTransitionTime: c.lastTransitionTime,
+  }));
+  // Until the API server establishes the definition, none of these versions
+  // serve anything — which is why "kubectl get" returns nothing at all.
+  const established = conditions.find((c) => c.type === "Established");
+  const notEstablished = !!crd && established?.status !== "True";
+
+  const deprecatedVersions = (crd?.versions ?? []).filter((v) => v.deprecated);
+
+  const facts: KeyValue[] = [
+    { label: "Group", value: crd?.group || "core", mono: true },
+    { label: "Kind", value: crd?.kind ?? "—", mono: true },
+    { label: "Scope", value: crd?.scope ?? "—" },
+    {
+      label: "Storage version",
+      value: storageVersion?.name ?? "none declared",
+      mono: !!storageVersion,
+      tone: storageVersion ? undefined : "warn",
+    },
+    { label: "Plural", value: crd?.plural ?? "—", mono: true },
+    { label: "Singular", value: crd?.singular || "—", mono: true },
+    {
+      label: "Short names",
+      value: crd?.shortNames.length ? crd.shortNames.join(" · ") : "none",
+      mono: !!crd?.shortNames.length,
+    },
+    {
+      label: "Categories",
+      value: crd?.categories.length ? crd.categories.join(" · ") : "none",
+      mono: !!crd?.categories.length,
+    },
+  ];
+
   const tabs = [
     {
-      id: "overview",
-      label: "Overview",
-      content: crd && (
-        <div className="space-y-4">
-          {/* Basic Info */}
-          <Section>
-            <SectionHeader title="Basic Information" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Group</p>
-                <p className="font-medium">{crd.group || "core"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Kind</p>
-                <p className="font-medium">{crd.kind}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Scope</p>
-                <Badge
-                  variant={crd.scope === "Namespaced" ? "default" : "secondary"}
-                >
-                  {crd.scope}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Age</p>
-                <p className="font-medium">
-                  <RealtimeAge timestamp={crd.createdAt} fallback="-" />
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Plural</p>
-                <p className="font-medium">{crd.plural}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Singular</p>
-                <p className="font-medium">{crd.singular || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Short Names</p>
-                <div className="flex gap-1 flex-wrap">
-                  {crd.shortNames.length > 0 ? (
-                    crd.shortNames.map((sn) => (
-                      <Badge key={sn} variant="outline">
-                        {sn}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Categories</p>
-                <div className="flex gap-1 flex-wrap">
-                  {crd.categories.length > 0 ? (
-                    crd.categories.map((cat) => (
-                      <Badge key={cat} variant="outline">
-                        {cat}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Section>
-
-          {/* Versions */}
-          <Section>
-            <SectionHeader title="Versions" />
-            <div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3">Version</th>
-                      <th className="text-left py-2 px-3">Served</th>
-                      <th className="text-left py-2 px-3">Storage</th>
-                      <th className="text-left py-2 px-3">Deprecated</th>
-                      <th className="text-left py-2 px-3">Columns</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {crd.versions.map((version) => (
-                      <tr key={version.name} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-medium">
-                          {version.name}
-                        </td>
-                        <td className="py-2 px-3">
-                          <Badge
-                            variant={version.served ? "default" : "secondary"}
-                          >
-                            {version.served ? "Yes" : "No"}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-3">
-                          <Badge
-                            variant={version.storage ? "default" : "secondary"}
-                          >
-                            {version.storage ? "Yes" : "No"}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-3">
-                          {version.deprecated ? (
-                            <Badge variant="destructive">Deprecated</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">No</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3">
-                          {version.additionalPrinterColumns.length > 0 ? (
-                            <span>
-                              {version.additionalPrinterColumns.length} columns
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              Default
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </Section>
-
-          {/* Conditions */}
-          {crd.conditions.length > 0 && (
-            <ConditionsDisplay
-              conditions={crd.conditions.map((c) => ({
-                type: c.conditionType,
-                status: c.status,
-                reason: c.reason,
-                message: c.message,
-                lastTransitionTime: c.lastTransitionTime,
-              }))}
-            />
-          )}
-
-          {/* Labels & Annotations */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.keys(crd.labels).length > 0 && (
-              <LabelsDisplay labels={crd.labels} title="Labels" />
-            )}
-            {Object.keys(crd.annotations).length > 0 && (
-              <LabelsDisplay labels={crd.annotations} title="Annotations" />
-            )}
-          </div>
-        </div>
+      id: "versions",
+      label: "Versions",
+      content: (
+        <Section>
+          <SectionHeader
+            title="Versions"
+            count={
+              deprecatedVersions.length > 0
+                ? `${crd?.versions.length ?? 0} · ${deprecatedVersions.length} deprecated`
+                : (crd?.versions.length ?? 0)
+            }
+          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Version</TableHead>
+                <TableHead>Served</TableHead>
+                <TableHead>Storage</TableHead>
+                <TableHead>Printer columns</TableHead>
+                <TableHead>Note</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(crd?.versions ?? []).map((version) => (
+                <TableRow key={version.name} data-quiet>
+                  <TableCell className="font-mono text-fg">
+                    {version.name}
+                  </TableCell>
+                  <TableCell
+                    className={version.served ? "text-fg-mut" : "text-warn"}
+                  >
+                    {version.served ? "yes" : "no"}
+                  </TableCell>
+                  <TableCell className="text-fg-mut">
+                    {version.storage ? "yes" : "no"}
+                  </TableCell>
+                  <TableCell className="text-fg-fnt">
+                    {version.additionalPrinterColumns.length || "default"}
+                  </TableCell>
+                  <TableCell
+                    className={version.deprecated ? "text-warn" : "text-fg-fnt"}
+                  >
+                    {version.deprecated
+                      ? version.deprecationWarning || "deprecated"
+                      : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Section>
       ),
     },
     {
@@ -271,36 +209,39 @@ export function CrdDetail() {
       content: (
         <Section>
           <SectionHeader
-            title="OpenAPI Schema"
+            title="OpenAPI schema"
+            count={activeVersionName ?? undefined}
             actions={
               crd &&
               crd.versions.length > 1 && (
-                <div className="flex gap-2">
+                <div className="flex items-center gap-0.5">
                   {crd.versions.map((v) => (
-                    <Button
+                    <button
                       key={v.name}
-                      variant={
-                        (selectedVersion || storageVersion?.name) === v.name
-                          ? "default"
-                          : "outline"
-                      }
-                      size="sm"
+                      type="button"
                       onClick={() => setSelectedVersion(v.name)}
+                      aria-pressed={activeVersionName === v.name}
+                      className={cn(
+                        "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                        activeVersionName === v.name
+                          ? "bg-sel text-fg"
+                          : "text-fg-mut hover:text-fg"
+                      )}
                     >
                       {v.name}
-                      {v.storage && " (storage)"}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               )
             }
           />
-          <div>
+          <div className="border-t border-hair pt-1">
             {currentVersion?.schema ? (
               <SchemaViewer schema={currentVersion.schema} />
             ) : (
-              <p className="text-muted-foreground">
-                No schema available for this version.
+              <p className="py-1 text-xs text-fg-fnt">
+                This version publishes no structural schema, so the API server
+                validates nothing beyond the object's metadata.
               </p>
             )}
           </div>
@@ -324,24 +265,56 @@ export function CrdDetail() {
       ),
     },
     {
+      id: "conditions",
+      label: "Conditions",
+      content: (
+        <Section>
+          <SectionHeader title="Conditions" count={conditions.length} />
+          <ConditionRows conditions={conditions} />
+        </Section>
+      ),
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      content: (
+        <>
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(crd?.labels ?? {}).length}
+            items={recordToKeyValues(crd?.labels ?? {})}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(crd?.annotations ?? {}).length}
+            items={recordToKeyValues(crd?.annotations ?? {})}
+            emptyMessage="No annotations"
+          />
+        </>
+      ),
+    },
+    {
       id: "yaml",
       label: "YAML",
       content: (
         <Section>
           <SectionHeader
-            title="YAML Definition"
+            title="CustomResourceDefinition YAML"
             actions={
-              <Button variant="outline" size="sm" onClick={copyYaml}>
-                Copy
-              </Button>
+              <DetailAction
+                label="Copy"
+                onClick={() => yaml && copyToClipboard(yaml)}
+                disabled={!yaml}
+              />
             }
           />
-          <div>
+          <div className="overflow-hidden border-t border-hair">
             {yaml ? (
               <YamlEditor value={yaml} readOnly height="500px" />
             ) : (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">
-                Loading YAML...
+              <div className="p-4">
+                <TextSkeleton lines={18} />
               </div>
             )}
           </div>
@@ -356,56 +329,53 @@ export function CrdDetail() {
         resource={crd}
         isLoading={isLoading}
         error={error}
-        resourceKind="CustomResourceDefinition"
-        title={crd?.kind || ""}
-        namespace={undefined}
+        resourceKind={ResourceType.CustomResourceDefinition}
+        title={crd?.kind || decodedName || ""}
+        createdAt={crd?.createdAt}
         statusBadge={
           crd && (
-            <Badge
-              variant={crd.scope === "Namespaced" ? "default" : "secondary"}
-            >
-              {crd.scope}
-            </Badge>
+            <StatusBadge
+              status={notEstablished ? "Not established" : "Established"}
+              roleOverride={notEstablished ? "err" : "ok"}
+            />
           )
         }
         badges={
           crd && (
-            <span className="text-muted-foreground text-sm">{crd.name}</span>
+            <>
+              <span className="truncate font-mono text-[11px] text-fg-mut">
+                {crd.name}
+              </span>
+              <span className="text-[11px] text-fg-fnt">{crd.scope}</span>
+            </>
           )
         }
-        icon={<Puzzle className="h-8 w-8 text-muted-foreground" />}
         onBack={goBack}
         actions={
-          <>
-            <Button variant="outline" size="sm" asChild>
-              <Link
-                to={`/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(decodedName || "")}/instances`}
-              >
-                <List className="h-4 w-4 mr-2" />
-                View Instances
-              </Link>
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          </>
+          <DetailAction
+            label="Delete"
+            icon={Trash2}
+            onClick={() => setDeleteDialogOpen(true)}
+            busy={deleteMutation.isPending}
+            danger
+          />
         }
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-      />
+      >
+        <KeyValueSection
+          title="Definition"
+          items={facts}
+          className="max-w-lg"
+        />
+      </ResourceDetailLayout>
 
-      {/* Delete confirmation dialog */}
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         title="Delete CRD?"
-        description={`Are you sure you want to delete "${decodedName}"? This will also delete all instances of this custom resource.`}
+        description={`Deleting "${decodedName}" also deletes every instance of this custom resource in the cluster.`}
         confirmLabel="Delete"
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
