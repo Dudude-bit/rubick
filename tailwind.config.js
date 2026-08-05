@@ -38,6 +38,24 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Role tokens (one flat canvas)
+        canvas: 'hsl(var(--canvas))',
+        hair: 'hsl(var(--hair) / 0.07)',
+        hover: 'hsl(var(--hover) / 0.04)',
+        sel: 'hsl(var(--sel) / 0.09)',
+        fg: {
+          DEFAULT: 'hsl(var(--fg))',
+          mid: 'hsl(var(--fg-mid))',
+          mut: 'hsl(var(--fg-mut))',
+          fnt: 'hsl(var(--fg-fnt))',
+        },
+        // `<alpha-value>` is required for opacity modifiers such as
+        // `bg-ok/[0.16]` to work against a CSS-variable colour. Without
+        // it Tailwind emits the colour and silently drops the alpha.
+        ok: 'hsl(var(--ok) / <alpha-value>)',
+        warn: 'hsl(var(--warn) / <alpha-value>)',
+        err: 'hsl(var(--err) / <alpha-value>)',
+        info: 'hsl(var(--info) / <alpha-value>)',
         // Kubernetes resource status colors (design system)
         success: {
           DEFAULT: 'hsl(var(--status-running))',

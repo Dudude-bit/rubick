@@ -29,6 +29,25 @@
     --radius: 0.5rem;
 
     /* ============================================
+     * Role tokens (one flat canvas). Same role names as .dark below,
+     * different implementation: on light the hairlines are dark alpha
+     * and the status colours darken, because pale green on white does
+     * not read.
+     * ============================================ */
+    --canvas: 40 30% 98%;
+    --hair: 34 20% 30%; /* used with /12 */
+    --hover: 34 25% 20%; /* used with /5  */
+    --sel: 34 25% 20%; /* used with /9  */
+    --fg: 32 16% 13%;
+    --fg-mid: 32 10% 30%;
+    --fg-mut: 32 8% 42%;
+    --fg-fnt: 32 8% 55%;
+    --ok: 148 55% 29%;
+    --warn: 30 80% 37%;
+    --err: 4 66% 45%;
+    --info: 210 67% 40%;
+
+    /* ============================================
      * Status Colors (unified design system)
      * ============================================ */
     --status-running: 142.1 76.2% 36.3%;
@@ -127,6 +146,20 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /* Role tokens (one flat canvas) */
+    --canvas: 220 8% 11%;
+    --hair: 0 0% 100%; /* used with /7  */
+    --hover: 0 0% 100%; /* used with /4  */
+    --sel: 0 0% 100%; /* used with /9  */
+    --fg: 220 6% 91%;
+    --fg-mid: 212 7% 73%;
+    --fg-mut: 213 6% 57%;
+    --fg-fnt: 213 6% 43%;
+    --ok: 152 44% 49%;
+    --warn: 44 82% 48%;
+    --err: 358 81% 68%;
+    --info: 212 66% 58%;
 
     /* Resource Type Colors (dark mode adjustments) */
     --resource-pod-bg: 217 91% 15%;
