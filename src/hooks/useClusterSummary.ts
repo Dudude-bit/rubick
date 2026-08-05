@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
+import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 
 export interface NamespaceScope {
@@ -34,15 +35,8 @@ export function useClusterSummary(): ClusterSummary {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
 
-  const { data: overview, isLoading: overviewLoading } = useQuery({
-    queryKey: ["cluster-overview", currentContext, ""],
-    queryFn: () => commands.getClusterOverview(null),
-    enabled: isConnected,
-    staleTime: STALE_TIMES.overview,
-    refetchInterval: REFRESH_INTERVALS.overview,
-    placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-  });
+  const { data: overview, isLoading: overviewLoading } =
+    useClusterOverview(null);
 
   const { data: namespaceInfos, isLoading: namespacesLoading } = useQuery({
     queryKey: ["namespaces", currentContext],
@@ -85,7 +79,7 @@ export function useClusterSummary(): ClusterSummary {
       );
 
     return {
-      podCount: overview?.podCount ?? 0,
+      podCount: overview?.counts.pods ?? 0,
       problemCount: overview?.problems.length ?? 0,
       problemsTruncated: overview?.problemsTruncated ?? 0,
       namespaces,

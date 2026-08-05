@@ -8,8 +8,10 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import type {
+  ClusterOverview,
   ClusterProblem,
   NodeSummary,
+  PodComposition,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
@@ -177,19 +179,19 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
 export function ProblemsPanel({
   problems,
   problemsTruncated,
-  podCount,
+  pods,
   nodes,
 }: {
   problems: ClusterProblem[];
   /** Rows the backend dropped from the end of the ranked list. */
   problemsTruncated: number;
-  podCount: number;
+  pods: PodComposition;
   nodes: NodeSummary[];
 }) {
   // The headline counts everything that is wrong, not everything that fits —
   // an outage that overflows the cap must not read as smaller than it is.
   const total = problems.length + problemsTruncated;
-  const healthyPods = Math.max(0, podCount - countPodProblems(problems));
+  const serving = pods.running - pods.crashLooping;
   const readyNodes = nodes.filter((n) => n.ready).length;
 
   return (
@@ -219,8 +221,8 @@ export function ProblemsPanel({
             Healthy
           </span>
           <span className="truncate text-fg-fnt">
-            {healthyPods} of {podCount} pods · {readyNodes} of {nodes.length}{" "}
-            nodes ready
+            {serving} of {podTotal(pods)} pods running · {readyNodes} of{" "}
+            {nodes.length} nodes ready
           </span>
           <span />
           <span />
@@ -231,9 +233,11 @@ export function ProblemsPanel({
   );
 }
 
-/** Pods the ranked list already accounts for, so they are not counted twice. */
-function countPodProblems(problems: ClusterProblem[]): number {
-  return problems.filter((p) => p.kind === "Pod").length;
+/** The phases partition the scope, so their sum is the pod count. */
+function podTotal(pods: PodComposition): number {
+  return (
+    pods.running + pods.pending + pods.succeeded + pods.failed + pods.unknown
+  );
 }
 
 type Tone = "ok" | "warn" | "err" | "neutral";
@@ -259,7 +263,9 @@ function Composition({
   label,
   segments,
 }: {
-  total: number;
+  /** `null` when the list was refused: a column that cannot be read must
+   *  not draw an empty bar, which is the picture of "nothing here". */
+  total: number | null;
   label: string;
   segments: Segment[];
 }) {
@@ -268,8 +274,13 @@ function Composition({
   return (
     <div>
       <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[15px] font-semibold text-fg">
-          {total}
+        <span
+          className={cn(
+            "font-mono text-[15px] font-semibold",
+            total == null ? "text-fg-fnt" : "text-fg"
+          )}
+        >
+          {total ?? "—"}
         </span>
         <span className="text-[11px] text-fg-mut">{label}</span>
       </div>
@@ -283,40 +294,58 @@ function Composition({
         ))}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-        {visible.map((segment) => (
-          <span key={segment.label} className={LEGEND_TONE[segment.tone]}>
-            {segment.count} {segment.label}
-          </span>
-        ))}
+        {total == null ? (
+          <span className="text-fg-fnt">not readable with this access</span>
+        ) : (
+          visible.map((segment) => (
+            <span key={segment.label} className={LEGEND_TONE[segment.tone]}>
+              {segment.count} {segment.label}
+            </span>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function podSegments(problems: ClusterProblem[], podCount: number): Segment[] {
-  // Grouped by the reason the backend already computed — "3 CrashLoopBackOff"
-  // is a different problem from "1 Pending" even though both are red.
-  const byReason = new Map<string, Segment>();
-  for (const problem of problems) {
-    if (problem.kind !== "Pod") continue;
-    const existing = byReason.get(problem.reason);
-    if (existing) {
-      existing.count += 1;
-      continue;
-    }
-    byReason.set(problem.reason, {
-      label: problem.reason,
-      count: 1,
-      tone: problem.severity === "critical" ? "err" : "warn",
-    });
-  }
-  // Everything the problem pass did not flag. Succeeded pods land here too:
-  // the backend does not report phase, so the remainder is "not broken"
-  // rather than "Running", and is labelled as such.
-  const healthy = Math.max(0, podCount - countPodProblems(problems));
+/**
+ * Pods by phase.
+ *
+ * Phase is what separates a replica that is serving from a Job pod that ran
+ * and finished — lumping both into one "Healthy" bar told anyone with a
+ * nightly CronJob that they had more running workload than they do.
+ * Crash-loopers are carved back out of Running: the phase says Running while
+ * the container is in a back-off loop serving nothing.
+ */
+function podSegments(pods: PodComposition): Segment[] {
   return [
-    { label: "Healthy", count: healthy, tone: "ok" },
-    ...[...byReason.values()].sort((a, b) => b.count - a.count),
+    { label: "Running", count: pods.running - pods.crashLooping, tone: "ok" },
+    { label: "CrashLoop", count: pods.crashLooping, tone: "err" },
+    { label: "Pending", count: pods.pending, tone: "warn" },
+    { label: "Failed", count: pods.failed, tone: "err" },
+    { label: "Completed", count: pods.succeeded, tone: "neutral" },
+    { label: "Unknown", count: pods.unknown, tone: "neutral" },
+  ];
+}
+
+/**
+ * Deployments split into available and not.
+ *
+ * The unavailable half is the problem list, which the backend already ranked;
+ * the available half is the total minus it, so the two agree by construction.
+ */
+function deploymentSegments(
+  problems: ClusterProblem[],
+  total: number | null
+): Segment[] {
+  const unavailable = problems.filter((p) => p.kind === "Deployment").length;
+  return [
+    {
+      label: "Available",
+      count: Math.max(0, (total ?? 0) - unavailable),
+      tone: "ok",
+    },
+    { label: "Unavailable", count: unavailable, tone: "err" },
   ];
 }
 
@@ -340,27 +369,17 @@ function nodeSegments(nodes: NodeSummary[]): Segment[] {
   ];
 }
 
-/**
- * Composition of what this scope is made of.
- *
- * Only the kinds `get_cluster_overview` can account for in full are shown.
- * Deployments and Jobs appear in the payload only when they are already
- * broken, so their totals are unknown and a bar drawn from the problem list
- * alone would claim the cluster has as many deployments as it has failures.
- */
+/** Composition of what this scope is made of. */
 export function WorkloadsPanel({
-  problems,
-  problemsTruncated,
-  podCount,
-  nodes,
+  overview,
   scope,
 }: {
-  problems: ClusterProblem[];
-  problemsTruncated: number;
-  podCount: number;
-  nodes: NodeSummary[];
+  overview: ClusterOverview;
   scope: string;
 }) {
+  const { counts, pods, jobs, nodes, problems, problemsTruncated } = overview;
+  const podCount = podTotal(pods);
+
   return (
     <Section>
       <SectionHeader
@@ -375,12 +394,34 @@ export function WorkloadsPanel({
         <Composition
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
-          segments={podSegments(problems, podCount)}
+          segments={podSegments(pods)}
+        />
+        <Composition
+          total={counts.deployments}
+          label={counts.deployments === 1 ? "Deployment" : "Deployments"}
+          segments={deploymentSegments(problems, counts.deployments)}
         />
         <Composition
           total={nodes.length}
           label={nodes.length === 1 ? "Node" : "Nodes"}
           segments={nodeSegments(nodes)}
+        />
+        <Composition
+          total={counts.jobs}
+          label={counts.jobs === 1 ? "Job" : "Jobs"}
+          segments={
+            jobs
+              ? [
+                  {
+                    label: "Completed",
+                    count: jobs.completed,
+                    tone: "neutral",
+                  },
+                  { label: "Active", count: jobs.active, tone: "ok" },
+                  { label: "Failed", count: jobs.failed, tone: "err" },
+                ]
+              : []
+          }
         />
       </div>
     </Section>

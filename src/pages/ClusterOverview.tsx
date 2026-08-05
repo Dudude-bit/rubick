@@ -1,14 +1,11 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 
-import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
+import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { Section } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
-import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import {
   NodesPanel,
   ProblemsPanel,
@@ -28,7 +25,7 @@ import {
  * largest block on a screen whose first row is the point.
  */
 export function ClusterOverview() {
-  const { isConnected, currentContext, currentNamespace } = useClusterStore();
+  const { isConnected, currentNamespace } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
   const {
@@ -36,21 +33,7 @@ export function ClusterOverview() {
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ["cluster-overview", currentContext, currentNamespace],
-    queryFn: async () => {
-      try {
-        return await commands.getClusterOverview(currentNamespace || null);
-      } catch (err) {
-        throw new Error(normalizeTauriError(err), { cause: err });
-      }
-    },
-    enabled: isConnected,
-    staleTime: STALE_TIMES.overview,
-    placeholderData: keepPreviousData,
-    refetchInterval: REFRESH_INTERVALS.overview,
-    refetchOnWindowFocus: false,
-  });
+  } = useClusterOverview(currentNamespace);
 
   if (!isConnected) {
     return (
@@ -106,16 +89,10 @@ export function ClusterOverview() {
       <ProblemsPanel
         problems={overview.problems}
         problemsTruncated={overview.problemsTruncated}
-        podCount={overview.podCount}
+        pods={overview.pods}
         nodes={overview.nodes}
       />
-      <WorkloadsPanel
-        problems={overview.problems}
-        problemsTruncated={overview.problemsTruncated}
-        podCount={overview.podCount}
-        nodes={overview.nodes}
-        scope={scope}
-      />
+      <WorkloadsPanel overview={overview} scope={scope} />
       <SchedulerPanel
         scheduler={overview.scheduler}
         metricsAvailable={overview.metricsAvailable}

@@ -838,8 +838,41 @@ export interface ClusterOverview {
   nodes: NodeSummary[];
   warnings: WarningGroup[];
   namespaces: NamespaceLoad[];
-  podCount: number;
+  counts: ResourceCounts;
+  pods: PodComposition;
+  jobs: JobComposition | null;
   metricsAvailable: boolean;
+}
+
+export interface JobComposition {
+  completed: number;
+  active: number;
+  failed: number;
+}
+
+export interface PodComposition {
+  running: number;
+  pending: number;
+  succeeded: number;
+  failed: number;
+  unknown: number;
+  crashLooping: number;
+}
+
+export interface ResourceCounts {
+  pods: number | null;
+  deployments: number | null;
+  statefulSets: number | null;
+  daemonSets: number | null;
+  jobs: number | null;
+  cronJobs: number | null;
+  nodes: number | null;
+  namespaces: number | null;
+  services: number | null;
+  ingresses: number | null;
+  configMaps: number | null;
+  secrets: number | null;
+  events: number | null;
 }
 
 export interface NamespaceLoad {
