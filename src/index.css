@@ -47,6 +47,13 @@
     --err: 4 66% 45%;
     --info: 210 67% 40%;
 
+    /* The single documented exception to the flat canvas: an overlay has
+     * to read as floating above the page or it looks like a rendering
+     * fault. On light the canvas is already near-white, so the lift comes
+     * from pure white plus the shadow rather than from a lighter fill. */
+    --raise: 0 0% 100%;
+    --pop-shadow: 0 14px 32px -14px hsl(32 16% 13% / 0.35);
+
     /* ============================================
      * Status Colors (unified design system)
      * ============================================ */
@@ -160,6 +167,8 @@
     --warn: 44 82% 48%;
     --err: 358 81% 68%;
     --info: 212 66% 58%;
+    --raise: 220 7% 15%;
+    --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
 
     /* Resource Type Colors (dark mode adjustments) */
     --resource-pod-bg: 217 91% 15%;

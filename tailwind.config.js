@@ -40,6 +40,8 @@ export default {
         },
         // Role tokens (one flat canvas)
         canvas: 'hsl(var(--canvas))',
+        // Overlays only — see --raise in index.css.
+        raise: 'hsl(var(--raise))',
         hair: 'hsl(var(--hair))',
         hover: 'hsl(var(--hover))',
         sel: 'hsl(var(--sel))',
@@ -184,6 +186,9 @@ export default {
           'Consolas',
           'monospace',
         ],
+      },
+      boxShadow: {
+        pop: 'var(--pop-shadow)',
       },
       transitionDuration: {
         'ds-fast': 'var(--animation-fast)',
