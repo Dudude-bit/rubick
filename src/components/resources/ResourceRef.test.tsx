@@ -1,0 +1,202 @@
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { ResourceRef, isRoutableKind } from "./ResourceRef";
+import {
+  useDisplaySettingsStore,
+  type ResourceColouring,
+} from "@/stores/displaySettingsStore";
+
+const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+const styleOf = (testId: string) =>
+  screen.getByTestId(testId).getAttribute("style") ?? "";
+
+const colouring = (value: ResourceColouring) =>
+  useDisplaySettingsStore.setState({ resourceColouring: value });
+
+describe("ResourceRef", () => {
+  beforeEach(() => colouring("full"));
+
+  describe("routing", () => {
+    it("links a routable namespaced kind to its detail page", () => {
+      wrap(
+        <ResourceRef
+          kind="Pod"
+          name="log-demo-596964f7d6-54zt4"
+          namespace="k8s-gui-test"
+        />
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/pods/k8s-gui-test/log-demo-596964f7d6-54zt4"
+      );
+    });
+
+    it("links a cluster-scoped kind with no namespace", () => {
+      wrap(<ResourceRef kind="Node" name="agent-0" />);
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/nodes/agent-0"
+      );
+    });
+
+    it("accepts a plural spelling of the kind", () => {
+      wrap(<ResourceRef kind="pods" name="a-1" namespace="ns" />);
+      expect(screen.getByRole("link")).toHaveAttribute("href", "/pods/ns/a-1");
+    });
+
+    it("renders text, not a link, for a kind the router does not serve", () => {
+      wrap(
+        <ResourceRef
+          kind="HelmRelease"
+          name="traefik"
+          namespace="kube-system"
+        />
+      );
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.getByText(/traefik/)).toBeInTheDocument();
+    });
+
+    it("renders text for a namespaced kind handed no namespace", () => {
+      wrap(<ResourceRef kind="Pod" name="orphan" />);
+      expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    // The registry lists these; App.tsx serves them a list route only. Trusting
+    // the registry alone is exactly how a dead link ships.
+    it.each(["Namespace", "Event"])(
+      "renders text for %s, which the router only lists",
+      (kind) => {
+        wrap(<ResourceRef kind={kind} name="kube-system" />);
+        expect(screen.queryByRole("link")).toBeNull();
+      }
+    );
+
+    it("agrees with isRoutableKind", () => {
+      expect(isRoutableKind("Pod", "ns")).toBe(true);
+      expect(isRoutableKind("Pod")).toBe(false);
+      expect(isRoutableKind("Node")).toBe(true);
+      expect(isRoutableKind("Namespace")).toBe(false);
+      expect(isRoutableKind("Event", "ns")).toBe(false);
+      expect(isRoutableKind("HelmRelease", "ns")).toBe(false);
+    });
+  });
+
+  describe("text", () => {
+    it("keeps the whole name readable as one string", () => {
+      wrap(
+        <ResourceRef
+          kind="Pod"
+          name="cron-demo-29765945-cl6m2"
+          namespace="ns"
+        />
+      );
+      expect(screen.getByRole("link")).toHaveTextContent(
+        "cron-demo-29765945-cl6m2"
+      );
+    });
+
+    it("carries the kind as text for a screen reader even when shown as an icon", () => {
+      wrap(
+        <ResourceRef kind="Pod" name="a-1" namespace="ns" showKind={false} />
+      );
+      expect(screen.getByRole("link")).toHaveAccessibleName(/Pod/);
+    });
+
+    it("still names the kind when it is not routable", () => {
+      wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
+      expect(screen.getByText("Pod", { exact: false })).toBeInTheDocument();
+    });
+  });
+
+  describe("colouring", () => {
+    const renderRef = () =>
+      wrap(
+        <ResourceRef
+          kind="Pod"
+          name="cron-demo-29765945-cl6m2"
+          namespace="ns"
+        />
+      );
+
+    it("full tints the kind icon and the generated tail with different hues", () => {
+      renderRef();
+      expect(styleOf("resource-ref-icon")).toContain("var(--kind-s)");
+      expect(styleOf("resource-ref-kind")).toContain("var(--kind-s)");
+      expect(styleOf("resource-ref-tail")).toContain("var(--ident-s)");
+      // The stem repeats down a column; the tail is what tells rows apart.
+      expect(screen.getByTestId("resource-ref-stem").className).toContain(
+        "text-fg-mut"
+      );
+    });
+
+    it("full leaves an ungenerated name bright, having no tail to carry identity", () => {
+      wrap(<ResourceRef kind="Pod" name="metrics-server" namespace="ns" />);
+      expect(screen.getByTestId("resource-ref-stem").className).toContain(
+        "text-fg"
+      );
+      expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
+        "text-fg-mut"
+      );
+      expect(styleOf("resource-ref-tail")).not.toContain("hsl");
+    });
+
+    it("minimal keeps the kind hue on the icon only and dims the tail", () => {
+      colouring("minimal");
+      renderRef();
+      expect(styleOf("resource-ref-icon")).toContain("var(--kind-s)");
+      expect(styleOf("resource-ref-kind")).not.toContain("hsl");
+      expect(styleOf("resource-ref-tail")).not.toContain("hsl");
+      expect(screen.getByTestId("resource-ref-tail").className).toContain(
+        "text-fg-fnt"
+      );
+      expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
+        "text-fg-mut"
+      );
+    });
+
+    it("off drops every tint and leaves the whole name at full contrast", () => {
+      colouring("off");
+      renderRef();
+      expect(screen.getByRole("link").innerHTML).not.toContain("hsl");
+      for (const part of ["resource-ref-stem", "resource-ref-tail"]) {
+        expect(screen.getByTestId(part).className).toContain("text-fg");
+        expect(screen.getByTestId(part).className).not.toMatch(
+          /text-fg-(mut|fnt)/
+        );
+      }
+    });
+
+    it("gives two kinds sharing a name different tail hues", () => {
+      const { unmount } = wrap(
+        <ResourceRef kind="Pod" name="cron-demo-29765945" namespace="ns" />
+      );
+      const pod = styleOf("resource-ref-tail");
+      unmount();
+      wrap(<ResourceRef kind="Job" name="cron-demo-29765945" namespace="ns" />);
+      expect(styleOf("resource-ref-tail")).not.toBe(pod);
+    });
+  });
+
+  describe("click seam", () => {
+    it("hands a plain click to onClick without losing the href", async () => {
+      const onClick = vi.fn();
+      wrap(
+        <ResourceRef kind="Pod" name="a-1" namespace="ns" onClick={onClick} />
+      );
+      await userEvent.click(screen.getByRole("link"));
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("link")).toHaveAttribute("href", "/pods/ns/a-1");
+    });
+
+    it("does not call onClick for an unroutable reference", async () => {
+      const onClick = vi.fn();
+      wrap(<ResourceRef kind="HelmRelease" name="traefik" onClick={onClick} />);
+      await userEvent.click(screen.getByText(/traefik/));
+      expect(onClick).not.toHaveBeenCalled();
+    });
+  });
+});
