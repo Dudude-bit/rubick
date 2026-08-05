@@ -28,10 +28,17 @@ use tauri::State;
 /// How far back an event still counts as "recent" for the warnings feed.
 const RECENT_WARNING_WINDOW_MINUTES: i64 = 60;
 
-/// Server-side cap on the event list. Events are the largest collection in
-/// most clusters and this query re-runs every couple of seconds, so pulling
+/// Server-side page size for the event list. Events are the largest collection
+/// in most clusters and this query re-runs every couple of seconds, so pulling
 /// the full list to keep one hour of it is the wrong trade.
 const EVENT_FETCH_LIMIT: u32 = 500;
+
+/// How many event pages to walk at most. The API returns events in etcd key
+/// order, not newest first, so a single page can miss the entire last hour on
+/// a cluster with thousands of warnings — following `continue` widens the
+/// window. The cap keeps the trade: four pages cover 2000 warnings, and a
+/// pathological cluster cannot stall a query that re-runs every few seconds.
+const MAX_EVENT_PAGES: usize = 4;
 
 /// Longest a pod may sit Pending before it counts as a problem. Scheduling
 /// and image pulls take seconds; without this grace every CronJob tick
@@ -494,9 +501,13 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
 /// `Result` says nothing about availability. Reading it as "available with
 /// zero usage" is how the UI ended up stating "actually using 0m (0%)" as
 /// fact on every cluster without metrics-server.
+///
+/// An empty data set is the same claim by another route — a metrics-server
+/// that answered but knows nothing about any node measures nothing — so it is
+/// unavailable too, not zero.
 fn usage_index(response: Option<NodeMetricsResponse>) -> Option<BTreeMap<String, (f64, u64)>> {
     let response = response?;
-    if !matches!(response.status.status, MetricsStatusKind::Available) {
+    if !matches!(response.status.status, MetricsStatusKind::Available) || response.data.is_empty() {
         return None;
     }
     Some(
@@ -604,6 +615,51 @@ fn summarize_nodes(
     }
 }
 
+#[derive(Default)]
+struct NodeAccounting {
+    requests: BTreeMap<String, (f64, u64)>,
+    pods: BTreeMap<String, usize>,
+}
+
+/// Attribute pod requests to the node each pod landed on, so a single full
+/// node can be shown as such while the cluster average still looks roomy.
+fn account_by_node(pods: &[Pod]) -> NodeAccounting {
+    let mut accounting = NodeAccounting::default();
+    for pod in pods {
+        if is_terminal(pod) {
+            continue;
+        }
+        let Some(node_name) = pod.spec.as_ref().and_then(|s| s.node_name.clone()) else {
+            continue;
+        };
+        let (cpu, memory) = pod_requests(pod);
+        let entry = accounting
+            .requests
+            .entry(node_name.clone())
+            .or_insert((0.0, 0));
+        entry.0 += cpu;
+        entry.1 += memory;
+        *accounting.pods.entry(node_name).or_insert(0) += 1;
+    }
+    accounting
+}
+
+fn namespace_loads(pods: &[Pod]) -> Vec<NamespaceLoad> {
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for namespace in pods.iter().filter_map(|p| p.metadata.namespace.as_deref()) {
+        *counts.entry(namespace).or_insert(0) += 1;
+    }
+    let mut loads: Vec<_> = counts
+        .into_iter()
+        .map(|(name, pod_count)| NamespaceLoad {
+            name: name.to_string(),
+            pod_count,
+        })
+        .collect();
+    loads.sort_by(|a, b| b.pod_count.cmp(&a.pod_count));
+    loads
+}
+
 /// Worst first, then oldest first — the top row is both the most severe and
 /// the one that has been broken longest — then cut to `MAX_PROBLEMS`.
 /// Returns the list and how many rows the cut dropped.
@@ -618,6 +674,82 @@ fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usiz
     (problems, truncated)
 }
 
+/// Warning events from the last pages the API will hand over cheaply.
+///
+/// Failures degrade to whatever was already collected: events are the one
+/// input this screen can lose without becoming wrong.
+async fn list_warning_events(events_api: &Api<Event>) -> Vec<Event> {
+    let mut items = Vec::new();
+    let mut token: Option<String> = None;
+
+    for _ in 0..MAX_EVENT_PAGES {
+        // Filtering warnings server-side turns the largest collection in the
+        // cluster into a small one.
+        let mut params = ListParams::default()
+            .fields("type=Warning")
+            .limit(EVENT_FETCH_LIMIT);
+        if let Some(token) = token.as_deref() {
+            params = params.continue_token(token);
+        }
+        let Ok(mut page) = events_api.list(&params).await else {
+            break;
+        };
+        token = page.metadata.continue_.take().filter(|t| !t.is_empty());
+        items.append(&mut page.items);
+        if token.is_none() {
+            break;
+        }
+    }
+
+    items
+}
+
+struct OverviewInputs<'a> {
+    /// Pods in the requested scope: problems, namespace breakdown, `pod_count`.
+    scoped_pods: &'a [Pod],
+    /// Cluster-wide pods, driving everything that is divided by node
+    /// allocatable. Same slice as `scoped_pods` when nothing is selected.
+    accounting_pods: &'a [Pod],
+    nodes: &'a [Node],
+    deployments: &'a [Deployment],
+    events: &'a [Event],
+    usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
+    namespace: Option<&'a str>,
+    now: DateTime<Utc>,
+}
+
+fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
+    let metrics_available = input.usage_by_node.is_some();
+    let accounting = account_by_node(input.accounting_pods);
+    let aggregate = summarize_nodes(
+        input.nodes,
+        &accounting.requests,
+        &accounting.pods,
+        input.usage_by_node.as_ref(),
+    );
+
+    let mut problems = pod_problems(input.scoped_pods, input.now);
+    problems.extend(deployment_problems(input.deployments));
+    problems.extend(node_problems(input.nodes));
+    let (problems, problems_truncated) = rank_and_cap(problems);
+
+    ClusterOverview {
+        problems,
+        problems_truncated,
+        scheduler: aggregate.scheduler,
+        nodes: aggregate.summaries,
+        warnings: recent_warnings(input.events),
+        // Scoped, the breakdown is one row restating the selection, under a
+        // heading that counts namespaces in the cluster. Drop it instead.
+        namespaces: match input.namespace {
+            Some(_) => Vec::new(),
+            None => namespace_loads(input.scoped_pods),
+        },
+        pod_count: input.scoped_pods.len(),
+        metrics_available,
+    }
+}
+
 /// Get everything the overview screen needs in one round trip.
 #[tauri::command]
 pub async fn get_cluster_overview(
@@ -626,95 +758,61 @@ pub async fn get_cluster_overview(
 ) -> Result<ClusterOverview> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
     let params = ListParams::default();
-    // Filtering warnings server-side turns the largest collection in the
-    // cluster into a small one, and the limit bounds the pathological case
-    // where even the warnings are numerous.
-    let event_params = ListParams::default()
-        .fields("type=Warning")
-        .limit(EVENT_FETCH_LIMIT);
     let pods_api: Api<Pod> = ctx.namespaced_or_cluster_api();
     let nodes_api: Api<Node> = ctx.cluster_api();
     let deployments_api: Api<Deployment> = ctx.namespaced_or_cluster_api();
     let events_api: Api<Event> = ctx.namespaced_or_cluster_api();
+    // Scheduler headroom and the node rows describe the cluster, not the
+    // selection: dividing one namespace's requests by every node's allocatable
+    // would state a reserved share that is nobody's number. So the accounting
+    // pass always runs on a cluster-wide pod list — fetched only when a
+    // namespace is selected, since otherwise the scoped list already is one.
+    let cluster_pods_api: Api<Pod> = ctx.cluster_api();
+    let cluster_pods_request = async {
+        match ctx.namespace {
+            Some(_) => Some(cluster_pods_api.list(&params).await),
+            None => None,
+        }
+    };
 
-    let (pods_result, nodes_result, deployments_result, events_result) = tokio::join!(
+    let (pods_result, cluster_pods_result, nodes_result, deployments_result, events, metrics) = tokio::join!(
         pods_api.list(&params),
+        cluster_pods_request,
         nodes_api.list(&params),
         deployments_api.list(&params),
-        events_api.list(&event_params),
+        list_warning_events(&events_api),
+        crate::metrics::get_node_metrics(&state),
     );
 
     let pods = pods_result.map_err(Error::from)?.items;
+    let cluster_pods = cluster_pods_result
+        .transpose()
+        .map_err(Error::from)?
+        .map(|list| list.items);
     let nodes = nodes_result.map_err(Error::from)?.items;
     let deployments = deployments_result.map_err(Error::from)?.items;
-    // Events are the one input we can lose without making the screen wrong,
-    // so a failure here degrades to "no warnings" instead of an error page.
-    let events = events_result.map(|l| l.items).unwrap_or_default();
 
-    // Live usage is best-effort: metrics-server is not installed everywhere.
-    let usage_by_node = usage_index(crate::metrics::get_node_metrics(&state).await.ok());
-    let metrics_available = usage_by_node.is_some();
-
-    // Requests are attributed per node so a single node can be shown as
-    // full while the cluster average still looks comfortable.
-    let mut requests_by_node: BTreeMap<String, (f64, u64)> = BTreeMap::new();
-    let mut pods_by_node: BTreeMap<String, usize> = BTreeMap::new();
-    let mut namespace_counts: BTreeMap<String, usize> = BTreeMap::new();
-
-    for pod in &pods {
-        if let Some(ns) = pod.metadata.namespace.as_ref() {
-            *namespace_counts.entry(ns.clone()).or_insert(0) += 1;
-        }
-        if is_terminal(pod) {
-            continue;
-        }
-        let Some(node_name) = pod.spec.as_ref().and_then(|s| s.node_name.clone()) else {
-            continue;
-        };
-        let (cpu, memory) = pod_requests(pod);
-        let entry = requests_by_node
-            .entry(node_name.clone())
-            .or_insert((0.0, 0));
-        entry.0 += cpu;
-        entry.1 += memory;
-        *pods_by_node.entry(node_name).or_insert(0) += 1;
-    }
-
-    let aggregate = summarize_nodes(
-        &nodes,
-        &requests_by_node,
-        &pods_by_node,
-        usage_by_node.as_ref(),
-    );
-
-    let mut problems = pod_problems(&pods, Utc::now());
-    problems.extend(deployment_problems(&deployments));
-    problems.extend(node_problems(&nodes));
-    let (problems, problems_truncated) = rank_and_cap(problems);
-
-    let mut namespaces: Vec<_> = namespace_counts
-        .into_iter()
-        .map(|(name, pod_count)| NamespaceLoad { name, pod_count })
-        .collect();
-    namespaces.sort_by(|a, b| b.pod_count.cmp(&a.pod_count));
-
-    Ok(ClusterOverview {
-        problems,
-        problems_truncated,
-        scheduler: aggregate.scheduler,
-        nodes: aggregate.summaries,
-        warnings: recent_warnings(&events),
-        namespaces,
-        pod_count: pods.len(),
-        metrics_available,
-    })
+    Ok(build_overview(&OverviewInputs {
+        scoped_pods: &pods,
+        accounting_pods: cluster_pods.as_deref().unwrap_or(&pods),
+        nodes: &nodes,
+        deployments: &deployments,
+        events: &events,
+        // Live usage is best-effort: metrics-server is not installed everywhere.
+        usage_by_node: usage_index(metrics.ok()),
+        namespace: ctx.namespace.as_deref(),
+        now: Utc::now(),
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::metrics::{MetricsStatus, NodeMetrics};
-    use k8s_openapi::api::core::v1::{PodCondition, PodStatus};
+    use k8s_openapi::api::core::v1::{
+        Container, NodeStatus, PodCondition, PodSpec, PodStatus, ResourceRequirements,
+    };
+    use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
     use kube::core::ObjectMeta;
 
@@ -751,6 +849,71 @@ mod tests {
         );
         p.metadata.creation_timestamp = Some(at(now, pending_for));
         p
+    }
+
+    fn quantities(pairs: &[(&str, &str)]) -> BTreeMap<String, Quantity> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), Quantity((*v).to_string())))
+            .collect()
+    }
+
+    fn node(name: &str, cpu: &str, memory: &str) -> Node {
+        Node {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            status: Some(NodeStatus {
+                allocatable: Some(quantities(&[("cpu", cpu), ("memory", memory)])),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn scheduled_pod(name: &str, namespace: &str, node_name: &str, cpu: &str, memory: &str) -> Pod {
+        Pod {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some(namespace.to_string()),
+                ..Default::default()
+            },
+            spec: Some(PodSpec {
+                node_name: Some(node_name.to_string()),
+                containers: vec![Container {
+                    name: "app".to_string(),
+                    resources: Some(ResourceRequirements {
+                        requests: Some(quantities(&[("cpu", cpu), ("memory", memory)])),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                phase: Some("Running".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn overview(
+        scoped_pods: &[Pod],
+        accounting_pods: &[Pod],
+        namespace: Option<&str>,
+    ) -> ClusterOverview {
+        build_overview(&OverviewInputs {
+            scoped_pods,
+            accounting_pods,
+            nodes: &[node("n1", "4", "8Gi"), node("n2", "4", "8Gi")],
+            deployments: &[],
+            events: &[],
+            usage_by_node: None,
+            namespace,
+            now: Utc::now(),
+        })
     }
 
     fn node_metrics_response(
@@ -809,6 +972,112 @@ mod tests {
             assert!(aggregate.summaries[0].cpu.usage.is_none());
             assert!(aggregate.summaries[0].memory.usage.is_none());
         }
+    }
+
+    /// `Available` with nothing in it measures nothing. Reporting it as
+    /// available turned the cluster totals into `Some(0.0)` and put the same
+    /// "actually using 0m (0%)" claim back on screen.
+    #[test]
+    fn metrics_available_without_data_is_unavailable() {
+        assert!(usage_index(Some(node_metrics_response(
+            MetricsStatusKind::Available,
+            vec![],
+        )))
+        .is_none());
+
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[node("n1", "4", "8Gi")],
+            deployments: &[],
+            events: &[],
+            usage_by_node: usage_index(Some(node_metrics_response(
+                MetricsStatusKind::Available,
+                vec![],
+            ))),
+            namespace: None,
+            now: Utc::now(),
+        });
+        assert!(!result.metrics_available);
+        assert!(result.scheduler.cpu.usage.is_none());
+        assert!(result.scheduler.memory.usage.is_none());
+    }
+
+    /// The scheduler panel divides requests by every node's allocatable, so
+    /// feeding it one namespace's requests printed a "6% reserved" that
+    /// describes no real quantity.
+    #[test]
+    fn namespace_scope_keeps_resource_accounting_cluster_wide() {
+        let scoped = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        let cluster = vec![
+            scheduled_pod("api", "app", "n1", "500m", "1Gi"),
+            scheduled_pod("db", "data", "n1", "1", "2Gi"),
+            scheduled_pod("agent", "kube-system", "n2", "250m", "512Mi"),
+        ];
+
+        let result = overview(&scoped, &cluster, Some("app"));
+
+        assert_eq!(result.scheduler.cpu.allocatable, 8000.0);
+        assert_eq!(result.scheduler.cpu.requested, 1750.0);
+        assert_eq!(result.nodes[0].pod_count, 2);
+        assert_eq!(result.nodes[1].pod_count, 1);
+        assert_eq!(result.nodes[0].cpu.requested, 1500.0);
+        // The scoped list still owns the counts that are about the selection.
+        assert_eq!(result.pod_count, 1);
+    }
+
+    /// Unscoped, the same slice does both jobs and the numbers must not move.
+    #[test]
+    fn unscoped_accounting_matches_the_single_pod_list() {
+        let pods = vec![
+            scheduled_pod("api", "app", "n1", "500m", "1Gi"),
+            scheduled_pod("agent", "kube-system", "n2", "250m", "512Mi"),
+        ];
+
+        let result = overview(&pods, &pods, None);
+
+        assert_eq!(result.scheduler.cpu.requested, 750.0);
+        assert_eq!(result.pod_count, 2);
+        assert_eq!(result.namespaces.len(), 2);
+    }
+
+    /// One row restating the namespace you already picked, under a heading
+    /// counting "namespaces with workloads: 1", is worse than no card.
+    #[test]
+    fn namespaces_breakdown_is_dropped_when_scoped() {
+        let scoped = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        assert!(overview(&scoped, &scoped, Some("app"))
+            .namespaces
+            .is_empty());
+    }
+
+    #[test]
+    fn namespace_loads_are_sorted_by_pod_count() {
+        let pods = vec![
+            scheduled_pod("a", "quiet", "n1", "100m", "64Mi"),
+            scheduled_pod("b", "busy", "n1", "100m", "64Mi"),
+            scheduled_pod("c", "busy", "n2", "100m", "64Mi"),
+        ];
+        let loads = namespace_loads(&pods);
+        assert_eq!(loads[0].name, "busy");
+        assert_eq!(loads[0].pod_count, 2);
+        assert_eq!(loads[1].name, "quiet");
+    }
+
+    /// Terminal pods hold no reservation; counting them would inflate both the
+    /// per-node pod count and the reserved share.
+    #[test]
+    fn terminal_pods_are_left_out_of_the_accounting() {
+        let mut finished = scheduled_pod("backup", "app", "n1", "500m", "1Gi");
+        finished.status = Some(PodStatus {
+            phase: Some("Succeeded".to_string()),
+            ..Default::default()
+        });
+        let pods = vec![finished, scheduled_pod("api", "app", "n1", "250m", "512Mi")];
+
+        let accounting = account_by_node(&pods);
+        assert_eq!(accounting.pods.get("n1"), Some(&1));
+        assert_eq!(accounting.requests.get("n1").map(|r| r.0), Some(250.0));
     }
 
     #[test]

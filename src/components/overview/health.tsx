@@ -206,7 +206,9 @@ function PressureBar({
           {format(pressure.requested)} / {format(pressure.allocatable)}
         </span>
       </div>
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-hover">
+      {/* Track needs its own contrast: `bg-hover` is 4-5% ink and the meter
+       *  reads as floating fill with no scale behind it, worst on light. */}
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-fg-fnt/25">
         <div
           className={cn("h-full rounded-full", tight ? "bg-warn" : "bg-info")}
           style={{ width: `${Math.min(100, ratio * 100)}%` }}
