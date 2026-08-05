@@ -10,7 +10,7 @@ export function ConnectClusterEmptyState({
     : "Connect to a cluster";
 
   return (
-    <div className="flex h-full items-center justify-center text-muted-foreground">
+    <div className="flex h-full items-center justify-center text-xs text-fg-mut">
       {message}
     </div>
   );

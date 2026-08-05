@@ -37,9 +37,7 @@ export const RealtimeAge = memo(function RealtimeAge({
   const age = useRealtimeAge(timestamp ?? null);
 
   if (!timestamp) {
-    return (
-      <span className={cn("text-muted-foreground", className)}>{fallback}</span>
-    );
+    return <span className={cn("text-fg-fnt", className)}>{fallback}</span>;
   }
 
   return <span className={className}>{age}</span>;

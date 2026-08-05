@@ -70,7 +70,7 @@ export function QuickActions<T>({
                   // 20px click target is hostile even when it looks tidy.
                   "relative h-5 w-5 before:absolute before:-inset-0.5 before:content-['']",
                   action.variant === "destructive" &&
-                    "text-destructive hover:text-destructive hover:bg-destructive/10"
+                    "text-err hover:bg-err/[0.16] hover:text-err"
                 )}
                 aria-label={action.label}
                 disabled={isDisabled}

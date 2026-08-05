@@ -325,7 +325,7 @@ export function DataTable<TData, TValue>({
         {...rowProps}
         className={cn(
           isClickable && "cursor-pointer",
-          isFocused && "ring-2 ring-ring ring-inset",
+          isFocused && "ring-1 ring-inset ring-info",
           "relative group"
         )}
         onClick={

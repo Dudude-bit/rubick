@@ -41,7 +41,7 @@ export function MaskedValue({
         <span
           className={cn(
             "font-mono text-xs break-all",
-            !isRevealed && "text-muted-foreground italic"
+            !isRevealed && "italic text-fg-fnt"
           )}
         >
           {isLoading ? "Loading..." : displayValue}
@@ -78,7 +78,7 @@ export function MaskedValue({
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <pre className="bg-muted p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono flex-1">
+      <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded bg-hover p-2 font-mono text-xs text-fg-mid">
         {isLoading ? "Loading..." : displayValue}
       </pre>
       <div className="flex items-center gap-1 shrink-0">

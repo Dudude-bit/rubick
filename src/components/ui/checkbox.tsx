@@ -10,7 +10,10 @@ const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+      // Unchecked is a hairline box like every other input; checked inverts
+      // to the foreground — the same "affirmative by contrast, not by hue"
+      // move the default Button makes.
+      "peer h-3.5 w-3.5 shrink-0 rounded-[3px] border border-hair transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-canvas",
       className
     )}
     {...props}
@@ -18,7 +21,7 @@ const Checkbox = React.forwardRef<
     <CheckboxPrimitive.Indicator
       className={cn("flex items-center justify-center text-current")}
     >
-      <Check className="h-4 w-4" />
+      <Check className="h-3 w-3" strokeWidth={3} />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));

@@ -3,9 +3,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * A placeholder is a shape the real content will occupy — nothing more.
- * The old skeletons drew card frames (`rounded-md border bg-card shadow-sm`)
- * around their bars, so every loading screen promised a layout the loaded
- * screen no longer has.
+ * The old skeletons drew a filled, shadowed card frame around their bars, so
+ * every loading screen promised a layout the loaded screen no longer has.
  */
 function Skeleton({
   className,

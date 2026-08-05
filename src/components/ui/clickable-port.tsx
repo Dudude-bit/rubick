@@ -52,7 +52,7 @@ export function ClickablePort({
           <Badge
             variant={variant}
             className={cn(
-              "cursor-pointer transition-colors hover:bg-primary hover:text-primary-foreground",
+              "cursor-pointer transition-colors hover:bg-sel hover:text-fg",
               className
             )}
             onClick={(e) => {
