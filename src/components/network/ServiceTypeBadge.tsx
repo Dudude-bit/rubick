@@ -9,35 +9,44 @@ interface ServiceTypeBadgeProps {
   type: string;
 }
 
-const typeConfig: Record<string, { color: string; description: string }> = {
+/**
+ * A service type is not a status, so it gets no palette of its own. The
+ * one thing worth marking is whether the service is reachable from outside
+ * the cluster, and that reads as weight rather than hue — an amber pill on
+ * every LoadBalancer row would claim something is wrong when nothing is.
+ */
+const SERVICE_TYPES: Record<
+  string,
+  { external: boolean; description: string }
+> = {
   ClusterIP: {
-    color: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-    description: "Internal only - accessible within cluster",
+    external: false,
+    description: "Internal only — reachable from inside the cluster",
   },
   NodePort: {
-    color: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    description: "External via node ports",
+    external: true,
+    description: "Reachable from outside via a port on every node",
   },
   LoadBalancer: {
-    color: "bg-green-500/10 text-green-500 border-green-500/20",
-    description: "External via load balancer",
+    external: true,
+    description: "Reachable from outside via a load balancer",
   },
   ExternalName: {
-    color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    description: "DNS alias to external service",
+    external: false,
+    description: "DNS alias to a service outside the cluster",
   },
 };
 
 export function ServiceTypeBadge({ type }: ServiceTypeBadgeProps) {
-  const config = typeConfig[type] || {
-    color: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  const config = SERVICE_TYPES[type] ?? {
+    external: false,
     description: "Unknown service type",
   };
 
   return (
     <Tooltip>
       <TooltipTrigger>
-        <Badge variant="default" className={config.color}>
+        <Badge variant={config.external ? "default" : "secondary"}>
           {type}
         </Badge>
       </TooltipTrigger>
