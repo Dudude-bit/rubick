@@ -134,8 +134,8 @@ export function MetricCard({
   // Progress bar style: dashed when no limit
   const progressBarClass = cn(
     "h-2",
-    colorVariant === "destructive" && "[&>div]:bg-red-500",
-    colorVariant === "secondary" && "[&>div]:bg-yellow-500",
+    colorVariant === "destructive" && "[&>div]:bg-err",
+    colorVariant === "secondary" && "[&>div]:bg-warn",
     !hasLimit && hasRequest && "[&>div]:bg-opacity-60"
   );
 

@@ -284,7 +284,7 @@ export function DataTable<TData, TValue>({
         </div>
         <div className="flex items-center gap-2">
           {showLargeDatasetWarning && (
-            <div className="flex items-center gap-1.5 text-xs text-yellow-600 dark:text-yellow-500">
+            <div className="flex items-center gap-1.5 text-xs text-warn">
               <AlertTriangle className="h-3.5 w-3.5" />
               <span>Showing all {data.length} rows may affect performance</span>
             </div>

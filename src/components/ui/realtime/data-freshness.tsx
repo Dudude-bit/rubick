@@ -50,7 +50,7 @@ export const DataFreshness = memo(function DataFreshness({
               className
             )}
           >
-            <span className="h-2 w-2 rounded-full shrink-0 bg-green-500" />
+            <span className="h-2 w-2 rounded-full shrink-0 bg-ok" />
             <span>Live</span>
           </div>
         </TooltipTrigger>

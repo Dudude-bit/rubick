@@ -68,7 +68,7 @@ export const RealtimeCountdown = memo(function RealtimeCountdown({
     ? warningLevel === "critical"
       ? "text-destructive font-medium"
       : warningLevel === "warning"
-        ? "text-yellow-600 dark:text-yellow-500"
+        ? "text-warn"
         : ""
     : "";
 
