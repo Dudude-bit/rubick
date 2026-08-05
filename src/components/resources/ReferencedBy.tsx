@@ -1,26 +1,19 @@
-// src/components/resources/ReferencedBy.tsx
+/**
+ * What consumes this Secret or ConfigMap.
+ *
+ * A reference is a kind, a name and how it is consumed, so it is one row —
+ * not a collapsible group of bordered link tiles with a count badge on each.
+ * Empty relationships are dropped instead of drawn as "No references found":
+ * the reader is looking for what does use the object, and five empty groups
+ * bury the one that is not.
+ */
+
 import { useQuery } from "@tanstack/react-query";
+
 import { Section, SectionHeader } from "@/components/ui/section";
-import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  ChevronDown,
-  ChevronRight,
-  Lock,
-  FileKey,
-  HardDrive,
-  Globe,
-  Image,
-} from "lucide-react";
-import { useState } from "react";
-import { ResourceLink } from "@/components/shared";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
+import { ResourceLink } from "./detail-blocks";
 import type { ResourceReferences } from "@/generated/types";
 
 interface ReferencedByProps {
@@ -29,49 +22,19 @@ interface ReferencedByProps {
   namespace: string;
 }
 
-interface RefGroupProps {
-  title: string;
-  icon: React.ElementType;
-  count: number;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
+interface RefRow {
+  kind: string;
+  name: string;
+  namespace: string;
+  /** How the object is consumed: container, key, mount path, host. */
+  via: string;
 }
 
-function RefGroup({
-  title,
-  icon: Icon,
-  count,
-  defaultOpen = false,
-  children,
-}: RefGroupProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen || count > 0);
+const REF_ROW =
+  "grid grid-cols-[minmax(0,92px)_minmax(0,232px)_minmax(0,1fr)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
 
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-hover rounded transition-colors">
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
-        )}
-        <Icon className="h-4 w-4 text-fg-mut" />
-        <span className="font-medium text-sm">{title}</span>
-        <Badge
-          variant={count > 0 ? "default" : "secondary"}
-          className="ml-auto"
-        >
-          {count}
-        </Badge>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pl-8 pr-2 pb-2 space-y-2">
-        {count === 0 ? (
-          <p className="text-sm text-fg-mut py-2">No references found</p>
-        ) : (
-          children
-        )}
-      </CollapsibleContent>
-    </Collapsible>
-  );
+function join(...parts: (string | null | undefined | false)[]): string {
+  return parts.filter(Boolean).join(" · ");
 }
 
 export function ReferencedBy({
@@ -85,139 +48,116 @@ export function ReferencedBy({
       commands.getResourceReferences(resourceType, name, namespace),
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Spinner className="h-6 w-6" />
-        <span className="ml-2 text-fg-mut">Loading references...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <p className="text-err text-sm py-4">
-        Failed to load references: {String(error)}
-      </p>
-    );
-  }
-
-  const refs = data || {
+  const refs = data ?? {
     envVars: [],
     envFrom: [],
     volumes: [],
     imagePullSecrets: [],
     tlsIngress: [],
   };
-  const totalCount =
-    refs.envVars.length +
-    refs.envFrom.length +
-    refs.volumes.length +
-    refs.imagePullSecrets.length +
-    refs.tlsIngress.length;
+
+  const groups: { label: string; rows: RefRow[] }[] = [
+    {
+      label: "Environment variables",
+      rows: refs.envVars.map((ref) => ({
+        kind: ref.kind,
+        name: ref.name,
+        namespace: ref.namespace,
+        via: join(ref.containerName, ref.key),
+      })),
+    },
+    {
+      label: "Bulk import (envFrom)",
+      rows: refs.envFrom.map((ref) => ({
+        kind: ref.kind,
+        name: ref.name,
+        namespace: ref.namespace,
+        via: join(ref.containerName, "all keys"),
+      })),
+    },
+    {
+      label: "Volume mounts",
+      rows: refs.volumes.map((ref) => ({
+        kind: ref.kind,
+        name: ref.name,
+        namespace: ref.namespace,
+        via: join(ref.containerName, ref.mountPath),
+      })),
+    },
+    ...(resourceType === ResourceType.Secret
+      ? [
+          {
+            label: "Image pull secrets",
+            rows: refs.imagePullSecrets.map((ref) => ({
+              kind: ref.kind,
+              name: ref.name,
+              namespace: ref.namespace,
+              via: join(ref.containerName),
+            })),
+          },
+          {
+            label: "TLS ingress",
+            rows: refs.tlsIngress.map((ref) => ({
+              kind: ResourceType.Ingress,
+              name: ref.name,
+              namespace: ref.namespace,
+              via: ref.hosts.join(", "),
+            })),
+          },
+        ]
+      : []),
+  ].filter((group) => group.rows.length > 0);
+
+  const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
 
   return (
     <Section>
-      <SectionHeader title="Referenced By" count={totalCount} />
-      <div className="flex flex-col gap-1">
-        <RefGroup
-          title="Environment Variables"
-          icon={resourceType === ResourceType.Secret ? Lock : FileKey}
-          count={refs.envVars.length}
-          defaultOpen={refs.envVars.length > 0}
-        >
-          {refs.envVars.map((ref, i) => (
-            <ResourceLink
-              key={`env-${i}`}
-              kind={ref.kind}
-              name={ref.name}
-              namespace={ref.namespace}
-              subtitle={
-                ref.containerName
-                  ? `Container: ${ref.containerName}${ref.key ? ` → ${ref.key}` : ""}`
-                  : undefined
-              }
-            />
-          ))}
-        </RefGroup>
-
-        <RefGroup
-          title="EnvFrom (Bulk Import)"
-          icon={resourceType === ResourceType.Secret ? Lock : FileKey}
-          count={refs.envFrom.length}
-          defaultOpen={refs.envFrom.length > 0}
-        >
-          {refs.envFrom.map((ref, i) => (
-            <ResourceLink
-              key={`envfrom-${i}`}
-              kind={ref.kind}
-              name={ref.name}
-              namespace={ref.namespace}
-              subtitle={
-                ref.containerName
-                  ? `Container: ${ref.containerName} (all keys)`
-                  : undefined
-              }
-            />
-          ))}
-        </RefGroup>
-
-        <RefGroup
-          title="Volume Mounts"
-          icon={HardDrive}
-          count={refs.volumes.length}
-          defaultOpen={refs.volumes.length > 0}
-        >
-          {refs.volumes.map((ref, i) => (
-            <ResourceLink
-              key={`vol-${i}`}
-              kind={ref.kind}
-              name={ref.name}
-              namespace={ref.namespace}
-              subtitle={`${ref.containerName ? `${ref.containerName} → ` : ""}${ref.mountPath}`}
-            />
-          ))}
-        </RefGroup>
-
-        {resourceType === ResourceType.Secret && (
-          <>
-            <RefGroup
-              title="Image Pull Secrets"
-              icon={Image}
-              count={refs.imagePullSecrets.length}
-            >
-              {refs.imagePullSecrets.map((ref, i) => (
-                <ResourceLink
-                  key={`pull-${i}`}
-                  kind={ref.kind}
-                  name={ref.name}
-                  namespace={ref.namespace}
-                />
-              ))}
-            </RefGroup>
-
-            <RefGroup
-              title="TLS Ingress"
-              icon={Globe}
-              count={refs.tlsIngress.length}
-            >
-              {refs.tlsIngress.map((ref, i) => (
-                <ResourceLink
-                  key={`tls-${i}`}
-                  kind="Ingress"
-                  name={ref.name}
-                  namespace={ref.namespace}
-                  subtitle={
-                    ref.hosts.length > 0
-                      ? `Hosts: ${ref.hosts.join(", ")}`
-                      : undefined
-                  }
-                />
-              ))}
-            </RefGroup>
-          </>
-        )}
-      </div>
+      <SectionHeader
+        title="Referenced by"
+        count={isLoading || error ? undefined : total}
+      />
+      {isLoading ? (
+        <p className="text-xs text-fg-fnt">Reading references…</p>
+      ) : error ? (
+        <p className="text-xs text-err">
+          Could not read references: {String(error)}
+        </p>
+      ) : total === 0 ? (
+        <p className="text-xs text-fg-fnt">
+          Nothing in this namespace references this{" "}
+          {resourceType === ResourceType.Secret ? "Secret" : "ConfigMap"}
+        </p>
+      ) : (
+        groups.map((group) => (
+          <div key={group.label}>
+            <div className="pb-0.5 pt-2 text-[11px] text-fg-fnt">
+              {group.label}
+              <span className="font-mono text-fg-mut">
+                {" "}
+                · {group.rows.length}
+              </span>
+            </div>
+            {group.rows.map((row, index) => (
+              <div key={`${row.kind}/${row.name}/${index}`} className={REF_ROW}>
+                <span className="truncate text-fg-mut">{row.kind}</span>
+                <span className="min-w-0 truncate">
+                  <ResourceLink
+                    kind={row.kind}
+                    name={row.name}
+                    namespace={row.namespace}
+                  />
+                </span>
+                <span
+                  className="truncate text-[11px] text-fg-fnt"
+                  title={row.via}
+                >
+                  {row.via || "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))
+      )}
     </Section>
   );
 }

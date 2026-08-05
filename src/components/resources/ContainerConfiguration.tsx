@@ -32,7 +32,7 @@ export function ContainerConfiguration({
   namespace,
 }: ContainerConfigurationProps) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-[22px]">
       <EnvironmentVariables
         env={env}
         envFrom={envFrom}

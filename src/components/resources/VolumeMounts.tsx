@@ -1,46 +1,30 @@
 /**
- * Volume Mounts Component
+ * A pod's volume mounts, as rows on the canvas.
  *
- * Displays volume mounts in a collapsible card with expandable content
- * for Secret and ConfigMap volumes.
+ * A mount is three facts — the path inside the container, what backs it, and
+ * which container asked for it — so it is one hairline-separated row rather
+ * than a bordered card with badges. Secret and ConfigMap backings expand in
+ * place, and the expansion is the same key/value block the ConfigMap and
+ * Secret pages are built from instead of a second, private rendering of the
+ * same data.
  */
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
+
 import { Section, SectionHeader } from "@/components/ui/section";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  ChevronDown,
-  ChevronRight,
-  Lock,
-  FileKey,
-  Database,
-  FolderOpen,
-  Box,
-  Loader2,
-} from "lucide-react";
-import type { VolumeReference } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { ResourceType } from "@/lib/resource-registry";
-import { SecretKeyValueItem } from "@/components/ui/secret-value";
+import { cn } from "@/lib/utils";
+import { DataSection } from "./data-rows";
+import { ResourceLink } from "./detail-blocks";
+import type { VolumeReference } from "@/generated/types";
 
 interface VolumeMountsProps {
-  /** Volume mount references */
   volumes: VolumeReference[];
-  /** Namespace for fetching Secret/ConfigMap data */
+  /** Required to read the backing Secret or ConfigMap. */
   namespace?: string;
 }
-
-// Cache for ConfigMap and Secret data
-type DataCache = Record<string, Record<string, string>>;
 
 type VolumeType =
   | "Secret"
@@ -49,253 +33,170 @@ type VolumeType =
   | "EmptyDir"
   | "Other";
 
+const KIND_TO_TYPE: Record<string, VolumeType> = {
+  secret: "Secret",
+  configmap: "ConfigMap",
+  persistentvolumeclaim: "PersistentVolumeClaim",
+  pvc: "PersistentVolumeClaim",
+  emptydir: "EmptyDir",
+};
+
+/** What backs the mount, in the word the API uses for it. */
+const SOURCE_LABEL: Record<VolumeType, string> = {
+  Secret: "secret",
+  ConfigMap: "configmap",
+  PersistentVolumeClaim: "claim",
+  EmptyDir: "emptyDir",
+  Other: "volume",
+};
+
 function getVolumeType(kind: string): VolumeType {
-  switch (kind.toLowerCase()) {
-    case "secret":
-      return "Secret";
-    case "configmap":
-      return "ConfigMap";
-    case "persistentvolumeclaim":
-    case "pvc":
-      return "PersistentVolumeClaim";
-    case "emptydir":
-      return "EmptyDir";
-    default:
-      return "Other";
-  }
+  return KIND_TO_TYPE[kind.toLowerCase()] ?? "Other";
 }
 
-function getVolumeIcon(volumeType: VolumeType) {
-  switch (volumeType) {
-    case "Secret":
-      return <Lock className="h-4 w-4 text-fg-mut" />;
-    case "ConfigMap":
-      return <FileKey className="h-4 w-4 text-fg-mut" />;
-    case "PersistentVolumeClaim":
-      return <Database className="h-4 w-4 text-fg-mut" />;
-    case "EmptyDir":
-      return <FolderOpen className="h-4 w-4 text-fg-mut" />;
-    default:
-      return <Box className="h-4 w-4 text-fg-mut" />;
-  }
-}
+// The path column is capped rather than elastic: on a wide window a `1fr`
+// path pushes the source and the container to the far edge, and the three
+// facts of one mount stop reading as one row.
+const MOUNT_ROW =
+  "grid grid-cols-[minmax(0,380px)_minmax(0,280px)_minmax(0,1fr)] items-baseline gap-3 text-xs";
 
-function getVolumeBadgeVariant(
-  volumeType: VolumeType
-): "default" | "secondary" | "outline" | "destructive" {
-  switch (volumeType) {
-    case "Secret":
-      return "destructive";
-    case "ConfigMap":
-      return "secondary";
-    case "PersistentVolumeClaim":
-      return "default";
-    default:
-      return "outline";
-  }
-}
-
-interface VolumeMountItemProps {
+interface MountRowProps {
   volume: VolumeReference;
-  volumeType: VolumeType;
-  secretData?: Record<string, string>;
-  configMapData?: Record<string, string>;
-  showSecrets: boolean;
-  isLoadingSecret: boolean;
-  isLoadingConfigMap: boolean;
+  type: VolumeType;
+  open: boolean;
+  onToggle: () => void;
+  data?: Record<string, string>;
+  loading?: boolean;
 }
 
-function VolumeMountItem({
+function MountRow({
   volume,
-  volumeType,
-  secretData,
-  configMapData,
-  showSecrets,
-  isLoadingSecret,
-  isLoadingConfigMap,
-}: VolumeMountItemProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [userRevealedKeys, setUserRevealedKeys] = useState<Set<string>>(
-    new Set()
-  );
-
-  const hasExpandableContent =
-    (volumeType === ResourceType.Secret && secretData) ||
-    (volumeType === ResourceType.ConfigMap && configMapData);
-
-  // Derived: when the parent's "show all" toggle is on, every key in
-  // the loaded secretData is revealed. Otherwise we honour the user's
-  // per-key reveal toggles. Computing this during render avoids the
-  // useEffect → setState cascade that the prior implementation used.
-  const revealedKeys =
-    showSecrets && secretData
-      ? new Set(Object.keys(secretData))
-      : userRevealedKeys;
-
-  const toggleReveal = (key: string) => {
-    if (showSecrets) {
-      // No-op when "show all" is active — the derived value above is
-      // already the union of every key, so toggling does nothing
-      // visible.
-      return;
-    }
-    setUserRevealedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
-  const isLoading =
-    (volumeType === ResourceType.Secret && isLoadingSecret) ||
-    (volumeType === ResourceType.ConfigMap && isLoadingConfigMap);
+  type,
+  open,
+  onToggle,
+  data,
+  loading,
+}: MountRowProps) {
+  const expandable = type === "Secret" || type === "ConfigMap";
+  const linkable = expandable || type === "PersistentVolumeClaim";
+  const label =
+    type === "Other" ? volume.kind.toLowerCase() : SOURCE_LABEL[type];
+  const scope = [
+    volume.containerName,
+    volume.subPath && `subPath ${volume.subPath}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <div className="rounded border border-hair p-3 space-y-2">
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            {getVolumeIcon(volumeType)}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-sm font-medium truncate">
-                  {volume.mountPath}
-                </span>
-                {volume.subPath && (
-                  <Badge variant="outline" className="text-xs">
-                    subPath: {volume.subPath}
-                  </Badge>
-                )}
-              </div>
-              <div className="text-xs text-fg-mut mt-0.5">
-                {volume.name}
-                {volume.containerName && (
-                  <span className="ml-2 opacity-70">
-                    ({volume.containerName})
-                  </span>
-                )}
-              </div>
-            </div>
-            <Badge variant={getVolumeBadgeVariant(volumeType)} className="ml-2">
-              {volumeType}
-            </Badge>
-          </div>
-          {hasExpandableContent && (
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2">
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-          )}
-        </div>
-        {hasExpandableContent && (
-          <CollapsibleContent>
-            <div className="mt-3 pt-3 border-t border-hair space-y-2">
-              {volumeType === ResourceType.Secret && secretData && (
-                <>
-                  {Object.entries(secretData).length > 0 ? (
-                    Object.entries(secretData).map(([key, value]) => (
-                      <SecretKeyValueItem
-                        key={key}
-                        keyName={key}
-                        value={value}
-                        isRevealed={revealedKeys.has(key)}
-                        onToggleReveal={() => toggleReveal(key)}
-                        isLoading={isLoadingSecret}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-sm text-fg-mut">
-                      No data keys in secret
-                    </p>
-                  )}
-                </>
+    <div className="border-b border-hair py-1 last:border-b-0">
+      <div className={MOUNT_ROW}>
+        {expandable ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={open}
+            className="-mx-1 flex min-w-0 items-center gap-1 rounded px-1 text-left hover:bg-hover"
+          >
+            <ChevronRight
+              className={cn(
+                "h-3 w-3 shrink-0 text-fg-fnt transition-transform",
+                open && "rotate-90"
               )}
-              {volumeType === ResourceType.ConfigMap && configMapData && (
-                <>
-                  {Object.entries(configMapData).length > 0 ? (
-                    Object.entries(configMapData).map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="rounded border border-hair p-3 space-y-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <FileKey className="h-4 w-4 text-fg-mut" />
-                          <span className="font-medium">{key}</span>
-                          <Badge variant="secondary" className="text-xs">
-                            {value.length} chars
-                          </Badge>
-                        </div>
-                        <pre className="bg-hover p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-48">
-                          {isLoadingConfigMap ? "Loading..." : value}
-                        </pre>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-fg-mut">
-                      No data keys in configmap
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          </CollapsibleContent>
+            />
+            <span className="truncate font-mono text-fg">
+              {volume.mountPath}
+            </span>
+          </button>
+        ) : (
+          // Matches the chevron's 12px + 4px gap so every path starts on the
+          // same column whether or not the row can be opened.
+          <span className="block truncate pl-4 font-mono text-fg">
+            {volume.mountPath}
+          </span>
         )}
-      </Collapsible>
+        <span className="min-w-0 truncate">
+          <span className="text-fg-fnt">{label} </span>
+          {linkable ? (
+            <ResourceLink
+              kind={volume.kind}
+              name={volume.name}
+              namespace={volume.namespace}
+            />
+          ) : (
+            <span className="font-mono text-fg-mid">{volume.name}</span>
+          )}
+        </span>
+        <span
+          className="truncate text-[11px] text-fg-fnt"
+          title={scope || undefined}
+        >
+          {scope || "—"}
+        </span>
+      </div>
+      {open && (
+        <div className="ml-4 mt-1.5 border-l border-hair pl-3">
+          <DataSection
+            data={data ?? {}}
+            sensitive={type === "Secret"}
+            isLoading={!!loading}
+            emptyMessage={`This ${SOURCE_LABEL[type]} holds no keys`}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 export function VolumeMounts({ volumes, namespace }: VolumeMountsProps) {
-  const [showSecrets, setShowSecrets] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [openRows, setOpenRows] = useState<ReadonlySet<string>>(new Set());
 
-  const hasVolumes = volumes.length > 0;
+  const rows = useMemo(
+    () =>
+      volumes.map((volume) => ({
+        volume,
+        type: getVolumeType(volume.kind),
+        key: `${volume.name}/${volume.mountPath}`,
+      })),
+    [volumes]
+  );
 
-  // Get unique secret and configMap names
-  const { secretNames, configMapNames, hasSecrets } = useMemo(() => {
-    const secrets = new Set<string>();
-    const configMaps = new Set<string>();
+  const secretNames = useMemo(
+    () => [
+      ...new Set(
+        rows.filter((r) => r.type === "Secret").map((r) => r.volume.name)
+      ),
+    ],
+    [rows]
+  );
+  const configMapNames = useMemo(
+    () => [
+      ...new Set(
+        rows.filter((r) => r.type === "ConfigMap").map((r) => r.volume.name)
+      ),
+    ],
+    [rows]
+  );
 
-    for (const vol of volumes) {
-      const volumeType = getVolumeType(vol.kind);
-      if (volumeType === ResourceType.Secret) {
-        secrets.add(vol.name);
-      } else if (volumeType === ResourceType.ConfigMap) {
-        configMaps.add(vol.name);
-      }
-    }
+  const openSources = useMemo(
+    () =>
+      new Set(
+        rows.filter((r) => openRows.has(r.key)).map((r) => r.volume.name)
+      ),
+    [rows, openRows]
+  );
 
-    return {
-      secretNames: Array.from(secrets),
-      configMapNames: Array.from(configMaps),
-      hasSecrets: secrets.size > 0,
-    };
-  }, [volumes]);
-
-  // Per-name parallel queries via useQueries. Each ConfigMap/Secret
-  // gets its own queryKey so a slow one doesn't block fast ones (the
-  // previous Promise.all blocked on the slowest), and cache survives
-  // navigation away and back. staleTime: Infinity matches the prior
-  // behaviour of "fetched once per session" — these reflect data on
-  // the cluster that doesn't change frequently. retry: false + the
-  // ?? {} fallback below keep the original silent-error behaviour
-  // (a missing/forbidden CM shows as empty, not a toast).
+  // Reading a backing object is deferred until its row is opened: a pod can
+  // mount a dozen ConfigMaps, and reading a Secret is a privileged call worth
+  // not making until someone asks for it. `staleTime: Infinity` keeps a mount
+  // that is opened and closed repeatedly to one read; `retry: false` plus the
+  // undefined data leaves a forbidden read showing "no keys" rather than a
+  // toast storm.
   const configMapQueries = useQueries({
     queries: configMapNames.map((name) => ({
       queryKey: ["configmap-data", namespace, name] as const,
       queryFn: () => commands.getConfigmapData(name, namespace!),
-      enabled: !!namespace,
+      enabled: !!namespace && openSources.has(name),
       staleTime: Infinity,
       retry: false,
     })),
@@ -305,118 +206,50 @@ export function VolumeMounts({ volumes, namespace }: VolumeMountsProps) {
     queries: secretNames.map((name) => ({
       queryKey: ["secret-data", namespace, name] as const,
       queryFn: () => commands.getSecretData(name, namespace!),
-      enabled: !!namespace && showSecrets,
+      enabled: !!namespace && openSources.has(name),
       staleTime: Infinity,
       retry: false,
     })),
   });
 
-  const configMapCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    configMapNames.forEach((name, i) => {
-      const q = configMapQueries[i];
-      if (q?.data) cache[name] = q.data;
-      else if (q?.isError) cache[name] = {};
+  const toggle = (key: string) =>
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
     });
-    return cache;
-  }, [configMapNames, configMapQueries]);
-
-  const secretCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    secretNames.forEach((name, i) => {
-      const q = secretQueries[i];
-      if (q?.data) cache[name] = q.data;
-      else if (q?.isError) cache[name] = {};
-    });
-    return cache;
-  }, [secretNames, secretQueries]);
-
-  const loadingConfigMaps = useMemo<Set<string>>(() => {
-    const set = new Set<string>();
-    configMapNames.forEach((name, i) => {
-      if (configMapQueries[i]?.isFetching) set.add(name);
-    });
-    return set;
-  }, [configMapNames, configMapQueries]);
-
-  const loadingSecrets = useMemo<Set<string>>(() => {
-    const set = new Set<string>();
-    secretNames.forEach((name, i) => {
-      if (secretQueries[i]?.isFetching) set.add(name);
-    });
-    return set;
-  }, [secretNames, secretQueries]);
 
   return (
-    <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
-      <Section>
-        <SectionHeader
-          title="Volume Mounts"
-          count={hasVolumes ? volumes.length : undefined}
-          actions={
-            <>
-              {hasSecrets && (
-                <div className="flex items-center gap-2">
-                  {loadingSecrets.size > 0 && (
-                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
-                  )}
-                  <Switch
-                    id="show-volume-secrets"
-                    checked={showSecrets}
-                    onCheckedChange={setShowSecrets}
-                    disabled={loadingSecrets.size > 0}
-                  />
-                  <Label htmlFor="show-volume-secrets" className="text-sm">
-                    Show secrets
-                  </Label>
-                </div>
-              )}
-              <CollapsibleTrigger
-                aria-label={isExpanded ? "Collapse" : "Expand"}
-                className="ml-1 text-fg-mut hover:text-fg"
-              >
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </CollapsibleTrigger>
-            </>
-          }
-        />
-        <CollapsibleContent>
-          {!hasVolumes ? (
-            <p className="text-sm text-fg-mut">No volume mounts defined</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {volumes.map((volume) => {
-                const volumeType = getVolumeType(volume.kind);
-                const secretData =
-                  volumeType === ResourceType.Secret
-                    ? secretCache[volume.name]
-                    : undefined;
-                const configMapData =
-                  volumeType === ResourceType.ConfigMap
-                    ? configMapCache[volume.name]
-                    : undefined;
-
-                return (
-                  <VolumeMountItem
-                    key={`${volume.name}-${volume.mountPath}`}
-                    volume={volume}
-                    volumeType={volumeType}
-                    secretData={secretData}
-                    configMapData={configMapData}
-                    showSecrets={showSecrets}
-                    isLoadingSecret={loadingSecrets.has(volume.name)}
-                    isLoadingConfigMap={loadingConfigMaps.has(volume.name)}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </CollapsibleContent>
-      </Section>
-    </Collapsible>
+    <Section>
+      <SectionHeader
+        title="Volume mounts"
+        count={volumes.length > 0 ? volumes.length : undefined}
+      />
+      {volumes.length === 0 ? (
+        <p className="text-xs text-fg-fnt">No volumes mounted</p>
+      ) : (
+        <div>
+          {rows.map(({ volume, type, key }) => {
+            const query =
+              type === "Secret"
+                ? secretQueries[secretNames.indexOf(volume.name)]
+                : type === "ConfigMap"
+                  ? configMapQueries[configMapNames.indexOf(volume.name)]
+                  : undefined;
+            return (
+              <MountRow
+                key={key}
+                volume={volume}
+                type={type}
+                open={openRows.has(key)}
+                onToggle={() => toggle(key)}
+                data={query?.data}
+                loading={query?.isFetching}
+              />
+            );
+          })}
+        </div>
+      )}
+    </Section>
   );
 }

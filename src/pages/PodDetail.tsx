@@ -430,7 +430,9 @@ export function PodDetail() {
       {showTerminal && selectedContainer && pod && (
         <Section>
           <SectionHeader title={`Shell · ${selectedContainer}`} />
-          <div className="relative h-[500px] overflow-hidden rounded border border-hair bg-black">
+          {/* The xterm viewport paints its own background, so the frame only
+              has to hold the canvas colour until the terminal attaches. */}
+          <div className="relative h-[500px] overflow-hidden rounded border border-hair bg-canvas">
             <PodTerminal
               podName={pod.name}
               namespace={pod.namespace}

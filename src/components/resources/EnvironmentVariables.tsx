@@ -30,8 +30,64 @@ import type {
   EnvVarSourceType,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { SourceBadge, type SourceType } from "@/components/ui/source-badge";
+import { ResourceType } from "@/lib/resource-registry";
+import { ResourceLink } from "@/components/resources/detail-blocks";
 import { MaskedValue } from "@/components/ui/masked-value";
+
+/**
+ * Where a variable's value came from.
+ *
+ * Printed as a word plus a link, never as a badge: a source is a fact about
+ * the variable, not a lifecycle status, and a column of tinted pills reads as
+ * a column of alarms.
+ */
+type SourceType =
+  | "direct"
+  | "secret"
+  | "configmap"
+  | "field"
+  | "resource"
+  | "envFromSecret"
+  | "envFromConfigMap";
+
+const SOURCE_LABEL: Record<SourceType, string> = {
+  direct: "inline",
+  secret: "secret",
+  configmap: "configmap",
+  field: "fieldRef",
+  resource: "resourceRef",
+  envFromSecret: "secret · envFrom",
+  envFromConfigMap: "configmap · envFrom",
+};
+
+function SourceCell({
+  type,
+  name,
+  namespace,
+}: {
+  type: SourceType;
+  name?: string;
+  namespace?: string;
+}) {
+  const isSecret = type === "secret" || type === "envFromSecret";
+  const isConfigMap = type === "configmap" || type === "envFromConfigMap";
+  return (
+    <span className="text-[11px] text-fg-fnt">
+      {SOURCE_LABEL[type]}
+      {name && " "}
+      {name &&
+        (namespace && (isSecret || isConfigMap) ? (
+          <ResourceLink
+            kind={isSecret ? ResourceType.Secret : ResourceType.ConfigMap}
+            name={name}
+            namespace={namespace}
+          />
+        ) : (
+          <span className="font-mono text-fg-mut">{name}</span>
+        ))}
+    </span>
+  );
+}
 
 interface EnvironmentVariablesProps {
   env: EnvVarInfo[];
@@ -53,7 +109,6 @@ type FilterOption =
   | "resource"
   | "envFrom";
 
-// Map EnvVarSourceType to SourceBadge's SourceType
 function mapSourceType(sourceType: EnvVarSourceType): SourceType {
   switch (sourceType) {
     case "secretKeyRef":
@@ -453,7 +508,7 @@ export function EnvironmentVariables({
                   />
                   <Label
                     htmlFor={`show-secrets-${containerName}`}
-                    className="text-sm"
+                    className="text-[11px] text-fg-mut"
                   >
                     Show secrets
                   </Label>
@@ -475,11 +530,11 @@ export function EnvironmentVariables({
         />
         <CollapsibleContent>
           {!hasEnvVars ? (
-            <p className="text-sm text-fg-mut">
+            <p className="text-xs text-fg-fnt">
               No environment variables defined
             </p>
           ) : filteredEnvVars.length === 0 ? (
-            <p className="text-sm text-fg-mut">
+            <p className="text-xs text-fg-fnt">
               No environment variables match the selected filter
             </p>
           ) : (
@@ -506,7 +561,7 @@ export function EnvironmentVariables({
                     >
                       <TableCell className="font-mono text-xs font-medium">
                         {isPlaceholder ? (
-                          <span className="text-fg-mut italic">
+                          <span className="text-fg-fnt">
                             (all keys from {ev.sourceName})
                           </span>
                         ) : (
@@ -515,7 +570,7 @@ export function EnvironmentVariables({
                       </TableCell>
                       <TableCell>
                         {isPlaceholder ? (
-                          <span className="text-fg-mut text-xs italic">
+                          <span className="text-xs text-fg-fnt">
                             {displayValue}
                           </span>
                         ) : isSecret ? (
@@ -534,11 +589,10 @@ export function EnvironmentVariables({
                         )}
                       </TableCell>
                       <TableCell>
-                        <SourceBadge
+                        <SourceCell
                           type={ev.sourceType}
                           name={ev.sourceName}
                           namespace={namespace}
-                          linkable={!!ev.sourceName && !!namespace}
                         />
                       </TableCell>
                     </TableRow>
