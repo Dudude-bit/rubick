@@ -1,35 +1,42 @@
-import { useNavigate } from "react-router-dom";
-import { Section } from "@/components/ui/section";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { Bug, RefreshCw, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bug, Network, RefreshCw, Trash2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { commands } from "@/lib/commands";
-import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
-import { mergePodsWithMetrics } from "@/lib/metrics";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { useClusterStore } from "@/stores/clusterStore";
-import { MetricsStatusBanner } from "@/components/metrics";
-import type { PodInfo, DebugResult } from "@/generated/types";
-import { DebugPodDialog } from "@/components/debug";
-import { Button } from "@/components/ui/button";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { MetricsStatusBanner } from "@/components/metrics";
+import { DebugPodDialog } from "@/components/debug";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodTerminal } from "@/components/terminal/PodTerminal";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { ContainerCard } from "@/components/resources/ContainerCard";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { useToast } from "@/components/ui/use-toast";
-import { normalizeTauriError } from "@/lib/error-utils";
-
+import { ContainerRows } from "@/components/resources/container-rows";
+import {
+  ConditionRows,
+  DetailAction,
+  ResourceLink,
+  UsageRow,
+} from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
 import { PodPortForwardDialog } from "@/components/pod/PodPortForwardDialog";
 import { usePodPortForward } from "@/components/pod/usePodPortForward";
 import { usePodReplacementSearch } from "@/components/pod/usePodReplacementSearch";
-import { PodInfoCards } from "@/components/pod/PodInfoCards";
+import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
+import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
+import { mergePodsWithMetrics } from "@/lib/metrics";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { useClusterStore } from "@/stores/clusterStore";
+import type { PodInfo, DebugResult } from "@/generated/types";
 
 export function PodDetail() {
   const navigate = useNavigate();
@@ -196,6 +203,45 @@ export function PodDetail() {
         })
     : undefined;
 
+  const placement: KeyValue[] = [
+    {
+      label: "Node",
+      value: pod?.nodeName ? (
+        <ResourceLink kind={ResourceType.Node} name={pod.nodeName} />
+      ) : (
+        "unscheduled"
+      ),
+      tone: pod?.nodeName ? undefined : "warn",
+    },
+    { label: "Pod IP", value: pod?.podIp || "—", mono: true },
+    { label: "Host IP", value: pod?.hostIp || "—", mono: true },
+    {
+      label: "Restarts",
+      value: pod?.restartCount ?? 0,
+      mono: true,
+      tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
+    },
+    {
+      label: "Containers",
+      value: pod
+        ? `${pod.containers.filter((c) => c.ready).length} of ${pod.containers.length} ready`
+        : "—",
+      tone:
+        pod && pod.containers.some((c) => !c.ready)
+          ? ("warn" as const)
+          : undefined,
+    },
+    ...(pod?.status.reason || pod?.status.message
+      ? [
+          {
+            label: "Reason",
+            value: pod.status.message || pod.status.reason || "",
+            tone: "err" as const,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <ResourceDetailLayout
       resource={pod}
@@ -204,56 +250,44 @@ export function PodDetail() {
       resourceKind={ResourceType.Pod}
       title={pod?.name || name || "Pod"}
       namespace={pod?.namespace || namespace}
+      createdAt={pod?.createdAt}
       onBack={() => navigate(-1)}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      badges={
+      statusBadge={
         pod?.status.phase ? <StatusBadge status={pod.status.phase} /> : null
       }
       onFindReplacement={handleFindReplacement}
       isSearchingReplacement={isSearchingReplacement}
       actions={
         <>
-          <Button
-            variant="outline"
-            size="sm"
+          <DetailAction
+            label="Debug"
+            icon={Bug}
             onClick={() => setDebugDialogOpen(true)}
             disabled={!currentContext || !pod}
-          >
-            <Bug className="mr-2 h-4 w-4" />
-            Debug
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          />
+          <DetailAction
+            label="Port forward"
+            icon={Network}
             onClick={openPortForwardDialog}
             disabled={!currentContext || !pod}
-          >
-            Port Forward
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          />
+          <DetailAction
+            label="Restart"
+            icon={RefreshCw}
             onClick={() => restartMutation.mutate()}
-            disabled={restartMutation.isPending || !pod}
-          >
-            <RefreshCw
-              className={cn(
-                "mr-2 h-4 w-4",
-                restartMutation.isPending && "animate-spin"
-              )}
-            />
-            Restart
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
+            disabled={!pod}
+            busy={restartMutation.isPending}
+          />
+          <DetailAction
+            label="Delete"
+            icon={Trash2}
             onClick={() => deleteMutation?.mutate()}
-            disabled={deleteMutation?.isPending || !pod}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
+            disabled={!pod}
+            busy={deleteMutation?.isPending}
+            danger
+          />
         </>
       }
       tabs={[
@@ -261,29 +295,32 @@ export function PodDetail() {
           id: "overview",
           label: "Overview",
           content: (
-            <div className="space-y-4">
-              {pod && (
-                <LabelsDisplay labels={pod.labels} className="col-span-full" />
-              )}
-            </div>
+            <>
+              <KeyValueSection
+                title="Labels"
+                count={Object.keys(pod?.labels ?? {}).length}
+                items={recordToKeyValues(pod?.labels ?? {})}
+                emptyMessage="No labels"
+              />
+              <KeyValueSection
+                title="Annotations"
+                count={Object.keys(pod?.annotations ?? {}).length}
+                items={recordToKeyValues(pod?.annotations ?? {})}
+                emptyMessage="No annotations"
+              />
+            </>
           ),
         },
         {
           id: "containers",
           label: "Containers",
           content: pod ? (
-            <div className="space-y-4">
-              {pod.containers.map((container) => (
-                <ContainerCard
-                  key={container.name}
-                  container={container}
-                  namespace={namespace}
-                  podName={pod.name}
-                  showShell={true}
-                  onOpenShell={openTerminal}
-                />
-              ))}
-            </div>
+            <ContainerRows
+              containers={pod.containers}
+              namespace={pod.namespace}
+              podName={pod.name}
+              onOpenShell={openTerminal}
+            />
           ) : null,
         },
         {
@@ -300,6 +337,19 @@ export function PodDetail() {
           ) : null,
         },
         {
+          id: "conditions",
+          label: "Conditions",
+          content: (
+            <Section>
+              <SectionHeader
+                title="Conditions"
+                count={pod?.status.conditions.length}
+              />
+              <ConditionRows conditions={pod?.status.conditions ?? []} />
+            </Section>
+          ),
+        },
+        {
           id: "yaml",
           label: "YAML",
           content: (
@@ -313,20 +363,35 @@ export function PodDetail() {
             />
           ),
         },
-        {
-          id: "conditions",
-          label: "Conditions",
-          content: (
-            <ConditionsDisplay conditions={pod?.status.conditions || []} />
-          ),
-        },
       ]}
     >
       {podStatus?.status !== "available" && (
         <MetricsStatusBanner status={podStatus} />
       )}
 
-      {pod && <PodInfoCards pod={pod} podWithMetrics={podWithMetrics} />}
+      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
+        <KeyValueSection title="Placement" items={placement} />
+        <Section>
+          <SectionHeader
+            title="Usage"
+            count="live usage against this pod's limits"
+          />
+          <div>
+            <UsageRow
+              label="CPU"
+              used={podWithMetrics?.cpuMillicores}
+              total={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
+              type="cpu"
+            />
+            <UsageRow
+              label="Memory"
+              used={podWithMetrics?.memoryBytes}
+              total={pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null}
+              type="memory"
+            />
+          </div>
+        </Section>
+      </div>
 
       {pod && (
         <RelatedResources
@@ -363,8 +428,9 @@ export function PodDetail() {
       )}
 
       {showTerminal && selectedContainer && pod && (
-        <Section className="my-4 overflow-hidden border-2 border-muted">
-          <div className="p-0 h-[500px] overflow-hidden relative bg-black">
+        <Section>
+          <SectionHeader title={`Shell · ${selectedContainer}`} />
+          <div className="relative h-[500px] overflow-hidden rounded border border-hair bg-black">
             <PodTerminal
               podName={pod.name}
               namespace={pod.namespace}
