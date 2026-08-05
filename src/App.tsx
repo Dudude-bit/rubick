@@ -39,6 +39,11 @@ const NodeList = lazy(() =>
     default: m.NodeList,
   }))
 );
+const NamespaceList = lazy(() =>
+  import("@/components/resources/NamespaceList").then((m) => ({
+    default: m.NamespaceList,
+  }))
+);
 const Events = lazy(() =>
   import("@/pages/Events").then((m) => ({ default: m.Events }))
 );
@@ -207,6 +212,10 @@ export default function App() {
             <Route
               path={`${toPlural(ResourceType.Node)}/:name`}
               element={<NodeDetail />}
+            />
+            <Route
+              path={toPlural(ResourceType.Namespace)}
+              element={<NamespaceList />}
             />
             <Route path="events" element={<Events />} />
             <Route path="helm" element={<Helm />} />

@@ -3,6 +3,7 @@ import {
   Layers,
   Database,
   Server,
+  Copy,
   Briefcase,
   CalendarClock,
   FileText,
@@ -10,6 +11,7 @@ import {
   Network,
   Globe,
   HardDrive,
+  HardDriveDownload,
   Activity,
   FolderOpen,
   Puzzle,
@@ -56,7 +58,10 @@ export const RESOURCE_REGISTRY = [
     kind: "DaemonSet",
     plural: "daemonsets",
     displayPlural: "DaemonSets",
-    icon: Server,
+    // Not Server, which belongs to Nodes: a DaemonSet and a Node drawn with
+    // the same mark sit six rows apart in the sidebar and stop being two
+    // things. The offset-frames glyph reads as "one copy per node".
+    icon: Copy,
     apiVersion: "apps/v1",
     scope: "namespaced",
     category: "workloads",
@@ -119,7 +124,9 @@ export const RESOURCE_REGISTRY = [
     kind: "PersistentVolumeClaim",
     plural: "persistentvolumeclaims",
     displayPlural: "PVCs",
-    icon: HardDrive,
+    // A claim draws from a volume, so it is the drive with the arrow — the
+    // two sat adjacent under Storage sharing one mark.
+    icon: HardDriveDownload,
     apiVersion: "v1",
     scope: "namespaced",
     category: "storage",

@@ -1,271 +1,250 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
-  Box,
-  Network,
-  Database,
-  FileText,
-  Server,
-  Activity,
   Package,
   Settings,
-  ChevronDown,
-  Puzzle,
+  type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import { useEffect, useState } from "react";
+
+import { ProviderMark } from "@/components/ui/provider-mark";
+import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { detectProvider } from "@/lib/cluster-identity";
 import {
   ResourceType,
   getDisplayPlural,
+  getResourceIcon,
   getResourceListUrl,
+  type ResourceKind,
 } from "@/lib/resource-registry";
+import { cn } from "@/lib/utils";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
+import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Overview", path: "/" },
+type NavItem = {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  /** Which of the backend's counts belongs at the end of this row. */
+  count?: keyof ResourceCounts;
+};
+
+/** A row whose label, route and icon all come from the resource registry. */
+function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
+  return {
+    label: getDisplayPlural(kind),
+    path: getResourceListUrl(kind),
+    icon: getResourceIcon(kind),
+    count,
+  };
+}
+
+/**
+ * The nav, in reading order.
+ *
+ * A group is a caption, not a control: the resources under it are what the
+ * sidebar is for, and hiding them behind a disclosure the user has to open
+ * on every launch made the panel a list of four words. Captioned groups
+ * cost one line each and keep every destination one click away.
+ */
+const GROUPS: { caption?: string; items: NavItem[] }[] = [
   {
-    icon: Box,
-    label: "Workloads",
-    path: "/workloads",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.Pod),
-        path: getResourceListUrl(ResourceType.Pod),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Deployment),
-        path: getResourceListUrl(ResourceType.Deployment),
-      },
-      {
-        label: getDisplayPlural(ResourceType.StatefulSet),
-        path: getResourceListUrl(ResourceType.StatefulSet),
-      },
-      {
-        label: getDisplayPlural(ResourceType.DaemonSet),
-        path: getResourceListUrl(ResourceType.DaemonSet),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Job),
-        path: getResourceListUrl(ResourceType.Job),
-      },
-      {
-        label: getDisplayPlural(ResourceType.CronJob),
-        path: getResourceListUrl(ResourceType.CronJob),
-      },
+    items: [
+      { label: "Overview", path: "/", icon: LayoutDashboard },
+      resource(ResourceType.Event, "events"),
     ],
   },
   {
-    icon: Network,
-    label: "Network",
-    path: "/network",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.Service),
-        path: getResourceListUrl(ResourceType.Service),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Ingress),
-        path: getResourceListUrl(ResourceType.Ingress),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Endpoints),
-        path: getResourceListUrl(ResourceType.Endpoints),
-      },
+    caption: "Workloads",
+    items: [
+      resource(ResourceType.Pod, "pods"),
+      resource(ResourceType.Deployment, "deployments"),
+      resource(ResourceType.StatefulSet, "statefulSets"),
+      resource(ResourceType.DaemonSet, "daemonSets"),
+      resource(ResourceType.Job, "jobs"),
+      resource(ResourceType.CronJob, "cronJobs"),
     ],
   },
   {
-    icon: Database,
-    label: "Storage",
-    path: "/storage",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.PersistentVolume),
-        path: getResourceListUrl(ResourceType.PersistentVolume),
-      },
-      {
-        label: getDisplayPlural(ResourceType.PersistentVolumeClaim),
-        path: getResourceListUrl(ResourceType.PersistentVolumeClaim),
-      },
-      {
-        label: getDisplayPlural(ResourceType.StorageClass),
-        path: getResourceListUrl(ResourceType.StorageClass),
-      },
+    caption: "Cluster",
+    items: [
+      resource(ResourceType.Node, "nodes"),
+      resource(ResourceType.Namespace, "namespaces"),
+      resource(ResourceType.CustomResourceDefinition),
+      { label: "Helm", path: "/helm", icon: Package },
     ],
   },
   {
-    icon: FileText,
-    label: "Configuration",
-    path: "/configuration",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.ConfigMap),
-        path: getResourceListUrl(ResourceType.ConfigMap),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Secret),
-        path: getResourceListUrl(ResourceType.Secret),
-      },
-      { label: "Builder", path: "/configuration/builder" },
+    caption: "Network",
+    items: [
+      resource(ResourceType.Service, "services"),
+      resource(ResourceType.Ingress, "ingresses"),
     ],
   },
   {
-    icon: Server,
-    label: getDisplayPlural(ResourceType.Node),
-    path: getResourceListUrl(ResourceType.Node),
+    caption: "Storage",
+    items: [
+      resource(ResourceType.PersistentVolumeClaim),
+      resource(ResourceType.PersistentVolume),
+      resource(ResourceType.StorageClass),
+    ],
   },
   {
-    icon: Activity,
-    label: getDisplayPlural(ResourceType.Event),
-    path: getResourceListUrl(ResourceType.Event),
+    caption: "Config",
+    items: [
+      resource(ResourceType.ConfigMap, "configMaps"),
+      resource(ResourceType.Secret, "secrets"),
+    ],
   },
   {
-    icon: Puzzle,
-    label: getDisplayPlural(ResourceType.CustomResourceDefinition),
-    path: getResourceListUrl(ResourceType.CustomResourceDefinition),
+    items: [{ label: "Settings", path: "/settings", icon: Settings }],
   },
-  { icon: Package, label: "Helm", path: "/helm" },
-  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 export function Sidebar() {
-  const [expandedItems, setExpandedItems] = useState<string[]>([]);
-  const location = useLocation();
-  const updateAvailable = useUpdaterStore((state) => state.available);
-  const { data: appInfo } = useQuery({
-    queryKey: ["appInfo"],
-    queryFn: commands.getAppInfo,
-    staleTime: Infinity,
-  });
-
-  useEffect(() => {
-    const activeParents = navItems
-      .filter((item) => item.children)
-      .filter((item) => {
-        if (
-          location.pathname === item.path ||
-          location.pathname.startsWith(`${item.path}/`)
-        ) {
-          return true;
-        }
-        return item.children?.some(
-          (child) =>
-            location.pathname === child.path ||
-            location.pathname.startsWith(`${child.path}/`)
-        );
-      })
-      .map((item) => item.label);
-
-    if (activeParents.length === 0) {
-      return;
-    }
-
-    // Genuine union-of-user-intent-and-external-state pattern: the
-    // user can collapse parents manually, but route navigation must
-    // auto-expand the matching parent. Splitting into separate
-    // userExpanded / autoExpanded sets would require a state model
-    // refactor — left as a follow-up.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      activeParents.forEach((label) => next.add(label));
-      return Array.from(next);
-    });
-  }, [location.pathname]);
-
-  const toggleExpanded = (label: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(label)
-        ? prev.filter((item) => item !== label)
-        : [...prev, label]
-    );
-  };
+  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const { data: overview } = useClusterOverview(currentNamespace);
 
   return (
-    <aside className="flex w-52 flex-col border-r border-hair">
-      {/* Logo */}
-      <div className="flex h-11 items-center gap-2 px-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-          <span className="text-lg font-bold text-primary-foreground">K8</span>
-        </div>
-        <span className="font-semibold">K8s GUI</span>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin py-2">
-        {navItems.map((item) => (
-          <div key={item.label}>
-            {item.children ? (
-              <>
-                <button
-                  onClick={() => toggleExpanded(item.label)}
-                  className="flex w-full items-center gap-2 px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt"
-                >
-                  <item.icon className="h-3.5 w-3.5 text-fg-fnt" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform",
-                      expandedItems.includes(item.label) && "rotate-180"
-                    )}
-                  />
-                </button>
-                {expandedItems.includes(item.label) && (
-                  <div className="ml-4 border-l border-hair pl-4">
-                    {item.children.map((child) => (
-                      <NavLink
-                        key={child.path}
-                        to={child.path}
-                        className={({ isActive }) =>
-                          cn(
-                            "block rounded-[5px] px-2 py-1 text-xs text-fg-mid transition-colors hover:bg-hover",
-                            isActive && "bg-sel font-medium text-fg"
-                          )
-                        }
-                      >
-                        {child.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-[5px] px-2 py-1 text-xs text-fg-mid transition-colors hover:bg-hover",
-                    isActive && "bg-sel font-medium text-fg"
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className="relative">
-                      <item.icon
-                        className={cn(
-                          "h-3.5 w-3.5 text-fg-fnt",
-                          isActive && "text-info"
-                        )}
-                      />
-                      {item.label === "Settings" && updateAvailable && (
-                        <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
-                      )}
-                    </div>
-                    {item.label}
-                  </>
-                )}
-              </NavLink>
+    <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
+      <ClusterRow />
+      <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
+        {GROUPS.map((group, index) => (
+          <div key={group.caption ?? `ungrouped-${index}`}>
+            {group.caption && (
+              <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+                {group.caption}
+              </div>
             )}
+            {group.items.map((item) => (
+              <NavRow key={item.path} item={item} overview={overview} />
+            ))}
           </div>
         ))}
       </nav>
-
-      {/* Version */}
-      <div className="border-t border-border p-4 text-xs text-muted-foreground">
-        {appInfo?.version ?? "..."}
-      </div>
     </aside>
   );
+}
+
+/**
+ * The top row names the cluster, not the product.
+ *
+ * Which cluster this window is pointed at is the fact that decides whether a
+ * command is routine or an outage; the product's own name is something the
+ * user already knows and can never act on.
+ */
+function ClusterRow() {
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const isLoading = useClusterStore((s) => s.isLoading);
+  const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
+
+  const connecting = isLoading || isAuthenticating;
+
+  return (
+    <div className="flex h-[38px] flex-none items-center gap-2 px-2.5">
+      <ProviderMark
+        provider={detectProvider(currentContext ?? "")}
+        className="h-[15px] w-[15px] flex-none"
+        style={{ color: "var(--cluster)" }}
+      />
+      <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
+        {currentContext ?? "no cluster"}
+      </span>
+      {/* The halo is what makes a 7px dot readable in peripheral vision,
+          which is the only way this indicator is ever looked at. */}
+      <span
+        aria-label={
+          isConnected ? "connected" : connecting ? "connecting" : "disconnected"
+        }
+        className={cn(
+          "ml-auto h-[7px] w-[7px] flex-none rounded-full",
+          !isConnected && (connecting ? "bg-warn" : "bg-fg-fnt")
+        )}
+        style={
+          isConnected
+            ? {
+                background: "var(--cluster)",
+                boxShadow:
+                  "0 0 0 3px color-mix(in srgb, var(--cluster) 22%, transparent)",
+              }
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+function NavRow({
+  item,
+  overview,
+}: {
+  item: NavItem;
+  overview: ClusterOverview | undefined;
+}) {
+  const updateAvailable = useUpdaterStore((state) => state.available);
+  const badge = item.path === "/settings" && updateAvailable;
+
+  return (
+    <NavLink
+      to={item.path}
+      end={item.path === "/"}
+      className={({ isActive }) =>
+        cn(
+          "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
+          isActive && "bg-sel font-medium text-fg"
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <div className="relative flex-none">
+            <item.icon
+              className={cn(
+                // The icon sits a step below the label in contrast — it aids
+                // recognition without competing with it. Only the active row
+                // lifts it, which is what marks the row rather than the fill.
+                "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut",
+                isActive && "text-info group-hover:text-info"
+              )}
+            />
+            {badge && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
+            )}
+          </div>
+          {item.label}
+          <NavCount item={item} overview={overview} />
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/**
+ * The number at the end of a row.
+ *
+ * A count the cluster refused to hand over renders as nothing at all. `0`
+ * is a measurement — "this namespace has no secrets" — and printing it for
+ * a list the token may not read would state that as fact.
+ */
+function NavCount({
+  item,
+  overview,
+}: {
+  item: NavItem;
+  overview: ClusterOverview | undefined;
+}) {
+  if (!overview) return null;
+
+  if (item.path === "/") {
+    // Uncapped: the backend truncates its ranked list, and a headline that
+    // shrank when things got worse would be the one number nobody can use.
+    const problems = overview.problems.length + overview.problemsTruncated;
+    if (problems === 0) return null;
+    return <span className="ml-auto text-[11px] text-err">{problems}</span>;
+  }
+
+  const count = item.count && overview.counts[item.count];
+  if (count == null) return null;
+  return <span className="ml-auto text-[11px] text-fg-fnt">{count}</span>;
 }
