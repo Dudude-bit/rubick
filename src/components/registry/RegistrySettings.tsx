@@ -345,16 +345,16 @@ export function RegistrySettings() {
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-fg-mut">
           Docker config import reads ~/.docker/config.json (or
           %USERPROFILE%\\.docker\\config.json on Windows). Credential helpers
           are not imported.
         </p>
 
         {showRegistryEditor && (
-          <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+          <div className="space-y-2 border-t border-hair pt-3">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Provider</Label>
+              <Label className="text-xs text-fg-mut">Provider</Label>
               <Select
                 value={newRegistryProvider}
                 onValueChange={(value) =>
@@ -373,9 +373,7 @@ export function RegistrySettings() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                Display name
-              </Label>
+              <Label className="text-xs text-fg-mut">Display name</Label>
               <Input
                 placeholder="My private registry"
                 value={newRegistryLabel}
@@ -385,9 +383,7 @@ export function RegistrySettings() {
             {(newRegistryProvider === "registry-v2" ||
               newRegistryProvider === "harbor") && (
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">
-                  Registry URL
-                </Label>
+                <Label className="text-xs text-fg-mut">Registry URL</Label>
                 <Input
                   placeholder="registry.example.com"
                   value={newRegistryUrl}
@@ -397,7 +393,7 @@ export function RegistrySettings() {
             )}
             {newRegistryProvider === "harbor" && (
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-xs text-fg-mut">
                   Project (optional)
                 </Label>
                 <Input
@@ -412,7 +408,7 @@ export function RegistrySettings() {
             {newRegistryProvider === "gcr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Host</Label>
+                  <Label className="text-xs text-fg-mut">Host</Label>
                   <Input
                     placeholder="gcr.io"
                     value={newRegistryHost}
@@ -420,7 +416,7 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
+                  <Label className="text-xs text-fg-mut">
                     Project (optional)
                   </Label>
                   <Input
@@ -436,9 +432,7 @@ export function RegistrySettings() {
             {newRegistryProvider === "ecr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Account ID
-                  </Label>
+                  <Label className="text-xs text-fg-mut">Account ID</Label>
                   <Input
                     placeholder="123456789012"
                     value={newRegistryAccountId}
@@ -448,9 +442,7 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Region
-                  </Label>
+                  <Label className="text-xs text-fg-mut">Region</Label>
                   <Input
                     placeholder="us-east-1"
                     value={newRegistryRegion}
@@ -481,11 +473,9 @@ export function RegistrySettings() {
         )}
 
         {selectedRegistry.id !== "docker-hub" && (
-          <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+          <div className="space-y-2 border-t border-hair pt-3">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                Display name
-              </Label>
+              <Label className="text-xs text-fg-mut">Display name</Label>
               <Input
                 value={selectedRegistry.label}
                 onChange={(event) =>
@@ -498,9 +488,7 @@ export function RegistrySettings() {
             {(selectedRegistry.provider === "registry-v2" ||
               selectedRegistry.provider === "harbor") && (
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">
-                  Registry URL
-                </Label>
+                <Label className="text-xs text-fg-mut">Registry URL</Label>
                 <Input
                   placeholder="registry.example.com"
                   value={selectedRegistry.baseUrl ?? ""}
@@ -514,7 +502,7 @@ export function RegistrySettings() {
             )}
             {selectedRegistry.provider === "harbor" && (
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-xs text-fg-mut">
                   Project (optional)
                 </Label>
                 <Input
@@ -531,7 +519,7 @@ export function RegistrySettings() {
             {selectedRegistry.provider === "gcr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Host</Label>
+                  <Label className="text-xs text-fg-mut">Host</Label>
                   <Input
                     placeholder="gcr.io"
                     value={selectedRegistry.host ?? ""}
@@ -543,7 +531,7 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
+                  <Label className="text-xs text-fg-mut">
                     Project (optional)
                   </Label>
                   <Input
@@ -561,9 +549,7 @@ export function RegistrySettings() {
             {selectedRegistry.provider === "ecr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Account ID
-                  </Label>
+                  <Label className="text-xs text-fg-mut">Account ID</Label>
                   <Input
                     placeholder="123456789012"
                     value={selectedRegistry.accountId ?? ""}
@@ -575,9 +561,7 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Region
-                  </Label>
+                  <Label className="text-xs text-fg-mut">Region</Label>
                   <Input
                     placeholder="us-east-1"
                     value={selectedRegistry.region ?? ""}
@@ -593,9 +577,9 @@ export function RegistrySettings() {
           </div>
         )}
 
-        <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+        <div className="space-y-2 border-t border-hair pt-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Auth</Label>
+            <Label className="text-xs text-fg-mut">Auth</Label>
             <Select
               value={selectedRegistry.authType}
               onValueChange={(nextValue) =>
@@ -644,7 +628,7 @@ export function RegistrySettings() {
           {selectedRegistry.authType !== "none" &&
             (selectedRegistry.username ||
               selectedRegistry.authType === "bearer") && (
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-fg-mut">
                 {selectedRegistry.authType === "basic" &&
                 selectedRegistry.username
                   ? `Saved: ${selectedRegistry.username}`
@@ -670,7 +654,7 @@ export function RegistrySettings() {
             </Button>
           </div>
           {authStatusMessage && (
-            <p className="text-xs text-muted-foreground">{authStatusMessage}</p>
+            <p className="text-xs text-fg-mut">{authStatusMessage}</p>
           )}
         </div>
       </div>

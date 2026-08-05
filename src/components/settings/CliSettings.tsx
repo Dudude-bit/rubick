@@ -132,7 +132,7 @@ export function CliSettings() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h4 className="font-medium">Helm CLI</h4>
+              <h4 className="text-[13px] font-medium text-fg-mid">Helm CLI</h4>
               {isChecking || helm === null ? (
                 <Badge variant="secondary">
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -230,7 +230,9 @@ export function CliSettings() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h4 className="font-medium">kubectl CLI</h4>
+              <h4 className="text-[13px] font-medium text-fg-mid">
+                kubectl CLI
+              </h4>
               {isChecking || kubectl === null ? (
                 <Badge variant="secondary">
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
