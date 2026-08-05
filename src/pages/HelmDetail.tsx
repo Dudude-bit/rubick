@@ -1,29 +1,51 @@
 import { useState } from "react";
-import { Section, SectionHeader } from "@/components/ui/section";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useClusterStore } from "@/stores/clusterStore";
-import { useDependenciesStore } from "@/stores/dependenciesStore";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ExternalLink, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
-import { YamlEditor } from "@/components/yaml/YamlEditor";
-import { useToast } from "@/components/ui/use-toast";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  ArrowLeft,
-  RefreshCw,
-  Trash2,
-  RotateCcw,
-  Clock,
-  Package,
-  History,
-  Anchor,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/components/ui/use-toast";
+import { YamlEditor } from "@/components/yaml/YamlEditor";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { DetailAction } from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { cn } from "@/lib/utils";
+import { statusRole } from "@/lib/status-role";
+import { cn, formatDate } from "@/lib/utils";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useDependenciesStore } from "@/stores/dependenciesStore";
+
+/**
+ * Helm stores values as JSON. Rendering them through the YAML editor keeps
+ * one code viewer on screen instead of two, so the braces are stripped down
+ * to indented `key: value` rather than shown as JSON.
+ */
+function valuesAsYaml(values: unknown): string {
+  if (!values) return "# No values set — the chart's defaults apply.";
+  if (typeof values === "string") return values;
+  try {
+    return JSON.stringify(values, null, 2)
+      .replace(/"([^"]+)":/g, "$1:")
+      .replace(/"([^"]+)"/g, "$1");
+  } catch {
+    return String(values);
+  }
+}
 
 export function HelmDetail() {
   const { source, namespace, name } = useParams<{
@@ -39,15 +61,16 @@ export function HelmDetail() {
 
   const [rollbackTarget, setRollbackTarget] = useState<number | null>(null);
   const [showUninstall, setShowUninstall] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("history");
 
   const isNative = source === "native";
   const helmCliAvailable = helm?.available ?? false;
+  const goBack = () => navigate("/helm");
 
-  // Fetch release detail
   const {
     data: release,
     isLoading,
+    isFetching,
     refetch,
     error,
   } = useQuery({
@@ -59,7 +82,6 @@ export function HelmDetail() {
     enabled: isConnected && !!namespace && !!name && isNative,
   });
 
-  // Fetch history
   const { data: history = [], isLoading: historyLoading } = useQuery({
     queryKey: ["helm-history", name, namespace],
     queryFn: async () => {
@@ -69,7 +91,6 @@ export function HelmDetail() {
     enabled: isConnected && !!namespace && !!name && isNative,
   });
 
-  // Rollback mutation
   const rollbackMutation = useMutation({
     mutationFn: async (revision: number) => {
       if (!namespace || !name) throw new Error("Missing parameters");
@@ -93,7 +114,6 @@ export function HelmDetail() {
     },
   });
 
-  // Uninstall mutation
   const uninstallMutation = useMutation({
     mutationFn: async () => {
       if (!namespace || !name) throw new Error("Missing parameters");
@@ -117,314 +137,289 @@ export function HelmDetail() {
 
   if (!isConnected) {
     return (
-      <div className="p-4 text-center text-muted-foreground">
-        Connect to a cluster to view Helm release details.
-      </div>
+      <p className="text-xs text-fg-mut">
+        Connect to a cluster to read Helm releases.
+      </p>
     );
   }
 
+  // Flux owns its releases through a CRD; this page only speaks to Helm's
+  // own storage, so it hands the object over rather than half-rendering it.
   if (!isNative) {
-    // Redirect to CRD view for Flux releases
     return (
-      <div className="p-4 space-y-4">
-        <Button variant="ghost" onClick={() => navigate("/helm")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Helm Releases
-        </Button>
-        <Section>
-          <div className="p-6 text-center">
-            <Anchor className="h-12 w-12 mx-auto text-purple-500 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Flux HelmRelease</h2>
-            <p className="text-muted-foreground mb-4">
-              This is a Flux CD managed HelmRelease. View it in the CRD browser.
-            </p>
-            <Button
-              onClick={() =>
-                navigate(
-                  `/crds/helm.toolkit.fluxcd.io/helmreleases/${namespace}/${name}`
-                )
-              }
-            >
-              View in CRD Browser
-            </Button>
-          </div>
-        </Section>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="p-4 text-center text-muted-foreground">
-        Loading release details...
-      </div>
-    );
-  }
-
-  if (error || !release) {
-    return (
-      <div className="p-4 space-y-4">
-        <Button variant="ghost" onClick={() => navigate("/helm")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Helm Releases
-        </Button>
-        <Section>
-          <div className="p-6 text-center text-destructive">
-            {error ? normalizeTauriError(error) : "Release not found"}
-          </div>
-        </Section>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/helm")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-blue-500" />
-              <h1 className="text-2xl font-bold">{release.name}</h1>
-              <StatusBadge status={release.status} showDot />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {release.namespace} • {release.chart}:{release.chartVersion}
-            </p>
-          </div>
+      <Section className="max-w-lg">
+        <SectionHeader title="Managed by Flux" count={`${namespace}/${name}`} />
+        <p className="text-xs text-fg-mut">
+          This release is a Flux CD HelmRelease. Its spec, status and
+          reconciliation history live on the custom resource.
+        </p>
+        <div className="flex items-center gap-1 pt-1">
+          <DetailAction label="Back to releases" onClick={goBack} />
+          <DetailAction
+            label="Open the HelmRelease"
+            icon={ExternalLink}
+            onClick={() =>
+              navigate(
+                `/crds/helm.toolkit.fluxcd.io/helmreleases/${namespace}/${name}`
+              )
+            }
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => refetch()}
-            disabled={isLoading}
-          >
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          </Button>
-          {helmCliAvailable && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setRollbackTarget(release.revision - 1)}
-                disabled={release.revision <= 1}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Rollback
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => setShowUninstall(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Uninstall
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      </Section>
+    );
+  }
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="values">Values</TabsTrigger>
-          <TabsTrigger value="manifest">Manifest</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-          {release.notes && <TabsTrigger value="notes">Notes</TabsTrigger>}
-        </TabsList>
+  const failed = !!release && statusRole(release.status) === "err";
+  const failedRevisions = history.filter(
+    (rev) => statusRole(rev.status) === "err"
+  ).length;
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <InfoCard
-              icon={Package}
-              label="Chart"
-              value={`${release.chart}:${release.chartVersion}`}
-            />
-            <InfoCard
-              icon={Clock}
-              label="App Version"
-              value={release.appVersion || "-"}
-            />
-            <InfoCard
-              icon={History}
-              label="Revision"
-              value={String(release.revision)}
-            />
-            <InfoCard
-              icon={Clock}
-              label="Last Deployed"
-              value={
-                release.lastDeployed
-                  ? new Date(release.lastDeployed).toLocaleString()
-                  : "-"
-              }
-            />
-          </div>
+  const facts: KeyValue[] = [
+    {
+      label: "Chart",
+      value: `${release?.chart ?? "—"}:${release?.chartVersion ?? "—"}`,
+      mono: true,
+    },
+    { label: "App version", value: release?.appVersion || "—", mono: true },
+    { label: "Revision", value: release?.revision ?? "—", mono: true },
+    {
+      label: "Last deployed",
+      value: formatDate(release?.lastDeployed) ?? "—",
+    },
+    {
+      label: "First deployed",
+      value: formatDate(release?.firstDeployed) ?? "—",
+    },
+    ...(release?.description
+      ? [
+          {
+            label: "Description",
+            value: release.description,
+            tone: failed ? ("err" as const) : undefined,
+          },
+        ]
+      : []),
+  ];
 
-          {release.description && (
-            <Section>
-              <SectionHeader title="Description" />
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  {release.description}
-                </p>
-              </div>
-            </Section>
-          )}
-
-          <Section>
-            <SectionHeader title="Deployment Info" />
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <StatusBadge status={release.status} />
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Namespace</span>
-                <span>{release.namespace}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">First Deployed</span>
-                <span>
-                  {release.firstDeployed
-                    ? new Date(release.firstDeployed).toLocaleString()
-                    : "-"}
-                </span>
-              </div>
-            </div>
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="values">
-          <Section>
-            <SectionHeader title="Values (YAML)" />
-            <div>
-              <YamlEditor
-                value={formatYaml(release.values)}
-                readOnly
-                height="600px"
-                className="rounded-lg overflow-hidden"
-              />
-            </div>
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="manifest">
-          <Section>
-            <SectionHeader title="Rendered Manifest" />
-            <div>
-              <YamlEditor
-                value={release.manifest || "# No manifest available"}
-                readOnly
-                height="600px"
-                className="rounded-lg overflow-hidden"
-              />
-            </div>
-          </Section>
-        </TabsContent>
-
-        <TabsContent value="history">
-          <Section>
-            <SectionHeader title="Release History" />
-            <div>
-              {historyLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : history.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No history available
-                </p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Revision</th>
-                      <th className="text-left p-2">Status</th>
-                      <th className="text-left p-2">Chart</th>
-                      <th className="text-left p-2">Updated</th>
-                      <th className="text-left p-2">Description</th>
-                      <th className="text-right p-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((rev) => (
-                      <tr
-                        key={rev.revision}
-                        className={cn(
-                          "border-b last:border-0",
-                          rev.revision === release.revision && "bg-muted/50"
+  const tabs = [
+    {
+      id: "history",
+      label: "History",
+      content: (
+        <Section>
+          <SectionHeader
+            title="Revisions"
+            count={
+              failedRevisions > 0
+                ? `${history.length} · ${failedRevisions} failed`
+                : history.length || undefined
+            }
+          />
+          {historyLoading ? (
+            <p className="text-xs text-fg-fnt">Reading history…</p>
+          ) : history.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No history — Helm keeps none for this release.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Rev</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Chart</TableHead>
+                  <TableHead>App</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((rev) => {
+                  const current = rev.revision === release?.revision;
+                  const revFailed = statusRole(rev.status) === "err";
+                  return (
+                    <TableRow
+                      key={rev.revision}
+                      className={cn(current && "bg-sel")}
+                      data-quiet={current || undefined}
+                    >
+                      <TableCell className="font-mono text-fg">
+                        {rev.revision}
+                        {current && (
+                          <span className="ml-1.5 text-[11px] text-fg-fnt">
+                            current
+                          </span>
                         )}
-                      >
-                        <td className="p-2 font-medium">
-                          {rev.revision}
-                          {rev.revision === release.revision && (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              (current)
-                            </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "text-[11px]",
+                            revFailed ? "text-err" : "text-fg-mut"
                           )}
-                        </td>
-                        <td className="p-2">
-                          <StatusBadge status={rev.status} />
-                        </td>
-                        <td className="p-2 text-muted-foreground">
-                          {rev.chart}
-                        </td>
-                        <td className="p-2 text-muted-foreground">
-                          {rev.updated
-                            ? new Date(rev.updated).toLocaleString()
-                            : "-"}
-                        </td>
-                        <td className="p-2 text-muted-foreground truncate max-w-[200px]">
-                          {rev.description || "-"}
-                        </td>
-                        <td className="p-2 text-right">
-                          {rev.revision < release.revision &&
-                            helmCliAvailable && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setRollbackTarget(rev.revision)}
-                              >
-                                <RotateCcw className="h-3 w-3 mr-1" />
-                                Rollback
-                              </Button>
-                            )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Section>
-        </TabsContent>
-
-        {release.notes && (
-          <TabsContent value="notes">
-            <Section>
-              <SectionHeader title="Release Notes" />
-              <div>
-                <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-[600px] font-mono whitespace-pre-wrap">
+                        >
+                          {rev.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-fg-mut">
+                        {rev.chart}
+                      </TableCell>
+                      <TableCell className="font-mono text-fg-fnt">
+                        {rev.appVersion || "—"}
+                      </TableCell>
+                      <TableCell className="text-fg-fnt">
+                        {formatDate(rev.updated) ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[240px] truncate text-fg-fnt">
+                        {rev.description || "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!current && helmCliAvailable && (
+                          <DetailAction
+                            label="Roll back"
+                            icon={RotateCcw}
+                            onClick={() => setRollbackTarget(rev.revision)}
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
+      ),
+    },
+    {
+      id: "values",
+      label: "Values",
+      content: (
+        <Section>
+          <SectionHeader
+            title="Values"
+            count="what this release overrides in the chart"
+          />
+          <div className="overflow-hidden border-t border-hair">
+            <YamlEditor
+              value={valuesAsYaml(release?.values)}
+              readOnly
+              height="560px"
+            />
+          </div>
+        </Section>
+      ),
+    },
+    {
+      id: "manifest",
+      label: "Manifest",
+      content: (
+        <Section>
+          <SectionHeader
+            title="Rendered manifest"
+            count="what the chart actually applied"
+          />
+          <div className="overflow-hidden border-t border-hair">
+            <YamlEditor
+              value={release?.manifest || "# No manifest available"}
+              readOnly
+              height="560px"
+            />
+          </div>
+        </Section>
+      ),
+    },
+    ...(release?.notes
+      ? [
+          {
+            id: "notes",
+            label: "Notes",
+            content: (
+              <Section>
+                <SectionHeader title="Notes" />
+                <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap border-t border-hair pt-2 font-mono text-xs text-fg-mid">
                   {release.notes}
                 </pre>
-              </div>
-            </Section>
-          </TabsContent>
-        )}
-      </Tabs>
+              </Section>
+            ),
+          },
+        ]
+      : []),
+  ];
 
-      {/* Rollback confirmation */}
+  return (
+    <>
+      <ResourceDetailLayout
+        resource={release}
+        isLoading={isLoading}
+        error={error}
+        resourceKind="Helm release"
+        listUrl="/helm"
+        listLabel="Helm"
+        title={release?.name || name || ""}
+        namespace={release?.namespace || namespace}
+        createdAt={release?.firstDeployed}
+        statusBadge={release && <StatusBadge status={release.status} />}
+        badges={
+          release && (
+            <>
+              <span className="font-mono text-[11px] text-fg-mut">
+                {release.chart}:{release.chartVersion}
+              </span>
+              <span className="text-[11px] text-fg-fnt">
+                rev {release.revision}
+              </span>
+            </>
+          )
+        }
+        onBack={goBack}
+        actions={
+          <>
+            <DetailAction
+              label="Refresh"
+              icon={RefreshCw}
+              onClick={() => refetch()}
+              busy={isFetching}
+            />
+            {helmCliAvailable && release && (
+              <>
+                <DetailAction
+                  label="Roll back"
+                  icon={RotateCcw}
+                  onClick={() => setRollbackTarget(release.revision - 1)}
+                  disabled={release.revision <= 1}
+                />
+                <DetailAction
+                  label="Uninstall"
+                  icon={Trash2}
+                  onClick={() => setShowUninstall(true)}
+                  danger
+                />
+              </>
+            )}
+          </>
+        }
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      >
+        <KeyValueSection title="Release" items={facts} className="max-w-lg" />
+        {!helmCliAvailable && (
+          <p className="text-[11px] text-warn">
+            Helm CLI not found — rollback and uninstall are unavailable.
+          </p>
+        )}
+      </ResourceDetailLayout>
+
       <ConfirmDialog
         open={rollbackTarget !== null}
         onOpenChange={(open) => {
           if (!open) setRollbackTarget(null);
         }}
-        title="Rollback Release"
-        description={`Are you sure you want to rollback "${release.name}" to revision ${rollbackTarget}?`}
-        confirmLabel="Rollback"
+        title="Roll back release?"
+        description={`"${release?.name}" will be rolled back to revision ${rollbackTarget}.`}
+        confirmLabel="Roll back"
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
         onConfirm={() => {
@@ -434,58 +429,18 @@ export function HelmDetail() {
         }}
       />
 
-      {/* Uninstall confirmation */}
       <DangerousConfirmDialog
         open={showUninstall}
         onOpenChange={setShowUninstall}
-        title="Uninstall Release"
-        description={`This will permanently delete the Helm release "${release.name}" and all its resources from namespace "${release.namespace}". This action cannot be undone.`}
-        confirmationText={release.name}
+        title="Uninstall release"
+        description={`This permanently deletes the Helm release "${release?.name}" and every resource it created in namespace "${release?.namespace}". This cannot be undone.`}
+        confirmationText={release?.name ?? ""}
         confirmLabel="Uninstall"
         isLoading={uninstallMutation.isPending}
         onConfirm={() => uninstallMutation.mutate()}
       />
-    </div>
+    </>
   );
-}
-
-// Info card component
-interface InfoCardProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}
-
-function InfoCard({ icon: Icon, label, value }: InfoCardProps) {
-  return (
-    <Section>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-muted rounded-lg">
-            <Icon className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-sm font-medium truncate">{value}</p>
-          </div>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-// Format values as YAML
-function formatYaml(values: unknown): string {
-  if (!values) return "# No values configured";
-  if (typeof values === "string") return values;
-  try {
-    // Use YAML-like format (JSON with 2-space indent works for viewing)
-    return JSON.stringify(values, null, 2)
-      .replace(/"([^"]+)":/g, "$1:") // Remove quotes from keys
-      .replace(/"([^"]+)"/g, "$1"); // Remove quotes from string values
-  } catch {
-    return String(values);
-  }
 }
 
 export default HelmDetail;
