@@ -102,7 +102,11 @@ function createActionsColumn<TData, TValue>(
       const isVisible =
         hoveredRowIndex === row.index || focusedRowIndex === row.index;
       return (
-        <div data-quick-actions className="flex justify-end">
+        // The icon buttons are 20px so their hit area can stay 24px, which
+        // is 4px more than a compact row's line box. The negative margin
+        // lets that overhang bleed into the cell padding instead of
+        // setting the height of every row in the table.
+        <div data-quick-actions className="-my-0.5 flex justify-end">
           <QuickActions
             item={row.original}
             actions={quickActions}
@@ -161,9 +165,13 @@ export function DataTable<TData, TValue>({
   // like `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the
   // row grows to triple height, which defeats the point of compact. The
   // table container already scrolls horizontally.
+  //
+  // 3px against a 16px line box and a 1px rule is a 23px pitch: nothing in
+  // a cell may be taller than that line box or it, not the padding, becomes
+  // the row height.
   const isCompact = tableDensity === "compact";
   const cellPadding = isCompact
-    ? "py-0.5 px-2.5 whitespace-nowrap"
+    ? "py-[3px] px-2.5 whitespace-nowrap"
     : "py-2 px-2.5";
 
   // A caption that repeats a scope the user already picked is noise, so
