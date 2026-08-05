@@ -4,17 +4,23 @@
  * Colour is derived from a semantic role, never written per status. The
  * label is always present: colour reinforces meaning, it never carries
  * it alone.
+ *
+ * Not a pill. A filled chip is a container, and the design removed those
+ * everywhere else; worse, it spent colour on the healthy majority, so a
+ * column of twenty Running rows shouted exactly as loudly as the one row
+ * that had crashed. `ok` is therefore plain text — the anomaly is the only
+ * thing worth a hue, and it now has the column to itself.
  */
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 
 const ROLE_CLASS: Record<StatusRole, string> = {
-  ok: "text-ok bg-ok/[0.16]",
-  pending: "text-info bg-info/[0.16]",
-  warn: "text-warn bg-warn/[0.16]",
-  err: "text-err bg-err/[0.16]",
-  neutral: "text-fg-mut bg-hover",
+  ok: "text-fg-mid",
+  pending: "text-info",
+  warn: "text-warn",
+  err: "text-err",
+  neutral: "text-fg-mut",
 };
 
 const DOT_CLASS: Record<StatusRole, string> = {
@@ -50,10 +56,12 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        // 16px tall, fixed: the pill is mostly read inside a compact table
-        // row, and any padding on top of the line box makes the badge — not
-        // the text — decide how tall every row in the table is.
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0 text-[11px] font-medium leading-4",
+        // Mono, because a status column is a set of fixed tokens read down
+        // the page rather than prose read across it, and the same glyph
+        // width is what makes it scannable now the chip is gone. 16px line
+        // box with no vertical padding: the status must never be what
+        // decides how tall a table row is.
+        "inline-flex items-center gap-1.5 font-mono text-[11px] font-medium leading-4",
         ROLE_CLASS[resolved],
         className
       )}
