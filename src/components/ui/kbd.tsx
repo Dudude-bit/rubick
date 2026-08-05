@@ -28,14 +28,17 @@ function spell(shortcut: string): string {
 export function Kbd({ shortcut, className, ...props }: KbdProps) {
   return (
     <kbd
-      aria-label={spell(shortcut)}
       className={cn(
         "rounded border border-hair px-1 py-px font-mono text-[10px] text-fg-fnt",
         className
       )}
       {...props}
     >
-      {formatShortcut(shortcut)}
+      {/* WAI-ARIA 1.2 forbids aria-label on <kbd>'s implicit generic
+          role, so browsers/AT drop it — spell the modifiers in a
+          visually hidden span instead. */}
+      <span aria-hidden="true">{formatShortcut(shortcut)}</span>
+      <span className="sr-only">{spell(shortcut)}</span>
     </kbd>
   );
 }

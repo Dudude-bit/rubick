@@ -7,9 +7,8 @@ describe("Kbd", () => {
   it("shows the platform form and keeps the logical one accessible", () => {
     setHostOs("windows");
     render(<Kbd shortcut="mod+K" />);
-    const el = screen.getByText("Ctrl+K");
-    expect(el.tagName).toBe("KBD");
-    expect(el).toHaveAttribute("aria-label", "Control K");
+    expect(screen.getByText("Ctrl+K")).toBeInTheDocument();
+    expect(screen.getByText("Control K")).toBeInTheDocument();
   });
 
   it("uses the command glyph on macOS", () => {

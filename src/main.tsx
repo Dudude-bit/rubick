@@ -26,15 +26,6 @@ import { setHostOs } from "@/lib/platform";
 // Register built-in CRD plugins for enhanced UI
 registerBuiltInPlugins();
 
-// Resolved once at boot. Rendering a shortcut is synchronous, so the
-// value has to be in place before the first paint that shows one.
-void commands
-  .getAppInfo()
-  .then((info) => setHostOs(info.os))
-  .catch(() => {
-    /* keep the ctrl fallback */
-  });
-
 const formatKey = (key: unknown) => {
   try {
     return JSON.parse(JSON.stringify(key));
@@ -93,15 +84,36 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BrowserRouter>
-          <App />
-          <Toaster />
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+// The rendered modifier differs per platform and Kbd reads it
+// synchronously, so resolve it before the first paint rather than
+// letting an early mount render the wrong glyph with no way to
+// re-render. A hung IPC must not white-screen the app, so the wait is
+// bounded and falls back to the Ctrl default.
+async function resolveHostOs(): Promise<void> {
+  try {
+    const info = await Promise.race([
+      commands.getAppInfo(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 2000)
+      ),
+    ]);
+    setHostOs(info.os);
+  } catch {
+    // keep the Ctrl fallback
+  }
+}
+
+void resolveHostOs().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <BrowserRouter>
+            <App />
+            <Toaster />
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+});
