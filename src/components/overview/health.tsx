@@ -1,16 +1,17 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import {
   Composition,
   type CompositionSegment,
 } from "@/components/resources/detail-blocks";
-import { cn, formatAge } from "@/lib/utils";
 import {
-  ResourceType,
-  toPlural,
-  type ResourceKind,
-} from "@/lib/resource-registry";
+  isRoutableKind,
+  ResourceRef,
+} from "@/components/resources/ResourceRef";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { cn, formatAge } from "@/lib/utils";
+import { ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
   ClusterProblem,
@@ -71,21 +72,6 @@ function memoryRatio(pressure: ResourcePressure): Ratio {
   };
 }
 
-const DETAIL_ROUTE: Record<string, ResourceKind | undefined> = {
-  Pod: ResourceType.Pod,
-  Deployment: ResourceType.Deployment,
-  Node: ResourceType.Node,
-};
-
-/** Deep link to the offending object, when the app has a page for its kind. */
-function problemHref(problem: ClusterProblem): string | null {
-  const type = DETAIL_ROUTE[problem.kind];
-  if (!type) return null;
-  if (problem.kind === "Node") return `/${toPlural(type)}/${problem.name}`;
-  if (!problem.namespace) return null;
-  return `/${toPlural(type)}/${problem.namespace}/${problem.name}`;
-}
-
 const ROW =
   "grid grid-cols-[10px_150px_minmax(0,1fr)_60px_74px_46px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
 
@@ -128,9 +114,10 @@ function Sparkline({
 }
 
 function ProblemRow({ problem }: { problem: ClusterProblem }) {
+  const navigate = useNavigate();
   const isCritical = problem.severity === "critical";
   const tone = isCritical ? "text-err" : "text-warn";
-  const href = problemHref(problem);
+  const routable = isRoutableKind(problem.kind, problem.namespace);
   const restarts = problem.restarts ?? 0;
 
   const body = (
@@ -144,7 +131,12 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         {problem.reason}
       </span>
       <span className="truncate text-fg-mid">
-        {problem.name}
+        <ResourceRef
+          kind={problem.kind}
+          name={problem.name}
+          namespace={problem.namespace}
+          showKind={false}
+        />
         {problem.namespace && (
           <span className="text-fg-fnt"> · {problem.namespace}</span>
         )}
@@ -172,11 +164,28 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
     </>
   );
 
-  if (!href) return <div className={ROW}>{body}</div>;
+  if (!routable) return <div className={ROW}>{body}</div>;
+  // The row opens the object's page; the name inside it opens the peek.
   return (
-    <Link to={href} className={cn(ROW, "hover:bg-hover")}>
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a")) return;
+        navigate(
+          getResourceDetailUrl(problem.kind, problem.name, problem.namespace)
+        );
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        navigate(
+          getResourceDetailUrl(problem.kind, problem.name, problem.namespace)
+        );
+      }}
+      className={cn(ROW, "cursor-pointer hover:bg-hover")}
+    >
       {body}
-    </Link>
+    </div>
   );
 }
 
@@ -451,10 +460,19 @@ export function SchedulerPanel({
 }
 
 function NodeRow({ node }: { node: NodeSummary }) {
+  const navigate = useNavigate();
+  const open = () =>
+    navigate(getResourceDetailUrl(ResourceType.Node, node.name));
   return (
-    <Link
-      to={`/${toPlural(ResourceType.Node)}/${node.name}`}
-      className="grid grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a")) return;
+        open();
+      }}
+      onKeyDown={(event) => event.key === "Enter" && open()}
+      className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
     >
       <span
         className={cn(
@@ -464,7 +482,11 @@ function NodeRow({ node }: { node: NodeSummary }) {
         aria-hidden="true"
       />
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className="truncate font-mono">{node.name}</span>
+        <ResourceRef
+          kind={ResourceType.Node}
+          name={node.name}
+          showKind={false}
+        />
         {node.roles.map((role) => (
           <span key={role} className="text-[11px] text-fg-fnt">
             {role}
@@ -485,7 +507,7 @@ function NodeRow({ node }: { node: NodeSummary }) {
         )}
         <Unit> pods</Unit>
       </span>
-    </Link>
+    </div>
   );
 }
 
