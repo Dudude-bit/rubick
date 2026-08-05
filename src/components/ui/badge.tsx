@@ -2,21 +2,23 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
+/**
+ * Same geometry as StatusBadge: 16px line box, no vertical padding. The
+ * badge is mostly read inside a compact table row, and anything taller
+ * than the line box makes the badge — not the row — set the table's pitch.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center gap-1 rounded-full px-2 py-0 text-[11px] font-medium leading-4 transition-colors",
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
-        success: "border-transparent bg-ok/[0.16] text-ok",
-        warning: "border-transparent bg-warn/[0.16] text-warn",
-        error: "border-transparent bg-err/[0.16] text-err",
+        default: "bg-sel text-fg",
+        secondary: "bg-hover text-fg-mut",
+        destructive: "bg-err/[0.16] text-err",
+        outline: "border border-hair text-fg-mut",
+        success: "bg-ok/[0.16] text-ok",
+        warning: "bg-warn/[0.16] text-warn",
+        error: "bg-err/[0.16] text-err",
       },
     },
     defaultVariants: {
