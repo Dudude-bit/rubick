@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { commands } from "@/lib/commands";
 import type {
@@ -404,219 +404,238 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="z-[60] max-w-lg overflow-hidden p-0 shadow-lg">
+      <DialogContent className="z-[60] max-w-[560px] gap-0 overflow-hidden p-0">
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <div className="border-b px-3 py-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={inputRef}
-              autoFocus
-              placeholder="Search resources, actions, or navigate..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={handleKeyDown}
-              className="h-11 pl-9"
-            />
-          </div>
+
+        {/* One field on the raised surface. A bordered input inside an
+            overlay is a second surface on top of the only surface the
+            design allows — the hairline below is the whole chrome. */}
+        <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
+          <Search className="h-3.5 w-3.5 flex-none" />
+          <input
+            ref={inputRef}
+            autoFocus
+            aria-label="Search resources, actions and pages"
+            placeholder="Search resources, actions, or jump to a page…"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent text-[13px] text-fg outline-none placeholder:text-fg-fnt"
+          />
         </div>
 
-        <div ref={resultsRef} className="max-h-[320px] overflow-y-auto p-2">
+        <div
+          ref={resultsRef}
+          role="listbox"
+          aria-label="Results"
+          className="max-h-[336px] overflow-y-auto p-1"
+        >
           {hasQuery && !hasAnyResults && !isSearching && (
-            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-              No results found.
-            </div>
+            <p className="px-2 py-6 text-center text-xs text-fg-mut">
+              Nothing matches "{searchQuery}".
+            </p>
           )}
 
-          {/* Recent items - show when no query */}
           {!hasQuery && recentItems.length > 0 && (
             <>
-              <div className="space-y-1">
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                  Recent
-                </div>
-                {recentItems.map((item, idx) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    data-index={idx}
-                    onClick={() =>
-                      handleSelect(
-                        item.path,
-                        item.name,
-                        item.kind,
-                        item.namespace ?? undefined
-                      )
-                    }
-                    className={`flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent ${selectedIndex === idx ? "bg-accent" : ""}`}
-                  >
-                    <span className="font-medium">{item.name}</span>
-                    <Badge variant="outline" className="ml-auto">
-                      {item.kind}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-              <div className="my-2 h-px bg-border" />
+              <GroupCaption>Recent</GroupCaption>
+              {recentItems.map((item, idx) => (
+                <PaletteRow
+                  key={item.path}
+                  index={idx}
+                  selected={selectedIndex === idx}
+                  label={item.name}
+                  meta={item.namespace ?? undefined}
+                  trailing={item.kind}
+                  onSelect={() =>
+                    handleSelect(
+                      item.path,
+                      item.name,
+                      item.kind,
+                      item.namespace ?? undefined
+                    )
+                  }
+                />
+              ))}
             </>
           )}
 
           {filteredNavigation.length > 0 && (
-            <div className="space-y-1">
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Navigation
-              </div>
+            <>
+              <GroupCaption>Navigation</GroupCaption>
               {filteredNavigation.map((action, idx) => {
                 const globalIdx = (!hasQuery ? recentItems.length : 0) + idx;
                 return (
-                  <button
+                  <PaletteRow
                     key={action.path}
-                    type="button"
-                    data-index={globalIdx}
-                    onClick={() => handleSelect(action.path)}
-                    className={`flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent ${selectedIndex === globalIdx ? "bg-accent" : ""}`}
-                  >
-                    <action.icon className="mr-2 h-4 w-4" />
-                    {action.label}
-                  </button>
+                    index={globalIdx}
+                    selected={selectedIndex === globalIdx}
+                    icon={action.icon}
+                    label={action.label}
+                    onSelect={() => handleSelect(action.path)}
+                  />
                 );
               })}
-            </div>
+            </>
           )}
 
-          {filteredNavigation.length > 0 &&
-            filteredQuickCommands.length > 0 && (
-              <div className="my-2 h-px bg-border" />
-            )}
-
           {filteredQuickCommands.length > 0 && (
-            <div className="space-y-1">
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Quick Actions
-              </div>
+            <>
+              <GroupCaption>Actions</GroupCaption>
               {filteredQuickCommands.map((action, idx) => {
                 const globalIdx =
                   (!hasQuery ? recentItems.length : 0) +
                   filteredNavigation.length +
                   idx;
                 return (
-                  <button
+                  <PaletteRow
                     key={action.label}
-                    type="button"
-                    data-index={globalIdx}
-                    onClick={() => setOpen(false)}
-                    className={`flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent ${selectedIndex === globalIdx ? "bg-accent" : ""}`}
-                  >
-                    <action.icon className="mr-2 h-4 w-4" />
-                    {action.label}
-                  </button>
+                    index={globalIdx}
+                    selected={selectedIndex === globalIdx}
+                    icon={action.icon}
+                    label={action.label}
+                    onSelect={() => setOpen(false)}
+                  />
                 );
               })}
-            </div>
+            </>
           )}
 
-          {(filteredNavigation.length > 0 ||
-            filteredQuickCommands.length > 0) && (
-            <div className="my-2 h-px bg-border" />
-          )}
+          {hasQuery && (
+            <>
+              <GroupCaption>Resources</GroupCaption>
 
-          <div className="space-y-1">
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              Resources
-            </div>
-
-            {!isConnected && canSearchResources && (
-              <div className="px-2 py-2 text-sm text-muted-foreground">
-                Connect to a cluster to search resources.
-              </div>
-            )}
-
-            {isConnected && !canSearchResources && hasQuery && (
-              <div className="px-2 py-2 text-sm text-muted-foreground">
-                Type at least 2 characters to search resources.
-              </div>
-            )}
-
-            {isConnected && isSearching && (
-              <div className="flex items-center px-2 py-2 text-sm text-muted-foreground">
-                <Spinner size="sm" className="mr-2" />
-                Searching...
-              </div>
-            )}
-
-            {isConnected &&
-              canSearchResources &&
-              !isSearching &&
-              resourceResults.length === 0 && (
-                <div className="px-2 py-2 text-sm text-muted-foreground">
-                  No resources found.
-                </div>
+              {!isConnected ? (
+                <Hint>Connect to a cluster to search resources.</Hint>
+              ) : !canSearchResources ? (
+                <Hint>Type at least 2 characters to search resources.</Hint>
+              ) : isSearching ? (
+                <Hint>
+                  <Spinner size="sm" className="mr-2" />
+                  Searching…
+                </Hint>
+              ) : resourceResults.length === 0 ? (
+                <Hint>No resources found.</Hint>
+              ) : (
+                (() => {
+                  let resourceIdx =
+                    (!hasQuery ? recentItems.length : 0) +
+                    filteredNavigation.length +
+                    filteredQuickCommands.length;
+                  return Object.entries(groupedResources).flatMap(
+                    ([kind, items]) =>
+                      items.map((item) => {
+                        const globalIdx = resourceIdx++;
+                        return (
+                          <PaletteRow
+                            key={`${kind}-${item.namespace ?? "cluster"}-${item.name}`}
+                            index={globalIdx}
+                            selected={selectedIndex === globalIdx}
+                            label={item.name}
+                            mono
+                            meta={item.namespace}
+                            trailing={kind}
+                            onSelect={() =>
+                              handleSelect(
+                                item.path,
+                                item.name,
+                                kind,
+                                item.namespace
+                              )
+                            }
+                          />
+                        );
+                      })
+                  );
+                })()
               )}
-
-            {isConnected &&
-              !isSearching &&
-              (() => {
-                let resourceIdx =
-                  (!hasQuery ? recentItems.length : 0) +
-                  filteredNavigation.length +
-                  filteredQuickCommands.length;
-                return Object.entries(groupedResources).map(([kind, items]) => (
-                  <div key={kind} className="space-y-1">
-                    {items.map((item) => {
-                      const globalIdx = resourceIdx++;
-                      return (
-                        <button
-                          key={`${kind}-${item.namespace ?? "cluster"}-${item.name}`}
-                          type="button"
-                          data-index={globalIdx}
-                          onClick={() =>
-                            handleSelect(
-                              item.path,
-                              item.name,
-                              kind,
-                              item.namespace
-                            )
-                          }
-                          className={`flex w-full items-center rounded-sm px-2 py-2 text-sm hover:bg-accent ${selectedIndex === globalIdx ? "bg-accent" : ""}`}
-                        >
-                          <span className="font-medium">{item.name}</span>
-                          {item.namespace && (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {item.namespace}
-                            </span>
-                          )}
-                          <Badge variant="outline" className="ml-auto">
-                            {kind}
-                          </Badge>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ));
-              })()}
-          </div>
+            </>
+          )}
         </div>
 
-        {/* Footer with keyboard hints */}
-        <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">↑↓</kbd>
-              <span>navigate</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">↵</kbd>
-              <span>select</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">
-                esc
-              </kbd>
-              <span>close</span>
-            </span>
-          </div>
+        <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
+          <span className="flex items-center gap-1.5">
+            <Kbd shortcut="↑↓" />
+            move
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Kbd shortcut="↵" />
+            open
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Kbd shortcut="esc" />
+            close
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Kbd shortcut="mod+K" />
+            toggle
+          </span>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 11px group caption — the only thing separating one group from the
+ *  next, in place of the rules this list used to draw between them. */
+function GroupCaption({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="presentation"
+      className="px-2 pb-0.5 pt-2 text-[11px] text-fg-fnt first:pt-1"
+    >
+      {children}
+    </div>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-center px-2 py-1.5 text-xs text-fg-mut">
+      {children}
+    </p>
+  );
+}
+
+function PaletteRow({
+  index,
+  selected,
+  icon: Icon,
+  label,
+  mono,
+  meta,
+  trailing,
+  onSelect,
+}: {
+  index: number;
+  selected: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
+  label: string;
+  mono?: boolean;
+  meta?: string;
+  trailing?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      data-index={index}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors hover:bg-hover",
+        selected ? "bg-sel text-fg" : "text-fg-mid"
+      )}
+    >
+      {Icon && <Icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />}
+      <span className={cn("truncate", mono && "font-mono")}>{label}</span>
+      {meta && <span className="truncate text-fg-fnt">{meta}</span>}
+      {trailing && (
+        <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          {trailing}
+        </span>
+      )}
+    </button>
   );
 }
