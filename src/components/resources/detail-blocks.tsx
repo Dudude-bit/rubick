@@ -9,6 +9,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 
@@ -475,9 +476,11 @@ function EventRow({
       </span>
       <span className="truncate text-fg-mid">
         {showObject && (
-          <span className="font-mono">
-            {event.involvedObject.kind}/{event.involvedObject.name}
-          </span>
+          <ResourceRef
+            kind={event.involvedObject.kind}
+            name={event.involvedObject.name}
+            namespace={event.involvedObject.namespace ?? event.namespace}
+          />
         )}
         {showNamespace && event.namespace && (
           <span className="text-fg-fnt"> · {event.namespace}</span>
