@@ -1,33 +1,45 @@
 import { useMemo } from "react";
-import { Section, SectionHeader } from "@/components/ui/section";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import type { JobDetailInfo } from "@/generated/types";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { RealtimeAge } from "@/components/ui/realtime";
-import {
-  Trash2,
-  Briefcase,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  Clock,
-} from "lucide-react";
+import { Trash2 } from "lucide-react";
+
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ContainerRows } from "@/components/resources/container-rows";
 import {
-  ResourceDetailLayout,
-  InfoCard,
-  InfoRow,
-} from "@/components/resources/ResourceDetailLayout";
-
+  Composition,
+  ConditionRows,
+  DetailAction,
+} from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { formatDate } from "@/lib/utils";
+import type { JobDetailInfo } from "@/generated/types";
+
+/** Wall-clock time the job has been running, or ran for. */
+function duration(start: string | null, end: string | null): string | null {
+  if (!start) return null;
+  const from = new Date(start).getTime();
+  const to = end ? new Date(end).getTime() : Date.now();
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+
+  const seconds = Math.max(0, Math.round((to - from) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
 
 export function JobDetail() {
   const {
@@ -36,7 +48,6 @@ export function JobDetail() {
     resource: job,
     isLoading,
     error,
-    refetch,
     yaml,
     copyYaml,
     activeTab,
@@ -50,14 +61,13 @@ export function JobDetail() {
     defaultTab: "overview",
   });
 
-  // Fetch pods for this Job
   const { data: pods = [] } = useQuery({
     queryKey: ["job-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
       try {
-        const allPods = await commands.listPods({
-          namespace: namespace,
+        return await commands.listPods({
+          namespace,
           labelSelector: `job-name=${name}`,
           fieldSelector: null,
           limit: null,
@@ -65,7 +75,6 @@ export function JobDetail() {
           selector: null,
           nodeName: null,
         });
-        return allPods;
       } catch {
         return [];
       }
@@ -76,166 +85,54 @@ export function JobDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
-  // Memoised so the `tabs` useMemo below can list `statusInfo` as a
-  // direct dependency without losing memo benefit on every render
-  // (a fresh object literal each time would defeat memoisation).
-  const statusInfo = useMemo(() => {
-    if (!job)
-      return { variant: "secondary" as const, text: "Unknown", icon: Clock };
-    if (job.status === "Complete") {
-      return {
-        variant: "success" as const,
-        text: "Complete",
-        icon: CheckCircle,
-      };
-    }
-    if (job.status === "Failed") {
-      return { variant: "destructive" as const, text: "Failed", icon: XCircle };
-    }
-    if (job.status === "Running") {
-      return { variant: "warning" as const, text: "Running", icon: RefreshCw };
-    }
-    return { variant: "secondary" as const, text: job.status, icon: Clock };
-  }, [job]);
-
   const tabs = useMemo(
     () => [
       {
         id: "overview",
         label: "Overview",
         content: (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoCard title="Job Configuration">
-                <div className="space-y-1">
-                  <InfoRow
-                    label="Completions"
-                    value={job?.completions ?? "Not set (1)"}
-                  />
-                  <InfoRow label="Parallelism" value={job?.parallelism ?? 1} />
-                  <InfoRow
-                    label="Backoff Limit"
-                    value={job?.backoffLimit ?? 6}
-                  />
-                  {job?.activeDeadlineSeconds && (
-                    <InfoRow
-                      label="Deadline"
-                      value={`${job.activeDeadlineSeconds}s`}
-                    />
-                  )}
-                  <InfoRow
-                    label="Created"
-                    value={
-                      <RealtimeAge timestamp={job?.createdAt} fallback="-" />
-                    }
-                  />
-                </div>
-              </InfoCard>
-
-              <InfoCard title="Status">
-                <div className="space-y-1">
-                  <InfoRow
-                    label="Status"
-                    value={
-                      <Badge variant={statusInfo.variant}>
-                        {statusInfo.text}
-                      </Badge>
-                    }
-                  />
-                  <InfoRow label="Active" value={job?.active ?? 0} />
-                  <InfoRow label="Succeeded" value={job?.succeeded ?? 0} />
-                  <InfoRow label="Failed" value={job?.failed ?? 0} />
-                  {job?.startTime && (
-                    <InfoRow
-                      label="Start Time"
-                      value={<RealtimeAge timestamp={job.startTime} />}
-                    />
-                  )}
-                  {job?.completionTime && (
-                    <InfoRow
-                      label="Completion Time"
-                      value={<RealtimeAge timestamp={job.completionTime} />}
-                    />
-                  )}
-                </div>
-              </InfoCard>
-            </div>
-          </div>
+          <>
+            <KeyValueSection
+              title="Labels"
+              count={Object.keys(job?.labels ?? {}).length}
+              items={recordToKeyValues(job?.labels ?? {})}
+              emptyMessage="No labels"
+            />
+            <KeyValueSection
+              title="Annotations"
+              count={Object.keys(job?.annotations ?? {}).length}
+              items={recordToKeyValues(job?.annotations ?? {})}
+              emptyMessage="No annotations"
+            />
+          </>
         ),
       },
       {
-        id: "containers",
-        label: "Containers",
+        id: "container-template",
+        label: "Template",
         content: (
-          <div className="space-y-4">
-            {(job?.containers || []).map((container) => (
-              <Section key={container.name}>
-                <SectionHeader title={container.name} />
-                <div className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Image</span>
-                      <span className="font-mono text-xs">
-                        {container.image}
-                      </span>
-                    </div>
-                    {container.ports.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ports</span>
-                        <span>{container.ports.join(", ")}</span>
-                      </div>
-                    )}
-                    {container.resources.requests &&
-                      Object.keys(container.resources.requests).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Requests
-                          </span>
-                          <span>
-                            {Object.entries(container.resources.requests)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                    {container.resources.limits &&
-                      Object.keys(container.resources.limits).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Limits</span>
-                          <span>
-                            {Object.entries(container.resources.limits)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                  </div>
-
-                  {/* Environment Variables */}
-                  {(container.env.length > 0 ||
-                    container.envFrom.length > 0) && (
-                    <EnvironmentVariables
-                      env={container.env}
-                      envFrom={container.envFrom}
-                      containerName={container.name}
-                      namespace={namespace}
-                    />
-                  )}
-                </div>
-              </Section>
-            ))}
-            {(!job?.containers || job.containers.length === 0) && (
-              <p className="text-center text-muted-foreground py-8">
-                No containers defined
-              </p>
-            )}
-          </div>
+          <ContainerRows
+            containers={job?.containers ?? []}
+            namespace={namespace}
+          />
         ),
       },
       {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
-        content: <PodListCard pods={pods} />,
+        content: (
+          <PodListCard pods={pods} emptyMessage="No pods for this job" />
+        ),
+      },
+      {
+        id: "conditions",
+        label: "Conditions",
+        content: (
+          <Section>
+            <SectionHeader title="Conditions" count={job?.conditions.length} />
+            <ConditionRows conditions={job?.conditions ?? []} />
+          </Section>
+        ),
       },
       {
         id: "yaml",
@@ -244,70 +141,126 @@ export function JobDetail() {
           <YamlTabContent
             yaml={yaml}
             onCopy={copyYaml}
-            title={job?.name || "Job YAML"}
+            title="Job YAML"
             resourceKind={ResourceType.Job}
             resourceName={job?.name || name || ""}
             namespace={job?.namespace || namespace}
           />
         ),
       },
-      {
-        id: "conditions",
-        label: "Conditions",
-        content: <ConditionsDisplay conditions={job?.conditions || []} />,
-      },
     ],
-    [job, pods, yaml, copyYaml, namespace, name, statusInfo]
+    [job, pods, yaml, copyYaml, namespace, name]
   );
 
   if (!job && !isLoading && !error) {
     return null;
   }
 
+  // An unset `completions` means the job is done after one successful pod.
+  const completions = job?.completions ?? 1;
+  const parallelism = job?.parallelism ?? 1;
+  const backoffLimit = job?.backoffLimit ?? 6;
+  const succeeded = job?.succeeded ?? 0;
+  const failed = job?.failed ?? 0;
+  const active = job?.active ?? 0;
+  const ran = duration(job?.startTime ?? null, job?.completionTime ?? null);
+
+  const timing: KeyValue[] = [
+    {
+      label: "Started",
+      value: job?.startTime ? formatDate(job.startTime) : "not started",
+      tone: job?.startTime ? undefined : "warn",
+    },
+    {
+      label: "Finished",
+      value: job?.completionTime
+        ? formatDate(job.completionTime)
+        : "still running",
+    },
+    ...(ran ? [{ label: "Ran for", value: ran, mono: true }] : []),
+    ...(job?.activeDeadlineSeconds
+      ? [
+          {
+            label: "Deadline",
+            value: `${job.activeDeadlineSeconds}s after start`,
+            mono: true,
+          },
+        ]
+      : []),
+    {
+      label: "Containers",
+      value: job?.containers.length ?? 0,
+      mono: true,
+    },
+  ];
+
   return (
     <ResourceDetailLayout
       resource={job}
       isLoading={isLoading}
       error={error}
-      resourceKind="Job"
-      title={name || ""}
-      namespace={namespace}
-      statusBadge={
-        <Badge variant={statusInfo.variant}>{statusInfo.text}</Badge>
-      }
+      resourceKind={ResourceType.Job}
+      title={job?.name || name || ""}
+      namespace={job?.namespace || namespace}
+      createdAt={job?.createdAt}
+      statusBadge={job && <StatusBadge status={job.status} />}
       badges={
-        <>
-          <Badge variant="outline">
-            {job?.succeeded ?? 0}/{job?.completions ?? 1} completed
-          </Badge>
-        </>
+        failed > 0 && (
+          <span className="text-[11px] text-err">
+            {failed} failed {failed === 1 ? "pod" : "pods"}
+          </span>
+        )
       }
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation?.mutate()}
-            disabled={deleteMutation?.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </>
-      }
-      icon={<Briefcase className="h-5 w-5" />}
       onBack={goBack}
+      actions={
+        <DetailAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      labels={job?.labels}
-      annotations={job?.annotations}
     >
-      {/* Related Resources (Owner References) */}
+      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
+        <Section>
+          {/* Completions, parallelism and the backoff limit are one setting
+              read three ways — how many runs, how fast, how many retries —
+              so the two that qualify the count sit under it rather than
+              beside it as equal rows. */}
+          <SectionHeader
+            title="Run"
+            count={`${parallelism} at a time · up to ${backoffLimit} ${
+              backoffLimit === 1 ? "retry" : "retries"
+            }`}
+          />
+          <Composition
+            total={completions}
+            label={
+              job?.completions == null
+                ? "successful pod needed"
+                : completions === 1
+                  ? "completion wanted"
+                  : "completions wanted"
+            }
+            segments={[
+              { label: "succeeded", count: succeeded, tone: "neutral" },
+              { label: "running", count: active, tone: "ok" },
+              { label: "failed", count: failed, tone: "err" },
+            ]}
+            note={
+              succeeded < completions && active === 0 && failed > 0
+                ? "no pod is running and the last one failed"
+                : undefined
+            }
+          />
+        </Section>
+        <KeyValueSection title="Timing" items={timing} />
+      </div>
+
       {job && (
         <RelatedResources
           ownerReferences={job.ownerReferences}

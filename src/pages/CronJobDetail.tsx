@@ -1,24 +1,105 @@
-import { Link } from "react-router-dom";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import type { CronJobDetailInfo } from "@/generated/types";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { RealtimeAge } from "@/components/ui/realtime";
-import { Trash2, CalendarClock, RefreshCw, Pause, Play } from "lucide-react";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
-import { RelatedResources } from "@/components/resources/RelatedResources";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-  InfoRow,
-} from "@/components/resources/ResourceDetailLayout";
+import { Trash2 } from "lucide-react";
 
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { RelatedResources } from "@/components/resources/RelatedResources";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ContainerRows } from "@/components/resources/container-rows";
+import { JobRows } from "@/components/resources/child-rows";
+import {
+  describeCron,
+  nextCronRun,
+} from "@/components/resources/cron-schedule";
+import {
+  Composition,
+  DetailAction,
+  Headline,
+} from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
+import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { formatDate } from "@/lib/utils";
+import type { CronJobDetailInfo } from "@/generated/types";
+
+/**
+ * The three facts a CronJob page exists to answer, at a glance.
+ *
+ * Kubernetes reports neither the next fire time nor a readable schedule, so
+ * both are derived here; when the expression cannot be parsed the row says so
+ * instead of showing a confident wrong time.
+ */
+function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
+  const lastAge = useRealtimeAge(cronJob.lastSchedule ?? null);
+  const next = useMemo(
+    () =>
+      cronJob.suspend
+        ? null
+        : nextCronRun(cronJob.schedule, new Date(), cronJob.timezone),
+    [cronJob.schedule, cronJob.timezone, cronJob.suspend]
+  );
+  const countdown = useRealtimeCountdown(next);
+  const description = describeCron(cronJob.schedule);
+
+  return (
+    <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">
+      <Headline
+        label="Schedule"
+        value={cronJob.schedule || "—"}
+        mono
+        note={
+          <>
+            {description ?? "cron expression"}
+            {cronJob.timezone && ` · ${cronJob.timezone}`}
+          </>
+        }
+      />
+      <Headline
+        label="Last run"
+        value={cronJob.lastSchedule ? `${lastAge} ago` : "never"}
+        note={
+          cronJob.lastSuccessfulTime
+            ? `last success ${formatDate(cronJob.lastSuccessfulTime)}`
+            : cronJob.lastSchedule
+              ? "no run has succeeded yet"
+              : "this CronJob has not fired"
+        }
+        tone={
+          cronJob.lastSchedule && !cronJob.lastSuccessfulTime
+            ? "warn"
+            : undefined
+        }
+      />
+      <Headline
+        label="Next run"
+        value={
+          cronJob.suspend
+            ? "suspended"
+            : next
+              ? `in ${countdown.display}`
+              : "unknown"
+        }
+        tone={cronJob.suspend ? "warn" : undefined}
+        note={
+          cronJob.suspend
+            ? "nothing will start until the suspend flag is cleared"
+            : next
+              ? (formatDate(next.toISOString()) ?? undefined)
+              : "the schedule could not be read"
+        }
+      />
+    </div>
+  );
+}
 
 export function CronJobDetail() {
   const {
@@ -27,7 +108,6 @@ export function CronJobDetail() {
     resource: cronJob,
     isLoading,
     error,
-    refetch,
     yaml,
     copyYaml,
     activeTab,
@@ -41,20 +121,20 @@ export function CronJobDetail() {
     defaultTab: "overview",
   });
 
-  // Fetch jobs created by this CronJob
   const { data: jobs = [] } = useQuery({
     queryKey: ["cronjob-jobs", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
       try {
-        const allJobs = await commands.listJobs({
-          namespace: namespace,
+        const all = await commands.listJobs({
+          namespace,
           labelSelector: null,
           fieldSelector: null,
           limit: null,
         });
-        // Filter jobs owned by this CronJob (jobs have owner reference)
-        return allJobs.filter((job) => job.name.startsWith(name));
+        // The list command carries no owner references, so the naming
+        // convention the controller uses is the only link available.
+        return all.filter((job) => job.name.startsWith(`${name}-`));
       } catch {
         return [];
       }
@@ -65,221 +145,100 @@ export function CronJobDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
+  const tabs = useMemo(
+    () => [
+      {
+        id: "overview",
+        label: "Overview",
+        content: (
+          <>
+            <KeyValueSection
+              title="Labels"
+              count={Object.keys(cronJob?.labels ?? {}).length}
+              items={recordToKeyValues(cronJob?.labels ?? {})}
+              emptyMessage="No labels"
+            />
+            <KeyValueSection
+              title="Annotations"
+              count={Object.keys(cronJob?.annotations ?? {}).length}
+              items={recordToKeyValues(cronJob?.annotations ?? {})}
+              emptyMessage="No annotations"
+            />
+          </>
+        ),
+      },
+      {
+        id: "container-template",
+        label: "Template",
+        content: (
+          <ContainerRows
+            containers={cronJob?.containers ?? []}
+            namespace={namespace}
+          />
+        ),
+      },
+      {
+        id: toPlural(ResourceType.Job),
+        label: "Jobs",
+        content: (
+          <Section>
+            <SectionHeader
+              title="Jobs"
+              count={`${jobs.length} kept · history limits decide how many`}
+            />
+            <JobRows jobs={jobs} />
+          </Section>
+        ),
+      },
+      {
+        id: "yaml",
+        label: "YAML",
+        content: (
+          <YamlTabContent
+            yaml={yaml}
+            onCopy={copyYaml}
+            title="CronJob YAML"
+            resourceKind={ResourceType.CronJob}
+            resourceName={cronJob?.name || name || ""}
+            namespace={cronJob?.namespace || namespace}
+          />
+        ),
+      },
+    ],
+    [cronJob, jobs, yaml, copyYaml, namespace, name]
+  );
+
   if (!cronJob && !isLoading && !error) {
     return null;
   }
 
-  const statusVariant = cronJob?.suspend ? "warning" : "success";
-  const statusText = cronJob?.suspend ? "Suspended" : "Active";
-  const StatusIcon = cronJob?.suspend ? Pause : Play;
+  const kept = {
+    succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
+    failed: cronJob?.failedJobsHistoryLimit ?? 1,
+  };
 
-  const tabs = [
+  const policy: KeyValue[] = [
     {
-      id: "overview",
-      label: "Overview",
-      content: (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoCard title="Schedule">
-              <div className="space-y-1">
-                <InfoRow
-                  label="Schedule"
-                  value={
-                    <code className="text-sm bg-muted px-2 py-0.5 rounded">
-                      {cronJob?.schedule || "-"}
-                    </code>
-                  }
-                />
-                {cronJob?.timezone && (
-                  <InfoRow label="Timezone" value={cronJob.timezone} />
-                )}
-                <InfoRow
-                  label="Concurrency Policy"
-                  value={cronJob?.concurrencyPolicy || "Allow"}
-                />
-                {cronJob?.startingDeadlineSeconds && (
-                  <InfoRow
-                    label="Starting Deadline"
-                    value={`${cronJob.startingDeadlineSeconds}s`}
-                  />
-                )}
-                <InfoRow
-                  label="Created"
-                  value={
-                    <RealtimeAge timestamp={cronJob?.createdAt} fallback="-" />
-                  }
-                />
-              </div>
-            </InfoCard>
-
-            <InfoCard title="Status & History">
-              <div className="space-y-1">
-                <InfoRow
-                  label="Status"
-                  value={
-                    <Badge variant={statusVariant} className="gap-1">
-                      <StatusIcon className="h-3 w-3" />
-                      {statusText}
-                    </Badge>
-                  }
-                />
-                <InfoRow label="Active Jobs" value={cronJob?.active ?? 0} />
-                {cronJob?.lastSchedule && (
-                  <InfoRow
-                    label="Last Schedule"
-                    value={<RealtimeAge timestamp={cronJob.lastSchedule} />}
-                  />
-                )}
-                {cronJob?.lastSuccessfulTime && (
-                  <InfoRow
-                    label="Last Success"
-                    value={
-                      <RealtimeAge timestamp={cronJob.lastSuccessfulTime} />
-                    }
-                  />
-                )}
-                <InfoRow
-                  label="Success History Limit"
-                  value={cronJob?.successfulJobsHistoryLimit ?? 3}
-                />
-                <InfoRow
-                  label="Failed History Limit"
-                  value={cronJob?.failedJobsHistoryLimit ?? 1}
-                />
-              </div>
-            </InfoCard>
-          </div>
-        </div>
-      ),
+      label: "Concurrency",
+      value: cronJob?.concurrencyPolicy || "Allow",
     },
     {
-      id: "containers",
+      label: "Starting deadline",
+      value: cronJob?.startingDeadlineSeconds
+        ? `${cronJob.startingDeadlineSeconds}s`
+        : // Without a deadline a run missed during controller downtime is
+          // skipped silently rather than started late.
+          "none — missed runs are skipped",
+      mono: cronJob?.startingDeadlineSeconds != null,
+    },
+    {
+      label: "History kept",
+      value: `${kept.succeeded} succeeded · ${kept.failed} failed`,
+    },
+    {
       label: "Containers",
-      content: (
-        <div className="space-y-4">
-          {(cronJob?.containers || []).map((container) => (
-            <Section key={container.name}>
-              <SectionHeader title={container.name} />
-              <div className="space-y-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Image</span>
-                    <span className="font-mono text-xs">{container.image}</span>
-                  </div>
-                  {container.ports.length > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Ports</span>
-                      <span>{container.ports.join(", ")}</span>
-                    </div>
-                  )}
-                  {container.resources.requests &&
-                    Object.keys(container.resources.requests).length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Requests</span>
-                        <span>
-                          {Object.entries(container.resources.requests)
-                            .map(([k, v]) => `${k}: ${v}`)
-                            .join(", ")}
-                        </span>
-                      </div>
-                    )}
-                  {container.resources.limits &&
-                    Object.keys(container.resources.limits).length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Limits</span>
-                        <span>
-                          {Object.entries(container.resources.limits)
-                            .map(([k, v]) => `${k}: ${v}`)
-                            .join(", ")}
-                        </span>
-                      </div>
-                    )}
-                </div>
-
-                {/* Environment Variables */}
-                {(container.env.length > 0 || container.envFrom.length > 0) && (
-                  <EnvironmentVariables
-                    env={container.env}
-                    envFrom={container.envFrom}
-                    containerName={container.name}
-                    namespace={namespace}
-                  />
-                )}
-              </div>
-            </Section>
-          ))}
-          {(!cronJob?.containers || cronJob.containers.length === 0) && (
-            <p className="text-center text-muted-foreground py-8">
-              No containers defined
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: toPlural(ResourceType.Job),
-      label: "Jobs",
-      content: (
-        <Section>
-          <div className="pt-6">
-            <div className="space-y-2">
-              {jobs.map((job) => {
-                const status = job.status || "Unknown";
-
-                return (
-                  <Link
-                    key={job.name}
-                    to={`/${toPlural(ResourceType.Job)}/${job.namespace}/${job.name}`}
-                    className="flex items-center justify-between p-3 rounded-md hover:bg-muted transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        variant={
-                          status === "Complete"
-                            ? "success"
-                            : status === "Failed"
-                              ? "destructive"
-                              : status === "Running"
-                                ? "warning"
-                                : "secondary"
-                        }
-                      >
-                        {status}
-                      </Badge>
-                      <span className="font-medium">{job.name}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>
-                        {job.succeeded}/{job.completions ?? 1} completed
-                      </span>
-                      <RealtimeAge timestamp={job.createdAt} />
-                    </div>
-                  </Link>
-                );
-              })}
-              {jobs.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">
-                  No jobs found
-                </p>
-              )}
-            </div>
-          </div>
-        </Section>
-      ),
-    },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          yaml={yaml}
-          onCopy={copyYaml}
-          title={cronJob?.name || "CronJob YAML"}
-          resourceKind={ResourceType.CronJob}
-          resourceName={cronJob?.name || name || ""}
-          namespace={cronJob?.namespace || namespace}
-        />
-      ),
+      value: cronJob?.containers.length ?? 0,
+      mono: true,
     },
   ];
 
@@ -288,47 +247,66 @@ export function CronJobDetail() {
       resource={cronJob}
       isLoading={isLoading}
       error={error}
-      resourceKind="CronJob"
-      title={name || ""}
-      namespace={namespace}
+      resourceKind={ResourceType.CronJob}
+      title={cronJob?.name || name || ""}
+      namespace={cronJob?.namespace || namespace}
+      createdAt={cronJob?.createdAt}
       statusBadge={
-        <Badge variant={statusVariant} className="gap-1">
-          <StatusIcon className="h-3 w-3" />
-          {statusText}
-        </Badge>
+        cronJob && (
+          <StatusBadge status={cronJob.suspend ? "Suspended" : "Active"} />
+        )
       }
-      badges={
-        <>
-          <Badge variant="outline">{cronJob?.schedule || "-"}</Badge>
-          <Badge variant="outline">{cronJob?.active ?? 0} active</Badge>
-        </>
-      }
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation?.mutate()}
-            disabled={deleteMutation?.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </>
-      }
-      icon={<CalendarClock className="h-5 w-5" />}
       onBack={goBack}
+      actions={
+        <DetailAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      labels={cronJob?.labels}
-      annotations={cronJob?.annotations}
     >
-      {/* Related Resources (Owner References) */}
+      {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
+
+      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
+        <Section>
+          <SectionHeader title="Runs" count="jobs this CronJob still owns" />
+          <Composition
+            total={jobs.length}
+            label={jobs.length === 1 ? "job kept" : "jobs kept"}
+            // Every segment is counted off the same list as the total, so the
+            // bar cannot disagree with the rows under the Jobs tab.
+            segments={[
+              {
+                label: "running",
+                count: jobs.filter((job) => job.status === "Running").length,
+                tone: "ok",
+              },
+              {
+                label: "succeeded",
+                count: jobs.filter((job) => job.status === "Complete").length,
+                tone: "neutral",
+              },
+              {
+                label: "failed",
+                count: jobs.filter((job) => job.status === "Failed").length,
+                tone: "err",
+              },
+            ]}
+            note={
+              cronJob?.active
+                ? `${cronJob.active} active per the controller`
+                : undefined
+            }
+          />
+        </Section>
+        <KeyValueSection title="Policy" items={policy} />
+      </div>
+
       {cronJob && (
         <RelatedResources
           ownerReferences={cronJob.ownerReferences}
