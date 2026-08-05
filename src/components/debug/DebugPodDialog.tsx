@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Bug, Copy, Info, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import type {
   DebugConfig,
@@ -28,10 +27,9 @@ import type {
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
-import { isK8sVersionAtLeast } from "@/lib/utils";
+import { cn, isK8sVersionAtLeast } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
-import { Progress } from "@/components/ui/progress";
 
 /** Debug mode - frontend only, backend has separate commands for each mode */
 type DebugMode = "ephemeralContainer" | "copyPod";
@@ -213,27 +211,25 @@ export function DebugPodDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <AlertTriangle className="h-4 w-4 text-warn" />
               Container Not Ready
             </DialogTitle>
             <DialogDescription>
               The debug container in pod{" "}
-              <span className="font-medium">{timeoutOperation.podName}</span>{" "}
+              <span className="font-mono text-fg">
+                {timeoutOperation.podName}
+              </span>{" "}
               did not become ready within the timeout period.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
-            {statusReason && (
-              <div className="rounded-md border p-3 bg-muted/30">
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Last status:</span>
-                  <span className="font-medium">{statusReason}</span>
-                </div>
-              </div>
-            )}
-          </div>
+          {statusReason && (
+            <div className="flex items-center gap-2 border-t border-hair pt-2 text-xs">
+              <Clock className="h-3.5 w-3.5 flex-none text-fg-fnt" />
+              <span className="text-fg-mut">Last status</span>
+              <span className="ml-auto font-mono text-fg">{statusReason}</span>
+            </div>
+          )}
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={handleLeave}>
@@ -256,37 +252,36 @@ export function DebugPodDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin text-fg-fnt" />
               {state === "creating"
                 ? "Creating debug container..."
                 : "Waiting for container..."}
             </DialogTitle>
             <DialogDescription>
               Debug container for pod{" "}
-              <span className="font-medium">{podName}</span>
+              <span className="font-mono text-fg">{podName}</span>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            {/* Status */}
-            <div className="rounded-md border p-3 bg-muted/30">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <span className="font-medium">
-                  {statusReason || "Initializing..."}
-                </span>
-              </div>
+          <div className="flex flex-col gap-2 border-t border-hair pt-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-fg-mut">Status</span>
+              <span className="font-mono text-fg">
+                {statusReason || "initializing…"}
+              </span>
             </div>
-
-            {/* Progress */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Elapsed</span>
-                <span className="font-medium">
-                  {elapsedSeconds}s / {timeoutSeconds}s
-                </span>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
+            <div className="flex items-center justify-between">
+              <span className="text-fg-mut">Elapsed</span>
+              <span className="font-mono text-fg">
+                {elapsedSeconds}s <span className="text-fg-fnt">/</span>{" "}
+                {timeoutSeconds}s
+              </span>
+            </div>
+            <div className="h-[3px] overflow-hidden rounded-sm bg-sel">
+              <div
+                className="h-full bg-info"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
 
@@ -306,12 +301,12 @@ export function DebugPodDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Bug className="h-5 w-5" />
+            <Bug className="h-4 w-4 text-fg-fnt" />
             Debug Pod
           </DialogTitle>
           <DialogDescription>
-            Debug pod <span className="font-medium">{podName}</span> in
-            namespace <span className="font-medium">{namespace}</span>
+            Debug pod <span className="font-mono text-fg">{podName}</span> in
+            namespace <span className="font-mono text-fg">{namespace}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -325,11 +320,12 @@ export function DebugPodDialog({
               className="grid gap-2"
             >
               <div
-                className={`flex items-center space-x-3 rounded-md border p-3 ${
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-2 py-1.5",
                   supportsEphemeralContainers
-                    ? "cursor-pointer hover:bg-muted/50"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
+                    ? "cursor-pointer hover:bg-hover"
+                    : "cursor-not-allowed opacity-50"
+                )}
               >
                 <RadioGroupItem
                   value="ephemeralContainer"
@@ -338,30 +334,37 @@ export function DebugPodDialog({
                 />
                 <Label
                   htmlFor="ephemeral"
-                  className={`flex-1 ${supportsEphemeralContainers ? "cursor-pointer" : "cursor-not-allowed"}`}
+                  className={cn(
+                    "flex-1",
+                    supportsEphemeralContainers
+                      ? "cursor-pointer"
+                      : "cursor-not-allowed"
+                  )}
                 >
                   <div className="flex items-center gap-2">
-                    <Bug className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Ephemeral Container</span>
+                    <Bug className="h-3.5 w-3.5 text-fg-fnt" />
+                    <span className="font-medium text-fg">
+                      Ephemeral Container
+                    </span>
                     {!supportsEphemeralContainers && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-[11px] text-fg-fnt">
                         (K8s 1.25+)
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="mt-0.5 text-[11px] text-fg-mut">
                     Add debug container to existing pod without restart
                   </p>
                 </Label>
               </div>
-              <div className="flex items-center space-x-3 rounded-md border p-3 cursor-pointer hover:bg-muted/50">
+              <div className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-hover">
                 <RadioGroupItem value="copyPod" id="copy" />
                 <Label htmlFor="copy" className="flex-1 cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <Copy className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Copy Pod</span>
+                    <Copy className="h-3.5 w-3.5 text-fg-fnt" />
+                    <span className="font-medium text-fg">Copy Pod</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="mt-0.5 text-[11px] text-fg-mut">
                     Create a copy of the pod with debug container
                   </p>
                 </Label>
@@ -412,7 +415,7 @@ export function DebugPodDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] text-fg-mut">
                 Debug container will share process namespace with this container
               </p>
             </div>
@@ -420,10 +423,10 @@ export function DebugPodDialog({
 
           {/* Share Process Namespace (for copy mode) */}
           {mode === "copyPod" && (
-            <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5">
               <div className="space-y-0.5">
                 <Label htmlFor="share-processes">Share Process Namespace</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-fg-mut">
                   Allow debug container to see processes from other containers
                 </p>
               </div>
@@ -437,14 +440,12 @@ export function DebugPodDialog({
 
           {/* Info about ephemeral containers support */}
           {!supportsEphemeralContainers && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Ephemeral containers require Kubernetes 1.25+. Your cluster
-                version ({kubernetesVersion || "unknown"}) does not support this
-                feature. Use "Copy Pod" mode instead.
-              </AlertDescription>
-            </Alert>
+            <p className="flex items-start gap-2 border-t border-hair pt-2 text-[11px] text-fg-mut">
+              <Info className="mt-px h-3.5 w-3.5 flex-none text-fg-fnt" />
+              Ephemeral containers require Kubernetes 1.25+. This cluster
+              reports {kubernetesVersion || "an unknown version"}, so use "Copy
+              Pod" instead.
+            </p>
           )}
         </div>
 
