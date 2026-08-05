@@ -1,5 +1,9 @@
 import { useThemeStore } from "@/stores/themeStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
+import {
+  useDisplaySettingsStore,
+  type ResourceColouring,
+} from "@/stores/displaySettingsStore";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
@@ -29,8 +33,19 @@ const THEMES = [
   { value: "system", label: "System", Icon: Monitor },
 ] as const;
 
+const COLOURINGS = [
+  { value: "full", label: "Full", hint: "Kind and identifier both coloured" },
+  {
+    value: "minimal",
+    label: "Minimal",
+    hint: "Kind by icon, identifier dimmed",
+  },
+  { value: "off", label: "Off", hint: "No colour on resource names" },
+] as const;
+
 export function Settings() {
   const { theme, setTheme } = useThemeStore();
+  const { resourceColouring, setResourceColouring } = useDisplaySettingsStore();
   const { toast } = useToast();
   const {
     available: updateAvailable,
@@ -79,6 +94,36 @@ export function Settings() {
                     className="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
+                    {label}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          }
+        />
+        <SettingRow
+          label="Resource colouring"
+          hint="Colour tells resource kinds apart and gives each object a stable tint. Minimal keeps the icon only."
+          control={
+            <RadioGroup
+              value={resourceColouring}
+              onValueChange={(value) =>
+                setResourceColouring(value as ResourceColouring)
+              }
+              className="flex items-center gap-0.5"
+            >
+              {COLOURINGS.map(({ value, label, hint }) => (
+                <div key={value}>
+                  <RadioGroupItem
+                    value={value}
+                    id={`colouring-${value}`}
+                    className="peer sr-only"
+                  />
+                  <Label
+                    htmlFor={`colouring-${value}`}
+                    title={hint}
+                    className="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg"
+                  >
                     {label}
                   </Label>
                 </div>
