@@ -285,8 +285,10 @@ export async function drainNode(
   return invoke<void>("drain_node", { name, ignoreDaemonsets, force });
 }
 
-export async function getClusterOverview(): Promise<ClusterOverview> {
-  return invoke<ClusterOverview>("get_cluster_overview");
+export async function getClusterOverview(
+  namespace: string | null
+): Promise<ClusterOverview> {
+  return invoke<ClusterOverview>("get_cluster_overview", { namespace });
 }
 
 export async function listCustomResources(

@@ -63,12 +63,12 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
        *  point of the screen. */}
       {isCritical ? (
         <CircleAlert
-          className="mt-0.5 h-4 w-4 shrink-0 text-destructive"
+          className="mt-0.5 h-4 w-4 shrink-0 text-err"
           aria-hidden="true"
         />
       ) : (
         <AlertTriangle
-          className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--status-warning))]"
+          className="mt-0.5 h-4 w-4 shrink-0 text-warn"
           aria-hidden="true"
         />
       )}
@@ -77,27 +77,25 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
           <span
             className={cn(
               "font-mono text-sm font-medium",
-              isCritical
-                ? "text-destructive"
-                : "text-[hsl(var(--status-warning))]"
+              isCritical ? "text-err" : "text-warn"
             )}
           >
             {problem.reason}
           </span>
           <span className="truncate font-mono text-sm">{problem.name}</span>
           {problem.namespace && (
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <span className="shrink-0 text-xs text-fg-mut">
               {problem.namespace}
             </span>
           )}
         </div>
         {problem.detail && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-xs text-fg-mut">
             {problem.detail}
           </p>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-1 text-xs text-fg-mut">
         {problem.restarts != null && problem.restarts > 0 && (
           <span className="mr-2">{problem.restarts}&nbsp;restarts</span>
         )}
@@ -108,12 +106,12 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
   );
 
   if (!href) {
-    return <div className="border-b last:border-b-0">{body}</div>;
+    return <div className="border-b border-hair last:border-b-0">{body}</div>;
   }
   return (
     <Link
       to={href}
-      className="block border-b transition-colors last:border-b-0 hover:bg-muted/50"
+      className="block border-b border-hair transition-colors last:border-b-0 hover:bg-hover"
     >
       {body}
     </Link>
@@ -122,9 +120,12 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
 
 export function ProblemsPanel({
   problems,
+  problemsTruncated,
   podCount,
 }: {
   problems: ClusterProblem[];
+  /** Rows the backend dropped from the end of the ranked list. */
+  problemsTruncated: number;
   podCount: number;
 }) {
   // The healthy state is deliberately one line, not a card full of green
@@ -132,13 +133,10 @@ export function ProblemsPanel({
   // and let the topology below take the space.
   if (problems.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--status-running))]/30 bg-[hsl(var(--status-running))]/5 px-4 py-3">
-        <CheckCircle2
-          className="h-4 w-4 text-[hsl(var(--status-running))]"
-          aria-hidden="true"
-        />
+      <div className="flex items-center gap-2 rounded-md border border-ok/[0.16] bg-ok/[0.16] px-4 py-3">
+        <CheckCircle2 className="h-4 w-4 text-ok" aria-hidden="true" />
         <span className="text-sm font-medium">No problems detected</span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-fg-mut">
           {podCount} pods, all workloads available
         </span>
       </div>
@@ -146,32 +144,37 @@ export function ProblemsPanel({
   }
 
   const critical = problems.filter((p) => p.severity === "critical").length;
+  // The headline counts everything that is wrong, not everything that fits —
+  // an outage that overflows the cap must not read as smaller than it is.
+  const total = problems.length + problemsTruncated;
 
   return (
-    <Card className="border-destructive/40">
+    <Card className="border-err/[0.4]">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <CircleAlert
-            className="h-4 w-4 text-destructive"
-            aria-hidden="true"
-          />
-          {problems.length} {problems.length === 1 ? "problem" : "problems"}{" "}
-          need attention
-          {critical > 0 && problems.length !== critical && (
-            <span className="text-sm font-normal text-muted-foreground">
+          <CircleAlert className="h-4 w-4 text-err" aria-hidden="true" />
+          {total} {total === 1 ? "problem" : "problems"} need attention
+          {critical > 0 && total !== critical && (
+            <span className="text-sm font-normal text-fg-mut">
               {critical} critical
             </span>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="border-t">
+        <div className="border-t border-hair">
           {problems.map((problem) => (
             <ProblemRow
               key={`${problem.kind}/${problem.namespace ?? "-"}/${problem.name}/${problem.reason}`}
               problem={problem}
             />
           ))}
+          {problemsTruncated > 0 && (
+            <p className="px-4 py-2.5 text-xs text-fg-mut">
+              +{problemsTruncated} more — showing the {problems.length} most
+              severe
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -196,40 +199,30 @@ function PressureBar({
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between text-sm">
-        <span
-          className={cn(
-            "font-medium",
-            tight && "text-[hsl(var(--status-warning))]"
-          )}
-        >
+        <span className={cn("font-medium", tight && "text-warn")}>
           {Math.round(ratio * 100)}% reserved
         </span>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="font-mono text-xs text-fg-mut">
           {format(pressure.requested)} / {format(pressure.allocatable)}
         </span>
       </div>
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-hover">
         <div
-          className={cn(
-            "h-full rounded-full",
-            tight
-              ? "bg-[hsl(var(--status-warning))]"
-              : "bg-[hsl(var(--status-progressing))]"
-          )}
+          className={cn("h-full rounded-full", tight ? "bg-warn" : "bg-info")}
           style={{ width: `${Math.min(100, ratio * 100)}%` }}
         />
         {/* Actual usage as a tick, not a second bar: it is context for the
          *  reserved number, not a competing metric. */}
         {usageRatio != null && (
           <div
-            className="absolute top-0 h-full w-0.5 bg-foreground/70"
+            className="absolute top-0 h-full w-0.5 bg-fg-mid"
             style={{ left: `${Math.min(100, usageRatio * 100)}%` }}
             aria-hidden="true"
           />
         )}
       </div>
       {usageRatio != null && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-fg-mut">
           actually using {format(pressure.usage ?? 0)} (
           {Math.round(usageRatio * 100)}%)
         </p>
@@ -251,21 +244,21 @@ export function SchedulerPanel({
         <CardTitle className="text-base">Scheduler headroom</CardTitle>
         {/* Naming the denominator matters: people read a low usage bar as
          *  "room to spare" and then wonder why pods sit Pending. */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-fg-mut">
           Share of allocatable capacity already reserved by pod requests — this,
           not usage, decides whether the next pod schedules.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-fg-mut">
             <Cpu className="h-3.5 w-3.5" aria-hidden="true" />
             CPU
           </div>
           <PressureBar pressure={scheduler.cpu} format={formatCores} />
         </div>
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-fg-mut">
             <MemoryStick className="h-3.5 w-3.5" aria-hidden="true" />
             Memory
           </div>
@@ -275,7 +268,7 @@ export function SchedulerPanel({
           />
         </div>
         {!metricsAvailable && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-fg-mut">
             metrics-server unavailable — reserved figures are exact, live usage
             is not shown.
           </p>
@@ -296,14 +289,12 @@ function NodeRow({ node }: { node: NodeSummary }) {
   return (
     <Link
       to={`/${toPlural(ResourceType.Node)}/${node.name}`}
-      className="flex items-center gap-3 border-b px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/50"
+      className="flex items-center gap-3 border-b border-hair px-4 py-2.5 transition-colors last:border-b-0 hover:bg-hover"
     >
       <span
         className={cn(
           "h-2 w-2 shrink-0 rounded-full",
-          node.ready
-            ? "bg-[hsl(var(--status-running))]"
-            : "bg-[hsl(var(--status-error))]"
+          node.ready ? "bg-ok" : "bg-err"
         )}
         aria-hidden="true"
       />
@@ -311,20 +302,16 @@ function NodeRow({ node }: { node: NodeSummary }) {
         <div className="flex items-baseline gap-2">
           <span className="truncate font-mono text-sm">{node.name}</span>
           {node.roles.map((role) => (
-            <span key={role} className="text-xs text-muted-foreground">
+            <span key={role} className="text-xs text-fg-mut">
               {role}
             </span>
           ))}
           {!node.schedulable && (
-            <span className="text-xs text-[hsl(var(--status-warning))]">
-              cordoned
-            </span>
+            <span className="text-xs text-warn">cordoned</span>
           )}
-          {!node.ready && (
-            <span className="text-xs text-destructive">NotReady</span>
-          )}
+          {!node.ready && <span className="text-xs text-err">NotReady</span>}
         </div>
-        <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="mt-1 flex items-center gap-4 text-xs text-fg-mut">
           <span className="w-28 shrink-0">
             cpu {Math.round(cpuRatio * 100)}% reserved
           </span>
@@ -342,19 +329,22 @@ function NodeRow({ node }: { node: NodeSummary }) {
 }
 
 export function NodesPanel({ nodes }: { nodes: NodeSummary[] }) {
+  // Rendered in full, unlike the problems list: node counts are bounded in
+  // practice, and hiding one behind a "+N more" would hide the node someone
+  // opened this panel to find.
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Server className="h-4 w-4" aria-hidden="true" />
           Nodes
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className="text-sm font-normal text-fg-mut">
             {nodes.length}
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="border-t">
+        <div className="border-t border-hair">
           {nodes.map((node) => (
             <NodeRow key={node.name} node={node} />
           ))}
@@ -371,33 +361,31 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Warning events</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          last hour, grouped by reason
-        </p>
+        <p className="text-xs text-fg-mut">last hour, grouped by reason</p>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="border-t">
+        <div className="border-t border-hair">
           {warnings.map((warning) => (
             <div
               key={warning.reason}
-              className="flex items-start gap-3 border-b px-4 py-2 last:border-b-0"
+              className="flex items-start gap-3 border-b border-hair px-4 py-2 last:border-b-0"
             >
-              <span className="font-mono text-sm text-[hsl(var(--status-warning))]">
+              <span className="font-mono text-sm text-warn">
                 {warning.reason}
               </span>
               {warning.count > 1 && (
-                <span className="shrink-0 text-xs text-muted-foreground">
+                <span className="shrink-0 text-xs text-fg-mut">
                   &times;{warning.count}
                 </span>
               )}
-              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              <p className="min-w-0 flex-1 truncate text-xs text-fg-mut">
                 {warning.object && (
                   <span className="font-mono">{warning.object}</span>
                 )}
                 {warning.object && warning.sample && " — "}
                 {warning.sample}
               </p>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-xs text-fg-mut">
                 {formatAge(warning.lastSeen)}
               </span>
             </div>

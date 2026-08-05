@@ -833,6 +833,7 @@ export interface CustomResourceInfo {
 
 export interface ClusterOverview {
   problems: ClusterProblem[];
+  problemsTruncated: number;
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
   warnings: WarningGroup[];

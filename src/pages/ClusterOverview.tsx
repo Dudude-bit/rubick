@@ -46,10 +46,10 @@ export function ClusterOverview() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["cluster-overview", currentContext],
+    queryKey: ["cluster-overview", currentContext, currentNamespace],
     queryFn: async () => {
       try {
-        return await commands.getClusterOverview();
+        return await commands.getClusterOverview(currentNamespace || null);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
@@ -106,13 +106,10 @@ export function ClusterOverview() {
           title={currentContext || "Cluster Overview"}
           subtitle={subtitle}
         />
-        <Card className="border-destructive/40">
+        <Card className="border-err/[0.4]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertCircle
-                className="h-4 w-4 text-destructive"
-                aria-hidden="true"
-              />
+              <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
               Could not read cluster state
             </CardTitle>
             <CardDescription>{error.message}</CardDescription>
@@ -140,6 +137,7 @@ export function ClusterOverview() {
 
       <ProblemsPanel
         problems={overview.problems}
+        problemsTruncated={overview.problemsTruncated}
         podCount={overview.podCount}
       />
 
@@ -192,22 +190,20 @@ function NamespacesPanel({
         <CardTitle className="flex items-center gap-2 text-base">
           <Layers className="h-4 w-4" aria-hidden="true" />
           Namespaces with workloads
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className="text-sm font-normal text-fg-mut">
             {namespaces.length}
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="border-t">
+        <div className="border-t border-hair">
           {busiest.map((ns) => (
             <div
               key={ns.name}
-              className="flex items-center justify-between border-b px-4 py-2 text-sm last:border-b-0"
+              className="flex items-center justify-between border-b border-hair px-4 py-2 text-sm last:border-b-0"
             >
               <span className="font-mono">{ns.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {ns.podCount} pods
-              </span>
+              <span className="text-xs text-fg-mut">{ns.podCount} pods</span>
             </div>
           ))}
         </div>
