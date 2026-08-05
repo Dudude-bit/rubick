@@ -25,6 +25,15 @@
     --err: 4 66% 45%;
     --info: 210 67% 40%;
 
+    /* Kind and identity hues. Hue is a number from TypeScript; saturation
+     * and lightness live here so both palettes track the theme. Held well
+     * below the status colours' saturation — a tinted identifier must never
+     * read as a severity. */
+    --ident-s: 58%;
+    --ident-l: 38%;
+    --kind-s: 42%;
+    --kind-l: 38%;
+
     /* The single documented exception to the flat canvas: an overlay has
      * to read as floating above the page or it looks like a rendering
      * fault. On light the canvas is already near-white, so the lift comes
@@ -65,6 +74,10 @@
     --warn: 44 82% 48%;
     --err: 358 81% 68%;
     --info: 212 66% 58%;
+    --ident-s: 52%;
+    --ident-l: 66%;
+    --kind-s: 38%;
+    --kind-l: 70%;
     --raise: 220 7% 18%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }
