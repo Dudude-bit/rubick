@@ -1,33 +1,18 @@
-import { Badge } from "@/components/ui/badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { AnnotationsDisplay } from "@/components/resources/AnnotationsDisplay";
-import {
-  InfoCard,
-  ResourceDetailLayout,
-} from "@/components/resources/ResourceDetailLayout";
-import { ReferencedBy } from "@/components/resources";
-import { KeyValueList } from "@/components/shared";
-import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { Lock } from "lucide-react";
-import { commands } from "@/lib/commands";
 import { useQuery } from "@tanstack/react-query";
-import type { SecretInfo } from "@/generated/types";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { Trash2 } from "lucide-react";
 
-const getSecretTypeColor = (type: string): string => {
-  switch (type) {
-    case "kubernetes.io/tls":
-      return "bg-blue-500/20 text-blue-500";
-    case "kubernetes.io/dockerconfigjson":
-      return "bg-purple-500/20 text-purple-500";
-    case "kubernetes.io/service-account-token":
-      return "bg-green-500/20 text-green-500";
-    default:
-      return "bg-gray-500/20 text-gray-500";
-  }
-};
+import { StatusBadge } from "@/components/ui/status-badge";
+import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { ReferencedBy } from "@/components/resources/ReferencedBy";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { DataSection } from "@/components/resources/data-rows";
+import { DetailAction } from "@/components/resources/detail-blocks";
+import { KeyValueSection } from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { ResourceType } from "@/lib/resource-registry";
+import type { SecretInfo } from "@/generated/types";
 
 export function SecretDetail() {
   const {
@@ -41,6 +26,7 @@ export function SecretDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
   } = useResourceDetail<SecretInfo>({
     resourceKind: ResourceType.Secret,
     fetchResource: (name, ns) => commands.getSecret(name, ns),
@@ -48,8 +34,7 @@ export function SecretDetail() {
     defaultTab: "data",
   });
 
-  // Fetch decoded data for the Secret
-  const { data: secretData = {}, isLoading: isLoadingData } = useQuery({
+  const { data: secretData = {}, isLoading: isDataLoading } = useQuery({
     queryKey: ["secret-data", name, namespace],
     queryFn: async () => {
       if (!name || !namespace) return {};
@@ -65,42 +50,54 @@ export function SecretDetail() {
   const dataKeys = secret?.dataKeys ?? [];
   const labels = secret?.labels ?? {};
   const annotations = secret?.annotations ?? {};
-  const secretType = secret?.type ?? "Opaque";
+  // The prefix is the same on every built-in type and only pushes the part
+  // that differs off the end of the badge.
+  const secretType = (secret?.type ?? "Opaque").replace("kubernetes.io/", "");
 
   const tabs = [
     {
       id: "data",
       label: "Data",
       content: (
-        <KeyValueList
+        <DataSection
           data={secretData}
-          title="Data"
-          isSensitive={true}
-          showSensitiveBadge={true}
-          isLoading={isLoadingData}
-          emptyMessage="No data keys defined"
+          keys={dataKeys}
+          sensitive
+          isLoading={isDataLoading}
+          emptyMessage="This Secret holds no keys"
         />
       ),
     },
     {
       id: "references",
-      label: "Referenced By",
-      content: (
-        <ReferencedBy
-          resourceType="Secret"
-          name={name || ""}
-          namespace={namespace || ""}
-        />
-      ),
+      label: "Referenced by",
+      content:
+        name && namespace ? (
+          <ReferencedBy
+            resourceType="Secret"
+            name={name}
+            namespace={namespace}
+          />
+        ) : null,
     },
     {
       id: "metadata",
       label: "Metadata",
       content: (
-        <div className="space-y-4">
-          <LabelsDisplay labels={labels} title="Labels" />
-          <AnnotationsDisplay annotations={annotations} />
-        </div>
+        <>
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(labels).length}
+            items={recordToKeyValues(labels)}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(annotations).length}
+            items={recordToKeyValues(annotations)}
+            emptyMessage="No annotations"
+          />
+        </>
       ),
     },
     {
@@ -108,7 +105,7 @@ export function SecretDetail() {
       label: "YAML",
       content: (
         <YamlTabContent
-          title="Secret YAML (Redacted)"
+          title="Secret YAML"
           yaml={secretYaml}
           resourceKind={ResourceType.Secret}
           resourceName={name || ""}
@@ -125,34 +122,34 @@ export function SecretDetail() {
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Secret}
-      title={secret?.name || ""}
-      namespace={secret?.namespace}
+      title={secret?.name || name || ""}
+      namespace={secret?.namespace || namespace}
+      createdAt={secret?.createdAt}
       statusBadge={
         secret && (
-          <Badge className={getSecretTypeColor(secretType)}>
-            {secretType.replace("kubernetes.io/", "")}
-          </Badge>
+          // The type is a classification, not a health state: it gets the
+          // neutral role rather than borrowing a status colour.
+          <StatusBadge status={secretType} roleOverride="neutral" />
         )
       }
-      icon={<Lock className="h-8 w-8 text-muted-foreground" />}
+      badges={
+        <span className="text-[11px] text-fg-fnt">
+          {dataKeys.length} {dataKeys.length === 1 ? "key" : "keys"}
+        </span>
+      }
       onBack={goBack}
+      actions={
+        <DetailAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <div className="grid gap-4 md:grid-cols-3">
-        <InfoCard title="Type">
-          <StatusBadge status={secretType.replace("kubernetes.io/", "")} />
-        </InfoCard>
-
-        <InfoCard title="Data Keys">
-          <div className="text-xl font-bold">{dataKeys.length}</div>
-        </InfoCard>
-
-        <InfoCard title="Labels">
-          <div className="text-xl font-bold">{Object.keys(labels).length}</div>
-        </InfoCard>
-      </div>
-    </ResourceDetailLayout>
+    />
   );
 }

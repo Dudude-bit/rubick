@@ -1,17 +1,16 @@
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { AnnotationsDisplay } from "@/components/resources/AnnotationsDisplay";
-import { ReferencedBy } from "@/components/resources/ReferencedBy";
-import {
-  InfoCard,
-  ResourceDetailLayout,
-} from "@/components/resources/ResourceDetailLayout";
-import { KeyValueList } from "@/components/shared";
-import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { FileText } from "lucide-react";
-import { commands } from "@/lib/commands";
 import { useQuery } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
+
+import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { ReferencedBy } from "@/components/resources/ReferencedBy";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { DataSection } from "@/components/resources/data-rows";
+import { DetailAction } from "@/components/resources/detail-blocks";
+import { KeyValueSection } from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
 
 export function ConfigMapDetail() {
@@ -26,6 +25,7 @@ export function ConfigMapDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
   } = useResourceDetail<ConfigMapInfo>({
     resourceKind: ResourceType.ConfigMap,
     fetchResource: (name, ns) => commands.getConfigmap(name, ns),
@@ -33,7 +33,6 @@ export function ConfigMapDetail() {
     defaultTab: "data",
   });
 
-  // Fetch actual data for the ConfigMap
   const { data: configMapData = {}, isLoading: isDataLoading } = useQuery({
     queryKey: ["configmap-data", name, namespace],
     queryFn: async () => {
@@ -55,19 +54,20 @@ export function ConfigMapDetail() {
     {
       id: "data",
       label: "Data",
+      // The keys are the object; the metadata is context, so it moves to a
+      // tab of its own rather than sharing the fold with them.
       content: (
-        <KeyValueList
+        <DataSection
           data={configMapData}
-          title="Data"
-          isSensitive={false}
+          keys={dataKeys}
           isLoading={isDataLoading}
-          emptyMessage="No data keys defined"
+          emptyMessage="This ConfigMap holds no keys"
         />
       ),
     },
     {
       id: "references",
-      label: "Referenced By",
+      label: "Referenced by",
       content:
         name && namespace ? (
           <ReferencedBy
@@ -81,10 +81,20 @@ export function ConfigMapDetail() {
       id: "metadata",
       label: "Metadata",
       content: (
-        <div className="space-y-4">
-          <LabelsDisplay labels={labels} title="Labels" />
-          <AnnotationsDisplay annotations={annotations} />
-        </div>
+        <>
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(labels).length}
+            items={recordToKeyValues(labels)}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(annotations).length}
+            items={recordToKeyValues(annotations)}
+            emptyMessage="No annotations"
+          />
+        </>
       ),
     },
     {
@@ -109,23 +119,27 @@ export function ConfigMapDetail() {
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.ConfigMap}
-      title={configMap?.name || ""}
-      namespace={configMap?.namespace}
-      icon={<FileText className="h-8 w-8 text-muted-foreground" />}
+      title={configMap?.name || name || ""}
+      namespace={configMap?.namespace || namespace}
+      createdAt={configMap?.createdAt}
+      badges={
+        <span className="text-[11px] text-fg-fnt">
+          {dataKeys.length} {dataKeys.length === 1 ? "key" : "keys"}
+        </span>
+      }
       onBack={goBack}
+      actions={
+        <DetailAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <div className="grid gap-4 md:grid-cols-2">
-        <InfoCard title="Data Keys">
-          <div className="text-xl font-bold">{dataKeys.length}</div>
-        </InfoCard>
-
-        <InfoCard title="Labels">
-          <div className="text-xl font-bold">{Object.keys(labels).length}</div>
-        </InfoCard>
-      </div>
-    </ResourceDetailLayout>
+    />
   );
 }
