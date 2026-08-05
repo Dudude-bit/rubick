@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
-import type { KeyValue, KeyValueTone } from "./key-values";
+import { TONE_CLASS, type KeyValue, type KeyValueTone } from "./key-values";
 
 /**
  * The metadata row every detail page is made of.
@@ -15,13 +15,6 @@ import type { KeyValue, KeyValueTone } from "./key-values";
  * wraps rather than scrolls, because annotations and ingress URLs are long and
  * a horizontal scrollbar hides the end of the string that matters.
  */
-
-const TONE: Record<KeyValueTone, string> = {
-  ok: "text-ok",
-  warn: "text-warn",
-  err: "text-err",
-  info: "text-info",
-};
 
 export interface KeyValueRowProps {
   label: string;
@@ -50,7 +43,7 @@ export function KeyValueRow({
         className={cn(
           "min-w-0 break-words text-xs",
           mono && "font-mono",
-          tone ? TONE[tone] : "text-fg"
+          tone ? TONE_CLASS[tone] : "text-fg"
         )}
       >
         {children}

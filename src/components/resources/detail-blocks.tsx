@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
@@ -8,6 +9,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 
 /**
@@ -261,6 +263,121 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
           </>
         )}
       </span>
+    </div>
+  );
+}
+
+export type CompositionTone = "ok" | "warn" | "err" | "neutral";
+
+export interface CompositionSegment {
+  label: string;
+  count: number;
+  tone: CompositionTone;
+}
+
+const SEGMENT_BAR: Record<CompositionTone, string> = {
+  ok: "bg-ok",
+  warn: "bg-warn",
+  err: "bg-err",
+  neutral: "bg-fg-fnt",
+};
+
+/** Only the abnormal segments carry colour; the healthy majority stays quiet. */
+const SEGMENT_LEGEND: Record<CompositionTone, string> = {
+  ok: "text-fg-fnt",
+  warn: "text-warn",
+  err: "text-err",
+  neutral: "text-fg-fnt",
+};
+
+export interface CompositionProps {
+  /** The denominator the segments partition. */
+  total: number;
+  label: string;
+  segments: CompositionSegment[];
+  /** Why the total is what it is, e.g. "2 at a time · up to 6 retries". */
+  note?: ReactNode;
+}
+
+/**
+ * One count, split into what it is made of.
+ *
+ * A rollout is a single fact — "6 wanted, 5 running, 1 still coming" — and
+ * printing desired/current/ready/updated/available as five equal rows made
+ * the reader do the subtraction. The bar does it: the segments partition the
+ * total, so a gap is visible before any number is read.
+ */
+export function Composition({
+  total,
+  label,
+  segments,
+  note,
+}: CompositionProps) {
+  const visible = segments.filter((segment) => segment.count > 0);
+
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-[15px] font-semibold text-fg">
+          {total}
+        </span>
+        <span className="text-[11px] text-fg-mut">{label}</span>
+      </div>
+      <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
+        {visible.map((segment) => (
+          <span
+            key={segment.label}
+            className={SEGMENT_BAR[segment.tone]}
+            style={{ flex: segment.count }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+        {visible.length === 0 ? (
+          <span className="text-fg-fnt">nothing scheduled</span>
+        ) : (
+          visible.map((segment) => (
+            <span key={segment.label} className={SEGMENT_LEGEND[segment.tone]}>
+              {segment.count} {segment.label}
+            </span>
+          ))
+        )}
+      </div>
+      {note && <p className="mt-1.5 text-[11px] text-fg-fnt">{note}</p>}
+    </div>
+  );
+}
+
+export interface HeadlineProps {
+  label: string;
+  value: ReactNode;
+  /** One line under the value: the human reading of it, or why it is absent. */
+  note?: ReactNode;
+  mono?: boolean;
+  tone?: KeyValueTone;
+}
+
+/**
+ * The fact a page exists to answer, at the size of a composition's number.
+ *
+ * A cron schedule buried as row nine of a twenty-row metadata block is the
+ * thing the reader opened the page for. Three of these across the top say it
+ * before anything else is read.
+ */
+export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
+  return (
+    <div>
+      <div className="text-[11px] text-fg-mut">{label}</div>
+      <div
+        className={cn(
+          "mt-1 break-words text-[15px] font-semibold",
+          mono && "font-mono",
+          tone ? TONE_CLASS[tone] : "text-fg"
+        )}
+      >
+        {value}
+      </div>
+      {note && <p className="mt-0.5 text-[11px] text-fg-fnt">{note}</p>}
     </div>
   );
 }

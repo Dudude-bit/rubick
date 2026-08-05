@@ -8,6 +8,14 @@ import type { ReactNode } from "react";
 
 export type KeyValueTone = "ok" | "warn" | "err" | "info";
 
+/** The one place a tone becomes a colour, shared by every block that takes one. */
+export const TONE_CLASS: Record<KeyValueTone, string> = {
+  ok: "text-ok",
+  warn: "text-warn",
+  err: "text-err",
+  info: "text-info",
+};
+
 export interface KeyValue {
   label: string;
   value: ReactNode;
