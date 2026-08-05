@@ -34,6 +34,18 @@ describe("splitName", () => {
     });
   });
 
+  // A ReplicaSet is named after its Deployment plus the pod-template hash,
+  // with no pod suffix behind it. It is the name shown on a pod's "Controlled
+  // by" row, so leaving it whole makes the one place the two names sit
+  // together disagree about which part is generated.
+  it.each([
+    ["crash-demo-56588f6b8c", "crash-demo", "-56588f6b8c"],
+    ["log-demo-596964f7d6", "log-demo", "-596964f7d6"],
+    ["coredns-ccb96694c", "coredns", "-ccb96694c"],
+  ])("splits the bare ReplicaSet hash in %s", (name, stem, tail) => {
+    expect(splitName(name)).toEqual({ stem, tail });
+  });
+
   // A name a human typed is not noise. Guessing wrong here is worse than
   // not guessing, so anything unrecognised comes back whole.
   it.each([
@@ -43,6 +55,11 @@ describe("splitName", () => {
     "local-path-provisioner",
     "coredns",
     "unschedulable-demo",
+    // Long, vowel-free and alphabet-legal, but no digit — a pod-template
+    // hash is a hex-ish digest and effectively always carries one. Requiring
+    // that is what stops this branch from eating human words.
+    "cert-manager-webhook",
+    "prometheus-pushgateway",
   ])("leaves %s whole", (name) => {
     expect(splitName(name)).toEqual({ stem: name, tail: "" });
   });

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -198,5 +199,27 @@ describe("ResourceRef", () => {
       await userEvent.click(screen.getByText(/traefik/));
       expect(onClick).not.toHaveBeenCalled();
     });
+  });
+});
+
+// `ROUTABLE` restates what `App.tsx` serves, and a set that drifts from the
+// router fails in the quietest possible way: the reference silently stops
+// being a link. Read the routes back and hold the two together.
+describe("ROUTABLE against the router", () => {
+  it("lists exactly the kinds App.tsx serves a detail route", () => {
+    const app = readFileSync("src/App.tsx", "utf8");
+    const declared = new Set(
+      [
+        ...app.matchAll(
+          /toPlural\(ResourceType\.(\w+)\)\}\/:(?:namespace\/)?:?name/g
+        ),
+      ].map((m) => m[1])
+    );
+    for (const kind of declared) {
+      expect(
+        isRoutableKind(kind, "some-namespace"),
+        `${kind} has a detail route but ResourceRef renders it as text`
+      ).toBe(true);
+    }
   });
 });

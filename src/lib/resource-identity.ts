@@ -20,8 +20,16 @@ const GENERATED = "[bcdfghjklmnpqrstvwxz2456789]";
 const POD_SUFFIX = `${GENERATED}{5}`;
 const RS_HASH = `${GENERATED}{6,10}`;
 const UNIX_MINUTE = "\\d{8,10}";
+/**
+ * A ReplicaSet carries the pod-template hash with no pod suffix behind it.
+ * On its own that shape is close enough to a long compound word to be
+ * dangerous, so this branch is the strict one: at least eight characters and
+ * at least one digit. A template hash is a digest and effectively always has
+ * one; `cert-manager-webhook` does not.
+ */
+const BARE_HASH = `(?=${GENERATED}*[2456789])${GENERATED}{8,10}`;
 const TAIL = new RegExp(
-  `(?:-${RS_HASH}-${POD_SUFFIX}|-${UNIX_MINUTE}(?:-${POD_SUFFIX})?|-${POD_SUFFIX}|-\\d{1,3})$`
+  `(?:-${RS_HASH}-${POD_SUFFIX}|-${UNIX_MINUTE}(?:-${POD_SUFFIX})?|-${BARE_HASH}|-${POD_SUFFIX}|-\\d{1,3})$`
 );
 
 export function splitName(name: string): { stem: string; tail: string } {
