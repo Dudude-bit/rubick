@@ -12,7 +12,7 @@ Closes #
 
 - [ ] Verified manually on <platform>
 - [ ] Added/updated tests where applicable
-- [ ] `cargo fmt`, `cargo clippy`, and `npm run lint` pass
+- [ ] `cargo fmt`, `cargo clippy`, and `bun run lint` pass
 
 ## Screenshots (if UI change)
 
