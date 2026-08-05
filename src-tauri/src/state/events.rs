@@ -20,7 +20,7 @@ pub struct LogLineEvent {
 
 /// Operation type for a resource-watch event. Mirrors `kube::runtime::watcher::Event`
 /// flattened to a string the frontend can switch on.
-#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WatchOp {
     /// Resource was added or updated (the watcher merges these).

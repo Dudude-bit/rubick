@@ -60,8 +60,16 @@ macro_rules! subscribe_namespaced {
         $info_type:ty,
         $kind_label:literal $(,)?
     ) => {
+        // `async` is load-bearing: the subscribe call spawns the watcher
+        // task, and Tauri only runs async commands on its Tokio runtime.
+        // A sync command lands on a plain worker thread with no reactor,
+        // where `tokio::spawn` panics — and, being called across the IPC
+        // FFI boundary, that panic aborts the process instead of unwinding.
         #[tauri::command]
-        pub fn $cmd_name(namespace: Option<String>, state: State<'_, AppState>) -> Result<String> {
+        pub async fn $cmd_name(
+            namespace: Option<String>,
+            state: State<'_, AppState>,
+        ) -> Result<String> {
             let client = current_client(&state)?;
             let namespace = normalize_optional_namespace(namespace);
             Ok(state.watch_manager.subscribe::<$k8s_type, _, _>(
@@ -82,8 +90,9 @@ macro_rules! subscribe_cluster {
         $info_type:ty,
         $kind_label:literal $(,)?
     ) => {
+        // Async for the same reason as `subscribe_namespaced!`.
         #[tauri::command]
-        pub fn $cmd_name(state: State<'_, AppState>) -> Result<String> {
+        pub async fn $cmd_name(state: State<'_, AppState>) -> Result<String> {
             let client = current_client(&state)?;
             Ok(state
                 .watch_manager
@@ -169,8 +178,9 @@ subscribe_cluster!(
 /// Each event payload is the same `CustomResourceInfo` shape that
 /// command returns, so the frontend hook plugs directly into the
 /// existing `["custom-resources", crdName, namespace]` query cache.
+// Async for the same reason as `subscribe_namespaced!`.
 #[tauri::command]
-pub fn subscribe_custom_resource_watch(
+pub async fn subscribe_custom_resource_watch(
     group: String,
     version: String,
     kind: String,
