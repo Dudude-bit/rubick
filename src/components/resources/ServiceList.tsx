@@ -4,7 +4,7 @@ import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { getResourceListUrl } from "@/lib/navigation-utils";
-import { ServiceTypeBadge, PortsDisplay } from "@/components/network";
+import { PortsDisplay } from "@/components/network";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -12,13 +12,31 @@ import {
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
+/**
+ * A service type is a configuration fact, so it is printed rather than badged.
+ * The one distinction worth a cue is whether the service is reachable from
+ * outside the cluster, and that reads as weight — a coloured pill on every
+ * LoadBalancer row would claim something is wrong when nothing is.
+ */
+const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
+
 const columns = (): ColumnDef<ServiceInfo>[] => [
   createNameColumn<ServiceInfo>(getResourceListUrl(ResourceType.Service)),
   createNamespaceColumn<ServiceInfo>(),
   {
     accessorKey: "type",
     header: "Type",
-    cell: ({ row }) => <ServiceTypeBadge type={row.original.type} />,
+    cell: ({ row }) => (
+      <span
+        className={
+          EXTERNALLY_REACHABLE.has(row.original.type)
+            ? "text-fg"
+            : "text-fg-mut"
+        }
+      >
+        {row.original.type}
+      </span>
+    ),
   },
   {
     accessorKey: "clusterIp",

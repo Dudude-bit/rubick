@@ -116,7 +116,7 @@ export function ContainerRows({
                     .map((p) => `${p.containerPort}/${p.protocol}`)
                     .join(" · ")
                 ),
-              mono: !(podName && namespace),
+              mono: true,
             });
           }
         }
