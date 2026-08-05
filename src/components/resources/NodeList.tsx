@@ -1,9 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NodeBadge } from "@/components/ui/node-badge";
 import { ColumnDef } from "@tanstack/react-table";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -16,6 +15,7 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { createNameColumn } from "@/components/resources/columns";
 import type { NodeInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
@@ -131,15 +131,7 @@ export function NodeList() {
 
   const columns: ColumnDef<NodeInfo>[] = useMemo(
     () => [
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row }) => (
-          <Link to={getResourceDetailUrl(ResourceType.Node, row.original.name)}>
-            <NodeBadge nodeName={row.original.name} />
-          </Link>
-        ),
-      },
+      createNameColumn<NodeInfo>(ResourceType.Node),
       {
         id: "status",
         header: "Status",

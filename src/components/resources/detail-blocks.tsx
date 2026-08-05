@@ -1,12 +1,9 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { usageRole } from "@/lib/metric-format";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import type { ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { ResourceRef } from "./ResourceRef";
@@ -14,39 +11,11 @@ import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 
 /**
- * The blocks a resource detail page repeats: a link to another object, an
- * action in the header row, a condition list, a headroom bar and an event
- * feed. All flat, all built from role tokens, all sharing the column rhythm
- * the overview and the event screen already use.
+ * The blocks a resource detail page repeats: an action in the header row, a
+ * condition list, a headroom bar and an event feed. All flat, all built from
+ * role tokens, all sharing the column rhythm the overview and the event
+ * screen already use. Cross-references to other objects are `ResourceRef`.
  */
-
-export interface ResourceLinkProps {
-  kind: ResourceKind | string;
-  name: string;
-  namespace?: string | null;
-  /** Appended after the name, e.g. a port. Not part of the identifier. */
-  suffix?: string;
-  className?: string;
-}
-
-/** A cross-reference to another object. Mono, because it is a name. */
-export function ResourceLink({
-  kind,
-  name,
-  namespace,
-  suffix,
-  className,
-}: ResourceLinkProps) {
-  return (
-    <Link
-      to={getResourceDetailUrl(kind, name, namespace)}
-      className={cn("font-mono text-info hover:underline", className)}
-    >
-      {name}
-      {suffix && <span className="text-fg-fnt">:{suffix}</span>}
-    </Link>
-  );
-}
 
 export interface DetailActionProps {
   label: string;

@@ -1,7 +1,6 @@
 import type { ConfigMapInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -29,9 +28,7 @@ export const ConfigMapList = createResourceListPage<ConfigMapInfo>({
   watch: ({ namespace }) => commands.subscribeConfigmapWatch(namespace),
   deleter: (item) => commands.deleteConfigmap(item.name, item.namespace),
   columns: () => [
-    createNameColumn<ConfigMapInfo>(
-      getResourceDetailUrl(ResourceType.ConfigMap, "", "")
-    ),
+    createNameColumn<ConfigMapInfo>(ResourceType.ConfigMap),
     createNamespaceColumn<ConfigMapInfo>(),
     createDataKeysColumn<ConfigMapInfo>(),
     createAgeColumn<ConfigMapInfo>(),

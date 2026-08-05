@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { ResourceType } from "@/lib/resource-registry";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { ResourceRef } from "./ResourceRef";
 import type { JobInfo } from "@/generated/types";
 
 /**
@@ -18,8 +19,9 @@ import type { JobInfo } from "@/generated/types";
  */
 
 export interface ChildRow {
+  kind: ResourceKind;
   name: string;
-  href: string;
+  namespace?: string | null;
   /** Raw status word from the API, shown as-is beside the name. */
   status: string;
   /** Right-aligned facts: readiness, restarts, completions. */
@@ -57,27 +59,44 @@ export function ChildRows({
   return (
     <div>
       {rows.map((row) => (
-        <ChildRowItem key={row.href} row={row} />
+        <ChildRowItem key={`${row.namespace ?? ""}/${row.name}`} row={row} />
       ))}
     </div>
   );
 }
 
 function ChildRowItem({ row }: { row: ChildRow }) {
+  const navigate = useNavigate();
   const role = statusRole(row.status);
   const age = useRealtimeAge(row.timestamp ?? null);
 
   return (
-    <Link
-      to={row.href}
-      className="grid grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
+    // The row opens the page and the name opens the peek, which is the split
+    // the resource tables already use — so the name has to keep its own click.
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a")) return;
+        navigate(getResourceDetailUrl(row.kind, row.name, row.namespace));
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        navigate(getResourceDetailUrl(row.kind, row.name, row.namespace));
+      }}
+      className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
     >
       <span
         className={cn("h-[7px] w-[7px] rounded-full", DOT[role])}
         aria-hidden="true"
       />
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className="truncate font-mono text-fg-mid">{row.name}</span>
+        <ResourceRef
+          kind={row.kind}
+          name={row.name}
+          namespace={row.namespace}
+          showKind={false}
+        />
         <span className={cn("text-[11px]", WORD[role])}>{row.status}</span>
       </span>
       <span className="text-right text-[11px] text-fg-mut">{row.detail}</span>
@@ -87,7 +106,7 @@ function ChildRowItem({ row }: { row: ChildRow }) {
       >
         {row.timestamp ? age : "—"}
       </span>
-    </Link>
+    </div>
   );
 }
 
@@ -103,8 +122,9 @@ export function JobRows({
     <ChildRows
       emptyMessage={emptyMessage}
       rows={jobs.map((job) => ({
+        kind: ResourceType.Job,
         name: job.name,
-        href: getResourceDetailUrl(ResourceType.Job, job.name, job.namespace),
+        namespace: job.namespace,
         status: job.status || "Unknown",
         detail: (
           <>

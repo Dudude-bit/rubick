@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ResourceList } from "@/components/resources/ResourceList";
 import {
+  createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
 } from "@/components/resources/columns";
@@ -42,13 +43,7 @@ const getIngressOpenUrl = (ingress: IngressInfo): string | null => {
 };
 
 const baseColumns: ColumnDef<IngressInfo>[] = [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <span className="font-mono text-fg">{row.original.name}</span>
-    ),
-  },
+  createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
   {
     accessorKey: "className",

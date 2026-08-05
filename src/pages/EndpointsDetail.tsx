@@ -9,7 +9,7 @@ import {
 import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { ResourceLink } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -68,10 +68,11 @@ export function EndpointsDetail() {
     {
       label: "Service",
       value: (
-        <ResourceLink
+        <ResourceRef
           kind={ResourceType.Service}
           name={endpoints?.name || name || ""}
           namespace={endpoints?.namespace || namespace}
+          showKind={false}
         />
       ),
     },
@@ -127,20 +128,14 @@ export function EndpointsDetail() {
                     </TableCell>
                     <TableCell>
                       {address.targetRef ? (
-                        address.targetRef.kind === ResourceType.Pod ? (
-                          <ResourceLink
-                            kind={ResourceType.Pod}
-                            name={address.targetRef.name}
-                            namespace={
-                              address.targetRef.namespace ||
-                              endpoints?.namespace
-                            }
-                          />
-                        ) : (
-                          <span className="font-mono text-fg-mut">
-                            {address.targetRef.kind}/{address.targetRef.name}
-                          </span>
-                        )
+                        <ResourceRef
+                          kind={address.targetRef.kind}
+                          name={address.targetRef.name}
+                          namespace={
+                            address.targetRef.namespace || endpoints?.namespace
+                          }
+                          showKind={address.targetRef.kind !== ResourceType.Pod}
+                        />
                       ) : (
                         <span className="text-fg-fnt">—</span>
                       )}

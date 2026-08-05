@@ -1,14 +1,13 @@
-import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ResourceRef } from "./ResourceRef";
 import { createResourceListPage } from "./createResourceListPage";
 
 const columns = (): ColumnDef<StorageClassInfo>[] => [
@@ -17,15 +16,11 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     header: "Name",
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">
-        <Link
-          to={getResourceDetailUrl(
-            ResourceType.StorageClass,
-            row.original.name
-          )}
-          className="font-mono text-info hover:underline"
-        >
-          {row.original.name}
-        </Link>
+        <ResourceRef
+          kind={ResourceType.StorageClass}
+          name={row.original.name}
+          showKind={false}
+        />
         {/* Which class a PVC gets when it names none is worth saying in
          *  words: a gold star said it in colour and shape alone. */}
         {row.original.isDefault && (

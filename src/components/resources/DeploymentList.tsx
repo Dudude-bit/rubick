@@ -4,10 +4,7 @@ import { Scale, RotateCw } from "lucide-react";
 import type { DeploymentInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import {
-  getResourceDetailUrl,
-  getResourceListUrl,
-} from "@/lib/navigation-utils";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { matchDeploymentPods, type ResourceMetrics } from "@/lib/metrics";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -24,9 +21,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type DeploymentInfoWithMetrics = DeploymentInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
-  createNameColumn<DeploymentInfoWithMetrics>(
-    getResourceListUrl(ResourceType.Deployment)
-  ),
+  createNameColumn<DeploymentInfoWithMetrics>(ResourceType.Deployment),
   createNamespaceColumn<DeploymentInfoWithMetrics>(),
   createCpuColumn<DeploymentInfoWithMetrics>(),
   createMemoryColumn<DeploymentInfoWithMetrics>(),

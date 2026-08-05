@@ -1,30 +1,18 @@
-import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { createAccessModesColumn, createCapacityColumn } from "./columns";
+import {
+  createAccessModesColumn,
+  createCapacityColumn,
+  createNameColumn,
+} from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
 const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <Link
-        to={getResourceDetailUrl(
-          ResourceType.PersistentVolume,
-          row.original.name
-        )}
-        className="font-mono text-info hover:underline"
-      >
-        {row.original.name}
-      </Link>
-    ),
-  },
+  createNameColumn<PersistentVolumeInfo>(ResourceType.PersistentVolume),
   createCapacityColumn<PersistentVolumeInfo>(),
   createAccessModesColumn<PersistentVolumeInfo>(),
   {

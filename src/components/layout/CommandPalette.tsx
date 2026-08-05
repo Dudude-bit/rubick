@@ -13,6 +13,7 @@ import type {
 } from "@/generated/types";
 import { ResourceType, toPlural, getScope } from "@/lib/resource-registry";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   Box,
   Network,
@@ -444,7 +445,21 @@ export function CommandPalette() {
                   key={item.path}
                   index={idx}
                   selected={selectedIndex === idx}
-                  label={item.name}
+                  label={
+                    <PaletteRef
+                      kind={item.kind}
+                      name={item.name}
+                      namespace={item.namespace ?? undefined}
+                      onSelect={() =>
+                        handleSelect(
+                          item.path,
+                          item.name,
+                          item.kind,
+                          item.namespace ?? undefined
+                        )
+                      }
+                    />
+                  }
                   meta={item.namespace ?? undefined}
                   trailing={item.kind}
                   onSelect={() =>
@@ -531,8 +546,21 @@ export function CommandPalette() {
                             key={`${kind}-${item.namespace ?? "cluster"}-${item.name}`}
                             index={globalIdx}
                             selected={selectedIndex === globalIdx}
-                            label={item.name}
-                            mono
+                            label={
+                              <PaletteRef
+                                kind={kind}
+                                name={item.name}
+                                namespace={item.namespace}
+                                onSelect={() =>
+                                  handleSelect(
+                                    item.path,
+                                    item.name,
+                                    kind,
+                                    item.namespace
+                                  )
+                                }
+                              />
+                            }
                             meta={item.namespace}
                             trailing={kind}
                             onSelect={() =>
@@ -602,7 +630,6 @@ function PaletteRow({
   selected,
   icon: Icon,
   label,
-  mono,
   meta,
   trailing,
   onSelect,
@@ -610,32 +637,63 @@ function PaletteRow({
   index: number;
   selected: boolean;
   icon?: React.ComponentType<{ className?: string }>;
-  label: string;
-  mono?: boolean;
+  label: React.ReactNode;
   meta?: string;
   trailing?: string;
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
+    // A div, not a button: a resource row names its object with a
+    // `ResourceRef`, and an anchor inside a button is not a thing the browser
+    // will render. Arrow keys and Enter are handled by the search field.
+    <div
       role="option"
       aria-selected={selected}
       data-index={index}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors hover:bg-hover",
+        "flex w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors hover:bg-hover",
         selected ? "bg-sel text-fg" : "text-fg-mid"
       )}
     >
       {Icon && <Icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />}
-      <span className={cn("truncate", mono && "font-mono")}>{label}</span>
+      <span className="min-w-0 truncate">{label}</span>
       {meta && <span className="truncate text-fg-fnt">{meta}</span>}
       {trailing && (
         <span className="ml-auto flex-none text-[11px] text-fg-fnt">
           {trailing}
         </span>
       )}
-    </button>
+    </div>
+  );
+}
+
+/**
+ * A result row's object, as the reference used everywhere else. The row owns
+ * the selection, so a plain click on the name is the row's click — but the
+ * anchor keeps its href, and a modified click still opens a new window.
+ */
+function PaletteRef({
+  kind,
+  name,
+  namespace,
+  onSelect,
+}: {
+  kind: string;
+  name: string;
+  namespace?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <ResourceRef
+      kind={kind}
+      name={name}
+      namespace={namespace}
+      showKind={false}
+      onClick={(event) => {
+        event.preventDefault();
+        onSelect();
+      }}
+    />
   );
 }

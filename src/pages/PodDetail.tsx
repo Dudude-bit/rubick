@@ -18,9 +18,9 @@ import { ContainerRows } from "@/components/resources/container-rows";
 import {
   ConditionRows,
   DetailAction,
-  ResourceLink,
   UsageRow,
 } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -207,7 +207,11 @@ export function PodDetail() {
     {
       label: "Node",
       value: pod?.nodeName ? (
-        <ResourceLink kind={ResourceType.Node} name={pod.nodeName} />
+        <ResourceRef
+          kind={ResourceType.Node}
+          name={pod.nodeName}
+          showKind={false}
+        />
       ) : (
         "unscheduled"
       ),

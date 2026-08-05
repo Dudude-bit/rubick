@@ -18,14 +18,12 @@ import { Eye, Trash2 } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
+import type { ResourceKind } from "@/lib/resource-registry";
+import { ResourceRef } from "./ResourceRef";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-
-/** Resource names are identifiers — monospace so the random suffixes that
- *  distinguish two pods of the same deployment line up column-wise. */
-const NAME_CLASS = "font-mono text-info";
 
 // Base resource interface for column constraints
 interface BaseResource {
@@ -60,44 +58,25 @@ interface WithLabels {
 }
 
 /**
- * Creates a name column with link to detail page
- * @param linkPrefix - URL prefix for the detail page
- * @param options.className - Custom class name for the link/span
- * @param options.disableLink - If true, renders as span instead of link (use with row-level click)
+ * The name cell.
+ *
+ * `showKind` is off because the column header already says the kind: repeating
+ * it in every row is the noise the coloured reference exists to remove.
  */
-export function createNameColumn<T extends BaseResource>(
-  linkPrefix: string,
-  options?: { className?: string; disableLink?: boolean }
-): ColumnDef<T> {
+export function createNameColumn<
+  T extends { name: string; namespace?: string | null },
+>(kind: ResourceKind): ColumnDef<T> {
   return {
     accessorKey: "name",
     header: "Name",
-    cell: ({ row }) =>
-      options?.disableLink ? (
-        <span className={options?.className ?? NAME_CLASS}>
-          {row.original.name}
-        </span>
-      ) : (
-        <Link
-          to={`${linkPrefix}/${row.original.namespace}/${row.original.name}`}
-          className={cn(options?.className ?? NAME_CLASS, "hover:underline")}
-        >
-          {row.original.name}
-        </Link>
-      ),
-  };
-}
-
-/**
- * Creates a name column without link (just displays the name)
- */
-export function createSimpleNameColumn<
-  T extends { name: string },
->(): ColumnDef<T> {
-  return {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => <span className={NAME_CLASS}>{row.original.name}</span>,
+    cell: ({ row }) => (
+      <ResourceRef
+        kind={kind}
+        name={row.original.name}
+        namespace={row.original.namespace}
+        showKind={false}
+      />
+    ),
   };
 }
 
@@ -475,45 +454,4 @@ export function createStandardActions<T extends BaseResource>(
       variant: "destructive",
     },
   ];
-}
-
-/**
- * Builds a complete column set for a resource list
- */
-export function buildResourceColumns<T extends BaseResource & WithCreatedAt>(
-  config: {
-    linkPrefix: string;
-    includeNamespace?: boolean;
-    includeCpu?: boolean;
-    includeMemory?: boolean;
-    customColumns?: ColumnDef<T>[];
-    actions?: (setDeleteTarget: (item: T) => void) => ActionMenuItem<T>[];
-  },
-  setDeleteTarget?: (item: T) => void
-): ColumnDef<T>[] {
-  const columns: ColumnDef<T>[] = [createNameColumn<T>(config.linkPrefix)];
-
-  if (config.includeNamespace !== false) {
-    columns.push(createNamespaceColumn<T>());
-  }
-
-  if (config.includeCpu) {
-    columns.push(createCpuColumn<T & WithCpuUsage>() as ColumnDef<T>);
-  }
-
-  if (config.includeMemory) {
-    columns.push(createMemoryColumn<T & WithMemoryUsage>() as ColumnDef<T>);
-  }
-
-  if (config.customColumns) {
-    columns.push(...config.customColumns);
-  }
-
-  columns.push(createAgeColumn<T>());
-
-  if (config.actions && setDeleteTarget) {
-    columns.push(createActionsColumn<T>(config.actions, setDeleteTarget));
-  }
-
-  return columns;
 }

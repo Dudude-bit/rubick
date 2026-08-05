@@ -13,8 +13,8 @@ import {
   Composition,
   ConditionRows,
   DetailAction,
-  ResourceLink,
 } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -161,10 +161,11 @@ export function StatefulSetDetail() {
     {
       label: "Governing service",
       value: statefulSet?.serviceName ? (
-        <ResourceLink
+        <ResourceRef
           kind={ResourceType.Service}
           name={statefulSet.serviceName}
           namespace={statefulSet.namespace}
+          showKind={false}
         />
       ) : (
         // Without a headless service the stable network identity a

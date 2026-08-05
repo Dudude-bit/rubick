@@ -3,10 +3,8 @@ import { Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import {
-  DetailAction,
-  ResourceLink,
-} from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -60,10 +58,11 @@ export function PersistentVolumeDetail() {
       // A volume with no claim is storage nobody is using — the one fact on
       // this page that is worth a colour. Bound is the correct, quiet case.
       value: claim ? (
-        <ResourceLink
+        <ResourceRef
           kind={ResourceType.PersistentVolumeClaim}
           name={claim.name}
           namespace={claim.namespace}
+          showKind={false}
         />
       ) : (
         "unbound — no claim is using this volume"
@@ -73,7 +72,11 @@ export function PersistentVolumeDetail() {
     {
       label: "Storage class",
       value: pv?.storageClass ? (
-        <ResourceLink kind={ResourceType.StorageClass} name={pv.storageClass} />
+        <ResourceRef
+          kind={ResourceType.StorageClass}
+          name={pv.storageClass}
+          showKind={false}
+        />
       ) : (
         "none"
       ),

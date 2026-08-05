@@ -7,7 +7,6 @@ import {
   type PodWithMetrics,
 } from "@/hooks/usePodsWithMetrics";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NodeBadge } from "@/components/ui/node-badge";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -18,12 +17,10 @@ import {
 import type { ContainerInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "./ResourceList";
+import { ResourceRef } from "./ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  getResourceDetailUrl,
-  getResourceListUrl,
-} from "@/lib/navigation-utils";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -45,8 +42,7 @@ export function PodList() {
 
   const columns = useMemo<ColumnDef<PodWithMetrics>[]>(
     () => [
-      // Use disableLink since row is clickable
-      createNameColumn<PodWithMetrics>(getResourceListUrl(ResourceType.Pod)),
+      createNameColumn<PodWithMetrics>(ResourceType.Pod),
       createNamespaceColumn<PodWithMetrics>(),
       {
         id: "status",
@@ -84,7 +80,11 @@ export function PodList() {
         header: "Node",
         cell: ({ row }) =>
           row.original.nodeName ? (
-            <NodeBadge nodeName={row.original.nodeName} />
+            <ResourceRef
+              kind={ResourceType.Node}
+              name={row.original.nodeName}
+              showKind={false}
+            />
           ) : (
             <span className="text-fg-fnt">-</span>
           ),

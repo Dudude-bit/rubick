@@ -1,11 +1,12 @@
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Circle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 
 interface MatchingPodsProps {
   namespace: string;
@@ -28,6 +29,7 @@ function getPodStatusColor(phase: string): string {
 }
 
 export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
+  const navigate = useNavigate();
   const {
     data: pods,
     isLoading,
@@ -88,20 +90,44 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
       ) : pods && pods.length > 0 ? (
         <SectionBody className="flex flex-col divide-y divide-hair">
           {pods.map((pod) => (
-            <Link
+            // The row opens the pod's page; the name opens its peek, which is
+            // the same split the resource tables use.
+            <div
               key={pod.uid}
-              to={getResourceDetailUrl(
-                ResourceType.Pod,
-                pod.name,
-                pod.namespace
-              )}
-              className="flex items-center justify-between px-2 py-2.5 hover:bg-hover transition-colors"
+              role="link"
+              tabIndex={0}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("a")) return;
+                navigate(
+                  getResourceDetailUrl(
+                    ResourceType.Pod,
+                    pod.name,
+                    pod.namespace
+                  )
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                navigate(
+                  getResourceDetailUrl(
+                    ResourceType.Pod,
+                    pod.name,
+                    pod.namespace
+                  )
+                );
+              }}
+              className="flex cursor-pointer items-center justify-between px-2 py-2.5 hover:bg-hover transition-colors"
             >
               <div className="flex items-center gap-3">
                 <Circle
                   className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.phase || "Unknown")}`}
                 />
-                <span className="font-medium">{pod.name}</span>
+                <ResourceRef
+                  kind={ResourceType.Pod}
+                  name={pod.name}
+                  namespace={pod.namespace}
+                  showKind={false}
+                />
               </div>
               <div className="flex items-center gap-3 text-sm text-fg-mut">
                 <span>{pod.status.phase}</span>
@@ -109,7 +135,7 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
                   <code className="font-mono text-xs">{pod.podIp}</code>
                 )}
               </div>
-            </Link>
+            </div>
           ))}
         </SectionBody>
       ) : (

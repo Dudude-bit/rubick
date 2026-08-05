@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
@@ -8,6 +8,7 @@ import { ResourceList } from "@/components/resources/ResourceList";
 import {
   createAccessModesColumn,
   createCapacityColumn,
+  createNameColumn,
   createNamespaceColumn,
 } from "./columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -22,22 +23,9 @@ import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 
 const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <Link
-        to={getResourceDetailUrl(
-          ResourceType.PersistentVolumeClaim,
-          row.original.name,
-          row.original.namespace
-        )}
-        className="font-mono text-info hover:underline"
-      >
-        {row.original.name}
-      </Link>
-    ),
-  },
+  createNameColumn<PersistentVolumeClaimInfo>(
+    ResourceType.PersistentVolumeClaim
+  ),
   createNamespaceColumn<PersistentVolumeClaimInfo>(),
   {
     accessorKey: "status",

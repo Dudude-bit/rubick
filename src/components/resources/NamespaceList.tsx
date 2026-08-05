@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Crosshair } from "lucide-react";
 
 import { ResourceList } from "./ResourceList";
+import { ResourceRef } from "./ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
@@ -35,8 +36,12 @@ export function NamespaceList() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <span className="flex items-center gap-2 font-mono">
-            {row.original.name}
+          <span className="flex items-baseline gap-2">
+            <ResourceRef
+              kind={ResourceType.Namespace}
+              name={row.original.name}
+              showKind={false}
+            />
             {row.original.name === currentNamespace && (
               <span className="text-[11px] text-fg-fnt">current scope</span>
             )}

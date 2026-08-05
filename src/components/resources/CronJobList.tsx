@@ -3,7 +3,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import {
@@ -18,9 +17,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
-  createNameColumn<CronJobInfoWithMetrics>(
-    getResourceListUrl(ResourceType.CronJob)
-  ),
+  createNameColumn<CronJobInfoWithMetrics>(ResourceType.CronJob),
   createNamespaceColumn<CronJobInfoWithMetrics>(),
   createCpuColumn<CronJobInfoWithMetrics>(),
   createMemoryColumn<CronJobInfoWithMetrics>(),

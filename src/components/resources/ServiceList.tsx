@@ -3,7 +3,6 @@ import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
 import { PortsDisplay } from "@/components/network";
 import {
   createNameColumn,
@@ -21,7 +20,7 @@ import { createResourceListPage } from "./createResourceListPage";
 const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
 
 const columns = (): ColumnDef<ServiceInfo>[] => [
-  createNameColumn<ServiceInfo>(getResourceListUrl(ResourceType.Service)),
+  createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
   {
     accessorKey: "type",

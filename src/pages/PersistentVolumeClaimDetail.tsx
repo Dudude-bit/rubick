@@ -6,11 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import {
-  DetailAction,
-  EventRows,
-  ResourceLink,
-} from "@/components/resources/detail-blocks";
+import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -86,7 +83,11 @@ export function PersistentVolumeClaimDetail() {
     {
       label: "Volume",
       value: pvc?.volume ? (
-        <ResourceLink kind={ResourceType.PersistentVolume} name={pvc.volume} />
+        <ResourceRef
+          kind={ResourceType.PersistentVolume}
+          name={pvc.volume}
+          showKind={false}
+        />
       ) : (
         "not bound — nothing has satisfied this claim"
       ),
@@ -95,9 +96,10 @@ export function PersistentVolumeClaimDetail() {
     {
       label: "Storage class",
       value: pvc?.storageClass ? (
-        <ResourceLink
+        <ResourceRef
           kind={ResourceType.StorageClass}
           name={pvc.storageClass}
+          showKind={false}
         />
       ) : (
         "cluster default"

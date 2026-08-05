@@ -1,4 +1,3 @@
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
 import type { PodInfo } from "@/generated/types";
@@ -21,8 +20,9 @@ export function PodListCard({
         const ready = pod.containers?.filter((c) => c.ready).length ?? 0;
         const restarts = pod.restartCount ?? 0;
         return {
+          kind: ResourceType.Pod,
           name: pod.name,
-          href: getResourceDetailUrl(ResourceType.Pod, pod.name, pod.namespace),
+          namespace: pod.namespace,
           status: pod.status?.phase || "Unknown",
           detail: (
             <>

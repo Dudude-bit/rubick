@@ -13,11 +13,8 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import {
-  DetailAction,
-  EventRows,
-  ResourceLink,
-} from "@/components/resources/detail-blocks";
+import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueList,
   KeyValueSection,
@@ -234,12 +231,15 @@ export function IngressDetail() {
                     {url.resourceBackend ? (
                       <span className="font-mono">{url.resourceBackend}</span>
                     ) : url.backendService ? (
-                      <ResourceLink
-                        kind={ResourceType.Service}
-                        name={url.backendService}
-                        namespace={ingress?.namespace}
-                        suffix={url.backendPort}
-                      />
+                      <>
+                        <ResourceRef
+                          kind={ResourceType.Service}
+                          name={url.backendService}
+                          namespace={ingress?.namespace}
+                          showKind={false}
+                        />
+                        <span className="font-mono">:{url.backendPort}</span>
+                      </>
                     ) : (
                       "no backend"
                     )}
@@ -327,12 +327,17 @@ export function IngressDetail() {
                               {path.resourceBackend}
                             </span>
                           ) : path.backendService ? (
-                            <ResourceLink
-                              kind={ResourceType.Service}
-                              name={path.backendService}
-                              namespace={ingress?.namespace}
-                              suffix={path.backendPort}
-                            />
+                            <>
+                              <ResourceRef
+                                kind={ResourceType.Service}
+                                name={path.backendService}
+                                namespace={ingress?.namespace}
+                                showKind={false}
+                              />
+                              <span className="font-mono text-fg-fnt">
+                                :{path.backendPort}
+                              </span>
+                            </>
                           ) : (
                             <span className="text-warn">no backend</span>
                           )}

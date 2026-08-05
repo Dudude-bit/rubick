@@ -9,10 +9,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import {
-  DetailAction,
-  ResourceLink,
-} from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -21,11 +19,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import {
-  isResourceType,
-  ResourceType,
-  toPlural,
-} from "@/lib/resource-registry";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 
@@ -264,16 +258,14 @@ export function CustomResourceDetail() {
     label: `${owner.kind}${owner.controller ? " · controller" : ""}`,
     // An owner is often another custom resource, which has no route of its
     // own. Linking on a guessed plural would hand the user a dead end.
-    value: isResourceType(owner.kind) ? (
-      <ResourceLink
+    value: (
+      <ResourceRef
         kind={owner.kind}
         name={owner.name}
         namespace={resource?.namespace}
+        showKind={false}
       />
-    ) : (
-      owner.name
     ),
-    mono: !isResourceType(owner.kind),
   }));
 
   const tabs = [

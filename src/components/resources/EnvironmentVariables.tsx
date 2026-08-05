@@ -31,7 +31,7 @@ import type {
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceLink } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
 
 /**
@@ -77,10 +77,11 @@ function SourceCell({
       {name && " "}
       {name &&
         (namespace && (isSecret || isConfigMap) ? (
-          <ResourceLink
+          <ResourceRef
             kind={isSecret ? ResourceType.Secret : ResourceType.ConfigMap}
             name={name}
             namespace={namespace}
+            showKind={false}
           />
         ) : (
           <span className="font-mono text-fg-mut">{name}</span>

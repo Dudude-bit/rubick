@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceLink } from "./detail-blocks";
+import { ResourceRef } from "./ResourceRef";
 import type { ResourceReferences } from "@/generated/types";
 
 interface ReferencedByProps {
@@ -141,10 +141,11 @@ export function ReferencedBy({
               <div key={`${row.kind}/${row.name}/${index}`} className={REF_ROW}>
                 <span className="truncate text-fg-mut">{row.kind}</span>
                 <span className="min-w-0 truncate">
-                  <ResourceLink
+                  <ResourceRef
                     kind={row.kind}
                     name={row.name}
                     namespace={row.namespace}
+                    showKind={false}
                   />
                 </span>
                 <span

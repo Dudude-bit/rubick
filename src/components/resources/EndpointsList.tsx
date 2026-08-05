@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Network, CircleDot } from "lucide-react";
+import { CircleDot } from "lucide-react";
 
 import type { EndpointsInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -10,20 +10,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { createNamespaceColumn, createAgeColumn } from "./columns";
+import {
+  createNameColumn,
+  createNamespaceColumn,
+  createAgeColumn,
+} from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
 const columns = (): ColumnDef<EndpointsInfo>[] => [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-1.5">
-        <Network className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
-        <span className="font-mono text-info">{row.original.name}</span>
-      </div>
-    ),
-  },
+  createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
   createNamespaceColumn<EndpointsInfo>(),
   {
     id: "endpoints",

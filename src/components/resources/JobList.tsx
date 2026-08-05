@@ -3,7 +3,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { JobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
 import { matchJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -18,7 +17,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type JobInfoWithMetrics = JobInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
-  createNameColumn<JobInfoWithMetrics>(getResourceListUrl(ResourceType.Job)),
+  createNameColumn<JobInfoWithMetrics>(ResourceType.Job),
   createNamespaceColumn<JobInfoWithMetrics>(),
   createCpuColumn<JobInfoWithMetrics>(),
   createMemoryColumn<JobInfoWithMetrics>(),

@@ -8,8 +8,7 @@
  */
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { isResourceType } from "@/lib/resource-registry";
-import { ResourceLink } from "./detail-blocks";
+import { ResourceRef } from "./ResourceRef";
 import { KeyValueRow } from "./detail-kv";
 import type { OwnerReference } from "@/generated/types";
 
@@ -65,15 +64,12 @@ function OwnerRow({
   return (
     <KeyValueRow label={label}>
       <span className="flex flex-wrap items-baseline gap-x-2">
-        {isResourceType(owner.kind) ? (
-          <ResourceLink
-            kind={owner.kind}
-            name={owner.name}
-            namespace={namespace}
-          />
-        ) : (
-          <span className="font-mono">{owner.name}</span>
-        )}
+        <ResourceRef
+          kind={owner.kind}
+          name={owner.name}
+          namespace={namespace}
+          showKind={false}
+        />
         {/* The kind qualifies the name. It is not a state, so it is quiet
          *  text rather than a badge. */}
         <span className="text-[11px] text-fg-fnt">{owner.kind}</span>
