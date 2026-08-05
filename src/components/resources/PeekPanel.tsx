@@ -238,11 +238,11 @@ function PeekEvents({ target }: { target: PeekTarget }) {
       ) : !events ? (
         <Skeleton className="h-3 w-2/3" />
       ) : (
-        // The feed's row is proportioned for a full-width page; at 440px its
-        // reason column eats the message, which is the part being read here.
-        <div className="[&_.grid]:grid-cols-[10px_minmax(0,92px)_minmax(0,1fr)_38px_30px] [&_.grid]:gap-2 [&_.grid]:px-0">
-          <EventRows events={events} emptyMessage="No events for this object" />
-        </div>
+        <EventRows
+          events={events}
+          emptyMessage="No events for this object"
+          compact
+        />
       )}
     </>
   );

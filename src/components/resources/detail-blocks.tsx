@@ -406,6 +406,11 @@ export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
 export const EVENT_ROW =
   "grid grid-cols-[10px_minmax(0,168px)_minmax(0,1fr)_54px_44px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
+/** The same feed at drawer width, where the reason column would eat the
+ *  message — which is the part being read there. */
+const EVENT_ROW_COMPACT =
+  "grid grid-cols-[10px_minmax(0,92px)_minmax(0,1fr)_38px_30px] items-baseline gap-2 py-[3px] text-xs";
+
 export interface EventRowsProps {
   events: EventInfo[];
   emptyMessage?: ReactNode;
@@ -413,6 +418,8 @@ export interface EventRowsProps {
   showObject?: boolean;
   /** Off when the whole feed is already scoped to one namespace. */
   showNamespace?: boolean;
+  /** Narrow columns, for the peek panel's 440px. */
+  compact?: boolean;
 }
 
 /** The event feed. Used whole-cluster on `/events` and scoped on a detail. */
@@ -421,9 +428,14 @@ export function EventRows({
   emptyMessage = "No events for this object",
   showObject = false,
   showNamespace = false,
+  compact = false,
 }: EventRowsProps) {
   if (events.length === 0) {
-    return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
+    return (
+      <p className={cn("py-1 text-xs text-fg-fnt", !compact && "px-1.5")}>
+        {emptyMessage}
+      </p>
+    );
   }
   return (
     <div>
@@ -433,6 +445,7 @@ export function EventRows({
           event={event}
           showObject={showObject}
           showNamespace={showNamespace}
+          compact={compact}
         />
       ))}
     </div>
@@ -443,17 +456,19 @@ function EventRow({
   event,
   showObject,
   showNamespace,
+  compact,
 }: {
   event: EventInfo;
   showObject: boolean;
   showNamespace: boolean;
+  compact: boolean;
 }) {
   const isWarning = event.type === "Warning";
   const age = useRealtimeAge(event.lastTimestamp ?? null);
   const count = event.count ?? 0;
 
   return (
-    <div className={EVENT_ROW}>
+    <div className={compact ? EVENT_ROW_COMPACT : EVENT_ROW}>
       {/* Shape carries the severity alongside the colour — the feed has to
        *  stay readable without hue. */}
       <span
