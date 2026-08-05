@@ -1,17 +1,30 @@
-import { Badge } from "@/components/ui/badge";
-import { Section, SectionHeader } from "@/components/ui/section";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-} from "@/components/resources/ResourceDetailLayout";
-import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { HardDrive } from "lucide-react";
-import { commands } from "@/lib/commands";
-import type { PersistentVolumeInfo } from "@/generated/types";
+import { Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
+import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  DetailAction,
+  ResourceLink,
+} from "@/components/resources/detail-blocks";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { ResourceType } from "@/lib/resource-registry";
+import type { PersistentVolumeInfo } from "@/generated/types";
+
+/** `spec.claimRef` arrives serialised as `namespace/name`. */
+function splitClaim(claim: string): { namespace?: string; name: string } {
+  const slash = claim.indexOf("/");
+  if (slash === -1) return { name: claim };
+  return {
+    namespace: claim.slice(0, slash),
+    name: claim.slice(slash + 1),
+  };
+}
 
 export function PersistentVolumeDetail() {
   const {
@@ -24,64 +37,54 @@ export function PersistentVolumeDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
   } = useResourceDetail<PersistentVolumeInfo>({
     resourceKind: ResourceType.PersistentVolume,
     isClusterScoped: true,
     fetchResource: (name) => commands.getPersistentVolume(name),
     deleteResource: (name) => commands.deletePersistentVolume(name),
-    defaultTab: "details",
+    defaultTab: "yaml",
   });
 
-  const tabs = [
+  const claim = pv?.claim ? splitClaim(pv.claim) : null;
+
+  const facts: KeyValue[] = [
+    { label: "Capacity", value: pv?.capacity ?? "—", mono: true },
     {
-      id: "details",
-      label: "Details",
-      content: (
-        <Section>
-          <SectionHeader title="Volume Details" />
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <StatusBadge status={pv?.status || ""} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Capacity</p>
-                <p className="font-mono">{pv?.capacity}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Access Modes</p>
-                <div className="flex flex-wrap gap-1">
-                  {pv?.accessModes.map((mode, i) => (
-                    <Badge key={i} variant="outline">
-                      {mode}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Reclaim Policy</p>
-                <Badge variant="outline">{pv?.reclaimPolicy}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Storage Class</p>
-                <p className="font-mono">{pv?.storageClass || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Claim</p>
-                <p className="font-mono">{pv?.claim || "Unbound"}</p>
-              </div>
-              {pv?.reason && (
-                <div className="col-span-2">
-                  <p className="text-sm text-muted-foreground">Reason</p>
-                  <p>{pv.reason}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </Section>
+      label: "Access modes",
+      value: pv?.accessModes.length ? pv.accessModes.join(" · ") : "none",
+      mono: true,
+    },
+    {
+      label: "Claim",
+      // A volume with no claim is storage nobody is using — the one fact on
+      // this page that is worth a colour. Bound is the correct, quiet case.
+      value: claim ? (
+        <ResourceLink
+          kind={ResourceType.PersistentVolumeClaim}
+          name={claim.name}
+          namespace={claim.namespace}
+        />
+      ) : (
+        "unbound — no claim is using this volume"
+      ),
+      tone: claim ? undefined : "warn",
+    },
+    {
+      label: "Storage class",
+      value: pv?.storageClass ? (
+        <ResourceLink kind={ResourceType.StorageClass} name={pv.storageClass} />
+      ) : (
+        "none"
       ),
     },
+    { label: "Reclaim policy", value: pv?.reclaimPolicy ?? "—", mono: true },
+    ...(pv?.reason
+      ? [{ label: "Reason", value: pv.reason, tone: "err" as const }]
+      : []),
+  ];
+
+  const tabs = [
     {
       id: "yaml",
       label: "YAML",
@@ -105,37 +108,37 @@ export function PersistentVolumeDetail() {
       error={error}
       resourceKind={ResourceType.PersistentVolume}
       title={pv?.name || name || ""}
-      namespace={undefined}
-      badges={<StatusBadge status={pv?.status || ""} />}
-      icon={<HardDrive className="h-8 w-8 text-muted-foreground" />}
+      statusBadge={pv && <StatusBadge status={pv.status} />}
+      badges={
+        pv && (
+          <>
+            <span className="font-mono text-[11px] text-fg-mut">
+              {pv.capacity}
+            </span>
+            <span className="text-[11px] text-fg-fnt">
+              {pv.accessModes.join(" · ") || "no access modes"}
+            </span>
+            {!pv.claim && (
+              <span className="text-[11px] text-warn">unbound</span>
+            )}
+          </>
+        )
+      }
       onBack={goBack}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
+      actions={
+        <DetailAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
     >
-      <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard title="Capacity">
-          <div className="text-xl font-bold">{pv?.capacity}</div>
-        </InfoCard>
-
-        <InfoCard title="Access Modes">
-          <div className="flex flex-wrap gap-1">
-            {pv?.accessModes.map((mode, i) => (
-              <Badge key={i} variant="secondary">
-                {mode}
-              </Badge>
-            ))}
-          </div>
-        </InfoCard>
-
-        <InfoCard title="Reclaim Policy">
-          <div className="text-xl font-bold">{pv?.reclaimPolicy}</div>
-        </InfoCard>
-
-        <InfoCard title="Storage Class">
-          <div className="text-xl font-bold">{pv?.storageClass || "-"}</div>
-        </InfoCard>
-      </div>
+      <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
     </ResourceDetailLayout>
   );
 }
