@@ -38,7 +38,14 @@ export function KeyValueRow({
         className
       )}
     >
-      <dt className="text-[11px] text-fg-fnt">{label}</dt>
+      {/* `min-w-0` lets the label shrink to its track and `break-words`
+       *  breaks inside it. Without both, a grid item keeps its content's
+       *  intrinsic width, and an unhyphenated annotation key such as
+       *  `deployment.kubernetes.io/revision` is drawn straight over the
+       *  value column. */}
+      <dt className="min-w-0 break-words text-[11px] text-fg-fnt" title={label}>
+        {label}
+      </dt>
       <dd
         className={cn(
           "min-w-0 break-words text-xs",

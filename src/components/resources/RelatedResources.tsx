@@ -1,16 +1,16 @@
 /**
- * Related Resources Component
+ * Who owns this object.
  *
- * Displays owner references as clickable links to parent resources.
- * Shows the chain of ownership for a Kubernetes resource.
+ * An owner reference is one fact — "a DaemonSet made this pod" — so it reads
+ * as a metadata row like every other fact on the page. It used to be a
+ * bordered, hoverable box with the kind floated right in a pill, which made
+ * the least surprising thing on a pod page the only elevated one.
  */
 
-import { Link } from "react-router-dom";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { Badge } from "@/components/ui/badge";
-import { ResourceIcon } from "@/components/shared/ResourceIcon";
 import { isResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { ResourceLink } from "./detail-blocks";
+import { KeyValueRow } from "./detail-kv";
 import type { OwnerReference } from "@/generated/types";
 
 interface RelatedResourcesProps {
@@ -26,70 +26,58 @@ export function RelatedResources({
     return null;
   }
 
-  // Find controller owner (the primary owner)
-  const controllerOwner = ownerReferences.find((ref) => ref.controller);
-  const otherOwners = ownerReferences.filter((ref) => !ref.controller);
+  const controller = ownerReferences.find((ref) => ref.controller);
+  const others = ownerReferences.filter((ref) => !ref.controller);
 
   return (
     <Section>
-      <SectionHeader title="Related Resources" />
-      <div className="flex flex-col gap-3">
-        {controllerOwner && (
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-fg-mut font-medium">Controlled by</div>
-            <OwnerLink owner={controllerOwner} namespace={namespace} />
-          </div>
+      <SectionHeader title="Related resources" />
+      <dl className="flex flex-col">
+        {controller && (
+          <OwnerRow
+            label="Controlled by"
+            owner={controller}
+            namespace={namespace}
+          />
         )}
-
-        {otherOwners.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-fg-mut font-medium">Other owners</div>
-            <div className="flex flex-col gap-2">
-              {otherOwners.map((owner) => (
-                <OwnerLink
-                  key={owner.uid}
-                  owner={owner}
-                  namespace={namespace}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        {others.map((owner) => (
+          <OwnerRow
+            key={owner.uid}
+            label="Owner"
+            owner={owner}
+            namespace={namespace}
+          />
+        ))}
+      </dl>
     </Section>
   );
 }
 
-interface OwnerLinkProps {
+function OwnerRow({
+  label,
+  owner,
+  namespace,
+}: {
+  label: string;
   owner: OwnerReference;
   namespace?: string;
-}
-
-function OwnerLink({ owner, namespace }: OwnerLinkProps) {
-  const isSupported = isResourceType(owner.kind);
-
-  const content = (
-    <div
-      className={`flex items-center gap-2 rounded border border-hair p-2 text-sm ${isSupported ? "hover:bg-hover cursor-pointer" : ""} transition-colors`}
-    >
-      <ResourceIcon kind={owner.kind} className="h-4 w-4 text-fg-mut" />
-      <span className="font-medium">{owner.name}</span>
-      <Badge variant="outline" className="ml-auto text-xs">
-        {owner.kind}
-      </Badge>
-    </div>
+}) {
+  return (
+    <KeyValueRow label={label}>
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        {isResourceType(owner.kind) ? (
+          <ResourceLink
+            kind={owner.kind}
+            name={owner.name}
+            namespace={namespace}
+          />
+        ) : (
+          <span className="font-mono">{owner.name}</span>
+        )}
+        {/* The kind qualifies the name. It is not a state, so it is quiet
+         *  text rather than a badge. */}
+        <span className="text-[11px] text-fg-fnt">{owner.kind}</span>
+      </span>
+    </KeyValueRow>
   );
-
-  // Only make it a link if we have a route for this resource type
-  if (isSupported) {
-    const path = getResourceDetailUrl(owner.kind, owner.name, namespace);
-    return (
-      <Link to={path} className="block">
-        {content}
-      </Link>
-    );
-  }
-
-  // Otherwise just show the info without navigation
-  return <div className="block">{content}</div>;
 }
