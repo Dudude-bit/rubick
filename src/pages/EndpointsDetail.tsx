@@ -1,16 +1,31 @@
-import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceLink } from "@/components/resources/detail-blocks";
 import {
-  ResourceDetailLayout,
-  InfoCard,
-} from "@/components/resources/ResourceDetailLayout";
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Network, CircleDot } from "lucide-react";
-import { LinkedResource } from "@/components/network";
 import { commands } from "@/lib/commands";
-import type { EndpointsInfo } from "@/generated/types";
+import type { EndpointAddress, EndpointsInfo } from "@/generated/types";
+
+/** Every address in the object, flattened, carrying its readiness. */
+type Backend = {
+  address: EndpointAddress;
+  ready: boolean;
+  /** Which subset it came from — only shown when there is more than one. */
+  subset: number;
+};
 
 export function EndpointsDetail() {
   const {
@@ -32,118 +47,118 @@ export function EndpointsDetail() {
   });
 
   const subsets = endpoints?.subsets ?? [];
-  const totalReady = subsets.reduce((acc, s) => acc + s.addresses.length, 0);
-  const totalNotReady = subsets.reduce(
-    (acc, s) => acc + s.notReadyAddresses.length,
-    0
-  );
+  const backends: Backend[] = subsets.flatMap((subset, index) => [
+    ...subset.addresses.map((address) => ({
+      address,
+      ready: true,
+      subset: index,
+    })),
+    ...subset.notReadyAddresses.map((address) => ({
+      address,
+      ready: false,
+      subset: index,
+    })),
+  ]);
+  const totalReady = backends.filter((b) => b.ready).length;
+  const totalNotReady = backends.length - totalReady;
   const allPorts = subsets.flatMap((s) => s.ports);
+  const showSubset = subsets.length > 1;
+
+  const facts: KeyValue[] = [
+    {
+      label: "Service",
+      value: (
+        <ResourceLink
+          kind={ResourceType.Service}
+          name={endpoints?.name || name || ""}
+          namespace={endpoints?.namespace || namespace}
+        />
+      ),
+    },
+    { label: "Ready", value: totalReady, mono: true },
+    {
+      label: "Not ready",
+      value: totalNotReady,
+      mono: true,
+      // An endpoints object with backends that are not ready is the reason a
+      // service is dropping traffic, so this row is the one that gets colour.
+      tone: totalNotReady > 0 ? "warn" : undefined,
+    },
+    { label: "Ports", value: allPorts.length, mono: true },
+  ];
 
   const tabs = [
     {
       id: "addresses",
-      label: "Addresses",
+      label: "Backends",
       content: (
-        <div className="space-y-4">
-          {subsets.map((subset, idx) => (
-            <Section key={idx}>
-              <SectionHeader
-                title={`Subset ${idx + 1}`}
-                count={`${subset.addresses.length} ready`}
-                actions={
-                  subset.notReadyAddresses.length > 0 && (
-                    <Badge className="bg-warn/[0.16] text-warn border-warn/[0.16]">
-                      {subset.notReadyAddresses.length} not ready
-                    </Badge>
-                  )
-                }
-              />
-              <div className="space-y-4">
-                {subset.addresses.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2 text-green-500">
-                      Ready Addresses
-                    </h4>
-                    <div className="space-y-2">
-                      {subset.addresses.map((addr, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between rounded-lg border p-2 bg-green-500/5"
-                        >
-                          <div className="flex items-center gap-2">
-                            <CircleDot className="h-4 w-4 text-green-500" />
-                            <span className="font-mono">{addr.ip}</span>
-                          </div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-1">
-                            {addr.targetRef &&
-                            addr.targetRef.kind === ResourceType.Pod ? (
-                              <LinkedResource
-                                resourceType={ResourceType.Pod}
-                                name={addr.targetRef.name}
-                                namespace={
-                                  addr.targetRef.namespace ||
-                                  endpoints?.namespace ||
-                                  ""
-                                }
-                              />
-                            ) : addr.targetRef ? (
-                              `${addr.targetRef.kind}/${addr.targetRef.name}`
-                            ) : null}
-                            {addr.nodeName && <span>@ {addr.nodeName}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {subset.notReadyAddresses.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2 text-yellow-500">
-                      Not Ready Addresses
-                    </h4>
-                    <div className="space-y-2">
-                      {subset.notReadyAddresses.map((addr, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between rounded-lg border p-2 bg-yellow-500/5"
-                        >
-                          <div className="flex items-center gap-2">
-                            <CircleDot className="h-4 w-4 text-yellow-500" />
-                            <span className="font-mono">{addr.ip}</span>
-                          </div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-1">
-                            {addr.targetRef &&
-                            addr.targetRef.kind === ResourceType.Pod ? (
-                              <LinkedResource
-                                resourceType={ResourceType.Pod}
-                                name={addr.targetRef.name}
-                                namespace={
-                                  addr.targetRef.namespace ||
-                                  endpoints?.namespace ||
-                                  ""
-                                }
-                              />
-                            ) : addr.targetRef ? (
-                              `${addr.targetRef.kind}/${addr.targetRef.name}`
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Section>
-          ))}
-          {subsets.length === 0 && (
-            <Section>
-              <div className="py-8 text-center text-muted-foreground">
-                No endpoint subsets
-              </div>
-            </Section>
+        <Section>
+          <SectionHeader
+            title="Backends"
+            count={
+              totalNotReady > 0
+                ? `${totalReady} ready · ${totalNotReady} not ready`
+                : `${totalReady} ready`
+            }
+          />
+          {backends.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No backends — nothing is behind this service right now.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Address</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Node</TableHead>
+                  {showSubset && <TableHead>Subset</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {backends.map(({ address, ready, subset }) => (
+                  <TableRow key={`${subset}/${address.ip}`} data-quiet>
+                    <TableCell className="font-mono text-fg">
+                      {address.ip}
+                    </TableCell>
+                    <TableCell className={ready ? "text-fg-mut" : "text-warn"}>
+                      {ready ? "Ready" : "Not ready"}
+                    </TableCell>
+                    <TableCell>
+                      {address.targetRef ? (
+                        address.targetRef.kind === ResourceType.Pod ? (
+                          <ResourceLink
+                            kind={ResourceType.Pod}
+                            name={address.targetRef.name}
+                            namespace={
+                              address.targetRef.namespace ||
+                              endpoints?.namespace
+                            }
+                          />
+                        ) : (
+                          <span className="font-mono text-fg-mut">
+                            {address.targetRef.kind}/{address.targetRef.name}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-fg-fnt">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-fg-mut">
+                      {address.nodeName ?? "—"}
+                    </TableCell>
+                    {showSubset && (
+                      <TableCell className="text-fg-fnt">
+                        {subset + 1}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
-        </div>
+        </Section>
       ),
     },
     {
@@ -151,29 +166,38 @@ export function EndpointsDetail() {
       label: "Ports",
       content: (
         <Section>
-          <SectionHeader title="Ports" />
-          <div>
-            {allPorts.length > 0 ? (
-              <div className="space-y-2">
-                {allPorts.map((port, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between rounded-lg border p-3"
+          <SectionHeader title="Ports" count={allPorts.length} />
+          {allPorts.length === 0 ? (
+            <p className="text-xs text-fg-fnt">No ports defined</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Port</TableHead>
+                  <TableHead>Protocol</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allPorts.map((port) => (
+                  <TableRow
+                    key={`${port.name ?? ""}/${port.protocol}/${port.port}`}
+                    data-quiet
                   >
-                    <div className="flex items-center gap-3">
-                      {port.name && (
-                        <Badge variant="outline">{port.name}</Badge>
-                      )}
-                      <span className="font-mono">{port.port}</span>
-                    </div>
-                    <Badge variant="secondary">{port.protocol}</Badge>
-                  </div>
+                    <TableCell className="text-fg-mut">
+                      {port.name || "—"}
+                    </TableCell>
+                    <TableCell className="font-mono text-fg">
+                      {port.port}
+                    </TableCell>
+                    <TableCell className="text-fg-fnt">
+                      {port.protocol}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No ports defined</p>
-            )}
-          </div>
+              </TableBody>
+            </Table>
+          )}
         </Section>
       ),
     },
@@ -201,46 +225,25 @@ export function EndpointsDetail() {
       resourceKind={ResourceType.Endpoints}
       title={endpoints?.name || name || ""}
       namespace={endpoints?.namespace || namespace}
+      createdAt={endpoints?.createdAt}
       badges={
-        <>
-          <LinkedResource
-            resourceType={ResourceType.Service}
-            name={endpoints?.name || name || ""}
-            namespace={endpoints?.namespace || namespace || ""}
-          />
-          {totalReady > 0 && (
-            <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-              {totalReady} ready
-            </Badge>
-          )}
-          {totalNotReady > 0 && (
-            <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-              {totalNotReady} not ready
-            </Badge>
-          )}
-        </>
+        <span
+          className={
+            totalNotReady > 0
+              ? "text-[11px] text-warn"
+              : "text-[11px] text-fg-mut"
+          }
+        >
+          {totalReady} ready
+          {totalNotReady > 0 && ` · ${totalNotReady} not ready`}
+        </span>
       }
-      icon={<Network className="h-8 w-8 text-muted-foreground" />}
       onBack={goBack}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
     >
-      <div className="grid gap-4 md:grid-cols-3">
-        <InfoCard title="Ready Addresses">
-          <div className="text-xl font-bold text-green-500">{totalReady}</div>
-        </InfoCard>
-
-        <InfoCard title="Not Ready">
-          <div className="text-xl font-bold text-yellow-500">
-            {totalNotReady}
-          </div>
-        </InfoCard>
-
-        <InfoCard title="Ports">
-          <div className="text-xl font-bold">{allPorts.length}</div>
-        </InfoCard>
-      </div>
+      <KeyValueSection title="Endpoints" items={facts} className="max-w-lg" />
     </ResourceDetailLayout>
   );
 }
