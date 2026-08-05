@@ -55,75 +55,6 @@
     --pop-shadow: 0 14px 32px -14px hsl(32 16% 13% / 0.35);
 
     /* ============================================
-     * Status Colors (unified design system)
-     * ============================================ */
-    --status-running: 142.1 76.2% 36.3%;
-    --status-ready: 142.1 76.2% 36.3%;
-    --status-available: 142.1 76.2% 36.3%;
-    --status-active: 142.1 76.2% 36.3%;
-    --status-succeeded: 142.1 76.2% 36.3%;
-
-    --status-pending: 221.2 83.2% 53.3%;
-    --status-waiting: 221.2 83.2% 53.3%;
-    --status-progressing: 221.2 83.2% 53.3%;
-
-    --status-warning: 38 92% 50%;
-    --status-degraded: 38 92% 50%;
-
-    --status-error: 0 84.2% 60.2%;
-    --status-failed: 0 84.2% 60.2%;
-    --status-crashloopbackoff: 0 84.2% 60.2%;
-    --status-evicted: 0 84.2% 60.2%;
-    --status-oomkilled: 0 84.2% 60.2%;
-
-    --status-terminated: 215 16.3% 46.9%;
-    --status-completed: 215 16.3% 46.9%;
-    --status-unknown: 215 16.3% 46.9%;
-
-    /* ============================================
-     * Resource Type Colors (unified design system)
-     * ============================================ */
-    --resource-pod: 217 91% 60%;
-    --resource-pod-bg: 213 100% 96%;
-    --resource-deployment: 271 91% 65%;
-    --resource-deployment-bg: 270 100% 96%;
-    --resource-service: 142 71% 45%;
-    --resource-service-bg: 142 76% 94%;
-    --resource-configmap: 47 95% 53%;
-    --resource-configmap-bg: 47 100% 94%;
-    --resource-secret: 0 84% 60%;
-    --resource-secret-bg: 0 100% 96%;
-    --resource-node: 215 16% 47%;
-    --resource-node-bg: 210 40% 96%;
-    --resource-namespace: 200 90% 50%;
-    --resource-namespace-bg: 200 100% 96%;
-    --resource-ingress: 320 72% 55%;
-    --resource-ingress-bg: 320 100% 96%;
-    --resource-pv: 160 60% 45%;
-    --resource-pv-bg: 160 76% 94%;
-    --resource-pvc: 180 60% 45%;
-    --resource-pvc-bg: 180 76% 94%;
-
-    /* ============================================
-     * Utilization Colors (CPU/Memory gauges)
-     * ============================================ */
-    --utilization-low: 142.1 76.2% 36.3%;
-    --utilization-medium: 38 92% 50%;
-    --utilization-high: 0 84.2% 60.2%;
-    --utilization-critical: 0 84.2% 40%;
-
-    /* ============================================
-     * Spacing Scale (design system)
-     * ============================================ */
-    --space-xs: 0.25rem;
-    --space-sm: 0.5rem;
-    --space-md: 1rem;
-    --space-lg: 1.5rem;
-    --space-xl: 2rem;
-    --space-2xl: 3rem;
-    --space-3xl: 4rem;
-
-    /* ============================================
      * Animation Timings
      * ============================================ */
     --animation-fast: 150ms;
@@ -169,27 +100,18 @@
     --info: 212 66% 58%;
     --raise: 220 7% 15%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
-
-    /* Resource Type Colors (dark mode adjustments) */
-    --resource-pod-bg: 217 91% 15%;
-    --resource-deployment-bg: 271 91% 15%;
-    --resource-service-bg: 142 71% 15%;
-    --resource-configmap-bg: 47 95% 15%;
-    --resource-secret-bg: 0 84% 15%;
-    --resource-node-bg: 215 16% 20%;
-    --resource-namespace-bg: 200 90% 15%;
-    --resource-ingress-bg: 320 72% 15%;
-    --resource-pv-bg: 160 60% 15%;
-    --resource-pvc-bg: 180 60% 15%;
   }
 }
 
 @layer base {
+  /* A bare `border` / `border-b` anywhere in the app should be the hairline,
+   * not the old shadcn border colour — otherwise every un-suffixed border is
+   * a fresh way for the flat canvas to drift. */
   * {
-    @apply border-border;
+    @apply border-hair;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-canvas text-fg;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
@@ -232,7 +154,7 @@
   /* Custom scrollbar */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted)) transparent;
+    scrollbar-color: hsl(var(--sel)) transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -245,59 +167,12 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted));
+    background: hsl(var(--sel));
     border-radius: 4px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
-  }
-
-  /* Status indicators */
-  .status-running {
-    @apply text-success;
-  }
-
-  .status-pending {
-    @apply text-pending;
-  }
-
-  .status-warning {
-    @apply text-warning;
-  }
-
-  .status-error {
-    @apply text-error;
-  }
-
-  /* Resource badge colors */
-  .badge-pod {
-    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
-  }
-
-  .badge-deployment {
-    @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
-  }
-
-  .badge-service {
-    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
-  }
-
-  .badge-configmap {
-    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
-  }
-
-  .badge-secret {
-    @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
-  }
-
-  .badge-node {
-    @apply bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200;
-  }
-
-  /* Terminal styles */
-  .terminal-container {
-    @apply bg-black text-green-400 font-mono text-sm;
+    background: hsl(var(--fg-fnt));
   }
 }
 
