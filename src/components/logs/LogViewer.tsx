@@ -248,14 +248,14 @@ export function LogViewer({
         >
           {error ? (
             <div className="text-center py-8">
-              <p className="text-destructive mb-2">Failed to stream logs</p>
-              <p className="text-muted-foreground text-xs mb-4">{error}</p>
+              <p className="mb-2 text-err">Failed to stream logs</p>
+              <p className="mb-4 text-xs text-fg-mut">{error}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
                 Retry
               </Button>
             </div>
           ) : filteredLogs.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
+            <div className="py-8 text-center text-fg-mut">
               {isConnecting
                 ? "Connecting to log stream..."
                 : isStreaming

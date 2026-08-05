@@ -11,14 +11,14 @@ export function LogFilters({ filters, onRemoveFilter }: LogFiltersProps) {
   if (filters.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 border-b bg-muted/30">
-      <span className="text-xs text-muted-foreground">Filters:</span>
+    <div className="flex items-center gap-2 border-b border-hair px-2 py-1">
+      <span className="text-xs text-fg-fnt">Filters:</span>
       <div className="flex flex-wrap gap-1">
         {filters.map((filter, index) => (
           <Badge
             key={`${filter.type}-${filter.key}-${filter.value}-${index}`}
             variant="secondary"
-            className="flex items-center gap-1 cursor-pointer hover:bg-destructive/20"
+            className="flex cursor-pointer items-center gap-1 hover:bg-err/[0.16] hover:text-err"
             onClick={() => onRemoveFilter(filter)}
           >
             <span>{filter.label}</span>

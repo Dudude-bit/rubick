@@ -140,17 +140,27 @@ export function calculateMetricState(
 }
 
 /**
- * Get CSS color class for utilization level
+ * Class per utilization level, one table per surface.
+ *
+ * "Normal" is deliberately uncoloured: on a page where most values are
+ * fine, a green number on every row makes the one red number harder to
+ * find, not easier. Colour marks the anomaly; the percentage is printed
+ * either way, so the threshold never rides on hue alone.
  */
+const LEVEL_TEXT: Record<UtilizationLevel, string> = {
+  critical: "text-err",
+  warning: "text-warn",
+  normal: "",
+};
+
+const LEVEL_PROGRESS: Record<UtilizationLevel, string> = {
+  critical: "[&>div]:bg-err",
+  warning: "[&>div]:bg-warn",
+  normal: "",
+};
+
 export function getLevelColorClass(level: UtilizationLevel): string {
-  switch (level) {
-    case "critical":
-      return "text-red-500";
-    case "warning":
-      return "text-yellow-500";
-    default:
-      return "text-green-500";
-  }
+  return LEVEL_TEXT[level];
 }
 
 /**
@@ -169,16 +179,6 @@ export function getLevelBadgeVariant(
   }
 }
 
-/**
- * Get progress bar color class for utilization level
- */
 export function getLevelProgressClass(level: UtilizationLevel): string {
-  switch (level) {
-    case "critical":
-      return "[&>div]:bg-red-500";
-    case "warning":
-      return "[&>div]:bg-yellow-500";
-    default:
-      return "";
-  }
+  return LEVEL_PROGRESS[level];
 }

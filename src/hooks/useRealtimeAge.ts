@@ -138,7 +138,7 @@ export interface CountdownResult {
  * @example
  * ```tsx
  * const { display, isExpired, warningLevel } = useRealtimeCountdown(certificate.expiresAt);
- * return <span className={warningLevel === 'critical' ? 'text-red-500' : ''}>{display}</span>;
+ * return <span className={warningLevel === 'critical' ? 'text-err' : ''}>{display}</span>;
  * ```
  */
 export function useRealtimeCountdown(

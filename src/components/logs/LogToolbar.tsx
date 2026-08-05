@@ -61,7 +61,7 @@ export function LogToolbar({
   onToggleStreaming,
 }: LogToolbarProps) {
   return (
-    <div className="flex items-center gap-2 p-2 border-b bg-muted/50">
+    <div className="flex items-center gap-2 border-b border-hair p-2">
       <Select value={selectedContainer} onValueChange={onContainerChange}>
         <SelectTrigger className="w-48">
           <SelectValue placeholder="Select container" />
@@ -76,7 +76,7 @@ export function LogToolbar({
       </Select>
 
       <div className="relative flex-1 max-w-xs">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-fg-fnt" />
         <Input
           placeholder="Search logs..."
           value={searchQuery}

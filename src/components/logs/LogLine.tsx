@@ -15,6 +15,10 @@ import {
   formatTimestamp,
 } from "./types";
 
+/** Shared shell for the table and compact rows; only the rule colour differs. */
+const ROW =
+  "flex gap-3 rounded border-l-2 px-1 py-0.5 pl-2 transition-colors hover:bg-hover";
+
 interface LogLineProps {
   log: LogLineType;
   viewMode: ViewMode;
@@ -37,7 +41,7 @@ export const LogLineComponent = memo(function LogLineComponent({
 
   if (viewMode === "raw") {
     return (
-      <div className="py-0.5 px-1 hover:bg-muted/50 rounded">
+      <div className="rounded px-1 py-0.5 hover:bg-hover">
         <span className="whitespace-pre-wrap break-all">
           {searchQuery ? (
             <HighlightedText text={log.raw} query={searchQuery} />
@@ -55,10 +59,8 @@ export const LogLineComponent = memo(function LogLineComponent({
 
   if (viewMode === "table") {
     return (
-      <div
-        className={`flex gap-3 hover:bg-muted/50 py-0.5 px-1 rounded border-l-2 pl-2 ${borderColor}`}
-      >
-        <span className="text-muted-foreground shrink-0 w-20">
+      <div className={`${ROW} ${borderColor}`}>
+        <span className="w-20 shrink-0 text-fg-fnt">
           {formatTimestamp(log.timestamp)}
         </span>
         <span
@@ -77,21 +79,19 @@ export const LogLineComponent = memo(function LogLineComponent({
           </span>
         </div>
         {visibleFields.length > 0 && (
-          <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground shrink-0 max-w-xs">
+          <div className="flex max-w-xs shrink-0 flex-wrap gap-2 text-[10px] text-fg-fnt">
             {visibleFields.slice(0, 3).map(([key, value]) => (
               <span
                 key={key}
-                className="flex items-baseline gap-1 cursor-pointer hover:text-foreground"
+                className="flex cursor-pointer items-baseline gap-1 hover:text-fg"
                 onClick={() => onFieldClick?.(key, value)}
               >
-                <span className="text-foreground/70">{key}</span>
-                <span className="truncate max-w-[100px]">{value}</span>
+                <span className="text-fg-mut">{key}</span>
+                <span className="max-w-[100px] truncate">{value}</span>
               </span>
             ))}
             {visibleFields.length > 3 && (
-              <span className="text-muted-foreground">
-                +{visibleFields.length - 3}
-              </span>
+              <span className="text-fg-fnt">+{visibleFields.length - 3}</span>
             )}
           </div>
         )}
@@ -101,10 +101,8 @@ export const LogLineComponent = memo(function LogLineComponent({
 
   // Compact mode (default)
   return (
-    <div
-      className={`flex gap-3 hover:bg-muted/50 py-0.5 px-1 rounded border-l-2 pl-2 ${borderColor}`}
-    >
-      <span className="text-muted-foreground shrink-0 w-20">
+    <div className={`${ROW} ${borderColor}`}>
+      <span className="w-20 shrink-0 text-fg-fnt">
         {formatTimestamp(log.timestamp)}
       </span>
       <span
@@ -116,7 +114,7 @@ export const LogLineComponent = memo(function LogLineComponent({
       {log.format !== "plain" && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="shrink-0 text-[10px] uppercase text-muted-foreground cursor-help">
+            <span className="shrink-0 cursor-help text-[10px] uppercase text-fg-fnt">
               {log.format}
             </span>
           </TooltipTrigger>
@@ -134,14 +132,14 @@ export const LogLineComponent = memo(function LogLineComponent({
           )}
         </span>
         {visibleFields.length > 0 && (
-          <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap gap-2 text-[10px] text-fg-fnt">
             {visibleFields.map(([key, value]) => (
               <span
                 key={key}
-                className="flex items-baseline gap-1 cursor-pointer hover:text-foreground"
+                className="flex cursor-pointer items-baseline gap-1 hover:text-fg"
                 onClick={() => onFieldClick?.(key, value)}
               >
-                <span className="text-foreground/70">{key}</span>
+                <span className="text-fg-mut">{key}</span>
                 <span className="break-all">{value}</span>
               </span>
             ))}
@@ -171,10 +169,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase() ? (
-          <mark
-            key={i}
-            className="bg-yellow-500/30 text-foreground rounded px-0.5"
-          >
+          <mark key={i} className="rounded bg-warn/[0.24] px-0.5 text-fg">
             {part}
           </mark>
         ) : (
