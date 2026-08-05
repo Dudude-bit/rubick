@@ -43,10 +43,14 @@ export function splitName(name: string): { stem: string; tail: string } {
 /**
  * Hues for hashed identity. Evenly spread so neighbouring instances land far
  * apart. Saturation and lightness live in `--ident-s` / `--ident-l` per theme.
+ *
+ * The warm end — red through yellow, roughly 0-60 — is left out on purpose:
+ * those are `--err` and `--warn`. A six-character tail in amber was ambiguous
+ * enough; once the tint covers a whole name, `unschedulable-demo` in amber
+ * reads as a warning the app never raised. Losing three hues costs less than
+ * one identifier that lies about severity.
  */
-const IDENT_HUES = [
-  4, 28, 48, 92, 132, 160, 184, 202, 224, 250, 274, 296, 318, 340,
-];
+const IDENT_HUES = [92, 132, 160, 184, 202, 224, 250, 274, 296, 318, 340];
 
 /**
  * FNV-1a, then murmur3's finalizer. The finalizer is not decoration: FNV-1a

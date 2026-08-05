@@ -171,15 +171,12 @@ describe("ResourceRef", () => {
       );
     });
 
-    it("full leaves an ungenerated name bright, having no tail to carry identity", () => {
+    it("full tints an ungenerated name whole, since it is its own identity", () => {
       wrap(<ResourceRef kind="Pod" name="metrics-server" namespace="ns" />);
-      expect(screen.getByTestId("resource-ref-stem").className).toContain(
-        "text-fg"
-      );
+      expect(styleOf("resource-ref-stem")).toContain("hsl");
       expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
         "text-fg-mut"
       );
-      expect(styleOf("resource-ref-tail")).not.toContain("hsl");
     });
 
     it("minimal keeps the kind hue on the icon only and dims the tail", () => {
@@ -296,5 +293,62 @@ describe("ROUTABLE against the router", () => {
         `${kind} has a detail route but ResourceRef renders it as text`
       ).toBe(true);
     }
+  });
+});
+
+// A node is `k3d-k8s-gui-dev-agent-0`: siblings share everything but the last
+// few characters, and the splitter's tail is the ordinal `-0`. Tinting two
+// characters of a thirty-character string tells nobody anything.
+describe("names whose tail is too thin to carry identity", () => {
+  beforeEach(() => {
+    useDisplaySettingsStore.setState({ resourceColouring: "full" });
+  });
+
+  const styleOf = (id: string) =>
+    screen.getByTestId(id).getAttribute("style") ?? "";
+
+  it("tints the whole name of a node", () => {
+    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
+    expect(styleOf("resource-ref-stem")).toContain("hsl");
+    expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
+      "text-fg-mut"
+    );
+  });
+
+  it("gives two nodes that differ only in their role distinct hues", () => {
+    const { unmount } = wrap(
+      <ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />
+    );
+    const agent = styleOf("resource-ref-stem");
+    unmount();
+    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-server-0" />);
+    expect(styleOf("resource-ref-stem")).not.toBe(agent);
+  });
+
+  it("tints the whole name when there is no tail at all", () => {
+    wrap(<ResourceRef kind="Pod" name="bad-image-demo" namespace="ns" />);
+    expect(styleOf("resource-ref-stem")).toContain("hsl");
+  });
+
+  it("still dims the stem when the tail is a real generated one", () => {
+    wrap(
+      <ResourceRef
+        kind="Pod"
+        name="crash-demo-56588f6b8c-8bj9v"
+        namespace="ns"
+      />
+    );
+    expect(styleOf("resource-ref-stem")).not.toContain("hsl");
+    expect(screen.getByTestId("resource-ref-stem").className).toContain(
+      "text-fg-mut"
+    );
+    expect(styleOf("resource-ref-tail")).toContain("hsl");
+  });
+
+  it("leaves a node name uncoloured when colouring is off", () => {
+    useDisplaySettingsStore.setState({ resourceColouring: "off" });
+    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
+    expect(styleOf("resource-ref-stem")).not.toContain("hsl");
+    expect(styleOf("resource-ref-tail")).not.toContain("hsl");
   });
 });

@@ -29,8 +29,11 @@
      * and lightness live here so both palettes track the theme. Held well
      * below the status colours' saturation — a tinted identifier must never
      * read as a severity. */
+    /* 30%, not 38%: the tint now covers a whole name when there is no
+     * generated tail to carry it, and at 38% the yellow-green end of the
+     * hue ring only reached 3.3:1 against this canvas. */
     --ident-s: 58%;
-    --ident-l: 38%;
+    --ident-l: 30%;
     --kind-s: 42%;
     --kind-l: 38%;
 

@@ -91,10 +91,36 @@ export function ResourceRef({
     colouring === "off"
       ? undefined
       : { color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))` };
-  const tinted = colouring === "full" && tail !== "";
-  const tailStyle = tinted
-    ? { color: `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))` }
-    : undefined;
+  // The tint marks whichever part of the name says *which* object this is.
+  // Usually that is the generated tail. But a node is `k3d-k8s-gui-dev-agent-0`
+  // — every sibling shares all of it but the last few characters, and the tail
+  // the splitter finds is the ordinal `-0`, two characters of colour on a
+  // thirty-character string. Where the tail is that thin, or absent, the name
+  // itself is the identity and the whole of it is tinted.
+  const identityStyle =
+    colouring === "full"
+      ? { color: `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))` }
+      : undefined;
+  const tailCarriesIdentity = tail.length > 2;
+  const stemStyle = tailCarriesIdentity ? undefined : identityStyle;
+  const tailStyle = identityStyle;
+  // Dim the stem only when the tail is the tinted part; a name tinted end to
+  // end must not be half grey.
+  const stemClass =
+    colouring === "full" && tailCarriesIdentity
+      ? "text-fg-mut"
+      : stemStyle
+        ? undefined
+        : "text-fg";
+  // Minimal spends no hue on identity, so the tail falls back to being the
+  // quiet half of the name — which is still more than `off`, where the whole
+  // name reads at one weight.
+  const tailClass =
+    colouring === "full"
+      ? undefined
+      : colouring === "minimal"
+        ? "text-fg-fnt"
+        : "text-fg";
 
   const body = (
     <>
@@ -125,17 +151,14 @@ export function ResourceRef({
           <span className="sr-only">{kind} </span>
         )}
         <span
-          // Only worth dimming when the tail is actually carrying the identity;
-          // a name with no generated tail would otherwise read dim end to end.
-          className={cn(tinted ? "text-fg-mut" : "text-fg")}
+          className={stemClass}
+          style={stemStyle}
           data-testid="resource-ref-stem"
         >
           {stem}
         </span>
         <span
-          className={cn(
-            colouring === "off" ? "text-fg" : !tinted && "text-fg-fnt"
-          )}
+          className={tailClass}
           style={tailStyle}
           data-testid="resource-ref-tail"
         >
