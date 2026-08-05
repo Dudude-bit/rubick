@@ -33,7 +33,7 @@ function formatPortFull(port: ServicePortInfo): string {
 
 export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
   if (ports.length === 0) {
-    return <span className="text-muted-foreground">No ports</span>;
+    return <span className="text-fg-mut">No ports</span>;
   }
 
   const displayPorts = ports.slice(0, maxDisplay);

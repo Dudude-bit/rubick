@@ -29,20 +29,15 @@ export function ResourceLink({
     <Link
       to={path}
       className={cn(
-        "flex items-center gap-2 rounded-md border p-2 text-sm hover:bg-accent transition-colors",
+        "flex items-center gap-2 rounded-md border p-2 text-sm hover:bg-hover transition-colors",
         className
       )}
     >
-      <ResourceIcon
-        kind={kind}
-        className="h-4 w-4 text-muted-foreground shrink-0"
-      />
+      <ResourceIcon kind={kind} className="h-4 w-4 text-fg-mut shrink-0" />
       <div className="flex flex-col min-w-0 flex-1">
         <span className="font-medium truncate">{name}</span>
         {subtitle && (
-          <span className="text-xs text-muted-foreground truncate">
-            {subtitle}
-          </span>
+          <span className="text-xs text-fg-mut truncate">{subtitle}</span>
         )}
       </div>
       {showKindBadge && (

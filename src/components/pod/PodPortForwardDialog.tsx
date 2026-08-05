@@ -84,7 +84,7 @@ export function PodPortForwardDialog({
         <div className="space-y-4">
           <div className="rounded-md border p-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Target</span>
+              <span className="text-fg-mut">Target</span>
               <span className="font-medium">
                 {pod.namespace}/{pod.name}
               </span>
@@ -110,13 +110,13 @@ export function PodPortForwardDialog({
                     }
                   >
                     {p.name ? `${p.name} (${p.port})` : String(p.port)}
-                    <span className="ml-1 text-xs text-muted-foreground">
+                    <span className="ml-1 text-xs text-fg-mut">
                       {p.protocol}
                     </span>
                   </Button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-fg-mut">
                 Click to auto-fill local and remote ports
               </p>
             </div>
@@ -165,7 +165,7 @@ export function PodPortForwardDialog({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Auto reconnect</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Retry when the pod or connection drops
                 </p>
               </div>
@@ -179,7 +179,7 @@ export function PodPortForwardDialog({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Save as config</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Keep this port-forward for quick reuse
                 </p>
               </div>
@@ -195,7 +195,7 @@ export function PodPortForwardDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">Auto start</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-fg-mut">
                       Start automatically when this cluster connects
                     </p>
                   </div>
@@ -233,7 +233,7 @@ export function PodPortForwardDialog({
                     <div className="font-medium">
                       {session.localPort} → {session.pod}:{session.remotePort}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-fg-mut">
                       {portForwardStatusBySession[session.id]?.message ||
                         portForwardStatusBySession[session.id]?.status ||
                         "Active"}

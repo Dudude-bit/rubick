@@ -454,7 +454,7 @@ export function RegistrySettings() {
               </>
             )}
             {registryEditorError && (
-              <p className="text-xs text-destructive">{registryEditorError}</p>
+              <p className="text-xs text-err">{registryEditorError}</p>
             )}
             <div className="flex items-center gap-2">
               <Button type="button" size="sm" onClick={handleRegistrySave}>

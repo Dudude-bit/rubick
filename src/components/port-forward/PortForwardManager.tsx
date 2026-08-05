@@ -354,7 +354,7 @@ export function PortForwardManager() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Cluster</span>
+            <span className="text-fg-mut">Cluster</span>
             <Badge variant={currentContext ? "outline" : "destructive"}>
               {currentContext || "Not connected"}
             </Badge>
@@ -403,7 +403,7 @@ export function PortForwardManager() {
         </div>
 
         {contextConfigs.length === 0 ? (
-          <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+          <div className="rounded-md border border-dashed p-6 text-sm text-fg-mut">
             {currentContext
               ? "No port-forward configs for this cluster yet."
               : "Connect to a cluster to create port-forward configs."}
@@ -435,7 +435,7 @@ export function PortForwardManager() {
                           </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-fg-mut">
                         {config.namespace}/{config.pod} · {config.localPort} →
                         {config.pod}:{config.remotePort}
                       </div>
@@ -501,7 +501,7 @@ export function PortForwardManager() {
                     </div>
                     {activeSession &&
                     statusBySession[activeSession.id]?.message ? (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-fg-mut">
                         {statusBySession[activeSession.id]?.message}
                       </span>
                     ) : null}
@@ -537,7 +537,7 @@ export function PortForwardManager() {
                           </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-fg-mut">
                         {session.namespace}/{session.pod}
                       </div>
                     </div>
@@ -651,7 +651,7 @@ export function PortForwardManager() {
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="text-sm font-medium">Auto reconnect</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Retry when the pod or connection drops
                 </p>
               </div>
@@ -665,7 +665,7 @@ export function PortForwardManager() {
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="text-sm font-medium">Auto start</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Start automatically when this cluster connects
                 </p>
               </div>
