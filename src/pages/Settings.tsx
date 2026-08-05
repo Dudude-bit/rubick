@@ -1,6 +1,5 @@
 import { useThemeStore } from "@/stores/themeStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import { SectionHeader } from "@/components/ui/section";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
@@ -53,9 +52,9 @@ export function Settings() {
   });
 
   return (
+    // No page title: the breadcrumb above already reads "Settings", and the
+    // first group caption starts the content immediately.
     <div className="flex max-w-3xl flex-col gap-5 animate-in fade-in duration-200">
-      <SectionHeader title="Settings" />
-
       <SettingsGroup title="Appearance">
         <SettingRow
           label="Theme"

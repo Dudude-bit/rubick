@@ -644,14 +644,20 @@ export function InfrastructureBuilder() {
                   className="rounded"
                 >
                   <Background gap={16} size={1} color="hsl(var(--hair))" />
-                  <Controls />
+                  {/* React Flow ships its own light-mode chrome — white
+                      buttons, a white minimap — which lands on the canvas as
+                      two glowing rectangles. Its classes are overridden here
+                      rather than in index.css so the override stays next to
+                      the component that needs it. */}
+                  <Controls className="[&>button]:border-hair [&>button]:bg-canvas [&>button]:fill-fg-mut [&>button:hover]:bg-hover" />
                   {/* The minimap answers "where am I in the graph", which is
                       a question about position. Six hues keyed to kind
                       answered a question nobody asked and put more colour on
                       screen than the rest of the app has in total. */}
                   <MiniMap
+                    className="!bg-canvas rounded border border-hair"
                     nodeColor="hsl(var(--fg-fnt))"
-                    maskColor="hsl(var(--canvas) / 0.7)"
+                    maskColor="hsl(var(--canvas) / 0.6)"
                   />
                 </ReactFlow>
                 {emptyCanvas && (
