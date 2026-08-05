@@ -1,11 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { MetricBadge } from "@/components/ui/metric-card";
@@ -67,7 +61,7 @@ export function OverviewHeader({ title, subtitle }: OverviewHeaderProps) {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <p className="text-sm text-fg-mut">{subtitle}</p>
       </div>
     </div>
   );
@@ -84,54 +78,50 @@ export function ResourceStatCard({
   const visibleBadges =
     badges?.filter((badge) => !badge.hideWhenZero || badge.value > 0) ?? [];
 
-  const card = (
-    <Card
-      className={cn(
-        "transition-all duration-200",
-        href && "group-hover:bg-accent"
+  const stat = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-semibold tracking-tight text-fg">
+          {title}
+        </span>
+        <Icon className="h-4 w-4 text-fg-fnt" />
+      </div>
+      <div className="text-2xl font-bold tabular-nums">{value}</div>
+      {visibleBadges.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {visibleBadges.map((badge) => {
+            const BadgeIcon = badge.icon;
+            return (
+              <Badge
+                key={badge.label}
+                variant={badge.variant ?? "secondary"}
+                className="gap-1"
+              >
+                {BadgeIcon && <BadgeIcon className="h-3 w-3" />}
+                {badge.value} {badge.label}
+              </Badge>
+            );
+          })}
+        </div>
       )}
-    >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="text-2xl font-bold">{value}</div>
-        {visibleBadges.length > 0 && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            {visibleBadges.map((badge) => {
-              const BadgeIcon = badge.icon;
-              return (
-                <Badge
-                  key={badge.label}
-                  variant={badge.variant ?? "secondary"}
-                  className="gap-1"
-                >
-                  {BadgeIcon && <BadgeIcon className="h-3 w-3" />}
-                  {badge.value} {badge.label}
-                </Badge>
-              );
-            })}
-          </div>
-        )}
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </CardContent>
-    </Card>
+      {description && <p className="text-xs text-fg-mut">{description}</p>}
+    </>
   );
 
   if (!href) {
-    return card;
+    return <Section className="p-2">{stat}</Section>;
   }
 
   return (
     <Link
       to={href}
-      className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "flex flex-col gap-2 rounded p-2 transition-colors hover:bg-hover",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      )}
       aria-label={`Open ${title}`}
     >
-      {card}
+      {stat}
     </Link>
   );
 }
@@ -154,14 +144,11 @@ export function TopPodsCard({
   const maxValue = items.reduce((max, item) => Math.max(max, item.value), 0);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Section>
+      <SectionHeader title={title} description={description} />
+      <SectionBody className="pt-2">
         {items.length > 0 ? (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {items.map((item, idx) => {
               const progress = maxValue
                 ? Math.min(100, (item.value / maxValue) * 100)
@@ -170,7 +157,7 @@ export function TopPodsCard({
                 <Link
                   key={`${item.namespace}-${item.name}`}
                   to={`${basePath}/${item.namespace}/${item.name}`}
-                  className="flex cursor-pointer flex-col gap-2 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex cursor-pointer flex-col gap-2 rounded p-2 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`Open pod ${item.namespace}/${item.name}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -186,9 +173,7 @@ export function TopPodsCard({
                           {item.name}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {item.namespace}
-                      </p>
+                      <p className="text-xs text-fg-mut">{item.namespace}</p>
                     </div>
                     <MetricBadge
                       used={item.value}
@@ -202,12 +187,10 @@ export function TopPodsCard({
             })}
           </div>
         ) : (
-          <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-            No pod metrics available
-          </div>
+          <p className="p-2 text-sm text-fg-mut">No pod metrics available</p>
         )}
-      </CardContent>
-    </Card>
+      </SectionBody>
+    </Section>
   );
 }
 
@@ -220,19 +203,17 @@ export function QuickActionTile({
 }: QuickActionTileProps) {
   const content = (
     <>
-      <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground transition-colors group-hover:text-foreground">
-        <Icon className="h-4 w-4" />
-      </div>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fg-mut transition-colors group-hover:text-fg" />
       <div className="space-y-1 text-left">
         <p className="text-sm font-medium leading-none">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-fg-mut">{description}</p>
       </div>
     </>
   );
 
   const className = cn(
-    "group flex items-start gap-3 rounded-lg border border-border bg-card p-3",
-    "transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    "group flex items-start gap-3 rounded border border-hair p-3",
+    "transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
   );
 
   if (href) {

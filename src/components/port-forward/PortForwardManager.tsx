@@ -9,13 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/ui/refresh-button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import {
   Dialog,
   DialogContent,
@@ -352,14 +346,12 @@ export function PortForwardManager() {
   };
 
   return (
-    <Card>
-      <CardHeader className="space-y-1">
-        <CardTitle>Port Forwards</CardTitle>
-        <CardDescription>
-          Save and run per-cluster port-forward configurations
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Section>
+      <SectionHeader
+        title="Port Forwards"
+        description="Save and run per-cluster port-forward configurations"
+      />
+      <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Cluster</span>
@@ -564,7 +556,7 @@ export function PortForwardManager() {
             </div>
           </div>
         )}
-      </CardContent>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -695,6 +687,6 @@ export function PortForwardManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </Section>
   );
 }

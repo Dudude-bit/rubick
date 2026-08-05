@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,7 +14,6 @@ import {
   XCircle,
   FolderOpen,
   RefreshCw,
-  Terminal,
   AlertCircle,
   Loader2,
 } from "lucide-react";
@@ -129,18 +122,12 @@ export function CliSettings() {
     kubectlPath !== (cliPaths?.kubectlPath ?? "");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Terminal className="h-5 w-5" />
-          CLI Tools
-        </CardTitle>
-        <CardDescription>
-          Configure paths to external CLI tools. If a tool is not found
-          automatically, you can specify the path manually.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <Section>
+      <SectionHeader
+        title="CLI Tools"
+        description="Configure paths to external CLI tools. If a tool is not found automatically, you can specify the path manually."
+      />
+      <div className="flex flex-col gap-6">
         {/* Helm CLI Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -352,7 +339,7 @@ export function CliSettings() {
             {saveMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

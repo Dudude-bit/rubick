@@ -1,12 +1,6 @@
 import { useThemeStore } from "@/stores/themeStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
@@ -53,24 +47,19 @@ export function Settings() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Customize your K8s GUI experience
-        </p>
+        <p className="text-fg-mut">Customize your K8s GUI experience</p>
       </div>
 
-      {/* Appearance */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-          <CardDescription>
-            Customize the look and feel of the application
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
+      <Section>
+        <SectionHeader
+          title="Appearance"
+          description="Customize the look and feel of the application"
+        />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <Label>Theme</Label>
             <RadioGroup
               value={theme}
@@ -87,7 +76,7 @@ export function Settings() {
                 />
                 <Label
                   htmlFor="light"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
                 >
                   <Sun className="mb-2 h-6 w-6" aria-hidden="true" />
                   Light
@@ -101,7 +90,7 @@ export function Settings() {
                 />
                 <Label
                   htmlFor="dark"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
                 >
                   <Moon className="mb-2 h-6 w-6" aria-hidden="true" />
                   Dark
@@ -115,7 +104,7 @@ export function Settings() {
                 />
                 <Label
                   htmlFor="system"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
                 >
                   <Monitor className="mb-2 h-6 w-6" aria-hidden="true" />
                   System
@@ -123,8 +112,8 @@ export function Settings() {
               </div>
             </RadioGroup>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
       {/* Kubeconfig */}
       <KubeconfigSettings />
@@ -139,25 +128,21 @@ export function Settings() {
 
       <PortForwardManager />
 
-      {/* About */}
-      <Card>
-        <CardHeader>
-          <CardTitle>About</CardTitle>
-          <CardDescription>Application information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Section>
+        <SectionHeader title="About" description="Application information" />
+        <div className="flex flex-col gap-4">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Version</span>
+            <span className="text-fg-mut">Version</span>
             <span className="font-mono">{appInfo?.version ?? "..."}</span>
           </div>
           <Separator />
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Tauri</span>
+            <span className="text-fg-mut">Tauri</span>
             <span>{appInfo?.tauriVersion ?? "..."}</span>
           </div>
           <Separator />
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Framework</span>
+            <span className="text-fg-mut">Framework</span>
             <span>React + TypeScript</span>
           </div>
           <Separator />
@@ -168,12 +153,12 @@ export function Settings() {
               <div>
                 <p className="font-medium">Updates</p>
                 {updateAvailable && updateVersion && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-fg-mut">
                     Version {updateVersion} available
                   </p>
                 )}
                 {updateError && (
-                  <p className="text-sm text-destructive flex items-center gap-1">
+                  <p className="text-sm text-err flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     {updateError}
                   </p>
@@ -235,7 +220,7 @@ export function Settings() {
             {updateDownloading && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Downloading...</span>
+                  <span className="text-fg-mut">Downloading...</span>
                   <span className="font-mono">{updateProgress}%</span>
                 </div>
                 <Progress value={updateProgress} className="h-2" />
@@ -248,7 +233,7 @@ export function Settings() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Automatic Updates</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-fg-mut">
                   Check for updates on startup and every 30 minutes
                 </p>
               </div>
@@ -258,8 +243,8 @@ export function Settings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
     </div>
   );
 }

@@ -1,18 +1,12 @@
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
-import { FolderOpen, FileText, RotateCcw } from "lucide-react";
+import { FolderOpen, RotateCcw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 /**
@@ -102,21 +96,20 @@ export function KubeconfigSettings() {
   const hasChanges = pathInput !== (currentPath ?? "");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Kubeconfig
-        </CardTitle>
-        <CardDescription>
-          By default the app reads <code>$KUBECONFIG</code> or{" "}
-          <code>~/.kube/config</code>. Set a custom path here to point at a
-          different file — useful for testing against a synthetic kubeconfig
-          without touching your default one.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
+    <Section>
+      <SectionHeader
+        title="Kubeconfig"
+        description={
+          <>
+            By default the app reads <code>$KUBECONFIG</code> or{" "}
+            <code>~/.kube/config</code>. Set a custom path here to point at a
+            different file — useful for testing against a synthetic kubeconfig
+            without touching your default one.
+          </>
+        }
+      />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="kubeconfig-path">Custom kubeconfig path</Label>
           <div className="flex gap-2">
             <Input
@@ -140,11 +133,11 @@ export function KubeconfigSettings() {
             </Button>
           </div>
           {currentPath ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-fg-mut">
               Currently active: <span className="font-mono">{currentPath}</span>
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-fg-mut">
               Currently using default lookup ($KUBECONFIG / ~/.kube/config).
             </p>
           )}
@@ -166,7 +159,7 @@ export function KubeconfigSettings() {
             {setMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

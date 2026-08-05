@@ -6,10 +6,9 @@ import {
   CircleAlert,
   Cpu,
   MemoryStick,
-  Server,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { cn, formatAge } from "@/lib/utils";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import {
@@ -57,7 +56,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
   const href = problemHref(problem);
 
   const body = (
-    <div className="flex items-start gap-3 px-4 py-2.5">
+    <div className="flex items-start gap-3 px-2 py-2.5">
       {/* Icon carries the severity too — colour alone would be invisible to
        *  anyone with a red/green deficiency, and these rows are the whole
        *  point of the screen. */}
@@ -133,7 +132,7 @@ export function ProblemsPanel({
   // and let the topology below take the space.
   if (problems.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-ok/[0.16] bg-ok/[0.16] px-4 py-3">
+      <div className="flex items-center gap-2 px-2 py-3">
         <CheckCircle2 className="h-4 w-4 text-ok" aria-hidden="true" />
         <span className="text-sm font-medium">No problems detected</span>
         <span className="text-sm text-fg-mut">
@@ -149,35 +148,30 @@ export function ProblemsPanel({
   const total = problems.length + problemsTruncated;
 
   return (
-    <Card className="border-err/[0.4]">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CircleAlert className="h-4 w-4 text-err" aria-hidden="true" />
-          {total} {total === 1 ? "problem" : "problems"} need attention
-          {critical > 0 && total !== critical && (
-            <span className="text-sm font-normal text-fg-mut">
-              {critical} critical
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="border-t border-hair">
-          {problems.map((problem) => (
-            <ProblemRow
-              key={`${problem.kind}/${problem.namespace ?? "-"}/${problem.name}/${problem.reason}`}
-              problem={problem}
-            />
-          ))}
-          {problemsTruncated > 0 && (
-            <p className="px-4 py-2.5 text-xs text-fg-mut">
-              +{problemsTruncated} more — showing the {problems.length} most
-              severe
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <Section>
+      <SectionHeader
+        title={`${total} ${total === 1 ? "problem" : "problems"} need attention`}
+        count={
+          critical > 0 && total !== critical
+            ? `${critical} critical`
+            : undefined
+        }
+      />
+      <SectionBody>
+        {problems.map((problem) => (
+          <ProblemRow
+            key={`${problem.kind}/${problem.namespace ?? "-"}/${problem.name}/${problem.reason}`}
+            problem={problem}
+          />
+        ))}
+        {problemsTruncated > 0 && (
+          <p className="px-2 py-2.5 text-xs text-fg-mut">
+            +{problemsTruncated} more — showing the {problems.length} most
+            severe
+          </p>
+        )}
+      </SectionBody>
+    </Section>
   );
 }
 
@@ -241,17 +235,14 @@ export function SchedulerPanel({
   metricsAvailable: boolean;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Scheduler headroom</CardTitle>
-        {/* Naming the denominator matters: people read a low usage bar as
-         *  "room to spare" and then wonder why pods sit Pending. */}
-        <p className="text-xs text-fg-mut">
-          Share of allocatable capacity already reserved by pod requests — this,
-          not usage, decides whether the next pod schedules.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Section>
+      {/* Naming the denominator matters: people read a low usage bar as
+       *  "room to spare" and then wonder why pods sit Pending. */}
+      <SectionHeader
+        title="Scheduler headroom"
+        description="Share of allocatable capacity already reserved by pod requests — this, not usage, decides whether the next pod schedules."
+      />
+      <div className="flex flex-col gap-4 pt-1">
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-fg-mut">
             <Cpu className="h-3.5 w-3.5" aria-hidden="true" />
@@ -275,8 +266,8 @@ export function SchedulerPanel({
             is not shown.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }
 
@@ -291,7 +282,7 @@ function NodeRow({ node }: { node: NodeSummary }) {
   return (
     <Link
       to={`/${toPlural(ResourceType.Node)}/${node.name}`}
-      className="flex items-center gap-3 border-b border-hair px-4 py-2.5 transition-colors last:border-b-0 hover:bg-hover"
+      className="flex items-center gap-3 border-b border-hair px-2 py-2.5 transition-colors last:border-b-0 hover:bg-hover"
     >
       <span
         className={cn(
@@ -335,24 +326,14 @@ export function NodesPanel({ nodes }: { nodes: NodeSummary[] }) {
   // practice, and hiding one behind a "+N more" would hide the node someone
   // opened this panel to find.
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Server className="h-4 w-4" aria-hidden="true" />
-          Nodes
-          <span className="text-sm font-normal text-fg-mut">
-            {nodes.length}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="border-t border-hair">
-          {nodes.map((node) => (
-            <NodeRow key={node.name} node={node} />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <Section>
+      <SectionHeader title="Nodes" count={nodes.length} />
+      <SectionBody>
+        {nodes.map((node) => (
+          <NodeRow key={node.name} node={node} />
+        ))}
+      </SectionBody>
+    </Section>
   );
 }
 
@@ -360,40 +341,38 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
   if (warnings.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Warning events</CardTitle>
-        <p className="text-xs text-fg-mut">last hour, grouped by reason</p>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="border-t border-hair">
-          {warnings.map((warning) => (
-            <div
-              key={warning.reason}
-              className="flex items-start gap-3 border-b border-hair px-4 py-2 last:border-b-0"
-            >
-              <span className="font-mono text-sm text-warn">
-                {warning.reason}
-              </span>
-              {warning.count > 1 && (
-                <span className="shrink-0 text-xs text-fg-mut">
-                  &times;{warning.count}
-                </span>
-              )}
-              <p className="min-w-0 flex-1 truncate text-xs text-fg-mut">
-                {warning.object && (
-                  <span className="font-mono">{warning.object}</span>
-                )}
-                {warning.object && warning.sample && " — "}
-                {warning.sample}
-              </p>
+    <Section>
+      <SectionHeader
+        title="Warning events"
+        description="last hour, grouped by reason"
+      />
+      <SectionBody>
+        {warnings.map((warning) => (
+          <div
+            key={warning.reason}
+            className="flex items-start gap-3 border-b border-hair px-2 py-2 last:border-b-0"
+          >
+            <span className="font-mono text-sm text-warn">
+              {warning.reason}
+            </span>
+            {warning.count > 1 && (
               <span className="shrink-0 text-xs text-fg-mut">
-                {formatAge(warning.lastSeen)}
+                &times;{warning.count}
               </span>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            )}
+            <p className="min-w-0 flex-1 truncate text-xs text-fg-mut">
+              {warning.object && (
+                <span className="font-mono">{warning.object}</span>
+              )}
+              {warning.object && warning.sample && " — "}
+              {warning.sample}
+            </p>
+            <span className="shrink-0 text-xs text-fg-mut">
+              {formatAge(warning.lastSeen)}
+            </span>
+          </div>
+        ))}
+      </SectionBody>
+    </Section>
   );
 }
