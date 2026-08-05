@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
-import { Badge } from "@/components/ui/badge";
+import { SectionHeader } from "@/components/ui/section";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -61,6 +61,7 @@ import {
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { cn } from "@/lib/utils";
 
 const LOCAL_CONTEXT = "__local__";
 
@@ -495,86 +496,103 @@ export function InfrastructureBuilder() {
   const emptyCanvas = nodes.length === 0;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Infrastructure Builder</h1>
-          <p className="text-sm text-muted-foreground">
-            Design manifests visually or edit raw YAML before applying to the
-            cluster.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
+    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+      <Tabs value={mode} onValueChange={handleModeChange}>
+        <SectionHeader
+          title="Infrastructure Builder"
+          count={`${nodes.length} ${nodes.length === 1 ? "resource" : "resources"}`}
+          actions={
+            <>
+              <TabsList>
+                <TabsTrigger value="visual">Visual</TabsTrigger>
+                <TabsTrigger value="yaml">YAML</TabsTrigger>
+              </TabsList>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDeleteSelection}
+                disabled={
+                  selection.nodes.length === 0 && selection.edges.length === 0
+                }
+              >
+                <Trash2 className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                Delete selection
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setClearOpen(true)}
+              >
+                Clear canvas
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleImportFromCluster}
+                disabled={isImporting}
+              >
+                {isImporting ? (
+                  <Spinner size="sm" className="mr-1.5" />
+                ) : (
+                  <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                )}
+                Import
+              </Button>
               <Button
                 variant="outline"
-                size="icon"
-                aria-label="Open builder help"
-                onClick={() => setHelpOpen(true)}
+                size="sm"
+                onClick={handleValidate}
+                disabled={isValidating}
               >
-                <HelpCircle className="h-4 w-4" />
+                {isValidating ? (
+                  <Spinner size="sm" className="mr-1.5" />
+                ) : (
+                  <CheckCircle2 className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                )}
+                Validate
               </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="center" className="max-w-xs">
-              <div className="text-xs font-semibold">Quick tips</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Drag from palette, lasso select on empty canvas.
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                Delete: Backspace · Select all: Cmd/Ctrl+A · Invert:
-                Cmd/Ctrl+Shift+I
-              </div>
-            </TooltipContent>
-          </Tooltip>
-          <Button
-            variant="outline"
-            onClick={handleDeleteSelection}
-            disabled={
-              selection.nodes.length === 0 && selection.edges.length === 0
-            }
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete Selection
-          </Button>
-          <Button variant="outline" onClick={() => setClearOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Clear Canvas
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleImportFromCluster}
-            disabled={isImporting}
-          >
-            {isImporting ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Import
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleValidate}
-            disabled={isValidating}
-          >
-            {isValidating ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-            )}
-            Validate
-          </Button>
-          <Button onClick={handleApply} disabled={isApplying}>
-            {isApplying ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <Play className="mr-2 h-4 w-4" />
-            )}
-            Apply
-          </Button>
+              <Button size="sm" onClick={handleApply} disabled={isApplying}>
+                {isApplying ? (
+                  <Spinner size="sm" className="mr-1.5" />
+                ) : (
+                  <Play className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                )}
+                Apply
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Open builder help"
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  align="center"
+                  className="max-w-xs"
+                >
+                  Drag from the palette, lasso-select on empty canvas. Delete:
+                  Backspace · Select all: Cmd/Ctrl+A · Invert: Cmd/Ctrl+Shift+I
+                </TooltipContent>
+              </Tooltip>
+            </>
+          }
+        />
+
+        <div className="flex flex-wrap items-center gap-3 py-1">
+          <Input
+            placeholder="Filter resources…"
+            aria-label="Filter resources"
+            className="w-56"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          />
           {mode === "visual" && (
-            <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1">
+            <span className="flex items-center gap-1.5">
               <Switch
                 id="include-imported"
                 checked={includeImported}
@@ -582,50 +600,31 @@ export function InfrastructureBuilder() {
               />
               <Label
                 htmlFor="include-imported"
-                className="text-xs text-muted-foreground"
+                className="text-[11px] font-normal text-fg-mut"
               >
                 Include imported
               </Label>
-            </div>
+            </span>
           )}
-        </div>
-      </div>
-
-      {!isConnected && (
-        <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-muted/50 p-3 text-sm text-muted-foreground">
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          Connect to a cluster to validate, apply, or import live resources.
-        </div>
-      )}
-
-      <Tabs value={mode} onValueChange={handleModeChange}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="visual">Visual</TabsTrigger>
-            <TabsTrigger value="yaml">YAML</TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Filter resources..."
-              className="w-56"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-            <Badge variant="outline">{nodes.length} resources</Badge>
-          </div>
+          {!isConnected && (
+            <span className="flex items-center gap-1.5 text-[11px] text-warn">
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+              Not connected — validate, apply and import are unavailable.
+            </span>
+          )}
         </div>
 
         <TabsContent value="visual">
-          <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+          <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_300px]">
             <ResourcePalette
               onAdd={handlePaletteClick}
               onTemplate={handleTemplate}
               onPointerDown={handlePalettePointerDown}
             />
-            <div className="flex min-h-[520px] flex-col gap-3">
+            <div className="flex min-h-[520px] flex-col gap-2">
               <div
                 ref={reactFlowWrapper}
-                className="relative h-[520px] flex-1 rounded-lg border border-border bg-background"
+                className="relative h-[520px] flex-1 rounded border border-hair"
               >
                 <ReactFlow
                   nodes={visibleNodes}
@@ -642,44 +641,28 @@ export function InfrastructureBuilder() {
                   onInit={setReactFlowInstance}
                   fitView
                   fitViewOptions={{ padding: 0.2 }}
-                  className="rounded-lg"
+                  className="rounded"
                 >
-                  <Background gap={16} size={1} color="hsl(var(--border))" />
+                  <Background gap={16} size={1} color="hsl(var(--hair))" />
                   <Controls />
+                  {/* The minimap answers "where am I in the graph", which is
+                      a question about position. Six hues keyed to kind
+                      answered a question nobody asked and put more colour on
+                      screen than the rest of the app has in total. */}
                   <MiniMap
-                    nodeColor={(node) => {
-                      const kind = (node.data as ResourceNodeData).kind;
-                      if (kind === ResourceType.Service) return "#22c55e";
-                      if (kind === ResourceType.Deployment) return "#a855f7";
-                      if (kind === ResourceType.Pod) return "#3b82f6";
-                      if (kind === ResourceType.Ingress) return "#06b6d4";
-                      if (kind === ResourceType.ConfigMap) return "#f59e0b";
-                      return "#ef4444";
-                    }}
+                    nodeColor="hsl(var(--fg-fnt))"
+                    maskColor="hsl(var(--canvas) / 0.7)"
                   />
                 </ReactFlow>
                 {emptyCanvas && (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="rounded-lg border border-dashed border-border bg-background/80 p-4 text-center text-sm text-muted-foreground">
-                      Drag resources here or use the palette to start building.
-                    </div>
+                    <p className="text-xs text-fg-mut">
+                      Drag resources here, or click one in the palette.
+                    </p>
                   </div>
                 )}
               </div>
-              {lastResult && (
-                <div
-                  className={`rounded-lg border border-border p-3 text-xs ${
-                    lastResult.success
-                      ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
-                      : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200"
-                  }`}
-                >
-                  <div className="font-semibold">{lastResult.title}</div>
-                  <pre className="mt-2 whitespace-pre-wrap">
-                    {lastResult.message}
-                  </pre>
-                </div>
-              )}
+              <ResultNote result={lastResult} />
             </div>
             <InspectorPanel
               node={selectedNode}
@@ -691,9 +674,9 @@ export function InfrastructureBuilder() {
         </TabsContent>
 
         <TabsContent value="yaml">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-border bg-background">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="flex flex-col gap-2">
+              <div className="overflow-hidden rounded border border-hair">
                 <CodeMirror
                   value={yamlText}
                   height="520px"
@@ -702,26 +685,13 @@ export function InfrastructureBuilder() {
                   onChange={(value) => setYamlText(value)}
                 />
               </div>
-              {lastResult && (
-                <div
-                  className={`rounded-lg border border-border p-3 text-xs ${
-                    lastResult.success
-                      ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
-                      : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200"
-                  }`}
-                >
-                  <div className="font-semibold">{lastResult.title}</div>
-                  <pre className="mt-2 whitespace-pre-wrap">
-                    {lastResult.message}
-                  </pre>
-                </div>
-              )}
+              <ResultNote result={lastResult} />
             </div>
-            <div className="space-y-4">
-              <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-                Use this editor to paste or fine-tune manifests. Switching back
-                to the visual mode will parse and map supported resource types.
-              </div>
+            <div className="flex flex-col gap-3 border-l border-hair pl-3">
+              <p className="text-[11px] text-fg-mut">
+                Paste or fine-tune manifests here. Switching back to the canvas
+                parses this text and maps the resource types it recognises.
+              </p>
               {!isConnected && (
                 <ConnectClusterEmptyState resourceLabel="Manifests" />
               )}
@@ -749,26 +719,26 @@ export function InfrastructureBuilder() {
               Shortcuts and selection tips for the canvas.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 text-sm">
+          <div className="flex flex-col gap-3 text-xs text-fg-mid">
             <div>
-              <div className="text-xs font-semibold uppercase text-muted-foreground">
+              <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
                 Canvas
-              </div>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
+              </h3>
+              <ul className="list-disc space-y-0.5 pl-4">
                 <li>Drag a resource from the palette to place it.</li>
                 <li>
                   Click a resource in the palette to add it near the canvas
-                  center.
+                  centre.
                 </li>
                 <li>Drag on empty canvas to draw a selection box.</li>
                 <li>Click a node to select it, drag to move.</li>
               </ul>
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase text-muted-foreground">
+              <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
                 Shortcuts
-              </div>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
+              </h3>
+              <ul className="list-disc space-y-0.5 pl-4">
                 <li>Delete or Backspace: remove current selection.</li>
                 <li>Cmd/Ctrl + A: select all nodes and edges.</li>
                 <li>Cmd/Ctrl + Shift + I: invert selection.</li>
@@ -777,6 +747,38 @@ export function InfrastructureBuilder() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * The outcome of the last Validate or Apply. It used to be a filled pastel
+ * card, duplicated verbatim in both tabs; a kubectl transcript is text, so
+ * it reads as text with a rule down its left edge in the outcome's colour.
+ */
+function ResultNote({
+  result,
+}: {
+  result: { title: string; message: string; success: boolean } | null;
+}) {
+  if (!result) {
+    return null;
+  }
+  return (
+    <div
+      className={cn(
+        "border-l-2 py-1 pl-2.5 text-[11px]",
+        result.success ? "border-ok" : "border-err"
+      )}
+    >
+      <div
+        className={cn("font-medium", result.success ? "text-ok" : "text-err")}
+      >
+        {result.title}
+      </div>
+      <pre className="mt-1 whitespace-pre-wrap font-mono text-fg-mut">
+        {result.message}
+      </pre>
     </div>
   );
 }
