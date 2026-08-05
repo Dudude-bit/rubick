@@ -51,6 +51,7 @@ export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 export { Progress } from "./progress";
 export { Spinner } from "./spinner";
 export { ScrollArea } from "./scroll-area";
+export { Section, SectionHeader, SectionBody } from "./section";
 export {
   DropdownMenu,
   DropdownMenuContent,
