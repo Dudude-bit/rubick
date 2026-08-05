@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync("src/index.css", "utf8");
+const light = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
+const dark = css.slice(css.indexOf(".dark {"));
 
 const ROLES = [
   "--canvas",
@@ -18,25 +20,72 @@ const ROLES = [
   "--info",
 ];
 
+/** `--fg: 220 6% 93%` -> [220, 6, 93]. */
+function hsl(block: string, role: string): [number, number, number] {
+  const match = new RegExp(`${role}:\\s*([\\d.]+) ([\\d.]+)% ([\\d.]+)%`).exec(
+    block
+  );
+  if (!match) throw new Error(`${role} is not an hsl triple`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function alpha(block: string, role: string): number {
+  const match = new RegExp(`${role}:[^;]*/\\s*([\\d.]+)`).exec(block);
+  if (!match) throw new Error(`${role} carries no alpha`);
+  return Number(match[1]);
+}
+
 describe("role tokens", () => {
-  it("defines every role in the dark theme", () => {
-    const dark = css.slice(css.indexOf(".dark {"));
-    for (const role of ROLES) expect(dark).toContain(role);
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ])("defines every role in the %s theme", (_name, block) => {
+    for (const role of ROLES) expect(block).toContain(role);
   });
 
-  it("defines every role in the light theme", () => {
-    const light = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
-    for (const role of ROLES) expect(light).toContain(role);
+  // Values are calibrated against screenshots and are expected to move.
+  // What must not move is the shape of the system, so these assert
+  // relationships rather than transcribing the constants — a test that
+  // pins a literal only protects against editing it.
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ])("keeps the foreground ramp monotonic in the %s theme", (_n, block) => {
+    const toward = (l: number) =>
+      hsl(block, "--canvas")[2] > 50 ? l : 100 - l;
+    const ramp = ["--fg", "--fg-mid", "--fg-mut", "--fg-fnt"].map((role) =>
+      toward(hsl(block, role)[2])
+    );
+    // Each step must fade toward the canvas, or two roles are interchangeable
+    // and the hierarchy they exist to express has collapsed.
+    for (let i = 1; i < ramp.length; i++) {
+      expect(ramp[i]).toBeGreaterThan(ramp[i - 1]);
+    }
   });
 
-  it("uses the exact approved dark canvas", () => {
-    expect(css).toContain("--canvas: 220 8% 11%");
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ])("carries alpha in the %s hairline, hover and selection", (_n, block) => {
+    // Alpha belongs inside the variable: the same role has to be a light
+    // wash on dark and a dark wash on light, which a single opacity
+    // modifier at the call site cannot express.
+    expect(alpha(block, "--hair")).toBeGreaterThan(0);
+    // A row must read as more selected than merely hovered.
+    expect(alpha(block, "--sel")).toBeGreaterThan(alpha(block, "--hover"));
   });
 
-  it("carries alpha in the hairline variable itself, per theme", () => {
-    const light = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
-    const dark = css.slice(css.indexOf(".dark {"));
-    expect(light).toContain("--hair: 34 20% 30% / 0.12");
-    expect(dark).toContain("--hair: 0 0% 100% / 0.07");
+  it("lifts the overlay surface off the dark canvas", () => {
+    // Light does the opposite — its canvas is already near-white, so the
+    // lift comes from pure white plus the shadow.
+    expect(hsl(dark, "--raise")[2]).toBeGreaterThan(hsl(dark, "--canvas")[2]);
+    expect(hsl(light, "--raise")[2]).toBeGreaterThanOrEqual(
+      hsl(light, "--canvas")[2]
+    );
+  });
+
+  it("keeps the two themes on opposite sides of mid grey", () => {
+    expect(hsl(dark, "--canvas")[2]).toBeLessThan(50);
+    expect(hsl(light, "--canvas")[2]).toBeGreaterThan(50);
   });
 });

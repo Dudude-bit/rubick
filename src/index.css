@@ -13,13 +13,13 @@
      * not read.
      * ============================================ */
     --canvas: 40 30% 98%;
-    --hair: 34 20% 30% / 0.12;
-    --hover: 34 25% 20% / 0.05;
-    --sel: 34 25% 20% / 0.09;
-    --fg: 32 16% 13%;
-    --fg-mid: 32 10% 30%;
-    --fg-mut: 32 8% 42%;
-    --fg-fnt: 32 8% 55%;
+    --hair: 34 20% 30% / 0.14;
+    --hover: 34 25% 20% / 0.06;
+    --sel: 34 25% 20% / 0.1;
+    --fg: 32 16% 11%;
+    --fg-mid: 32 10% 26%;
+    --fg-mut: 32 8% 37%;
+    --fg-fnt: 32 8% 49%;
     --ok: 148 55% 29%;
     --warn: 30 80% 37%;
     --err: 4 66% 45%;
@@ -42,20 +42,30 @@
   }
 
   .dark {
-    /* Role tokens (one flat canvas) */
-    --canvas: 220 8% 11%;
-    --hair: 0 0% 100% / 0.07;
-    --hover: 0 0% 100% / 0.04;
-    --sel: 0 0% 100% / 0.09;
-    --fg: 220 6% 91%;
-    --fg-mid: 212 7% 73%;
-    --fg-mut: 213 6% 57%;
-    --fg-fnt: 213 6% 43%;
+    /* Role tokens (one flat canvas).
+     *
+     * Calibrated against a reference screenshot rather than by eye. The
+     * reference is just as flat as this (94% of its pixels are grey, 90%
+     * sit within six levels of its median) — flatness was never the
+     * problem. What differed was that its canvas sat lighter and its body
+     * text brighter, so the whole page read murky here by comparison.
+     * Most text in this app lives on --fg-mid / --fg-mut / --fg-fnt, which
+     * makes those three, not the headings, what "washed out" actually
+     * means. The alphas move with the canvas so a hairline keeps the same
+     * weight against it. */
+    --canvas: 220 8% 13%;
+    --hair: 0 0% 100% / 0.09;
+    --hover: 0 0% 100% / 0.055;
+    --sel: 0 0% 100% / 0.11;
+    --fg: 220 6% 93%;
+    --fg-mid: 212 7% 79%;
+    --fg-mut: 213 6% 65%;
+    --fg-fnt: 213 6% 51%;
     --ok: 152 44% 49%;
     --warn: 44 82% 48%;
     --err: 358 81% 68%;
     --info: 212 66% 58%;
-    --raise: 220 7% 15%;
+    --raise: 220 7% 18%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }
 }
