@@ -145,8 +145,11 @@ export function ResourceRef({
     </>
   );
 
+  // No `max-w-full`: inside an inline parent that percentage resolves against
+  // a width computed without the icon, which clips two characters off every
+  // name in the command palette. `min-w-0` is what lets a real bound shrink it.
   const shell =
-    "-mx-0.5 inline-flex min-w-0 max-w-full items-baseline gap-1 rounded-[3px] px-0.5";
+    "-mx-0.5 inline-flex min-w-0 items-baseline gap-1 rounded-[3px] px-0.5";
 
   if (!isRoutableKind(kind, namespace)) {
     return <span className={cn(shell, className)}>{body}</span>;

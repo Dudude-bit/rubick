@@ -657,7 +657,9 @@ function PaletteRow({
       )}
     >
       {Icon && <Icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />}
-      <span className="min-w-0 truncate">{label}</span>
+      {/* No `truncate` here: a reference clips its own name, and clipping it
+          twice shrinks the row's name to a few characters. */}
+      <span className="min-w-0">{label}</span>
       {meta && <span className="truncate text-fg-fnt">{meta}</span>}
       {trailing && (
         <span className="ml-auto flex-none text-[11px] text-fg-fnt">
