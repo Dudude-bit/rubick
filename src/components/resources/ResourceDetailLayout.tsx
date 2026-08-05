@@ -1,6 +1,6 @@
 /**
  * The frame every resource detail page sits in: the header, the page's own
- * blocks, the tab strip, and the metadata trailer.
+ * blocks and the tab strip.
  *
  * Nothing here draws a surface. Sections are separated by 22px of canvas and
  * the occasional hairline, which is the same rhythm the overview uses.
@@ -9,16 +9,12 @@
 import type { ReactNode } from "react";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
-import type { ConditionInfo } from "@/generated/types";
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { Section } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
-import { cn } from "@/lib/utils";
-import { ConditionRows, DetailAction } from "./detail-blocks";
-import { KeyValueRow, KeyValueSection } from "./detail-kv";
-import { recordToKeyValues } from "./key-values";
+import { DetailAction } from "./detail-blocks";
 
 interface DetailErrorProps {
   error: Error | string | null;
@@ -76,49 +72,6 @@ export function DetailError({
   );
 }
 
-interface InfoRowProps {
-  label: string;
-  value: ReactNode;
-  className?: string;
-}
-
-/**
- * A single metadata row outside a list. Shares the key/value primitive, but
- * carries its own hairline: standalone rows are stacked as siblings, so the
- * list's "no rule under the last row" would leave every one of them bare.
- */
-export function InfoRow({ label, value, className }: InfoRowProps) {
-  return (
-    <dl className={cn("border-b border-hair last:border-b-0", className)}>
-      <KeyValueRow label={label} className="border-b-0">
-        {value}
-      </KeyValueRow>
-    </dl>
-  );
-}
-
-interface InfoCardProps {
-  title: string;
-  children: ReactNode;
-  className?: string;
-  contentClassName?: string;
-}
-
-/** Titled group of related info on the flat canvas. */
-export function InfoCard({
-  title,
-  children,
-  className,
-  contentClassName,
-}: InfoCardProps) {
-  return (
-    <Section className={className}>
-      <SectionHeader title={title} />
-      <div className={contentClassName}>{children}</div>
-    </Section>
-  );
-}
-
 export interface DetailTab {
   id: string;
   label: string;
@@ -143,11 +96,6 @@ interface ResourceDetailLayoutProps {
   /** Qualifiers shown beside the name. */
   badges?: ReactNode;
   actions?: ReactNode;
-  /**
-   * Accepted and ignored. The flat header has no room for a 32px glyph, but
-   * twelve detail pages still pass one; the prop goes when they convert.
-   */
-  icon?: ReactNode;
 
   onBack: () => void;
   onFindReplacement?: () => void;
@@ -156,11 +104,6 @@ interface ResourceDetailLayoutProps {
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
-
-  /** Rendered under the tabs when the default tab is showing. */
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-  conditions?: ConditionInfo[];
 
   children?: ReactNode;
 }
@@ -184,9 +127,6 @@ export function ResourceDetailLayout({
   tabs,
   activeTab,
   onTabChange,
-  labels,
-  annotations,
-  conditions,
   children,
 }: ResourceDetailLayoutProps) {
   if (isLoading) {
@@ -204,8 +144,6 @@ export function ResourceDetailLayout({
       />
     );
   }
-
-  const showTrailer = activeTab === "overview";
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
@@ -250,29 +188,6 @@ export function ResourceDetailLayout({
           </TabsContent>
         ))}
       </Tabs>
-
-      {showTrailer && labels && Object.keys(labels).length > 0 && (
-        <KeyValueSection
-          title="Labels"
-          count={Object.keys(labels).length}
-          items={recordToKeyValues(labels)}
-        />
-      )}
-
-      {showTrailer && annotations && Object.keys(annotations).length > 0 && (
-        <KeyValueSection
-          title="Annotations"
-          count={Object.keys(annotations).length}
-          items={recordToKeyValues(annotations)}
-        />
-      )}
-
-      {showTrailer && conditions && conditions.length > 0 && (
-        <Section>
-          <SectionHeader title="Conditions" count={conditions.length} />
-          <ConditionRows conditions={conditions} />
-        </Section>
-      )}
     </div>
   );
 }
