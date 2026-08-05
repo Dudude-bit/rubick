@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import {
+  Composition,
+  type CompositionSegment,
+} from "@/components/resources/detail-blocks";
 import { cn, formatAge } from "@/lib/utils";
 import {
   ResourceType,
@@ -240,73 +244,7 @@ function podTotal(pods: PodComposition): number {
   );
 }
 
-type Tone = "ok" | "warn" | "err" | "neutral";
-type Segment = { label: string; count: number; tone: Tone };
-
-const BAR_TONE: Record<Tone, string> = {
-  ok: "bg-ok",
-  warn: "bg-warn",
-  err: "bg-err",
-  neutral: "bg-fg-fnt",
-};
-
-/** Only the abnormal segments carry colour; the healthy majority stays quiet. */
-const LEGEND_TONE: Record<Tone, string> = {
-  ok: "text-fg-fnt",
-  warn: "text-warn",
-  err: "text-err",
-  neutral: "text-fg-fnt",
-};
-
-function Composition({
-  total,
-  label,
-  segments,
-}: {
-  /** `null` when the list was refused: a column that cannot be read must
-   *  not draw an empty bar, which is the picture of "nothing here". */
-  total: number | null;
-  label: string;
-  segments: Segment[];
-}) {
-  const visible = segments.filter((s) => s.count > 0);
-
-  return (
-    <div>
-      <div className="flex items-baseline gap-1.5">
-        <span
-          className={cn(
-            "font-mono text-[15px] font-semibold",
-            total == null ? "text-fg-fnt" : "text-fg"
-          )}
-        >
-          {total ?? "—"}
-        </span>
-        <span className="text-[11px] text-fg-mut">{label}</span>
-      </div>
-      <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
-        {visible.map((segment) => (
-          <span
-            key={segment.label}
-            className={BAR_TONE[segment.tone]}
-            style={{ flex: segment.count }}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-        {total == null ? (
-          <span className="text-fg-fnt">not readable with this access</span>
-        ) : (
-          visible.map((segment) => (
-            <span key={segment.label} className={LEGEND_TONE[segment.tone]}>
-              {segment.count} {segment.label}
-            </span>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
+type Segment = CompositionSegment;
 
 /**
  * Pods by phase.
@@ -394,21 +332,25 @@ export function WorkloadsPanel({
         <Composition
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
+          emptyMessage="none in scope"
           segments={podSegments(pods)}
         />
         <Composition
           total={counts.deployments}
           label={counts.deployments === 1 ? "Deployment" : "Deployments"}
+          emptyMessage="none in scope"
           segments={deploymentSegments(problems, counts.deployments)}
         />
         <Composition
           total={nodes.length}
           label={nodes.length === 1 ? "Node" : "Nodes"}
+          emptyMessage="none in scope"
           segments={nodeSegments(nodes)}
         />
         <Composition
           total={counts.jobs}
           label={counts.jobs === 1 ? "Job" : "Jobs"}
+          emptyMessage="none in scope"
           segments={
             jobs
               ? [

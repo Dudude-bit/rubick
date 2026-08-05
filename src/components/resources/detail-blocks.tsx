@@ -291,10 +291,16 @@ const SEGMENT_LEGEND: Record<CompositionTone, string> = {
 };
 
 export interface CompositionProps {
-  /** The denominator the segments partition. */
-  total: number;
+  /**
+   * The denominator the segments partition. `null` when the list was
+   * refused: a count that cannot be read must not draw an empty bar, which
+   * is the picture of "nothing here".
+   */
+  total: number | null;
   label: string;
   segments: CompositionSegment[];
+  /** Legend text when the total is real but nothing is in it. */
+  emptyMessage?: ReactNode;
   /** Why the total is what it is, e.g. "2 at a time · up to 6 retries". */
   note?: ReactNode;
 }
@@ -305,12 +311,14 @@ export interface CompositionProps {
  * A rollout is a single fact — "6 wanted, 5 running, 1 still coming" — and
  * printing desired/current/ready/updated/available as five equal rows made
  * the reader do the subtraction. The bar does it: the segments partition the
- * total, so a gap is visible before any number is read.
+ * total, so a gap is visible before any number is read. The overview's
+ * per-kind census is the same shape and shares this component.
  */
 export function Composition({
   total,
   label,
   segments,
+  emptyMessage = "nothing scheduled",
   note,
 }: CompositionProps) {
   const visible = segments.filter((segment) => segment.count > 0);
@@ -318,23 +326,31 @@ export function Composition({
   return (
     <div>
       <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[15px] font-semibold text-fg">
-          {total}
+        <span
+          className={cn(
+            "font-mono text-[15px] font-semibold",
+            total == null ? "text-fg-fnt" : "text-fg"
+          )}
+        >
+          {total ?? "—"}
         </span>
         <span className="text-[11px] text-fg-mut">{label}</span>
       </div>
       <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
-        {visible.map((segment) => (
-          <span
-            key={segment.label}
-            className={SEGMENT_BAR[segment.tone]}
-            style={{ flex: segment.count }}
-          />
-        ))}
+        {total != null &&
+          visible.map((segment) => (
+            <span
+              key={segment.label}
+              className={SEGMENT_BAR[segment.tone]}
+              style={{ flex: segment.count }}
+            />
+          ))}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-        {visible.length === 0 ? (
-          <span className="text-fg-fnt">nothing scheduled</span>
+        {total == null ? (
+          <span className="text-fg-fnt">not readable with this access</span>
+        ) : visible.length === 0 ? (
+          <span className="text-fg-fnt">{emptyMessage}</span>
         ) : (
           visible.map((segment) => (
             <span key={segment.label} className={SEGMENT_LEGEND[segment.tone]}>
@@ -382,36 +398,63 @@ export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
   );
 }
 
-const EVENT_ROW =
+/**
+ * Severity, reason, who it happened to, how often, how long ago. Exported
+ * because the `/events` screen builds its skeleton rows on the same grid.
+ */
+export const EVENT_ROW =
   "grid grid-cols-[10px_minmax(0,168px)_minmax(0,1fr)_54px_44px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
-/** The event feed's row, scoped to one object. Same rhythm as `/events`. */
+export interface EventRowsProps {
+  events: EventInfo[];
+  emptyMessage?: ReactNode;
+  /** Off when every row is the same object and naming it would be noise. */
+  showObject?: boolean;
+  /** Off when the whole feed is already scoped to one namespace. */
+  showNamespace?: boolean;
+}
+
+/** The event feed. Used whole-cluster on `/events` and scoped on a detail. */
 export function EventRows({
   events,
   emptyMessage = "No events for this object",
-}: {
-  events: EventInfo[];
-  emptyMessage?: string;
-}) {
+  showObject = false,
+  showNamespace = false,
+}: EventRowsProps) {
   if (events.length === 0) {
     return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
   }
   return (
     <div>
       {events.map((event) => (
-        <EventRow key={event.uid} event={event} />
+        <EventRow
+          key={event.uid}
+          event={event}
+          showObject={showObject}
+          showNamespace={showNamespace}
+        />
       ))}
     </div>
   );
 }
 
-function EventRow({ event }: { event: EventInfo }) {
+function EventRow({
+  event,
+  showObject,
+  showNamespace,
+}: {
+  event: EventInfo;
+  showObject: boolean;
+  showNamespace: boolean;
+}) {
   const isWarning = event.type === "Warning";
   const age = useRealtimeAge(event.lastTimestamp ?? null);
   const count = event.count ?? 0;
 
   return (
     <div className={EVENT_ROW}>
+      {/* Shape carries the severity alongside the colour — the feed has to
+       *  stay readable without hue. */}
       <span
         className={cn(
           "justify-self-center text-[9px]",
@@ -430,7 +473,22 @@ function EventRow({ event }: { event: EventInfo }) {
         <span className="sr-only">{event.type}: </span>
         {event.reason ?? "—"}
       </span>
-      <span className="truncate text-fg-fnt">{event.message}</span>
+      <span className="truncate text-fg-mid">
+        {showObject && (
+          <span className="font-mono">
+            {event.involvedObject.kind}/{event.involvedObject.name}
+          </span>
+        )}
+        {showNamespace && event.namespace && (
+          <span className="text-fg-fnt"> · {event.namespace}</span>
+        )}
+        {event.message && (
+          <span className="text-fg-fnt">
+            {showObject ? " — " : ""}
+            {event.message}
+          </span>
+        )}
+      </span>
       <span className="text-right font-mono text-[11px] text-fg-fnt">
         {count > 1 ? `×${count}` : ""}
       </span>

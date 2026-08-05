@@ -12,14 +12,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
-import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { EventFilters, EventInfo } from "@/generated/types";
+import type { EventFilters } from "@/generated/types";
 
 const TYPE_FILTERS = [
   { value: "all", label: "All" },
@@ -28,13 +28,6 @@ const TYPE_FILTERS = [
 ] as const;
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
-
-/**
- * One event, one line — same column rhythm as the overview's problem feed:
- * severity, reason, who it happened to, how often, how long ago.
- */
-const ROW =
-  "grid grid-cols-[10px_minmax(0,168px)_minmax(0,1fr)_54px_44px] items-center gap-2.5 px-1.5 py-[3px] text-xs";
 
 export function Events() {
   const { isConnected, currentNamespace } = useClusterStore();
@@ -141,18 +134,13 @@ export function Events() {
         <SectionBody>
           {showSkeleton ? (
             <EventsSkeleton />
-          ) : events.length === 0 ? (
-            <p className="px-1.5 py-8 text-center text-xs text-fg-mut">
-              No events in {currentNamespace || "any namespace"} yet.
-            </p>
           ) : (
-            events.map((event) => (
-              <EventRow
-                key={event.uid}
-                event={event}
-                showNamespace={!currentNamespace}
-              />
-            ))
+            <EventRows
+              events={events}
+              showObject
+              showNamespace={!currentNamespace}
+              emptyMessage={`No events in ${currentNamespace || "any namespace"} yet.`}
+            />
           )}
         </SectionBody>
       </Section>
@@ -174,68 +162,11 @@ function summarise(
   return parts.join(" · ");
 }
 
-function EventRow({
-  event,
-  showNamespace,
-}: {
-  event: EventInfo;
-  showNamespace: boolean;
-}) {
-  const isWarning = event.type === "Warning";
-  const age = useRealtimeAge(event.lastTimestamp ?? null);
-  const count = event.count ?? 0;
-
-  return (
-    <div className={ROW}>
-      {/* Shape carries the severity alongside the colour — the feed has to
-       *  stay readable without hue. */}
-      <span
-        className={cn(
-          "justify-self-center text-[9px]",
-          isWarning ? "text-warn" : "text-fg-fnt"
-        )}
-        aria-hidden="true"
-      >
-        {isWarning ? "▲" : "●"}
-      </span>
-      <span
-        className={cn(
-          "truncate font-mono font-medium",
-          isWarning ? "text-warn" : "text-fg-mut"
-        )}
-      >
-        <span className="sr-only">{event.type}: </span>
-        {event.reason ?? "—"}
-      </span>
-      <span className="truncate text-fg-mid">
-        <span className="font-mono">
-          {event.involvedObject.kind}/{event.involvedObject.name}
-        </span>
-        {showNamespace && event.namespace && (
-          <span className="text-fg-fnt"> · {event.namespace}</span>
-        )}
-        {event.message && (
-          <span className="text-fg-fnt"> — {event.message}</span>
-        )}
-      </span>
-      <span className="text-right font-mono text-[11px] text-fg-fnt">
-        {count > 1 ? `×${count}` : ""}
-      </span>
-      <span
-        className="text-right text-[11px] text-fg-fnt"
-        title={formatDate(event.lastTimestamp) ?? undefined}
-      >
-        {event.lastTimestamp ? age : "—"}
-      </span>
-    </div>
-  );
-}
-
 function EventsSkeleton() {
   return (
     <div aria-hidden="true">
       {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className={ROW}>
+        <div key={index} className={EVENT_ROW}>
           <span />
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-3 w-full" />
