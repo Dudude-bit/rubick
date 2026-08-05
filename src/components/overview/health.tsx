@@ -1,16 +1,7 @@
 import { Link } from "react-router-dom";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronRight,
-  CircleAlert,
-  Cpu,
-  MemoryStick,
-} from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { cn, formatAge } from "@/lib/utils";
-import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import {
   ResourceType,
   toPlural,
@@ -27,13 +18,51 @@ import type {
 /** Reserved share past which the scheduler is the binding constraint. */
 const PRESSURE_WARN = 0.85;
 
-/** `formatCPU` renders cores as a bare number ("16.0"), which reads as
- *  nonsense next to a millicore value ("220m / 16.0"). Spell out the unit
- *  here rather than change the shared helper other screens rely on. */
-function formatCores(millicores: number): string {
-  return millicores < 1000
-    ? formatCPU(millicores)
-    : `${(millicores / 1000).toFixed(1)} cores`;
+const KIB = 1024;
+const MEMORY_UNITS: [string, number][] = [
+  ["Ti", KIB ** 4],
+  ["Gi", KIB ** 3],
+  ["Mi", KIB ** 2],
+  ["Ki", KIB],
+];
+
+/**
+ * The unit rides along dimmed and a size smaller, so the number keeps the
+ * eye in a column of otherwise identical-looking quantities.
+ */
+function Unit({ children }: { children: React.ReactNode }) {
+  return <span className="text-[0.85em] text-fg-fnt">{children}</span>;
+}
+
+/** A pair of quantities sharing one unit: `3.2/4.5 cores`, `27.4/31.2Gi`. */
+type Ratio = { used: string; total: string; unit: string };
+
+function cpuRatio(pressure: ResourcePressure): Ratio {
+  // The unit is chosen from the denominator so both halves stay comparable —
+  // "250m/4.5 cores" makes the reader do the conversion.
+  if (pressure.allocatable >= 1000) {
+    return {
+      used: (pressure.requested / 1000).toFixed(1),
+      total: (pressure.allocatable / 1000).toFixed(1),
+      unit: " cores",
+    };
+  }
+  return {
+    used: String(Math.round(pressure.requested)),
+    total: String(Math.round(pressure.allocatable)),
+    unit: "m",
+  };
+}
+
+function memoryRatio(pressure: ResourcePressure): Ratio {
+  const [unit, size] = MEMORY_UNITS.find(
+    ([, size]) => pressure.allocatable >= size
+  ) ?? ["B", 1];
+  return {
+    used: (pressure.requested / size).toFixed(1),
+    total: (pressure.allocatable / size).toFixed(1),
+    unit,
+  };
 }
 
 const DETAIL_ROUTE: Record<string, ResourceKind | undefined> = {
@@ -51,67 +80,95 @@ function problemHref(problem: ClusterProblem): string | null {
   return `/${toPlural(type)}/${problem.namespace}/${problem.name}`;
 }
 
+const ROW =
+  "grid grid-cols-[10px_150px_minmax(0,1fr)_60px_74px_46px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
+
+/**
+ * A 60x14 trend line for one problem row.
+ *
+ * There is no history behind this. The backend returns a snapshot, so the
+ * only shape that can be justified from the data is "a pod that has already
+ * restarted is still climbing"; everything else draws flat. It is derived
+ * from the row next to it, not measured telemetry — do not read it as a
+ * series, and do not add shapes that no field in `ClusterProblem` supports.
+ */
+function Sparkline({
+  rising,
+  className,
+}: {
+  rising: boolean;
+  className: string;
+}) {
+  return (
+    <svg
+      width="60"
+      height="14"
+      viewBox="0 0 60 14"
+      className={cn("block", className)}
+      aria-hidden="true"
+    >
+      <polyline
+        points={
+          rising
+            ? "0,12 10,12 20,10 30,8 40,5 50,3 60,1"
+            : "0,7 10,7 20,7 30,7 40,7 50,7 60,7"
+        }
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
 function ProblemRow({ problem }: { problem: ClusterProblem }) {
   const isCritical = problem.severity === "critical";
+  const tone = isCritical ? "text-err" : "text-warn";
   const href = problemHref(problem);
+  const restarts = problem.restarts ?? 0;
 
   const body = (
-    <div className="flex items-start gap-3 px-2 py-2.5">
-      {/* Icon carries the severity too — colour alone would be invisible to
-       *  anyone with a red/green deficiency, and these rows are the whole
-       *  point of the screen. */}
-      {isCritical ? (
-        <CircleAlert
-          className="mt-0.5 h-4 w-4 shrink-0 text-err"
-          aria-hidden="true"
-        />
-      ) : (
-        <AlertTriangle
-          className="mt-0.5 h-4 w-4 shrink-0 text-warn"
-          aria-hidden="true"
-        />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span
-            className={cn(
-              "font-mono text-sm font-medium",
-              isCritical ? "text-err" : "text-warn"
-            )}
-          >
-            {problem.reason}
-          </span>
-          <span className="truncate font-mono text-sm">{problem.name}</span>
-          {problem.namespace && (
-            <span className="shrink-0 text-xs text-fg-mut">
-              {problem.namespace}
-            </span>
-          )}
-        </div>
+    <>
+      {/* Shape carries the severity alongside the colour: a red/green
+       *  deficiency must not flatten the only ranking on this screen. */}
+      <span className={cn("justify-self-center text-[9px]", tone)}>
+        {isCritical ? "●" : "▲"}
+      </span>
+      <span className={cn("truncate font-mono font-medium", tone)}>
+        {problem.reason}
+      </span>
+      <span className="truncate text-fg-mid">
+        {problem.name}
+        {problem.namespace && (
+          <span className="text-fg-fnt"> · {problem.namespace}</span>
+        )}
         {problem.detail && (
-          <p className="mt-0.5 truncate text-xs text-fg-mut">
-            {problem.detail}
-          </p>
+          <span className="text-fg-fnt"> — {problem.detail}</span>
         )}
-      </div>
-      <div className="flex shrink-0 items-center gap-1 text-xs text-fg-mut">
-        {problem.restarts != null && problem.restarts > 0 && (
-          <span className="mr-2">{problem.restarts}&nbsp;restarts</span>
+      </span>
+      <Sparkline
+        rising={problem.kind === "Pod" && restarts > 0}
+        className={tone}
+      />
+      <span className="text-right font-mono text-fg-mut">
+        {restarts > 0 ? (
+          <>
+            {restarts}
+            <Unit> restarts</Unit>
+          </>
+        ) : (
+          "—"
         )}
-        <span>{formatAge(problem.since)}</span>
-        {href && <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
-      </div>
-    </div>
+      </span>
+      <span className="text-right text-[11px] text-fg-fnt">
+        {formatAge(problem.since)}
+      </span>
+    </>
   );
 
-  if (!href) {
-    return <div className="border-b border-hair last:border-b-0">{body}</div>;
-  }
+  if (!href) return <div className={ROW}>{body}</div>;
   return (
-    <Link
-      to={href}
-      className="block border-b border-hair transition-colors last:border-b-0 hover:bg-hover"
-    >
+    <Link to={href} className={cn(ROW, "hover:bg-hover")}>
       {body}
     </Link>
   );
@@ -121,43 +178,27 @@ export function ProblemsPanel({
   problems,
   problemsTruncated,
   podCount,
+  nodes,
 }: {
   problems: ClusterProblem[];
   /** Rows the backend dropped from the end of the ranked list. */
   problemsTruncated: number;
   podCount: number;
+  nodes: NodeSummary[];
 }) {
-  // The healthy state is deliberately one line, not a card full of green
-  // checkmarks: when nothing is wrong this screen should get out of the way
-  // and let the topology below take the space.
-  if (problems.length === 0) {
-    return (
-      <div className="flex items-center gap-2 px-2 py-3">
-        <CheckCircle2 className="h-4 w-4 text-ok" aria-hidden="true" />
-        <span className="text-sm font-medium">No problems detected</span>
-        <span className="text-sm text-fg-mut">
-          {podCount} pods, all workloads available
-        </span>
-      </div>
-    );
-  }
-
-  const critical = problems.filter((p) => p.severity === "critical").length;
   // The headline counts everything that is wrong, not everything that fits —
   // an outage that overflows the cap must not read as smaller than it is.
   const total = problems.length + problemsTruncated;
+  const healthyPods = Math.max(0, podCount - countPodProblems(problems));
+  const readyNodes = nodes.filter((n) => n.ready).length;
 
   return (
     <Section>
       <SectionHeader
-        title={`${total} ${total === 1 ? "problem" : "problems"} need attention`}
-        count={
-          critical > 0 && total !== critical
-            ? `${critical} critical`
-            : undefined
-        }
+        title="Needs attention"
+        count={total > 0 ? `${total} · worst first` : "nothing broken"}
       />
-      <SectionBody>
+      <div>
         {problems.map((problem) => (
           <ProblemRow
             key={`${problem.kind}/${problem.namespace ?? "-"}/${problem.name}/${problem.reason}`}
@@ -165,64 +206,232 @@ export function ProblemsPanel({
           />
         ))}
         {problemsTruncated > 0 && (
-          <p className="px-2 py-2.5 text-xs text-fg-mut">
+          <p className="px-1.5 py-[5px] text-[11px] text-fg-fnt">
             +{problemsTruncated} more — showing the {problems.length} most
             severe
           </p>
         )}
-      </SectionBody>
+        {/* What is fine gets one muted line at the end, never a panel of
+         *  green checkmarks competing with the rows above it. */}
+        <div className={ROW}>
+          <span className="justify-self-center text-[9px] text-ok">{"●"}</span>
+          <span className="truncate font-mono font-medium text-fg-mut">
+            Healthy
+          </span>
+          <span className="truncate text-fg-fnt">
+            {healthyPods} of {podCount} pods · {readyNodes} of {nodes.length}{" "}
+            nodes ready
+          </span>
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
     </Section>
   );
 }
 
-function PressureBar({
-  pressure,
-  format,
+/** Pods the ranked list already accounts for, so they are not counted twice. */
+function countPodProblems(problems: ClusterProblem[]): number {
+  return problems.filter((p) => p.kind === "Pod").length;
+}
+
+type Tone = "ok" | "warn" | "err" | "neutral";
+type Segment = { label: string; count: number; tone: Tone };
+
+const BAR_TONE: Record<Tone, string> = {
+  ok: "bg-ok",
+  warn: "bg-warn",
+  err: "bg-err",
+  neutral: "bg-fg-fnt",
+};
+
+/** Only the abnormal segments carry colour; the healthy majority stays quiet. */
+const LEGEND_TONE: Record<Tone, string> = {
+  ok: "text-fg-fnt",
+  warn: "text-warn",
+  err: "text-err",
+  neutral: "text-fg-fnt",
+};
+
+function Composition({
+  total,
+  label,
+  segments,
 }: {
-  pressure: ResourcePressure;
-  format: (value: number) => string;
+  total: number;
+  label: string;
+  segments: Segment[];
 }) {
-  const ratio =
+  const visible = segments.filter((s) => s.count > 0);
+
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-[15px] font-semibold text-fg">
+          {total}
+        </span>
+        <span className="text-[11px] text-fg-mut">{label}</span>
+      </div>
+      <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
+        {visible.map((segment) => (
+          <span
+            key={segment.label}
+            className={BAR_TONE[segment.tone]}
+            style={{ flex: segment.count }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+        {visible.map((segment) => (
+          <span key={segment.label} className={LEGEND_TONE[segment.tone]}>
+            {segment.count} {segment.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function podSegments(problems: ClusterProblem[], podCount: number): Segment[] {
+  // Grouped by the reason the backend already computed — "3 CrashLoopBackOff"
+  // is a different problem from "1 Pending" even though both are red.
+  const byReason = new Map<string, Segment>();
+  for (const problem of problems) {
+    if (problem.kind !== "Pod") continue;
+    const existing = byReason.get(problem.reason);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    byReason.set(problem.reason, {
+      label: problem.reason,
+      count: 1,
+      tone: problem.severity === "critical" ? "err" : "warn",
+    });
+  }
+  // Everything the problem pass did not flag. Succeeded pods land here too:
+  // the backend does not report phase, so the remainder is "not broken"
+  // rather than "Running", and is labelled as such.
+  const healthy = Math.max(0, podCount - countPodProblems(problems));
+  return [
+    { label: "Healthy", count: healthy, tone: "ok" },
+    ...[...byReason.values()].sort((a, b) => b.count - a.count),
+  ];
+}
+
+function nodeSegments(nodes: NodeSummary[]): Segment[] {
+  return [
+    {
+      label: "Ready",
+      count: nodes.filter((n) => n.ready && n.schedulable).length,
+      tone: "ok",
+    },
+    {
+      label: "Cordoned",
+      count: nodes.filter((n) => n.ready && !n.schedulable).length,
+      tone: "warn",
+    },
+    {
+      label: "NotReady",
+      count: nodes.filter((n) => !n.ready).length,
+      tone: "err",
+    },
+  ];
+}
+
+/**
+ * Composition of what this scope is made of.
+ *
+ * Only the kinds `get_cluster_overview` can account for in full are shown.
+ * Deployments and Jobs appear in the payload only when they are already
+ * broken, so their totals are unknown and a bar drawn from the problem list
+ * alone would claim the cluster has as many deployments as it has failures.
+ */
+export function WorkloadsPanel({
+  problems,
+  problemsTruncated,
+  podCount,
+  nodes,
+  scope,
+}: {
+  problems: ClusterProblem[];
+  problemsTruncated: number;
+  podCount: number;
+  nodes: NodeSummary[];
+  scope: string;
+}) {
+  return (
+    <Section>
+      <SectionHeader
+        title="Workloads"
+        count={
+          problemsTruncated > 0
+            ? `${scope} · +${problemsTruncated} unranked problems`
+            : scope
+        }
+      />
+      <div className="grid grid-cols-4 gap-[22px]">
+        <Composition
+          total={podCount}
+          label={podCount === 1 ? "Pod" : "Pods"}
+          segments={podSegments(problems, podCount)}
+        />
+        <Composition
+          total={nodes.length}
+          label={nodes.length === 1 ? "Node" : "Nodes"}
+          segments={nodeSegments(nodes)}
+        />
+      </div>
+    </Section>
+  );
+}
+
+function PressureRow({
+  label,
+  pressure,
+  ratio: format,
+}: {
+  label: string;
+  pressure: ResourcePressure;
+  ratio: (pressure: ResourcePressure) => Ratio;
+}) {
+  const share =
     pressure.allocatable > 0 ? pressure.requested / pressure.allocatable : 0;
-  const usageRatio =
+  const usedShare =
     pressure.allocatable > 0 && pressure.usage != null
       ? pressure.usage / pressure.allocatable
       : null;
-  const tight = ratio >= PRESSURE_WARN;
+  const tight = share >= PRESSURE_WARN;
+  const { used, total, unit } = format(pressure);
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-baseline justify-between text-sm">
-        <span className={cn("font-medium", tight && "text-warn")}>
-          {Math.round(ratio * 100)}% reserved
-        </span>
-        <span className="font-mono text-xs text-fg-mut">
-          {format(pressure.requested)} / {format(pressure.allocatable)}
-        </span>
-      </div>
-      {/* Track needs its own contrast: `bg-hover` is 4-5% ink and the meter
-       *  reads as floating fill with no scale behind it, worst on light. */}
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-fg-fnt/25">
-        <div
-          className={cn("h-full rounded-full", tight ? "bg-warn" : "bg-info")}
-          style={{ width: `${Math.min(100, ratio * 100)}%` }}
+    <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
+      <span className="text-[11px] text-fg-mut">{label}</span>
+      <span className="relative h-[5px] overflow-hidden rounded-[3px] bg-sel">
+        <span
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-[3px]",
+            tight ? "bg-warn" : "bg-info"
+          )}
+          style={{ width: `${Math.min(100, share * 100)}%` }}
         />
-        {/* Actual usage as a tick, not a second bar: it is context for the
+        {/* Live usage is a tick, not a second bar: it is context for the
          *  reserved number, not a competing metric. */}
-        {usageRatio != null && (
-          <div
-            className="absolute top-0 h-full w-0.5 bg-fg-mid"
-            style={{ left: `${Math.min(100, usageRatio * 100)}%` }}
-            aria-hidden="true"
+        {usedShare != null && (
+          <span
+            className="absolute inset-y-0 w-0.5 bg-fg-mid"
+            style={{ left: `${Math.min(100, usedShare * 100)}%` }}
           />
         )}
-      </div>
-      {usageRatio != null && (
-        <p className="text-xs text-fg-mut">
-          actually using {format(pressure.usage ?? 0)} (
-          {Math.round(usageRatio * 100)}%)
-        </p>
-      )}
+      </span>
+      <span className="text-right font-mono text-[11px] text-fg-mut">
+        {used}
+        <Unit>/</Unit>
+        {total}
+        <Unit>{unit}</Unit> · {Math.round(share * 100)}
+        <Unit>%</Unit>
+      </span>
     </div>
   );
 }
@@ -236,103 +445,91 @@ export function SchedulerPanel({
 }) {
   return (
     <Section>
-      {/* Naming the denominator matters: people read a low usage bar as
-       *  "room to spare" and then wonder why pods sit Pending. */}
+      {/* Naming the denominator matters: people read a low bar as "room to
+       *  spare" and then wonder why the next pod sits Pending. */}
       <SectionHeader
         title="Scheduler headroom"
-        description="Share of allocatable capacity already reserved by pod requests — this, not usage, decides whether the next pod schedules."
+        count={
+          metricsAvailable
+            ? "requests vs allocatable · tick marks live usage"
+            : "requests vs allocatable · no metrics-server, live usage unknown"
+        }
       />
-      <div className="flex flex-col gap-4 pt-1">
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-fg-mut">
-            <Cpu className="h-3.5 w-3.5" aria-hidden="true" />
-            CPU
-          </div>
-          <PressureBar pressure={scheduler.cpu} format={formatCores} />
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-fg-mut">
-            <MemoryStick className="h-3.5 w-3.5" aria-hidden="true" />
-            Memory
-          </div>
-          <PressureBar
-            pressure={scheduler.memory}
-            format={(value) => formatMemory(value, 1)}
-          />
-        </div>
-        {!metricsAvailable && (
-          <p className="text-xs text-fg-mut">
-            metrics-server unavailable — reserved figures are exact, live usage
-            is not shown.
-          </p>
-        )}
+      <div>
+        <PressureRow label="CPU" pressure={scheduler.cpu} ratio={cpuRatio} />
+        <PressureRow
+          label="Memory"
+          pressure={scheduler.memory}
+          ratio={memoryRatio}
+        />
       </div>
     </Section>
   );
 }
 
 function NodeRow({ node }: { node: NodeSummary }) {
-  const cpuRatio =
-    node.cpu.allocatable > 0 ? node.cpu.requested / node.cpu.allocatable : 0;
-  const memRatio =
-    node.memory.allocatable > 0
-      ? node.memory.requested / node.memory.allocatable
-      : 0;
-
   return (
     <Link
       to={`/${toPlural(ResourceType.Node)}/${node.name}`}
-      className="flex items-center gap-3 border-b border-hair px-2 py-2.5 transition-colors last:border-b-0 hover:bg-hover"
+      className="grid grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
     >
       <span
         className={cn(
-          "h-2 w-2 shrink-0 rounded-full",
+          "h-[7px] w-[7px] rounded-full",
           node.ready ? "bg-ok" : "bg-err"
         )}
         aria-hidden="true"
       />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate font-mono text-sm">{node.name}</span>
-          {node.roles.map((role) => (
-            <span key={role} className="text-xs text-fg-mut">
-              {role}
-            </span>
-          ))}
-          {!node.schedulable && (
-            <span className="text-xs text-warn">cordoned</span>
-          )}
-          {!node.ready && <span className="text-xs text-err">NotReady</span>}
-        </div>
-        <div className="mt-1 flex items-center gap-4 text-xs text-fg-mut">
-          <span className="w-28 shrink-0">
-            cpu {Math.round(cpuRatio * 100)}% reserved
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="truncate font-mono">{node.name}</span>
+        {node.roles.map((role) => (
+          <span key={role} className="text-[11px] text-fg-fnt">
+            {role}
           </span>
-          <span className="w-32 shrink-0">
-            mem {Math.round(memRatio * 100)}% reserved
-          </span>
-          <span>
-            {node.podCount} pods
-            {node.podCapacity != null && ` / ${node.podCapacity}`}
-          </span>
-        </div>
-      </div>
+        ))}
+        {!node.schedulable && (
+          <span className="text-[11px] text-warn">cordoned</span>
+        )}
+        {!node.ready && <span className="text-[11px] text-err">NotReady</span>}
+      </span>
+      <span className="text-right font-mono text-[11px] text-fg-mut">
+        {node.podCount}
+        {node.podCapacity != null && (
+          <>
+            <Unit>/</Unit>
+            {node.podCapacity}
+          </>
+        )}
+        <Unit> pods</Unit>
+      </span>
     </Link>
   );
 }
 
-export function NodesPanel({ nodes }: { nodes: NodeSummary[] }) {
+export function NodesPanel({
+  nodes,
+  version,
+}: {
+  nodes: NodeSummary[];
+  /** Server version, shown here rather than in a page title of its own. */
+  version?: string;
+}) {
   // Rendered in full, unlike the problems list: node counts are bounded in
   // practice, and hiding one behind a "+N more" would hide the node someone
   // opened this panel to find.
   return (
     <Section>
-      <SectionHeader title="Nodes" count={nodes.length} />
-      <SectionBody>
+      <SectionHeader
+        title="Nodes"
+        count={
+          version ? `${nodes.length} · Kubernetes ${version}` : nodes.length
+        }
+      />
+      <div>
         {nodes.map((node) => (
           <NodeRow key={node.name} node={node} />
         ))}
-      </SectionBody>
+      </div>
     </Section>
   );
 }
@@ -342,32 +539,27 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
 
   return (
     <Section>
-      <SectionHeader
-        title="Warning events"
-        description="last hour, grouped by reason"
-      />
+      <SectionHeader title="Warning events" count="last hour, by reason" />
       <SectionBody>
         {warnings.map((warning) => (
           <div
             key={warning.reason}
-            className="flex items-start gap-3 border-b border-hair px-2 py-2 last:border-b-0"
+            className="grid grid-cols-[150px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs"
           >
-            <span className="font-mono text-sm text-warn">
+            <span className="truncate font-mono font-medium text-warn">
               {warning.reason}
+              {warning.count > 1 && <Unit> ×{warning.count}</Unit>}
             </span>
-            {warning.count > 1 && (
-              <span className="shrink-0 text-xs text-fg-mut">
-                &times;{warning.count}
-              </span>
-            )}
-            <p className="min-w-0 flex-1 truncate text-xs text-fg-mut">
+            <span className="truncate text-fg-mid">
               {warning.object && (
                 <span className="font-mono">{warning.object}</span>
               )}
-              {warning.object && warning.sample && " — "}
-              {warning.sample}
-            </p>
-            <span className="shrink-0 text-xs text-fg-mut">
+              {warning.object && warning.sample && " "}
+              {warning.sample && (
+                <span className="text-fg-fnt">{warning.sample}</span>
+              )}
+            </span>
+            <span className="text-right text-[11px] text-fg-fnt">
               {formatAge(warning.lastSeen)}
             </span>
           </div>

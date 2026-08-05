@@ -1,34 +1,31 @@
-import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import { Section } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import { OverviewHeader } from "@/components/overview";
 import {
   NodesPanel,
   ProblemsPanel,
   SchedulerPanel,
   WarningsPanel,
+  WorkloadsPanel,
 } from "@/components/overview/health";
 
 /**
  * The overview answers one question — "do I need to do something right
- * now?" — and reorders itself around the answer.
+ * now?" — and the reading order answers it: what is broken, what this scope
+ * is made of, how much room the scheduler has left, and what the nodes and
+ * the event feed have been saying.
  *
- * When something is broken, the problem list owns the top of the screen and
- * everything else compresses into supporting context. When nothing is, that
- * list collapses to a single line and the screen becomes an orientation
- * view: what this cluster is, how it is laid out, how much room is left.
- *
- * It deliberately does not show object counts or top-consumers. Neither
- * answers the question, and both crowd out what does.
+ * The cluster identity is not repeated here: the header already carries the
+ * context and namespace selectors, and a page title restating them was the
+ * largest block on a screen whose first row is the point.
  */
 export function ClusterOverview() {
   const { isConnected, currentContext, currentNamespace } = useClusterStore();
@@ -54,18 +51,6 @@ export function ClusterOverview() {
     refetchInterval: REFRESH_INTERVALS.overview,
     refetchOnWindowFocus: false,
   });
-
-  const subtitle = useMemo(() => {
-    const parts = [
-      currentNamespace ? `Namespace: ${currentNamespace}` : "All namespaces",
-    ];
-    if (clusterInfo?.server_version) {
-      parts.push(`Kubernetes ${clusterInfo.server_version}`);
-    }
-    if (clusterInfo?.platform) parts.push(clusterInfo.platform);
-    if (overview) parts.push(`${overview.podCount} pods`);
-    return parts.join(" • ");
-  }, [clusterInfo, currentNamespace, overview]);
 
   if (!isConnected) {
     return (
@@ -95,106 +80,51 @@ export function ClusterOverview() {
 
   if (error && !overview) {
     return (
-      <div className="space-y-6">
-        <OverviewHeader
-          title={currentContext || "Cluster Overview"}
-          subtitle={subtitle}
-        />
-        <Section>
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-            <h2 className="text-[13px] font-semibold tracking-tight text-err">
-              Could not read cluster state
-            </h2>
-          </div>
-          <p className="text-xs text-fg-mut">{error.message}</p>
-          <div className="flex items-center gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              Retry
-            </Button>
-          </div>
-        </Section>
-      </div>
+      <Section>
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+          <h2 className="text-[13px] font-semibold tracking-tight text-err">
+            Could not read cluster state
+          </h2>
+        </div>
+        <p className="text-xs text-fg-mut">{error.message}</p>
+        <div className="flex items-center gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Retry
+          </Button>
+        </div>
+      </Section>
     );
   }
 
   if (!overview) return null;
 
-  const hasProblems = overview.problems.length > 0;
+  const scope = currentNamespace || "all namespaces";
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-200">
-      <OverviewHeader
-        title={currentContext || "Cluster Overview"}
-        subtitle={subtitle}
-      />
-
+    <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
       <ProblemsPanel
         problems={overview.problems}
         problemsTruncated={overview.problemsTruncated}
         podCount={overview.podCount}
+        nodes={overview.nodes}
       />
-
-      {hasProblems ? (
-        // Triage layout: the problem list above is the work queue, and these
-        // two answer the follow-up questions it raises — "is the cluster out
-        // of room?" and "what else has been complaining?".
-        <>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <SchedulerPanel
-              scheduler={overview.scheduler}
-              metricsAvailable={overview.metricsAvailable}
-            />
-            <WarningsPanel warnings={overview.warnings} />
-          </div>
-          <NodesPanel nodes={overview.nodes} />
-        </>
-      ) : (
-        // Orientation layout: nothing is on fire, so lead with what this
-        // cluster is made of.
-        <>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <NodesPanel nodes={overview.nodes} />
-            <SchedulerPanel
-              scheduler={overview.scheduler}
-              metricsAvailable={overview.metricsAvailable}
-            />
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <NamespacesPanel namespaces={overview.namespaces} />
-            <WarningsPanel warnings={overview.warnings} />
-          </div>
-        </>
-      )}
+      <WorkloadsPanel
+        problems={overview.problems}
+        problemsTruncated={overview.problemsTruncated}
+        podCount={overview.podCount}
+        nodes={overview.nodes}
+        scope={scope}
+      />
+      <SchedulerPanel
+        scheduler={overview.scheduler}
+        metricsAvailable={overview.metricsAvailable}
+      />
+      <NodesPanel
+        nodes={overview.nodes}
+        version={clusterInfo?.server_version}
+      />
+      <WarningsPanel warnings={overview.warnings} />
     </div>
-  );
-}
-
-function NamespacesPanel({
-  namespaces,
-}: {
-  namespaces: { name: string; podCount: number }[];
-}) {
-  if (namespaces.length === 0) return null;
-  const busiest = namespaces.slice(0, 8);
-
-  return (
-    <Section>
-      <SectionHeader
-        title="Namespaces with workloads"
-        count={namespaces.length}
-      />
-      <SectionBody>
-        {busiest.map((ns) => (
-          <div
-            key={ns.name}
-            className="flex items-center justify-between border-b border-hair px-2 py-2 text-sm last:border-b-0"
-          >
-            <span className="font-mono">{ns.name}</span>
-            <span className="text-xs text-fg-mut">{ns.podCount} pods</span>
-          </div>
-        ))}
-      </SectionBody>
-    </Section>
   );
 }
