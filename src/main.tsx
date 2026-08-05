@@ -20,9 +20,20 @@ import "./index.css";
 import { logDebug, logError, logInfo } from "@/lib/logger";
 import { registerBuiltInPlugins } from "@/lib/crd-plugins/plugins";
 import { STALE_TIMES } from "@/lib/refresh";
+import { commands } from "@/lib/commands";
+import { setHostOs } from "@/lib/platform";
 
 // Register built-in CRD plugins for enhanced UI
 registerBuiltInPlugins();
+
+// Resolved once at boot. Rendering a shortcut is synchronous, so the
+// value has to be in place before the first paint that shows one.
+void commands
+  .getAppInfo()
+  .then((info) => setHostOs(info.os))
+  .catch(() => {
+    /* keep the ctrl fallback */
+  });
 
 const formatKey = (key: unknown) => {
   try {

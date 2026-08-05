@@ -220,6 +220,7 @@ export interface AppInfo {
   version: string;
   name: string;
   tauriVersion: string;
+  os: string;
 }
 
 export interface CliPathsConfig {
