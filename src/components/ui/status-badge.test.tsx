@@ -38,14 +38,13 @@ describe("no chip, colour only on anomalies", () => {
     render(<StatusBadge status={status} />).container.firstElementChild!
       .className;
 
-  it.each(["Running", "Succeeded", "Bound", "Ready"])(
-    "leaves %s uncoloured",
-    (status) => {
-      const cls = classOf(status);
-      expect(cls).not.toMatch(/text-(ok|warn|err|info)\b/);
-      expect(cls).toContain("text-fg-mid");
-    }
-  );
+  it.each([
+    ["Running", "text-ok"],
+    ["Succeeded", "text-ok"],
+    ["Completed", "text-fg-mut"],
+  ])("gives %s the %s role colour", (status, expected) => {
+    expect(classOf(status)).toContain(expected);
+  });
 
   it.each([
     ["CrashLoopBackOff", "text-err"],
@@ -70,5 +69,51 @@ describe("no chip, colour only on anomalies", () => {
   it("still says the status in words, so colour is never alone", () => {
     const { getByText } = render(<StatusBadge status="CrashLoopBackOff" />);
     expect(getByText("CrashLoopBackOff")).toBeInTheDocument();
+  });
+});
+
+// Colour is the fastest channel, not the only one. Roughly one reader in
+// twelve cannot separate the red from the green, and a screenshot in
+// greyscale is how half of these end up in a bug report.
+describe("severity survives without colour", () => {
+  const iconOf = (status: string) => {
+    const { container } = render(<StatusBadge status={status} />);
+    const icon = container.querySelector('[data-testid="status-badge-icon"]');
+    return icon?.getAttribute("class")?.match(/lucide-[a-z-]+/)?.[0] ?? null;
+  };
+
+  it("gives each role a distinct glyph", () => {
+    const shapes = [
+      "Running",
+      "Pending",
+      "NotReady",
+      "CrashLoopBackOff",
+      "Completed",
+    ].map(iconOf);
+    expect(shapes.every(Boolean)).toBe(true);
+    expect(new Set(shapes).size).toBe(shapes.length);
+  });
+
+  it("hides the glyph from a screen reader, which already hears the word", () => {
+    const { container } = render(<StatusBadge status="Failed" />);
+    expect(
+      container.querySelector('[data-testid="status-badge-icon"]')
+    ).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("drops the glyph where the layout already carries a mark", () => {
+    const { container } = render(
+      <StatusBadge status="Failed" showIcon={false} />
+    );
+    expect(
+      container.querySelector('[data-testid="status-badge-icon"]')
+    ).toBeNull();
+  });
+
+  it("prefers an explicit dot over the glyph", () => {
+    const { container } = render(<StatusBadge status="Failed" showDot />);
+    expect(
+      container.querySelector('[data-testid="status-badge-icon"]')
+    ).toBeNull();
   });
 });
