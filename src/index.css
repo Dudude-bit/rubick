@@ -138,8 +138,13 @@
   padding: 8px;
 }
 
+/* xterm.css hardcodes the viewport to #000 and xterm repaints it with an
+ * inline style, so only `!important` reaches it. Without this the padding
+ * above — which the renderer's canvases do not cover — draws a black frame
+ * around the terminal on the light canvas. */
 .xterm-viewport {
   overflow-y: auto !important;
+  background-color: hsl(var(--canvas)) !important;
 }
 
 /* Monaco editor theme support (for YAML editing) */
