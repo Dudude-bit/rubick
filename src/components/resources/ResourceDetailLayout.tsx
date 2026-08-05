@@ -1,39 +1,32 @@
 /**
- * ResourceDetailLayout - Unified layout for resource detail pages
+ * The frame every resource detail page sits in: the header, the page's own
+ * blocks, the tab strip, and the metadata trailer.
  *
- * Provides common structure for detail pages including:
- * - Loading state with skeleton
- * - Error state with navigation
- * - Consistent layout structure
+ * Nothing here draws a surface. Sections are separated by 22px of canvas and
+ * the occasional hairline, which is the same rhythm the overview uses.
  */
 
 import type { ReactNode } from "react";
-import type { ConditionInfo } from "@/generated/types";
-import { Button } from "@/components/ui/button";
-import { DetailSkeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Section, SectionHeader } from "@/components/ui/section";
-import { ResourceDetailHeader } from "./ResourceDetailHeader";
-import { LabelsDisplay } from "./LabelsDisplay";
-import { ConditionsDisplay } from "./ConditionsDisplay";
-import { ArrowLeft, AlertCircle, RefreshCw } from "lucide-react";
-import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
-/**
- * Error state for detail pages
- */
+import type { ConditionInfo } from "@/generated/types";
+import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { ResourceDetailHeader } from "./ResourceDetailHeader";
+import { cn } from "@/lib/utils";
+import { ConditionRows, DetailAction } from "./detail-blocks";
+import { KeyValueRow, KeyValueSection } from "./detail-kv";
+import { recordToKeyValues } from "./key-values";
+
 interface DetailErrorProps {
-  /** Error object or message */
   error: Error | string | null;
-  /** Resource kind for display */
   resourceKind: string;
-  /** Go back callback */
   onBack: () => void;
-  /** Optional: Action to find replacement */
+  /** Pods are replaced rather than restarted, so a 404 offers to follow. */
   onFindReplacement?: () => void;
-  /** Is searching for replacement */
   isSearching?: boolean;
-  /** Additional message */
   additionalMessage?: string;
 }
 
@@ -46,70 +39,64 @@ export function DetailError({
   additionalMessage,
 }: DetailErrorProps) {
   const isNotFound = isResourceNotFoundError(error);
+  const kind = resourceKind.toLowerCase();
 
   return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4">
-      <AlertCircle className="h-12 w-12 text-err" />
-      <p className="text-err text-lg font-medium">
+    <Section className="max-w-lg">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+        <h2 className="text-[13px] font-semibold tracking-tight text-err">
+          {isNotFound
+            ? `${resourceKind} not found`
+            : `Could not read this ${kind}`}
+        </h2>
+      </div>
+      <p className="text-xs text-fg-mut">
         {isNotFound
-          ? `${resourceKind} not found`
-          : `Failed to load ${resourceKind.toLowerCase()} details`}
+          ? `The ${kind} may have been deleted or recreated under a new name.`
+          : typeof error === "string"
+            ? error
+            : (error?.message ?? "The cluster did not answer.")}
       </p>
-      {isNotFound && (
-        <p className="text-fg-mut text-sm">
-          The {resourceKind.toLowerCase()} may have been deleted or recreated
-        </p>
-      )}
       {additionalMessage && (
-        <p className="text-fg-mut text-sm">{additionalMessage}</p>
+        <p className="text-xs text-fg-mut">{additionalMessage}</p>
       )}
-      {isSearching && (
-        <div className="flex items-center gap-2 text-fg-mut">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span>Looking for replacement...</span>
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Go Back
-        </Button>
+      <div className="flex items-center gap-1 pt-1">
+        <DetailAction label="Go back" icon={ArrowLeft} onClick={onBack} />
         {isNotFound && onFindReplacement && (
-          <Button onClick={onFindReplacement} disabled={isSearching}>
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${isSearching ? "animate-spin" : ""}`}
-            />
-            {isSearching ? "Searching..." : "Find Replacement"}
-          </Button>
+          <DetailAction
+            label={isSearching ? "Searching…" : "Find replacement"}
+            icon={RefreshCw}
+            onClick={onFindReplacement}
+            busy={isSearching}
+          />
         )}
       </div>
-    </div>
+    </Section>
   );
 }
 
-/**
- * Info row component for displaying key-value pairs
- */
 interface InfoRowProps {
   label: string;
   value: ReactNode;
   className?: string;
 }
 
+/**
+ * A single metadata row outside a list. Shares the key/value primitive, but
+ * carries its own hairline: standalone rows are stacked as siblings, so the
+ * list's "no rule under the last row" would leave every one of them bare.
+ */
 export function InfoRow({ label, value, className }: InfoRowProps) {
   return (
-    <div
-      className={`flex justify-between items-center py-1 ${className ?? ""}`}
-    >
-      <span className="text-sm text-fg-mut">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
+    <dl className={cn("border-b border-hair last:border-b-0", className)}>
+      <KeyValueRow label={label} className="border-b-0">
+        {value}
+      </KeyValueRow>
+    </dl>
   );
 }
 
-/**
- * Titled group of related info on the flat canvas.
- */
 interface InfoCardProps {
   title: string;
   children: ReactNode;
@@ -117,6 +104,7 @@ interface InfoCardProps {
   contentClassName?: string;
 }
 
+/** Titled group of related info on the flat canvas. */
 export function InfoCard({
   title,
   children,
@@ -131,69 +119,49 @@ export function InfoCard({
   );
 }
 
-/**
- * Tab definition for resource detail tabs
- */
 export interface DetailTab {
   id: string;
   label: string;
   content: ReactNode;
 }
 
-/**
- * Props for ResourceDetailLayout
- */
 interface ResourceDetailLayoutProps {
-  /** Resource data */
   resource: unknown;
-  /** Is loading */
   isLoading: boolean;
-  /** Error state */
   error: Error | string | null;
-  /** Resource kind for display */
+  /** Kind, used for the breadcrumb and every "not found" message. */
   resourceKind: string;
 
-  /** Header title */
+  /** The object's name. */
   title: string;
-  /** Namespace */
   namespace?: string;
-  /** Status badge */
+  createdAt?: string | null;
   statusBadge?: ReactNode;
-  /** Additional badges */
+  /** Qualifiers shown beside the name. */
   badges?: ReactNode;
-  /** Action buttons */
   actions?: ReactNode;
-  /** Header icon */
+  /**
+   * Accepted and ignored. The flat header has no room for a 32px glyph, but
+   * twelve detail pages still pass one; the prop goes when they convert.
+   */
   icon?: ReactNode;
 
-  /** Go back callback */
   onBack: () => void;
-  /** Find replacement callback (for pods) */
   onFindReplacement?: () => void;
-  /** Is searching for replacement */
   isSearchingReplacement?: boolean;
 
-  /** Tab definitions */
   tabs: DetailTab[];
-  /** Active tab */
   activeTab: string;
-  /** Set active tab */
   onTabChange: (tab: string) => void;
 
-  /** Labels for LabelsDisplay */
+  /** Rendered under the tabs when the default tab is showing. */
   labels?: Record<string, string>;
-  /** Annotations for display */
   annotations?: Record<string, string>;
-  /** Conditions for ConditionsDisplay */
   conditions?: ConditionInfo[];
 
-  /** Additional content below tabs */
   children?: ReactNode;
 }
 
-/**
- * Unified layout component for resource detail pages
- */
 export function ResourceDetailLayout({
   resource,
   isLoading,
@@ -201,10 +169,10 @@ export function ResourceDetailLayout({
   resourceKind,
   title,
   namespace,
+  createdAt,
   statusBadge,
   badges,
   actions,
-  icon,
   onBack,
   onFindReplacement,
   isSearchingReplacement,
@@ -216,12 +184,10 @@ export function ResourceDetailLayout({
   conditions,
   children,
 }: ResourceDetailLayoutProps) {
-  // Loading state
   if (isLoading) {
     return <DetailSkeleton />;
   }
 
-  // Error state
   if (error || !resource) {
     return (
       <DetailError
@@ -234,62 +200,71 @@ export function ResourceDetailLayout({
     );
   }
 
-  // Build combined badges
-  const allBadges = (
-    <>
-      {statusBadge}
-      {badges}
-    </>
-  );
+  const showTrailer = activeTab === "overview";
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
+    <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
       <ResourceDetailHeader
-        title={title}
+        name={title}
+        kind={resourceKind}
         namespace={namespace}
-        badges={allBadges}
+        createdAt={createdAt}
+        status={statusBadge}
+        meta={badges}
         actions={actions}
         onBack={onBack}
-        icon={icon}
       />
 
-      {/* Additional children (Info Cards, etc.) */}
       {children}
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={onTabChange}>
-        <TabsList>
+        {/* The strip is an underline, not a pill row: the window already has
+            a pill tab strip for scopes, and two of them on one screen read as
+            the same control at two levels. */}
+        <TabsList className="h-auto w-full justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="-mb-px h-7 rounded-none border-b border-transparent px-0.5 pb-1.5 pt-0 text-xs font-normal text-fg-mut shadow-none transition-colors hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+            >
               {tab.label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {/* Tab contents */}
         {tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="space-y-6">
+          <TabsContent
+            key={tab.id}
+            value={tab.id}
+            className="mt-[18px] flex flex-col gap-[22px]"
+          >
             {tab.content}
           </TabsContent>
         ))}
       </Tabs>
 
-      {/* Labels section (if on overview tab and labels exist) */}
-      {activeTab === "overview" && labels && Object.keys(labels).length > 0 && (
-        <LabelsDisplay labels={labels} title="Labels" />
+      {showTrailer && labels && Object.keys(labels).length > 0 && (
+        <KeyValueSection
+          title="Labels"
+          count={Object.keys(labels).length}
+          items={recordToKeyValues(labels)}
+        />
       )}
 
-      {/* Annotations section */}
-      {activeTab === "overview" &&
-        annotations &&
-        Object.keys(annotations).length > 0 && (
-          <LabelsDisplay labels={annotations} title="Annotations" />
-        )}
+      {showTrailer && annotations && Object.keys(annotations).length > 0 && (
+        <KeyValueSection
+          title="Annotations"
+          count={Object.keys(annotations).length}
+          items={recordToKeyValues(annotations)}
+        />
+      )}
 
-      {/* Conditions section */}
-      {activeTab === "overview" && conditions && conditions.length > 0 && (
-        <ConditionsDisplay conditions={conditions} />
+      {showTrailer && conditions && conditions.length > 0 && (
+        <Section>
+          <SectionHeader title="Conditions" count={conditions.length} />
+          <ConditionRows conditions={conditions} />
+        </Section>
       )}
     </div>
   );

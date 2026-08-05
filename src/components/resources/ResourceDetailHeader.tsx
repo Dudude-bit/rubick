@@ -1,53 +1,90 @@
-import { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { DataFreshness } from "@/components/ui/realtime";
+import { Link } from "react-router-dom";
 
-interface ResourceDetailHeaderProps {
-  title: string;
+import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
+import { getResourceListUrl } from "@/lib/navigation-utils";
+import { toPlural, type ResourceKind } from "@/lib/resource-registry";
+import { formatDate } from "@/lib/utils";
+
+export interface ResourceDetailHeaderProps {
+  /** The object's own name — an identifier, so it reads as mono. */
+  name: string;
+  kind: ResourceKind | string;
   namespace?: string;
-  badges?: ReactNode;
+  /** The one badge that says whether this object is healthy. */
+  status?: ReactNode;
+  /** Facts that qualify the name: node roles, an ingress class, a count. */
+  meta?: ReactNode;
+  createdAt?: string | null;
   actions?: ReactNode;
   onBack: () => void;
-  icon?: ReactNode;
-  /** Timestamp when data was last fetched (from React Query's dataUpdatedAt) */
+  /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
 }
 
+/**
+ * The top of every detail page.
+ *
+ * The name used to be a 24px title with a 32px icon beside it, which made the
+ * heaviest thing on the page the one fact the user just clicked to get here.
+ * It is now breadcrumb-scale: the trail says where you are and gets you back
+ * to the list, and the row below carries the name, its status, its age and the
+ * actions — everything else belongs in the metadata blocks under it.
+ */
 export function ResourceDetailHeader({
-  title,
+  name,
+  kind,
   namespace,
-  badges,
+  status,
+  meta,
+  createdAt,
   actions,
   onBack,
-  icon,
   dataUpdatedAt,
 }: ResourceDetailHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        {icon && <div className="h-8 w-8 text-muted-foreground">{icon}</div>}
-        <div>
-          <h1 className="text-2xl font-bold">{title}</h1>
-          {namespace && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{namespace}</span>
-              {badges}
-            </div>
-          )}
-          {!namespace && badges && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {badges}
-            </div>
-          )}
-        </div>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1 text-[11px] text-fg-fnt">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="-ml-1 flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-hover hover:text-fg"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </button>
+        <Link
+          to={getResourceListUrl(kind)}
+          className="rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
+        >
+          {toPlural(kind as ResourceKind)}
+        </Link>
+        {namespace && (
+          <>
+            <span aria-hidden="true">/</span>
+            <span className="truncate font-mono">{namespace}</span>
+          </>
+        )}
       </div>
-      <div className="flex items-center gap-2">
-        {actions}
-        <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <h1 className="truncate font-mono text-[13px] font-semibold tracking-tight text-fg">
+          {name}
+        </h1>
+        {status}
+        {meta}
+        {createdAt && (
+          <span
+            className="text-[11px] text-fg-fnt"
+            title={formatDate(createdAt) ?? undefined}
+          >
+            <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          {actions}
+          <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,116 @@
+import * as React from "react";
+
+import { Section, SectionHeader } from "@/components/ui/section";
+import { cn } from "@/lib/utils";
+import type { KeyValue, KeyValueTone } from "./key-values";
+
+/**
+ * The metadata row every detail page is made of.
+ *
+ * Eighteen detail pages were each inventing their own label/value grid —
+ * different weights, different sizes, a bordered box around every group. One
+ * row shape replaces all of them: an 11px label at the faintest foreground, a
+ * 12px value at full foreground, one hairline between rows and no box. The
+ * label column is fixed so values line up down the page; the value column
+ * wraps rather than scrolls, because annotations and ingress URLs are long and
+ * a horizontal scrollbar hides the end of the string that matters.
+ */
+
+const TONE: Record<KeyValueTone, string> = {
+  ok: "text-ok",
+  warn: "text-warn",
+  err: "text-err",
+  info: "text-info",
+};
+
+export interface KeyValueRowProps {
+  label: string;
+  mono?: boolean;
+  tone?: KeyValueTone;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function KeyValueRow({
+  label,
+  mono,
+  tone,
+  children,
+  className,
+}: KeyValueRowProps) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0",
+        className
+      )}
+    >
+      <dt className="text-[11px] text-fg-fnt">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 break-words text-xs",
+          mono && "font-mono",
+          tone ? TONE[tone] : "text-fg"
+        )}
+      >
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+export interface KeyValueListProps {
+  items: KeyValue[];
+  /** Shown in place of the rows when there are none. */
+  emptyMessage?: string;
+  className?: string;
+}
+
+export function KeyValueList({
+  items,
+  emptyMessage = "None",
+  className,
+}: KeyValueListProps) {
+  if (items.length === 0) {
+    return <p className="py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
+  }
+  return (
+    <dl className={cn("flex flex-col", className)}>
+      {items.map((item, index) => (
+        <KeyValueRow
+          key={`${index}-${item.label}`}
+          label={item.label}
+          mono={item.mono}
+          tone={item.tone}
+        >
+          {item.value}
+        </KeyValueRow>
+      ))}
+    </dl>
+  );
+}
+
+export interface KeyValueSectionProps extends KeyValueListProps {
+  title: string;
+  count?: React.ReactNode;
+  actions?: React.ReactNode;
+}
+
+/** A titled metadata block: the heading, then the rows, on the canvas. */
+export function KeyValueSection({
+  title,
+  count,
+  actions,
+  items,
+  emptyMessage,
+  className,
+}: KeyValueSectionProps) {
+  return (
+    <Section className={className}>
+      <SectionHeader title={title} count={count} actions={actions} />
+      <KeyValueList items={items} emptyMessage={emptyMessage} />
+    </Section>
+  );
+}
+
+export type { KeyValue, KeyValueTone };
