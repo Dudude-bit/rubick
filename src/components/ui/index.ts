@@ -61,11 +61,7 @@ export {
 export { useToast, toast } from "./use-toast";
 
 // Custom design system components
-export {
-  StatusBadge,
-  ConditionBadge,
-  statusBadgeVariants,
-} from "./status-badge";
+export { StatusBadge, ConditionBadge } from "./status-badge";
 export type { StatusBadgeProps, ConditionBadgeProps } from "./status-badge";
 
 export { MetricCard, MetricBadge } from "./metric-card";
