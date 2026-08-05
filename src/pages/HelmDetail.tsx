@@ -274,14 +274,16 @@ export function HelmDetail() {
                       <TableCell className="max-w-[240px] truncate text-fg-fnt">
                         {rev.description || "—"}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {!current && helmCliAvailable && (
-                          <DetailAction
-                            label="Roll back"
-                            icon={RotateCcw}
-                            onClick={() => setRollbackTarget(rev.revision)}
-                          />
-                        )}
+                      <TableCell>
+                        <span className="flex justify-end">
+                          {!current && helmCliAvailable && (
+                            <DetailAction
+                              label="Roll back"
+                              icon={RotateCcw}
+                              onClick={() => setRollbackTarget(rev.revision)}
+                            />
+                          )}
+                        </span>
                       </TableCell>
                     </TableRow>
                   );

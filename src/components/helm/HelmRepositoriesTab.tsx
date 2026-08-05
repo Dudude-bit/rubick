@@ -1,14 +1,16 @@
-import {
-  ExternalLink,
-  FolderGit2,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { ExternalLink, Plus, RefreshCw, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DetailAction } from "@/components/resources/detail-blocks";
+
 import type { HelmRepository } from "@/generated/types";
-import { cn } from "@/lib/utils";
 
 export interface HelmRepositoriesTabProps {
   repositories: HelmRepository[];
@@ -28,82 +30,67 @@ export function HelmRepositoriesTab({
   onDeleteRepo,
 }: HelmRepositoriesTabProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Manage Helm chart repositories
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onUpdateAll}
-            disabled={isUpdating}
-          >
-            <RefreshCw
-              className={cn("h-4 w-4 mr-2", isUpdating && "animate-spin")}
-            />
-            Update All
-          </Button>
-          <Button size="sm" onClick={onAddRepoClick}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Repository
-          </Button>
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1">
+        <DetailAction
+          label="Add repository"
+          icon={Plus}
+          onClick={onAddRepoClick}
+        />
+        <DetailAction
+          label="Update all"
+          icon={RefreshCw}
+          onClick={onUpdateAll}
+          busy={isUpdating}
+        />
       </div>
 
       {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          Loading repositories...
-        </div>
+        <p className="py-8 text-center text-xs text-fg-fnt">
+          Reading repositories…
+        </p>
       ) : repositories.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <FolderGit2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No repositories configured</p>
-          <p className="text-sm">Add a Helm chart repository to get started</p>
-        </div>
+        <p className="py-8 text-center text-xs text-fg-fnt">
+          No repositories configured — add one to search for charts.
+        </p>
       ) : (
-        <div className="border rounded-lg">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-3 font-medium">Name</th>
-                <th className="text-left p-3 font-medium">URL</th>
-                <th className="text-right p-3 font-medium w-[100px]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {repositories.map((repo) => (
-                <tr key={repo.name} className="border-b last:border-0">
-                  <td className="p-3 font-medium">{repo.name}</td>
-                  <td className="p-3 text-muted-foreground">
-                    <a
-                      href={repo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:underline inline-flex items-center gap-1"
-                    >
-                      {repo.url}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>URL</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {repositories.map((repo) => (
+              <TableRow key={repo.name}>
+                <TableCell className="font-mono text-fg">{repo.name}</TableCell>
+                <TableCell>
+                  <a
+                    href={repo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-mono text-info hover:underline"
+                  >
+                    {repo.url}
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </a>
+                </TableCell>
+                <TableCell>
+                  <span className="flex justify-end">
+                    <DetailAction
+                      label="Remove"
+                      icon={Trash2}
                       onClick={() => onDeleteRepo(repo.name)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      danger
+                    />
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

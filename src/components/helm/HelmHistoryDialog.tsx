@@ -1,8 +1,23 @@
-import { RotateCcw, X } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, HelmRevision } from "@/generated/types";
+import { statusRole } from "@/lib/status-role";
+import { cn, formatDate } from "@/lib/utils";
 
 interface HelmHistoryDialogProps {
   release: HelmRelease;
@@ -22,75 +37,92 @@ export function HelmHistoryDialog({
   onRollback,
 }: HelmHistoryDialogProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
-        <div className="p-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold">History: {release.name}</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="Close history"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
-        <div className="p-4 overflow-y-auto max-h-[60vh]">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[80vh] max-w-3xl overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>
+            History
+            <span className="ml-2 font-mono text-[11px] font-normal text-fg-fnt">
+              {release.namespace}/{release.name}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto">
           {isLoading ? (
-            <div className="text-center text-muted-foreground py-8">
-              Loading history...
-            </div>
+            <p className="py-6 text-center text-xs text-fg-fnt">
+              Reading history…
+            </p>
           ) : history.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              No history found
-            </div>
+            <p className="py-6 text-center text-xs text-fg-fnt">
+              Helm keeps no history for this release.
+            </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-2">Rev</th>
-                  <th className="text-left p-2">Status</th>
-                  <th className="text-left p-2">Chart</th>
-                  <th className="text-left p-2">Updated</th>
-                  <th className="text-left p-2">Description</th>
-                  <th className="text-right p-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((rev) => (
-                  <tr key={rev.revision} className="border-b last:border-0">
-                    <td className="p-2 font-medium">{rev.revision}</td>
-                    <td className="p-2">
-                      <StatusBadge status={rev.status} />
-                    </td>
-                    <td className="p-2 text-muted-foreground">{rev.chart}</td>
-                    <td className="p-2 text-muted-foreground">
-                      {rev.updated
-                        ? new Date(rev.updated).toLocaleString()
-                        : "-"}
-                    </td>
-                    <td className="p-2 text-muted-foreground truncate max-w-[150px]">
-                      {rev.description || "-"}
-                    </td>
-                    <td className="p-2 text-right">
-                      {rev.revision < release.revision && helmCliAvailable && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onRollback(rev.revision)}
-                        >
-                          <RotateCcw className="h-3 w-3 mr-1" />
-                          Rollback
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Rev</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Chart</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((rev) => {
+                  const current = rev.revision === release.revision;
+                  return (
+                    <TableRow
+                      key={rev.revision}
+                      className={cn(current && "bg-sel")}
+                      data-quiet={current || undefined}
+                    >
+                      <TableCell className="font-mono text-fg">
+                        {rev.revision}
+                        {current && (
+                          <span className="ml-1.5 text-[11px] text-fg-fnt">
+                            current
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-[11px]",
+                          statusRole(rev.status) === "err"
+                            ? "text-err"
+                            : "text-fg-mut"
+                        )}
+                      >
+                        {rev.status}
+                      </TableCell>
+                      <TableCell className="font-mono text-fg-mut">
+                        {rev.chart}
+                      </TableCell>
+                      <TableCell className="text-fg-fnt">
+                        {formatDate(rev.updated) ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate text-fg-fnt">
+                        {rev.description || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex justify-end">
+                          {!current && helmCliAvailable && (
+                            <DetailAction
+                              label="Roll back"
+                              icon={RotateCcw}
+                              onClick={() => onRollback(rev.revision)}
+                            />
+                          )}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

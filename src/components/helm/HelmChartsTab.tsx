@@ -1,7 +1,16 @@
-import { Download, Package, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmChartSearchResult } from "@/generated/types";
 
 export interface HelmChartsTabProps {
@@ -22,16 +31,19 @@ export function HelmChartsTab({
   onInstall,
 }: HelmChartsTabProps) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative max-w-md flex-1">
+          <Search
+            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-fnt"
+            aria-hidden="true"
+          />
           <Input
-            placeholder="Search charts (e.g., nginx, redis, postgresql)..."
+            placeholder="Search charts — nginx, redis, postgresql…"
             value={searchKeyword}
             onChange={(e) => onSearchKeywordChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
-            className="pl-9"
+            className="pl-8"
           />
         </div>
         <Button
@@ -47,56 +59,48 @@ export function HelmChartsTab({
       </div>
 
       {results.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>Search for Helm charts</p>
-          <p className="text-sm">
-            Add repositories first, then search for available charts
-          </p>
-        </div>
+        <p className="py-8 text-center text-xs text-fg-fnt">
+          Add a repository, then search it for charts.
+        </p>
       ) : (
-        <div className="border rounded-lg">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-3 font-medium">Chart</th>
-                <th className="text-left p-3 font-medium">Version</th>
-                <th className="text-left p-3 font-medium">App Version</th>
-                <th className="text-left p-3 font-medium">Description</th>
-                <th className="text-right p-3 font-medium w-[100px]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((chart) => (
-                <tr
-                  key={`${chart.name}-${chart.version}`}
-                  className="border-b last:border-0"
-                >
-                  <td className="p-3 font-medium">{chart.name}</td>
-                  <td className="p-3 text-muted-foreground">{chart.version}</td>
-                  <td className="p-3 text-muted-foreground">
-                    {chart.appVersion || "-"}
-                  </td>
-                  <td className="p-3 text-muted-foreground text-sm truncate max-w-[300px]">
-                    {chart.description || "-"}
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Chart</TableHead>
+              <TableHead>Version</TableHead>
+              <TableHead>App version</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {results.map((chart) => (
+              <TableRow key={`${chart.name}-${chart.version}`}>
+                <TableCell className="font-mono text-fg">
+                  {chart.name}
+                </TableCell>
+                <TableCell className="font-mono text-fg-mut">
+                  {chart.version}
+                </TableCell>
+                <TableCell className="font-mono text-fg-fnt">
+                  {chart.appVersion || "—"}
+                </TableCell>
+                <TableCell className="max-w-[320px] truncate text-fg-fnt">
+                  {chart.description || "—"}
+                </TableCell>
+                <TableCell>
+                  <span className="flex justify-end">
+                    <DetailAction
+                      label="Install"
+                      icon={Download}
                       onClick={() => onInstall(chart)}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Install
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    />
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

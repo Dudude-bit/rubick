@@ -6,23 +6,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/**
+ * Which controller owns this release. The two sources differ in glyph and in
+ * tooltip, not in hue — neither of them is a problem, and a coloured icon in
+ * every row of a table is the loudest thing on the screen.
+ */
 export function SourceIcon({ source }: { source: string }) {
-  if (source === "flux") {
-    return (
-      <Tooltip>
-        <TooltipTrigger>
-          <Anchor className="h-4 w-4 text-purple-500" />
-        </TooltipTrigger>
-        <TooltipContent>Flux CD HelmRelease</TooltipContent>
-      </Tooltip>
-    );
-  }
+  const isFlux = source === "flux";
+  const Icon = isFlux ? Anchor : Package;
   return (
     <Tooltip>
       <TooltipTrigger>
-        <Package className="h-4 w-4 text-blue-500" />
+        <Icon className="h-3.5 w-3.5 text-fg-mut" aria-hidden="true" />
+        <span className="sr-only">{isFlux ? "Flux" : "Helm"}</span>
       </TooltipTrigger>
-      <TooltipContent>Native Helm Release</TooltipContent>
+      <TooltipContent>
+        {isFlux ? "Flux CD HelmRelease" : "Native Helm release"}
+      </TooltipContent>
     </Tooltip>
   );
 }
