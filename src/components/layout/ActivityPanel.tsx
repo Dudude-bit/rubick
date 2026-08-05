@@ -6,9 +6,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Network, Terminal, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useBackgroundJobStore } from "@/stores/backgroundJobStore";
@@ -16,11 +15,22 @@ import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
 
+type TabId = "ports" | "terminals" | "jobs";
+
+const TABS: Array<{
+  id: TabId;
+  label: string;
+  icon: typeof Network;
+}> = [
+  { id: "ports", label: "Ports", icon: Network },
+  { id: "terminals", label: "Terminals", icon: Terminal },
+  { id: "jobs", label: "Jobs", icon: Loader2 },
+];
+
 export function ActivityPanel() {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<TabId>("ports");
 
-  // Get counts for badge.
-  //
   // IMPORTANT: every Zustand selector here returns a *raw* slice
   // (`state.sessions`, `state.jobs`) so its result is reference-stable
   // across renders. Filtering happens in useMemo below. Returning a
@@ -45,8 +55,13 @@ export function ActivityPanel() {
     (s) => s.status === "connected"
   ).length;
 
-  const totalActive =
-    portForwardSessions.length + activeTerminals + activeJobs.length;
+  const counts: Record<TabId, number> = {
+    ports: portForwardSessions.length,
+    terminals: activeTerminals,
+    jobs: activeJobs.length,
+  };
+
+  const totalActive = counts.ports + counts.terminals + counts.jobs;
 
   const handleClose = () => setOpen(false);
 
@@ -64,66 +79,51 @@ export function ActivityPanel() {
           <span>{totalActive > 0 ? `${totalActive} active` : "activity"}</span>
         </button>
       </SheetTrigger>
-      <SheetContent className="w-[400px] sm:w-[450px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Activity
-          </SheetTitle>
+
+      {/* The sheet itself is the elevation; everything inside it is back
+          on the flat rules — hairlines and alignment, no inner panels. */}
+      <SheetContent className="flex w-[400px] flex-col gap-0 p-0 sm:w-[460px]">
+        <SheetHeader className="flex-none px-3 py-2">
+          <SheetTitle>Activity</SheetTitle>
         </SheetHeader>
 
-        <Tabs defaultValue="port-forwards" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="port-forwards" className="gap-1.5 text-xs">
-              <Network className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Ports</span>
-              {portForwardSessions.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-4 min-w-[16px] px-1 text-[10px]"
-                >
-                  {portForwardSessions.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="terminals" className="gap-1.5 text-xs">
-              <Terminal className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Terminals</span>
-              {activeTerminals > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-4 min-w-[16px] px-1 text-[10px]"
-                >
-                  {activeTerminals}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="jobs" className="gap-1.5 text-xs">
-              <Loader2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Jobs</span>
-              {activeJobs.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-4 min-w-[16px] px-1 text-[10px]"
-                >
-                  {activeJobs.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+        <div
+          role="tablist"
+          aria-label="Activity"
+          className="flex flex-none items-center gap-1 border-b border-hair px-2 pb-1.5"
+        >
+          {TABS.map((item) => {
+            const selected = tab === item.id;
+            const count = counts[item.id];
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "flex items-center gap-[7px] rounded-md px-[9px] py-1 text-xs transition-colors",
+                  selected ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover"
+                )}
+              >
+                <item.icon className="h-3.5 w-3.5 text-fg-fnt" />
+                {item.label}
+                {count > 0 && (
+                  <span className="font-mono text-[11px] text-fg-fnt">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-          <div className="mt-4">
-            <TabsContent value="port-forwards" className="m-0">
-              <PortForwardsTab onClose={handleClose} />
-            </TabsContent>
-            <TabsContent value="terminals" className="m-0">
-              <TerminalsTab onClose={handleClose} />
-            </TabsContent>
-            <TabsContent value="jobs" className="m-0">
-              <BackgroundJobsTab />
-            </TabsContent>
-          </div>
-        </Tabs>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {tab === "ports" && <PortForwardsTab onClose={handleClose} />}
+          {tab === "terminals" && <TerminalsTab onClose={handleClose} />}
+          {tab === "jobs" && <BackgroundJobsTab />}
+        </div>
       </SheetContent>
     </Sheet>
   );
