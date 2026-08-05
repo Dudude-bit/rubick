@@ -11,6 +11,14 @@ export interface ResourceDetailHeaderProps {
   /** The object's own name — an identifier, so it reads as mono. */
   name: string;
   kind: ResourceKind | string;
+  /**
+   * Where the breadcrumb's kind segment points. Defaults to the registry's
+   * list route, which is wrong for kinds the registry does not own: a Helm
+   * release lists at `/helm`, and a custom resource's parent is its CRD.
+   */
+  listUrl?: string;
+  /** The word in that segment, when the registry's plural is not it. */
+  listLabel?: string;
   namespace?: string;
   /** The one badge that says whether this object is healthy. */
   status?: ReactNode;
@@ -35,6 +43,8 @@ export interface ResourceDetailHeaderProps {
 export function ResourceDetailHeader({
   name,
   kind,
+  listUrl,
+  listLabel,
   namespace,
   status,
   meta,
@@ -55,10 +65,10 @@ export function ResourceDetailHeader({
           <ArrowLeft className="h-3.5 w-3.5" />
         </button>
         <Link
-          to={getResourceListUrl(kind)}
+          to={listUrl ?? getResourceListUrl(kind)}
           className="rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
         >
-          {toPlural(kind as ResourceKind)}
+          {listLabel ?? toPlural(kind as ResourceKind)}
         </Link>
         {namespace && (
           <>

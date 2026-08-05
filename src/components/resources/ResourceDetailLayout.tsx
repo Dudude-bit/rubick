@@ -131,6 +131,9 @@ interface ResourceDetailLayoutProps {
   error: Error | string | null;
   /** Kind, used for the breadcrumb and every "not found" message. */
   resourceKind: string;
+  /** Breadcrumb overrides for kinds the resource registry does not own. */
+  listUrl?: string;
+  listLabel?: string;
 
   /** The object's name. */
   title: string;
@@ -167,6 +170,8 @@ export function ResourceDetailLayout({
   isLoading,
   error,
   resourceKind,
+  listUrl,
+  listLabel,
   title,
   namespace,
   createdAt,
@@ -207,6 +212,8 @@ export function ResourceDetailLayout({
       <ResourceDetailHeader
         name={title}
         kind={resourceKind}
+        listUrl={listUrl}
+        listLabel={listLabel}
         namespace={namespace}
         createdAt={createdAt}
         status={statusBadge}
