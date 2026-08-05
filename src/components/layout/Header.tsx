@@ -112,7 +112,7 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border px-4">
+    <header className="flex h-11 items-center justify-between border-b border-hair px-4">
       {/* Left: Cluster and Namespace selectors */}
       <div className="flex items-center gap-4">
         {/* Cluster selector */}
@@ -141,12 +141,12 @@ export function Header() {
                 {isLoading ? (
                   <Spinner size="sm" className="text-muted-foreground" />
                 ) : error ? (
-                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <AlertCircle className="h-4 w-4 text-err" />
                 ) : (
                   <div
                     className={cn(
                       "h-2.5 w-2.5 rounded-full",
-                      isConnected ? "bg-green-500" : "bg-gray-400"
+                      isConnected ? "bg-ok" : "bg-fg-fnt"
                     )}
                   />
                 )}
@@ -160,17 +160,13 @@ export function Header() {
                 </span>
               ) : error ? (
                 <div className="space-y-1">
-                  <div className="font-medium text-red-500">
-                    Connection Error
-                  </div>
+                  <div className="font-medium text-err">Connection Error</div>
                   <div className="text-xs text-muted-foreground break-words">
                     {errorContext ? `${errorContext}: ${error}` : error}
                   </div>
                 </div>
               ) : isConnected ? (
-                <span className="text-green-500">
-                  Connected to {currentContext}
-                </span>
+                <span className="text-ok">Connected to {currentContext}</span>
               ) : (
                 <span>Not connected. Select a cluster to connect.</span>
               )}

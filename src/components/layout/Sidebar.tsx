@@ -183,9 +183,9 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex w-56 flex-col border-r border-border bg-card">
+    <aside className="flex w-52 flex-col border-r border-hair">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+      <div className="flex h-11 items-center gap-2 px-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
           <span className="text-lg font-bold text-primary-foreground">K8</span>
         </div>
@@ -200,29 +200,27 @@ export function Sidebar() {
               <>
                 <button
                   onClick={() => toggleExpanded(item.label)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  )}
+                  className="flex w-full items-center gap-2 px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt"
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-3.5 w-3.5 text-fg-fnt" />
                   <span className="flex-1 text-left">{item.label}</span>
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 transition-transform",
+                      "h-3.5 w-3.5 transition-transform",
                       expandedItems.includes(item.label) && "rotate-180"
                     )}
                   />
                 </button>
                 {expandedItems.includes(item.label) && (
-                  <div className="ml-4 border-l border-border pl-4">
+                  <div className="ml-4 border-l border-hair pl-4">
                     {item.children.map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
                         className={({ isActive }) =>
                           cn(
-                            "block py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
-                            isActive && "font-medium text-primary"
+                            "block rounded-[5px] px-2 py-1 text-xs text-fg-mid transition-colors hover:bg-hover",
+                            isActive && "bg-sel font-medium text-fg"
                           )
                         }
                       >
@@ -237,18 +235,27 @@ export function Sidebar() {
                 to={item.path}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-3 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                    isActive && "bg-accent text-foreground"
+                    "flex items-center gap-3 rounded-[5px] px-2 py-1 text-xs text-fg-mid transition-colors hover:bg-hover",
+                    isActive && "bg-sel font-medium text-fg"
                   )
                 }
               >
-                <div className="relative">
-                  <item.icon className="h-4 w-4" />
-                  {item.label === "Settings" && updateAvailable && (
-                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </div>
-                {item.label}
+                {({ isActive }) => (
+                  <>
+                    <div className="relative">
+                      <item.icon
+                        className={cn(
+                          "h-3.5 w-3.5 text-fg-fnt",
+                          isActive && "text-info"
+                        )}
+                      />
+                      {item.label === "Settings" && updateAvailable && (
+                        <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
+                      )}
+                    </div>
+                    {item.label}
+                  </>
+                )}
               </NavLink>
             )}
           </div>
