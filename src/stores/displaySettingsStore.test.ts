@@ -1,21 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-
-// Node 26 defines a global `localStorage` that stays undefined without
-// `--localstorage-file`, and it shadows jsdom's. `persist` reads it once at
-// import time, so the stub has to be hoisted above the store import.
-vi.hoisted(() => {
-  const memory = new Map<string, string>();
-  globalThis.localStorage = {
-    getItem: (key: string) => memory.get(key) ?? null,
-    setItem: (key: string, value: string) => void memory.set(key, value),
-    removeItem: (key: string) => void memory.delete(key),
-    clear: () => memory.clear(),
-    key: (index: number) => [...memory.keys()][index] ?? null,
-    get length() {
-      return memory.size;
-    },
-  };
-});
+import { describe, it, expect, beforeEach } from "vitest";
 
 import {
   useDisplaySettingsStore,
