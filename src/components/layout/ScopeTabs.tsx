@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Plus, Search, X } from "lucide-react";
+import { Check, Search } from "lucide-react";
 
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
@@ -71,11 +71,7 @@ export function ScopeTabs() {
   ]);
 
   return (
-    <div
-      role="tablist"
-      aria-label="Open scopes"
-      className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5"
-    >
+    <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
       <ContextPopover
         open={newTabOpen}
         onOpenChange={setNewTabOpen}
@@ -87,34 +83,37 @@ export function ScopeTabs() {
         <button
           type="button"
           aria-label="Open another cluster"
-          className="rounded-md px-[7px] py-[3px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+          className="rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
         >
-          <Plus className="h-3.5 w-3.5" />
+          +
         </button>
       </ContextPopover>
 
-      {tabs.map((tab) => (
-        <ScopeTabItem
-          key={tab.id}
-          tab={tab}
-          active={tab.id === activeId}
-          context={tab.id === activeId ? currentContext : tab.context}
-          namespace={tab.id === activeId ? currentNamespace : tab.namespace}
-          closable={tabs.length > 1}
-        />
-      ))}
-
-      <div className="flex-1" />
+      <div
+        role="tablist"
+        aria-label="Open scopes"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+      >
+        {tabs.map((tab) => (
+          <ScopeTabItem
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeId}
+            context={tab.id === activeId ? currentContext : tab.context}
+            namespace={tab.id === activeId ? currentNamespace : tab.namespace}
+          />
+        ))}
+      </div>
 
       <button
         type="button"
         onClick={() =>
           window.dispatchEvent(new CustomEvent("command-palette-open"))
         }
-        className="flex items-center gap-2 rounded-md px-2 py-1 text-[11px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
+        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
       >
         Search
-        <Kbd shortcut="mod+K" />
+        <Kbd shortcut="mod+K" className="leading-[13px]" />
       </button>
     </div>
   );
@@ -125,13 +124,11 @@ function ScopeTabItem({
   active,
   context,
   namespace,
-  closable,
 }: {
   tab: ScopeTab;
   active: boolean;
   context: string | null;
   namespace: string;
-  closable: boolean;
 }) {
   const switchContext = useClusterStore((s) => s.switchContext);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
@@ -159,7 +156,7 @@ function ScopeTabItem({
       role="tab"
       aria-selected={active}
       className={cn(
-        "flex items-center gap-[7px] rounded-md px-[9px] py-1 text-xs transition-colors",
+        "flex min-w-0 items-center gap-[7px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
         active ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover"
       )}
     >
@@ -175,6 +172,9 @@ function ScopeTabItem({
         }}
       >
         <button type="button" className={segClass(open === "ctx")}>
+          {/* Only the dot carries the cluster colour here — the mark
+              stays at text contrast so the tab reads as one label and
+              the colour signal has a single owner. */}
           <span
             className="h-1.5 w-1.5 flex-none rounded-full"
             style={{ background: color }}
@@ -182,15 +182,12 @@ function ScopeTabItem({
           <ProviderMark
             provider={detectProvider(context ?? "")}
             className="h-[13px] w-[13px]"
-            style={{ color }}
           />
-          <span className="max-w-[190px] truncate">
-            {context ?? "no cluster"}
-          </span>
+          <span className="whitespace-nowrap">{context ?? "no cluster"}</span>
         </button>
       </ContextPopover>
 
-      <span className="text-fg-fnt">/</span>
+      <span className="mx-px text-fg-fnt">/</span>
 
       <NamespacePopover
         open={open === "ns"}
@@ -202,31 +199,31 @@ function ScopeTabItem({
         }}
       >
         <button type="button" className={segClass(open === "ns")}>
-          <span className="max-w-[190px] truncate">
+          <span className="whitespace-nowrap">
             {namespace || ALL_NAMESPACES}
           </span>
           <span className="text-[9px] text-fg-fnt">▾</span>
         </button>
       </NamespacePopover>
 
-      {closable && (
-        <button
-          type="button"
-          aria-label={`Close ${context ?? "scope"}`}
-          onClick={() => closeTab(tab.id)}
-          className="text-fg-fnt transition-colors hover:text-fg"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      )}
+      <button
+        type="button"
+        aria-label={`Close ${context ?? "scope"}`}
+        onClick={() => closeTab(tab.id)}
+        className="flex-none text-fg-fnt transition-colors hover:text-fg"
+      >
+        <span aria-hidden="true">✕</span>
+      </button>
     </div>
   );
 }
 
+/** The open segment carries the fill: it is what says which of the two
+ *  lists you are looking at while both stay visible. */
 function segClass(on: boolean) {
   return cn(
-    "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors hover:bg-hover",
-    on && "bg-hover"
+    "inline-flex min-w-0 items-center gap-1.5 rounded px-[5px] py-0.5 transition-colors hover:bg-hover",
+    on && "bg-sel hover:bg-sel"
   );
 }
 

@@ -85,8 +85,17 @@ export const useScopeTabStore = create<ScopeTabState>((set, get) => ({
 
   closeTab: async (id: string) => {
     const { tabs, activeId } = get();
-    // The strip is the only way back to a scope, so it never empties.
-    if (tabs.length < 2) return;
+    // The strip is the only way back to a scope, so it never empties:
+    // closing the last tab drops the connection and leaves an empty
+    // scope to pick a cluster in, rather than a window with no chrome.
+    if (tabs.length < 2) {
+      set({ tabs: [{ id: tabs[0].id, context: null, namespace: "" }] });
+      // Disconnect first: switchNamespace only writes a preference while
+      // a context is set, and the cleared scope must not save one.
+      await useClusterStore.getState().disconnect();
+      await useClusterStore.getState().switchNamespace("");
+      return;
+    }
     const index = tabs.findIndex((tab) => tab.id === id);
     if (index === -1) return;
 
