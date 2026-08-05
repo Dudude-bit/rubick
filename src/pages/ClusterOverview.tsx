@@ -1,6 +1,10 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { AlertCircle, Layers } from "lucide-react";
+
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useClusterInfo } from "@/hooks";
 import {
   Card,
   CardContent,
@@ -8,259 +12,66 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
-import {
-  Box,
-  Server,
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Search,
-  Layers,
-  Package,
-} from "lucide-react";
-import { useMetrics, useClusterInfo } from "@/hooks";
-import { MetricCard } from "@/components/ui/metric-card";
-import { MetricsStatusBanner } from "@/components/metrics";
-import {
-  getTopPodsByCPU,
-  getTopPodsByMemory,
-  mergePodsWithMetrics,
-} from "@/lib/metrics";
-import { useMemo } from "react";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { OverviewHeader } from "@/components/overview";
 import {
-  OverviewHeader,
-  ResourceStatCard,
-  TopPodsCard,
-  QuickActionTile,
-  type ResourceStatCardData,
-  type TopPodMetric,
-  type QuickActionTileProps,
-} from "@/components/overview";
+  NodesPanel,
+  ProblemsPanel,
+  SchedulerPanel,
+  WarningsPanel,
+} from "@/components/overview/health";
 
+/**
+ * The overview answers one question — "do I need to do something right
+ * now?" — and reorders itself around the answer.
+ *
+ * When something is broken, the problem list owns the top of the screen and
+ * everything else compresses into supporting context. When nothing is, that
+ * list collapses to a single line and the screen becomes an orientation
+ * view: what this cluster is, how it is laid out, how much room is left.
+ *
+ * It deliberately does not show object counts or top-consumers. Neither
+ * answers the question, and both crowd out what does.
+ */
 export function ClusterOverview() {
   const { isConnected, currentContext, currentNamespace } = useClusterStore();
+  const { data: clusterInfo } = useClusterInfo();
 
-  const { data: clusterInfo, isLoading: isLoadingCluster } = useClusterInfo();
-
-  // Single efficient stats call with smooth transitions
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
-    queryKey: ["overview-stats", currentContext, currentNamespace],
+  const {
+    data: overview,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["cluster-overview", currentContext],
     queryFn: async () => {
       try {
-        return await commands.getClusterStats(currentNamespace);
+        return await commands.getClusterOverview();
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
     enabled: isConnected,
     staleTime: STALE_TIMES.overview,
-    placeholderData: keepPreviousData, // Keep showing previous data while loading
+    placeholderData: keepPreviousData,
     refetchInterval: REFRESH_INTERVALS.overview,
     refetchOnWindowFocus: false,
   });
 
-  const {
-    clusterMetrics,
-    clusterStatus,
-    podMetrics: allPodMetrics,
-    podStatus,
-  } = useMetrics({
-    namespace: null,
-    includeNodes: false,
-    enabled: isConnected,
-  });
-
-  // Get all pods
-  const { data: allPods = [] } = useQuery({
-    queryKey: [toPlural(ResourceType.Pod), undefined],
-    queryFn: async () => {
-      try {
-        const result = await commands.listPods({
-          namespace: null,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-        });
-        return result;
-      } catch (err) {
-        throw new Error(normalizeTauriError(err), { cause: err });
-      }
-    },
-    enabled: isConnected,
-    placeholderData: keepPreviousData,
-    staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
-    refetchOnWindowFocus: false,
-  });
-
-  // Merge pods with metrics
-  const podsWithMetrics = useMemo(() => {
-    return mergePodsWithMetrics(allPods, allPodMetrics);
-  }, [allPods, allPodMetrics]);
-
-  // Calculate top pods by CPU and Memory
-  const topPodsByCPU = useMemo<TopPodMetric[]>(() => {
-    return getTopPodsByCPU(podsWithMetrics, 5).map((pod) => ({
-      name: pod.name,
-      namespace: pod.namespace,
-      value: pod.cpuMillicores,
-    }));
-  }, [podsWithMetrics]);
-
-  const topPodsByMemory = useMemo<TopPodMetric[]>(() => {
-    return getTopPodsByMemory(podsWithMetrics, 5).map((pod) => ({
-      name: pod.name,
-      namespace: pod.namespace,
-      value: pod.memoryBytes,
-    }));
-  }, [podsWithMetrics]);
-
-  // Calculate total cluster capacity from nodes (fallback if metrics API unavailable)
-  const totalClusterCapacity = useMemo(() => {
-    // This would ideally come from node metrics, but for now we'll use clusterMetrics if available
-    return {
-      cpu: clusterMetrics?.totalCpuCapacityMillicores ?? null,
-      memory: clusterMetrics?.totalMemoryCapacityBytes ?? null,
-    };
-  }, [clusterMetrics]);
-
-  const metricsStatus =
-    clusterStatus?.status !== "available"
-      ? clusterStatus
-      : podStatus?.status !== "available"
-        ? podStatus
-        : null;
-
-  const overviewSubtitle = useMemo(() => {
-    const parts = [clusterInfo?.context || "Connected cluster"];
-    parts.push(
-      currentNamespace ? `Namespace: ${currentNamespace}` : "All namespaces"
-    );
+  const subtitle = useMemo(() => {
+    const parts = [
+      currentNamespace ? `Namespace: ${currentNamespace}` : "All namespaces",
+    ];
     if (clusterInfo?.server_version) {
       parts.push(`Kubernetes ${clusterInfo.server_version}`);
     }
-    if (clusterInfo?.platform) {
-      parts.push(clusterInfo.platform);
-    }
+    if (clusterInfo?.platform) parts.push(clusterInfo.platform);
+    if (overview) parts.push(`${overview.podCount} pods`);
     return parts.join(" • ");
-  }, [clusterInfo, currentNamespace]);
-
-  const resourceStats = useMemo<ResourceStatCardData[]>(() => {
-    return [
-      {
-        id: "pods",
-        title: "Pods",
-        icon: Box,
-        value: stats?.pods.total ?? 0,
-        href: `/workloads/${toPlural(ResourceType.Pod)}`,
-        badges: [
-          {
-            label: "Running",
-            value: stats?.pods.running ?? 0,
-            variant: "success",
-            icon: CheckCircle,
-          },
-          {
-            label: "Pending",
-            value: stats?.pods.pending ?? 0,
-            variant: "warning",
-            icon: Clock,
-            hideWhenZero: true,
-          },
-          {
-            label: "Failed",
-            value: stats?.pods.failed ?? 0,
-            variant: "error",
-            icon: AlertTriangle,
-            hideWhenZero: true,
-          },
-        ],
-      },
-      {
-        id: "deployments",
-        title: "Deployments",
-        icon: Box,
-        value: stats?.deployments.total ?? 0,
-        href: `/workloads/${toPlural(ResourceType.Deployment)}`,
-        badges: [
-          {
-            label: "Available",
-            value: stats?.deployments.available ?? 0,
-            variant: "success",
-            icon: CheckCircle,
-          },
-          {
-            label: "Unavailable",
-            value: stats?.deployments.unavailable ?? 0,
-            variant: "error",
-            icon: AlertTriangle,
-            hideWhenZero: true,
-          },
-        ],
-      },
-      {
-        id: "services",
-        title: "Services",
-        icon: Activity,
-        value: stats?.services.total ?? 0,
-        description: "Active services in namespace",
-        href: `/network/${toPlural(ResourceType.Service)}`,
-      },
-      {
-        id: "nodes",
-        title: "Nodes",
-        icon: Server,
-        value: stats?.nodes.total ?? 0,
-        href: `/${toPlural(ResourceType.Node)}`,
-        badges: [
-          {
-            label: "Ready",
-            value: stats?.nodes.ready ?? 0,
-            variant: "success",
-            icon: CheckCircle,
-          },
-        ],
-      },
-    ];
-  }, [stats]);
-
-  const podBasePath = `/${toPlural(ResourceType.Pod)}`;
-
-  const openCommandPalette = () => {
-    window.dispatchEvent(new CustomEvent("command-palette-open"));
-  };
-
-  const quickActions: QuickActionTileProps[] = [
-    {
-      icon: Search,
-      label: "Command Palette",
-      description: "Search resources and run commands",
-      onClick: openCommandPalette,
-    },
-    {
-      icon: Layers,
-      label: "Infrastructure Builder",
-      description: "Design manifests visually",
-      href: "/configuration/builder",
-    },
-    {
-      icon: Package,
-      label: "Helm Releases",
-      description: "Install and manage charts",
-      href: "/helm",
-    },
-  ];
-
-  // Only show skeleton on initial load, not on refetch
-  const showSkeleton = (isLoadingCluster || isLoadingStats) && !stats;
+  }, [clusterInfo, currentNamespace, overview]);
 
   if (!isConnected) {
     return (
@@ -277,84 +88,130 @@ export function ClusterOverview() {
     );
   }
 
-  if (showSkeleton) {
+  // Skeleton only on the first load — a refetch keeps the previous state on
+  // screen so the layout never flashes empty while polling.
+  if (isLoading && !overview) {
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
         <HeaderSkeleton />
-        <StatsSkeleton count={4} />
+        <StatsSkeleton count={2} />
       </div>
     );
   }
 
+  if (error && !overview) {
+    return (
+      <div className="space-y-6">
+        <OverviewHeader
+          title={currentContext || "Cluster Overview"}
+          subtitle={subtitle}
+        />
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertCircle
+                className="h-4 w-4 text-destructive"
+                aria-hidden="true"
+              />
+              Could not read cluster state
+            </CardTitle>
+            <CardDescription>{error.message}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!overview) return null;
+
+  const hasProblems = overview.problems.length > 0;
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200">
       <OverviewHeader
         title={currentContext || "Cluster Overview"}
-        subtitle={overviewSubtitle}
+        subtitle={subtitle}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {resourceStats.map((stat) => (
-          <ResourceStatCard key={stat.id} {...stat} />
-        ))}
-      </div>
+      <ProblemsPanel
+        problems={overview.problems}
+        podCount={overview.podCount}
+      />
 
-      {/* Cluster Resource Usage */}
-      {metricsStatus && <MetricsStatusBanner status={metricsStatus} />}
-      <div className="grid gap-4 md:grid-cols-2">
-        <MetricCard
-          title="Cluster CPU Usage"
-          used={clusterMetrics?.totalCpuMillicores ?? null}
-          limit={
-            clusterMetrics?.totalCpuCapacityMillicores ??
-            totalClusterCapacity.cpu
-          }
-          type="cpu"
-          showProgressBar
-        />
-
-        <MetricCard
-          title="Cluster Memory Usage"
-          used={clusterMetrics?.totalMemoryBytes ?? null}
-          limit={
-            clusterMetrics?.totalMemoryCapacityBytes ??
-            totalClusterCapacity.memory
-          }
-          type="memory"
-          showProgressBar
-        />
-      </div>
-
-      {/* Top Pods by Resource Usage */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <TopPodsCard
-          title="Top Pods by CPU"
-          description="Pods consuming the most CPU resources"
-          items={topPodsByCPU}
-          type="cpu"
-          basePath={podBasePath}
-        />
-        <TopPodsCard
-          title="Top Pods by Memory"
-          description="Pods consuming the most memory resources"
-          items={topPodsByMemory}
-          type="memory"
-          basePath={podBasePath}
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks and shortcuts</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          {quickActions.map((action) => (
-            <QuickActionTile key={action.label} {...action} />
-          ))}
-        </CardContent>
-      </Card>
+      {hasProblems ? (
+        // Triage layout: the problem list above is the work queue, and these
+        // two answer the follow-up questions it raises — "is the cluster out
+        // of room?" and "what else has been complaining?".
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SchedulerPanel
+              scheduler={overview.scheduler}
+              metricsAvailable={overview.metricsAvailable}
+            />
+            <WarningsPanel warnings={overview.warnings} />
+          </div>
+          <NodesPanel nodes={overview.nodes} />
+        </>
+      ) : (
+        // Orientation layout: nothing is on fire, so lead with what this
+        // cluster is made of.
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <NodesPanel nodes={overview.nodes} />
+            <SchedulerPanel
+              scheduler={overview.scheduler}
+              metricsAvailable={overview.metricsAvailable}
+            />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <NamespacesPanel namespaces={overview.namespaces} />
+            <WarningsPanel warnings={overview.warnings} />
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function NamespacesPanel({
+  namespaces,
+}: {
+  namespaces: { name: string; podCount: number }[];
+}) {
+  if (namespaces.length === 0) return null;
+  const busiest = namespaces.slice(0, 8);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Layers className="h-4 w-4" aria-hidden="true" />
+          Namespaces with workloads
+          <span className="text-sm font-normal text-muted-foreground">
+            {namespaces.length}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pb-0">
+        <div className="border-t">
+          {busiest.map((ns) => (
+            <div
+              key={ns.name}
+              className="flex items-center justify-between border-b px-4 py-2 text-sm last:border-b-0"
+            >
+              <span className="font-mono">{ns.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {ns.podCount} pods
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

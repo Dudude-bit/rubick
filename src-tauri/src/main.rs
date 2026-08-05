@@ -270,6 +270,7 @@ fn main() {
             commands::network::delete_endpoints,
             // Stats commands
             commands::stats::get_cluster_stats,
+            commands::overview::get_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
             commands::metrics::get_nodes_metrics,
