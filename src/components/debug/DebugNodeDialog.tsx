@@ -182,7 +182,7 @@ export function DebugNodeDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <AlertTriangle className="h-4 w-4 text-warn" />
               Debug Pod Not Ready
             </DialogTitle>
             <DialogDescription>
@@ -195,10 +195,10 @@ export function DebugNodeDialog({
 
           <div className="py-4">
             {statusReason && (
-              <div className="rounded-md border p-3 bg-muted/30">
+              <div className="rounded-md border border-hair p-3">
                 <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Last status:</span>
+                  <Clock className="h-3.5 w-3.5 text-fg-fnt" />
+                  <span className="text-fg-mut">Last status:</span>
                   <span className="font-medium">{statusReason}</span>
                 </div>
               </div>
@@ -238,9 +238,9 @@ export function DebugNodeDialog({
 
           <div className="space-y-4 py-4">
             {/* Status */}
-            <div className="rounded-md border p-3 bg-muted/30">
+            <div className="rounded-md border border-hair p-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
+                <span className="text-fg-mut">Status</span>
                 <span className="font-medium">
                   {statusReason || "Initializing..."}
                 </span>
@@ -250,7 +250,7 @@ export function DebugNodeDialog({
             {/* Progress */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Elapsed</span>
+                <span className="text-fg-mut">Elapsed</span>
                 <span className="font-medium">
                   {elapsedSeconds}s / {timeoutSeconds}s
                 </span>
@@ -286,9 +286,9 @@ export function DebugNodeDialog({
 
         <div className="space-y-4 py-4">
           {/* Node Info */}
-          <div className="rounded-md border p-3 bg-muted/30">
+          <div className="rounded-md border border-hair p-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Target Node</span>
+              <span className="text-fg-mut">Target Node</span>
               <span className="font-medium">{nodeName}</span>
             </div>
           </div>
@@ -326,7 +326,7 @@ export function DebugNodeDialog({
               value={namespace}
               onChange={(e) => setNamespace(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-fg-mut">
               Namespace where the debug pod will be created
             </p>
           </div>
@@ -337,7 +337,7 @@ export function DebugNodeDialog({
             <AlertDescription>
               This will create a <strong>privileged pod</strong> with full
               access to the host. The host filesystem will be mounted at{" "}
-              <code className="bg-muted px-1 rounded">/host</code>.
+              <code className="rounded bg-hover px-1">/host</code>.
             </AlertDescription>
           </Alert>
         </div>

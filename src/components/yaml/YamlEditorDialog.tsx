@@ -379,9 +379,7 @@ export function YamlEditorDialog() {
 
           {hasChanges && (
             <div className="py-4">
-              <p className="text-sm text-muted-foreground mb-2">
-                Changes to be applied:
-              </p>
+              <p className="mb-2 text-xs text-fg-mut">Changes to be applied:</p>
               <ScrollArea className="h-[200px] rounded-md border">
                 <YamlDiffViewer
                   original={originalContent}

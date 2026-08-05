@@ -208,19 +208,19 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
   })();
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
-      <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted border-b">
-        <div className="flex min-w-0 items-center gap-2 text-sm">
-          <TerminalIcon className="h-4 w-4 shrink-0" />
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs">
+          <TerminalIcon className="h-3.5 w-3.5 shrink-0 text-fg-fnt" />
           {metadata?.title && (
-            <span className="truncate font-mono text-sm font-semibold">
+            <span className="truncate font-mono font-medium text-fg">
               {metadata.title}
             </span>
           )}
           {metadata?.subtitle && (
             <>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate font-mono text-sm text-blue-500">
+              <span className="text-fg-fnt">/</span>
+              <span className="truncate font-mono text-fg-mid">
                 {metadata.subtitle}
               </span>
             </>
@@ -229,7 +229,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
         <div className="flex items-center gap-2">
           <Badge variant={statusVariant}>{statusLabel}</Badge>
           {error && status !== "connected" && (
-            <span className="text-xs text-muted-foreground max-w-[240px] truncate">
+            <span className="max-w-[240px] truncate text-xs text-fg-mut">
               {error}
             </span>
           )}

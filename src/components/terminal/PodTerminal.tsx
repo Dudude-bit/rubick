@@ -179,11 +179,11 @@ export function PodTerminal({
     !sessionId && !isConnecting && (error || unavailableReason);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
       {showReconnect && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted border-b">
+        <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2">
           <div className="flex min-w-0 items-center gap-2 text-sm">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-mut">
               {error || unavailableReason}
             </span>
           </div>
