@@ -60,7 +60,7 @@ export function ClusterOverview() {
             Welcome to K8s GUI
           </h1>
           <p className="text-sm text-fg-mut">
-            Select a cluster from the header to get started.
+            Pick a cluster in the scope tab above to get started.
           </p>
         </Section>
       </div>

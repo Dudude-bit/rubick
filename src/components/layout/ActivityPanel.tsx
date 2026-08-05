@@ -6,7 +6,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Network, Terminal, Loader2 } from "lucide-react";
@@ -53,23 +52,17 @@ export function ActivityPanel() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
+      {/* Lives in the status bar, so the trigger is a status-bar line and
+          not a 36px icon button: the running count is the point. */}
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative"
+        <button
+          type="button"
           aria-label="Activity panel"
+          className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
         >
-          <Activity className="h-4 w-4" />
-          {totalActive > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 text-[10px] flex items-center justify-center"
-            >
-              {totalActive > 99 ? "99+" : totalActive}
-            </Badge>
-          )}
-        </Button>
+          <Activity className="h-3 w-3" />
+          <span>{totalActive > 0 ? `${totalActive} active` : "activity"}</span>
+        </button>
       </SheetTrigger>
       <SheetContent className="w-[400px] sm:w-[450px]">
         <SheetHeader>
