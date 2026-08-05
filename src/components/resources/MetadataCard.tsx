@@ -1,8 +1,8 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { ReactNode } from "react";
 
 export interface MetadataCardProps<T> {
-  /** Card title */
+  /** Section title */
   title: string;
   /** Items to display */
   items: T[];
@@ -12,12 +12,12 @@ export interface MetadataCardProps<T> {
   renderItem: (item: T, index: number) => ReactNode;
   /** Container className for items */
   itemsContainerClassName?: string;
-  /** Optional className for the card */
+  /** Optional className for the section */
   className?: string;
 }
 
 /**
- * Generic card component for displaying metadata items.
+ * Generic section for displaying metadata items.
  * Used as a base for LabelsDisplay, ConditionsDisplay, and similar components.
  */
 export function MetadataCard<T>({
@@ -28,29 +28,16 @@ export function MetadataCard<T>({
   itemsContainerClassName = "space-y-2",
   className,
 }: MetadataCardProps<T>) {
-  if (items.length === 0) {
-    return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">{emptyMessage}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Section className={className}>
+      <SectionHeader title={title} count={items.length || undefined} />
+      {items.length === 0 ? (
+        <p className="text-sm text-fg-mut">{emptyMessage}</p>
+      ) : (
         <div className={itemsContainerClassName}>
           {items.map((item, index) => renderItem(item, index))}
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </Section>
   );
 }

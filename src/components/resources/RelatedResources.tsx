@@ -6,9 +6,8 @@
  */
 
 import { Link } from "react-router-dom";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
-import { Layers } from "lucide-react";
 import { ResourceIcon } from "@/components/shared/ResourceIcon";
 import { isResourceType } from "@/lib/resource-registry";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -32,31 +31,20 @@ export function RelatedResources({
   const otherOwners = ownerReferences.filter((ref) => !ref.controller);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Related Resources
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* Controller owner (primary) */}
+    <Section>
+      <SectionHeader title="Related Resources" />
+      <div className="flex flex-col gap-3">
         {controllerOwner && (
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground font-medium">
-              Controlled by
-            </div>
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-fg-mut font-medium">Controlled by</div>
             <OwnerLink owner={controllerOwner} namespace={namespace} />
           </div>
         )}
 
-        {/* Other owners */}
         {otherOwners.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground font-medium">
-              Other owners
-            </div>
-            <div className="space-y-2">
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-fg-mut font-medium">Other owners</div>
+            <div className="flex flex-col gap-2">
               {otherOwners.map((owner) => (
                 <OwnerLink
                   key={owner.uid}
@@ -67,8 +55,8 @@ export function RelatedResources({
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }
 
@@ -82,12 +70,9 @@ function OwnerLink({ owner, namespace }: OwnerLinkProps) {
 
   const content = (
     <div
-      className={`flex items-center gap-2 rounded-md border p-2 text-sm ${isSupported ? "hover:bg-accent cursor-pointer" : ""} transition-colors`}
+      className={`flex items-center gap-2 rounded border border-hair p-2 text-sm ${isSupported ? "hover:bg-hover cursor-pointer" : ""} transition-colors`}
     >
-      <ResourceIcon
-        kind={owner.kind}
-        className="h-4 w-4 text-muted-foreground"
-      />
+      <ResourceIcon kind={owner.kind} className="h-4 w-4 text-fg-mut" />
       <span className="font-medium">{owner.name}</span>
       <Badge variant="outline" className="ml-auto text-xs">
         {owner.kind}

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { MaskedValue } from "@/components/ui/masked-value";
 import { Copy, Eye, EyeOff, Key, ShieldAlert } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks";
@@ -63,21 +63,24 @@ export function KeyValueList({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-base">
-            {title} ({entries.length})
-          </CardTitle>
-          {showSensitiveBadge && isSensitive && (
-            <Badge variant="outline" className="text-xs">
-              <ShieldAlert className="h-3 w-3 mr-1" />
-              Sensitive
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
+    <Section>
+      <SectionHeader
+        title={title}
+        count={
+          showSensitiveBadge && isSensitive ? (
+            <span className="flex items-center gap-2">
+              {entries.length}
+              <Badge variant="outline" className="text-xs">
+                <ShieldAlert className="h-3 w-3 mr-1" />
+                Sensitive
+              </Badge>
+            </span>
+          ) : (
+            entries.length
+          )
+        }
+        actions={
+          entries.length > 0 && (
             <>
               {isSensitive && (
                 <>
@@ -111,67 +114,65 @@ export function KeyValueList({
                 Copy All
               </Button>
             </>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {entries.map(([key, value]) => (
-            <div key={key} className="rounded-lg border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Key className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium font-mono text-sm">{key}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {value.length} chars
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-1">
-                  {isSensitive && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleReveal(key)}
-                      disabled={isLoading}
-                      className="h-8 w-8 p-0"
-                    >
-                      {revealedKeys.has(key) ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
+          )
+        }
+      />
+      <SectionBody className="flex flex-col divide-y divide-hair">
+        {entries.map(([key, value]) => (
+          <div key={key} className="flex flex-col gap-2 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-fg-fnt" />
+                <span className="font-medium font-mono text-sm">{key}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {value.length} chars
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                {isSensitive && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyValue(key, value)}
+                    onClick={() => toggleReveal(key)}
                     disabled={isLoading}
                     className="h-8 w-8 p-0"
                   >
-                    <Copy className="h-4 w-4" />
+                    {revealedKeys.has(key) ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </Button>
-                </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCopyValue(key, value)}
+                  disabled={isLoading}
+                  className="h-8 w-8 p-0"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
               </div>
-              {isSensitive ? (
-                <MaskedValue
-                  value={value}
-                  isRevealed={revealedKeys.has(key)}
-                  showCopy={false}
-                  isLoading={isLoading}
-                />
-              ) : (
-                <pre className="bg-muted p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono">
-                  {isLoading ? "Loading..." : value}
-                </pre>
-              )}
             </div>
-          ))}
-          {entries.length === 0 && !isLoading && (
-            <p className="text-muted-foreground text-sm">{emptyMessage}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            {isSensitive ? (
+              <MaskedValue
+                value={value}
+                isRevealed={revealedKeys.has(key)}
+                showCopy={false}
+                isLoading={isLoading}
+              />
+            ) : (
+              <pre className="bg-hover p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono">
+                {isLoading ? "Loading..." : value}
+              </pre>
+            )}
+          </div>
+        ))}
+        {entries.length === 0 && !isLoading && (
+          <p className="text-fg-mut text-sm py-3">{emptyMessage}</p>
+        )}
+      </SectionBody>
+    </Section>
   );
 }

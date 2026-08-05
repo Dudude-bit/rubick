@@ -1,8 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
-import { Users, Circle } from "lucide-react";
+import { Circle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -16,15 +15,15 @@ interface MatchingPodsProps {
 function getPodStatusColor(phase: string): string {
   switch (phase) {
     case "Running":
-      return "text-green-500";
+      return "text-ok";
     case "Pending":
-      return "text-yellow-500";
+      return "text-warn";
     case "Succeeded":
-      return "text-blue-500";
+      return "text-info";
     case "Failed":
-      return "text-red-500";
+      return "text-err";
     default:
-      return "text-gray-500";
+      return "text-fg-fnt";
   }
 }
 
@@ -50,17 +49,10 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
 
   if (Object.keys(selector).length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Matching Pods
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">No selector defined</p>
-        </CardContent>
-      </Card>
+      <Section>
+        <SectionHeader title="Matching Pods" />
+        <p className="text-sm text-fg-mut">No selector defined</p>
+      </Section>
     );
   }
 
@@ -80,59 +72,49 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
     .join(", ");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Matching Pods
-          {pods && pods.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {statusSummary}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : error ? (
-          <p className="text-destructive">
-            Failed to load pods: {String(error)}
-          </p>
-        ) : pods && pods.length > 0 ? (
-          <div className="space-y-2">
-            {pods.map((pod) => (
-              <Link
-                key={pod.uid}
-                to={getResourceDetailUrl(
-                  ResourceType.Pod,
-                  pod.name,
-                  pod.namespace
+    <Section>
+      <SectionHeader
+        title="Matching Pods"
+        count={pods?.length}
+        description={pods && pods.length > 0 ? statusSummary : undefined}
+      />
+      {isLoading ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : error ? (
+        <p className="text-sm text-err">Failed to load pods: {String(error)}</p>
+      ) : pods && pods.length > 0 ? (
+        <SectionBody className="flex flex-col divide-y divide-hair">
+          {pods.map((pod) => (
+            <Link
+              key={pod.uid}
+              to={getResourceDetailUrl(
+                ResourceType.Pod,
+                pod.name,
+                pod.namespace
+              )}
+              className="flex items-center justify-between px-2 py-2.5 hover:bg-hover transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Circle
+                  className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.phase || "Unknown")}`}
+                />
+                <span className="font-medium">{pod.name}</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm text-fg-mut">
+                <span>{pod.status.phase}</span>
+                {pod.podIp && (
+                  <code className="font-mono text-xs">{pod.podIp}</code>
                 )}
-                className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Circle
-                    className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.phase || "Unknown")}`}
-                  />
-                  <span className="font-medium">{pod.name}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span>{pod.status.phase}</span>
-                  {pod.podIp && (
-                    <code className="font-mono text-xs">{pod.podIp}</code>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground">No pods match this selector</p>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+            </Link>
+          ))}
+        </SectionBody>
+      ) : (
+        <p className="text-sm text-fg-mut">No pods match this selector</p>
+      )}
+    </Section>
   );
 }
