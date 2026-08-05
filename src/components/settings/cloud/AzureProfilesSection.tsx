@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, TestTube, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProfileRow, ProfileSection } from "./ProfileSection";
 import {
   Dialog,
   DialogContent,
@@ -110,74 +110,30 @@ export function AzureProfilesSection() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Azure Profiles</h3>
-        <Button size="sm" variant="outline" onClick={openCreateDialog}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Profile
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      ) : profiles?.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">
-          No Azure profiles configured. Using default az login credentials.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {profiles?.map((item) => (
-            <div
-              key={item.name}
-              className="flex items-center justify-between p-3 border rounded-lg"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{item.name}</span>
-                  {item.profile.tenantId && (
-                    <Badge variant="secondary">
-                      Tenant: {item.profile.tenantId.slice(0, 8)}...
-                    </Badge>
-                  )}
-                </div>
-                {item.profile.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {item.profile.description}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => testMutation.mutate(item.name)}
-                  disabled={testMutation.isPending}
-                >
-                  <TestTube className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => openEditDialog(item.name, item.profile)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => deleteMutation.mutate(item.name)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <ProfileSection
+      title="Azure"
+      addLabel="Add profile"
+      onAdd={openCreateDialog}
+      isLoading={isLoading}
+      isEmpty={!profiles || profiles.length === 0}
+      emptyMessage="No profiles — using the default az login credentials."
+    >
+      {profiles?.map((item) => (
+        <ProfileRow
+          key={item.name}
+          name={item.name}
+          detail={
+            item.profile.tenantId
+              ? `tenant ${item.profile.tenantId.slice(0, 8)}…`
+              : undefined
+          }
+          description={item.profile.description}
+          onTest={() => testMutation.mutate(item.name)}
+          onEdit={() => openEditDialog(item.name, item.profile)}
+          onDelete={() => deleteMutation.mutate(item.name)}
+          busy={testMutation.isPending || deleteMutation.isPending}
+        />
+      ))}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -277,13 +233,13 @@ export function AzureProfilesSection() {
               disabled={!newProfileName || saveMutation.isPending}
             >
               {saveMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               )}
               Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ProfileSection>
   );
 }

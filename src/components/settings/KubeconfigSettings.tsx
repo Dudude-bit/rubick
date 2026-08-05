@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Section, SectionHeader } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { SettingRow, SettingsGroup } from "./settings-row";
 import { useToast } from "@/components/ui/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
@@ -96,70 +95,60 @@ export function KubeconfigSettings() {
   const hasChanges = pathInput !== (currentPath ?? "");
 
   return (
-    <Section>
-      <SectionHeader
-        title="Kubeconfig"
-        description={
+    <SettingsGroup title="Kubeconfig">
+      <SettingRow
+        label="Custom kubeconfig path"
+        htmlFor="kubeconfig-path"
+        hint={
+          currentPath ? (
+            <>
+              Active: <span className="font-mono">{currentPath}</span>
+            </>
+          ) : (
+            "Using the default lookup ($KUBECONFIG, then ~/.kube/config)."
+          )
+        }
+        control={
           <>
-            By default the app reads <code>$KUBECONFIG</code> or{" "}
-            <code>~/.kube/config</code>. Set a custom path here to point at a
-            different file — useful for testing against a synthetic kubeconfig
-            without touching your default one.
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => clearMutation.mutate()}
+              disabled={isPending || isLoading || !currentPath}
+            >
+              <RotateCcw className="mr-1.5 h-3 w-3" aria-hidden="true" />
+              Reset
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setMutation.mutate(pathInput)}
+              disabled={isPending || isLoading || !hasChanges || !pathInput}
+            >
+              {setMutation.isPending ? "Saving…" : "Save"}
+            </Button>
           </>
         }
-      />
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="kubeconfig-path">Custom kubeconfig path</Label>
-          <div className="flex gap-2">
-            <Input
-              id="kubeconfig-path"
-              placeholder="Leave empty to use default lookup (~/.kube/config)"
-              value={pathInput}
-              onChange={(e) => setPathInput(e.target.value)}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              disabled={isPending || isLoading}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleBrowse}
-              disabled={isPending || isLoading}
-            >
-              <FolderOpen className="h-4 w-4" />
-            </Button>
-          </div>
-          {currentPath ? (
-            <p className="text-xs text-fg-mut">
-              Currently active: <span className="font-mono">{currentPath}</span>
-            </p>
-          ) : (
-            <p className="text-xs text-fg-mut">
-              Currently using default lookup ($KUBECONFIG / ~/.kube/config).
-            </p>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2">
+      >
+        <div className="flex gap-1.5">
+          <Input
+            id="kubeconfig-path"
+            placeholder="Leave empty to use the default lookup"
+            value={pathInput}
+            onChange={(e) => setPathInput(e.target.value)}
+            disabled={isPending || isLoading}
+            className="font-mono"
+          />
           <Button
             variant="outline"
-            onClick={() => clearMutation.mutate()}
-            disabled={isPending || isLoading || !currentPath}
+            size="icon"
+            aria-label="Browse for a kubeconfig file"
+            onClick={handleBrowse}
+            disabled={isPending || isLoading}
           >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset to default
-          </Button>
-          <Button
-            onClick={() => setMutation.mutate(pathInput)}
-            disabled={isPending || isLoading || !hasChanges || !pathInput}
-          >
-            {setMutation.isPending ? "Saving..." : "Save"}
+            <FolderOpen className="h-3.5 w-3.5" />
           </Button>
         </div>
-      </div>
-    </Section>
+      </SettingRow>
+    </SettingsGroup>
   );
 }

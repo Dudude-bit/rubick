@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -113,48 +112,40 @@ export function BindingsTab() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Context → Profile Bindings</h3>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
-        Bind cloud authentication profiles to kubeconfig contexts. Contexts
-        without bindings will use Application Default Credentials.
+    <div className="py-2">
+      <p className="pb-1 text-[11px] text-fg-mut">
+        A context without a binding authenticates with Application Default
+        Credentials.
       </p>
 
       {isLoading ? (
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
+        <p className="py-2 text-[11px] text-fg-mut">Loading…</p>
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3">
           {bindings && bindings.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-medium text-muted-foreground uppercase">
-                Configured Bindings
+            <div>
+              <h4 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+                Bound
               </h4>
               {bindings.map((item) => (
                 <div
                   key={item.contextName}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className="flex items-center justify-between gap-4 rounded px-1 py-1 transition-colors hover:bg-hover"
                 >
-                  <div className="space-y-1">
-                    <span className="font-medium font-mono text-sm">
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate font-mono text-xs text-fg">
                       {item.contextName}
                     </span>
-                    <div className="flex gap-2">
-                      {item.gcpProfile && (
-                        <Badge variant="outline">GCP: {item.gcpProfile}</Badge>
-                      )}
-                      {item.azureProfile && (
-                        <Badge variant="outline">
-                          Azure: {item.azureProfile}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[11px] text-fg-mut">
+                      {[
+                        item.gcpProfile && `GCP: ${item.gcpProfile}`,
+                        item.azureProfile && `Azure: ${item.azureProfile}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span className="flex flex-none items-center gap-0.5">
                     <Button
                       size="sm"
                       variant="ghost"
@@ -163,39 +154,40 @@ export function BindingsTab() {
                       Edit
                     </Button>
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="ghost"
+                      aria-label={`Remove binding for ${item.contextName}`}
                       onClick={() => deleteMutation.mutate(item.contextName)}
                       disabled={deleteMutation.isPending}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
-                  </div>
+                  </span>
                 </div>
               ))}
             </div>
           )}
 
           {unboundContexts && unboundContexts.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-medium text-muted-foreground uppercase">
-                Available Contexts (using defaults)
+            <div>
+              <h4 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+                Using defaults
               </h4>
               {unboundContexts.map((ctx) => (
                 <div
                   key={ctx.name}
-                  className="flex items-center justify-between p-3 border rounded-lg border-dashed"
+                  className="flex items-center justify-between gap-4 rounded px-1 py-1 transition-colors hover:bg-hover"
                 >
-                  <span className="font-mono text-sm text-muted-foreground">
+                  <span className="truncate font-mono text-xs text-fg-mut">
                     {ctx.name}
                   </span>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     onClick={() => openEditDialog(ctx.name)}
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Bind Profile
+                    <Plus className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                    Bind
                   </Button>
                 </div>
               ))}

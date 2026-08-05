@@ -1,9 +1,8 @@
 import { useThemeStore } from "@/stores/themeStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
@@ -15,6 +14,7 @@ import { RegistrySettings } from "@/components/registry/RegistrySettings";
 import { CloudProfiles } from "@/components/settings/CloudProfiles";
 import { CliSettings } from "@/components/settings/CliSettings";
 import { KubeconfigSettings } from "@/components/settings/KubeconfigSettings";
+import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
 import {
   Download,
   RefreshCw,
@@ -23,6 +23,12 @@ import {
   Moon,
   Monitor,
 } from "lucide-react";
+
+const THEMES = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "system", label: "System", Icon: Monitor },
+] as const;
 
 export function Settings() {
   const { theme, setTheme } = useThemeStore();
@@ -47,204 +53,150 @@ export function Settings() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-fg-mut">Customize your K8s GUI experience</p>
-      </div>
+    <div className="flex max-w-3xl flex-col gap-5 animate-in fade-in duration-200">
+      <SectionHeader title="Settings" />
 
-      <Section>
-        <SectionHeader
-          title="Appearance"
-          description="Customize the look and feel of the application"
-        />
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label>Theme</Label>
+      <SettingsGroup title="Appearance">
+        <SettingRow
+          label="Theme"
+          hint="System follows your desktop's light/dark preference."
+          control={
             <RadioGroup
               value={theme}
               onValueChange={(value) =>
                 setTheme(value as "light" | "dark" | "system")
               }
-              className="grid grid-cols-3 gap-4"
+              className="flex items-center gap-0.5"
             >
-              <div>
-                <RadioGroupItem
-                  value="light"
-                  id="light"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="light"
-                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
-                >
-                  <Sun className="mb-2 h-6 w-6" aria-hidden="true" />
-                  Light
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem
-                  value="dark"
-                  id="dark"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="dark"
-                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
-                >
-                  <Moon className="mb-2 h-6 w-6" aria-hidden="true" />
-                  Dark
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem
-                  value="system"
-                  id="system"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="system"
-                  className="flex flex-col items-center justify-between rounded border border-hair p-4 hover:bg-hover peer-data-[state=checked]:border-fg [&:has([data-state=checked])]:border-fg"
-                >
-                  <Monitor className="mb-2 h-6 w-6" aria-hidden="true" />
-                  System
-                </Label>
-              </div>
+              {THEMES.map(({ value, label, Icon }) => (
+                <div key={value}>
+                  <RadioGroupItem
+                    value={value}
+                    id={`theme-${value}`}
+                    className="peer sr-only"
+                  />
+                  <Label
+                    htmlFor={`theme-${value}`}
+                    className="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg"
+                  >
+                    <Icon className="h-3 w-3" aria-hidden="true" />
+                    {label}
+                  </Label>
+                </div>
+              ))}
             </RadioGroup>
-          </div>
-        </div>
-      </Section>
+          }
+        />
+      </SettingsGroup>
 
-      {/* Kubeconfig */}
       <KubeconfigSettings />
-
-      {/* Cloud Profiles */}
       <CloudProfiles />
-
-      {/* CLI Tools */}
       <CliSettings />
-
       <RegistrySettings />
-
       <PortForwardManager />
 
-      <Section>
-        <SectionHeader title="About" description="Application information" />
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-between">
-            <span className="text-fg-mut">Version</span>
-            <span className="font-mono">{appInfo?.version ?? "..."}</span>
-          </div>
-          <Separator />
-          <div className="flex justify-between">
-            <span className="text-fg-mut">Tauri</span>
-            <span>{appInfo?.tauriVersion ?? "..."}</span>
-          </div>
-          <Separator />
-          <div className="flex justify-between">
-            <span className="text-fg-mut">Framework</span>
-            <span>React + TypeScript</span>
-          </div>
-          <Separator />
-
-          {/* Update Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Updates</p>
-                {updateAvailable && updateVersion && (
-                  <p className="text-sm text-fg-mut">
-                    Version {updateVersion} available
-                  </p>
-                )}
-                {updateError && (
-                  <p className="text-sm text-err flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {updateError}
-                  </p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {!updateAvailable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      const update = await checkForUpdates();
-                      if (update) {
-                        toast({
-                          title: "Update available",
-                          description: `Version ${update.version} is ready to download`,
-                        });
-                      } else if (!updateError) {
-                        toast({
-                          title: "No updates",
-                          description: "You're running the latest version",
-                        });
-                      }
-                    }}
-                    disabled={updateChecking}
-                  >
-                    {updateChecking ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Checking...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Check for Updates
-                      </>
-                    )}
-                  </Button>
-                )}
-                {updateAvailable && !updateDownloading && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      toast({
-                        title: "Downloading update",
-                        description:
-                          "The app will restart automatically when ready",
-                      });
-                      downloadAndInstall();
-                    }}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download & Install
-                  </Button>
-                )}
-              </div>
+      <SettingsGroup title="About">
+        <SettingRow
+          label="Version"
+          control={
+            <span className="font-mono text-xs text-fg">
+              {appInfo?.version ?? "…"}
+            </span>
+          }
+        />
+        <SettingRow
+          label="Tauri"
+          control={
+            <span className="font-mono text-xs text-fg-mut">
+              {appInfo?.tauriVersion ?? "…"}
+            </span>
+          }
+        />
+        <SettingRow
+          label="Framework"
+          control={
+            <span className="text-xs text-fg-mut">React + TypeScript</span>
+          }
+        />
+        <SettingRow
+          label="Updates"
+          hint={
+            updateError ? (
+              <span className="flex items-center gap-1 text-err">
+                <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                {updateError}
+              </span>
+            ) : updateAvailable && updateVersion ? (
+              `Version ${updateVersion} is available.`
+            ) : (
+              "You are running the latest version."
+            )
+          }
+          control={
+            updateAvailable && !updateDownloading ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  toast({
+                    title: "Downloading update",
+                    description: "The app restarts automatically when ready.",
+                  });
+                  downloadAndInstall();
+                }}
+              >
+                <Download className="mr-1.5 h-3 w-3" aria-hidden="true" />
+                Download &amp; install
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const update = await checkForUpdates();
+                  if (update) {
+                    toast({
+                      title: "Update available",
+                      description: `Version ${update.version} is ready to download.`,
+                    });
+                  } else if (!updateError) {
+                    toast({
+                      title: "No updates",
+                      description: "You're running the latest version.",
+                    });
+                  }
+                }}
+                disabled={updateChecking || updateDownloading}
+              >
+                <RefreshCw
+                  className={`mr-1.5 h-3 w-3 ${updateChecking ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                {updateChecking ? "Checking…" : "Check for updates"}
+              </Button>
+            )
+          }
+        >
+          {updateDownloading && (
+            <div className="flex items-center gap-2">
+              <Progress value={updateProgress} className="max-w-xs" />
+              <span className="font-mono text-[11px] text-fg-mut">
+                {updateProgress}%
+              </span>
             </div>
-
-            {updateDownloading && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-fg-mut">Downloading...</span>
-                  <span className="font-mono">{updateProgress}%</span>
-                </div>
-                <Progress value={updateProgress} className="h-2" />
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Auto-check toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Automatic Updates</p>
-                <p className="text-sm text-fg-mut">
-                  Check for updates on startup and every 30 minutes
-                </p>
-              </div>
-              <Switch
-                checked={autoCheckEnabled}
-                onCheckedChange={setAutoCheckEnabled}
-              />
-            </div>
-          </div>
-        </div>
-      </Section>
+          )}
+        </SettingRow>
+        <SettingRow
+          label="Automatic updates"
+          hint="Check on startup and every 30 minutes."
+          control={
+            <Switch
+              aria-label="Automatic updates"
+              checked={autoCheckEnabled}
+              onCheckedChange={setAutoCheckEnabled}
+            />
+          }
+        />
+      </SettingsGroup>
     </div>
   );
 }
