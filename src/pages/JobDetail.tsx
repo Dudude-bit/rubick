@@ -106,10 +106,7 @@ export function JobDetail() {
         content: (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoCard
-                title="Job Configuration"
-                icon={<Briefcase className="h-4 w-4" />}
-              >
+              <InfoCard title="Job Configuration">
                 <div className="space-y-1">
                   <InfoRow
                     label="Completions"

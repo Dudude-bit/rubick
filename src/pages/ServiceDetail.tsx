@@ -14,7 +14,7 @@ import {
 } from "@/components/network";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Network, Globe, Server } from "lucide-react";
+import { Network } from "lucide-react";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -151,28 +151,19 @@ export function ServiceDetail() {
       onTabChange={setActiveTab}
     >
       <div className="grid gap-4 md:grid-cols-3">
-        <InfoCard
-          title="Cluster IP"
-          icon={<Server className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Cluster IP">
           <div className="text-xl font-bold font-mono">
             {service?.clusterIp || "None"}
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="External IPs"
-          icon={<Globe className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="External IPs">
           <div className="text-xl font-bold font-mono">
             {externalIps.length > 0 ? externalIps.join(", ") : "None"}
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Ports"
-          icon={<Network className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Ports">
           <div className="text-xl font-bold">{ports.length}</div>
         </InfoCard>
       </div>

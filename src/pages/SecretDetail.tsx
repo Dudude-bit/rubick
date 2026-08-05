@@ -10,7 +10,7 @@ import { ReferencedBy } from "@/components/resources";
 import { KeyValueList } from "@/components/shared";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Lock, Key } from "lucide-react";
+import { Lock } from "lucide-react";
 import { commands } from "@/lib/commands";
 import { useQuery } from "@tanstack/react-query";
 import type { SecretInfo } from "@/generated/types";
@@ -141,24 +141,15 @@ export function SecretDetail() {
       onTabChange={setActiveTab}
     >
       <div className="grid gap-4 md:grid-cols-3">
-        <InfoCard
-          title="Type"
-          icon={<Lock className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Type">
           <StatusBadge status={secretType.replace("kubernetes.io/", "")} />
         </InfoCard>
 
-        <InfoCard
-          title="Data Keys"
-          icon={<Key className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Data Keys">
           <div className="text-xl font-bold">{dataKeys.length}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Labels"
-          icon={<Lock className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Labels">
           <div className="text-xl font-bold">{Object.keys(labels).length}</div>
         </InfoCard>
       </div>

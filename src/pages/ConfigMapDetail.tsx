@@ -9,7 +9,7 @@ import {
 import { KeyValueList } from "@/components/shared";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { FileText, Key } from "lucide-react";
+import { FileText } from "lucide-react";
 import { commands } from "@/lib/commands";
 import { useQuery } from "@tanstack/react-query";
 import type { ConfigMapInfo } from "@/generated/types";
@@ -118,17 +118,11 @@ export function ConfigMapDetail() {
       onTabChange={setActiveTab}
     >
       <div className="grid gap-4 md:grid-cols-2">
-        <InfoCard
-          title="Data Keys"
-          icon={<Key className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Data Keys">
           <div className="text-xl font-bold">{dataKeys.length}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Labels"
-          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Labels">
           <div className="text-xl font-bold">{Object.keys(labels).length}</div>
         </InfoCard>
       </div>

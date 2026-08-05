@@ -7,7 +7,7 @@
 
 import { useState, useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -20,7 +20,6 @@ import {
 import {
   ChevronDown,
   ChevronRight,
-  HardDrive,
   Lock,
   FileKey,
   Database,
@@ -69,15 +68,15 @@ function getVolumeType(kind: string): VolumeType {
 function getVolumeIcon(volumeType: VolumeType) {
   switch (volumeType) {
     case "Secret":
-      return <Lock className="h-4 w-4 text-orange-500" />;
+      return <Lock className="h-4 w-4 text-fg-mut" />;
     case "ConfigMap":
-      return <FileKey className="h-4 w-4 text-blue-500" />;
+      return <FileKey className="h-4 w-4 text-fg-mut" />;
     case "PersistentVolumeClaim":
-      return <Database className="h-4 w-4 text-purple-500" />;
+      return <Database className="h-4 w-4 text-fg-mut" />;
     case "EmptyDir":
-      return <FolderOpen className="h-4 w-4 text-gray-500" />;
+      return <FolderOpen className="h-4 w-4 text-fg-mut" />;
     default:
-      return <Box className="h-4 w-4 text-muted-foreground" />;
+      return <Box className="h-4 w-4 text-fg-mut" />;
   }
 }
 
@@ -156,7 +155,7 @@ function VolumeMountItem({
     (volumeType === ResourceType.ConfigMap && isLoadingConfigMap);
 
   return (
-    <div className="rounded-lg border p-3 space-y-2">
+    <div className="rounded border border-hair p-3 space-y-2">
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -172,7 +171,7 @@ function VolumeMountItem({
                   </Badge>
                 )}
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
+              <div className="text-xs text-fg-mut mt-0.5">
                 {volume.name}
                 {volume.containerName && (
                   <span className="ml-2 opacity-70">
@@ -201,7 +200,7 @@ function VolumeMountItem({
         </div>
         {hasExpandableContent && (
           <CollapsibleContent>
-            <div className="mt-3 pt-3 border-t space-y-2">
+            <div className="mt-3 pt-3 border-t border-hair space-y-2">
               {volumeType === ResourceType.Secret && secretData && (
                 <>
                   {Object.entries(secretData).length > 0 ? (
@@ -216,7 +215,7 @@ function VolumeMountItem({
                       />
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-fg-mut">
                       No data keys in secret
                     </p>
                   )}
@@ -228,22 +227,22 @@ function VolumeMountItem({
                     Object.entries(configMapData).map(([key, value]) => (
                       <div
                         key={key}
-                        className="rounded-lg border p-3 space-y-2"
+                        className="rounded border border-hair p-3 space-y-2"
                       >
                         <div className="flex items-center gap-2">
-                          <FileKey className="h-4 w-4 text-muted-foreground" />
+                          <FileKey className="h-4 w-4 text-fg-mut" />
                           <span className="font-medium">{key}</span>
                           <Badge variant="secondary" className="text-xs">
                             {value.length} chars
                           </Badge>
                         </div>
-                        <pre className="bg-muted p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-48">
+                        <pre className="bg-hover p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-48">
                           {isLoadingConfigMap ? "Loading..." : value}
                         </pre>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-fg-mut">
                       No data keys in configmap
                     </p>
                   )}
@@ -349,81 +348,75 @@ export function VolumeMounts({ volumes, namespace }: VolumeMountsProps) {
   }, [secretNames, secretQueries]);
 
   return (
-    <Card>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80">
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
+    <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
+      <Section>
+        <SectionHeader
+          title="Volume Mounts"
+          count={hasVolumes ? volumes.length : undefined}
+          actions={
+            <>
+              {hasSecrets && (
+                <div className="flex items-center gap-2">
+                  {loadingSecrets.size > 0 && (
+                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
+                  )}
+                  <Switch
+                    id="show-volume-secrets"
+                    checked={showSecrets}
+                    onCheckedChange={setShowSecrets}
+                    disabled={loadingSecrets.size > 0}
+                  />
+                  <Label htmlFor="show-volume-secrets" className="text-sm">
+                    Show secrets
+                  </Label>
+                </div>
               )}
-              <CardTitle className="text-base flex items-center gap-2">
-                <HardDrive className="h-4 w-4" />
-                Volume Mounts
-                {hasVolumes && (
-                  <Badge variant="secondary" className="ml-2">
-                    {volumes.length}
-                  </Badge>
+              <CollapsibleTrigger
+                aria-label={isExpanded ? "Collapse" : "Expand"}
+                className="ml-1 text-fg-mut hover:text-fg"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
                 )}
-              </CardTitle>
-            </CollapsibleTrigger>
-            {hasSecrets && (
-              <div className="flex items-center gap-2">
-                {loadingSecrets.size > 0 && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-                <Switch
-                  id="show-volume-secrets"
-                  checked={showSecrets}
-                  onCheckedChange={setShowSecrets}
-                  disabled={loadingSecrets.size > 0}
-                />
-                <Label htmlFor="show-volume-secrets" className="text-sm">
-                  Show secrets
-                </Label>
-              </div>
-            )}
-          </div>
-        </CardHeader>
+              </CollapsibleTrigger>
+            </>
+          }
+        />
         <CollapsibleContent>
-          <CardContent className="pt-0">
-            {!hasVolumes ? (
-              <p className="text-sm text-muted-foreground">
-                No volume mounts defined
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {volumes.map((volume) => {
-                  const volumeType = getVolumeType(volume.kind);
-                  const secretData =
-                    volumeType === ResourceType.Secret
-                      ? secretCache[volume.name]
-                      : undefined;
-                  const configMapData =
-                    volumeType === ResourceType.ConfigMap
-                      ? configMapCache[volume.name]
-                      : undefined;
+          {!hasVolumes ? (
+            <p className="text-sm text-fg-mut">No volume mounts defined</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {volumes.map((volume) => {
+                const volumeType = getVolumeType(volume.kind);
+                const secretData =
+                  volumeType === ResourceType.Secret
+                    ? secretCache[volume.name]
+                    : undefined;
+                const configMapData =
+                  volumeType === ResourceType.ConfigMap
+                    ? configMapCache[volume.name]
+                    : undefined;
 
-                  return (
-                    <VolumeMountItem
-                      key={`${volume.name}-${volume.mountPath}`}
-                      volume={volume}
-                      volumeType={volumeType}
-                      secretData={secretData}
-                      configMapData={configMapData}
-                      showSecrets={showSecrets}
-                      isLoadingSecret={loadingSecrets.has(volume.name)}
-                      isLoadingConfigMap={loadingConfigMaps.has(volume.name)}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
+                return (
+                  <VolumeMountItem
+                    key={`${volume.name}-${volume.mountPath}`}
+                    volume={volume}
+                    volumeType={volumeType}
+                    secretData={secretData}
+                    configMapData={configMapData}
+                    showSecrets={showSecrets}
+                    isLoadingSecret={loadingSecrets.has(volume.name)}
+                    isLoadingConfigMap={loadingConfigMaps.has(volume.name)}
+                  />
+                );
+              })}
+            </div>
+          )}
         </CollapsibleContent>
-      </Collapsible>
-    </Card>
+      </Section>
+    </Collapsible>
   );
 }

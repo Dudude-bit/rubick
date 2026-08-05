@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -404,30 +403,17 @@ export function EnvironmentVariables({
   }, [expandedEnvVars]);
 
   return (
-    <Card>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80">
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <CardTitle className="text-base">
-                Environment Variables
-                {hasEnvVars && (
-                  <Badge variant="secondary" className="ml-2">
-                    {
-                      expandedEnvVars.filter((ev) => !ev.name.endsWith("*"))
-                        .length
-                    }
-                  </Badge>
-                )}
-              </CardTitle>
-            </CollapsibleTrigger>
-            <div className="flex items-center gap-4">
-              {/* Filter dropdown */}
+    <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
+      <Section>
+        <SectionHeader
+          title="Environment Variables"
+          count={
+            hasEnvVars
+              ? expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length
+              : undefined
+          }
+          actions={
+            <>
               <Select
                 value={filter}
                 onValueChange={(value) => setFilter(value as FilterOption)}
@@ -447,9 +433,9 @@ export function EnvironmentVariables({
               </Select>
 
               {hasSecrets && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-2">
                   {loadingSecrets && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
                   )}
                   <Switch
                     id={`show-secrets-${containerName}`}
@@ -473,89 +459,96 @@ export function EnvironmentVariables({
                   </Label>
                 </div>
               )}
-            </div>
-          </div>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="pt-0">
-            {!hasEnvVars ? (
-              <p className="text-sm text-muted-foreground">
-                No environment variables defined
-              </p>
-            ) : filteredEnvVars.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No environment variables match the selected filter
-              </p>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">Name</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead className="w-[200px]">Source</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEnvVars.map((ev) => {
-                      const isSecret =
-                        ev.sourceType === "secret" ||
-                        ev.sourceType === "envFromSecret";
-                      const isRevealed = revealedSecrets.has(ev.name);
-                      const displayValue = getDisplayValue(ev);
-                      const isPlaceholder = ev.name.endsWith("*");
 
-                      return (
-                        <TableRow
-                          key={`${ev.sourceType}-${ev.sourceName || ""}-${ev.name}`}
-                        >
-                          <TableCell className="font-mono text-xs font-medium">
-                            {isPlaceholder ? (
-                              <span className="text-muted-foreground italic">
-                                (all keys from {ev.sourceName})
-                              </span>
-                            ) : (
-                              ev.name
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isPlaceholder ? (
-                              <span className="text-muted-foreground text-xs italic">
-                                {displayValue}
-                              </span>
-                            ) : isSecret ? (
-                              <MaskedValue
-                                value={displayValue}
-                                isRevealed={isRevealed}
-                                onToggleReveal={() => toggleReveal(ev.name)}
-                                isLoading={loadingSecrets}
-                                showCopy={isRevealed}
-                                compact
-                              />
-                            ) : (
-                              <span className="font-mono text-xs break-all">
-                                {displayValue}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <SourceBadge
-                              type={ev.sourceType}
-                              name={ev.sourceName}
-                              namespace={namespace}
-                              linkable={!!ev.sourceName && !!namespace}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
+              <CollapsibleTrigger
+                aria-label={isExpanded ? "Collapse" : "Expand"}
+                className="ml-1 text-fg-mut hover:text-fg"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </CollapsibleTrigger>
+            </>
+          }
+        />
+        <CollapsibleContent>
+          {!hasEnvVars ? (
+            <p className="text-sm text-fg-mut">
+              No environment variables defined
+            </p>
+          ) : filteredEnvVars.length === 0 ? (
+            <p className="text-sm text-fg-mut">
+              No environment variables match the selected filter
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Name</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead className="w-[200px]">Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredEnvVars.map((ev) => {
+                  const isSecret =
+                    ev.sourceType === "secret" ||
+                    ev.sourceType === "envFromSecret";
+                  const isRevealed = revealedSecrets.has(ev.name);
+                  const displayValue = getDisplayValue(ev);
+                  const isPlaceholder = ev.name.endsWith("*");
+
+                  return (
+                    <TableRow
+                      key={`${ev.sourceType}-${ev.sourceName || ""}-${ev.name}`}
+                    >
+                      <TableCell className="font-mono text-xs font-medium">
+                        {isPlaceholder ? (
+                          <span className="text-fg-mut italic">
+                            (all keys from {ev.sourceName})
+                          </span>
+                        ) : (
+                          ev.name
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isPlaceholder ? (
+                          <span className="text-fg-mut text-xs italic">
+                            {displayValue}
+                          </span>
+                        ) : isSecret ? (
+                          <MaskedValue
+                            value={displayValue}
+                            isRevealed={isRevealed}
+                            onToggleReveal={() => toggleReveal(ev.name)}
+                            isLoading={loadingSecrets}
+                            showCopy={isRevealed}
+                            compact
+                          />
+                        ) : (
+                          <span className="font-mono text-xs break-all">
+                            {displayValue}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <SourceBadge
+                          type={ev.sourceType}
+                          name={ev.sourceName}
+                          namespace={namespace}
+                          linkable={!!ev.sourceName && !!namespace}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CollapsibleContent>
-      </Collapsible>
-    </Card>
+      </Section>
+    </Collapsible>
   );
 }

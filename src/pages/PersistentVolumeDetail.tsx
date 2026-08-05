@@ -7,7 +7,7 @@ import {
 } from "@/components/resources/ResourceDetailLayout";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { HardDrive, Link as LinkIcon, Database } from "lucide-react";
+import { HardDrive } from "lucide-react";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeInfo } from "@/generated/types";
 
@@ -116,17 +116,11 @@ export function PersistentVolumeDetail() {
       tabs={tabs}
     >
       <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Capacity"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Capacity">
           <div className="text-xl font-bold">{pv?.capacity}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Access Modes"
-          icon={<LinkIcon className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Access Modes">
           <div className="flex flex-wrap gap-1">
             {pv?.accessModes.map((mode, i) => (
               <Badge key={i} variant="secondary">
@@ -136,17 +130,11 @@ export function PersistentVolumeDetail() {
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Reclaim Policy"
-          icon={<HardDrive className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Reclaim Policy">
           <div className="text-xl font-bold">{pv?.reclaimPolicy}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Storage Class"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Storage Class">
           <div className="text-xl font-bold">{pv?.storageClass || "-"}</div>
         </InfoCard>
       </div>

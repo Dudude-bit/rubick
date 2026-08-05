@@ -11,12 +11,12 @@
  * views where all configuration data is available together.
  */
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
 import { ClickablePorts } from "@/components/ui/clickable-port";
-import { Activity, Terminal as TerminalIcon, ImageIcon } from "lucide-react";
+import { Terminal as TerminalIcon, ImageIcon } from "lucide-react";
 import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
 
 // Type guard to check if container has runtime info
@@ -67,46 +67,42 @@ export function ContainerCard({
   const resources = isRuntime ? null : container.resources;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Activity className="h-4 w-4" />
-          {container.name}
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          {/* Runtime status badge */}
-          {isRuntime && (
-            <Badge variant={container.ready ? "success" : "destructive"}>
-              {container.ready ? "Ready" : "Not Ready"}
-            </Badge>
-          )}
+    <Section>
+      <SectionHeader
+        title={container.name}
+        actions={
+          <>
+            {isRuntime && (
+              <Badge variant={container.ready ? "success" : "destructive"}>
+                {container.ready ? "Ready" : "Not Ready"}
+              </Badge>
+            )}
 
-          {/* Shell button for runtime containers */}
-          {showShell && isRuntime && onOpenShell && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenShell(container.name)}
-            >
-              <TerminalIcon className="mr-2 h-4 w-4" />
-              Shell
-            </Button>
-          )}
+            {showShell && isRuntime && onOpenShell && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenShell(container.name)}
+              >
+                <TerminalIcon className="mr-2 h-4 w-4" />
+                Shell
+              </Button>
+            )}
 
-          {/* Update image button for spec containers */}
-          {showUpdateImage && !isRuntime && onUpdateImage && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onUpdateImage(container.name, container.image)}
-            >
-              <ImageIcon className="mr-2 h-4 w-4" />
-              Update Image
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+            {showUpdateImage && !isRuntime && onUpdateImage && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onUpdateImage(container.name, container.image)}
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Update Image
+              </Button>
+            )}
+          </>
+        }
+      />
+      <SectionBody className="flex flex-col gap-3 pt-3 text-sm">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <span className="font-semibold block">Image:</span>
@@ -181,7 +177,7 @@ export function ContainerCard({
         {isRuntime && container.state && (
           <div>
             <span className="font-semibold block mb-1">State:</span>
-            <div className="text-muted-foreground">
+            <div className="text-fg-mut">
               {Object.entries(container.state).map(([status, details]) => (
                 <div key={status}>
                   <span className="capitalize">{status}</span>
@@ -200,7 +196,7 @@ export function ContainerCard({
           containerName={container.name}
           namespace={namespace}
         />
-      </CardContent>
-    </Card>
+      </SectionBody>
+    </Section>
   );
 }

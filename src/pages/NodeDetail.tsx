@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Server, Cpu, HardDrive, MemoryStick, Bug } from "lucide-react";
+import { Server, HardDrive, Bug } from "lucide-react";
 import {
   formatKubernetesBytes,
   parseCPU,
@@ -225,7 +225,6 @@ export function NodeDetail() {
           used={nodeWithMetrics?.cpuMillicores ?? null}
           limit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
           type="cpu"
-          icon={<Cpu className="h-4 w-4" />}
           showProgressBar={true}
           description={
             node?.allocatable.cpu
@@ -241,7 +240,6 @@ export function NodeDetail() {
             node?.capacity.memory ? parseMemory(node.capacity.memory) : null
           }
           type="memory"
-          icon={<MemoryStick className="h-4 w-4" />}
           showProgressBar={true}
           description={
             node?.allocatable.memory

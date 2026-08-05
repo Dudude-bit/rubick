@@ -1,6 +1,6 @@
 // src/components/resources/ReferencedBy.tsx
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -11,7 +11,6 @@ import {
 import {
   ChevronDown,
   ChevronRight,
-  Layers,
   Lock,
   FileKey,
   HardDrive,
@@ -30,7 +29,7 @@ interface ReferencedByProps {
   namespace: string;
 }
 
-interface SectionProps {
+interface RefGroupProps {
   title: string;
   icon: React.ElementType;
   count: number;
@@ -38,24 +37,24 @@ interface SectionProps {
   children: React.ReactNode;
 }
 
-function Section({
+function RefGroup({
   title,
   icon: Icon,
   count,
   defaultOpen = false,
   children,
-}: SectionProps) {
+}: RefGroupProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen || count > 0);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-muted/50 rounded-md transition-colors">
+      <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-hover rounded transition-colors">
         {isOpen ? (
           <ChevronDown className="h-4 w-4" />
         ) : (
           <ChevronRight className="h-4 w-4" />
         )}
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className="h-4 w-4 text-fg-mut" />
         <span className="font-medium text-sm">{title}</span>
         <Badge
           variant={count > 0 ? "default" : "secondary"}
@@ -66,9 +65,7 @@ function Section({
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-8 pr-2 pb-2 space-y-2">
         {count === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
-            No references found
-          </p>
+          <p className="text-sm text-fg-mut py-2">No references found</p>
         ) : (
           children
         )}
@@ -90,26 +87,18 @@ export function ReferencedBy({
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <Spinner className="h-6 w-6" />
-          <span className="ml-2 text-muted-foreground">
-            Loading references...
-          </span>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center py-8">
+        <Spinner className="h-6 w-6" />
+        <span className="ml-2 text-fg-mut">Loading references...</span>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent className="py-4">
-          <p className="text-destructive text-sm">
-            Failed to load references: {String(error)}
-          </p>
-        </CardContent>
-      </Card>
+      <p className="text-err text-sm py-4">
+        Failed to load references: {String(error)}
+      </p>
     );
   }
 
@@ -128,18 +117,10 @@ export function ReferencedBy({
     refs.tlsIngress.length;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Referenced By
-          <Badge variant="secondary" className="ml-2">
-            {totalCount}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        <Section
+    <Section>
+      <SectionHeader title="Referenced By" count={totalCount} />
+      <div className="flex flex-col gap-1">
+        <RefGroup
           title="Environment Variables"
           icon={resourceType === ResourceType.Secret ? Lock : FileKey}
           count={refs.envVars.length}
@@ -158,9 +139,9 @@ export function ReferencedBy({
               }
             />
           ))}
-        </Section>
+        </RefGroup>
 
-        <Section
+        <RefGroup
           title="EnvFrom (Bulk Import)"
           icon={resourceType === ResourceType.Secret ? Lock : FileKey}
           count={refs.envFrom.length}
@@ -179,9 +160,9 @@ export function ReferencedBy({
               }
             />
           ))}
-        </Section>
+        </RefGroup>
 
-        <Section
+        <RefGroup
           title="Volume Mounts"
           icon={HardDrive}
           count={refs.volumes.length}
@@ -196,11 +177,11 @@ export function ReferencedBy({
               subtitle={`${ref.containerName ? `${ref.containerName} → ` : ""}${ref.mountPath}`}
             />
           ))}
-        </Section>
+        </RefGroup>
 
         {resourceType === ResourceType.Secret && (
           <>
-            <Section
+            <RefGroup
               title="Image Pull Secrets"
               icon={Image}
               count={refs.imagePullSecrets.length}
@@ -213,9 +194,9 @@ export function ReferencedBy({
                   namespace={ref.namespace}
                 />
               ))}
-            </Section>
+            </RefGroup>
 
-            <Section
+            <RefGroup
               title="TLS Ingress"
               icon={Globe}
               count={refs.tlsIngress.length}
@@ -233,10 +214,10 @@ export function ReferencedBy({
                   }
                 />
               ))}
-            </Section>
+            </RefGroup>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }

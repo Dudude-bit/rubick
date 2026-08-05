@@ -4,8 +4,6 @@
  * metrics, returns the grid.
  */
 
-import { Activity, Server } from "lucide-react";
-
 import { InfoCard, InfoRow } from "@/components/resources/ResourceDetailLayout";
 import { MetricCard } from "@/components/ui/metric-card";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -20,13 +18,13 @@ interface PodInfoCardsProps {
 export function PodInfoCards({ pod, podWithMetrics }: PodInfoCardsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <InfoCard title="Info" icon={<Server className="h-4 w-4" />}>
+      <InfoCard title="Info">
         <InfoRow label="Node" value={pod.nodeName || "-"} />
         <InfoRow label="Pod IP" value={pod.podIp || "-"} />
         <InfoRow label="Host IP" value={pod.hostIp || "-"} />
       </InfoCard>
 
-      <InfoCard title="Status" icon={<Activity className="h-4 w-4" />}>
+      <InfoCard title="Status">
         <InfoRow label="Phase" value={pod.status.phase} />
         <InfoRow
           label="Started"

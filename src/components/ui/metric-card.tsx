@@ -5,9 +5,8 @@
  * Uses design system tokens for colors and animations.
  */
 
-import * as React from "react";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,14 +15,13 @@ import {
   calculateUtilization,
   getUtilizationColor,
 } from "@/lib/k8s-quantity";
-import { Cpu, MemoryStick, Activity, HardDrive } from "lucide-react";
 
 // ============================================================================
-// MetricCard - Card display for metrics with progress bar
+// MetricCard - Metric readout with progress bar
 // ============================================================================
 
 export interface MetricCardProps {
-  /** Title for the metric card */
+  /** Title for the metric */
   title: string;
   /** Used value (millicores/bytes depending on type) */
   used: number | null | undefined;
@@ -33,8 +31,6 @@ export interface MetricCardProps {
   limit?: number | null | undefined;
   /** Type of metric for parsing and formatting */
   type: "cpu" | "memory" | "storage" | "custom";
-  /** Custom icon (defaults to CPU/Memory based on type) */
-  icon?: React.ReactNode;
   /** Show progress bar */
   showProgressBar?: boolean;
   /** Show percentage badge */
@@ -48,7 +44,7 @@ export interface MetricCardProps {
 }
 
 /**
- * MetricCard - Full card component for displaying a metric
+ * MetricCard - Metric readout with a progress bar
  *
  * Uses type-specific thresholds:
  * - CPU: warning at 80%, critical at 95%
@@ -70,7 +66,6 @@ export function MetricCard({
   request,
   limit,
   type,
-  icon,
   showProgressBar = true,
   showPercentage = true,
   description,
@@ -111,18 +106,6 @@ export function MetricCard({
         : undefined;
   const colorVariant = getUtilizationColor(percentage, metricType);
 
-  // Default icons based on type
-  const defaultIcon =
-    type === "cpu" ? (
-      <Cpu className="h-4 w-4" />
-    ) : type === "memory" ? (
-      <MemoryStick className="h-4 w-4" />
-    ) : type === "storage" ? (
-      <HardDrive className="h-4 w-4" />
-    ) : (
-      <Activity className="h-4 w-4" />
-    );
-
   // Format display values
   const usedDisplay = usedNum !== null ? format(usedNum) : "-";
   const baseDisplay = hasLimit
@@ -140,14 +123,12 @@ export function MetricCard({
   );
 
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <div className="flex items-center gap-2">
-            {icon ?? defaultIcon}
-            {title}
-          </div>
-          {showPercentage && percentage !== null && (
+    <Section className={className}>
+      <SectionHeader
+        title={title}
+        actions={
+          showPercentage &&
+          percentage !== null && (
             <Badge
               variant={
                 colorVariant === "destructive" ? "destructive" : "secondary"
@@ -155,30 +136,26 @@ export function MetricCard({
             >
               {percentage.toFixed(1)}%
             </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <span className="text-2xl font-bold">{usedDisplay}</span>
-          <span className="text-sm text-muted-foreground">/ {baseDisplay}</span>
-        </div>
-        {showProgressBar && percentage !== null && (
-          <Progress
-            value={Math.min(100, percentage)}
-            className={progressBarClass}
-          />
-        )}
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-        {hasRequest && hasLimit && (
-          <p className="text-xs text-muted-foreground">
-            Request: {format(requestNum!)}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+          )
+        }
+      />
+      <div className="flex items-baseline justify-between">
+        <span className="text-2xl font-bold tabular-nums">{usedDisplay}</span>
+        <span className="text-sm text-fg-mut tabular-nums">
+          / {baseDisplay}
+        </span>
+      </div>
+      {showProgressBar && percentage !== null && (
+        <Progress
+          value={Math.min(100, percentage)}
+          className={progressBarClass}
+        />
+      )}
+      {description && <p className="text-xs text-fg-mut">{description}</p>}
+      {hasRequest && hasLimit && (
+        <p className="text-xs text-fg-mut">Request: {format(requestNum!)}</p>
+      )}
+    </Section>
   );
 }
 

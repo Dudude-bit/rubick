@@ -7,7 +7,7 @@ import {
 } from "@/components/resources/ResourceDetailLayout";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Layers, Star, Settings } from "lucide-react";
+import { Layers, Star } from "lucide-react";
 import { commands } from "@/lib/commands";
 import type { StorageClassInfo } from "@/generated/types";
 
@@ -158,31 +158,19 @@ export function StorageClassDetail() {
       tabs={tabs}
     >
       <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Provisioner"
-          icon={<Settings className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Provisioner">
           <code className="text-sm">{sc?.provisioner}</code>
         </InfoCard>
 
-        <InfoCard
-          title="Reclaim Policy"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Reclaim Policy">
           <Badge variant="outline">{sc?.reclaimPolicy}</Badge>
         </InfoCard>
 
-        <InfoCard
-          title="Binding Mode"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Binding Mode">
           <Badge variant="secondary">{sc?.volumeBindingMode}</Badge>
         </InfoCard>
 
-        <InfoCard
-          title="Volume Expansion"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Volume Expansion">
           <Badge variant={sc?.allowVolumeExpansion ? "default" : "outline"}>
             {sc?.allowVolumeExpansion ? "Allowed" : "Disabled"}
           </Badge>

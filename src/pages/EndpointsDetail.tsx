@@ -7,7 +7,7 @@ import {
 } from "@/components/resources/ResourceDetailLayout";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Network, CircleDot, Server } from "lucide-react";
+import { Network, CircleDot } from "lucide-react";
 import { LinkedResource } from "@/components/network";
 import { commands } from "@/lib/commands";
 import type { EndpointsInfo } from "@/generated/types";
@@ -231,26 +231,17 @@ export function EndpointsDetail() {
       tabs={tabs}
     >
       <div className="grid gap-4 md:grid-cols-3">
-        <InfoCard
-          title="Ready Addresses"
-          icon={<CircleDot className="h-4 w-4 text-green-500" />}
-        >
+        <InfoCard title="Ready Addresses">
           <div className="text-xl font-bold text-green-500">{totalReady}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Not Ready"
-          icon={<CircleDot className="h-4 w-4 text-yellow-500" />}
-        >
+        <InfoCard title="Not Ready">
           <div className="text-xl font-bold text-yellow-500">
             {totalNotReady}
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Ports"
-          icon={<Server className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Ports">
           <div className="text-xl font-bold">{allPorts.length}</div>
         </InfoCard>
       </div>

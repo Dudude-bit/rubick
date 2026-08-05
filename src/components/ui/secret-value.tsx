@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Copy, Eye, EyeOff, Key, ShieldAlert } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks";
 
@@ -46,7 +46,7 @@ export function SecretValue({
 
   return (
     <div className="flex items-center gap-2">
-      <pre className="bg-muted p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono flex-1">
+      <pre className="bg-hover p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono flex-1">
         {isLoading ? "Loading..." : displayValue}
       </pre>
       <div className="flex items-center gap-1 shrink-0">
@@ -110,10 +110,10 @@ export function SecretKeyValueItem({
   };
 
   return (
-    <div className="rounded-lg border p-3 space-y-2">
+    <div className="rounded border border-hair p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Key className="h-4 w-4 text-muted-foreground" />
+          <Key className="h-4 w-4 text-fg-mut" />
           <span className="font-medium">{keyName}</span>
           <Badge variant="secondary" className="text-xs">
             {value.length} chars
@@ -144,7 +144,7 @@ export function SecretKeyValueItem({
           </Button>
         </div>
       </div>
-      <pre className="bg-muted p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono">
+      <pre className="bg-hover p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all font-mono">
         {isLoading ? "Loading..." : displayValue}
       </pre>
     </div>
@@ -207,21 +207,24 @@ export function SecretKeyValueList({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CardTitle>
-            {title} ({entries.length})
-          </CardTitle>
-          {showSensitiveBadge && (
-            <Badge variant="outline" className="text-xs">
-              <ShieldAlert className="h-3 w-3 mr-1" />
-              Sensitive
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
+    <Section>
+      <SectionHeader
+        title={title}
+        count={
+          showSensitiveBadge ? (
+            <span className="flex items-center gap-2">
+              {entries.length}
+              <Badge variant="outline" className="text-xs">
+                <ShieldAlert className="h-3 w-3 mr-1" />
+                Sensitive
+              </Badge>
+            </span>
+          ) : (
+            entries.length
+          )
+        }
+        actions={
+          entries.length > 0 && (
             <>
               <Button
                 variant="outline"
@@ -251,27 +254,25 @@ export function SecretKeyValueList({
                 Copy All
               </Button>
             </>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {entries.map(([key, value]) => (
-            <SecretKeyValueItem
-              key={key}
-              keyName={key}
-              value={value}
-              isRevealed={revealedKeys.has(key)}
-              onToggleReveal={() => toggleReveal(key)}
-              isLoading={isLoading}
-            />
-          ))}
-          {entries.length === 0 && !isLoading && (
-            <p className="text-muted-foreground">{emptyMessage}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          )
+        }
+      />
+      <SectionBody className="flex flex-col gap-3 pt-3">
+        {entries.map(([key, value]) => (
+          <SecretKeyValueItem
+            key={key}
+            keyName={key}
+            value={value}
+            isRevealed={revealedKeys.has(key)}
+            onToggleReveal={() => toggleReveal(key)}
+            isLoading={isLoading}
+          />
+        ))}
+        {entries.length === 0 && !isLoading && (
+          <p className="text-sm text-fg-mut">{emptyMessage}</p>
+        )}
+      </SectionBody>
+    </Section>
   );
 }
 

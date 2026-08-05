@@ -82,10 +82,7 @@ export function DaemonSetDetail() {
         content: (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoCard
-                title="DaemonSet Info"
-                icon={<Server className="h-4 w-4" />}
-              >
+              <InfoCard title="DaemonSet Info">
                 <div className="space-y-1">
                   <InfoRow
                     label="Update Strategy"

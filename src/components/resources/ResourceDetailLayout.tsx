@@ -12,7 +12,7 @@ import type { ConditionInfo } from "@/generated/types";
 import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { LabelsDisplay } from "./LabelsDisplay";
 import { ConditionsDisplay } from "./ConditionsDisplay";
@@ -49,22 +49,22 @@ export function DetailError({
 
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-4">
-      <AlertCircle className="h-12 w-12 text-destructive" />
-      <p className="text-destructive text-lg font-medium">
+      <AlertCircle className="h-12 w-12 text-err" />
+      <p className="text-err text-lg font-medium">
         {isNotFound
           ? `${resourceKind} not found`
           : `Failed to load ${resourceKind.toLowerCase()} details`}
       </p>
       {isNotFound && (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-fg-mut text-sm">
           The {resourceKind.toLowerCase()} may have been deleted or recreated
         </p>
       )}
       {additionalMessage && (
-        <p className="text-muted-foreground text-sm">{additionalMessage}</p>
+        <p className="text-fg-mut text-sm">{additionalMessage}</p>
       )}
       {isSearching && (
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="flex items-center gap-2 text-fg-mut">
           <RefreshCw className="h-4 w-4 animate-spin" />
           <span>Looking for replacement...</span>
         </div>
@@ -101,18 +101,17 @@ export function InfoRow({ label, value, className }: InfoRowProps) {
     <div
       className={`flex justify-between items-center py-1 ${className ?? ""}`}
     >
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm text-fg-mut">{label}</span>
       <span className="text-sm font-medium">{value}</span>
     </div>
   );
 }
 
 /**
- * Info card component for grouping related info
+ * Titled group of related info on the flat canvas.
  */
 interface InfoCardProps {
   title: string;
-  icon?: ReactNode;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -120,21 +119,15 @@ interface InfoCardProps {
 
 export function InfoCard({
   title,
-  icon,
   children,
   className,
   contentClassName,
 }: InfoCardProps) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center gap-2">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className={contentClassName}>{children}</CardContent>
-    </Card>
+    <Section className={className}>
+      <SectionHeader title={title} />
+      <div className={contentClassName}>{children}</div>
+    </Section>
   );
 }
 
@@ -250,7 +243,7 @@ export function ResourceDetailLayout({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <ResourceDetailHeader
         title={title}
@@ -276,7 +269,7 @@ export function ResourceDetailLayout({
 
         {/* Tab contents */}
         {tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="space-y-4">
+          <TabsContent key={tab.id} value={tab.id} className="space-y-6">
             {tab.content}
           </TabsContent>
         ))}

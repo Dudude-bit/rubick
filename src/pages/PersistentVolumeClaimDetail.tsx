@@ -7,7 +7,7 @@ import {
 } from "@/components/resources/ResourceDetailLayout";
 import { useResourceDetail } from "@/hooks";
 import { ResourceType } from "@/lib/resource-registry";
-import { Database, HardDrive, Link as LinkIcon } from "lucide-react";
+import { Database } from "lucide-react";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 
@@ -111,17 +111,11 @@ export function PersistentVolumeClaimDetail() {
       tabs={tabs}
     >
       <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Capacity"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Capacity">
           <div className="text-xl font-bold">{pvc?.capacity || "N/A"}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Access Modes"
-          icon={<LinkIcon className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Access Modes">
           <div className="flex flex-wrap gap-1">
             {pvc?.accessModes.map((mode, i) => (
               <Badge key={i} variant="secondary">
@@ -131,19 +125,13 @@ export function PersistentVolumeClaimDetail() {
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Storage Class"
-          icon={<HardDrive className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Storage Class">
           <div className="text-xl font-bold">
             {pvc?.storageClass || "default"}
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Volume"
-          icon={<HardDrive className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Volume">
           <div className="text-sm font-mono truncate">
             {pvc?.volume || "Pending"}
           </div>

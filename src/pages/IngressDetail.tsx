@@ -15,7 +15,6 @@ import {
   Globe,
   ExternalLink,
   Shield,
-  Network,
   Copy,
   Link2,
   Tag,
@@ -619,19 +618,13 @@ export function IngressDetail() {
       tabs={tabs}
     >
       <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Ingress Class"
-          icon={<Globe className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Ingress Class">
           <div className="text-xl font-bold">
             {ingress?.className || "default"}
           </div>
         </InfoCard>
 
-        <InfoCard
-          title="Load Balancer"
-          icon={<ExternalLink className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Load Balancer">
           <div className="text-xl font-bold">
             {loadBalancerIps.length > 0 ? loadBalancerIps[0] : "Pending"}
           </div>
@@ -642,17 +635,11 @@ export function IngressDetail() {
           )}
         </InfoCard>
 
-        <InfoCard
-          title="Rules"
-          icon={<Network className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Rules">
           <div className="text-xl font-bold">{rules.length}</div>
         </InfoCard>
 
-        <InfoCard
-          title="Access URLs"
-          icon={<Link2 className="h-4 w-4 text-muted-foreground" />}
-        >
+        <InfoCard title="Access URLs">
           <div className="text-xl font-bold">{accessUrls.length}</div>
         </InfoCard>
       </div>
