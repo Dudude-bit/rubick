@@ -40,9 +40,9 @@ export default {
         },
         // Role tokens (one flat canvas)
         canvas: 'hsl(var(--canvas))',
-        hair: 'hsl(var(--hair) / 0.07)',
-        hover: 'hsl(var(--hover) / 0.04)',
-        sel: 'hsl(var(--sel) / 0.09)',
+        hair: 'hsl(var(--hair))',
+        hover: 'hsl(var(--hover))',
+        sel: 'hsl(var(--sel))',
         fg: {
           DEFAULT: 'hsl(var(--fg))',
           mid: 'hsl(var(--fg-mid))',
