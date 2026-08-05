@@ -10,6 +10,7 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import { usePeek } from "@/hooks/usePeek";
 
 export interface ResourceRefProps {
   kind: string;
@@ -18,9 +19,10 @@ export interface ResourceRefProps {
   /** Off where the surrounding column already says the kind. */
   showKind?: boolean;
   /**
-   * Called before navigation on a plain left click. The peek panel takes this
-   * seam and calls `preventDefault()`; the anchor keeps its real destination
-   * either way, so middle-click and modifier-click still open the page.
+   * Called before the peek opens on a plain left click. Calling
+   * `preventDefault()` here keeps both the peek and the navigation from
+   * happening; the anchor keeps its real destination either way, so
+   * middle-click and modifier-click still open the page.
    */
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   className?: string;
@@ -74,6 +76,7 @@ export function ResourceRef({
   className,
 }: ResourceRefProps) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
+  const { open } = usePeek();
   const { stem, tail } = splitName(name);
   const resolved = isResourceType(kind) ? toKind(kind) : null;
   const Icon = resolved ? getResourceDefinition(resolved).icon : null;
@@ -147,10 +150,29 @@ export function ResourceRef({
     return <span className={cn(shell, className)}>{body}</span>;
   }
 
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+    // Only a plain left click belongs to the peek. Ctrl, cmd, shift and the
+    // middle button are how a reference is opened in a new window, and one
+    // that cannot be is worse than the plain link it replaced.
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    open({ kind, name, namespace });
+  };
+
   return (
     <Link
       to={getResourceDetailUrl(kind, name, namespace)}
-      onClick={onClick}
+      onClick={handleClick}
       className={cn(shell, "hover:bg-hover", className)}
     >
       {body}

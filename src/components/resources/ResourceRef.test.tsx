@@ -1,16 +1,30 @@
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { ResourceRef, isRoutableKind } from "./ResourceRef";
 import {
   useDisplaySettingsStore,
   type ResourceColouring,
 } from "@/stores/displaySettingsStore";
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+/** Where the click landed: the peek is a query parameter, not component state. */
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <span data-testid="location">{`${pathname}${search}`}</span>;
+}
+
+const wrap = (ui: ReactNode) =>
+  render(
+    <MemoryRouter initialEntries={["/events"]}>
+      {ui}
+      <LocationProbe />
+    </MemoryRouter>
+  );
+
+const location = () => screen.getByTestId("location").textContent;
 
 const styleOf = (testId: string) =>
   screen.getByTestId(testId).getAttribute("style") ?? "";
@@ -182,15 +196,53 @@ describe("ResourceRef", () => {
     });
   });
 
-  describe("click seam", () => {
-    it("hands a plain click to onClick without losing the href", async () => {
-      const onClick = vi.fn();
+  describe("click", () => {
+    const renderRef = (onClick?: () => void) =>
       wrap(
         <ResourceRef kind="Pod" name="a-1" namespace="ns" onClick={onClick} />
       );
+
+    it("opens the peek instead of navigating, keeping the page underneath", async () => {
+      renderRef();
+      await userEvent.click(screen.getByRole("link"));
+      expect(location()).toBe("/events?peek=pods%2Fns%2Fa-1");
+    });
+
+    // A reference that cannot be opened in a new window is worse than the
+    // plain link it replaced, so the browser keeps every modified click.
+    it.each([
+      ["ctrl", { ctrlKey: true }],
+      ["meta", { metaKey: true }],
+      ["shift", { shiftKey: true }],
+      ["middle button", { button: 1 }],
+    ])("leaves a %s click to the browser", (_label, init) => {
+      renderRef();
+      const link = screen.getByRole("link");
+      const handled = fireEvent.click(link, init);
+      expect(handled).toBe(true);
+      expect(location()).toBe("/events");
+      expect(link).toHaveAttribute("href", "/pods/ns/a-1");
+    });
+
+    it("hands a plain click to onClick without losing the href", async () => {
+      const onClick = vi.fn();
+      renderRef(onClick);
       await userEvent.click(screen.getByRole("link"));
       expect(onClick).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("link")).toHaveAttribute("href", "/pods/ns/a-1");
+    });
+
+    it("lets onClick call off the peek entirely", () => {
+      wrap(
+        <ResourceRef
+          kind="Pod"
+          name="a-1"
+          namespace="ns"
+          onClick={(event) => event.preventDefault()}
+        />
+      );
+      fireEvent.click(screen.getByRole("link"), { button: 0 });
+      expect(location()).toBe("/events");
     });
 
     it("does not call onClick for an unroutable reference", async () => {

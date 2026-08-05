@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
+import { PeekPanel } from "@/components/resources/PeekPanel";
 import { YamlEditorDialog } from "@/components/yaml";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
@@ -41,6 +42,9 @@ export function Layout() {
       </div>
       <CommandPalette />
       <YamlEditorDialog />
+      {/* Outside the outlet: one instance, and it survives the route change
+          that `Open full page` performs. */}
+      <PeekPanel />
     </div>
   );
 }
