@@ -168,6 +168,7 @@ export function ResourceList<
       {!embedded && (
         <ResourceListHeader
           title={resolvedTitle}
+          count={resources.length}
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
@@ -183,6 +184,8 @@ export function ResourceList<
         getRowHref={getRowHref}
         quickActions={resolvedQuickActions}
         getRowId={getRowId}
+        groupByNamespace
+        rowLabel={emptyStateLabel.toLowerCase()}
       />
       {deleteConfig && (
         <ConfirmDialog

@@ -63,7 +63,10 @@ export function QuickActions<T>({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7",
+                  // The row's height is whatever the tallest cell is, and
+                  // an icon button is usually it — 24px keeps a hover
+                  // affordance from inflating every row in the table.
+                  "h-6 w-6",
                   action.variant === "destructive" &&
                     "text-destructive hover:text-destructive hover:bg-destructive/10"
                 )}
@@ -73,7 +76,7 @@ export function QuickActions<T>({
                   action.onClick(item);
                 }}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">

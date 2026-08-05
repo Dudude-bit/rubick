@@ -46,11 +46,11 @@ export const DataFreshness = memo(function DataFreshness({
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "inline-flex items-center gap-1.5 text-xs text-muted-foreground",
+              "inline-flex items-center gap-1.5 text-[11px] text-fg-fnt",
               className
             )}
           >
-            <span className="h-2 w-2 rounded-full shrink-0 bg-ok" />
+            <span className="h-1.5 w-1.5 rounded-full shrink-0 bg-ok" />
             <span>Live</span>
           </div>
         </TooltipTrigger>

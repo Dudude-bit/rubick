@@ -10,6 +10,7 @@ import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
+  type VisibilityState,
   type Row,
 } from "@tanstack/react-table";
 import {
@@ -21,7 +22,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -74,6 +74,14 @@ interface DataTableProps<TData, TValue> {
   /** Shown when the cluster genuinely has none of this resource. The
    *  "no search matches" case is handled separately. */
   emptyMessage?: string;
+  /**
+   * Opt in to namespace captions. Only takes effect when the data spans
+   * more than one namespace: a single-namespace view stays a flat list,
+   * because a caption that repeats the tab's scope is noise.
+   */
+  groupByNamespace?: boolean;
+  /** Plural noun for the group caption count, e.g. "pods". */
+  rowLabel?: string;
 }
 
 // Extended page size options for large datasets
@@ -109,6 +117,12 @@ function createActionsColumn<TData, TValue>(
   };
 }
 
+/** Namespaces are the one grouping key every namespaced resource shares. */
+function rowNamespace(row: unknown): string | null {
+  const ns = (row as { namespace?: string | null } | null)?.namespace;
+  return typeof ns === "string" && ns.length > 0 ? ns : null;
+}
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -123,6 +137,8 @@ export function DataTable<TData, TValue>({
   enableKeyboardNav,
   getRowId,
   emptyMessage = "No resources of this type in the current scope.",
+  groupByNamespace = false,
+  rowLabel = "rows",
 }: DataTableProps<TData, TValue>) {
   const navigate = useNavigate();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
@@ -146,8 +162,30 @@ export function DataTable<TData, TValue>({
   // row grows to triple height, which defeats the point of compact. The
   // table container already scrolls horizontally.
   const isCompact = tableDensity === "compact";
-  const cellPadding = isCompact ? "py-1.5 px-3 whitespace-nowrap" : "p-4";
-  const headerHeight = isCompact ? "h-9" : "h-12";
+  const cellPadding = isCompact
+    ? "py-0.5 px-2.5 whitespace-nowrap"
+    : "py-2 px-2.5";
+
+  // A caption that repeats a scope the user already picked is noise, so
+  // grouping only switches on once the rows genuinely span namespaces.
+  const groupingActive = React.useMemo(() => {
+    if (!groupByNamespace) return false;
+    const seen = new Set<string>();
+    for (const item of data) {
+      const ns = rowNamespace(item);
+      if (ns) seen.add(ns);
+      if (seen.size > 1) return true;
+    }
+    return false;
+  }, [data, groupByNamespace]);
+
+  // The caption carries the namespace, so the column beneath it would say
+  // the same word on every row.
+  const columnVisibility = React.useMemo<VisibilityState>(() => {
+    const state: VisibilityState = {};
+    if (groupingActive) state.namespace = false;
+    return state;
+  }, [groupingActive]);
 
   // Determine if we should use virtual scroll based on data size
   const shouldVirtualScroll =
@@ -205,11 +243,13 @@ export function DataTable<TData, TValue>({
       columnFilters,
       globalFilter,
       pagination,
+      columnVisibility,
     },
   });
 
   const rows = table.getRowModel().rows;
   const isClickable = !!(getRowHref || onRowClick);
+  const visibleColumnCount = table.getVisibleFlatColumns().length;
 
   React.useEffect(() => {
     const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
@@ -266,25 +306,93 @@ export function DataTable<TData, TValue>({
     ? "all"
     : String(pagination.pageSize);
 
+  const renderRow = (row: Row<TData>, index: number) => {
+    const rowProps = keyboardNavEnabled ? getRowProps(index) : {};
+    const isFocused = focusedRowIndex === index;
+
+    return (
+      <TableRow
+        key={row.id}
+        data-state={row.getIsSelected() && "selected"}
+        {...rowProps}
+        className={cn(
+          isClickable && "cursor-pointer",
+          isFocused && "ring-2 ring-ring ring-inset",
+          "relative group"
+        )}
+        onClick={
+          isClickable ? (e) => handleRowClick(row.original, e) : undefined
+        }
+        onMouseEnter={() => setHoveredRowIndex(index)}
+        onMouseLeave={() => setHoveredRowIndex(null)}
+      >
+        {row.getVisibleCells().map((cell) => (
+          <TableCell key={cell.id} className={cellPadding}>
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  };
+
+  // One caption per namespace, rows beneath it in first-seen order. Built
+  // as a flat list so the keyboard-nav index stays the visual position and
+  // does not skip over the captions.
+  const body: React.ReactNode[] = [];
+  if (groupingActive) {
+    const groups = new Map<string, Row<TData>[]>();
+    for (const row of rows) {
+      const ns = rowNamespace(row.original) ?? "—";
+      const bucket = groups.get(ns);
+      if (bucket) bucket.push(row);
+      else groups.set(ns, [row]);
+    }
+    let index = 0;
+    for (const [ns, groupRows] of groups) {
+      const noun =
+        groupRows.length === 1 ? rowLabel.replace(/s$/, "") : rowLabel;
+      body.push(
+        <TableRow key={`ns-${ns}`} data-quiet className="border-0">
+          <TableCell
+            colSpan={visibleColumnCount}
+            className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+          >
+            {ns}{" "}
+            <span className="font-mono text-fg-mut">
+              · {groupRows.length} {noun}
+            </span>
+          </TableCell>
+        </TableRow>
+      );
+      for (const row of groupRows) body.push(renderRow(row, index++));
+    }
+  } else {
+    rows.forEach((row, index) => body.push(renderRow(row, index)));
+  }
+
   if (isLoading) {
     return <TableSkeleton columns={columns.length} rows={5} />;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
+        {/* A search field is a text entry, not a panel: the box only
+            appears once it has focus or a value. */}
+        <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+          <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <input
+            type="text"
+            aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            className="pl-8"
+            className="w-40 bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt"
           />
         </div>
         <div className="flex items-center gap-2">
           {showLargeDatasetWarning && (
-            <div className="flex items-center gap-1.5 text-xs text-warn">
+            <div className="flex items-center gap-1.5 text-[11px] text-warn">
               <AlertTriangle className="h-3.5 w-3.5" />
               <span>Showing all {data.length} rows may affect performance</span>
             </div>
@@ -292,17 +400,17 @@ export function DataTable<TData, TValue>({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() =>
                   setTableDensity(isCompact ? "comfortable" : "compact")
                 }
-                className="h-8 px-2"
+                className="h-7 w-7 p-0 text-fg-mut"
               >
                 {isCompact ? (
-                  <AlignJustify className="h-4 w-4" />
+                  <AlignJustify className="h-3.5 w-3.5" />
                 ) : (
-                  <List className="h-4 w-4" />
+                  <List className="h-3.5 w-3.5" />
                 )}
               </Button>
             </TooltipTrigger>
@@ -314,7 +422,6 @@ export function DataTable<TData, TValue>({
       </div>
       <div
         ref={containerRef}
-        className="rounded-md border"
         role={keyboardNavEnabled ? "grid" : undefined}
         aria-label={keyboardNavEnabled ? "Data table" : undefined}
       >
@@ -336,17 +443,14 @@ export function DataTable<TData, TValue>({
               className={cn(
                 shouldVirtualScroll &&
                   isShowingAllRows &&
-                  "sticky top-0 bg-background z-10"
+                  "sticky top-0 z-10 bg-canvas"
               )}
             >
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     return (
-                      <TableHead
-                        key={header.id}
-                        className={cn(headerHeight, cellPadding)}
-                      >
+                      <TableHead key={header.id}>
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -361,43 +465,11 @@ export function DataTable<TData, TValue>({
             </TableHeader>
             <TableBody>
               {rows.length ? (
-                rows.map((row, index) => {
-                  const rowProps = keyboardNavEnabled ? getRowProps(index) : {};
-                  const isFocused = focusedRowIndex === index;
-
-                  return (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
-                      {...rowProps}
-                      className={cn(
-                        isClickable && "cursor-pointer",
-                        isFocused && "ring-2 ring-ring ring-inset",
-                        "relative group"
-                      )}
-                      onClick={
-                        isClickable
-                          ? (e) => handleRowClick(row.original, e)
-                          : undefined
-                      }
-                      onMouseEnter={() => setHoveredRowIndex(index)}
-                      onMouseLeave={() => setHoveredRowIndex(null)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className={cellPadding}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  );
-                })
+                body
               ) : (
-                <TableRow className="hover:bg-transparent">
+                <TableRow data-quiet>
                   <TableCell
-                    colSpan={columnsWithActions.length}
+                    colSpan={visibleColumnCount}
                     className="h-32 text-center"
                   >
                     {/* "Nothing matches your filter" and "this cluster has
@@ -407,18 +479,19 @@ export function DataTable<TData, TValue>({
                     {searchValue ? (
                       <div className="flex flex-col items-center gap-2">
                         <SearchX
-                          className="h-5 w-5 text-muted-foreground"
+                          className="h-5 w-5 text-fg-mut"
                           aria-hidden="true"
                         />
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-fg-mut">
                           Nothing matches{" "}
-                          <span className="font-mono text-foreground">
+                          <span className="font-mono text-fg">
                             {searchValue}
                           </span>
                         </p>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
+                          className="h-7 text-xs"
                           onClick={() => setSearchValue("")}
                         >
                           Clear search
@@ -427,12 +500,10 @@ export function DataTable<TData, TValue>({
                     ) : (
                       <div className="flex flex-col items-center gap-2">
                         <Inbox
-                          className="h-5 w-5 text-muted-foreground"
+                          className="h-5 w-5 text-fg-mut"
                           aria-hidden="true"
                         />
-                        <p className="text-sm text-muted-foreground">
-                          {emptyMessage}
-                        </p>
+                        <p className="text-xs text-fg-mut">{emptyMessage}</p>
                       </div>
                     )}
                   </TableCell>
@@ -442,23 +513,28 @@ export function DataTable<TData, TValue>({
           </Table>
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
+      {/* Pagination is a footnote to the data, so it is text and chevrons
+          rather than a row of buttons competing with the table above. */}
+      <div className="flex items-center justify-between text-[11px] text-fg-fnt">
+        <div>
           {filteredRows === totalRows
-            ? `${totalRows} row(s)`
-            : `${filteredRows} of ${totalRows} row(s)`}
+            ? `${totalRows} ${totalRows === 1 ? rowLabel.replace(/s$/, "") : rowLabel}`
+            : `${filteredRows} of ${totalRows} ${rowLabel}`}
           {totalRows > 0 && !isShowingAllRows && (
             <span className="ml-2">
-              Showing {pageStart}-{pageEnd}
+              {pageStart}–{pageEnd}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Select
             value={currentPageSizeValue}
             onValueChange={handlePageSizeChange}
           >
-            <SelectTrigger className="h-8 w-[120px]">
+            <SelectTrigger
+              aria-label="Rows per page"
+              className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+            >
               <SelectValue placeholder="Rows" />
             </SelectTrigger>
             <SelectContent>
@@ -470,24 +546,26 @@ export function DataTable<TData, TValue>({
               <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
+            aria-label="Previous page"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
+            className="flex h-6 items-center gap-0.5 rounded px-1.5 text-fg-mut transition-colors hover:bg-hover disabled:pointer-events-none disabled:text-fg-fnt disabled:opacity-40"
           >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Prev
+          </button>
+          <button
+            type="button"
+            aria-label="Next page"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
+            className="flex h-6 items-center gap-0.5 rounded px-1.5 text-fg-mut transition-colors hover:bg-hover disabled:pointer-events-none disabled:text-fg-fnt disabled:opacity-40"
           >
             Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>
