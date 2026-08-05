@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import {
   ResourceDetailLayout,
@@ -37,11 +37,9 @@ export function StorageClassDetail() {
       id: "details",
       label: "Details",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Storage Class Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Section>
+          <SectionHeader title="Storage Class Details" />
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Provisioner</p>
@@ -83,19 +81,17 @@ export function StorageClassDetail() {
                 <p>{sc?.age}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
       id: "parameters",
       label: "Parameters",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Parameters</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Parameters" />
+          <div>
             {Object.keys(parameters).length > 0 ? (
               <div className="space-y-2">
                 {Object.entries(parameters).map(([key, value]) => (
@@ -110,8 +106,8 @@ export function StorageClassDetail() {
             ) : (
               <p className="text-muted-foreground">No parameters defined</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {

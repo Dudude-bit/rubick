@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, List, Puzzle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
@@ -114,12 +114,10 @@ export function CrdDetail() {
       label: "Overview",
       content: crd && (
         <div className="space-y-4">
-          {/* Basic Info Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Basic Info */}
+          <Section>
+            <SectionHeader title="Basic Information" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Group</p>
                 <p className="font-medium">{crd.group || "core"}</p>
@@ -178,15 +176,13 @@ export function CrdDetail() {
                   )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
 
-          {/* Versions Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Versions</CardTitle>
-            </CardHeader>
-            <CardContent>
+          {/* Versions */}
+          <Section>
+            <SectionHeader title="Versions" />
+            <div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -241,10 +237,10 @@ export function CrdDetail() {
                   </tbody>
                 </table>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
 
-          {/* Conditions Card */}
+          {/* Conditions */}
           {crd.conditions.length > 0 && (
             <ConditionsDisplay
               conditions={crd.conditions.map((c) => ({
@@ -273,11 +269,12 @@ export function CrdDetail() {
       id: "schema",
       label: "Schema",
       content: (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>OpenAPI Schema</CardTitle>
-              {crd && crd.versions.length > 1 && (
+        <Section>
+          <SectionHeader
+            title="OpenAPI Schema"
+            actions={
+              crd &&
+              crd.versions.length > 1 && (
                 <div className="flex gap-2">
                   {crd.versions.map((v) => (
                     <Button
@@ -295,10 +292,10 @@ export function CrdDetail() {
                     </Button>
                   ))}
                 </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
+              )
+            }
+          />
+          <div>
             {currentVersion?.schema ? (
               <SchemaViewer schema={currentVersion.schema} />
             ) : (
@@ -306,8 +303,8 @@ export function CrdDetail() {
                 No schema available for this version.
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
@@ -330,14 +327,16 @@ export function CrdDetail() {
       id: "yaml",
       label: "YAML",
       content: (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>YAML Definition</CardTitle>
-            <Button variant="outline" size="sm" onClick={copyYaml}>
-              Copy
-            </Button>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader
+            title="YAML Definition"
+            actions={
+              <Button variant="outline" size="sm" onClick={copyYaml}>
+                Copy
+              </Button>
+            }
+          />
+          <div>
             {yaml ? (
               <YamlEditor value={yaml} readOnly height="500px" />
             ) : (
@@ -345,8 +344,8 @@ export function CrdDetail() {
                 Loading YAML...
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
   ];

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
@@ -16,9 +16,6 @@ import {
   ExternalLink,
   Shield,
   Copy,
-  Link2,
-  Tag,
-  FileText,
   ArrowRight,
   AlertTriangle,
   Info,
@@ -165,15 +162,10 @@ export function IngressDetail() {
       label: "Access",
       content: (
         <div className="space-y-4">
-          {/* Access URLs Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Link2 className="h-5 w-5" />
-                How to Access This Ingress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          {/* Access URLs */}
+          <Section>
+            <SectionHeader title="How to Access This Ingress" />
+            <div>
               {accessUrls.length > 0 ? (
                 <div className="space-y-3">
                   {accessUrls.map((url, idx) => (
@@ -268,8 +260,8 @@ export function IngressDetail() {
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </div>
       ),
     },
@@ -277,11 +269,9 @@ export function IngressDetail() {
       id: "rules",
       label: "Rules",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ingress Rules</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Ingress Rules" />
+          <div>
             <div className="space-y-4">
               {rules.map((rule, idx) => {
                 const isWildcard = rule.host === "*" || !rule.host;
@@ -336,22 +326,17 @@ export function IngressDetail() {
                 <p className="text-muted-foreground">No rules defined</p>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
       id: "tls",
       label: "TLS",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              TLS Configuration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="TLS Configuration" />
+          <div>
             {tlsConfigs.length > 0 ? (
               <div className="space-y-4">
                 {/* Explicit TLS Hosts */}
@@ -423,8 +408,8 @@ export function IngressDetail() {
             ) : (
               <p className="text-muted-foreground">No TLS configured</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
@@ -433,14 +418,9 @@ export function IngressDetail() {
       content: (
         <div className="space-y-4">
           {/* Labels */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Tag className="h-5 w-5" />
-                Labels
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader title="Labels" />
+            <div>
               {Object.keys(labels).length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(labels).map(([key, value]) => (
@@ -454,18 +434,13 @@ export function IngressDetail() {
               ) : (
                 <p className="text-muted-foreground">No labels</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
 
           {/* Annotations */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Annotations
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader title="Annotations" />
+            <div>
               {Object.keys(annotations).length > 0 ? (
                 <div className="space-y-2">
                   {Object.entries(annotations).map(([key, value]) => (
@@ -483,8 +458,8 @@ export function IngressDetail() {
               ) : (
                 <p className="text-muted-foreground">No annotations</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </div>
       ),
     },
@@ -492,14 +467,9 @@ export function IngressDetail() {
       id: "events",
       label: "Events",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Events
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Events" />
+          <div>
             {eventsError ? (
               <div className="flex items-center justify-between p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
                 <div className="flex items-center gap-2">
@@ -564,8 +534,8 @@ export function IngressDetail() {
             ) : (
               <p className="text-muted-foreground">No events found</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {

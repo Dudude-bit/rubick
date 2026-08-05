@@ -1,4 +1,5 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
 import { useState, useEffect, useMemo } from "react";
@@ -9,7 +10,6 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,14 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Trash2,
-  RefreshCw,
-  Scale,
-  RotateCcw,
-  FileText,
-  Rocket,
-} from "lucide-react";
+import { Trash2, RefreshCw, Scale, RotateCcw, Rocket } from "lucide-react";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
@@ -307,11 +300,9 @@ export function DeploymentDetail() {
       content: (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Deployment Info</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+            <Section>
+              <SectionHeader title="Deployment Info" />
+              <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Strategy</span>
                   <span>{deployment?.strategy || "RollingUpdate"}</span>
@@ -332,8 +323,8 @@ export function DeploymentDetail() {
                   <span className="text-muted-foreground">Created</span>
                   <span>{deployment?.createdAt || "-"}</span>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
             <LabelsDisplay labels={deployment?.labels || {}} title="Labels" />
           </div>
@@ -393,13 +384,10 @@ export function DeploymentDetail() {
       id: "logs",
       label: "Logs",
       content: (
-        <Card className="h-[600px]">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Pod Logs
-              </CardTitle>
+        <Section className="h-[600px]">
+          <SectionHeader
+            title="Pod Logs"
+            actions={
               <Select
                 value={selectedLogPod || ""}
                 onValueChange={setSelectedLogPod}
@@ -416,10 +404,10 @@ export function DeploymentDetail() {
                           <span
                             className={`h-2 w-2 rounded-full ${
                               status === "Running"
-                                ? "bg-green-500"
+                                ? "bg-ok"
                                 : status === "Pending"
-                                  ? "bg-yellow-500"
-                                  : "bg-red-500"
+                                  ? "bg-warn"
+                                  : "bg-err"
                             }`}
                           />
                           {pod.name}
@@ -429,9 +417,9 @@ export function DeploymentDetail() {
                   })}
                 </SelectContent>
               </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 h-[calc(100%-4rem)]">
+            }
+          />
+          <div className="p-0 h-[calc(100%-4rem)]">
             {logPod ? (
               <LogViewer
                 key={`${logPod.namespace}:${logPod.name}`}
@@ -447,8 +435,8 @@ export function DeploymentDetail() {
                   : "Select a pod to view logs"}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
@@ -544,18 +532,18 @@ export function DeploymentDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
-      {/* Rollout Progress Card */}
+      {/* Rollout Progress */}
       {isRolloutInProgress && rolloutStatus && (
-        <Card className="border-blue-500/50 bg-blue-500/10 mb-4">
-          <CardContent className="py-3">
+        <Section className="border-blue-500/50 bg-blue-500/10 mb-4">
+          <div className="py-3">
             <div className="flex items-center justify-between">
               <span className="text-sm">{rolloutMessage}</span>
               <span className="text-sm text-muted-foreground">
                 {rolloutReady}/{rolloutDesired} pods ready
               </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       )}
 
       {/* Info Cards (Optional, current deployment view has mostly overview tab info) */}

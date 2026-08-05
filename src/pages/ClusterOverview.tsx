@@ -1,17 +1,11 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertCircle, Layers } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -76,14 +70,14 @@ export function ClusterOverview() {
   if (!isConnected) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle>Welcome to K8s GUI</CardTitle>
-            <CardDescription>
-              Select a cluster from the header to get started.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <Section className="max-w-sm text-center">
+          <h1 className="text-lg font-semibold tracking-tight">
+            Welcome to K8s GUI
+          </h1>
+          <p className="text-sm text-fg-mut">
+            Select a cluster from the header to get started.
+          </p>
+        </Section>
       </div>
     );
   }
@@ -106,20 +100,20 @@ export function ClusterOverview() {
           title={currentContext || "Cluster Overview"}
           subtitle={subtitle}
         />
-        <Card className="border-err/[0.4]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+        <Section>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+            <h2 className="text-[13px] font-semibold tracking-tight text-err">
               Could not read cluster state
-            </CardTitle>
-            <CardDescription>{error.message}</CardDescription>
-          </CardHeader>
-          <CardContent>
+            </h2>
+          </div>
+          <p className="text-xs text-fg-mut">{error.message}</p>
+          <div className="flex items-center gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Retry
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       </div>
     );
   }
@@ -129,7 +123,7 @@ export function ClusterOverview() {
   const hasProblems = overview.problems.length > 0;
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
+    <div className="flex flex-col gap-6 animate-in fade-in duration-200">
       <OverviewHeader
         title={currentContext || "Cluster Overview"}
         subtitle={subtitle}
@@ -146,7 +140,7 @@ export function ClusterOverview() {
         // two answer the follow-up questions it raises — "is the cluster out
         // of room?" and "what else has been complaining?".
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             <SchedulerPanel
               scheduler={overview.scheduler}
               metricsAvailable={overview.metricsAvailable}
@@ -159,14 +153,14 @@ export function ClusterOverview() {
         // Orientation layout: nothing is on fire, so lead with what this
         // cluster is made of.
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             <NodesPanel nodes={overview.nodes} />
             <SchedulerPanel
               scheduler={overview.scheduler}
               metricsAvailable={overview.metricsAvailable}
             />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             <NamespacesPanel namespaces={overview.namespaces} />
             <WarningsPanel warnings={overview.warnings} />
           </div>
@@ -185,29 +179,22 @@ function NamespacesPanel({
   const busiest = namespaces.slice(0, 8);
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Layers className="h-4 w-4" aria-hidden="true" />
-          Namespaces with workloads
-          <span className="text-sm font-normal text-fg-mut">
-            {namespaces.length}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="border-t border-hair">
-          {busiest.map((ns) => (
-            <div
-              key={ns.name}
-              className="flex items-center justify-between border-b border-hair px-4 py-2 text-sm last:border-b-0"
-            >
-              <span className="font-mono">{ns.name}</span>
-              <span className="text-xs text-fg-mut">{ns.podCount} pods</span>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <Section>
+      <SectionHeader
+        title="Namespaces with workloads"
+        count={namespaces.length}
+      />
+      <SectionBody>
+        {busiest.map((ns) => (
+          <div
+            key={ns.name}
+            className="flex items-center justify-between border-b border-hair px-2 py-2 text-sm last:border-b-0"
+          >
+            <span className="font-mono">{ns.name}</span>
+            <span className="text-xs text-fg-mut">{ns.podCount} pods</span>
+          </div>
+        ))}
+      </SectionBody>
+    </Section>
   );
 }

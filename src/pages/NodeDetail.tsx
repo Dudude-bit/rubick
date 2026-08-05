@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Server, HardDrive, Bug } from "lucide-react";
+import { Bug } from "lucide-react";
 import {
   formatKubernetesBytes,
   parseCPU,
@@ -120,11 +120,9 @@ export function NodeDetail() {
       id: "info",
       label: "Info",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Node Information</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
+        <Section>
+          <SectionHeader title="Node Information" />
+          <div className="grid gap-4 md:grid-cols-2">
             <InfoRow
               label="Internal IP"
               value={<span className="font-mono">{getInternalIP()}</span>}
@@ -145,8 +143,8 @@ export function NodeDetail() {
                   : "-"
               }
             />
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {
@@ -248,28 +246,20 @@ export function NodeDetail() {
           }
         />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pods (running)
-            </CardTitle>
-            <Server className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Pods (running)" />
+          <div>
             <div className="text-2xl font-bold">{podCount ?? "-"}</div>
             <p className="text-xs text-muted-foreground">
               Allocatable:{" "}
               {node?.allocatable.pods || node?.capacity.pods || "-"}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Storage" />
+          <div>
             <div className="text-2xl font-bold truncate text-lg">
               {node && formatKubernetesBytes(node.capacity.ephemeralStorage)}
             </div>
@@ -277,8 +267,8 @@ export function NodeDetail() {
               Allocatable:{" "}
               {node && formatKubernetesBytes(node.allocatable.ephemeralStorage)}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       </div>
 
       {/* Debug Node Dialog */}

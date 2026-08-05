@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
 import { AnnotationsDisplay } from "@/components/resources/AnnotationsDisplay";
@@ -57,11 +57,9 @@ export function ServiceDetail() {
       id: "ports",
       label: "Ports",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Service Ports</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Service Ports" />
+          <div>
             <div className="space-y-2">
               {ports.map((port, idx) => (
                 <div
@@ -84,8 +82,8 @@ export function ServiceDetail() {
                 <p className="text-muted-foreground">No ports defined</p>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {

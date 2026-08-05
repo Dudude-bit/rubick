@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -6,7 +7,6 @@ import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
@@ -18,8 +18,6 @@ import {
   RotateCcw,
   Clock,
   Package,
-  FileCode,
-  ScrollText,
   History,
   Anchor,
 } from "lucide-react";
@@ -133,8 +131,8 @@ export function HelmDetail() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Helm Releases
         </Button>
-        <Card>
-          <CardContent className="p-6 text-center">
+        <Section>
+          <div className="p-6 text-center">
             <Anchor className="h-12 w-12 mx-auto text-purple-500 mb-4" />
             <h2 className="text-xl font-semibold mb-2">Flux HelmRelease</h2>
             <p className="text-muted-foreground mb-4">
@@ -149,8 +147,8 @@ export function HelmDetail() {
             >
               View in CRD Browser
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       </div>
     );
   }
@@ -170,11 +168,11 @@ export function HelmDetail() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Helm Releases
         </Button>
-        <Card>
-          <CardContent className="p-6 text-center text-destructive">
+        <Section>
+          <div className="p-6 text-center text-destructive">
             {error ? normalizeTauriError(error) : "Release not found"}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       </div>
     );
   }
@@ -268,23 +266,19 @@ export function HelmDetail() {
           </div>
 
           {release.description && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Description</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Section>
+              <SectionHeader title="Description" />
+              <div>
                 <p className="text-sm text-muted-foreground">
                   {release.description}
                 </p>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Deployment Info</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <Section>
+            <SectionHeader title="Deployment Info" />
+            <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
                 <StatusBadge status={release.status} />
@@ -301,57 +295,42 @@ export function HelmDetail() {
                     : "-"}
                 </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </TabsContent>
 
         <TabsContent value="values">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileCode className="h-4 w-4" />
-                Values (YAML)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader title="Values (YAML)" />
+            <div>
               <YamlEditor
                 value={formatYaml(release.values)}
                 readOnly
                 height="600px"
                 className="rounded-lg overflow-hidden"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </TabsContent>
 
         <TabsContent value="manifest">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ScrollText className="h-4 w-4" />
-                Rendered Manifest
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader title="Rendered Manifest" />
+            <div>
               <YamlEditor
                 value={release.manifest || "# No manifest available"}
                 readOnly
                 height="600px"
                 className="rounded-lg overflow-hidden"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </TabsContent>
 
         <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <History className="h-4 w-4" />
-                Release History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Section>
+            <SectionHeader title="Release History" />
+            <div>
               {historyLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
               ) : history.length === 0 ? (
@@ -419,25 +398,20 @@ export function HelmDetail() {
                   </tbody>
                 </table>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
         </TabsContent>
 
         {release.notes && (
           <TabsContent value="notes">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <ScrollText className="h-4 w-4" />
-                  Release Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Section>
+              <SectionHeader title="Release Notes" />
+              <div>
                 <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-[600px] font-mono whitespace-pre-wrap">
                   {release.notes}
                 </pre>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           </TabsContent>
         )}
       </Tabs>
@@ -484,8 +458,8 @@ interface InfoCardProps {
 
 function InfoCard({ icon: Icon, label, value }: InfoCardProps) {
   return (
-    <Card>
-      <CardContent className="p-4">
+    <Section>
+      <div className="p-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-muted rounded-lg">
             <Icon className="h-4 w-4 text-muted-foreground" />
@@ -495,8 +469,8 @@ function InfoCard({ icon: Icon, label, value }: InfoCardProps) {
             <p className="text-sm font-medium truncate">{value}</p>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Section>
   );
 }
 

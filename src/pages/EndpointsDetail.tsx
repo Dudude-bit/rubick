@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import {
   ResourceDetailLayout,
@@ -46,21 +46,19 @@ export function EndpointsDetail() {
       content: (
         <div className="space-y-4">
           {subsets.map((subset, idx) => (
-            <Card key={idx}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  Subset {idx + 1}
-                  <Badge variant="outline">
-                    {subset.addresses.length} ready
-                  </Badge>
-                  {subset.notReadyAddresses.length > 0 && (
-                    <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
+            <Section key={idx}>
+              <SectionHeader
+                title={`Subset ${idx + 1}`}
+                count={`${subset.addresses.length} ready`}
+                actions={
+                  subset.notReadyAddresses.length > 0 && (
+                    <Badge className="bg-warn/[0.16] text-warn border-warn/[0.16]">
                       {subset.notReadyAddresses.length} not ready
                     </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                  )
+                }
+              />
+              <div className="space-y-4">
                 {subset.addresses.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium mb-2 text-green-500">
@@ -135,15 +133,15 @@ export function EndpointsDetail() {
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           ))}
           {subsets.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
+            <Section>
+              <div className="py-8 text-center text-muted-foreground">
                 No endpoint subsets
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           )}
         </div>
       ),
@@ -152,11 +150,9 @@ export function EndpointsDetail() {
       id: "ports",
       label: "Ports",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ports</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Ports" />
+          <div>
             {allPorts.length > 0 ? (
               <div className="space-y-2">
                 {allPorts.map((port, i) => (
@@ -177,8 +173,8 @@ export function EndpointsDetail() {
             ) : (
               <p className="text-muted-foreground">No ports defined</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {

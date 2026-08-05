@@ -1,11 +1,11 @@
 import { ReactNode, useState } from "react";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, FileCode, Box, Link as LinkIcon } from "lucide-react";
+import { Trash2, Box } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
@@ -176,14 +176,9 @@ export function CustomResourceDetail() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Basic Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileCode className="h-4 w-4" />
-                  Resource Info
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <Section>
+              <SectionHeader title="Resource Info" />
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">API Version</span>
                   <span className="font-mono">{resource.apiVersion}</span>
@@ -218,18 +213,13 @@ export function CustomResourceDetail() {
                   <span className="text-muted-foreground">Created</span>
                   <RealtimeAge timestamp={resource.createdAt} fallback="-" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
 
             {/* Owner References */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <LinkIcon className="h-4 w-4" />
-                  Owner References
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Section>
+              <SectionHeader title="Owner References" />
+              <div>
                 {resource.ownerReferences.length > 0 ? (
                   <div className="space-y-2">
                     {resource.ownerReferences.map((owner, index) => (
@@ -256,17 +246,15 @@ export function CustomResourceDetail() {
                     No owner references
                   </p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           </div>
 
           {/* Finalizers */}
           {resource.finalizers.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Finalizers</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Section>
+              <SectionHeader title="Finalizers" />
+              <div>
                 <div className="flex flex-wrap gap-2">
                   {resource.finalizers.map((finalizer, index) => (
                     <Badge
@@ -278,8 +266,8 @@ export function CustomResourceDetail() {
                     </Badge>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           )}
 
           {/* Labels & Annotations */}
@@ -293,8 +281,8 @@ export function CustomResourceDetail() {
 
           {/* CRD Link */}
           {crdInfo && (
-            <Card>
-              <CardContent className="pt-6">
+            <Section>
+              <div className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">
@@ -310,8 +298,8 @@ export function CustomResourceDetail() {
                     </Link>
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Section>
           )}
         </div>
       ),
@@ -320,18 +308,16 @@ export function CustomResourceDetail() {
       id: "spec",
       label: "Spec",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Spec</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader title="Spec" />
+          <div>
             {resource ? (
               <JsonTreeViewer data={resource.spec} />
             ) : (
               <p className="text-muted-foreground">Loading...</p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     ...(resource?.status != null
@@ -340,14 +326,12 @@ export function CustomResourceDetail() {
             id: "status",
             label: "Status",
             content: (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Status</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <Section>
+                <SectionHeader title="Status" />
+                <div>
                   <JsonTreeViewer data={resource.status} />
-                </CardContent>
-              </Card>
+                </div>
+              </Section>
             ),
           },
         ]
@@ -356,17 +340,19 @@ export function CustomResourceDetail() {
       id: "yaml",
       label: "YAML",
       content: (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">YAML Definition</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleCopyYaml}>
-              Copy
-            </Button>
-          </CardHeader>
-          <CardContent>
+        <Section>
+          <SectionHeader
+            title="YAML Definition"
+            actions={
+              <Button variant="outline" size="sm" onClick={handleCopyYaml}>
+                Copy
+              </Button>
+            }
+          />
+          <div className="border-t border-hair">
             <YamlEditor value={yaml} readOnly height="500px" />
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
   ];

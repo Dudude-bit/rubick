@@ -1,16 +1,10 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { Badge } from "@/components/ui/badge";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -123,15 +117,17 @@ export function Events() {
       </div>
 
       {/* Events List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Events</CardTitle>
-          <CardDescription>
-            Events from {currentNamespace || "all namespaces"}
-            {eventLimit !== "all" && ` • Limit ${eventLimit}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="max-h-[600px] overflow-y-auto scrollbar-thin">
+      <Section>
+        <SectionHeader
+          title="Recent Events"
+          description={
+            <>
+              Events from {currentNamespace || "all namespaces"}
+              {eventLimit !== "all" && ` • Limit ${eventLimit}`}
+            </>
+          }
+        />
+        <div className="max-h-[600px] overflow-y-auto scrollbar-thin">
           {showSkeleton ? (
             <ListSkeleton count={5} showIcon />
           ) : events.length === 0 ? (
@@ -145,8 +141,8 @@ export function Events() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
     </div>
   );
 }

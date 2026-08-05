@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Section } from "@/components/ui/section";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Bug, RefreshCw, Trash2 } from "lucide-react";
@@ -14,7 +15,6 @@ import type { PodInfo, DebugResult } from "@/generated/types";
 import { DebugPodDialog } from "@/components/debug";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodTerminal } from "@/components/terminal/PodTerminal";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
@@ -363,16 +363,16 @@ export function PodDetail() {
       )}
 
       {showTerminal && selectedContainer && pod && (
-        <Card className="my-4 overflow-hidden border-2 border-muted">
-          <CardContent className="p-0 h-[500px] overflow-hidden relative bg-black">
+        <Section className="my-4 overflow-hidden border-2 border-muted">
+          <div className="p-0 h-[500px] overflow-hidden relative bg-black">
             <PodTerminal
               podName={pod.name}
               namespace={pod.namespace}
               containerName={selectedContainer}
               onClose={handleTerminalClose}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       )}
     </ResourceDetailLayout>
   );

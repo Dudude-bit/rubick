@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import {
   ResourceDetailLayout,
@@ -37,11 +37,9 @@ export function PersistentVolumeDetail() {
       id: "details",
       label: "Details",
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Volume Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Section>
+          <SectionHeader title="Volume Details" />
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
@@ -80,8 +78,8 @@ export function PersistentVolumeDetail() {
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       ),
     },
     {

@@ -1,10 +1,10 @@
 import { useMemo } from "react";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import type { DaemonSetDetailInfo } from "@/generated/types";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { Trash2, Server, RefreshCw } from "lucide-react";
@@ -131,11 +131,9 @@ export function DaemonSetDetail() {
         content: (
           <div className="space-y-4">
             {(daemonSet?.containers || []).map((container) => (
-              <Card key={container.name}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{container.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <Section key={container.name}>
+                <SectionHeader title={container.name} />
+                <div className="space-y-4">
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Image</span>
@@ -185,8 +183,8 @@ export function DaemonSetDetail() {
                       namespace={namespace}
                     />
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </Section>
             ))}
             {(!daemonSet?.containers || daemonSet.containers.length === 0) && (
               <p className="text-center text-muted-foreground py-8">
