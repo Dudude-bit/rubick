@@ -21,7 +21,14 @@ import { RegistrySettings } from "@/components/registry/RegistrySettings";
 import { CloudProfiles } from "@/components/settings/CloudProfiles";
 import { CliSettings } from "@/components/settings/CliSettings";
 import { KubeconfigSettings } from "@/components/settings/KubeconfigSettings";
-import { Download, RefreshCw, AlertCircle } from "lucide-react";
+import {
+  Download,
+  RefreshCw,
+  AlertCircle,
+  Sun,
+  Moon,
+  Monitor,
+} from "lucide-react";
 
 export function Settings() {
   const { theme, setTheme } = useThemeStore();
@@ -82,7 +89,7 @@ export function Settings() {
                   htmlFor="light"
                   className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
                 >
-                  <span className="mb-2 text-2xl">☀️</span>
+                  <Sun className="mb-2 h-6 w-6" aria-hidden="true" />
                   Light
                 </Label>
               </div>
@@ -96,7 +103,7 @@ export function Settings() {
                   htmlFor="dark"
                   className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
                 >
-                  <span className="mb-2 text-2xl">🌙</span>
+                  <Moon className="mb-2 h-6 w-6" aria-hidden="true" />
                   Dark
                 </Label>
               </div>
@@ -110,7 +117,7 @@ export function Settings() {
                   htmlFor="system"
                   className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
                 >
-                  <span className="mb-2 text-2xl">💻</span>
+                  <Monitor className="mb-2 h-6 w-6" aria-hidden="true" />
                   System
                 </Label>
               </div>

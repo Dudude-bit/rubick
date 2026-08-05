@@ -10,6 +10,12 @@ import { BrowserRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import App from "./App";
+// Fonts are bundled, not fetched: the app's CSP is `style-src 'self'` /
+// `font-src 'self' data:`, which blocks the Google Fonts stylesheet and
+// the gstatic font files outright. Loading them from a CDN also breaks
+// on the airgapped networks this tool is used on.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import { logDebug, logError, logInfo } from "@/lib/logger";
 import { registerBuiltInPlugins } from "@/lib/crd-plugins/plugins";

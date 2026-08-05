@@ -72,7 +72,10 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+      // Micro-label header: uppercase + tracking keeps it legible at 11px
+      // and visually subordinate to the data, and `whitespace-nowrap` stops
+      // two-word labels ("CPU Usage") from wrapping and doubling row height.
+      "h-12 whitespace-nowrap px-4 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-muted-foreground [&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props}

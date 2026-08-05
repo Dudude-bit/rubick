@@ -36,6 +36,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  SearchX,
+  Inbox,
   AlertTriangle,
   AlignJustify,
   List,
@@ -69,6 +71,9 @@ interface DataTableProps<TData, TValue> {
   enableKeyboardNav?: boolean;
   /** Function to get unique row ID (for stable keys during data updates) */
   getRowId?: (row: TData, index: number) => string;
+  /** Shown when the cluster genuinely has none of this resource. The
+   *  "no search matches" case is handled separately. */
+  emptyMessage?: string;
 }
 
 // Extended page size options for large datasets
@@ -117,6 +122,7 @@ export function DataTable<TData, TValue>({
   quickActions,
   enableKeyboardNav,
   getRowId,
+  emptyMessage = "No resources of this type in the current scope.",
 }: DataTableProps<TData, TValue>) {
   const navigate = useNavigate();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
@@ -135,9 +141,12 @@ export function DataTable<TData, TValue>({
   );
   const deferredSearch = React.useDeferredValue(searchValue);
 
-  // Density styling
+  // Density styling. Compact rows stay strictly single-line — a pod name
+  // like `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the
+  // row grows to triple height, which defeats the point of compact. The
+  // table container already scrolls horizontally.
   const isCompact = tableDensity === "compact";
-  const cellPadding = isCompact ? "py-1.5 px-3" : "p-4";
+  const cellPadding = isCompact ? "py-1.5 px-3 whitespace-nowrap" : "p-4";
   const headerHeight = isCompact ? "h-9" : "h-12";
 
   // Determine if we should use virtual scroll based on data size
@@ -386,12 +395,46 @@ export function DataTable<TData, TValue>({
                   );
                 })
               ) : (
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableCell
                     colSpan={columnsWithActions.length}
-                    className="h-24 text-center"
+                    className="h-32 text-center"
                   >
-                    No results.
+                    {/* "Nothing matches your filter" and "this cluster has
+                     * none of these" are different problems with different
+                     * fixes — saying "No results." for both leaves the user
+                     * guessing which one they're looking at. */}
+                    {searchValue ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <SearchX
+                          className="h-5 w-5 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Nothing matches{" "}
+                          <span className="font-mono text-foreground">
+                            {searchValue}
+                          </span>
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSearchValue("")}
+                        >
+                          Clear search
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <Inbox
+                          className="h-5 w-5 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          {emptyMessage}
+                        </p>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               )}

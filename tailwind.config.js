@@ -156,8 +156,16 @@ export default {
         'fade-in-slow': 'fade-in var(--animation-slow) ease-out',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+        // "Variable" suffix matches the family name @fontsource-variable
+        // registers; the static names are kept as a fallback so a partial
+        // install still renders in the intended face.
+        sans: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
+        mono: [
+          'JetBrains Mono Variable',
+          'JetBrains Mono',
+          'Consolas',
+          'monospace',
+        ],
       },
       transitionDuration: {
         'ds-fast': 'var(--animation-fast)',

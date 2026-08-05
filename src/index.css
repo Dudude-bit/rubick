@@ -153,6 +153,18 @@
       "calt" 1;
   }
 
+  /* Resource metrics rewrite themselves on every watch event. Proportional
+   * digits change width as the value changes, so a column of CPU/memory
+   * readings visibly jitters on each update. Tabular figures keep every
+   * digit the same advance width. */
+  table,
+  .font-mono,
+  code,
+  kbd,
+  samp {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Smooth transitions for theme changes */
   *,
   *::before,
@@ -160,6 +172,17 @@
     transition-property: background-color, border-color, color, fill, stroke;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 150ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -26,8 +26,13 @@ export function HelmHistoryDialog({
       <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold">History: {release.name}</h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            ✕
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            aria-label="Close history"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
         <div className="p-4 overflow-y-auto max-h-[60vh]">

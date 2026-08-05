@@ -21,9 +21,7 @@
     {
       "description": "A list of capabilities.",
       "type": "object",
-      "required": [
-        "capabilities"
-      ],
+      "required": ["capabilities"],
       "properties": {
         "capabilities": {
           "description": "The list of capabilities.",
@@ -39,10 +37,7 @@
     "Capability": {
       "description": "A grouping and boundary mechanism developers can use to isolate access to the IPC layer.\n\nIt controls application windows' and webviews' fine grained access to the Tauri core, application, or plugin commands. If a webview or its window is not matching any capability then it has no access to the IPC layer at all.\n\nThis can be done to create groups of windows, based on their required system access, which can reduce impact of frontend vulnerabilities in less privileged windows. Windows can be added to a capability by exact name (e.g. `main-window`) or glob patterns like `*` or `admin-*`. A Window can have none, one, or multiple associated capabilities.\n\n## Example\n\n```json { \"identifier\": \"main-user-files-write\", \"description\": \"This capability allows the `main` window on macOS and Windows access to `filesystem` write related commands and `dialog` commands to enable programmatic access to files selected by the user.\", \"windows\": [ \"main\" ], \"permissions\": [ \"core:default\", \"dialog:open\", { \"identifier\": \"fs:allow-write-text-file\", \"allow\": [{ \"path\": \"$HOME/test.txt\" }] }, ], \"platforms\": [\"macOS\",\"windows\"] } ```",
       "type": "object",
-      "required": [
-        "identifier",
-        "permissions"
-      ],
+      "required": ["identifier", "permissions"],
       "properties": {
         "identifier": {
           "description": "Identifier of the capability.\n\n## Example\n\n`main-user-files-write`",
@@ -93,10 +88,7 @@
         },
         "platforms": {
           "description": "Limit which target platforms this capability applies to.\n\nBy default all platforms are targeted.\n\n## Example\n\n`[\"macOS\",\"windows\"]`",
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "$ref": "#/definitions/Target"
           }
@@ -106,9 +98,7 @@
     "CapabilityRemote": {
       "description": "Configuration for remote URLs that are associated with the capability.",
       "type": "object",
-      "required": [
-        "urls"
-      ],
+      "required": ["urls"],
       "properties": {
         "urls": {
           "description": "Remote domains this capability refers to using the [URLPattern standard](https://urlpattern.spec.whatwg.org/).\n\n## Examples\n\n- \"https://*.mydomain.dev\": allows subdomains of mydomain.dev - \"https://mydomain.dev/api/*\": allows any subpath of mydomain.dev/api",
@@ -1160,10 +1150,22 @@
                         "markdownDescription": "Enables the size command without any pre-configured scope."
                       },
                       {
+                        "description": "Enables the start_accessing_security_scoped_resource command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "fs:allow-start-accessing-security-scoped-resource",
+                        "markdownDescription": "Enables the start_accessing_security_scoped_resource command without any pre-configured scope."
+                      },
+                      {
                         "description": "Enables the stat command without any pre-configured scope.",
                         "type": "string",
                         "const": "fs:allow-stat",
                         "markdownDescription": "Enables the stat command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Enables the stop_accessing_security_scoped_resource command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "fs:allow-stop-accessing-security-scoped-resource",
+                        "markdownDescription": "Enables the stop_accessing_security_scoped_resource command without any pre-configured scope."
                       },
                       {
                         "description": "Enables the truncate command without any pre-configured scope.",
@@ -1316,10 +1318,22 @@
                         "markdownDescription": "Denies the size command without any pre-configured scope."
                       },
                       {
+                        "description": "Denies the start_accessing_security_scoped_resource command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "fs:deny-start-accessing-security-scoped-resource",
+                        "markdownDescription": "Denies the start_accessing_security_scoped_resource command without any pre-configured scope."
+                      },
+                      {
                         "description": "Denies the stat command without any pre-configured scope.",
                         "type": "string",
                         "const": "fs:deny-stat",
                         "markdownDescription": "Denies the stat command without any pre-configured scope."
+                      },
+                      {
+                        "description": "Denies the stop_accessing_security_scoped_resource command without any pre-configured scope.",
+                        "type": "string",
+                        "const": "fs:deny-stop-accessing-security-scoped-resource",
+                        "markdownDescription": "Denies the stop_accessing_security_scoped_resource command without any pre-configured scope."
                       },
                       {
                         "description": "Denies the truncate command without any pre-configured scope.",
@@ -1884,9 +1898,7 @@
                         },
                         {
                           "type": "object",
-                          "required": [
-                            "path"
-                          ],
+                          "required": ["path"],
                           "properties": {
                             "path": {
                               "description": "A path that can be accessed by the webview when using the fs APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
@@ -1908,9 +1920,7 @@
                         },
                         {
                           "type": "object",
-                          "required": [
-                            "path"
-                          ],
+                          "required": ["path"],
                           "properties": {
                             "path": {
                               "description": "A path that can be accessed by the webview when using the fs APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
@@ -2018,10 +2028,7 @@
                       "anyOf": [
                         {
                           "type": "object",
-                          "required": [
-                            "cmd",
-                            "name"
-                          ],
+                          "required": ["cmd", "name"],
                           "properties": {
                             "args": {
                               "description": "The allowed arguments for the command execution.",
@@ -2044,10 +2051,7 @@
                         },
                         {
                           "type": "object",
-                          "required": [
-                            "name",
-                            "sidecar"
-                          ],
+                          "required": ["name", "sidecar"],
                           "properties": {
                             "args": {
                               "description": "The allowed arguments for the command execution.",
@@ -2078,10 +2082,7 @@
                       "anyOf": [
                         {
                           "type": "object",
-                          "required": [
-                            "cmd",
-                            "name"
-                          ],
+                          "required": ["cmd", "name"],
                           "properties": {
                             "args": {
                               "description": "The allowed arguments for the command execution.",
@@ -2104,10 +2105,7 @@
                         },
                         {
                           "type": "object",
-                          "required": [
-                            "name",
-                            "sidecar"
-                          ],
+                          "required": ["name", "sidecar"],
                           "properties": {
                             "args": {
                               "description": "The allowed arguments for the command execution.",
@@ -2156,20 +2154,14 @@
                 },
                 "allow": {
                   "description": "Data that defines what is allowed by the scope.",
-                  "type": [
-                    "array",
-                    "null"
-                  ],
+                  "type": ["array", "null"],
                   "items": {
                     "$ref": "#/definitions/Value"
                   }
                 },
                 "deny": {
                   "description": "Data that defines what is denied by the scope. This should be prioritized by validation logic.",
-                  "type": [
-                    "array",
-                    "null"
-                  ],
+                  "type": ["array", "null"],
                   "items": {
                     "$ref": "#/definitions/Value"
                   }
@@ -2177,9 +2169,7 @@
               }
             }
           ],
-          "required": [
-            "identifier"
-          ]
+          "required": ["identifier"]
         }
       ]
     },
@@ -4233,22 +4223,22 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
-          "description": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-ask`\n- `allow-confirm`\n- `allow-message`\n- `allow-save`\n- `allow-open`",
+          "description": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-message`\n- `allow-save`\n- `allow-open`",
           "type": "string",
           "const": "dialog:default",
-          "markdownDescription": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-ask`\n- `allow-confirm`\n- `allow-message`\n- `allow-save`\n- `allow-open`"
+          "markdownDescription": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-message`\n- `allow-save`\n- `allow-open`"
         },
         {
-          "description": "Enables the ask command without any pre-configured scope.",
+          "description": "Enables the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)",
           "type": "string",
           "const": "dialog:allow-ask",
-          "markdownDescription": "Enables the ask command without any pre-configured scope."
+          "markdownDescription": "Enables the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)"
         },
         {
-          "description": "Enables the confirm command without any pre-configured scope.",
+          "description": "Enables the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)",
           "type": "string",
           "const": "dialog:allow-confirm",
-          "markdownDescription": "Enables the confirm command without any pre-configured scope."
+          "markdownDescription": "Enables the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)"
         },
         {
           "description": "Enables the message command without any pre-configured scope.",
@@ -4269,16 +4259,16 @@
           "markdownDescription": "Enables the save command without any pre-configured scope."
         },
         {
-          "description": "Denies the ask command without any pre-configured scope.",
+          "description": "Denies the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)",
           "type": "string",
           "const": "dialog:deny-ask",
-          "markdownDescription": "Denies the ask command without any pre-configured scope."
+          "markdownDescription": "Denies the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)"
         },
         {
-          "description": "Denies the confirm command without any pre-configured scope.",
+          "description": "Denies the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)",
           "type": "string",
           "const": "dialog:deny-confirm",
-          "markdownDescription": "Denies the confirm command without any pre-configured scope."
+          "markdownDescription": "Denies the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)"
         },
         {
           "description": "Denies the message command without any pre-configured scope.",
@@ -5319,10 +5309,22 @@
           "markdownDescription": "Enables the size command without any pre-configured scope."
         },
         {
+          "description": "Enables the start_accessing_security_scoped_resource command without any pre-configured scope.",
+          "type": "string",
+          "const": "fs:allow-start-accessing-security-scoped-resource",
+          "markdownDescription": "Enables the start_accessing_security_scoped_resource command without any pre-configured scope."
+        },
+        {
           "description": "Enables the stat command without any pre-configured scope.",
           "type": "string",
           "const": "fs:allow-stat",
           "markdownDescription": "Enables the stat command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_accessing_security_scoped_resource command without any pre-configured scope.",
+          "type": "string",
+          "const": "fs:allow-stop-accessing-security-scoped-resource",
+          "markdownDescription": "Enables the stop_accessing_security_scoped_resource command without any pre-configured scope."
         },
         {
           "description": "Enables the truncate command without any pre-configured scope.",
@@ -5475,10 +5477,22 @@
           "markdownDescription": "Denies the size command without any pre-configured scope."
         },
         {
+          "description": "Denies the start_accessing_security_scoped_resource command without any pre-configured scope.",
+          "type": "string",
+          "const": "fs:deny-start-accessing-security-scoped-resource",
+          "markdownDescription": "Denies the start_accessing_security_scoped_resource command without any pre-configured scope."
+        },
+        {
           "description": "Denies the stat command without any pre-configured scope.",
           "type": "string",
           "const": "fs:deny-stat",
           "markdownDescription": "Denies the stat command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_accessing_security_scoped_resource command without any pre-configured scope.",
+          "type": "string",
+          "const": "fs:deny-stop-accessing-security-scoped-resource",
+          "markdownDescription": "Denies the stop_accessing_security_scoped_resource command without any pre-configured scope."
         },
         {
           "description": "Denies the truncate command without any pre-configured scope.",
@@ -6238,37 +6252,27 @@
         {
           "description": "MacOS.",
           "type": "string",
-          "enum": [
-            "macOS"
-          ]
+          "enum": ["macOS"]
         },
         {
           "description": "Windows.",
           "type": "string",
-          "enum": [
-            "windows"
-          ]
+          "enum": ["windows"]
         },
         {
           "description": "Linux.",
           "type": "string",
-          "enum": [
-            "linux"
-          ]
+          "enum": ["linux"]
         },
         {
           "description": "Android.",
           "type": "string",
-          "enum": [
-            "android"
-          ]
+          "enum": ["android"]
         },
         {
           "description": "iOS.",
           "type": "string",
-          "enum": [
-            "iOS"
-          ]
+          "enum": ["iOS"]
         }
       ]
     },
@@ -6282,9 +6286,7 @@
         {
           "description": "A variable that is set while calling the command from the webview API.",
           "type": "object",
-          "required": [
-            "validator"
-          ],
+          "required": ["validator"],
           "properties": {
             "raw": {
               "description": "Marks the validator as a raw regex, meaning the plugin should not make any modification at runtime.\n\nThis means the regex will not match on the entire string by default, which might be exploited if your regex allow unexpected input to be considered valid. When using this option, make sure your regex is correct.",
