@@ -45,6 +45,17 @@
     --ctr-s: 62%;
     --ctr-l: 42%;
 
+    /* Event families. Quieter than identity because an event row already
+     * spends hue on the object it names, and two tinted columns at the same
+     * strength turn the feed into a swatch book. Lower still than the status
+     * colours, so a family never competes with the warning it sits beside.
+     *
+     * 33%, not 36%: at 36% the yellow-green and teal ends of the family ring
+     * reached only 4.2:1 against this canvas, and the reason is 12px text,
+     * not a swatch. The dark pair is tuned the same way from its own end. */
+    --evt-s: 46%;
+    --evt-l: 33%;
+
     /* The single documented exception to the flat canvas: an overlay has
      * to read as floating above the page or it looks like a rendering
      * fault. On light the canvas is already near-white, so the lift comes
@@ -91,6 +102,8 @@
     --kind-l: 70%;
     --ctr-s: 44%;
     --ctr-l: 65%;
+    --evt-s: 40%;
+    --evt-l: 66%;
     --raise: 220 7% 18%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }

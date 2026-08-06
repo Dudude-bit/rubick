@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
+import { eventReasonMark } from "@/lib/event-reason";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { usageRole } from "@/lib/metric-format";
 import { cn, formatDate } from "@/lib/utils";
@@ -401,12 +402,14 @@ export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
  * because the `/events` screen builds its skeleton rows on the same grid.
  */
 export const EVENT_ROW =
-  "grid grid-cols-[10px_minmax(0,168px)_minmax(0,1fr)_54px_44px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,182px)_minmax(0,1fr)_54px_44px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
 /** The same feed at drawer width, where the reason column would eat the
- *  message — which is the part being read there. */
+ *  message — which is the part being read there. Both widths carry the
+ *  14px the family glyph and its gap cost, so the reason truncates no
+ *  earlier than it did before the glyph existed. */
 const EVENT_ROW_COMPACT =
-  "grid grid-cols-[10px_minmax(0,92px)_minmax(0,1fr)_38px_30px] items-baseline gap-2 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,106px)_minmax(0,1fr)_38px_30px] items-baseline gap-2 py-[3px] text-xs";
 
 export interface EventRowsProps {
   events: EventInfo[];
@@ -463,6 +466,15 @@ function EventRow({
   const isWarning = event.type === "Warning";
   const age = useRealtimeAge(event.lastTimestamp ?? null);
   const count = event.count ?? 0;
+  const { family, Icon, color } = eventReasonMark(event.reason ?? null);
+  // Two independent channels, one per column: the mark on the left is
+  // severity and only severity, the mark on the reason is family and only
+  // family. Where they meet, severity takes the colour outright — a Warning
+  // is amber end to end or a reader cannot count the warnings in a feed —
+  // and the family keeps its shape, which is the whole point of the shapes
+  // differing. So a FailedMount is an amber platter and a FailedScheduling
+  // an amber pin: still one severity, still two families.
+  const familyStyle = isWarning || !color ? undefined : { color };
 
   return (
     <div className={compact ? EVENT_ROW_COMPACT : EVENT_ROW}>
@@ -479,12 +491,20 @@ function EventRow({
       </span>
       <span
         className={cn(
-          "truncate font-mono font-medium",
-          isWarning ? "text-warn" : "text-fg-mut"
+          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+          isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
         )}
+        style={familyStyle}
       >
-        <span className="sr-only">{event.type}: </span>
-        {event.reason ?? "—"}
+        <span className="sr-only">
+          {event.type}
+          {family ? `, ${family}` : ""}:{" "}
+        </span>
+        <Icon
+          className="h-2.5 w-2.5 flex-none self-center"
+          aria-hidden="true"
+        />
+        <span className="truncate">{event.reason ?? "—"}</span>
       </span>
       <span className="truncate text-fg-mid">
         {showObject && (
