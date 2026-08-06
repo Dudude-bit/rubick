@@ -222,6 +222,25 @@ export function parseQueryTerm(input: string): QueryTerm | null {
 }
 
 /**
+ * The term a key and a value stand for, wherever the pair was picked up.
+ *
+ * A row's field key, the container in a row's detail, the level in the
+ * Table view and the suggestion popover all come through here, so the
+ * chip is the same object whichever produced it — which is also what
+ * makes them deduplicate, since `termLabel` is the identity.
+ *
+ * `level` is not a field test: no line carries a `level` key (the parser
+ * lifts it out), and only a level term can be widened to `level≥warn`
+ * afterwards.
+ */
+export function fieldTerm(key: string, value: string): QueryTerm {
+  if (key.toLowerCase() === "level" && isLevel(value)) {
+    return { kind: "level", op: "=", value: value.toLowerCase() as LogLevel };
+  }
+  return { kind: "field", key, op: "=", value };
+}
+
+/**
  * A dragged range as a clock reading. Seconds, because that is the
  * finest slice the strip can produce, and a range whose ends read the
  * same would look like a mistake.

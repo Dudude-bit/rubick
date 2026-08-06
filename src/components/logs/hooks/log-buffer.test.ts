@@ -2,15 +2,27 @@ import { describe, it, expect } from "vitest";
 import {
   appendCapped,
   backfillPerContainer,
-  EMPTY_BUFFER,
+  emptyBuffer,
+  fieldSuggestions,
+  MAX_TRACKED_VALUES,
   orderByTimestamp,
+  type LogBuffer,
 } from "./log-buffer";
 import type { StreamedLogLine } from "../types";
 
 const line = (id: number, epoch = id) =>
-  ({ id, epoch, message: `m${id}` }) as StreamedLogLine;
+  ({
+    id,
+    epoch,
+    message: `m${id}`,
+    container: "app",
+    level: "info",
+  }) as StreamedLogLine;
 const lines = (from: number, count: number) =>
   Array.from({ length: count }, (_, i) => line(from + i));
+
+const buffered = (lines: StreamedLogLine[], dropped = 0): LogBuffer =>
+  appendCapped({ ...emptyBuffer(), dropped }, lines, lines.length);
 
 describe("orderByTimestamp", () => {
   it("returns the input untouched when it is already ordered", () => {
@@ -52,7 +64,7 @@ describe("orderByTimestamp", () => {
 
 describe("appendCapped", () => {
   it("returns a new array so React sees the change", () => {
-    const prev = { lines: lines(0, 3), dropped: 0 };
+    const prev = buffered(lines(0, 3));
     const next = appendCapped(prev, lines(3, 2), 100);
 
     expect(next.lines).not.toBe(prev.lines);
@@ -62,11 +74,7 @@ describe("appendCapped", () => {
   });
 
   it("drops from the head once the cap is reached, keeping the newest", () => {
-    const next = appendCapped(
-      { lines: lines(0, 100), dropped: 0 },
-      lines(100, 10),
-      100
-    );
+    const next = appendCapped(buffered(lines(0, 100)), lines(100, 10), 100);
 
     expect(next.lines).toHaveLength(100);
     expect(next.lines[0].id).toBe(10);
@@ -74,7 +82,7 @@ describe("appendCapped", () => {
   });
 
   it("counts what it dropped, so the viewer can stop being silently lossy", () => {
-    let buffer = appendCapped(EMPTY_BUFFER, lines(0, 100), 100);
+    let buffer = appendCapped(emptyBuffer(), lines(0, 100), 100);
     expect(buffer.dropped).toBe(0);
 
     buffer = appendCapped(buffer, lines(100, 10), 100);
@@ -85,11 +93,7 @@ describe("appendCapped", () => {
   });
 
   it("keeps only the tail of a window that is itself over the cap", () => {
-    const next = appendCapped(
-      { lines: lines(0, 5), dropped: 0 },
-      lines(100, 120),
-      100
-    );
+    const next = appendCapped(buffered(lines(0, 5)), lines(100, 120), 100);
 
     expect(next.lines).toHaveLength(100);
     expect(next.lines[0].id).toBe(120);
@@ -97,8 +101,129 @@ describe("appendCapped", () => {
   });
 
   it("is a no-op on an empty window", () => {
-    const prev = { lines: lines(0, 3), dropped: 4 };
+    const prev = buffered(lines(0, 3), 4);
     expect(appendCapped(prev, [], 100)).toBe(prev);
+  });
+});
+
+const fielded = (
+  id: number,
+  container: string,
+  fields: Record<string, string>
+) => ({ ...line(id), container, fields }) as StreamedLogLine;
+
+describe("the field index", () => {
+  it("offers level and container first, then the loudest parsed keys", () => {
+    const buffer = appendCapped(
+      emptyBuffer(),
+      [
+        fielded(1, "app", { component: "ingest", upstream: "db" }),
+        fielded(2, "app", { component: "ingest" }),
+        fielded(3, "sidecar", { component: "api" }),
+      ],
+      100
+    );
+
+    expect(fieldSuggestions(buffer.fields).map((f) => f.key)).toEqual([
+      "level",
+      "container",
+      "component",
+      "upstream",
+    ]);
+  });
+
+  it("counts values so the popover can rank them", () => {
+    const buffer = appendCapped(
+      emptyBuffer(),
+      [
+        fielded(1, "app", { component: "ingest" }),
+        fielded(2, "app", { component: "ingest" }),
+        fielded(3, "sidecar", { component: "api" }),
+      ],
+      100
+    );
+
+    const component = fieldSuggestions(buffer.fields).find(
+      (f) => f.key === "component"
+    )!;
+    expect(component.lines).toBe(3);
+    expect(component.values).toEqual([
+      { value: "ingest", lines: 2 },
+      { value: "api", lines: 1 },
+    ]);
+
+    const container = fieldSuggestions(buffer.fields).find(
+      (f) => f.key === "container"
+    )!;
+    expect(container.values).toEqual([
+      { value: "app", lines: 2 },
+      { value: "sidecar", lines: 1 },
+    ]);
+  });
+
+  it("uncounts what eviction dropped, so the index describes what is left", () => {
+    // The whole reason it is accumulated rather than recounted: nothing
+    // walks the buffer, so the head leaving has to say so on its way out.
+    let buffer = appendCapped(
+      emptyBuffer(),
+      [
+        fielded(1, "app", { component: "ingest" }),
+        fielded(2, "sidecar", { component: "api" }),
+      ],
+      2
+    );
+    buffer = appendCapped(
+      buffer,
+      [fielded(3, "sidecar", { component: "api" })],
+      2
+    );
+
+    expect(buffer.fields.keys.get("component")).toBe(2);
+    expect(buffer.fields.values.get("component")).toEqual(
+      new Map([["api", 2]])
+    );
+    expect(buffer.fields.values.get("container")).toEqual(
+      new Map([["sidecar", 2]])
+    );
+  });
+
+  it("stops listing a key with one value per line, and says how many lines", () => {
+    // `request_id`: listing its values is ten thousand buttons nobody
+    // reads, so past the cap only the line count survives.
+    const buffer = appendCapped(
+      emptyBuffer(),
+      Array.from({ length: MAX_TRACKED_VALUES + 10 }, (_, i) =>
+        fielded(i, "app", { request_id: `r${i}` })
+      ),
+      1000
+    );
+
+    const wide = fieldSuggestions(buffer.fields).find(
+      (f) => f.key === "request_id"
+    )!;
+    expect(wide.wide).toBe(true);
+    expect(wide.values).toEqual([]);
+    expect(wide.lines).toBe(MAX_TRACKED_VALUES + 10);
+  });
+
+  it("never offers the key the message itself was parsed out of", () => {
+    const buffer = appendCapped(
+      emptyBuffer(),
+      [fielded(1, "app", { msg: "hello", severity: "high", trace: "abc" })],
+      100
+    );
+
+    expect(fieldSuggestions(buffer.fields).map((f) => f.key)).toEqual([
+      "level",
+      "container",
+      "trace",
+    ]);
+  });
+
+  it("hands back a fresh index object so a memo on it re-runs", () => {
+    const first = appendCapped(emptyBuffer(), lines(0, 2), 100);
+    const second = appendCapped(first, lines(2, 2), 100);
+    expect(second.fields).not.toBe(first.fields);
   });
 });
 
