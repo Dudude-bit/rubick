@@ -166,7 +166,15 @@ export function ResourceDetailLayout({
   // Collapsing is not a control the reader operates: clicking "Logs" already
   // said what they came for, and a toggle would spend a slot in the very row
   // it exists to shrink. Reversing it is the Overview tab, one click away.
-  const surface = tabs.find((tab) => tab.id === activeTab)?.kind === "surface";
+  //
+  // Unless there is nowhere to reverse to. Hiding the page's own blocks is
+  // only fair while another tab still shows them; a page whose every tab is a
+  // surface would hide them for good, which is how PersistentVolume lost its
+  // capacity, binding and reclaim policy entirely.
+  const hasSectionsTab = tabs.some((tab) => tab.kind !== "surface");
+  const surface =
+    hasSectionsTab &&
+    tabs.find((tab) => tab.id === activeTab)?.kind === "surface";
 
   return (
     <div
