@@ -112,9 +112,15 @@ export function ReferencedBy({
 
   return (
     <Section>
+      {/* "Referenced by" is not a noun a count can lean on, so the count
+          brings its own. */}
       <SectionHeader
         title="Referenced by"
-        count={isLoading || error ? undefined : total}
+        count={
+          isLoading || error || total === 0
+            ? undefined
+            : `${total} ${total === 1 ? "reference" : "references"}`
+        }
       />
       {isLoading ? (
         <p className="text-xs text-fg-fnt">Reading references…</p>

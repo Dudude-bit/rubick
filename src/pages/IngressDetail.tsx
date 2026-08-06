@@ -78,6 +78,11 @@ function generateAccessUrls(
   return urls;
 }
 
+/** "1 host", "2 hosts" — the count and its noun agree. */
+function countOf(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 const ACCESS_ROW =
   "grid grid-cols-[44px_minmax(0,1fr)_minmax(0,190px)_50px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
@@ -209,8 +214,8 @@ export function IngressDetail() {
             title="Reachable at"
             count={
               plainHttp > 0
-                ? `${accessUrls.length} paths · ${plainHttp} over plain HTTP`
-                : `${accessUrls.length} paths`
+                ? `${countOf(accessUrls.length, "path")} · ${plainHttp} over plain HTTP`
+                : countOf(accessUrls.length, "path")
             }
           />
           {accessUrls.length === 0 ? (
@@ -282,7 +287,7 @@ export function IngressDetail() {
       label: "Rules",
       content: (
         <Section>
-          <SectionHeader title="Rules" count={`${rules.length} hosts`} />
+          <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
           {rules.length === 0 ? (
             <p className="text-xs text-fg-fnt">No rules defined</p>
           ) : (

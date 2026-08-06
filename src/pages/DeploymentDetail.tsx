@@ -498,7 +498,7 @@ export function DeploymentDetail() {
       )}
 
       <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <KeyValueSection title="Deployment" items={facts} />
+        <KeyValueSection title="Rollout" items={facts} />
         <Section>
           <SectionHeader
             title="Usage"

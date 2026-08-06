@@ -71,7 +71,10 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
 
   return (
     <Section>
-      <SectionHeader title="How to Access This Service" />
+      {/* "How to Access This Service" was the tab label padded out to six
+          Title Case words. This names the thing under it instead, and says
+          it the way the ingress page already says it. */}
+      <SectionHeader title="Reachable at" />
       <SectionBody className="flex flex-col divide-y divide-hair">
         {accessItems.map((item, idx) => (
           <div key={idx} className="flex items-center justify-between py-3">

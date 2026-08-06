@@ -162,7 +162,7 @@ export function NodeDetail() {
       content: (
         <>
           <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-            <KeyValueSection title="Node" items={facts} />
+            <KeyValueSection title="Host" items={facts} />
             <KeyValueSection
               title="Allocatable"
               count="what the scheduler may hand out"
