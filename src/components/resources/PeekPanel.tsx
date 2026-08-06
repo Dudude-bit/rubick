@@ -53,7 +53,15 @@ export function PeekPanel() {
   const shown = target ?? previous;
 
   return (
-    <Sheet open={!!target} onOpenChange={(next) => !next && close()}>
+    // Not modal. A peek exists to be skimmed — click a row, glance, click the
+    // next — and Radix's modal mode dims the app, makes it inert and traps
+    // focus, so the sidebar, the scope tabs and the very list you are reading
+    // all stop responding until you close it. That is a dialog, not a peek.
+    <Sheet
+      open={!!target}
+      modal={false}
+      onOpenChange={(next) => !next && close()}
+    >
       {shown && (
         <PeekContent
           key={`${shown.kind}/${shown.namespace ?? ""}/${shown.name}`}
@@ -104,7 +112,14 @@ function PeekContent({ target }: { target: PeekTarget }) {
     <SheetContent
       ref={contentRef}
       side="right"
+      showOverlay={false}
       onKeyDown={handleKeyDown}
+      // Without a scrim Radix would still close on any outside pointerdown,
+      // including the one that picks the next row. Closing here and letting
+      // that row's own click reopen the panel is a flicker for no gain; the
+      // close affordances are the button, Escape and browser back.
+      onPointerDownOutside={(event) => event.preventDefault()}
+      onInteractOutside={(event) => event.preventDefault()}
       // Focus the panel itself rather than its close button, so Enter opens
       // the page and Escape closes without the reader aiming first.
       onOpenAutoFocus={(event) => {
