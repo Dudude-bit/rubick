@@ -1,117 +1,159 @@
 import { useMemo } from "react";
-import type { LogLine, LogFormat } from "@/generated/types";
+import type { LogFormat } from "@/generated/types";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FORMAT_DESCRIPTIONS } from "./types";
+import {
+  FORMAT_DESCRIPTIONS,
+  formatCount,
+  type StreamedLogLine,
+} from "./types";
+
+/**
+ * Lines the rate is measured over. Long enough that one slow second does
+ * not read as a stall, short enough that a burst is still visible as one.
+ */
+const RATE_SAMPLE = 400;
 
 interface LogStatusBarProps {
-  logs: LogLine[];
+  logs: StreamedLogLine[];
   /** Lines held right now, and the cap they are held against. */
   retained: number;
   limit: number;
-  /** Evicted from the head since the stream started; > 0 means lossy. */
-  dropped: number;
-  filteredCount: number;
-  /** Lines standing behind a collapsed run rather than drawn on their own. */
-  collapsedCount: number;
+  /** Rows drawn after filtering and grouping. */
+  shownCount: number;
+  /** Lines the filter removed and lines standing behind a collapsed run. */
+  hiddenCount: number;
   isStreaming: boolean;
 }
 
+/**
+ * What the buffer actually holds, said out loud.
+ *
+ * The fill meter is the part that matters: a number climbing towards a cap
+ * is easy to read as a total, and the bar going solid is the moment the
+ * pane stops being the whole log. The format is stated once here rather
+ * than badged onto every line of a stream that only ever has one.
+ */
 export function LogStatusBar({
   logs,
   retained,
   limit,
-  dropped,
-  filteredCount,
-  collapsedCount,
+  shownCount,
+  hiddenCount,
   isStreaming,
 }: LogStatusBarProps) {
-  const formatInfo = useMemo(() => {
-    if (logs.length === 0) return null;
-
-    const formatCounts = new Map<string, number>();
-    for (const log of logs) {
-      const format = log.format ?? "plain";
-      formatCounts.set(format, (formatCounts.get(format) ?? 0) + 1);
-    }
-
-    if (formatCounts.size === 1) {
-      const format = formatCounts.keys().next().value as LogFormat;
-      return {
-        format,
-        label: format,
-        description: FORMAT_DESCRIPTIONS[format],
-      };
-    }
-
-    // Find dominant format
-    let maxFormat: LogFormat = "plain";
-    let maxCount = 0;
-    for (const [format, count] of formatCounts) {
-      if (count > maxCount) {
-        maxCount = count;
-        maxFormat = format as LogFormat;
-      }
-    }
-
-    const percentage = Math.round((maxCount / logs.length) * 100);
-    if (percentage >= 90) {
-      return {
-        format: maxFormat,
-        label: `${maxFormat} (${percentage}%)`,
-        description: FORMAT_DESCRIPTIONS[maxFormat],
-      };
-    }
-
-    return {
-      format: "mixed" as const,
-      label: "mixed",
-      description: "Logs contain multiple formats",
-    };
-  }, [logs]);
+  const formatInfo = useMemo(() => describeFormat(logs), [logs]);
+  const rate = useMemo(() => measureRate(logs), [logs]);
+  const fill = limit > 0 ? Math.min(100, (retained / limit) * 100) : 0;
 
   return (
-    <div className="flex items-center justify-between border-t border-hair px-4 py-1.5 text-xs text-fg-mut">
-      <span>
-        {retained.toLocaleString()}{" "}
-        <span className="text-fg-fnt">of {limit.toLocaleString()} kept</span>
-        {/* The head being dropped was silent until now: the pane looked
-            like the whole log and was not. */}
-        {dropped > 0 && (
-          <span className="text-warn">
-            {" "}
-            · {dropped.toLocaleString()} older dropped
-          </span>
-        )}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-[11px] text-fg-mut">
+      <span className="whitespace-nowrap">
+        {formatCount(retained)}{" "}
+        <span className="text-fg-fnt">of {formatCount(limit)} kept</span>
       </span>
-      <div className="flex items-center gap-4">
-        <span className="text-fg-fnt">
-          {filteredCount.toLocaleString()} shown
-          {retained !== filteredCount &&
-            ` · ${(retained - filteredCount).toLocaleString()} filtered out`}
-          {collapsedCount > 0 &&
-            ` · ${collapsedCount.toLocaleString()} in collapsed repeats`}
+      <span
+        className="h-[3px] w-14 overflow-hidden rounded-sm bg-hair"
+        role="meter"
+        aria-valuenow={retained}
+        aria-valuemin={0}
+        aria-valuemax={limit}
+        aria-label="Buffer fill"
+      >
+        <span
+          className={`block h-full ${fill >= 100 ? "bg-warn" : "bg-fg-fnt"}`}
+          style={{ width: `${fill}%` }}
+        />
+      </span>
+      {formatInfo && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help whitespace-nowrap text-fg-fnt">
+              {formatInfo.label}
+              {rate !== null && ` · ${formatRate(rate)} lines/s`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{formatInfo.description}</TooltipContent>
+        </Tooltip>
+      )}
+      <span className="ml-auto whitespace-nowrap text-fg-fnt">
+        {formatCount(shownCount)} shown
+        {hiddenCount > 0 &&
+          ` · ${formatCount(hiddenCount)} hidden by filter and grouping`}
+      </span>
+      {isStreaming && (
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok"
+          />
+          Streaming
         </span>
-        {formatInfo && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="capitalize cursor-help">
-                format: {formatInfo.label}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{formatInfo.description}</TooltipContent>
-          </Tooltip>
-        )}
-        {isStreaming && (
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok" />
-            Streaming
-          </span>
-        )}
-      </div>
+      )}
     </div>
   );
+}
+
+function describeFormat(logs: StreamedLogLine[]) {
+  if (logs.length === 0) return null;
+
+  const counts = new Map<LogFormat, number>();
+  for (const log of logs) {
+    const format = log.format ?? "plain";
+    counts.set(format, (counts.get(format) ?? 0) + 1);
+  }
+
+  let dominant: LogFormat = "plain";
+  let best = 0;
+  for (const [format, count] of counts) {
+    if (count > best) {
+      best = count;
+      dominant = format;
+    }
+  }
+
+  if (counts.size === 1) {
+    return {
+      label: dominant,
+      description: FORMAT_DESCRIPTIONS[dominant],
+    };
+  }
+
+  const share = Math.round((best / logs.length) * 100);
+  if (share >= 90) {
+    return {
+      label: `${dominant} (${share}%)`,
+      description: FORMAT_DESCRIPTIONS[dominant],
+    };
+  }
+  return {
+    label: "mixed",
+    description: "These containers write in more than one log format",
+  };
+}
+
+/**
+ * Lines per second over the tail of the buffer, from the timestamps the
+ * lines carry rather than from arrival: a backfill of five thousand lines
+ * arrives in one batch, and reporting that as the rate would say the pod
+ * is writing a hundred thousand lines a second the moment the pane opens.
+ */
+function measureRate(logs: StreamedLogLine[]): number | null {
+  if (logs.length < 2) return null;
+  const sample = logs.slice(-RATE_SAMPLE);
+  const span = sample[sample.length - 1].epoch - sample[0].epoch;
+  if (span <= 0) return null;
+  return ((sample.length - 1) / span) * 1000;
+}
+
+/**
+ * A decimal below ten, none above. A quiet pod runs at well under one line
+ * a second, and rounding that to "1" or "0" is the difference between a
+ * reading and a shrug.
+ */
+function formatRate(rate: number): string {
+  return rate < 10 ? rate.toFixed(1) : formatCount(Math.round(rate));
 }

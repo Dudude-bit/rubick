@@ -8,6 +8,7 @@ import {
   type UIEvent,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { LogLevel } from "@/generated/types";
 import { ArrowDown } from "lucide-react";
 
 import { LogLineComponent, LogRunRow } from "./LogLine";
@@ -32,10 +33,10 @@ const BOTTOM_SLACK_PX = 48;
 
 /**
  * A one-line compact row. Only a starting guess — every row that renders is
- * measured for real, because a line with parsed fields is two rows tall and
- * a wrapped line in a 360px peek panel can be five.
+ * measured for real, because a row with its detail open is a dozen lines
+ * tall and a wrapped Table row in a 360px peek panel can be five.
  */
-const ESTIMATED_ROW_PX = 22;
+const ESTIMATED_ROW_PX = 19;
 
 interface LogListProps {
   /** Already filtered; the source the rows index into, and what a copy yields. */
@@ -48,6 +49,11 @@ interface LogListProps {
   rows: LogRun[];
   expandedRuns: ReadonlySet<number>;
   onToggleRun: (id: number) => void;
+  /** Lines showing their detail block. Measured like any other height change. */
+  expandedLines: ReadonlySet<number>;
+  onToggleLine: (id: number) => void;
+  /** Container name -> its rule colour, for the whole pod. */
+  containerColors: Map<string, string>;
   viewMode: ViewMode;
   searchQuery: string;
   follow: boolean;
@@ -65,7 +71,7 @@ interface LogListProps {
    */
   oldestRetainedId: number | undefined;
   onFieldClick: (key: string, value: string) => void;
-  onLevelClick: (level: string) => void;
+  onLevelClick: (level: LogLevel) => void;
   /** Shown in place of the list when there is nothing to window. */
   children?: ReactNode;
 }
@@ -75,6 +81,9 @@ export function LogList({
   rows,
   expandedRuns,
   onToggleRun,
+  expandedLines,
+  onToggleLine,
+  containerColors,
   viewMode,
   searchQuery,
   follow,
@@ -265,7 +274,7 @@ export function LogList({
         // Focusable so ctrl+A lands here rather than on the document.
         tabIndex={0}
         data-testid="log-scroll"
-        className="h-full overflow-y-auto scrollbar-thin p-4 font-mono text-xs leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-hair"
+        className="h-full overflow-y-auto scrollbar-thin px-1 py-1.5 font-mono text-xs leading-[1.45] outline-none focus-visible:ring-1 focus-visible:ring-hair"
       >
         {rows.length === 0 ? (
           children
@@ -290,13 +299,18 @@ export function LogList({
                     <LogRunRow
                       run={run}
                       expanded={expandedRuns.has(run.id)}
+                      containerColor={containerColors.get(run.head.container)}
                       onToggle={onToggleRun}
                     />
                   ) : (
                     <LogLineComponent
                       log={run.head}
+                      lineId={run.id}
                       viewMode={viewMode}
                       searchQuery={searchQuery}
+                      containerColor={containerColors.get(run.head.container)}
+                      expanded={expandedLines.has(run.id)}
+                      onToggleDetail={onToggleLine}
                       onFieldClick={onFieldClick}
                       onLevelClick={onLevelClick}
                     />

@@ -1,5 +1,4 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import type { ReactNode } from "react";
 import {
   Select,
   SelectContent,
@@ -7,36 +6,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import {
+  ArrowDown,
   Copy,
   Download,
-  Pause,
-  Play,
-  Search,
+  MoreHorizontal,
   Trash2,
-  ArrowDown,
-  Rows3,
-  AlignJustify,
-  Code,
-  Layers,
 } from "lucide-react";
-import { LOG_LIMITS } from "./hooks/useLogStream";
-import type { ViewMode } from "./types";
 
-/**
- * The default selection: every container streamed at once. A sentinel
- * rather than an empty string because Radix's Select treats "" as
- * "nothing chosen" and shows the placeholder.
- */
-export const ALL_CONTAINERS = "__all__";
+import { LOG_LIMITS } from "./hooks/useLogStream";
+import { LogQuery } from "./LogQuery";
+import { formatCount, type QueryTerm, type ViewMode } from "./types";
+
+const VIEW_MODES: Array<{ mode: ViewMode; label: string; hint: string }> = [
+  {
+    mode: "compact",
+    label: "Compact",
+    hint: "One line per entry, fields inline",
+  },
+  {
+    mode: "table",
+    label: "Table",
+    hint: "Level spelled out and the message wrapped in full",
+  },
+  { mode: "raw", label: "Raw", hint: "The bytes the container wrote" },
+];
 
 interface LogToolbarProps {
-  containers: string[];
-  selectedContainer: string;
-  onContainerChange: (container: string) => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
+  terms: QueryTerm[];
+  draft: string;
+  onDraftChange: (draft: string) => void;
+  onAddTerm: (term: QueryTerm) => void;
+  onRemoveTerm: (term: QueryTerm) => void;
   /** Backfill and retention in one number — see `DEFAULT_LOG_LIMIT`. */
   limit: number;
   onLimitChange: (limit: number) => void;
@@ -46,6 +54,8 @@ interface LogToolbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   isStreaming: boolean;
   isConnecting: boolean;
+  /** Stopped by the reader, as opposed to stopped because the stream died. */
+  isPaused: boolean;
   autoScroll: boolean;
   isAtBottom: boolean;
   onAutoScrollToggle: () => void;
@@ -55,12 +65,23 @@ interface LogToolbarProps {
   onToggleStreaming: () => void;
 }
 
+/**
+ * Every control says what it is.
+ *
+ * This was five unlabelled icon buttons, which is not a toolbar so much
+ * as a quiz: an icon-only control whose meaning you discover by clicking
+ * it is not a control. The three that are modes — the view, the collapse,
+ * the follow — carry their word on screen because their state has to be
+ * readable at a glance; the three that are one-shot actions live behind a
+ * named menu, which is also what keeps this from wrapping to three rows
+ * in a 360px peek panel.
+ */
 export function LogToolbar({
-  containers,
-  selectedContainer,
-  onContainerChange,
-  searchQuery,
-  onSearchChange,
+  terms,
+  draft,
+  onDraftChange,
+  onAddTerm,
+  onRemoveTerm,
   limit,
   onLimitChange,
   collapseRepeats,
@@ -69,6 +90,7 @@ export function LogToolbar({
   onViewModeChange,
   isStreaming,
   isConnecting,
+  isPaused,
   autoScroll,
   isAtBottom,
   onAutoScrollToggle,
@@ -78,161 +100,172 @@ export function LogToolbar({
   onToggleStreaming,
 }: LogToolbarProps) {
   return (
-    // Wraps because the same toolbar now sits in the peek panel, which the
+    // Wraps because the same toolbar sits in the peek panel, which the
     // reader can drag down to 360px — unwrapped it pushed its own controls
     // off the edge.
-    <div className="flex flex-wrap items-center gap-2 border-b border-hair p-2">
-      <Select value={selectedContainer} onValueChange={onContainerChange}>
-        <SelectTrigger className="w-48">
-          <SelectValue placeholder="Select container" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_CONTAINERS}>
-            All containers ({containers.length})
-          </SelectItem>
-          {containers.map((container) => (
-            <SelectItem key={container} value={container}>
-              {container}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-hair px-2 py-1.5">
+      <LogQuery
+        terms={terms}
+        draft={draft}
+        onDraftChange={onDraftChange}
+        onAddTerm={onAddTerm}
+        onRemoveTerm={onRemoveTerm}
+      />
 
-      <div className="relative flex-1 max-w-xs">
-        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-fg-fnt" />
-        <Input
-          placeholder="Search logs..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-8"
-        />
+      <div className="flex items-center gap-px rounded-md border border-hair p-px">
+        {VIEW_MODES.map(({ mode, label, hint }) => (
+          <button
+            key={mode}
+            type="button"
+            title={hint}
+            aria-pressed={viewMode === mode}
+            onClick={() => onViewModeChange(mode)}
+            className={`rounded px-2 py-0.5 text-xs ${
+              viewMode === mode
+                ? "bg-sel text-fg"
+                : "text-fg-mut hover:bg-hover hover:text-fg"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+
+      <ToolbarToggle
+        on={collapseRepeats}
+        onClick={() => onCollapseRepeatsChange(!collapseRepeats)}
+        title="Collapse consecutive repeats into one row with a count and a time span"
+      >
+        Repeats
+      </ToolbarToggle>
+
+      <ToolbarToggle
+        on={autoScroll}
+        onClick={onAutoScrollToggle}
+        title={
+          autoScroll
+            ? "Following the tail — click to stop and read"
+            : "Jump to the newest line and follow it"
+        }
+      >
+        <ArrowDown
+          aria-hidden="true"
+          className={`h-3 w-3 ${!isAtBottom && !autoScroll ? "animate-bounce" : ""}`}
+        />
+        Follow
+      </ToolbarToggle>
 
       {/* One number, one meaning: it is what the stream backfills with
           and what the viewer keeps. It used to be two, and only the
           smaller one was on screen. */}
       <Select
         value={limit.toString()}
-        onValueChange={(v) => onLimitChange(parseInt(v))}
+        onValueChange={(value) => onLimitChange(parseInt(value))}
       >
-        <SelectTrigger className="w-32">
+        <SelectTrigger
+          className="h-6 w-[6.5rem] px-2 text-xs"
+          title="How many lines to backfill and then keep"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {LOG_LIMITS.map((option) => (
             <SelectItem key={option} value={option.toString()}>
-              Keep {option.toLocaleString()}
+              Keep {formatCount(option)}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      <Button
-        variant={collapseRepeats ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => onCollapseRepeatsChange(!collapseRepeats)}
-        title="Collapse consecutive repeats into one row with a count"
-      >
-        <Layers className="mr-1 h-4 w-4" />
-        Repeats
-      </Button>
-
-      <div className="flex items-center border rounded-md">
-        <Button
-          variant={viewMode === "compact" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onViewModeChange("compact")}
-          title="Compact view"
-          className="rounded-r-none"
-        >
-          <AlignJustify className="h-4 w-4" />
-        </Button>
-        <Button
-          variant={viewMode === "table" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onViewModeChange("table")}
-          title="Table view"
-          className="rounded-none border-x"
-        >
-          <Rows3 className="h-4 w-4" />
-        </Button>
-        <Button
-          variant={viewMode === "raw" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onViewModeChange("raw")}
-          title="Raw view"
-          className="rounded-l-none"
-        >
-          <Code className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-1 ml-auto">
-        <Button
-          variant={autoScroll ? "secondary" : "ghost"}
-          size="icon"
-          onClick={onAutoScrollToggle}
-          title={
-            autoScroll
-              ? "Auto-scroll enabled (click to disable)"
-              : "Enable auto-scroll"
-          }
-        >
-          <ArrowDown
-            className={`h-4 w-4 ${!isAtBottom && !autoScroll ? "animate-bounce" : ""}`}
-          />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClearLogs}
-          title="Clear logs"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-        {/* Copy is a button rather than ctrl+A because the list is
-            virtualised: only a screenful is ever in the DOM, so this is the
-            one path guaranteed to yield every retained line. */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onCopyLogs}
-          title="Copy all retained lines"
-        >
-          <Copy className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onDownloadLogs}
-          title="Download logs"
-        >
-          <Download className="h-4 w-4" />
-        </Button>
-        <Button
-          variant={isStreaming ? "destructive" : "default"}
-          size="sm"
+      <div className="ml-auto flex items-center gap-1.5">
+        <button
+          type="button"
           onClick={onToggleStreaming}
           disabled={isConnecting}
+          title={
+            isStreaming
+              ? "Stop reading from the container"
+              : "Attach to the container and follow its output"
+          }
+          className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover disabled:opacity-60"
         >
           {isConnecting ? (
             <>
-              <Spinner size="sm" className="mr-1" />
+              <Spinner size="sm" />
               Connecting
-            </>
-          ) : isStreaming ? (
-            <>
-              <Pause className="h-4 w-4 mr-1" />
-              Stop
             </>
           ) : (
             <>
-              <Play className="h-4 w-4 mr-1" />
-              Stream
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isStreaming ? "animate-pulse bg-ok" : "bg-fg-fnt"
+                }`}
+              />
+              {/* Three states, not two: a stream the reader stopped and a
+                  stream that died are both "not live", and calling the
+                  second one "Paused" blames the reader for it. */}
+              {isStreaming ? "Live" : isPaused ? "Paused" : "Stopped"}
             </>
           )}
-        </Button>
+        </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            title="More log actions"
+            aria-label="More log actions"
+            className="flex h-6 w-6 items-center justify-center rounded text-fg-mut hover:bg-hover hover:text-fg"
+          >
+            <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Copy is a menu item rather than ctrl+A because the list is
+                virtualised: only a screenful is ever in the DOM, so this is
+                the one path guaranteed to yield every retained line. */}
+            <DropdownMenuItem onSelect={onCopyLogs}>
+              <Copy aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+              Copy the lines in view
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onDownloadLogs}>
+              <Download aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+              Download the full log
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onClearLogs}>
+              <Trash2 aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+              Clear what is buffered
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
+  );
+}
+
+function ToolbarToggle({
+  on,
+  onClick,
+  title,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      className={`flex h-6 items-center gap-1 rounded px-2 text-xs ${
+        on ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover hover:text-fg"
+      }`}
+    >
+      {children}
+      <span aria-hidden="true" className={on ? "text-fg-mut" : "opacity-0"}>
+        ✓
+      </span>
+    </button>
   );
 }

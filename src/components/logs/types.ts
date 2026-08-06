@@ -27,18 +27,19 @@ export type StreamedLogLine = LogLine & {
   groupKey: string;
 };
 
-export interface LogFilter {
-  search: string;
-  levels: LogLevel[];
-  fields: Record<string, string>;
-}
-
-export interface ActiveFilter {
-  type: "level" | "field" | "search";
-  key?: string;
-  value: string;
-  label: string;
-}
+/**
+ * One clause of the query, and the whole of what a chip stands for.
+ *
+ * A structured term rather than a substring because the reader has to be
+ * able to see what they asked for and take it back: `level≥warn` is a
+ * thing you can read off the toolbar and remove, where `warn` typed into
+ * a search box is indistinguishable from a line that happens to contain
+ * the word.
+ */
+export type QueryTerm =
+  | { kind: "text"; value: string }
+  | { kind: "level"; op: "=" | "≥"; value: LogLevel }
+  | { kind: "field"; key: string; op: "=" | "≠"; value: string };
 
 export const HIDDEN_FIELD_KEYS = new Set([
   "message",
@@ -50,23 +51,36 @@ export const HIDDEN_FIELD_KEYS = new Set([
   "severity",
 ]);
 
-export const LEVEL_LABELS: Record<LogLevel, string> = {
-  fatal: "FTL",
-  error: "ERR",
-  warn: "WRN",
-  info: "INF",
-  debug: "DBG",
-  unknown: "---",
+/** The level spelled out. An abbreviation nobody has to decode. */
+export const LEVEL_WORDS: Record<LogLevel, string> = {
+  fatal: "fatal",
+  error: "error",
+  warn: "warn",
+  info: "info",
+  debug: "debug",
+  unknown: "unlabelled",
+};
+
+/**
+ * Severity as an order, so `level≥warn` means something. `unknown` sits
+ * at the bottom on purpose: a line the parser could not read a level out
+ * of is not evidence of a problem, and a threshold query asking for
+ * trouble should not return every unparsed line in the buffer.
+ */
+const LEVEL_RANK: Record<LogLevel, number> = {
+  fatal: 5,
+  error: 4,
+  warn: 3,
+  info: 2,
+  debug: 1,
+  unknown: 0,
 };
 
 /**
  * Log levels collapse onto the same roles the rest of the app uses, so a
- * warning in a log stream is the same yellow as a warning in a table. Two
- * per-level colour tables became one role map plus one class table per
- * surface; `debug` no longer spends a hue on "less important than normal",
- * and `fatal` no longer needs a darker red than `error` to say the same
- * thing. LEVEL_LABELS is always rendered alongside, so the level is never
- * carried by colour alone.
+ * warning in a log stream is the same yellow as a warning in a table.
+ * `debug` no longer spends a hue on "less important than normal", and
+ * `fatal` no longer needs a darker red than `error` to say the same thing.
  */
 type LevelRole = "err" | "warn" | "info" | "mut";
 
@@ -84,18 +98,27 @@ const byRole = (classes: Record<LevelRole, string>): Record<LogLevel, string> =>
     Object.entries(LEVEL_ROLE).map(([level, role]) => [level, classes[role]])
   ) as Record<LogLevel, string>;
 
+/**
+ * The level colours the message itself rather than spending a column on a
+ * three-letter word. `info` is deliberately the plain foreground: a stream
+ * where every second line is INF gains nothing from tinting the majority,
+ * and leaving it neutral is what makes the two lines that are not stand out.
+ * The word is never lost — it is one click away in the row's detail, and it
+ * is what `level≥warn` filters on.
+ */
+export const LEVEL_MESSAGE_COLORS = byRole({
+  err: "text-err",
+  warn: "text-warn",
+  info: "text-fg",
+  mut: "text-fg-mut",
+});
+
+/** The same four roles where the level is written out as a word. */
 export const LEVEL_COLORS = byRole({
   err: "text-err",
   warn: "text-warn",
   info: "text-info",
   mut: "text-fg-fnt",
-});
-
-export const LEVEL_BORDER_COLORS = byRole({
-  err: "border-err",
-  warn: "border-warn",
-  info: "border-info",
-  mut: "border-transparent",
 });
 
 export const FORMAT_DESCRIPTIONS: Record<LogFormat, string> = {
@@ -106,14 +129,27 @@ export const FORMAT_DESCRIPTIONS: Record<LogFormat, string> = {
   plain: "Plain text without structured formatting",
 };
 
+/**
+ * Wall clock, 24-hour, fixed width. `toLocaleTimeString` was the reason the
+ * time column read "AM": on an en-US locale it appends a meridiem the column
+ * has no room for, and the part that gets clipped is the part that matters.
+ */
 export function formatTimestamp(timestamp: string | null): string {
   if (!timestamp) return "--:--:--";
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString();
-  } catch {
-    return timestamp;
-  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+/** The same clock with milliseconds, for the detail where there is room. */
+export function formatTimestampPrecise(timestamp: string | null): string {
+  if (!timestamp) return "no timestamp";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  const ms = String(date.getMilliseconds()).padStart(3, "0");
+  return `${formatTimestamp(timestamp)}.${ms}`;
 }
 
 /**
@@ -128,6 +164,92 @@ export function formatSpan(ms: number): string {
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.round((ms % 60000) / 1000);
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+/**
+ * Long counts get a thin space between groups, as in the mock. A narrow
+ * no-break space rather than a comma: these numbers sit inside prose like
+ * "× 2 481 over 1m 12s", where a comma reads as punctuation of the sentence.
+ */
+export function formatCount(value: number): string {
+  // Grouped by hand rather than by locale: `toLocaleString` picks its
+  // separator from whatever ICU the host was built with, and this number has
+  // to line up with the mono column beside it either way.
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+const LEVEL_NAMES = new Set(Object.keys(LEVEL_RANK));
+
+const isLevel = (value: string): value is LogLevel =>
+  LEVEL_NAMES.has(value.toLowerCase());
+
+/**
+ * Turn what someone typed into a term. `level>=warn` (or `≥`, or `>`) is a
+ * threshold, `key=value` and `key!=value` are field tests, and anything
+ * else is what it looks like: text to find.
+ */
+export function parseQueryTerm(input: string): QueryTerm | null {
+  const raw = input.trim();
+  if (raw === "") return null;
+
+  const match = /^([A-Za-z_][\w.-]*)\s*(>=|≥|>|!=|≠|=)\s*(.+)$/.exec(raw);
+  if (!match) return { kind: "text", value: raw };
+
+  const [, key, op, rest] = match;
+  const value = rest.trim().replace(/^["']|["']$/g, "");
+  if (value === "") return { kind: "text", value: raw };
+
+  if (key.toLowerCase() === "level" && isLevel(value)) {
+    const level = value.toLowerCase() as LogLevel;
+    return op === "=" || op === "!=" || op === "≠"
+      ? { kind: "level", op: "=", value: level }
+      : { kind: "level", op: "≥", value: level };
+  }
+  return {
+    kind: "field",
+    key,
+    op: op === "!=" || op === "≠" ? "≠" : "=",
+    value,
+  };
+}
+
+/** What the chip reads. Also its identity — two equal labels are one term. */
+export function termLabel(term: QueryTerm): string {
+  if (term.kind === "text") return term.value;
+  if (term.kind === "level") return `level${term.op}${term.value}`;
+  return `${term.key}${term.op}${term.value}`;
+}
+
+function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
+  if (term.kind === "text") {
+    const needle = term.value.toLowerCase();
+    return (
+      log.message.toLowerCase().includes(needle) ||
+      log.raw.toLowerCase().includes(needle)
+    );
+  }
+  if (term.kind === "level") {
+    const level = log.level ?? "unknown";
+    return term.op === "="
+      ? level === term.value
+      : LEVEL_RANK[level] >= LEVEL_RANK[term.value];
+  }
+  // `container` is not a parsed field but it is the one every reader asks
+  // about by name, and the legend and the row detail both offer it as one.
+  const actual =
+    term.key === "container" ? log.container : log.fields?.[term.key];
+  return term.op === "="
+    ? actual === term.value
+    : actual !== undefined && actual !== term.value;
+}
+
+/** Every term has to hold: chips narrow, they do not widen. */
+export function matchesQuery(
+  log: StreamedLogLine,
+  terms: readonly QueryTerm[]
+): boolean {
+  for (const term of terms) if (!matchesTerm(log, term)) return false;
+  return true;
 }
 
 /**

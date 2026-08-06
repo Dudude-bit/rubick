@@ -112,4 +112,33 @@ describe("LogViewer when a live stream dies", () => {
       "a deleted pod cannot be reconnected to"
     ).not.toBeInTheDocument();
   });
+
+  it("marks the dead container in the legend, not just above the list", async () => {
+    await renderStreaming();
+
+    // A container that stopped and a container that is merely quiet both end
+    // at a number; the legend is where the reader looks to tell them apart.
+    expect(screen.getByTestId("log-legend")).toHaveTextContent("app");
+    expect(screen.getByTestId("log-legend")).not.toHaveTextContent("ended");
+
+    fireFailure("gone", "container app is no longer running.");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toHaveTextContent("ended");
+    });
+  });
+
+  it("names every toolbar control", async () => {
+    await renderStreaming();
+
+    // The five unlabelled icon buttons this replaced were a quiz, not a
+    // toolbar. Nothing here may be reachable by icon alone.
+    for (const control of screen.getAllByRole("button")) {
+      const name =
+        control.textContent?.trim() ||
+        control.getAttribute("aria-label") ||
+        control.getAttribute("title");
+      expect(name, `an unnamed control: ${control.outerHTML}`).toBeTruthy();
+    }
+  });
 });
