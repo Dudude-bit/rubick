@@ -37,6 +37,14 @@
     --kind-s: 42%;
     --kind-l: 38%;
 
+    /* The log gutter, same rule with its own pair: a container rule is a 3px
+     * block of solid colour rather than text, so it can hold a heavier
+     * lightness on this canvas than a tinted name could — and it must, or a
+     * three-pixel stripe at the identity text's lightness vanishes against
+     * near-white. */
+    --ctr-s: 62%;
+    --ctr-l: 42%;
+
     /* The single documented exception to the flat canvas: an overlay has
      * to read as floating above the page or it looks like a rendering
      * fault. On light the canvas is already near-white, so the lift comes
@@ -81,6 +89,8 @@
     --ident-l: 66%;
     --kind-s: 38%;
     --kind-l: 70%;
+    --ctr-s: 44%;
+    --ctr-l: 65%;
     --raise: 220 7% 18%;
     --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }
