@@ -14,9 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TextSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
-import { YamlEditor } from "@/components/yaml/YamlEditor";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { SchemaViewer } from "@/components/crds/SchemaViewer";
 import { CustomResourceList } from "@/components/resources/CustomResourceList";
 import {
@@ -297,35 +296,13 @@ export function CrdDetail() {
         </>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      kind: "surface",
-      content: (
-        <div className="flex h-full flex-col">
-          <SectionHeader
-            className="flex-none pb-2"
-            title="CustomResourceDefinition YAML"
-            actions={
-              <DetailAction
-                label="Copy"
-                onClick={() => yaml && copyToClipboard(yaml)}
-                disabled={!yaml}
-              />
-            }
-          />
-          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
-            {yaml ? (
-              <YamlEditor value={yaml} readOnly height="100%" />
-            ) : (
-              <div className="p-4">
-                <TextSkeleton lines={18} />
-              </div>
-            )}
-          </div>
-        </div>
-      ),
-    },
+    yamlTab({
+      title: "CustomResourceDefinition YAML",
+      yaml,
+      onCopy: () => yaml && copyToClipboard(yaml),
+      resourceKind: ResourceType.CustomResourceDefinition,
+      resourceName: decodedName,
+    }),
   ];
 
   return (

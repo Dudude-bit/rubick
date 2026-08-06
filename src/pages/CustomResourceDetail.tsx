@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
-import { YamlEditor } from "@/components/yaml/YamlEditor";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import {
   ResourceDetailLayout,
   type DetailTab,
@@ -336,29 +336,11 @@ export function CustomResourceDetail() {
         </>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      kind: "surface",
-      content: (
-        <div className="flex h-full flex-col">
-          <SectionHeader
-            className="flex-none pb-2"
-            title={`${resource?.kind || "Resource"} YAML`}
-            actions={
-              <DetailAction
-                label="Copy"
-                onClick={() => copyToClipboard(yaml)}
-                disabled={!yaml}
-              />
-            }
-          />
-          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
-            <YamlEditor value={yaml} readOnly height="100%" />
-          </div>
-        </div>
-      ),
-    },
+    yamlTab({
+      title: `${resource?.kind || "Resource"} YAML`,
+      yaml,
+      onCopy: () => copyToClipboard(yaml),
+    }),
   ];
 
   return (
