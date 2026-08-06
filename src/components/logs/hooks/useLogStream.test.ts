@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 // ----- Mocks -----
 
@@ -74,6 +74,24 @@ describe("useLogStream deferred-start handshake", () => {
     expect(batchCall!.index).toBeLessThan(subscribedCalls[0].index);
   });
 
+  it("registers stream-failed listener before calling logStreamSubscribed", async () => {
+    // Same contract as log-batch, and for the same reason: the backend
+    // can fail on its first read the moment the gate is released, and
+    // Tauri events have no replay.
+    renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    const failureCall = listenCalls.find((c) => c.event === "stream-failed");
+    expect(
+      failureCall,
+      "stream-failed listener was never registered"
+    ).toBeDefined();
+    expect(failureCall!.index).toBeLessThan(subscribedCalls[0].index);
+  });
+
   it("calls logStreamSubscribed with the streamId returned from streamPodLogs", async () => {
     renderHook(() => useLogStream(baseProps));
 
@@ -103,6 +121,105 @@ function logEvent(streamId: string, ...messages: string[]) {
     },
   };
 }
+
+function failureEvent(
+  streamId: string,
+  kind: "gone" | "broken",
+  message: string
+) {
+  return { payload: { stream_id: streamId, kind, message } };
+}
+
+describe("useLogStream surfaces a stream that dies after it started", () => {
+  beforeEach(() => {
+    listenCalls.length = 0;
+    subscribedCalls.length = 0;
+    callCounter = 0;
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  it("reports a deleted pod as gone and stops claiming to stream", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+    expect(result.current.failure).toBeNull();
+
+    listeners["stream-failed"]!(
+      failureEvent(
+        "stream-id-1",
+        "gone",
+        "n/p stopped streaming — container c is no longer running."
+      )
+    );
+
+    await waitFor(() => {
+      expect(result.current.failure).not.toBeNull();
+    });
+    expect(result.current.failure!.kind).toBe("gone");
+    expect(result.current.failure!.message).toContain("no longer running");
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("reports a dropped connection as broken", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    listeners["stream-failed"]!(
+      failureEvent("stream-id-1", "broken", "The log stream from n/p broke.")
+    );
+
+    await waitFor(() => {
+      expect(result.current.failure?.kind).toBe("broken");
+    });
+  });
+
+  it("ignores a failure belonging to another stream", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    listeners["stream-failed"]!(
+      failureEvent("some-other-stream", "broken", "not ours")
+    );
+    listeners["log-batch"]!(logEvent("stream-id-1", "still alive"));
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(1);
+    });
+    expect(result.current.failure).toBeNull();
+  });
+
+  it("clears the failure when retry restarts the stream", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    listeners["stream-failed"]!(
+      failureEvent("stream-id-1", "broken", "dropped")
+    );
+    await waitFor(() => {
+      expect(result.current.failure).not.toBeNull();
+    });
+
+    act(() => {
+      result.current.retry();
+    });
+
+    await waitFor(() => {
+      expect(result.current.failure).toBeNull();
+    });
+  });
+});
 
 describe("useLogStream stable line ids", () => {
   beforeEach(() => {

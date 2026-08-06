@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
+import type { StreamFailure } from "@/lib/stream-failure";
 
 import { useLogStream } from "./hooks/useLogStream";
 import { LogToolbar } from "./LogToolbar";
@@ -34,12 +36,68 @@ function LogSkeleton() {
   );
 }
 
+/**
+ * A stream that stopped on its own, said out loud.
+ *
+ * It sits above the output rather than replacing it: a pod deleted
+ * after an hour of logs still has an hour of logs worth reading, and
+ * swapping them for an error message would be its own kind of lie. The
+ * two kinds read differently on purpose — a deleted pod is a fact and
+ * gets no button, a broken connection is a maybe and gets Reconnect.
+ */
+function StreamFailureNotice({
+  failure,
+  podName,
+  container,
+  onRetry,
+}: {
+  failure: StreamFailure;
+  podName: string;
+  container: string;
+  onRetry: () => void;
+}) {
+  const gone = failure.kind === "gone";
+
+  return (
+    <div
+      role="alert"
+      data-testid="log-stream-failure"
+      className="flex flex-none items-start justify-between gap-3 border-b border-hair px-4 py-2"
+    >
+      <div className="min-w-0">
+        <p className={`text-xs ${gone ? "text-warn" : "text-err"}`}>
+          {gone
+            ? `Stream ended — ${podName}/${container} is gone.`
+            : `Lost the log stream from ${podName}/${container}.`}
+        </p>
+        <p className="mt-0.5 break-words text-[11px] text-fg-mut">
+          {failure.message}
+        </p>
+      </div>
+      {gone ? (
+        <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+          Nothing left to reconnect to
+        </span>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={onRetry}
+        >
+          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+          Reconnect
+        </Button>
+      )}
+    </div>
+  );
+}
+
 interface LogViewerProps {
   podName: string;
   namespace: string;
   containers: string[];
   initialContainer?: string;
-  onPodNotFound?: () => void;
 }
 
 export function LogViewer({
@@ -47,7 +105,6 @@ export function LogViewer({
   namespace,
   containers,
   initialContainer,
-  onPodNotFound,
 }: LogViewerProps) {
   const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState(
@@ -65,7 +122,7 @@ export function LogViewer({
     logs,
     isStreaming,
     isConnecting,
-    error,
+    failure,
     clearLogs,
     togglePause,
     retry,
@@ -74,7 +131,6 @@ export function LogViewer({
     namespace,
     container: selectedContainer,
     tailLines,
-    onPodNotFound,
   });
 
   // Filter logs based on search and active filters
@@ -264,20 +320,22 @@ export function LogViewer({
 
       <LogFilters filters={activeFilters} onRemoveFilter={handleRemoveFilter} />
 
+      {failure && (
+        <StreamFailureNotice
+          failure={failure}
+          podName={podName}
+          container={selectedContainer}
+          onRetry={handleRetry}
+        />
+      )}
+
       <ScrollArea className="flex-1" ref={scrollAreaRef}>
         <div
           className="p-4 font-mono text-xs leading-relaxed"
           style={{ minHeight: "100%" }}
         >
-          {error ? (
-            <div className="text-center py-8">
-              <p className="mb-2 text-err">Failed to stream logs</p>
-              <p className="mb-4 text-xs text-fg-mut">{error}</p>
-              <Button variant="outline" size="sm" onClick={handleRetry}>
-                Retry
-              </Button>
-            </div>
-          ) : isConnecting && logs.length === 0 ? (
+          {failure && logs.length === 0 ? null : isConnecting &&
+            logs.length === 0 ? (
             // Lines, not a spinner: the shape the output will take says "this
             // is a log about to arrive" where a spinner says only "wait".
             <LogSkeleton />
@@ -291,14 +349,14 @@ export function LogViewer({
               ) : isStreaming ? (
                 <>
                   No output yet.
-                  {/* Deliberately not "the stream is attached": the backend
-                      reports a mid-stream failure to its own log and not to
-                      us, so this state also covers a stream that died on
-                      connect. Claiming health here would be a lie. */}
+                  {/* Safe to claim the stream is attached now: a stream that
+                      dies emits `stream-failed`, which replaces this with the
+                      notice above. Before that event existed this branch also
+                      covered a broken connection and could not say so. */}
                   <span className="text-fg-fnt">
                     {" "}
-                    Nothing has arrived on this container since the stream
-                    started.
+                    The stream is attached; this container has written nothing
+                    since it started.
                   </span>
                 </>
               ) : (

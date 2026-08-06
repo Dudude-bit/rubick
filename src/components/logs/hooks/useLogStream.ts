@@ -8,6 +8,10 @@ import type {
   StreamLogConfig,
 } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
+import {
+  listenForStreamFailure,
+  type StreamFailure,
+} from "@/lib/stream-failure";
 
 const MAX_LOG_LINES = 5000;
 
@@ -25,14 +29,19 @@ interface UseLogStreamOptions {
   namespace: string;
   container: string;
   tailLines: number;
-  onPodNotFound?: () => void;
 }
 
 interface UseLogStreamResult {
   logs: StreamedLogLine[];
   isStreaming: boolean;
   isConnecting: boolean;
-  error: string | null;
+  /**
+   * Why the stream is not running. Covers both a command that never
+   * started one and a stream that died after it did — the second used
+   * to reach nothing but the backend's own log, so the viewer showed
+   * an empty state for a connection that had broken.
+   */
+  failure: StreamFailure | null;
   isPaused: boolean;
   clearLogs: () => void;
   togglePause: () => void;
@@ -44,18 +53,16 @@ export function useLogStream({
   namespace,
   container,
   tailLines,
-  onPodNotFound,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [logs, setLogs] = useState<StreamedLogLine[]>([]);
   const nextIdRef = useRef(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<StreamFailure | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
 
   const streamIdRef = useRef<string | null>(null);
-  const unlistenRef = useRef<(() => void) | null>(null);
 
   const clearLogs = useCallback(() => {
     setLogs([]);
@@ -66,7 +73,7 @@ export function useLogStream({
   }, []);
 
   const retry = useCallback(() => {
-    setError(null);
+    setFailure(null);
     setIsPaused(false);
     setRetryTrigger((prev) => prev + 1);
   }, []);
@@ -74,14 +81,11 @@ export function useLogStream({
   useEffect(() => {
     let active = true;
     let currentStreamId: string | null = null;
-    let currentUnlisten: (() => void) | null = null;
+    const unlistens: Array<() => void> = [];
 
     const cleanup = async () => {
       active = false;
-      if (currentUnlisten) {
-        currentUnlisten();
-        currentUnlisten = null;
-      }
+      while (unlistens.length > 0) unlistens.pop()!();
       if (currentStreamId) {
         try {
           await commands.stopLogStream(currentStreamId);
@@ -90,6 +94,7 @@ export function useLogStream({
         }
         currentStreamId = null;
       }
+      streamIdRef.current = null;
       setIsStreaming(false);
       setIsConnecting(false);
     };
@@ -100,7 +105,7 @@ export function useLogStream({
 
       try {
         setIsConnecting(true);
-        setError(null);
+        setFailure(null);
         setLogs([]);
 
         const config: StreamLogConfig = {
@@ -163,27 +168,43 @@ export function useLogStream({
           setLogs((prev) => [...prev, ...tagged].slice(-MAX_LOG_LINES));
         });
 
+        unlistens.push(unlisten);
+
+        // Same gate, same reason as log-batch: the stream can die on
+        // its very first read, and that failure has to have somewhere
+        // to land before the backend is allowed to start.
+        const unlistenFailure = await listenForStreamFailure(
+          () => streamIdRef.current,
+          (streamFailure) => {
+            if (!active) return;
+            setFailure(streamFailure);
+            setIsStreaming(false);
+            setIsConnecting(false);
+          }
+        );
+        unlistens.push(unlistenFailure);
+
         if (!active) {
-          unlisten();
+          while (unlistens.length > 0) unlistens.pop()!();
           commands.stopLogStream(streamId).catch(console.error);
           setIsConnecting(false);
           return;
         }
 
-        currentUnlisten = unlisten;
-        unlistenRef.current = unlisten;
-
-        // Listener is installed — release the backend gate so it can
-        // start emitting log-batch events without losing the first ones.
+        // Listeners are installed — release the backend gate so it can
+        // start emitting without losing the first events.
         // See `commands::logs::stream_pod_logs` for the gate.
         try {
           await commands.logStreamSubscribed(streamId);
         } catch (err) {
           // Map entry was removed (e.g. another stop_log_stream raced
-          // us). Stream will not emit anything; surface as error.
+          // us). Stream will not emit anything; surface as a failure.
           if (active) {
             console.error("Failed to subscribe log stream:", err);
-            setError(normalizeTauriError(err));
+            setFailure({
+              kind: "broken",
+              message: normalizeTauriError(err),
+            });
             setIsConnecting(false);
             return;
           }
@@ -195,15 +216,14 @@ export function useLogStream({
         if (!active) return;
 
         console.error("Failed to start log streaming:", err);
-        const errorMsg = normalizeTauriError(err);
-        const isPodNotFoundError =
-          errorMsg.includes("not found") || errorMsg.includes("NotFound");
-
-        setError(errorMsg);
-
-        if (isPodNotFoundError && onPodNotFound) {
-          onPodNotFound();
-        }
+        const message = normalizeTauriError(err);
+        setFailure({
+          kind:
+            message.includes("not found") || message.includes("NotFound")
+              ? "gone"
+              : "broken",
+          message,
+        });
         setIsConnecting(false);
         setIsStreaming(false);
       }
@@ -214,21 +234,13 @@ export function useLogStream({
     return () => {
       cleanup();
     };
-  }, [
-    container,
-    tailLines,
-    podName,
-    namespace,
-    isPaused,
-    retryTrigger,
-    onPodNotFound,
-  ]);
+  }, [container, tailLines, podName, namespace, isPaused, retryTrigger]);
 
   return {
     logs,
     isStreaming,
     isConnecting,
-    error,
+    failure,
     isPaused,
     clearLogs,
     togglePause,
