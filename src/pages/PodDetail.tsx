@@ -7,6 +7,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
 import { LogViewer } from "@/components/logs/LogViewer";
@@ -217,8 +218,14 @@ export function PodDetail() {
       ),
       tone: pod?.nodeName ? undefined : "warn",
     },
-    { label: "Pod IP", value: pod?.podIp || "—", mono: true },
-    { label: "Host IP", value: pod?.hostIp || "—", mono: true },
+    {
+      label: "Pod IP",
+      value: <CopyableAddress value={pod?.podIp} label="Pod IP" />,
+    },
+    {
+      label: "Host IP",
+      value: <CopyableAddress value={pod?.hostIp} label="Host IP" />,
+    },
     {
       label: "Restarts",
       value: pod?.restartCount ?? 0,

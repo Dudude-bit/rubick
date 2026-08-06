@@ -17,7 +17,11 @@ export const TONE_CLASS: Record<KeyValueTone, string> = {
 };
 
 export interface KeyValue {
-  label: string;
+  /**
+   * A node, not just a string: an endpoints row is keyed by its address, and
+   * an address is a thing you copy.
+   */
+  label: ReactNode;
   value: ReactNode;
   /** Identifiers — names, images, IPs, versions — read as mono. */
   mono?: boolean;

@@ -4,6 +4,7 @@ import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "@/components/network";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -41,7 +42,7 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "clusterIp",
     header: "Cluster IP",
     cell: ({ row }) => (
-      <span className="font-mono text-sm">{row.original.clusterIp}</span>
+      <CopyableAddress value={row.original.clusterIp} label="Cluster IP" />
     ),
   },
   {
@@ -54,9 +55,9 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
       return (
         <div className="flex flex-col gap-1">
           {ips.map((ip, i) => (
-            <div key={i} className="flex items-center gap-1 font-mono text-xs">
-              <ExternalLink className="h-3 w-3" />
-              {ip}
+            <div key={i} className="flex items-center gap-1 text-xs">
+              <ExternalLink className="h-3 w-3 flex-none" aria-hidden="true" />
+              <CopyableAddress value={ip} label="External IP" />
             </div>
           ))}
         </div>

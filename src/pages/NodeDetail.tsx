@@ -5,6 +5,7 @@ import { Bug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugNodeDialog } from "@/components/debug";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
@@ -103,14 +104,32 @@ export function NodeDetail() {
   };
 
   const address = (type: string) =>
-    node?.status.addresses.find((a) => a.type === type)?.address ?? "-";
+    node?.status.addresses.find((a) => a.type === type)?.address;
 
   const podCapacity = Number(node?.allocatable.pods ?? node?.capacity.pods);
 
   const facts: KeyValue[] = [
-    { label: "Internal IP", value: address("InternalIP"), mono: true },
-    { label: "External IP", value: address("ExternalIP"), mono: true },
-    { label: "Hostname", value: address("Hostname"), mono: true },
+    {
+      label: "Internal IP",
+      value: (
+        <CopyableAddress
+          value={address("InternalIP")}
+          label="Internal IP"
+          fallback="-"
+        />
+      ),
+    },
+    {
+      label: "External IP",
+      value: (
+        <CopyableAddress
+          value={address("ExternalIP")}
+          label="External IP"
+          fallback="-"
+        />
+      ),
+    },
+    { label: "Hostname", value: address("Hostname") ?? "-", mono: true },
     { label: "Kubernetes", value: node?.version, mono: true },
     { label: "Container runtime", value: node?.containerRuntime, mono: true },
     { label: "OS", value: node?.os },

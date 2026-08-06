@@ -9,6 +9,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricValue } from "@/components/ui/metric-value";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo, useState } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -164,7 +165,13 @@ export function NodeList() {
           const address = row.original.status.addresses.find(
             (a) => a.type === "InternalIP"
           );
-          return address?.address || "-";
+          return (
+            <CopyableAddress
+              value={address?.address}
+              label="Internal IP"
+              fallback="-"
+            />
+          );
         },
       },
       {

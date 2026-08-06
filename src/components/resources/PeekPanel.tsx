@@ -12,6 +12,10 @@ import { ExternalLink, Copy } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Kbd } from "@/components/ui/kbd";
+import {
+  CopyableAddress,
+  CopyableAddresses,
+} from "@/components/ui/copyable-value";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -337,7 +341,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             value: pod.nodeName ? ref("Node", pod.nodeName) : "unscheduled",
             tone: pod.nodeName ? undefined : "warn",
           },
-          { label: "Pod IP", value: pod.podIp || "—", mono: true },
+          {
+            label: "Pod IP",
+            value: <CopyableAddress value={pod.podIp} label="Pod IP" />,
+          },
           {
             label: "Restarts",
             value: pod.restartCount,
@@ -565,8 +572,13 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: "Type", value: service.type },
           {
             label: "Cluster IP",
-            value: service.clusterIp || "none",
-            mono: true,
+            value: (
+              <CopyableAddress
+                value={service.clusterIp}
+                label="Cluster IP"
+                fallback="none"
+              />
+            ),
           },
           {
             label: "Ports",
@@ -579,8 +591,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           },
           {
             label: "External",
-            value: list([...service.externalIps, ...service.loadBalancerIps]),
-            mono: true,
+            value: (
+              <CopyableAddresses
+                values={[...service.externalIps, ...service.loadBalancerIps]}
+                label="External address"
+              />
+            ),
           },
           {
             label: "Selector",
@@ -606,8 +622,16 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: "Class", value: ingress.className || "cluster default" },
           {
             label: "Address",
-            value: list(ingress.loadBalancerIps, "not assigned yet"),
-            mono: true,
+            // The empty state keeps its own tone, so it stays plain text
+            // rather than the component's faint fallback.
+            value: ingress.loadBalancerIps.length ? (
+              <CopyableAddresses
+                values={ingress.loadBalancerIps}
+                label="Ingress address"
+              />
+            ) : (
+              "not assigned yet"
+            ),
             tone: ingress.loadBalancerIps.length ? undefined : "warn",
           },
           {
@@ -666,7 +690,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           title: "Pods",
           count: addresses.length,
           items: addresses.slice(0, 8).map((address) => ({
-            label: address.ip,
+            label: <CopyableAddress value={address.ip} label="Address" />,
             value: address.targetRef
               ? ref(
                   address.targetRef.kind,
@@ -801,11 +825,16 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             { label: "Runtime", value: node.containerRuntime, mono: true },
             {
               label: "Internal IP",
-              value:
-                node.status.addresses.find(
-                  (address) => address.type === "InternalIP"
-                )?.address ?? "—",
-              mono: true,
+              value: (
+                <CopyableAddress
+                  value={
+                    node.status.addresses.find(
+                      (address) => address.type === "InternalIP"
+                    )?.address
+                  }
+                  label="Internal IP"
+                />
+              ),
             },
           ],
         },

@@ -7,6 +7,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
+import {
+  CopyableAddress,
+  CopyableAddresses,
+} from "@/components/ui/copyable-value";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
@@ -51,21 +55,35 @@ export function ServiceDetail() {
     { label: "Type", value: service?.type },
     // A headless service has no cluster IP at all; "None" is the API's own
     // word for it and means something different from "not assigned yet".
-    { label: "Cluster IP", value: service?.clusterIp || "None", mono: true },
+    {
+      label: "Cluster IP",
+      value: (
+        <CopyableAddress
+          value={service?.clusterIp}
+          label="Cluster IP"
+          fallback="None"
+        />
+      ),
+    },
     {
       label: "External IPs",
-      value: externalIps.length > 0 ? externalIps.join(", ") : "—",
-      mono: externalIps.length > 0,
+      value: <CopyableAddresses values={externalIps} label="External IP" />,
     },
     ...(service?.type === "LoadBalancer"
       ? [
           {
             label: "Load balancer",
+            // The empty state keeps its own tone, so it stays plain text
+            // rather than the component's faint fallback.
             value:
-              loadBalancerIps.length > 0
-                ? loadBalancerIps.join(", ")
-                : "pending",
-            mono: loadBalancerIps.length > 0,
+              loadBalancerIps.length > 0 ? (
+                <CopyableAddresses
+                  values={loadBalancerIps}
+                  label="Load balancer address"
+                />
+              ) : (
+                "pending"
+              ),
             tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
           },
         ]

@@ -17,7 +17,7 @@ import { TONE_CLASS, type KeyValue, type KeyValueTone } from "./key-values";
  */
 
 export interface KeyValueRowProps {
-  label: string;
+  label: React.ReactNode;
   mono?: boolean;
   tone?: KeyValueTone;
   children: React.ReactNode;
@@ -43,7 +43,12 @@ export function KeyValueRow({
        *  intrinsic width, and an unhyphenated annotation key such as
        *  `deployment.kubernetes.io/revision` is drawn straight over the
        *  value column. */}
-      <dt className="min-w-0 break-words text-[11px] text-fg-fnt" title={label}>
+      <dt
+        className="min-w-0 break-words text-[11px] text-fg-fnt"
+        // Only a plain label can be its own tooltip; a rendered one carries
+        // its own affordances and would announce them twice.
+        title={typeof label === "string" ? label : undefined}
+      >
         {label}
       </dt>
       <dd
@@ -78,7 +83,7 @@ export function KeyValueList({
     <dl className={cn("flex flex-col", className)}>
       {items.map((item, index) => (
         <KeyValueRow
-          key={`${index}-${item.label}`}
+          key={index}
           label={item.label}
           mono={item.mono}
           tone={item.tone}

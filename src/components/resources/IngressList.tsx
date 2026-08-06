@@ -12,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceList } from "@/components/resources/ResourceList";
 import {
   createNameColumn,
@@ -113,7 +114,11 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
       if (ips.length === 0) return <span className="text-fg-fnt">pending</span>;
       return (
         <span className="flex items-baseline gap-2">
-          <span className="font-mono text-fg-mid">{ips[0]}</span>
+          <CopyableAddress
+            value={ips[0]}
+            label="Ingress address"
+            className="text-fg-mid"
+          />
           {ips.length > 1 && (
             <span className="text-[11px] text-fg-fnt">
               +{ips.length - 1} more

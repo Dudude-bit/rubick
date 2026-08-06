@@ -5,6 +5,7 @@ import type { EndpointsInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { Badge } from "@/components/ui/badge";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   Tooltip,
   TooltipContent,
@@ -54,7 +55,7 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
                   {row.original.subsets.flatMap((s) =>
                     s.addresses.map((addr, i) => (
                       <div key={i}>
-                        {addr.ip}
+                        <CopyableAddress value={addr.ip} label="Address" />
                         {addr.targetRef &&
                           ` (${addr.targetRef.kind}/${addr.targetRef.name})`}
                       </div>
@@ -74,7 +75,7 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
                   {row.original.subsets.flatMap((s) =>
                     s.notReadyAddresses.map((addr, i) => (
                       <div key={i}>
-                        {addr.ip}
+                        <CopyableAddress value={addr.ip} label="Address" />
                         {addr.targetRef &&
                           ` (${addr.targetRef.kind}/${addr.targetRef.name})`}
                       </div>
@@ -128,9 +129,11 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            <div className="space-y-1 text-xs font-mono">
+            <div className="space-y-1 text-xs">
               {addresses.map((addr, i) => (
-                <div key={i}>{addr.ip}</div>
+                <div key={i}>
+                  <CopyableAddress value={addr.ip} label="Address" />
+                </div>
               ))}
             </div>
           </TooltipContent>

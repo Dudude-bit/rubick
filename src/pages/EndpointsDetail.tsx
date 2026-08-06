@@ -7,6 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -120,8 +121,8 @@ export function EndpointsDetail() {
               <TableBody>
                 {backends.map(({ address, ready, subset }) => (
                   <TableRow key={`${subset}/${address.ip}`} data-quiet>
-                    <TableCell className="font-mono text-fg">
-                      {address.ip}
+                    <TableCell>
+                      <CopyableAddress value={address.ip} label="Address" />
                     </TableCell>
                     <TableCell className={ready ? "text-fg-mut" : "text-warn"}>
                       {ready ? "Ready" : "Not ready"}

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
@@ -175,10 +176,15 @@ export function IngressDetail() {
       label: "Load balancer",
       // Until the controller assigns an address nothing reaches this ingress,
       // which is the single most common reason it "does not work".
+      // The empty state keeps its own tone, so it stays plain text rather
+      // than the component's faint fallback.
       value:
-        loadBalancerIps.length > 0 ? loadBalancerIps.join(", ") : "pending",
-      mono: loadBalancerIps.length > 0,
-      tone: loadBalancerIps.length > 0 ? undefined : "warn",
+        loadBalancerIps.length > 0 ? (
+          <CopyableAddresses values={loadBalancerIps} label="Ingress address" />
+        ) : (
+          "pending"
+        ),
+      tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
     },
     { label: "Rules", value: rules.length, mono: true },
     { label: "Paths", value: accessUrls.length, mono: true },

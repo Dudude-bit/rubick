@@ -1,5 +1,6 @@
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useNavigate } from "react-router-dom";
 import { Circle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -132,7 +133,9 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
               <div className="flex items-center gap-3 text-sm text-fg-mut">
                 <span>{pod.status.phase}</span>
                 {pod.podIp && (
-                  <code className="font-mono text-xs">{pod.podIp}</code>
+                  <span className="text-xs">
+                    <CopyableAddress value={pod.podIp} label="Pod IP" />
+                  </span>
                 )}
               </div>
             </div>

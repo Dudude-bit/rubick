@@ -7,6 +7,7 @@ import {
   type PodWithMetrics,
 } from "@/hooks/usePodsWithMetrics";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -92,12 +93,14 @@ export function PodList() {
       {
         id: "ip",
         header: "IP",
-        cell: ({ row }) =>
-          row.original.podIp ? (
-            <span className="font-mono text-fg-mut">{row.original.podIp}</span>
-          ) : (
-            <span className="text-fg-fnt">-</span>
-          ),
+        cell: ({ row }) => (
+          <CopyableAddress
+            value={row.original.podIp}
+            label="Pod IP"
+            fallback="-"
+            className="text-fg-mut"
+          />
+        ),
       },
       createAgeColumn<PodWithMetrics>(),
     ],
