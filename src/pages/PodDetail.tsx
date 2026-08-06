@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bug, Network, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowRight, Bug, Network, RefreshCw, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -19,8 +19,10 @@ import { ContainerRows } from "@/components/resources/container-rows";
 import {
   ConditionRows,
   DetailAction,
+  ProblemSummary,
   UsageRow,
 } from "@/components/resources/detail-blocks";
+import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -36,8 +38,135 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { failingCondition } from "@/lib/condition-health";
+import { statusRole } from "@/lib/status-role";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { PodInfo, DebugResult } from "@/generated/types";
+import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
+
+interface PodProblem {
+  /** The kubelet's own word for it, for the header row. */
+  reason: string;
+  headline: ReactNode;
+  detail: ReactNode;
+  tone: "err" | "warn";
+  /** The tab that holds the rest of the story. */
+  tab: "containers" | "conditions";
+}
+
+/** A container that has not started yet is not a container in trouble. */
+const STARTING = new Set(["containercreating", "podinitializing", "creating"]);
+
+const CANNOT_PULL =
+  /^(ImagePull|ErrImagePull|InvalidImageName|RegistryUnavailable)/i;
+
+function describeWaiting(
+  container: ContainerInfo,
+  reason: string
+): Omit<PodProblem, "tab"> {
+  if (CANNOT_PULL.test(reason)) {
+    return {
+      reason,
+      headline: `${container.name} cannot pull its image`,
+      detail: (
+        <>
+          <ImageRef image={container.image} inline /> — the kubelet is retrying,
+          waiting longer after each attempt. The name, the tag or the pull
+          credentials are what to check.
+        </>
+      ),
+      tone: "err",
+    };
+  }
+  if (reason.toLowerCase() === "crashloopbackoff") {
+    return {
+      reason,
+      headline: `${container.name} starts and then exits, over and over`,
+      detail: `${container.restartCount} restarts so far. What it printed before it last died is in Logs.`,
+      tone: "err",
+    };
+  }
+  if (/^CreateContainer(Config)?Error$/i.test(reason)) {
+    return {
+      reason,
+      headline: `${container.name} cannot be built from this spec`,
+      detail:
+        "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
+      tone: "err",
+    };
+  }
+  return {
+    reason,
+    headline: `${container.name} is waiting to start`,
+    detail: reason,
+    tone: statusRole(reason) === "err" ? "err" : "warn",
+  };
+}
+
+/**
+ * What is wrong with this pod, in one sentence, or nothing.
+ *
+ * Containers first and conditions second, because a container reason is
+ * the specific answer and `Ready=False · containers with unready status:
+ * [app]` is the same fact with the answer taken out. The Ready family is
+ * skipped for that reason: it can only ever restate the loop above it.
+ */
+function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
+  if (!pod || pod.status.phase === "Succeeded") return null;
+
+  for (const container of pod.containers) {
+    const state = container.state;
+    if (
+      state.type === "waiting" &&
+      state.reason &&
+      !STARTING.has(state.reason.toLowerCase())
+    ) {
+      return {
+        ...describeWaiting(container, state.reason),
+        tab: "containers",
+      };
+    }
+    if (state.type === "terminated" && state.exit_code !== 0) {
+      return {
+        reason: state.reason ?? "Error",
+        headline: `${container.name} exited with ${state.exit_code}`,
+        detail: `${state.reason ?? "Error"} — the last run of this container did not finish cleanly.`,
+        tone: "err",
+        tab: "containers",
+      };
+    }
+  }
+
+  const condition = failingCondition(pod.status.conditions, [
+    "Ready",
+    "ContainersReady",
+  ]);
+  if (condition) {
+    return {
+      reason: condition.reason ?? condition.type,
+      headline:
+        condition.type === "PodScheduled"
+          ? "No node will take this pod"
+          : `${condition.type} is ${condition.status}`,
+      detail: condition.message ?? condition.reason ?? "",
+      tone: condition.reason === "Unschedulable" ? "err" : "warn",
+      tab: "conditions",
+    };
+  }
+
+  // Eviction and the other node-level verdicts land here, and nowhere else
+  // in the object says them.
+  if (pod.status.reason || pod.status.message) {
+    return {
+      reason: pod.status.reason ?? "Failed",
+      headline: pod.status.reason ?? "This pod failed",
+      detail: pod.status.message ?? "",
+      tone: "err",
+      tab: "conditions",
+    };
+  }
+
+  return null;
+}
 
 export function PodDetail() {
   const navigate = useNavigate();
@@ -260,16 +389,9 @@ export function PodDetail() {
           ? ("warn" as const)
           : undefined,
     },
-    ...(pod?.status.reason || pod?.status.message
-      ? [
-          {
-            label: "Reason",
-            value: pod.status.message || pod.status.reason || "",
-            tone: "err" as const,
-          },
-        ]
-      : []),
   ];
+
+  const problem = useMemo(() => podProblem(pod), [pod]);
 
   return (
     <ResourceDetailLayout
@@ -285,6 +407,18 @@ export function PodDetail() {
       onTabChange={setActiveTab}
       statusBadge={
         pod?.status.phase ? <StatusBadge status={pod.status.phase} /> : null
+      }
+      // The phase is not the problem: `Pending` is true of a pod waiting for
+      // a node and of one whose image does not exist. The kubelet's word for
+      // it rides beside the phase, on every tab.
+      badges={
+        problem && (
+          <span
+            className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
+          >
+            {problem.reason}
+          </span>
+        )
       }
       onFindReplacement={handleFindReplacement}
       isSearchingReplacement={isSearchingReplacement}
@@ -387,6 +521,21 @@ export function PodDetail() {
         }),
       ]}
     >
+      {problem && (
+        <ProblemSummary
+          headline={problem.headline}
+          detail={problem.detail}
+          tone={problem.tone}
+          action={
+            <DetailAction
+              label={`See ${problem.tab}`}
+              icon={ArrowRight}
+              onClick={() => setActiveTab(problem.tab)}
+            />
+          }
+        />
+      )}
+
       {podStatus?.status !== "available" && (
         <MetricsStatusBanner status={podStatus} />
       )}

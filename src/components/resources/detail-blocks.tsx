@@ -3,6 +3,10 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
+import {
+  conditionVerdict,
+  type ConditionVerdict,
+} from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import { linkifyImages } from "@/lib/image-ref";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
@@ -90,36 +94,6 @@ export function DetailAction({
   );
 }
 
-/**
- * Conditions whose healthy value is `False`.
- *
- * A node reports pressure by setting the condition True, which is the exact
- * opposite of the Ready-style conditions. Colouring on the status word alone
- * painted a perfectly healthy node's `MemoryPressure=False` red.
- */
-const HEALTHY_WHEN_FALSE = new Set([
-  "memorypressure",
-  "diskpressure",
-  "pidpressure",
-  "networkunavailable",
-  "replicafailure",
-  "failed",
-  "failuretarget",
-]);
-
-type ConditionVerdict = "good" | "unknown" | "bad";
-
-function conditionVerdict(condition: ConditionInfo): ConditionVerdict {
-  const status = condition.status.toLowerCase();
-  if (status !== "true" && status !== "false") return "unknown";
-  const healthyValue = HEALTHY_WHEN_FALSE.has(
-    condition.type.toLowerCase().replace(/[\s_-]/g, "")
-  )
-    ? "false"
-    : "true";
-  return status === healthyValue ? "good" : "bad";
-}
-
 const VERDICT_TONE: Record<ConditionVerdict, string> = {
   good: "text-fg-mut",
   unknown: "text-warn",
@@ -192,6 +166,56 @@ function ConditionRow({ condition }: { condition: ConditionInfo }) {
       >
         {condition.lastTransitionTime ? age : "—"}
       </span>
+    </div>
+  );
+}
+
+export interface ProblemSummaryProps {
+  /** What is wrong, as a sentence in the reader's terms. */
+  headline: ReactNode;
+  /** The cluster's own word for it, and what that word means. */
+  detail?: ReactNode;
+  /** The way to the tab that holds the rest of it. */
+  action?: ReactNode;
+  tone?: "err" | "warn";
+}
+
+/**
+ * Why this object is not doing its job, at the top of the page.
+ *
+ * A page whose object is broken used to open exactly like a page whose
+ * object is fine: `bad-image-demo` led with `Labels 0 · No labels` while
+ * the reason sat two tabs away under `Containers → State`. The reason was
+ * in the object the whole time; nothing led with it. This does, above the
+ * tab strip, so it is on every tab rather than on the one the reader
+ * happens to guess.
+ *
+ * Deliberately not a banner: no fill, no border, no icon in a box. The
+ * glyph and the colour are the same two channels the condition rows and
+ * the event feed already use for "this one is bad", so a page in trouble
+ * reads as the rest of the app reads, only louder.
+ */
+export function ProblemSummary({
+  headline,
+  detail,
+  action,
+  tone = "err",
+}: ProblemSummaryProps) {
+  const color = tone === "err" ? "text-err" : "text-warn";
+  return (
+    <div className="flex items-start gap-2">
+      <span className={cn("mt-[3px] text-[9px]", color)} aria-hidden="true">
+        ▲
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={cn("text-[13px] font-semibold tracking-tight", color)}>
+          {headline}
+        </p>
+        {detail && (
+          <p className="mt-0.5 break-words text-xs text-fg-mut">{detail}</p>
+        )}
+      </div>
+      {action && <div className="flex flex-none items-center">{action}</div>}
     </div>
   );
 }
