@@ -2,6 +2,31 @@ import type { LogFormat, LogLevel, LogLine } from "@/generated/types";
 
 export type ViewMode = "compact" | "table" | "raw";
 
+/**
+ * A line as the viewer holds it, with the three things the backend
+ * cannot supply.
+ *
+ * `id` because `LogLine` has no identity — two events can carry
+ * identical timestamp and message bytes, and React needs a stable key
+ * so a filter shrinking the visible array does not remount unrelated
+ * rows. It is assigned at receive time and is therefore also the
+ * arrival order, which is what breaks ties when several containers
+ * report the same instant.
+ *
+ * `epoch` and `groupKey` are precomputed for cost, not for taste: the
+ * merge sorts on the first and the collapse compares the second, both
+ * over the whole retained buffer several times a second. Parsing a
+ * timestamp or running six regexes inside those loops is the difference
+ * between a viewer and a stall.
+ */
+export type StreamedLogLine = LogLine & {
+  id: number;
+  /** ms since epoch; carried forward from the last line of the same stream when the line has no timestamp. */
+  epoch: number;
+  /** See `groupKeyFor` — container, level, field keys and the normalised message. */
+  groupKey: string;
+};
+
 export interface LogFilter {
   search: string;
   levels: LogLevel[];
@@ -89,6 +114,20 @@ export function formatTimestamp(timestamp: string | null): string {
   } catch {
     return timestamp;
   }
+}
+
+/**
+ * A run's duration, at the precision the number deserves. A burst that
+ * landed inside one clock tick is "instant" rather than "0ms", which
+ * reads like a measurement that failed.
+ */
+export function formatSpan(ms: number): string {
+  if (ms <= 0) return "instant";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.round((ms % 60000) / 1000);
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }
 
 /**
