@@ -25,6 +25,7 @@ import {
   type LogRun,
 } from "./grouping";
 import {
+  fieldTerm,
   formatCount,
   logsToText,
   matchesQuery,
@@ -32,6 +33,9 @@ import {
   type QueryTerm,
   type ViewMode,
 } from "./types";
+
+/** Before the first batch there is no index to read the legend's tally from. */
+const EMPTY_COUNTS: Map<string, number> = new Map();
 
 /** Ragged bars at log-line rhythm — the shape the output will land in. */
 const SKELETON_WIDTHS = [
@@ -207,6 +211,7 @@ export function LogViewer({
   const {
     logs,
     retained,
+    fields,
     dropped,
     isStreaming,
     isConnecting,
@@ -220,14 +225,10 @@ export function LogViewer({
   const colors = useMemo(() => buildContainerColors(containers), [containers]);
 
   // Counted over the whole buffer rather than the view, so hiding a
-  // container does not zero the number that says how loud it is.
-  const counts = useMemo(() => {
-    const byContainer = new Map<string, number>();
-    for (const log of logs) {
-      byContainer.set(log.container, (byContainer.get(log.container) ?? 0) + 1);
-    }
-    return byContainer;
-  }, [logs]);
+  // container does not zero the number that says how loud it is. The
+  // field index already keeps exactly this tally, incrementally, so the
+  // legend no longer costs a pass over the buffer per batch.
+  const counts = fields.values.get("container") ?? EMPTY_COUNTS;
 
   // What is being typed filters live and becomes a chip on Enter, so the
   // box answers immediately and the answer survives being typed past.
@@ -369,16 +370,21 @@ export function LogViewer({
     setDraft("");
   }, []);
 
+  // One builder for every pair anyone clicks — a row's field key, the
+  // container in its detail, the level in the Table view, a suggestion in
+  // the query popover. Two of them producing terms that only looked alike
+  // would defeat the label-based dedupe and stack two chips saying the
+  // same thing.
   const handleFieldClick = useCallback(
     (key: string, value: string) => {
-      handleAddTerm({ kind: "field", key, op: "=", value });
+      handleAddTerm(fieldTerm(key, value));
     },
     [handleAddTerm]
   );
 
   const handleLevelClick = useCallback(
     (level: LogLevel) => {
-      handleAddTerm({ kind: "level", op: "=", value: level });
+      handleAddTerm(fieldTerm("level", level));
     },
     [handleAddTerm]
   );
@@ -467,6 +473,7 @@ export function LogViewer({
         onDraftChange={setDraft}
         onAddTerm={handleAddTerm}
         onRemoveTerm={handleRemoveTerm}
+        fields={fields}
         limit={limit}
         onLimitChange={setLimit}
         collapseRepeats={collapseRepeats}

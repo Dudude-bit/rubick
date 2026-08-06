@@ -21,6 +21,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import type { FieldIndex } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { formatCount, type QueryTerm, type ViewMode } from "./types";
@@ -45,6 +46,8 @@ interface LogToolbarProps {
   onDraftChange: (draft: string) => void;
   onAddTerm: (term: QueryTerm) => void;
   onRemoveTerm: (term: QueryTerm) => void;
+  /** What the buffer can be filtered by, offered when the query is focused. */
+  fields: FieldIndex;
   /** Backfill and retention in one number — see `DEFAULT_LOG_LIMIT`. */
   limit: number;
   onLimitChange: (limit: number) => void;
@@ -82,6 +85,7 @@ export function LogToolbar({
   onDraftChange,
   onAddTerm,
   onRemoveTerm,
+  fields,
   limit,
   onLimitChange,
   collapseRepeats,
@@ -103,6 +107,10 @@ export function LogToolbar({
     // Wraps because the same toolbar sits in the peek panel, which the
     // reader can drag down to 360px — unwrapped it pushed its own controls
     // off the edge.
+    //
+    // Everything in it is 24px tall, borders included: that is the rhythm
+    // the tables already keep, and this row used to hold three heights at
+    // once — a 30px query box, 24px buttons and a 22px segment group.
     <div className="flex flex-wrap items-center gap-1.5 border-b border-hair px-2 py-1.5">
       <LogQuery
         terms={terms}
@@ -110,9 +118,10 @@ export function LogToolbar({
         onDraftChange={onDraftChange}
         onAddTerm={onAddTerm}
         onRemoveTerm={onRemoveTerm}
+        fields={fields}
       />
 
-      <div className="flex items-center gap-px rounded-md border border-hair p-px">
+      <div className="flex h-6 items-center gap-px rounded-md border border-hair p-px">
         {VIEW_MODES.map(({ mode, label, hint }) => (
           <button
             key={mode}
@@ -120,7 +129,7 @@ export function LogToolbar({
             title={hint}
             aria-pressed={viewMode === mode}
             onClick={() => onViewModeChange(mode)}
-            className={`rounded px-2 py-0.5 text-xs ${
+            className={`flex h-full items-center rounded px-2 text-xs ${
               viewMode === mode
                 ? "bg-sel text-fg"
                 : "text-fg-mut hover:bg-hover hover:text-fg"
