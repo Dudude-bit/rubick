@@ -60,6 +60,34 @@ const SOURCE_LABEL: Record<SourceType, string> = {
   envFromConfigMap: "configmap · envFrom",
 };
 
+/** Which filter option a row answers to. One mapping, so the control
+ *  offering an option and the list honouring it cannot drift. */
+function filterOf(sourceType: SourceType): FilterOption {
+  return sourceType === "envFromSecret" || sourceType === "envFromConfigMap"
+    ? "envFrom"
+    : sourceType;
+}
+
+/** The picker names a source with the same word its rows do. */
+const FILTER_LABEL: Record<FilterOption, string> = {
+  all: "all sources",
+  direct: SOURCE_LABEL.direct,
+  secret: SOURCE_LABEL.secret,
+  configmap: SOURCE_LABEL.configmap,
+  field: SOURCE_LABEL.field,
+  resource: SOURCE_LABEL.resource,
+  envFrom: "envFrom",
+};
+
+const FILTER_ORDER = [
+  "direct",
+  "secret",
+  "configmap",
+  "field",
+  "resource",
+  "envFrom",
+] as const satisfies readonly FilterOption[];
+
 function SourceCell({
   type,
   name,
@@ -349,32 +377,24 @@ export function EnvironmentVariables({
     loadingConfigMaps,
   ]);
 
-  // Filter expanded env vars based on selected filter
-  const filteredEnvVars = useMemo(() => {
-    if (filter === "all") return expandedEnvVars;
+  const filteredEnvVars = useMemo(
+    () =>
+      filter === "all"
+        ? expandedEnvVars
+        : expandedEnvVars.filter((ev) => filterOf(ev.sourceType) === filter),
+    [expandedEnvVars, filter]
+  );
 
-    return expandedEnvVars.filter((ev) => {
-      switch (filter) {
-        case "direct":
-          return ev.sourceType === "direct";
-        case "secret":
-          return ev.sourceType === "secret";
-        case "configmap":
-          return ev.sourceType === "configmap";
-        case "field":
-          return ev.sourceType === "field";
-        case "resource":
-          return ev.sourceType === "resource";
-        case "envFrom":
-          return (
-            ev.sourceType === "envFromSecret" ||
-            ev.sourceType === "envFromConfigMap"
-          );
-        default:
-          return true;
-      }
-    });
-  }, [expandedEnvVars, filter]);
+  /**
+   * The sources actually present. A picker offering six of them over a
+   * container whose variables all came from one place is a control whose
+   * every setting but the current one empties the list.
+   */
+  const sources = useMemo(() => {
+    const present = new Set<FilterOption>();
+    for (const ev of expandedEnvVars) present.add(filterOf(ev.sourceType));
+    return present;
+  }, [expandedEnvVars]);
 
   // Get the value to display for an env var
   const getDisplayValue = (ev: ExpandedEnvVar): string => {
@@ -456,35 +476,49 @@ export function EnvironmentVariables({
       .map((ev) => ev.name);
   }, [expandedEnvVars]);
 
+  // Chrome after content, never before it. A container that declares no
+  // variables was still getting a heading, a bordered source picker and a
+  // chevron — three controls over an empty list, on four of the five
+  // containers of an ordinary pod. What is true is one line long.
+  if (!hasEnvVars) {
+    return (
+      <p className="text-xs text-fg-fnt">No environment variables declared</p>
+    );
+  }
+
   return (
     <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
       <Section>
         <SectionHeader
-          title="Environment Variables"
-          count={
-            hasEnvVars
-              ? expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length
-              : undefined
-          }
+          title="Environment"
+          count={expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length}
           actions={
             <>
-              <Select
-                value={filter}
-                onValueChange={(value) => setFilter(value as FilterOption)}
-              >
-                <SelectTrigger className="w-[140px] h-8">
-                  <SelectValue placeholder="Filter by source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="direct">Direct</SelectItem>
-                  <SelectItem value="secret">Secret</SelectItem>
-                  <SelectItem value="configmap">ConfigMap</SelectItem>
-                  <SelectItem value="field">Field Ref</SelectItem>
-                  <SelectItem value="resource">Resource Ref</SelectItem>
-                  <SelectItem value="envFrom">EnvFrom</SelectItem>
-                </SelectContent>
-              </Select>
+              {sources.size > 1 && (
+                <Select
+                  value={filter}
+                  onValueChange={(value) => setFilter(value as FilterOption)}
+                >
+                  {/* Borderless, like every other picker on a detail page:
+                      the canvas has no boxed controls. */}
+                  <SelectTrigger
+                    aria-label="Filter by source"
+                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{FILTER_LABEL.all}</SelectItem>
+                    {FILTER_ORDER.filter((option) => sources.has(option)).map(
+                      (option) => (
+                        <SelectItem key={option} value={option}>
+                          {FILTER_LABEL[option]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
 
               {hasSecrets && (
                 <div className="flex items-center gap-2 ml-2">
@@ -528,11 +562,7 @@ export function EnvironmentVariables({
           }
         />
         <CollapsibleContent>
-          {!hasEnvVars ? (
-            <p className="text-xs text-fg-fnt">
-              No environment variables defined
-            </p>
-          ) : filteredEnvVars.length === 0 ? (
+          {filteredEnvVars.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               No environment variables match the selected filter
             </p>
