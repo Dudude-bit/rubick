@@ -44,7 +44,12 @@ vi.mock("@/lib/error-utils", () => ({
   normalizeTauriError: (err: unknown) => String(err),
 }));
 
-import { useLogStream } from "./useLogStream";
+import {
+  appendCapped,
+  MAX_LOG_LINES,
+  useLogStream,
+  type StreamedLogLine,
+} from "./useLogStream";
 
 const baseProps = {
   podName: "p",
@@ -307,5 +312,70 @@ describe("useLogStream stable line ids", () => {
 
     expect(result.current.logs[0].id).toBe(idsBefore[0]);
     expect(result.current.logs[1].id).toBe(idsBefore[1]);
+  });
+});
+
+describe("appendCapped", () => {
+  const line = (id: number) => ({ id, message: `m${id}` }) as StreamedLogLine;
+  const lines = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => line(from + i));
+
+  it("returns a new array so React sees the change", () => {
+    const prev = lines(0, 3);
+    const next = appendCapped(prev, lines(3, 2));
+    expect(next).not.toBe(prev);
+    expect(prev).toHaveLength(3);
+    expect(next.map((l) => l.id)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("drops from the head once the cap is reached, keeping the newest", () => {
+    const prev = lines(0, MAX_LOG_LINES);
+    const next = appendCapped(prev, lines(MAX_LOG_LINES, 10));
+
+    expect(next).toHaveLength(MAX_LOG_LINES);
+    expect(next[0].id).toBe(10);
+    expect(next[next.length - 1].id).toBe(MAX_LOG_LINES + 9);
+  });
+
+  it("keeps only the tail of a batch that is itself over the cap", () => {
+    const next = appendCapped(lines(0, 5), lines(100, MAX_LOG_LINES + 20));
+
+    expect(next).toHaveLength(MAX_LOG_LINES);
+    expect(next[0].id).toBe(120);
+    expect(next[next.length - 1].id).toBe(100 + MAX_LOG_LINES + 19);
+  });
+});
+
+describe("useLogStream retention", () => {
+  beforeEach(() => {
+    listenCalls.length = 0;
+    subscribedCalls.length = 0;
+    callCounter = 0;
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  it("never retains more than the cap, however many batches arrive", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    const handler = listeners["log-batch"]!;
+    const batch = Array.from({ length: 1000 }, (_, i) => `line ${i}`);
+    for (let i = 0; i < MAX_LOG_LINES / 1000 + 3; i++) {
+      handler(logEvent("stream-id-1", ...batch));
+    }
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(MAX_LOG_LINES);
+    });
+
+    // Ids stay strictly increasing across the drop, which is what the
+    // virtualiser's per-line height cache is keyed on.
+    const ids = result.current.logs.map((l) => l.id);
+    expect(ids[0]).toBeLessThan(ids[ids.length - 1]);
+    expect(new Set(ids).size).toBe(MAX_LOG_LINES);
   });
 });

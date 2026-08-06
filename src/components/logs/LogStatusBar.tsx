@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LogLine, LogFormat } from "@/generated/types";
 import {
   Tooltip,
@@ -6,6 +6,26 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FORMAT_DESCRIPTIONS } from "./types";
+
+// TEMP INSTRUMENTATION - remove before commit
+function DomProbe() {
+  const [n, setN] = useState<[number, number]>([0, 0]);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const list = document.querySelector("[data-log-list]");
+      setN([
+        list ? list.querySelectorAll("*").length : -1,
+        document.getElementsByTagName("*").length,
+      ]);
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span data-testid="dom-probe">
+      dom: {n[0]} / {n[1]}
+    </span>
+  );
+}
 
 interface LogStatusBarProps {
   logs: LogLine[];
@@ -73,6 +93,7 @@ export function LogStatusBar({
         )}
       </span>
       <div className="flex items-center gap-4">
+        <DomProbe />
         {formatInfo && (
           <Tooltip>
             <TooltipTrigger asChild>

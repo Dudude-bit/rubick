@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import type { StreamFailure } from "@/lib/stream-failure";
 
 import { useLogStream } from "./hooks/useLogStream";
 import { LogToolbar } from "./LogToolbar";
-import { LogLineComponent } from "./LogLine";
+import { LogList } from "./LogList";
 import { LogFilters } from "./LogFilters";
 import { LogStatusBar } from "./LogStatusBar";
-import type { ViewMode, ActiveFilter } from "./types";
+import { logsToText, type ViewMode, type ActiveFilter } from "./types";
 
 /** Ragged bars at log-line rhythm — the shape the output will land in. */
 const SKELETON_WIDTHS = [
@@ -107,6 +107,7 @@ export function LogViewer({
   initialContainer,
 }: LogViewerProps) {
   const { toast } = useToast();
+  const copyToClipboard = useCopyToClipboard();
   const [selectedContainer, setSelectedContainer] = useState(
     initialContainer || containers[0]
   );
@@ -116,7 +117,6 @@ export function LogViewer({
   const [autoScroll, setAutoScroll] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const {
     logs,
@@ -161,66 +161,19 @@ export function LogViewer({
     return result;
   }, [logs, searchQuery, activeFilters]);
 
-  // Scroll area helpers
-  const getViewport = useCallback(() => {
-    return scrollAreaRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
-    ) as HTMLElement | null;
+  const handleAutoScrollToggle = useCallback(() => {
+    // Turning it back on is the same act as jumping to the foot: the list
+    // pins itself the moment `follow` flips true.
+    setAutoScroll((previous) => !previous);
   }, []);
 
-  // Auto-scroll to bottom when new logs arrive
-  useEffect(() => {
-    if (autoScroll && filteredLogs.length > 0) {
-      const viewport = getViewport();
-      if (viewport) {
-        // Double rAF to ensure DOM is updated before scrolling
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            viewport.scrollTop = viewport.scrollHeight;
-          });
-        });
-      }
-    }
-  }, [filteredLogs, autoScroll, getViewport]);
-
-  // Track scroll position
-  useEffect(() => {
-    const viewport = getViewport();
-    if (!viewport) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = viewport;
-      const atBottom = scrollHeight - scrollTop - clientHeight < 50;
-      setIsAtBottom(atBottom);
-
-      if (atBottom && !autoScroll) {
-        setAutoScroll(true);
-      }
-      if (!atBottom && autoScroll) {
-        setAutoScroll(false);
-      }
-    };
-
-    viewport.addEventListener("scroll", handleScroll);
-    return () => viewport.removeEventListener("scroll", handleScroll);
-  }, [autoScroll, getViewport]);
-
-  const handleAutoScrollToggle = useCallback(() => {
-    if (autoScroll) {
-      // Disable auto-scroll
-      setAutoScroll(false);
-    } else {
-      // Enable auto-scroll and scroll to bottom
-      const viewport = getViewport();
-      if (viewport) {
-        viewport.scrollTo({
-          top: viewport.scrollHeight,
-          behavior: "smooth",
-        });
-      }
-      setAutoScroll(true);
-    }
-  }, [autoScroll, getViewport]);
+  const handleCopyLogs = useCallback(() => {
+    if (filteredLogs.length === 0) return;
+    copyToClipboard(
+      logsToText(filteredLogs),
+      `${filteredLogs.length} ${filteredLogs.length === 1 ? "line" : "lines"} copied`
+    );
+  }, [copyToClipboard, filteredLogs]);
 
   const handleDownloadLogs = async () => {
     try {
@@ -233,10 +186,7 @@ export function LogViewer({
         false
       );
 
-      const content = allLogs
-        .map((log) => log.raw || `${log.timestamp || ""} ${log.message}`)
-        .join("\n");
-      const blob = new Blob([content], { type: "text/plain" });
+      const blob = new Blob([logsToText(allLogs)], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -314,6 +264,7 @@ export function LogViewer({
         isAtBottom={isAtBottom}
         onAutoScrollToggle={handleAutoScrollToggle}
         onClearLogs={clearLogs}
+        onCopyLogs={handleCopyLogs}
         onDownloadLogs={handleDownloadLogs}
         onToggleStreaming={togglePause}
       />
@@ -329,54 +280,50 @@ export function LogViewer({
         />
       )}
 
-      <ScrollArea className="flex-1" ref={scrollAreaRef}>
-        <div
-          className="p-4 font-mono text-xs leading-relaxed"
-          style={{ minHeight: "100%" }}
-        >
-          {failure && logs.length === 0 ? null : isConnecting &&
-            logs.length === 0 ? (
-            // Lines, not a spinner: the shape the output will take says "this
-            // is a log about to arrive" where a spinner says only "wait".
-            <LogSkeleton />
-          ) : filteredLogs.length === 0 ? (
-            <div className="py-8 text-center text-xs text-fg-mut">
-              {logs.length > 0 ? (
-                <>
-                  No line matches the current filter.
-                  <span className="text-fg-fnt"> {logs.length} received.</span>
-                </>
-              ) : isStreaming ? (
-                <>
-                  No output yet.
-                  {/* Safe to claim the stream is attached now: a stream that
-                      dies emits `stream-failed`, which replaces this with the
-                      notice above. Before that event existed this branch also
-                      covered a broken connection and could not say so. */}
-                  <span className="text-fg-fnt">
-                    {" "}
-                    The stream is attached; this container has written nothing
-                    since it started.
-                  </span>
-                </>
-              ) : (
-                'Not streaming. Press "Stream" to attach.'
-              )}
-            </div>
-          ) : (
-            filteredLogs.map((log) => (
-              <LogLineComponent
-                key={log.id}
-                log={log}
-                viewMode={viewMode}
-                searchQuery={searchQuery}
-                onFieldClick={handleFieldClick}
-                onLevelClick={handleLevelClick}
-              />
-            ))
-          )}
-        </div>
-      </ScrollArea>
+      <LogList
+        logs={filteredLogs}
+        viewMode={viewMode}
+        searchQuery={searchQuery}
+        follow={autoScroll}
+        atBottom={isAtBottom}
+        onFollowChange={setAutoScroll}
+        onAtBottomChange={setIsAtBottom}
+        resetKey={selectedContainer}
+        oldestRetainedId={logs[0]?.id}
+        onFieldClick={handleFieldClick}
+        onLevelClick={handleLevelClick}
+      >
+        {failure && logs.length === 0 ? null : isConnecting &&
+          logs.length === 0 ? (
+          // Lines, not a spinner: the shape the output will take says "this
+          // is a log about to arrive" where a spinner says only "wait".
+          <LogSkeleton />
+        ) : (
+          <div className="py-8 text-center text-xs text-fg-mut">
+            {logs.length > 0 ? (
+              <>
+                No line matches the current filter.
+                <span className="text-fg-fnt"> {logs.length} received.</span>
+              </>
+            ) : isStreaming ? (
+              <>
+                No output yet.
+                {/* Safe to claim the stream is attached now: a stream that
+                    dies emits `stream-failed`, which replaces this with the
+                    notice above. Before that event existed this branch also
+                    covered a broken connection and could not say so. */}
+                <span className="text-fg-fnt">
+                  {" "}
+                  The stream is attached; this container has written nothing
+                  since it started.
+                </span>
+              </>
+            ) : (
+              'Not streaming. Press "Stream" to attach.'
+            )}
+          </div>
+        )}
+      </LogList>
 
       {/* The status bar carries the live indicator: a pulsing dot beside the
           word "Streaming", which is the only thing that separates an attached

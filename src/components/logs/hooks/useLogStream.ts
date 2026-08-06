@@ -13,7 +13,15 @@ import {
   type StreamFailure,
 } from "@/lib/stream-failure";
 
-const MAX_LOG_LINES = 5000;
+/**
+ * The cap used to protect the DOM: every retained line was a live subtree,
+ * so 5000 was already 80k elements and a webview holding 1.9 GB. The list
+ * is virtualised now, so the only thing a retained line costs is the object
+ * itself — measured at ~1.1 KB for a JSON line with parsed fields (see the
+ * note in LogViewer). 40 000 lines is therefore ~44 MB of heap, and buys
+ * roughly three minutes of a 200 line/s pod instead of twenty-five seconds.
+ */
+export const MAX_LOG_LINES = 40000;
 
 /**
  * `LogLine` from the backend has no stable identity — two events can
@@ -23,6 +31,27 @@ const MAX_LOG_LINES = 5000;
  * with a monotonic id assigned at receive time.
  */
 export type StreamedLogLine = LogLine & { id: number };
+
+/**
+ * `[...prev, ...batch].slice(-MAX)` built a full-length array only to throw
+ * the head of it away — two allocations and two full copies per batch, at
+ * twenty batches a second. Trim once, then push in place.
+ *
+ * The result is still a new array: React re-renders on identity, and a
+ * mutated-in-place buffer would go unnoticed.
+ */
+export function appendCapped(
+  prev: StreamedLogLine[],
+  batch: StreamedLogLine[]
+): StreamedLogLine[] {
+  if (batch.length >= MAX_LOG_LINES) {
+    return batch.slice(batch.length - MAX_LOG_LINES);
+  }
+  const overflow = prev.length + batch.length - MAX_LOG_LINES;
+  const next = overflow > 0 ? prev.slice(overflow) : prev.slice();
+  for (const line of batch) next.push(line);
+  return next;
+}
 
 interface UseLogStreamOptions {
   podName: string;
@@ -165,7 +194,7 @@ export function useLogStream({
             namespace,
           }));
 
-          setLogs((prev) => [...prev, ...tagged].slice(-MAX_LOG_LINES));
+          setLogs((prev) => appendCapped(prev, tagged));
         });
 
         unlistens.push(unlisten);

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import {
+  Copy,
   Download,
   Pause,
   Play,
@@ -37,6 +38,7 @@ interface LogToolbarProps {
   isAtBottom: boolean;
   onAutoScrollToggle: () => void;
   onClearLogs: () => void;
+  onCopyLogs: () => void;
   onDownloadLogs: () => void;
   onToggleStreaming: () => void;
 }
@@ -57,6 +59,7 @@ export function LogToolbar({
   isAtBottom,
   onAutoScrollToggle,
   onClearLogs,
+  onCopyLogs,
   onDownloadLogs,
   onToggleStreaming,
 }: LogToolbarProps) {
@@ -155,6 +158,17 @@ export function LogToolbar({
           title="Clear logs"
         >
           <Trash2 className="h-4 w-4" />
+        </Button>
+        {/* Copy is a button rather than ctrl+A because the list is
+            virtualised: only a screenful is ever in the DOM, so this is the
+            one path guaranteed to yield every retained line. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onCopyLogs}
+          title="Copy all retained lines"
+        >
+          <Copy className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"

@@ -91,4 +91,15 @@ export function formatTimestamp(timestamp: string | null): string {
   }
 }
 
+/**
+ * The one way a log line becomes text. Download and copy have to agree —
+ * a reader who copies a selection and a reader who downloads the file are
+ * looking for the same bytes.
+ */
+export function logsToText(logs: LogLine[]): string {
+  return logs
+    .map((log) => log.raw || `${log.timestamp || ""} ${log.message}`)
+    .join("\n");
+}
+
 export { LogFormat, LogLevel, LogLine };
