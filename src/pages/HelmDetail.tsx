@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import yaml from "js-yaml";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
@@ -16,16 +17,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { YamlEditor } from "@/components/yaml/YamlEditor";
 import {
   ResourceDetailLayout,
   type DetailTab,
 } from "@/components/resources/ResourceDetailLayout";
+import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import {
   KeyValueSection,
   type KeyValue,
 } from "@/components/resources/detail-kv";
+import { useCopyToClipboard } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { statusRole } from "@/lib/status-role";
@@ -34,17 +36,26 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 
 /**
- * Helm stores values as JSON. Rendering them through the YAML editor keeps
- * one code viewer on screen instead of two, so the braces are stripped down
- * to indented `key: value` rather than shown as JSON.
+ * Helm stores values as JSON; the tab shows them as YAML, because that is
+ * the form you paste back into `helm upgrade -f`.
+ *
+ * This used to be `JSON.stringify` with the quotes taken out by two regexes,
+ * which produced neither YAML nor JSON: braces and trailing commas survived,
+ * and any empty or quote-bearing string lost one quote and kept the other —
+ * `systemDefaultRegistry: "`. A serialiser is not optional here. `lineWidth`
+ * is off because a wrapped value in a values file is a value nobody can copy
+ * a line of.
  */
 function valuesAsYaml(values: unknown): string {
-  if (!values) return "# No values set — the chart's defaults apply.";
   if (typeof values === "string") return values;
+  if (
+    values == null ||
+    (typeof values === "object" && Object.keys(values).length === 0)
+  ) {
+    return "# No values set — the chart's defaults apply.";
+  }
   try {
-    return JSON.stringify(values, null, 2)
-      .replace(/"([^"]+)":/g, "$1:")
-      .replace(/"([^"]+)"/g, "$1");
+    return yaml.dump(values, { indent: 2, lineWidth: -1, noRefs: true });
   } catch {
     return String(values);
   }
@@ -58,6 +69,7 @@ export function HelmDetail() {
   }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const copyToClipboard = useCopyToClipboard();
   const queryClient = useQueryClient();
   const { isConnected } = useClusterStore();
   const { helm } = useDependenciesStore();
@@ -137,6 +149,12 @@ export function HelmDetail() {
       });
     },
   });
+
+  const values = useMemo(
+    () => valuesAsYaml(release?.values),
+    [release?.values]
+  );
+  const manifest = release?.manifest || "# The release stored no manifest.";
 
   if (!isConnected) {
     return (
@@ -302,20 +320,12 @@ export function HelmDetail() {
       label: "Values",
       kind: "surface",
       content: (
-        <div className="flex h-full flex-col">
-          <SectionHeader
-            className="flex-none pb-2"
-            title="Values"
-            count="what this release overrides in the chart"
-          />
-          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
-            <YamlEditor
-              value={valuesAsYaml(release?.values)}
-              readOnly
-              height="100%"
-            />
-          </div>
-        </div>
+        <YamlTabContent
+          title={`Values of ${release?.name ?? name ?? ""}`}
+          yaml={values}
+          note="what this release overrides in the chart"
+          onCopy={() => copyToClipboard(values, "Release values copied.")}
+        />
       ),
     },
     {
@@ -323,20 +333,12 @@ export function HelmDetail() {
       label: "Manifest",
       kind: "surface",
       content: (
-        <div className="flex h-full flex-col">
-          <SectionHeader
-            className="flex-none pb-2"
-            title="Rendered manifest"
-            count="what the chart actually applied"
-          />
-          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
-            <YamlEditor
-              value={release?.manifest || "# No manifest available"}
-              readOnly
-              height="100%"
-            />
-          </div>
-        </div>
+        <YamlTabContent
+          title={`Manifest of ${release?.name ?? name ?? ""}`}
+          yaml={manifest}
+          note="what the chart actually applied"
+          onCopy={() => copyToClipboard(manifest, "Rendered manifest copied.")}
+        />
       ),
     },
     ...(release?.notes
