@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
@@ -17,7 +17,10 @@ import type { ConditionInfo, EventInfo } from "@/generated/types";
  * screen already use. Cross-references to other objects are `ResourceRef`.
  */
 
-export interface DetailActionProps {
+export interface DetailActionProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "onClick" | "disabled" | "type"
+> {
   label: string;
   icon?: LucideIcon;
   onClick: () => void;
@@ -26,6 +29,12 @@ export interface DetailActionProps {
   busy?: boolean;
   /** Destructive actions read in the error colour; the word still says it. */
   danger?: boolean;
+  /**
+   * Why the action cannot run on this object. Unlike `disabled` the control
+   * stays focusable and hoverable, so whatever describes it — a tooltip on
+   * the trigger — is reachable rather than sitting on a dead element.
+   */
+  reason?: string | null;
 }
 
 /**
@@ -41,15 +50,34 @@ export function DetailAction({
   disabled,
   busy,
   danger,
+  reason,
+  className,
+  ...rest
 }: DetailActionProps) {
+  const blocked = !!reason;
+  // A tooltip or a menu mounts this through Radix's `asChild`, which merges
+  // its own handlers in as props. Overwriting `onClick` outright would drop
+  // them, so the forwarded one is called alongside ours.
+  const { onClick: forwarded, ...attributes } =
+    rest as ButtonHTMLAttributes<HTMLButtonElement>;
+
   return (
     <button
+      {...attributes}
       type="button"
-      onClick={onClick}
-      disabled={disabled || busy}
+      onClick={(event) => {
+        forwarded?.(event);
+        if (!blocked) onClick();
+      }}
+      disabled={!blocked && (disabled || busy)}
+      aria-disabled={blocked || undefined}
       className={cn(
-        "flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] transition-colors hover:bg-hover disabled:pointer-events-none disabled:opacity-40",
-        danger ? "text-err" : "text-fg-mut hover:text-fg"
+        "flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40",
+        danger ? "text-err" : "text-fg-mut",
+        blocked
+          ? "cursor-default opacity-40"
+          : cn("hover:bg-hover", !danger && "hover:text-fg"),
+        className
       )}
     >
       {Icon && <Icon className={cn("h-3.5 w-3.5", busy && "animate-spin")} />}

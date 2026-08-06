@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bug, Network, RefreshCw, Trash2 } from "lucide-react";
 
@@ -46,9 +46,15 @@ export function PodDetail() {
   const queryClient = useQueryClient();
   const { data: clusterInfo } = useClusterInfo();
 
-  const [showTerminal, setShowTerminal] = useState(false);
+  // `?shell=<container>` is how somewhere else — the peek panel, a link —
+  // asks for a shell on this pod. A terminal is unusable in a drawer, so it
+  // opens here, at full width, where the session behaves like any other.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedShell = searchParams.get("shell");
+
+  const [showTerminal, setShowTerminal] = useState(!!requestedShell);
   const [selectedContainer, setSelectedContainer] = useState<string | null>(
-    null
+    requestedShell
   );
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
 
@@ -151,6 +157,18 @@ export function PodDetail() {
 
   const handleTerminalClose = useCallback(() => {
     setShowTerminal(false);
+    // The URL asked for this shell; once it is closed it would be lying, and
+    // a reload would reopen a terminal nobody asked for again.
+    if (searchParams.has("shell")) {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("shell");
+          return next;
+        },
+        { replace: true }
+      );
+    }
 
     if (isDebugPod && pod) {
       toast({
@@ -180,7 +198,7 @@ export function PodDetail() {
         duration: 10000,
       });
     }
-  }, [isDebugPod, pod, toast, navigate]);
+  }, [isDebugPod, pod, toast, navigate, searchParams, setSearchParams]);
 
   const handleFindReplacement = savedLabels
     ? () =>

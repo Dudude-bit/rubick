@@ -27,6 +27,10 @@ vi.mock("@/lib/commands", () => ({
     stopLogStream: vi.fn(),
     logStreamSubscribed: vi.fn(),
     getPodLogs: vi.fn(),
+    getClusterInfo: vi.fn(),
+    getEndpoints: vi.fn(),
+    deletePod: vi.fn(),
+    restartPod: vi.fn(),
   },
 }));
 
@@ -41,6 +45,7 @@ status:
 `;
 
 import { commands } from "@/lib/commands";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import {
   PEEK_WIDTH_DEFAULT,
@@ -155,10 +160,14 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[entry]}>
-        {ui}
-        <Probe />
-      </MemoryRouter>
+      {/* The shell mounts one of these around the whole app; a disabled
+          action's reason rides in a tooltip and needs it. */}
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[entry]}>
+          {ui}
+          <Probe />
+        </MemoryRouter>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 };
@@ -183,6 +192,8 @@ function mockCluster() {
   vi.mocked(commands.logStreamSubscribed)
     .mockReset()
     .mockResolvedValue(undefined);
+  vi.mocked(commands.deletePod).mockReset().mockResolvedValue(undefined);
+  vi.mocked(commands.restartPod).mockReset().mockResolvedValue(undefined);
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
 
@@ -469,6 +480,204 @@ describe("PeekPanel tab persistence", () => {
         "true"
       )
     );
+  });
+});
+
+const PENDING_POD = buildPod({
+  name: "unschedulable-demo",
+  status: {
+    phase: "Pending",
+    ready: false,
+    conditions: [],
+    message: "0/3 nodes are available: insufficient cpu.",
+    reason: "Unschedulable",
+  },
+  restartCount: 0,
+  containers: [
+    {
+      name: "app",
+      image: "busybox:1.36",
+      ready: false,
+      state: { type: "waiting", reason: "ContainerCreating" },
+      restartCount: 0,
+      ports: [{ name: null, containerPort: 8080, protocol: "TCP" }],
+      env: [],
+      envFrom: [],
+    },
+  ],
+} as Partial<PodInfo>);
+
+const RUNNING_POD = buildPod({
+  name: "log-demo-1",
+  status: {
+    phase: "Running",
+    ready: true,
+    conditions: [],
+    message: null,
+    reason: null,
+  },
+  restartCount: 0,
+  containers: [
+    {
+      name: "app",
+      image: "busybox:1.36",
+      ready: true,
+      state: { type: "running" },
+      restartCount: 0,
+      ports: [{ name: null, containerPort: 8080, protocol: "TCP" }],
+      env: [],
+      envFrom: [],
+    },
+  ],
+} as Partial<PodInfo>);
+
+const RUNNING_PEEK = "/events?peek=pods/k8s-gui-test/log-demo-1";
+
+const openMore = () =>
+  userEvent.click(screen.getByRole("button", { name: /More actions/ }));
+
+describe("PeekPanel actions", () => {
+  beforeEach(mockCluster);
+
+  it("offers a pod's work up front and its destructive end behind a menu", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    expect(screen.getByRole("button", { name: /^Shell/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Port forward/ })
+    ).toBeInTheDocument();
+    // Not on the row until the menu is opened.
+    expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
+
+    await openMore();
+    expect(
+      await screen.findByRole("menuitem", { name: /Delete/ })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Restart/ })).toBeVisible();
+  });
+
+  // A dead button teaches nothing. The control stays reachable and carries
+  // the reason, which is the answer to the question the click was asking.
+  it("says why a pending pod cannot be shelled into or forwarded", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(PENDING_POD);
+    wrap("/events?peek=pods/k8s-gui-test/unschedulable-demo");
+    await screen.findByText("Pending");
+
+    const shell = screen.getByRole("button", { name: /^Shell/ });
+    expect(shell).toHaveAttribute("aria-disabled", "true");
+    expect(shell).not.toBeDisabled();
+
+    await userEvent.hover(shell);
+    // Radix renders the reason twice: once visibly, once for the screen
+    // reader it describes the trigger to.
+    expect(
+      await screen.findAllByText(/No container is running yet/)
+    ).not.toHaveLength(0);
+
+    const forward = screen.getByRole("button", { name: /Port forward/ });
+    expect(forward).toHaveAttribute("aria-disabled", "true");
+    await userEvent.hover(forward);
+    expect(
+      await screen.findAllByText(/Nothing is listening yet/)
+    ).not.toHaveLength(0);
+  });
+
+  it("takes a shell request to the page where a terminal fits", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Shell/ }));
+    expect(location()).toBe("/pods/k8s-gui-test/log-demo-1?shell=app");
+  });
+
+  it("names the object and the consequence before deleting it", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
+
+    expect(
+      await screen.findByText("Delete pod k8s-gui-test/log-demo-1?")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/will start a replacement/)).toBeInTheDocument();
+
+    // Cancelling leaves both the object and the panel exactly where they were.
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(commands.deletePod).not.toHaveBeenCalled();
+    expect(location()).toBe(RUNNING_PEEK);
+  });
+
+  // A peek onto an object that no longer exists is a ghost.
+  it("closes itself once the object it is showing is gone", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    vi.mocked(commands.deletePod).mockResolvedValue(undefined);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
+    await userEvent.type(
+      await screen.findByLabelText(/to confirm/),
+      "log-demo-1"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(location()).toBe("/events"));
+    expect(commands.deletePod).toHaveBeenCalledWith(
+      "log-demo-1",
+      "k8s-gui-test",
+      false
+    );
+  });
+
+  it("keeps the panel open across a restart", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    vi.mocked(commands.restartPod).mockResolvedValue(undefined);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Restart/ }));
+
+    await waitFor(() =>
+      expect(commands.restartPod).toHaveBeenCalledWith(
+        "log-demo-1",
+        "k8s-gui-test"
+      )
+    );
+    expect(location()).toBe(RUNNING_PEEK);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // Restarting a pod nothing owns is a deletion; it has to be confirmed, and
+  // it must not read like a Deployment's rolling restart.
+  it("gates a bare pod's restart behind the same confirmation a delete gets", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({ ...RUNNING_POD, ownerReferences: [] } as Partial<PodInfo>)
+    );
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Restart \(deletes it\)/ })
+    );
+    expect(
+      await screen.findByText(/nothing will recreate it/)
+    ).toBeInTheDocument();
+    expect(commands.restartPod).not.toHaveBeenCalled();
+  });
+
+  it("gives a ConfigMap the one action it has", async () => {
+    wrap(CONFIGMAP_PEEK);
+    await screen.findByRole("tab", { name: "Data" });
+    expect(screen.getByRole("button", { name: /Delete/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
   });
 });
 

@@ -8,22 +8,20 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Copy } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import { DetailAction, EventRows } from "./detail-blocks";
+import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
+import { PeekActions } from "./PeekActions";
 import { resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -81,7 +79,7 @@ function PeekContent({
   onTabChange: (tab: PeekTabId) => void;
 }) {
   const navigate = useNavigate();
-  const copy = useCopyToClipboard();
+  const { close } = usePeek();
   const contentRef = useRef<HTMLDivElement>(null);
   const namespace = target.namespace ?? null;
   const { width, min, max, preview, commit } = usePeekWidth();
@@ -174,26 +172,12 @@ function PeekContent({
             </>
           )}
         </div>
-        {/* The action row. Everything that acts on the object hangs here —
-            shell, debug, port-forward, restart, delete are the next ones in,
-            so it wraps rather than growing the header. */}
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {routable && (
-            <>
-              <DetailAction
-                label="Open full page"
-                icon={ExternalLink}
-                onClick={openFullPage}
-              />
-              <Kbd shortcut="enter" />
-            </>
-          )}
-          <DetailAction
-            label="Copy name"
-            icon={Copy}
-            onClick={() => copy(target.name, `${target.name} copied`)}
-          />
-        </div>
+        <PeekActions
+          target={target}
+          detail={data}
+          onOpenFullPage={routable ? openFullPage : undefined}
+          onClose={close}
+        />
       </header>
 
       <Tabs

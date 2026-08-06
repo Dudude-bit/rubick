@@ -27,6 +27,7 @@ import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
   ConditionRows,
@@ -55,7 +56,6 @@ import type { DeploymentInfo } from "@/generated/types";
 export function DeploymentDetail() {
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
-  const [newReplicas, setNewReplicas] = useState(1);
   const [newImage, setNewImage] = useState("");
   const [selectedContainer, setSelectedContainer] = useState("");
   const [selectedLogPod, setSelectedLogPod] = useState<string | null>(null);
@@ -182,14 +182,15 @@ export function DeploymentDetail() {
   });
 
   const scaleMutation = useResourceMutation(
-    async () => {
+    async (replicas: number) => {
       if (!name) return;
-      await commands.scaleDeployment(name, newReplicas, namespace || null);
+      await commands.scaleDeployment(name, replicas, namespace || null);
     },
     {
       toast: {
         successTitle: "Deployment scaled",
-        successDescription: `Deployment ${name} scaled to ${newReplicas} replicas.`,
+        successDescription: (_data, replicas) =>
+          `Deployment ${name} scaled to ${replicas} replicas.`,
         errorPrefix: "Failed to scale deployment",
       },
       invalidateQueryKeys:
@@ -241,10 +242,7 @@ export function DeploymentDetail() {
   );
 
   const openScaleDialog = () => {
-    if (deployment) {
-      setNewReplicas(deployment.replicas.desired);
-      setScaleDialogOpen(true);
-    }
+    if (deployment) setScaleDialogOpen(true);
   };
 
   const openImageDialog = (containerName: string, currentImage: string) => {
@@ -534,34 +532,14 @@ export function DeploymentDetail() {
         />
       )}
 
-      <Dialog open={scaleDialogOpen} onOpenChange={setScaleDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Scale Deployment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="replicas">Number of replicas</Label>
-            <Input
-              id="replicas"
-              type="number"
-              min={0}
-              value={newReplicas}
-              onChange={(e) => setNewReplicas(parseInt(e.target.value) || 0)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScaleDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => scaleMutation.mutate()}
-              disabled={scaleMutation.isPending}
-            >
-              Scale
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ScaleDialog
+        open={scaleDialogOpen}
+        onOpenChange={setScaleDialogOpen}
+        kind={ResourceType.Deployment}
+        current={deployment?.replicas.desired ?? 0}
+        busy={scaleMutation.isPending}
+        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
+      />
 
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent>
