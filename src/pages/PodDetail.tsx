@@ -12,7 +12,7 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodTerminal } from "@/components/terminal/PodTerminal";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ContainerRows } from "@/components/resources/container-rows";
@@ -357,13 +357,11 @@ export function PodDetail() {
           label: "Logs",
           kind: "surface",
           content: pod ? (
-            <div className="h-[70vh] min-h-[400px]">
-              <LogViewer
-                podName={pod.name}
-                namespace={pod.namespace}
-                containers={pod.containers.map((c) => c.name)}
-              />
-            </div>
+            <LogViewer
+              podName={pod.name}
+              namespace={pod.namespace}
+              containers={pod.containers.map((c) => c.name)}
+            />
           ) : null,
         },
         {
@@ -379,20 +377,14 @@ export function PodDetail() {
             </Section>
           ),
         },
-        {
-          id: "yaml",
-          label: "YAML",
-          content: (
-            <YamlTabContent
-              yaml={yaml}
-              onCopy={copyYaml}
-              title={pod?.name || "Pod YAML"}
-              resourceKind={ResourceType.Pod}
-              resourceName={pod?.name || name || ""}
-              namespace={pod?.namespace || namespace}
-            />
-          ),
-        },
+        yamlTab({
+          yaml,
+          onCopy: copyYaml,
+          title: pod?.name || "Pod YAML",
+          resourceKind: ResourceType.Pod,
+          resourceName: pod?.name || name || "",
+          namespace: pod?.namespace || namespace,
+        }),
       ]}
     >
       {podStatus?.status !== "available" && (

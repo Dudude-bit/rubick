@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -144,20 +144,14 @@ export function PersistentVolumeClaimDetail() {
         </Section>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="PersistentVolumeClaim YAML"
-          yaml={pvcYaml}
-          resourceKind={ResourceType.PersistentVolumeClaim}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "PersistentVolumeClaim YAML",
+      yaml: pvcYaml,
+      resourceKind: ResourceType.PersistentVolumeClaim,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

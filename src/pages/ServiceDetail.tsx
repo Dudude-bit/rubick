@@ -11,7 +11,7 @@ import {
   CopyableAddress,
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
   KeyValueSection,
@@ -184,20 +184,14 @@ export function ServiceDetail() {
         </>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Service YAML"
-          yaml={serviceYaml}
-          resourceKind={ResourceType.Service}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Service YAML",
+      yaml: serviceYaml,
+      resourceKind: ResourceType.Service,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

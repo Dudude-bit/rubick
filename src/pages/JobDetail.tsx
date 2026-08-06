@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -134,20 +134,14 @@ export function JobDetail() {
           </Section>
         ),
       },
-      {
-        id: "yaml",
-        label: "YAML",
-        content: (
-          <YamlTabContent
-            yaml={yaml}
-            onCopy={copyYaml}
-            title="Job YAML"
-            resourceKind={ResourceType.Job}
-            resourceName={job?.name || name || ""}
-            namespace={job?.namespace || namespace}
-          />
-        ),
-      },
+      yamlTab({
+        yaml,
+        onCopy: copyYaml,
+        title: "Job YAML",
+        resourceKind: ResourceType.Job,
+        resourceName: job?.name || name || "",
+        namespace: job?.namespace || namespace,
+      }),
     ],
     [job, pods, yaml, copyYaml, namespace, name]
   );

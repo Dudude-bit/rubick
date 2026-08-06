@@ -17,7 +17,10 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  ResourceDetailLayout,
+  type DetailTab,
+} from "@/components/resources/ResourceDetailLayout";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import {
   KeyValueSection,
@@ -201,7 +204,7 @@ export function HelmDetail() {
       : []),
   ];
 
-  const tabs = [
+  const tabs: DetailTab[] = [
     {
       id: "history",
       label: "History",
@@ -297,39 +300,43 @@ export function HelmDetail() {
     {
       id: "values",
       label: "Values",
+      kind: "surface",
       content: (
-        <Section>
+        <div className="flex h-full flex-col">
           <SectionHeader
+            className="flex-none pb-2"
             title="Values"
             count="what this release overrides in the chart"
           />
-          <div className="overflow-hidden border-t border-hair">
+          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
             <YamlEditor
               value={valuesAsYaml(release?.values)}
               readOnly
-              height="560px"
+              height="100%"
             />
           </div>
-        </Section>
+        </div>
       ),
     },
     {
       id: "manifest",
       label: "Manifest",
+      kind: "surface",
       content: (
-        <Section>
+        <div className="flex h-full flex-col">
           <SectionHeader
+            className="flex-none pb-2"
             title="Rendered manifest"
             count="what the chart actually applied"
           />
-          <div className="overflow-hidden border-t border-hair">
+          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
             <YamlEditor
               value={release?.manifest || "# No manifest available"}
               readOnly
-              height="560px"
+              height="100%"
             />
           </div>
-        </Section>
+        </div>
       ),
     },
     ...(release?.notes
@@ -337,6 +344,9 @@ export function HelmDetail() {
           {
             id: "notes",
             label: "Notes",
+            // Not a surface: NOTES.txt is usually four lines, and a pane
+            // stretched to the window would be one sentence over a page of
+            // canvas.
             content: (
               <Section>
                 <SectionHeader title="Notes" />

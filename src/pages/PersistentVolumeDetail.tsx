@@ -1,7 +1,7 @@
 import { Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -88,20 +88,14 @@ export function PersistentVolumeDetail() {
   ];
 
   const tabs = [
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="PersistentVolume YAML"
-          yaml={pvYaml}
-          resourceKind={ResourceType.PersistentVolume}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "PersistentVolume YAML",
+      yaml: pvYaml,
+      resourceKind: ResourceType.PersistentVolume,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

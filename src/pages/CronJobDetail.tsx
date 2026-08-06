@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ContainerRows } from "@/components/resources/container-rows";
@@ -190,20 +190,14 @@ export function CronJobDetail() {
           </Section>
         ),
       },
-      {
-        id: "yaml",
-        label: "YAML",
-        content: (
-          <YamlTabContent
-            yaml={yaml}
-            onCopy={copyYaml}
-            title="CronJob YAML"
-            resourceKind={ResourceType.CronJob}
-            resourceName={cronJob?.name || name || ""}
-            namespace={cronJob?.namespace || namespace}
-          />
-        ),
-      },
+      yamlTab({
+        yaml,
+        onCopy: copyYaml,
+        title: "CronJob YAML",
+        resourceKind: ResourceType.CronJob,
+        resourceName: cronJob?.name || name || "",
+        namespace: cronJob?.namespace || namespace,
+      }),
     ],
     [cronJob, jobs, yaml, copyYaml, namespace, name]
   );

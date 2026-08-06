@@ -13,6 +13,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailAction } from "./detail-blocks";
 
@@ -77,14 +78,20 @@ export interface DetailTab {
   label: string;
   content: ReactNode;
   /**
-   * What the tab is made of, which is what decides the space above it.
+   * What the tab is made of, which is what decides the space above it and
+   * who owns the page's height.
    *
    * "sections" is the page rhythm: a stack of blocks with 22px of canvas
-   * between them and 18px under the tab strip. "surface" is one full-height
-   * pane that brings its own chrome — a log viewer, an editor, a terminal —
-   * and the rhythm is wrong for it: the first row of such a pane is a
-   * toolbar, and canvas above a toolbar reads as a hole rather than as
-   * breathing room. Left off, a tab is a stack of sections.
+   * between them and 18px under the tab strip, in a page that flows and
+   * scrolls. "surface" is one full-height pane that brings its own chrome —
+   * a log viewer, an editor, a terminal. Two things follow from that. The
+   * rhythm is wrong for it: the first row of such a pane is a toolbar, and
+   * canvas above a toolbar reads as a hole rather than as breathing room.
+   * And the height is its: a pane with its own scrollbar inside a page with
+   * another one is two scrollbars over the same content, and the reader has
+   * to scroll the outer one to see the foot of the inner. A surface tab
+   * pins the page to the window and takes every pixel the chrome above it
+   * does not.
    */
   kind?: "sections" | "surface";
 }
@@ -156,8 +163,18 @@ export function ResourceDetailLayout({
     );
   }
 
+  // Collapsing is not a control the reader operates: clicking "Logs" already
+  // said what they came for, and a toggle would spend a slot in the very row
+  // it exists to shrink. Reversing it is the Overview tab, one click away.
+  const surface = tabs.find((tab) => tab.id === activeTab)?.kind === "surface";
+
   return (
-    <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
+    <div
+      className={cn(
+        "flex flex-col animate-in fade-in duration-200",
+        surface ? "h-full min-h-0 gap-2" : "gap-[22px]"
+      )}
+    >
       <ResourceDetailHeader
         name={title}
         kind={resourceKind}
@@ -169,15 +186,26 @@ export function ResourceDetailLayout({
         meta={badges}
         actions={actions}
         onBack={onBack}
+        compact={surface}
       />
 
-      {children}
+      {/* `contents` so the page's own blocks keep sitting in this column at
+          its own rhythm; `hidden` takes all of them off a surface tab at
+          once. Kept mounted either way — the dialogs a page hangs here
+          portal to the body and have to survive the tab that opened them. */}
+      {children && (
+        <div className={surface ? "hidden" : "contents"}>{children}</div>
+      )}
 
-      <Tabs value={activeTab} onValueChange={onTabChange}>
+      <Tabs
+        value={activeTab}
+        onValueChange={onTabChange}
+        className={surface ? "flex min-h-0 flex-1 flex-col" : undefined}
+      >
         {/* The strip is an underline, not a pill row: the window already has
             a pill tab strip for scopes, and two of them on one screen read as
             the same control at two levels. */}
-        <TabsList className="h-auto w-full justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
+        <TabsList className="h-auto w-full flex-none justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
           {tabs.map((tab) => (
             <TabsTrigger
               key={tab.id}
@@ -195,7 +223,10 @@ export function ResourceDetailLayout({
             value={tab.id}
             className={
               tab.kind === "surface"
-                ? "mt-0"
+                ? // A floor rather than `min-h-0`: below it the window is too
+                  // short for the pane to be worth anything, and letting the
+                  // page scroll again is better than a two-row log.
+                  "mt-0 min-h-[240px] flex-1 overflow-hidden"
                 : "mt-[18px] flex flex-col gap-[22px]"
             }
           >

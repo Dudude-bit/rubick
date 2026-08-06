@@ -29,6 +29,15 @@ export interface ResourceDetailHeaderProps {
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
+  /**
+   * One line instead of two, for a tab that is a full-height work surface.
+   *
+   * The trail, the name, its status and its actions survive; the age and the
+   * qualifying badges do not. Reading a log needs to know which pod is
+   * talking and to be able to act on it — everything else it was carrying is
+   * a click away on Overview, and here it is 200px of log.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -52,35 +61,65 @@ export function ResourceDetailHeader({
   actions,
   onBack,
   dataUpdatedAt,
+  compact,
 }: ResourceDetailHeaderProps) {
+  const trail = (
+    <>
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Back"
+        className="-ml-1 flex h-5 w-5 flex-none items-center justify-center rounded transition-colors hover:bg-hover hover:text-fg"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+      </button>
+      <Link
+        to={listUrl ?? getResourceListUrl(kind)}
+        className="flex-none rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
+      >
+        {listLabel ?? toPlural(kind as ResourceKind)}
+      </Link>
+      {namespace && (
+        <>
+          <span aria-hidden="true">/</span>
+          <span className="truncate font-mono">{namespace}</span>
+        </>
+      )}
+    </>
+  );
+
+  const title = (
+    <h1 className="truncate font-mono text-[13px] font-semibold tracking-tight text-fg">
+      {name}
+    </h1>
+  );
+
+  const trailing = (
+    <div className="ml-auto flex flex-none items-center gap-1">
+      {actions}
+      <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-x-1.5 text-[11px] text-fg-fnt">
+        {trail}
+        <span aria-hidden="true">/</span>
+        {title}
+        {status}
+        {trailing}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1 text-[11px] text-fg-fnt">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back"
-          className="-ml-1 flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-hover hover:text-fg"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-        </button>
-        <Link
-          to={listUrl ?? getResourceListUrl(kind)}
-          className="rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
-        >
-          {listLabel ?? toPlural(kind as ResourceKind)}
-        </Link>
-        {namespace && (
-          <>
-            <span aria-hidden="true">/</span>
-            <span className="truncate font-mono">{namespace}</span>
-          </>
-        )}
+        {trail}
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <h1 className="truncate font-mono text-[13px] font-semibold tracking-tight text-fg">
-          {name}
-        </h1>
+        {title}
         {status}
         {meta}
         {createdAt && (
@@ -91,10 +130,7 @@ export function ResourceDetailHeader({
             <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          {actions}
-          <DataFreshness dataUpdatedAt={dataUpdatedAt} />
-        </div>
+        {trailing}
       </div>
     </div>
   );

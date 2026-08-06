@@ -12,7 +12,7 @@ import {
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -432,20 +432,14 @@ export function IngressDetail() {
         </Section>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Ingress YAML"
-          yaml={ingressYaml}
-          resourceKind={ResourceType.Ingress}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Ingress YAML",
+      yaml: ingressYaml,
+      resourceKind: ResourceType.Ingress,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ReferencedBy } from "@/components/resources/ReferencedBy";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DataSection } from "@/components/resources/data-rows";
@@ -97,20 +97,14 @@ export function ConfigMapDetail() {
         </>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="ConfigMap YAML"
-          yaml={configMapYaml}
-          resourceKind={ResourceType.ConfigMap}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "ConfigMap YAML",
+      yaml: configMapYaml,
+      resourceKind: ResourceType.ConfigMap,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

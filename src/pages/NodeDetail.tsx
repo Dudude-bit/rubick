@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugNodeDialog } from "@/components/debug";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
   ConditionRows,
@@ -204,20 +204,14 @@ export function NodeDetail() {
         />
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Node YAML"
-          yaml={nodeYaml}
-          resourceKind={ResourceType.Node}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Node YAML",
+      yaml: nodeYaml,
+      resourceKind: ResourceType.Node,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -133,20 +133,14 @@ export function DaemonSetDetail() {
           </Section>
         ),
       },
-      {
-        id: "yaml",
-        label: "YAML",
-        content: (
-          <YamlTabContent
-            yaml={yaml}
-            onCopy={copyYaml}
-            title="DaemonSet YAML"
-            resourceKind={ResourceType.DaemonSet}
-            resourceName={daemonSet?.name || name || ""}
-            namespace={daemonSet?.namespace || namespace}
-          />
-        ),
-      },
+      yamlTab({
+        yaml,
+        onCopy: copyYaml,
+        title: "DaemonSet YAML",
+        resourceKind: ResourceType.DaemonSet,
+        resourceName: daemonSet?.name || name || "",
+        namespace: daemonSet?.namespace || namespace,
+      }),
     ],
     [daemonSet, pods, yaml, copyYaml, namespace, name]
   );

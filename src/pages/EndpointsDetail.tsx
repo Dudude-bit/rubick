@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -197,20 +197,14 @@ export function EndpointsDetail() {
         </Section>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Endpoints YAML"
-          yaml={endpointsYaml}
-          resourceKind={ResourceType.Endpoints}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Endpoints YAML",
+      yaml: endpointsYaml,
+      resourceKind: ResourceType.Endpoints,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

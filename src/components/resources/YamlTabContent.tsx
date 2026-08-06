@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor, YamlEditorAction } from "@/components/yaml";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
-interface YamlTabContentProps {
+export interface YamlTabContentProps {
   title: string;
   yaml: string | undefined;
   resourceKind: string;
@@ -30,8 +30,9 @@ export function YamlTabContent({
   }, [resourceKind, resourceName, namespace]);
 
   return (
-    <Section>
+    <div className="flex h-full flex-col">
       <SectionHeader
+        className="flex-none pb-2"
         title={title}
         actions={
           <>
@@ -52,14 +53,16 @@ export function YamlTabContent({
         }
       />
       {isYamlLoading ? (
-        <div className="border-t border-hair p-4">
+        <div className="min-h-0 flex-1 overflow-hidden border-t border-hair p-4">
           <TextSkeleton lines={18} />
         </div>
       ) : (
-        <div className="border-t border-hair overflow-hidden">
-          <YamlEditor value={yaml} readOnly height="500px" />
+        <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
+          {/* The editor scrolls itself, so it is handed the box rather than a
+              number: a manifest is read against the window it is read in. */}
+          <YamlEditor value={yaml} readOnly height="100%" />
         </div>
       )}
-    </Section>
+    </div>
   );
 }

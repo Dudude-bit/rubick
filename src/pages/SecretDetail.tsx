@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ReferencedBy } from "@/components/resources/ReferencedBy";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DataSection } from "@/components/resources/data-rows";
@@ -100,20 +100,14 @@ export function SecretDetail() {
         </>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Secret YAML"
-          yaml={secretYaml}
-          resourceKind={ResourceType.Secret}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Secret YAML",
+      yaml: secretYaml,
+      resourceKind: ResourceType.Secret,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

@@ -1,6 +1,6 @@
 import { Trash2 } from "lucide-react";
 
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import {
@@ -68,20 +68,14 @@ export function StorageClassDetail() {
         />
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="StorageClass YAML"
-          yaml={scYaml}
-          resourceKind={ResourceType.StorageClass}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "StorageClass YAML",
+      yaml: scYaml,
+      resourceKind: ResourceType.StorageClass,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

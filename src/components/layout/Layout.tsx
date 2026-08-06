@@ -31,7 +31,11 @@ export function Layout() {
         <div className="flex flex-1 flex-col overflow-hidden">
           <ScopeTabs />
           <main className="flex-1 overflow-auto scrollbar-thin p-4">
-            <div className="animate-in fade-in duration-200">
+            {/* `h-full` is what lets a page opt out of the page scroll: a page
+                that sizes itself to this box exactly fills it and this
+                container never gets anything to scroll. Pages taller than it
+                overflow as before. */}
+            <div className="h-full animate-in fade-in duration-200">
               <Suspense fallback={<PageSkeleton className="p-0" />}>
                 <Outlet />
               </Suspense>

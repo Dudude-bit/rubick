@@ -8,7 +8,10 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  ResourceDetailLayout,
+  type DetailTab,
+} from "@/components/resources/ResourceDetailLayout";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -268,7 +271,7 @@ export function CustomResourceDetail() {
     ),
   }));
 
-  const tabs = [
+  const tabs: DetailTab[] = [
     {
       id: "spec",
       label: "Spec",
@@ -336,9 +339,11 @@ export function CustomResourceDetail() {
     {
       id: "yaml",
       label: "YAML",
+      kind: "surface",
       content: (
-        <Section>
+        <div className="flex h-full flex-col">
           <SectionHeader
+            className="flex-none pb-2"
             title={`${resource?.kind || "Resource"} YAML`}
             actions={
               <DetailAction
@@ -348,10 +353,10 @@ export function CustomResourceDetail() {
               />
             }
           />
-          <div className="overflow-hidden border-t border-hair">
-            <YamlEditor value={yaml} readOnly height="500px" />
+          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
+            <YamlEditor value={yaml} readOnly height="100%" />
           </div>
-        </Section>
+        </div>
       ),
     },
   ];

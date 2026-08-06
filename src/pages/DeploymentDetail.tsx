@@ -23,10 +23,13 @@ import {
 } from "@/components/ui/dialog";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { MetricsStatusBanner } from "@/components/metrics";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  ResourceDetailLayout,
+  type DetailTab,
+} from "@/components/resources/ResourceDetailLayout";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
@@ -310,7 +313,7 @@ export function DeploymentDetail() {
     },
   ];
 
-  const tabs = [
+  const tabs: DetailTab[] = [
     {
       id: "overview",
       label: "Overview",
@@ -350,9 +353,11 @@ export function DeploymentDetail() {
     {
       id: "logs",
       label: "Logs",
+      kind: "surface",
       content: (
-        <Section>
+        <div className="flex h-full flex-col">
           <SectionHeader
+            className="flex-none pb-2"
             title="Logs"
             actions={
               <Select
@@ -392,7 +397,7 @@ export function DeploymentDetail() {
               </Select>
             }
           />
-          <div className="h-[600px]">
+          <div className="min-h-0 flex-1 border-t border-hair">
             {logPod ? (
               <LogViewer
                 key={`${logPod.namespace}:${logPod.name}`}
@@ -409,7 +414,7 @@ export function DeploymentDetail() {
               </p>
             )}
           </div>
-        </Section>
+        </div>
       ),
     },
     {
@@ -425,20 +430,14 @@ export function DeploymentDetail() {
         </Section>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Deployment YAML"
-          yaml={deploymentYaml}
-          resourceKind={ResourceType.Deployment}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Deployment YAML",
+      yaml: deploymentYaml,
+      resourceKind: ResourceType.Deployment,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (

@@ -19,7 +19,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { YamlEditor } from "@/components/yaml/YamlEditor";
 import { SchemaViewer } from "@/components/crds/SchemaViewer";
 import { CustomResourceList } from "@/components/resources/CustomResourceList";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  ResourceDetailLayout,
+  type DetailTab,
+} from "@/components/resources/ResourceDetailLayout";
 import {
   ConditionRows,
   DetailAction,
@@ -148,7 +151,7 @@ export function CrdDetail() {
     },
   ];
 
-  const tabs = [
+  const tabs: DetailTab[] = [
     {
       id: "versions",
       label: "Versions",
@@ -297,9 +300,11 @@ export function CrdDetail() {
     {
       id: "yaml",
       label: "YAML",
+      kind: "surface",
       content: (
-        <Section>
+        <div className="flex h-full flex-col">
           <SectionHeader
+            className="flex-none pb-2"
             title="CustomResourceDefinition YAML"
             actions={
               <DetailAction
@@ -309,16 +314,16 @@ export function CrdDetail() {
               />
             }
           />
-          <div className="overflow-hidden border-t border-hair">
+          <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
             {yaml ? (
-              <YamlEditor value={yaml} readOnly height="500px" />
+              <YamlEditor value={yaml} readOnly height="100%" />
             ) : (
               <div className="p-4">
                 <TextSkeleton lines={18} />
               </div>
             )}
           </div>
-        </Section>
+        </div>
       ),
     },
   ];
