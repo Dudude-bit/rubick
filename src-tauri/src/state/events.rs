@@ -40,6 +40,81 @@ pub enum WatchOp {
     Failed,
 }
 
+/// Why a long-lived stream stopped without the frontend asking it to.
+///
+/// The two read completely differently on screen and only one of them
+/// has an action behind it, so the distinction has to survive the trip
+/// to the frontend rather than being flattened into one message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamFailureKind {
+    /// The thing being streamed is no longer there: the pod was
+    /// deleted, the container exited, the log source reached EOF while
+    /// following. Expected, and no amount of retrying brings it back.
+    Gone,
+    /// The transport failed while the resource itself may well still be
+    /// running: a rejected WebSocket upgrade, an unreachable
+    /// kube-apiserver, a read error mid-stream. Retrying is worth
+    /// offering.
+    Broken,
+}
+
+impl StreamFailureKind {
+    /// Classify a backend error as "the resource went away" vs "the
+    /// connection broke".
+    ///
+    /// Only a `NotFound` — either our own variant or a 404 the
+    /// apiserver phrased as `pods "x" not found` — proves the resource
+    /// is gone. Everything else is treated as a transport failure,
+    /// deliberately: telling someone their pod is gone when it is
+    /// actually running sends them hunting through a healthy cluster,
+    /// which is the failure mode this whole event exists to kill.
+    #[must_use]
+    pub fn classify(error: &crate::error::Error) -> Self {
+        if matches!(error, crate::error::Error::NotFound { .. }) {
+            return Self::Gone;
+        }
+        let text = error.to_string().to_lowercase();
+        if text.contains("not found") || text.contains("notfound") {
+            Self::Gone
+        } else {
+            Self::Broken
+        }
+    }
+}
+
+/// Peel the Rust error wrapping off a message before it goes on screen.
+///
+/// `Error`'s `Display` prepends its variant label and each call site
+/// prepends its own context, so a rejected exec upgrade arrives as
+/// `Terminal error: Failed to exec: failed to upgrade to a WebSocket
+/// connection: 500`. Only the innermost clause tells the reader
+/// anything; the prefixes are bookkeeping from layers they never see.
+#[must_use]
+pub fn readable_cause(error: &crate::error::Error) -> String {
+    const WRAPPERS: [&str; 8] = [
+        "Terminal error: ",
+        "Log streaming error: ",
+        "Kubernetes API error: ",
+        "Connection error: ",
+        "Internal error: ",
+        "Failed to exec: ",
+        "Failed to start log stream: ",
+        "Failed to get logs: ",
+    ];
+
+    let text = error.to_string();
+    let mut rest = text.trim();
+    while let Some(stripped) = WRAPPERS.iter().find_map(|w| rest.strip_prefix(w)) {
+        rest = stripped.trim();
+    }
+    if rest.is_empty() {
+        text.trim().to_string()
+    } else {
+        rest.to_string()
+    }
+}
+
 /// Events that can be broadcast to frontend
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
@@ -86,6 +161,25 @@ pub enum AppEvent {
         /// Set on `failed` events with the error string (RBAC
         /// denial, network error, etc.). None for every other op.
         error: Option<String>,
+    },
+    /// A log stream or terminal session stopped on its own — not
+    /// because the frontend closed it.
+    ///
+    /// Without this the failure only ever reached `tracing`, and the
+    /// panel that was waiting on the stream rendered its empty state:
+    /// "No output yet" for a stream that died on connect, a blank
+    /// terminal for an exec whose WebSocket upgrade was rejected after
+    /// `open_pod_shell` had already handed back a session id. An empty
+    /// state that means "it broke" sends the reader looking for the
+    /// problem in their cluster.
+    ///
+    /// `stream_id` is the log stream id or the terminal session id —
+    /// whichever the receiving panel is holding. `message` is written
+    /// to be read by a person, not a `{:?}` of a Rust error.
+    StreamFailed {
+        stream_id: String,
+        kind: StreamFailureKind,
+        message: String,
     },
     /// Terminal output received
     TerminalOutput { session_id: String, data: String },
@@ -143,6 +237,7 @@ impl AppEvent {
     pub fn channel(&self) -> &'static str {
         match self {
             AppEvent::LogBatch { .. } => "log-batch",
+            AppEvent::StreamFailed { .. } => "stream-failed",
             AppEvent::ResourceWatchEvent { .. } => "resource-event",
             AppEvent::TerminalOutput { .. } => "terminal-output",
             AppEvent::TerminalClosed { .. } => "terminal-closed",
@@ -177,6 +272,15 @@ impl AppEvent {
             AppEvent::LogBatch { stream_id, lines } => serde_json::json!({
                 "stream_id": stream_id,
                 "lines": lines,
+            }),
+            AppEvent::StreamFailed {
+                stream_id,
+                kind,
+                message,
+            } => serde_json::json!({
+                "stream_id": stream_id,
+                "kind": kind,
+                "message": message,
             }),
             AppEvent::ResourceWatchEvent {
                 stream_id,
@@ -336,6 +440,11 @@ mod tests {
                 code: "X".into(),
                 message: "y".into(),
             },
+            AppEvent::StreamFailed {
+                stream_id: "log-1".into(),
+                kind: StreamFailureKind::Gone,
+                message: "gone".into(),
+            },
         ];
 
         for event in &samples {
@@ -409,10 +518,100 @@ mod tests {
                 },
                 "auth-url-requested",
             ),
+            (
+                AppEvent::StreamFailed {
+                    stream_id: String::new(),
+                    kind: StreamFailureKind::Broken,
+                    message: String::new(),
+                },
+                "stream-failed",
+            ),
         ];
 
         for (event, expected) in cases {
             assert_eq!(event.channel(), expected);
         }
+    }
+
+    /// The frontend switches on `kind` as a bare lowercase string
+    /// (`"gone"` / `"broken"`); serde's default would emit `"Gone"` and
+    /// every comparison would silently fall through to the retry path.
+    #[test]
+    fn stream_failed_payload_carries_id_kind_and_message() {
+        let payload = AppEvent::StreamFailed {
+            stream_id: "log-7".into(),
+            kind: StreamFailureKind::Gone,
+            message: "default/api-0 stopped streaming".into(),
+        }
+        .payload();
+
+        assert_eq!(
+            payload.get("stream_id").and_then(|v| v.as_str()),
+            Some("log-7")
+        );
+        assert_eq!(payload.get("kind").and_then(|v| v.as_str()), Some("gone"));
+        assert_eq!(
+            payload.get("message").and_then(|v| v.as_str()),
+            Some("default/api-0 stopped streaming"),
+        );
+
+        let broken = AppEvent::StreamFailed {
+            stream_id: "term-7".into(),
+            kind: StreamFailureKind::Broken,
+            message: "upgrade rejected".into(),
+        }
+        .payload();
+        assert_eq!(broken.get("kind").and_then(|v| v.as_str()), Some("broken"));
+    }
+
+    #[test]
+    fn classify_separates_a_missing_resource_from_a_broken_connection() {
+        use crate::error::Error;
+
+        assert_eq!(
+            StreamFailureKind::classify(&Error::NotFound {
+                kind: "Pod".into(),
+                name: "api-0".into(),
+                namespace: "default".into(),
+            }),
+            StreamFailureKind::Gone,
+        );
+        assert_eq!(
+            StreamFailureKind::classify(&Error::LogStream(
+                "Failed to start log stream: ApiError: pods \"api-0\" not found: NotFound".into()
+            )),
+            StreamFailureKind::Gone,
+        );
+        // The k3d reproduction: exec answers the upgrade with a 500.
+        // Nothing about that says the pod is gone.
+        assert_eq!(
+            StreamFailureKind::classify(&Error::Terminal(
+                "Failed to exec: failed to upgrade to a WebSocket connection: 500".into()
+            )),
+            StreamFailureKind::Broken,
+        );
+    }
+
+    #[test]
+    fn readable_cause_strips_stacked_wrapper_prefixes() {
+        use crate::error::Error;
+
+        assert_eq!(
+            readable_cause(&Error::Terminal(
+                "Failed to exec: failed to upgrade to a WebSocket connection: 500".into()
+            )),
+            "failed to upgrade to a WebSocket connection: 500",
+        );
+        assert_eq!(
+            readable_cause(&Error::LogStream(
+                "Failed to start log stream: connection refused".into()
+            )),
+            "connection refused",
+        );
+        // Nothing to peel: the text survives intact.
+        assert_eq!(
+            readable_cause(&Error::Connection("kube-apiserver unreachable".into())),
+            "kube-apiserver unreachable",
+        );
     }
 }

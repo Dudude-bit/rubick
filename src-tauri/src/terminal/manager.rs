@@ -1,9 +1,25 @@
 use crate::error::{Error, Result};
-use crate::state::AppEvent;
+use crate::state::{readable_cause, AppEvent, StreamFailureKind};
 use crate::terminal::session::{TerminalInput, TerminalSession, TerminalState};
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+
+/// How the wait for the frontend's subscribe signal ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Gate {
+    /// The frontend registered its listeners; events sent from here on
+    /// will be received.
+    Released,
+    /// The session was closed before the frontend ever attached.
+    Cancelled,
+    /// The frontend never called back. Emitting anyway is a guess, but
+    /// a silent wedged session is worse.
+    TimedOut,
+}
+
+/// Seconds to wait for the frontend before giving up on the gate.
+const SUBSCRIBE_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
 /// Terminal manager for handling multiple sessions
 pub struct TerminalManager {
@@ -112,54 +128,83 @@ impl TerminalManager {
 
         // Spawn task with adapter ownership
         tokio::spawn(async move {
-            // Connect adapter
-            if let Err(e) = adapter.connect().await {
-                tracing::error!("Failed to connect adapter: {}", e);
-                *session_state.write().await = TerminalState::Error;
+            // `create_session` has already returned the id by now, so a
+            // connect failure here lands *after* the caller believes it
+            // has a working session — the exec upgrade being rejected
+            // with a 500 is exactly this. Hold the error and report it
+            // through the same gate as everything else: the frontend's
+            // listeners do not exist yet, and Tauri events have no
+            // replay, so emitting now would put the only explanation
+            // of the blank pane into the void.
+            let connect_error = adapter.connect().await.err();
 
-                // Remove session from map to prevent memory leak
+            *session_state.write().await = if connect_error.is_some() {
+                TerminalState::Error
+            } else {
+                TerminalState::Connected
+            };
+
+            // Wait for the frontend to signal it has registered its
+            // event listeners. The cancel channel is armed too, so a
+            // session closed during startup unwinds cleanly, and a
+            // safety timeout prevents a wedged session if the frontend
+            // never calls `terminal_subscribed` (e.g. browser crash).
+            let gate = tokio::select! {
+                _ = subscribe_rx => Gate::Released,
+                _ = &mut cancel_rx => Gate::Cancelled,
+                _ = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => {
+                    tracing::warn!(
+                        "Terminal session {} subscribe gate timed out after {}s",
+                        session_id_clone,
+                        SUBSCRIBE_TIMEOUT.as_secs(),
+                    );
+                    Gate::TimedOut
+                }
+            };
+
+            if let Some(e) = connect_error {
+                tracing::error!("Failed to connect adapter: {}", e);
+                let _ = adapter.close().await;
                 sessions.remove(&session_id_clone);
 
+                if gate != Gate::Cancelled {
+                    let kind = StreamFailureKind::classify(&e);
+                    let cause = readable_cause(&e);
+                    emit_failure(
+                        &event_tx,
+                        &session_id_clone,
+                        kind,
+                        match kind {
+                            StreamFailureKind::Gone => {
+                                format!("There is no container left to attach to — {cause}.")
+                            }
+                            StreamFailureKind::Broken => {
+                                format!("Could not open the shell — {cause}.")
+                            }
+                        },
+                    );
+                }
+
                 let _ = event_tx.send(AppEvent::TerminalClosed {
-                    session_id: session_id_clone.clone(),
+                    session_id: session_id_clone,
                     status: Some(format!("Failed to connect: {e}")),
                 });
                 return;
             }
 
-            *session_state.write().await = TerminalState::Connected;
-
-            // Wait for the frontend to signal it has registered its
-            // event listeners. Without this gate, output emitted between
-            // session creation and listener registration would be lost
-            // forever — Tauri events have no replay. The cancel channel
-            // is also armed so a session closed during startup unwinds
-            // cleanly. A safety timeout prevents a wedged session if
-            // the frontend never calls `terminal_subscribed` (e.g.
-            // browser crash).
-            tokio::select! {
-                _ = subscribe_rx => {}
-                _ = &mut cancel_rx => {
-                    tracing::debug!(
-                        "Terminal session {} cancelled before subscribe",
-                        session_id_clone
-                    );
-                    let _ = adapter.close().await;
-                    *session_state.write().await = TerminalState::Disconnected;
-                    sessions.remove(&session_id_clone);
-                    let _ = event_tx.send(AppEvent::TerminalClosed {
-                        session_id: session_id_clone,
-                        status: None,
-                    });
-                    return;
-                }
-                _ = tokio::time::sleep(tokio::time::Duration::from_secs(60)) => {
-                    tracing::warn!(
-                        "Terminal session {} subscribe gate timed out after 60s; \
-                         starting I/O loop anyway",
-                        session_id_clone
-                    );
-                }
+            if gate == Gate::Cancelled {
+                tracing::debug!(
+                    "Terminal session {} cancelled before subscribe",
+                    session_id_clone
+                );
+                let _ = adapter.close().await;
+                *session_state.write().await = TerminalState::Disconnected;
+                sessions.remove(&session_id_clone);
+                let _ = event_tx.send(AppEvent::TerminalClosed {
+                    session_id: session_id_clone,
+                    status: None,
+                });
+                return;
             }
 
             // I/O loop
@@ -174,6 +219,15 @@ impl TerminalManager {
                             Some(TerminalInput::Data(data)) => {
                                 if let Err(e) = adapter.write_input(data.as_bytes()).await {
                                     tracing::error!("Failed to write input: {}", e);
+                                    emit_failure(
+                                        &event_tx,
+                                        &session_id_clone,
+                                        StreamFailureKind::Broken,
+                                        format!(
+                                            "The shell stopped accepting input — {}.",
+                                            readable_cause(&e)
+                                        ),
+                                    );
                                     break;
                                 }
                             }
@@ -204,6 +258,15 @@ impl TerminalManager {
                             }
                             Err(e) => {
                                 tracing::error!("Failed to read output: {}", e);
+                                emit_failure(
+                                    &event_tx,
+                                    &session_id_clone,
+                                    StreamFailureKind::classify(&e),
+                                    format!(
+                                        "The shell connection dropped — {}.",
+                                        readable_cause(&e)
+                                    ),
+                                );
                                 break;
                             }
                         }
@@ -226,6 +289,21 @@ impl TerminalManager {
 
         Ok(session_id)
     }
+}
+
+/// Tell the frontend a session stopped on its own. Send failures are
+/// ignored: no receiver means no window left to inform.
+fn emit_failure(
+    event_tx: &broadcast::Sender<AppEvent>,
+    session_id: &str,
+    kind: StreamFailureKind,
+    message: String,
+) {
+    let _ = event_tx.send(AppEvent::StreamFailed {
+        stream_id: session_id.to_string(),
+        kind,
+        message,
+    });
 }
 
 #[cfg(test)]
@@ -356,6 +434,121 @@ mod tests {
                 assert_eq!(data, "hello");
             }
             other => panic!("expected TerminalOutput, got {other:?}"),
+        }
+    }
+
+    /// Adapter whose `connect` fails the way the exec upgrade does on
+    /// a cluster that answers the handshake with a 500.
+    struct FailingConnectAdapter(Error);
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for FailingConnectAdapter {
+        async fn connect(&mut self) -> Result<()> {
+            Err(match &self.0 {
+                Error::Terminal(m) => Error::Terminal(m.clone()),
+                other => Error::Terminal(other.to_string()),
+            })
+        }
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            Ok(None)
+        }
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn is_running(&self) -> bool {
+            false
+        }
+    }
+
+    /// The whole point of the variant: `create_session` hands back an
+    /// id, the upgrade is rejected a moment later, and the frontend
+    /// has to hear about it. It cannot hear about it before its
+    /// listeners exist, so the failure has to wait on the same gate
+    /// that output does.
+    #[tokio::test]
+    async fn connect_failure_is_reported_after_the_subscribe_gate() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let session_id = manager
+            .create_session(Box::new(FailingConnectAdapter(Error::Terminal(
+                "Failed to exec: failed to upgrade to a WebSocket connection: 500".into(),
+            ))))
+            .await
+            .expect("create_session returns an id even though the connect will fail");
+
+        let early = tokio::time::timeout(Duration::from_millis(150), event_rx.recv()).await;
+        assert!(
+            early.is_err(),
+            "the failure must not be emitted before the frontend subscribes; got {early:?}"
+        );
+
+        manager
+            .mark_subscribed(&session_id)
+            .expect("session must still be registered so the frontend can release the gate");
+
+        let event = tokio::time::timeout(Duration::from_millis(500), event_rx.recv())
+            .await
+            .expect("event within timeout")
+            .expect("event delivered");
+
+        match event {
+            AppEvent::StreamFailed {
+                stream_id,
+                kind,
+                message,
+            } => {
+                assert_eq!(stream_id, session_id);
+                assert_eq!(
+                    kind,
+                    StreamFailureKind::Broken,
+                    "a rejected upgrade says nothing about the pod existing"
+                );
+                assert_eq!(
+                    message,
+                    "Could not open the shell — failed to upgrade to a WebSocket connection: 500."
+                );
+            }
+            other => panic!("expected StreamFailed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn connect_failure_on_a_missing_container_is_reported_as_gone() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let session_id = manager
+            .create_session(Box::new(FailingConnectAdapter(Error::Terminal(
+                "Failed to exec: ApiError: pods \"api-0\" not found: NotFound".into(),
+            ))))
+            .await
+            .expect("create_session");
+
+        manager
+            .mark_subscribed(&session_id)
+            .expect("mark_subscribed");
+
+        let event = tokio::time::timeout(Duration::from_millis(500), event_rx.recv())
+            .await
+            .expect("event within timeout")
+            .expect("event delivered");
+
+        match event {
+            AppEvent::StreamFailed { kind, message, .. } => {
+                assert_eq!(kind, StreamFailureKind::Gone);
+                assert!(
+                    message.starts_with("There is no container left to attach to"),
+                    "gone must not read like a retryable connection failure: {message}"
+                );
+            }
+            other => panic!("expected StreamFailed, got {other:?}"),
         }
     }
 

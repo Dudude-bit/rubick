@@ -5,7 +5,7 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
-use crate::state::{AppEvent, LogLineEvent};
+use crate::state::{readable_cause, AppEvent, LogLineEvent, StreamFailureKind};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::Api, Client};
 use std::sync::Arc;
@@ -87,10 +87,30 @@ impl LogStreamer {
         let pod = config.pod.clone();
         let namespace = config.namespace.clone();
 
-        let stream = api
-            .log_stream(&config.pod, &params)
-            .await
-            .map_err(|e| Error::LogStream(format!("Failed to start log stream: {e}")))?;
+        let target = format!("{namespace}/{pod}");
+
+        let stream = match api.log_stream(&config.pod, &params).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                let error = Error::LogStream(format!("Failed to start log stream: {e}"));
+                let cause = readable_cause(&error);
+                let kind = StreamFailureKind::classify(&error);
+                emit_failure(
+                    &self.event_tx,
+                    &stream_id,
+                    kind,
+                    match kind {
+                        StreamFailureKind::Gone => {
+                            format!("Pod {target} is not there any more — {cause}.")
+                        }
+                        StreamFailureKind::Broken => {
+                            format!("Could not attach to the logs of {target} — {cause}.")
+                        }
+                    },
+                );
+                return Err(error);
+            }
+        };
 
         use tokio_util::compat::FuturesAsyncReadCompatExt;
         let reader = BufReader::new(stream.compat());
@@ -99,6 +119,7 @@ impl LogStreamer {
         // Buffer + periodic flush. Triggers: timer tick, buffer hits
         // MAX_BATCH_SIZE, cancel, or EOF.
         let mut buffer: Vec<LogLineEvent> = Vec::with_capacity(MAX_BATCH_SIZE);
+        let mut ended_because_gone = false;
         let mut flush_timer = interval(FLUSH_INTERVAL);
         // First tick fires immediately; skip it so an empty buffer
         // doesn't emit an empty batch right after subscribe.
@@ -141,15 +162,31 @@ impl LogStreamer {
                             }
                         }
                         Ok(None) => {
-                            tracing::debug!("Log stream ended");
+                            tracing::debug!("Log stream {} reached EOF", stream_id);
+                            // Following a live pod, the apiserver only
+                            // closes the body when there is nothing
+                            // left to follow: the pod was deleted or
+                            // the container exited. Silence here is
+                            // what made a deleted pod read as "No
+                            // output yet". A one-shot read ending is
+                            // just the read finishing, so say nothing.
+                            if config.follow {
+                                ended_because_gone = true;
+                            }
                             break;
                         }
                         Err(e) => {
-                            tracing::error!("Log stream error: {}", e);
-                            let _ = self.event_tx.send(AppEvent::Error {
-                                code: "LOG_STREAM_ERROR".to_string(),
-                                message: e.to_string(),
-                            });
+                            tracing::error!("Log stream {} read error: {}", stream_id, e);
+                            let error = Error::LogStream(format!("Log stream read failed: {e}"));
+                            emit_failure(
+                                &self.event_tx,
+                                &stream_id,
+                                StreamFailureKind::Broken,
+                                format!(
+                                    "The log stream from {target} broke — {}.",
+                                    readable_cause(&error)
+                                ),
+                            );
                             break;
                         }
                     }
@@ -157,13 +194,40 @@ impl LogStreamer {
             }
         }
 
-        // Final flush on exit so trailing lines don't get dropped.
+        // Final flush on exit so trailing lines don't get dropped —
+        // and it has to land before the failure, or the panel replaces
+        // the last lines the pod ever wrote with an error.
         if !buffer.is_empty() {
             flush_batch(&self.event_tx, &stream_id, &mut buffer);
         }
 
+        if ended_because_gone {
+            emit_failure(
+                &self.event_tx,
+                &stream_id,
+                StreamFailureKind::Gone,
+                format!("{target} stopped streaming — container {container} is no longer running."),
+            );
+        }
+
         Ok(())
     }
+}
+
+/// Tell the frontend a stream stopped on its own. Send failures are
+/// ignored for the same reason as everywhere else here: no receiver
+/// means no window left to inform.
+fn emit_failure(
+    event_tx: &broadcast::Sender<AppEvent>,
+    stream_id: &str,
+    kind: StreamFailureKind,
+    message: String,
+) {
+    let _ = event_tx.send(AppEvent::StreamFailed {
+        stream_id: stream_id.to_string(),
+        kind,
+        message,
+    });
 }
 
 /// Drain the per-stream buffer into a single `AppEvent::LogBatch`.
