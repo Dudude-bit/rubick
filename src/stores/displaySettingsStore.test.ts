@@ -1,13 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
 
 import {
+  PEEK_WIDTH_DEFAULT,
+  PEEK_WIDTH_MAX,
+  PEEK_WIDTH_MIN,
   useDisplaySettingsStore,
   type DisplaySettingsState,
 } from "./displaySettingsStore";
 
 describe("displaySettingsStore", () => {
   beforeEach(() => {
-    useDisplaySettingsStore.setState({ resourceColouring: "full" });
+    useDisplaySettingsStore.setState({
+      resourceColouring: "full",
+      peekWidth: PEEK_WIDTH_DEFAULT,
+    });
   });
 
   it("defaults resource colouring to full", () => {
@@ -17,6 +23,20 @@ describe("displaySettingsStore", () => {
   it("stores a new choice", () => {
     useDisplaySettingsStore.getState().setResourceColouring("off");
     expect(useDisplaySettingsStore.getState().resourceColouring).toBe("off");
+  });
+
+  it("remembers a dragged peek width", () => {
+    useDisplaySettingsStore.getState().setPeekWidth(742);
+    expect(useDisplaySettingsStore.getState().peekWidth).toBe(742);
+  });
+
+  // The viewport clamp lives in the panel; the store still refuses a width
+  // that could never be sane on any window.
+  it("refuses a width outside the bounds", () => {
+    useDisplaySettingsStore.getState().setPeekWidth(12);
+    expect(useDisplaySettingsStore.getState().peekWidth).toBe(PEEK_WIDTH_MIN);
+    useDisplaySettingsStore.getState().setPeekWidth(9000);
+    expect(useDisplaySettingsStore.getState().peekWidth).toBe(PEEK_WIDTH_MAX);
   });
 });
 
@@ -40,6 +60,22 @@ describe("displaySettingsStore migration", () => {
     // The density migration already ran for this install; re-running it would
     // undo a choice the user made after the last upgrade.
     expect(migrated.tableDensity).toBe("comfortable");
+  });
+
+  it("gives every install written before version 3 the default peek width", () => {
+    expect(migrate({ tableDensity: "compact" }, 2).peekWidth).toBe(
+      PEEK_WIDTH_DEFAULT
+    );
+    expect(migrate(undefined, 0).peekWidth).toBe(PEEK_WIDTH_DEFAULT);
+  });
+
+  it("keeps a peek width the user already dragged", () => {
+    expect(migrate({ peekWidth: 900 }, 3).peekWidth).toBe(900);
+  });
+
+  it("pulls an out-of-range stored width back into bounds", () => {
+    expect(migrate({ peekWidth: 40 }, 3).peekWidth).toBe(PEEK_WIDTH_MIN);
+    expect(migrate({ peekWidth: 4000 }, 3).peekWidth).toBe(PEEK_WIDTH_MAX);
   });
 
   it("keeps a colouring the user already chose", () => {
@@ -74,13 +110,18 @@ describe("displaySettingsStore migration", () => {
     localStorage.setItem(
       "display-settings",
       JSON.stringify({
-        state: { tableDensity: "compact", resourceColouring: "minimal" },
-        version: 2,
+        state: {
+          tableDensity: "compact",
+          resourceColouring: "minimal",
+          peekWidth: 820,
+        },
+        version: 3,
       })
     );
     await useDisplaySettingsStore.persist.rehydrate();
     expect(useDisplaySettingsStore.getState().resourceColouring).toBe(
       "minimal"
     );
+    expect(useDisplaySettingsStore.getState().peekWidth).toBe(820);
   });
 });

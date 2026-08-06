@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 
@@ -10,6 +11,28 @@ import { LogLineComponent } from "./LogLine";
 import { LogFilters } from "./LogFilters";
 import { LogStatusBar } from "./LogStatusBar";
 import type { ViewMode, ActiveFilter } from "./types";
+
+/** Ragged bars at log-line rhythm — the shape the output will land in. */
+const SKELETON_WIDTHS = [
+  "w-[78%]",
+  "w-[54%]",
+  "w-[88%]",
+  "w-[41%]",
+  "w-[70%]",
+  "w-[62%]",
+  "w-[84%]",
+  "w-[48%]",
+];
+
+function LogSkeleton() {
+  return (
+    <div className="space-y-1.5" aria-hidden="true" data-testid="log-skeleton">
+      {SKELETON_WIDTHS.map((width, index) => (
+        <Skeleton key={index} className={`h-2.5 ${width}`} />
+      ))}
+    </div>
+  );
+}
 
 interface LogViewerProps {
   podName: string;
@@ -254,13 +277,33 @@ export function LogViewer({
                 Retry
               </Button>
             </div>
+          ) : isConnecting && logs.length === 0 ? (
+            // Lines, not a spinner: the shape the output will take says "this
+            // is a log about to arrive" where a spinner says only "wait".
+            <LogSkeleton />
           ) : filteredLogs.length === 0 ? (
-            <div className="py-8 text-center text-fg-mut">
-              {isConnecting
-                ? "Connecting to log stream..."
-                : isStreaming
-                  ? "Waiting for logs..."
-                  : 'Click "Stream" to start viewing logs'}
+            <div className="py-8 text-center text-xs text-fg-mut">
+              {logs.length > 0 ? (
+                <>
+                  No line matches the current filter.
+                  <span className="text-fg-fnt"> {logs.length} received.</span>
+                </>
+              ) : isStreaming ? (
+                <>
+                  No output yet.
+                  {/* Deliberately not "the stream is attached": the backend
+                      reports a mid-stream failure to its own log and not to
+                      us, so this state also covers a stream that died on
+                      connect. Claiming health here would be a lie. */}
+                  <span className="text-fg-fnt">
+                    {" "}
+                    Nothing has arrived on this container since the stream
+                    started.
+                  </span>
+                </>
+              ) : (
+                'Not streaming. Press "Stream" to attach.'
+              )}
             </div>
           ) : (
             filteredLogs.map((log) => (
@@ -277,6 +320,9 @@ export function LogViewer({
         </div>
       </ScrollArea>
 
+      {/* The status bar carries the live indicator: a pulsing dot beside the
+          word "Streaming", which is the only thing that separates an attached
+          stream from a dead pane. */}
       <LogStatusBar
         logs={logs}
         filteredCount={filteredLogs.length}

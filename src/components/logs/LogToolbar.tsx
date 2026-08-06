@@ -61,7 +61,10 @@ export function LogToolbar({
   onToggleStreaming,
 }: LogToolbarProps) {
   return (
-    <div className="flex items-center gap-2 border-b border-hair p-2">
+    // Wraps because the same toolbar now sits in the peek panel, which the
+    // reader can drag down to 360px — unwrapped it pushed its own controls
+    // off the edge.
+    <div className="flex flex-wrap items-center gap-2 border-b border-hair p-2">
       <Select value={selectedContainer} onValueChange={onContainerChange}>
         <SelectTrigger className="w-48">
           <SelectValue placeholder="Select container" />
