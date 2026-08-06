@@ -81,13 +81,16 @@ export function LogLegend({
           </button>
         );
       })}
+      {/* Dimming a chip is a quiet way to say "withheld", and on a row of
+       *  five it is easy to read as decoration. The count says it in
+       *  words, in the row the hiding happened in. */}
       {hidden.size > 0 && (
         <button
           type="button"
           onClick={onShowAll}
-          className="ml-1 rounded px-1.5 py-0.5 text-fg-fnt hover:bg-hover hover:text-fg-mut"
+          className="ml-1 rounded px-1.5 py-0.5 text-warn hover:bg-hover"
         >
-          Show all
+          {hidden.size} hidden · show all
         </button>
       )}
     </div>

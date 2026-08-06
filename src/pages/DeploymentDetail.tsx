@@ -404,7 +404,6 @@ export function DeploymentDetail() {
                 podName={logPod.name}
                 namespace={logPod.namespace}
                 containers={logPod.containers?.map((c) => c.name) || []}
-                initialContainer={logPod.containers?.[0]?.name}
               />
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">

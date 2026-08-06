@@ -183,6 +183,58 @@ function DroppedNotice({
 }
 
 /**
+ * Few enough rows that the pane reads as empty rather than as short, and
+ * enough lines behind them that the emptiness is a lie.
+ */
+const COLLAPSED_ROWS = 12;
+const COLLAPSED_LINES = 50;
+
+/**
+ * The grouping is doing all the work, said where the work is happening.
+ *
+ * A container that writes the same line a thousand times collapses to one
+ * row, which is the right answer and looks exactly like a broken pane: a
+ * single line over 700px of nothing, with `1 shown · 4 025 hidden by
+ * filter and grouping` in 11px at the far corner. The count was never the
+ * problem — its distance from the emptiness it explained was. This says
+ * it at the top of the list, next to the way out.
+ */
+function GroupedNotice({
+  rows,
+  collapsed,
+  onShowEveryLine,
+}: {
+  rows: number;
+  collapsed: number;
+  onShowEveryLine: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      data-testid="log-grouped-notice"
+      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+    >
+      <p>
+        {rows === 1 ? "This row stands" : `These ${rows} rows stand`} for{" "}
+        {formatCount(rows + collapsed)} lines.
+        <span className="text-fg-fnt">
+          {" "}
+          Repeats is on, so a line that says what the one above it said is
+          folded into it.
+        </span>
+      </p>
+      <button
+        type="button"
+        onClick={onShowEveryLine}
+        className="shrink-0 rounded px-1.5 py-0.5 text-info hover:bg-hover"
+      >
+        Show every line
+      </button>
+    </div>
+  );
+}
+
+/**
  * How long a stream under intake may say nothing before the pane says
  * why. Short enough to answer the question while it is being asked,
  * long enough that an ordinary gap between bursts does not trip it.
@@ -243,27 +295,23 @@ interface LogViewerProps {
   podName: string;
   namespace: string;
   containers: string[];
-  /** Opens with only this container shown; the rest are one click away. */
-  initialContainer?: string;
 }
 
-export function LogViewer({
-  podName,
-  namespace,
-  containers,
-  initialContainer,
-}: LogViewerProps) {
+export function LogViewer({ podName, namespace, containers }: LogViewerProps) {
   const { toast } = useToast();
   const copyToClipboard = useCopyToClipboard();
   // Every container streams, always. Hiding one is a view filter and
   // nothing more: stopping its stream would make its line count a lie
   // the moment it came back, and a sidecar bug is invisible one
   // container at a time.
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(() =>
-    initialContainer
-      ? new Set(containers.filter((name) => name !== initialContainer))
-      : new Set()
-  );
+  //
+  // And nothing is hidden on open. The pane used to be handed the first
+  // container of the pod as a starting filter, which on a five-container
+  // workload meant it opened showing a fifth of the log with no statement
+  // anywhere near the reader that four fifths were being withheld. A
+  // filter the reader did not set is not a filter, it is a lie about how
+  // much log there is.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [terms, setTerms] = useState<QueryTerm[]>([]);
   /**
    * Which terms are also kept at the source, by label.
@@ -661,6 +709,16 @@ export function LogViewer({
       {intake.length > 0 && isStreaming && failures.length === 0 && (
         <IntakeQuietNotice since={lastBatchAt} terms={intake} />
       )}
+
+      {rows.length > 0 &&
+        rows.length <= COLLAPSED_ROWS &&
+        collapsedCount >= COLLAPSED_LINES && (
+          <GroupedNotice
+            rows={rows.length}
+            collapsed={collapsedCount}
+            onShowEveryLine={() => setCollapseRepeats(false)}
+          />
+        )}
 
       <LogList
         logs={visibleLogs}

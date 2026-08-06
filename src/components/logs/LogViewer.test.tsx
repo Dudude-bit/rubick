@@ -396,3 +396,55 @@ describe("the density strip", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The pane used to open on a fifth of a five-container log, because the
+ * Deployment page handed it `containers[0]` as a starting filter. Nothing
+ * near the reader said so: the legend dimmed four chips and the count sat
+ * in the far corner of the footer.
+ */
+describe("what the pane shows on open", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  it("hides no container", async () => {
+    render(
+      <TooltipProvider>
+        <LogViewer {...props} containers={["app", "sidecar", "proxy"]} />
+      </TooltipProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+    for (const chip of within(screen.getByTestId("log-legend")).getAllByRole(
+      "button"
+    )) {
+      expect(chip).toHaveAttribute("aria-pressed", "true");
+    }
+  });
+
+  it("says so beside the log when grouping is what emptied it", async () => {
+    await renderStreaming();
+    fireBatch(
+      Array.from({ length: 60 }, (_, i) => ({
+        at: START + i * 100,
+        level: "info",
+        message: "the same thing, again",
+      }))
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-grouped-notice")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("log-grouped-notice")).toHaveTextContent(
+      "This row stands for 60 lines"
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show every line" })
+    );
+    expect(screen.queryByTestId("log-grouped-notice")).not.toBeInTheDocument();
+  });
+});
