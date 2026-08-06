@@ -6,6 +6,7 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::state::{readable_cause, AppEvent, LogLineEvent, StreamFailureKind};
+use chrono::Utc;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::Api, Client};
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use tokio::sync::{broadcast, oneshot};
 use tokio::time::{interval, MissedTickBehavior};
 
 use super::config::LogConfig;
+use super::filter::IntakeFilter;
 use super::parser;
 use super::types::LogLine;
 
@@ -89,6 +91,17 @@ impl LogStreamer {
 
         let target = format!("{namespace}/{pod}");
 
+        // Kubernetes has no grep, so this is the only place a line can
+        // be dropped before anything downstream pays for it: no event,
+        // no IPC hop, no slot in the retained buffer. Measured on
+        // `flood-demo`, that is the difference between 5 000 lines
+        // covering 24 seconds and the same 5 000 covering 3m 23s.
+        let intake = IntakeFilter::new(&config.intake);
+        // Where the stream last was on the clock. Lines the container
+        // wrote without a timestamp inherit it — kept or discarded, they
+        // all move it — which is how the viewer places them too.
+        let mut epoch_ms = Utc::now().timestamp_millis();
+
         let stream = match api.log_stream(&config.pod, &params).await {
             Ok(stream) => stream,
             Err(e) => {
@@ -148,17 +161,23 @@ impl LogStreamer {
                                 &namespace,
                             );
 
-                            buffer.push(LogLineEvent {
-                                message: log_line.message,
-                                timestamp: log_line.timestamp.map(|t| t.to_rfc3339()),
-                                level: log_line.level,
-                                format: log_line.format,
-                                fields: log_line.fields,
-                                raw: log_line.raw,
-                            });
+                            if let Some(ts) = log_line.timestamp {
+                                epoch_ms = ts.timestamp_millis();
+                            }
 
-                            if buffer.len() >= MAX_BATCH_SIZE {
-                                flush_batch(&self.event_tx, &stream_id, &mut buffer);
+                            if intake.matches(&log_line, epoch_ms) {
+                                buffer.push(LogLineEvent {
+                                    message: log_line.message,
+                                    timestamp: log_line.timestamp.map(|t| t.to_rfc3339()),
+                                    level: log_line.level,
+                                    format: log_line.format,
+                                    fields: log_line.fields,
+                                    raw: log_line.raw,
+                                });
+
+                                if buffer.len() >= MAX_BATCH_SIZE {
+                                    flush_batch(&self.event_tx, &stream_id, &mut buffer);
+                                }
                             }
                         }
                         Ok(None) => {

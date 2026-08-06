@@ -1087,8 +1087,10 @@ export interface StreamLogConfig {
   follow: boolean;
   tailLines: number | null;
   sinceSeconds: number | null;
+  sinceTime: string | null;
   timestamps: boolean;
   previous: boolean;
+  intake: QueryTerm[];
 }
 
 export interface EndpointsInfo {
@@ -1200,3 +1202,13 @@ export type LogLevel =
   | "error"
   | "fatal"
   | "unknown";
+
+export type QueryTerm =
+  | { kind: "text"; value: string }
+  | { kind: "level"; op: LevelOp; value: LogLevel }
+  | { kind: "field"; key: string; op: FieldOp; value: string }
+  | { kind: "time"; from: number; to: number };
+
+export type FieldOp = "=" | "≠";
+
+export type LevelOp = "=" | "≥";

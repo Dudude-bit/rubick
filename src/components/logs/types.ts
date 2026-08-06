@@ -1,4 +1,9 @@
-import type { LogFormat, LogLevel, LogLine } from "@/generated/types";
+import type {
+  LogFormat,
+  LogLevel,
+  LogLine,
+  QueryTerm,
+} from "@/generated/types";
 
 export type ViewMode = "compact" | "table" | "raw";
 
@@ -35,19 +40,14 @@ export type StreamedLogLine = LogLine & {
  * thing you can read off the toolbar and remove, where `warn` typed into
  * a search box is indistinguishable from a line that happens to contain
  * the word.
+ *
+ * It is declared in Rust (`src-tauri/src/logs/filter.rs`) and generated
+ * here, because the same term is evaluated in two places: over this
+ * buffer when it is a query, and before the line is ever kept when it is
+ * intake. One shape, and `shared/log-query-conformance.json` to keep the
+ * two evaluators saying the same thing about it.
  */
-export type QueryTerm =
-  | { kind: "text"; value: string }
-  | { kind: "level"; op: "=" | "≥"; value: LogLevel }
-  | { kind: "field"; key: string; op: "=" | "≠"; value: string }
-  /**
-   * A stretch of wall clock, dragged out of the density strip. It is a
-   * term rather than a mode of the strip so that "the last four minutes"
-   * sits in the toolbar beside `level≥warn`, is visible as something the
-   * reader asked for, and comes off the same way — with its ×. Bounds in
-   * ms since epoch, both inclusive.
-   */
-  | { kind: "time"; from: number; to: number };
+export type { QueryTerm };
 
 export const HIDDEN_FIELD_KEYS = new Set([
   "message",
@@ -74,8 +74,12 @@ export const LEVEL_WORDS: Record<LogLevel, string> = {
  * at the bottom on purpose: a line the parser could not read a level out
  * of is not evidence of a problem, and a threshold query asking for
  * trouble should not return every unparsed line in the buffer.
+ *
+ * The same order lives in `LogLevel::RANKED`, because intake evaluates
+ * the same threshold in Rust. `levelOrder` in the conformance corpus is
+ * what both are checked against — see `conformance.test.ts`.
  */
-const LEVEL_RANK: Record<LogLevel, number> = {
+export const LEVEL_RANK: Record<LogLevel, number> = {
   fatal: 5,
   error: 4,
   warn: 3,

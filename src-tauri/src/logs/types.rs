@@ -52,6 +52,33 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
+    /// Severity as an order, least severe first — the one definition of
+    /// what `level≥warn` means.
+    ///
+    /// `Unknown` sits at the bottom on purpose: a line the parser could
+    /// not read a level out of is not evidence of a problem, and a
+    /// threshold asking for trouble should not return every unparsed
+    /// line in the buffer. The viewer's `LEVEL_RANK` is this list, and
+    /// `shared/log-query-conformance.json` is what stops the two drifting.
+    pub const RANKED: [LogLevel; 6] = [
+        LogLevel::Unknown,
+        LogLevel::Debug,
+        LogLevel::Info,
+        LogLevel::Warn,
+        LogLevel::Error,
+        LogLevel::Fatal,
+    ];
+
+    /// This level's place in `RANKED`. Derived rather than written out a
+    /// second time, so the order has exactly one home.
+    #[must_use]
+    pub fn rank(self) -> usize {
+        Self::RANKED
+            .iter()
+            .position(|level| *level == self)
+            .unwrap_or(0)
+    }
+
     /// Best-effort heuristic from a free-text message — used when no
     /// structured `level` field is available.
     #[must_use]

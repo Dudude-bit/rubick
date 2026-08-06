@@ -5,6 +5,8 @@ use chrono::{DateTime, Utc};
 use kube::api::LogParams;
 use serde::{Deserialize, Serialize};
 
+use super::filter::{intake_since_time, QueryTerm};
+
 /// Log streaming configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +32,11 @@ pub struct LogConfig {
     /// Previous container logs
     #[serde(default)]
     pub previous: bool,
+    /// Terms every arriving line must satisfy to be kept. Empty — the
+    /// default — keeps everything, which is what every caller that
+    /// predates intake asks for.
+    #[serde(default)]
+    pub intake: Vec<QueryTerm>,
 }
 
 fn default_follow() -> bool {
@@ -48,6 +55,7 @@ impl Default for LogConfig {
             since_seconds: None,
             since_time: None,
             previous: false,
+            intake: Vec::new(),
         }
     }
 }
@@ -99,6 +107,18 @@ impl LogConfig {
         self
     }
 
+    #[must_use]
+    pub fn with_since_time(mut self, since_time: DateTime<Utc>) -> Self {
+        self.since_time = Some(since_time);
+        self
+    }
+
+    #[must_use]
+    pub fn with_intake(mut self, intake: Vec<QueryTerm>) -> Self {
+        self.intake = intake;
+        self
+    }
+
     /// Convert to kube `LogParams` for the underlying API call.
     #[must_use]
     pub fn to_log_params(&self) -> LogParams {
@@ -117,7 +137,14 @@ impl LogConfig {
             params.tail_lines = Some(tail);
         }
 
-        if let Some(since) = self.since_seconds {
+        // `since_time` was accepted and then silently dropped here, so
+        // the one narrowing the cluster can actually do for us never
+        // left the process. It also wins over `since_seconds`: the API
+        // takes only one of the two, kube resolves that tie towards
+        // `sinceSeconds`, and an instant is the more specific ask.
+        if let Some(since) = self.since_time.or_else(|| intake_since_time(&self.intake)) {
+            params.since_time = Some(since);
+        } else if let Some(since) = self.since_seconds {
             params.since_seconds = Some(since);
         }
 

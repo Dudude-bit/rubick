@@ -1,0 +1,251 @@
+{
+  "_": [
+    "One corpus, two evaluators. A term is written once in Rust and the",
+    "TypeScript type is generated from it, but a shared type only stops the",
+    "shapes drifting — it says nothing about which lines a term selects. A",
+    "chip promoted from query to intake moves from the browser's evaluator",
+    "to the streamer's, and if those disagree the chip silently changes",
+    "meaning as it crosses. So both sides are held to this file:",
+    "src-tauri/src/logs/filter.rs and src/components/logs/types.ts each",
+    "assert every case, and neither can be relaxed alone.",
+    "",
+    "A case's line is a partial log line. Both readers fill the same gaps:",
+    "message and raw default to empty, level to absent, fields to none,",
+    "container to 'app', and epoch to 0."
+  ],
+  "levelOrder": ["unknown", "debug", "info", "warn", "error", "fatal"],
+  "cases": [
+    {
+      "name": "text hits the message",
+      "term": { "kind": "text", "value": "queue" },
+      "line": { "message": "dropping batch: queue full" },
+      "expect": true
+    },
+    {
+      "name": "text hits the raw line when the message does not carry it",
+      "term": { "kind": "text", "value": "component" },
+      "line": {
+        "message": "batch accepted",
+        "raw": "{\"msg\":\"batch accepted\",\"component\":\"ingest\"}"
+      },
+      "expect": true
+    },
+    {
+      "name": "text ignores case on both sides",
+      "term": { "kind": "text", "value": "QuEuE" },
+      "line": { "message": "Dropping batch: QUEUE full" },
+      "expect": true
+    },
+    {
+      "name": "text that is nowhere is not a match",
+      "term": { "kind": "text", "value": "payments" },
+      "line": { "message": "batch accepted", "raw": "batch accepted" },
+      "expect": false
+    },
+    {
+      "name": "text folds beyond ascii",
+      "term": { "kind": "text", "value": "ÜBER" },
+      "line": { "message": "über die brücke" },
+      "expect": true
+    },
+    {
+      "name": "level= is exact",
+      "term": { "kind": "level", "op": "=", "value": "error" },
+      "line": { "level": "error" },
+      "expect": true
+    },
+    {
+      "name": "level= does not admit a more severe line",
+      "term": { "kind": "level", "op": "=", "value": "warn" },
+      "line": { "level": "error" },
+      "expect": false
+    },
+    {
+      "name": "an unlabelled line reads as unknown",
+      "term": { "kind": "level", "op": "=", "value": "unknown" },
+      "line": { "message": "no level here" },
+      "expect": true
+    },
+    {
+      "name": "level>= admits the threshold itself",
+      "term": { "kind": "level", "op": "≥", "value": "warn" },
+      "line": { "level": "warn" },
+      "expect": true
+    },
+    {
+      "name": "level>= admits anything worse",
+      "term": { "kind": "level", "op": "≥", "value": "warn" },
+      "line": { "level": "fatal" },
+      "expect": true
+    },
+    {
+      "name": "level>= refuses anything milder",
+      "term": { "kind": "level", "op": "≥", "value": "warn" },
+      "line": { "level": "info" },
+      "expect": false
+    },
+    {
+      "name": "level>=warn does not sweep up every unparsed line",
+      "term": { "kind": "level", "op": "≥", "value": "warn" },
+      "line": { "message": "no level here" },
+      "expect": false
+    },
+    {
+      "name": "unknown sits below debug",
+      "term": { "kind": "level", "op": "≥", "value": "debug" },
+      "line": { "level": "unknown" },
+      "expect": false
+    },
+    {
+      "name": "level>=unknown is everything",
+      "term": { "kind": "level", "op": "≥", "value": "unknown" },
+      "line": { "level": "unknown" },
+      "expect": true
+    },
+    {
+      "name": "error outranks warn",
+      "term": { "kind": "level", "op": "≥", "value": "error" },
+      "line": { "level": "warn" },
+      "expect": false
+    },
+    {
+      "name": "fatal outranks error",
+      "term": { "kind": "level", "op": "≥", "value": "fatal" },
+      "line": { "level": "error" },
+      "expect": false
+    },
+    {
+      "name": "a parsed field matches its value",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "fields": { "component": "ingest", "ms": "31" } },
+      "expect": true
+    },
+    {
+      "name": "a parsed field with another value does not",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "fields": { "component": "web" } },
+      "expect": false
+    },
+    {
+      "name": "a key the line does not carry does not match",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "upstream",
+        "value": "payments"
+      },
+      "line": { "fields": { "component": "ingest" } },
+      "expect": false
+    },
+    {
+      "name": "a line with no fields at all does not match",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "message": "plain" },
+      "expect": false
+    },
+    {
+      "name": "container answers as a field though nothing parsed it",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "container",
+        "value": "web"
+      },
+      "line": { "container": "web" },
+      "expect": true
+    },
+    {
+      "name": "container is not read out of the parsed fields",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "container",
+        "value": "web"
+      },
+      "line": { "container": "ingest", "fields": { "container": "web" } },
+      "expect": false
+    },
+    {
+      "name": "level is a field key like any other when asked for as one",
+      "term": { "kind": "field", "op": "=", "key": "level", "value": "warn" },
+      "line": { "level": "warn" },
+      "expect": false
+    },
+    {
+      "name": "not-equal keeps a line carrying another value",
+      "term": {
+        "kind": "field",
+        "op": "≠",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "fields": { "component": "web" } },
+      "expect": true
+    },
+    {
+      "name": "not-equal drops a line carrying that value",
+      "term": {
+        "kind": "field",
+        "op": "≠",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "fields": { "component": "ingest" } },
+      "expect": false
+    },
+    {
+      "name": "not-equal drops a line missing the key — absence is not another value",
+      "term": {
+        "kind": "field",
+        "op": "≠",
+        "key": "component",
+        "value": "ingest"
+      },
+      "line": { "fields": { "ms": "31" } },
+      "expect": false
+    },
+    {
+      "name": "a time range takes what is inside it",
+      "term": { "kind": "time", "from": 1000, "to": 2000 },
+      "line": { "message": "in" },
+      "epoch": 1500,
+      "expect": true
+    },
+    {
+      "name": "both ends of a time range are inclusive",
+      "term": { "kind": "time", "from": 1000, "to": 2000 },
+      "line": { "message": "on the edge" },
+      "epoch": 2000,
+      "expect": true
+    },
+    {
+      "name": "before the range is out",
+      "term": { "kind": "time", "from": 1000, "to": 2000 },
+      "line": { "message": "early" },
+      "epoch": 999,
+      "expect": false
+    },
+    {
+      "name": "after the range is out",
+      "term": { "kind": "time", "from": 1000, "to": 2000 },
+      "line": { "message": "late" },
+      "epoch": 2001,
+      "expect": false
+    }
+  ]
+}
