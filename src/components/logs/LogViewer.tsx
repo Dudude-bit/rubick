@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 import {
   useLogStream,
@@ -300,6 +301,14 @@ export function LogViewer({
     null
   );
 
+  // Remembered like the table density and shared with the peek: whether a
+  // chart belongs over a log is a fact about the reader, not about the pane
+  // they happen to be reading in.
+  const stripMode = useDisplaySettingsStore((state) => state.densityStrip);
+  const setStripMode = useDisplaySettingsStore(
+    (state) => state.setDensityStrip
+  );
+
   // Every chip filters the view; the ones flipped to intake also filter
   // the stream, so the toggle changes what is kept and never what is
   // shown. `useIntake` holds the set still for a moment so a run of
@@ -566,20 +575,25 @@ export function LogViewer({
     <div className="flex h-full flex-col">
       {/* Above the toolbar because it is the first question, not the
           fourth: the shape of the buffer is what tells the reader where
-          to point the query. */}
-      <LogDensityStrip
-        logs={scoped}
-        scope={scopeKey}
-        retained={retained}
-        headDropped={dropped > 0}
-        intake={intake.length > 0}
-        selection={timeRange}
-        viewportFrom={viewportFrom}
-        viewportTo={viewportTo}
-        onJump={handleJumpToTime}
-        onSelect={handleSelectRange}
-        onClearSelection={handleClearRange}
-      />
+          to point the query. Hidden outright, it leaves nothing behind —
+          the ⋯ menu is where it went and where it comes back from. */}
+      {stripMode !== "off" && (
+        <LogDensityStrip
+          logs={scoped}
+          scope={scopeKey}
+          retained={retained}
+          headDropped={dropped > 0}
+          intake={intake.length > 0}
+          selection={timeRange}
+          viewportFrom={viewportFrom}
+          viewportTo={viewportTo}
+          onJump={handleJumpToTime}
+          onSelect={handleSelectRange}
+          onClearSelection={handleClearRange}
+          mode={stripMode}
+          onModeChange={setStripMode}
+        />
+      )}
 
       <LogToolbar
         terms={terms}
@@ -606,6 +620,8 @@ export function LogViewer({
         onCopyLogs={handleCopyLogs}
         onDownloadLogs={handleDownloadLogs}
         onToggleStreaming={togglePause}
+        stripMode={stripMode}
+        onStripModeChange={setStripMode}
       />
 
       <LogLegend

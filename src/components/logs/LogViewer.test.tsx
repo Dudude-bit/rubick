@@ -32,6 +32,7 @@ vi.mock("@/lib/commands", () => ({
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import type { StreamLogConfig } from "@/generated/types";
+import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { LogViewer } from "./LogViewer";
 
 const props = {
@@ -271,6 +272,9 @@ describe("the density strip", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];
     vi.clearAllMocks();
+    // The mode is a remembered preference, so one test's choice would
+    // otherwise be the next one's starting state.
+    useDisplaySettingsStore.setState({ densityStrip: "full" });
   });
 
   async function renderWithShape() {
@@ -320,6 +324,58 @@ describe("the density strip", () => {
           /errors/.test(slice.getAttribute("aria-label") ?? "")
         ).length
     ).toBeGreaterThan(0);
+  });
+
+  it("keeps the map when it is collapsed to a band", async () => {
+    const user = userEvent.setup();
+    const strip = await renderWithShape();
+    const slices = within(strip).getAllByRole("option").length;
+
+    await user.click(
+      screen.getByRole("button", { name: /Collapse the density strip/ })
+    );
+
+    // Same listbox, same slices, same spoken summary: the collapse takes
+    // away the chart and nothing that navigates.
+    expect(screen.getByTestId("log-density-strip")).toHaveAttribute(
+      "data-mode",
+      "band"
+    );
+    const banded = screen.getByRole("listbox");
+    expect(within(banded).getAllByRole("option")).toHaveLength(slices);
+    expect(
+      screen.getByText(/Left and right arrows move between slices/)
+    ).toBeInTheDocument();
+    // What it does give up: the chart's own words.
+    expect(screen.queryByText(/click to jump · drag to filter/)).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: /Expand the density strip/ })
+    );
+    expect(screen.getByTestId("log-density-strip")).toHaveAttribute(
+      "data-mode",
+      "full"
+    );
+  });
+
+  it("hides the strip only from the menu, which is also the way back", async () => {
+    const user = userEvent.setup();
+    await renderWithShape();
+
+    await user.click(screen.getByRole("button", { name: "More log actions" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Hidden" }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("log-density-strip")).toBeNull()
+    );
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "More log actions" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Full" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("log-density-strip")).toBeInTheDocument()
+    );
   });
 
   it("says so instead of drawing one bar over everything", async () => {

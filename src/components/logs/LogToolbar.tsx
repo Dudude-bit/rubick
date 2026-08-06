@@ -10,8 +10,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { DensityStripMode } from "@/stores/displaySettingsStore";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ArrowDown,
@@ -25,6 +30,28 @@ import type { FieldIndex } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { formatCount, type QueryTerm, type ViewMode } from "./types";
+
+const STRIP_MODES: Array<{
+  mode: DensityStripMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    mode: "full",
+    label: "Full",
+    hint: "Volume over time, with the clock and the error counts",
+  },
+  {
+    mode: "band",
+    label: "Band",
+    hint: "A few pixels: where the errors are, still clickable, still marking the viewport",
+  },
+  {
+    mode: "off",
+    label: "Hidden",
+    hint: "No map at all — clicking to jump and dragging a time range go with it",
+  },
+];
 
 const VIEW_MODES: Array<{ mode: ViewMode; label: string; hint: string }> = [
   {
@@ -69,6 +96,9 @@ interface LogToolbarProps {
   onCopyLogs: () => void;
   onDownloadLogs: () => void;
   onToggleStreaming: () => void;
+  /** How much of the density strip is drawn, hidden included. */
+  stripMode: DensityStripMode;
+  onStripModeChange: (mode: DensityStripMode) => void;
 }
 
 /**
@@ -107,6 +137,8 @@ export function LogToolbar({
   onCopyLogs,
   onDownloadLogs,
   onToggleStreaming,
+  stripMode,
+  onStripModeChange,
 }: LogToolbarProps) {
   return (
     // Wraps because the same toolbar sits in the peek panel, which the
@@ -250,6 +282,24 @@ export function LogToolbar({
               <Trash2 aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
               Clear what is buffered
             </DropdownMenuItem>
+
+            {/* Hiding the strip outright is only reachable from here, and so
+                is undoing it: a control that removes itself would leave the
+                reader nothing to click to get the map back. */}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Density strip</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={stripMode}
+              onValueChange={(value) =>
+                onStripModeChange(value as DensityStripMode)
+              }
+            >
+              {STRIP_MODES.map(({ mode, label, hint }) => (
+                <DropdownMenuRadioItem key={mode} value={mode} title={hint}>
+                  {label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

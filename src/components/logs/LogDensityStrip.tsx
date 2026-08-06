@@ -7,7 +7,11 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+import type { DensityStripMode } from "@/stores/displaySettingsStore";
 
 import {
   advanceDensity,
@@ -35,6 +39,14 @@ import { formatCount, formatSpan, type StreamedLogLine } from "./types";
  * The two-way tie to the viewport is the part that makes it a map. A bar
  * chart above a log is decoration; a bar chart that says where you are
  * and takes you somewhere is navigation.
+ *
+ * Not everyone wants a chart over their log, so it collapses — but to a
+ * band rather than to nothing, because what a reader gives up by hiding
+ * this is the navigation, and the navigation survives at nine pixels. In
+ * "band" the height stops meaning volume and starts meaning severity, and
+ * every other tie holds: the slices are the same slices, the viewport rail
+ * still tracks, a click still jumps, a drag still bounds the query, the
+ * keys still work and the spoken summary is word for word the same one.
  */
 
 /** Bar area. Tall enough for a burst to read, short enough not to be a chart. */
@@ -62,6 +74,37 @@ const DEFAULT_BUDGET = 96;
 
 /** Bursts spelled out for a screen reader; past this it is a list, not a summary. */
 const SPOKEN_BURSTS = 5;
+
+/**
+ * Every row the strip is built from, in pixels.
+ *
+ * Spelled out because the collapse animates between two heights and both
+ * have to be known before either is rendered — a measured height would
+ * mean a first frame at the wrong size on every mount. The text rows carry
+ * a matching `leading-*` so the constant is the height, not a guess at it.
+ */
+const HEAD_PX = 16;
+const AXIS_PX = 14;
+const AXIS_GAP_PX = 2;
+const HAIRLINE_PX = 1;
+const BARS_PX = RULER_PX + MARK_PX + TRACK_PX + HAIRLINE_PX;
+const FULL_PX = 6 + HEAD_PX + BARS_PX + AXIS_GAP_PX + AXIS_PX + 4 + HAIRLINE_PX;
+
+/**
+ * The band. An error slice is the full six pixels, a warning four, an
+ * ordinary slice two — so where the errors are is carried by shape as well
+ * as by hue, the one promise the full strip makes that a few pixels could
+ * still have broken.
+ */
+const BAND_ERR_PX = 6;
+const BAND_WARN_PX = 4;
+const BAND_LINE_PX = 2;
+const BAND_PAD_PX = 3;
+const BAND_BARS_PX = RULER_PX + BAND_ERR_PX;
+/** Set by the toggle beside the bars, not by the bars: nine pixels is a
+ *  ruler, and a nine pixel button is a dare. */
+const BAND_ROW_PX = 12;
+const BAND_PX = BAND_PAD_PX * 2 + BAND_ROW_PX + HAIRLINE_PX;
 
 interface LogDensityStripProps {
   /**
@@ -93,6 +136,9 @@ interface LogDensityStripProps {
   onJump: (epoch: number) => void;
   onSelect: (from: number, to: number) => void;
   onClearSelection: () => void;
+  /** Drawn in full, or as the band. "off" never mounts this. */
+  mode: Exclude<DensityStripMode, "off">;
+  onModeChange: (mode: DensityStripMode) => void;
 }
 
 export function LogDensityStrip({
@@ -107,6 +153,8 @@ export function LogDensityStrip({
   onJump,
   onSelect,
   onClearSelection,
+  mode,
+  onModeChange,
 }: LogDensityStripProps) {
   const id = useId();
   const barsRef = useRef<HTMLDivElement>(null);
@@ -293,47 +341,106 @@ export function LogDensityStrip({
     [density, headDropped, intake]
   );
 
-  if (retained === 0) {
-    return (
-      <Frame>
-        <Head left="Density over time" intake={intake} />
-        <Placeholder>
-          Nothing to map yet — the strip fills in as lines arrive.
-        </Placeholder>
-      </Frame>
-    );
-  }
+  const band = mode === "band";
+  const toggle = <StripToggle mode={mode} onModeChange={onModeChange} />;
 
-  if (count === 0) {
-    return (
-      <Frame>
-        <Head left="Density over time" intake={intake} />
-        <Placeholder>
-          No line in the buffer matches the query, so there is no shape to show.
-        </Placeholder>
-      </Frame>
-    );
-  }
+  // Why there is no map, in one sentence — shown in place of the bars when
+  // the strip is open and spoken in both states.
+  const quiet =
+    retained === 0
+      ? "Nothing to map yet — the strip fills in as lines arrive."
+      : count === 0
+        ? "No line in the buffer matches the query, so there is no shape to show."
+        : density.lines === 1
+          ? `One line so far, at ${sliceClock(density.from)} — nothing to map until there is a stretch of time to map.`
+          : `All ${formatCount(density.lines)} lines landed within ${formatSpan(spanMs)} of each other — too short a stretch to slice.`;
 
   // One bar over everything is not a map, and drawing it anyway would be
   // a chart pretending to be one.
-  if (count < MIN_USEFUL_SLICES) {
+  const hasShape = retained > 0 && count >= MIN_USEFUL_SLICES;
+
+  // Built once for both shapes, handlers and all: the band is this listbox
+  // at another height, not a second control that happens to look like it.
+  const bars = hasShape ? (
+    <div
+      ref={barsRef}
+      role="listbox"
+      tabIndex={0}
+      aria-label="Log density over time"
+      aria-activedescendant={focused ? `${id}-${active}` : undefined}
+      aria-describedby={`${id}-summary`}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      data-testid="log-density-bars"
+      // The baseline is what makes an idle stretch read as silence
+      // rather than as a strip that failed to draw.
+      className={`flex flex-1 cursor-crosshair select-none items-stretch gap-px outline-none focus-visible:ring-1 focus-visible:ring-fg-fnt ${
+        band ? "" : "border-b border-hair"
+      }`}
+      style={{ height: band ? BAND_BARS_PX : BARS_PX }}
+    >
+      {buckets.map((bucket, index) => (
+        <Slice
+          key={bucket.start}
+          id={`${id}-${index}`}
+          bucket={bucket}
+          step={step}
+          peak={density.peak}
+          band={band}
+          inView={inView !== null && index >= inView.lo && index <= inView.hi}
+          chosen={chosen !== null && index >= chosen.lo && index <= chosen.hi}
+          dimmed={chosen !== null && (index < chosen.lo || index > chosen.hi)}
+          cursor={focused && index === active}
+        />
+      ))}
+    </div>
+  ) : null;
+
+  if (band) {
     return (
-      <Frame>
-        <Head left="Density over time" intake={intake} />
-        <Placeholder>
-          {density.lines === 1 ? (
-            <>
-              One line so far, at {sliceClock(density.from)} — nothing to map
-              until there is a stretch of time to map.
-            </>
-          ) : (
-            <>
-              All {formatCount(density.lines)} lines landed within{" "}
-              {formatSpan(spanMs)} of each other — too short a stretch to slice.
-            </>
+      <Frame mode={mode}>
+        <div
+          className="flex items-center gap-1.5"
+          style={{ height: BAND_ROW_PX }}
+        >
+          {/* The one thing the band may not drop with the header: a map
+              that has quietly stopped covering the log. */}
+          {intake && (
+            <span
+              className="flex-none text-[9px] leading-none text-info"
+              title="Intake discarded the rest before they reached the buffer, so they are not on this band."
+            >
+              <span aria-hidden="true">⇣</span>
+              <span className="sr-only">maps kept lines only</span>
+            </span>
           )}
-        </Placeholder>
+          {bars ?? (
+            <span
+              title={quiet}
+              className="flex flex-1 items-end"
+              style={{ height: BAND_BARS_PX }}
+            >
+              <span aria-hidden="true" className="h-px w-full bg-hair" />
+            </span>
+          )}
+          {toggle}
+        </div>
+        <p id={`${id}-summary`} className="sr-only">
+          {hasShape ? summary : quiet}
+        </p>
+      </Frame>
+    );
+  }
+
+  if (!hasShape) {
+    return (
+      <Frame mode={mode}>
+        <Head left="Density over time" intake={intake} toggle={toggle} />
+        <Placeholder>{quiet}</Placeholder>
       </Frame>
     );
   }
@@ -341,50 +448,22 @@ export function LogDensityStrip({
   const mid = buckets[Math.floor((count - 1) / 2)].start;
 
   return (
-    <Frame>
+    <Frame mode={mode}>
       <Head
         left={`${formatSpan(spanMs)} in ${stepLabel(step)} slices`}
         errors={density.errors}
         bursts={density.errorSlices}
         warnings={density.warnings}
         intake={intake}
+        toggle={toggle}
       />
 
-      <div
-        ref={barsRef}
-        role="listbox"
-        tabIndex={0}
-        aria-label="Log density over time"
-        aria-activedescendant={focused ? `${id}-${active}` : undefined}
-        aria-describedby={`${id}-summary`}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onKeyDown={handleKeyDown}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        data-testid="log-density-bars"
-        // The baseline is what makes an idle stretch read as silence
-        // rather than as a strip that failed to draw.
-        className="flex cursor-crosshair select-none items-stretch gap-px border-b border-hair outline-none focus-visible:ring-1 focus-visible:ring-fg-fnt"
-        style={{ height: RULER_PX + MARK_PX + TRACK_PX + 1 }}
-      >
-        {buckets.map((bucket, index) => (
-          <Slice
-            key={bucket.start}
-            id={`${id}-${index}`}
-            bucket={bucket}
-            step={step}
-            peak={density.peak}
-            inView={inView !== null && index >= inView.lo && index <= inView.hi}
-            chosen={chosen !== null && index >= chosen.lo && index <= chosen.hi}
-            dimmed={chosen !== null && (index < chosen.lo || index > chosen.hi)}
-            cursor={focused && index === active}
-          />
-        ))}
-      </div>
+      <div className="flex">{bars}</div>
 
-      <div className="mt-0.5 flex justify-between text-[10px] text-fg-fnt">
+      <div
+        className="mt-0.5 flex items-center justify-between text-[10px] leading-[14px] text-fg-fnt"
+        style={{ height: AXIS_PX }}
+      >
         <span
           title={
             headDropped
@@ -410,6 +489,46 @@ export function LogDensityStrip({
 }
 
 /**
+ * The way in and out of the band, in the one place a reader is already
+ * looking when they decide the chart is in the way.
+ *
+ * Full hiding is not here: it belongs in the ⋯ menu, because a control
+ * that removes itself leaves nothing behind to bring it back.
+ */
+function StripToggle({
+  mode,
+  onModeChange,
+}: {
+  mode: Exclude<DensityStripMode, "off">;
+  onModeChange: (mode: DensityStripMode) => void;
+}) {
+  const band = mode === "band";
+  const label = band
+    ? "Expand the density strip"
+    : "Collapse the density strip to a band";
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-expanded={!band}
+      onClick={() => onModeChange(band ? "full" : "band")}
+      // Taller than the band it sits in, into the padding on either side:
+      // the row is a ruler, and a nine pixel hit target is not a control.
+      className={`flex w-5 flex-none items-center justify-center rounded-[2px] text-fg-fnt hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg-fnt ${
+        band ? "-my-[3px] h-[18px]" : "h-4"
+      }`}
+    >
+      {band ? (
+        <ChevronDown aria-hidden="true" className="h-3 w-3" />
+      ) : (
+        <ChevronUp aria-hidden="true" className="h-3 w-3" />
+      )}
+    </button>
+  );
+}
+
+/**
  * One slice. Volume as height against the tallest slice in view, with the
  * two levels worth a colour stacked on top of it — an error burst is
  * three pixels of red at minimum however many quiet lines it is buried
@@ -420,6 +539,7 @@ function Slice({
   bucket,
   step,
   peak,
+  band,
   inView,
   chosen,
   dimmed,
@@ -429,6 +549,8 @@ function Slice({
   bucket: DensityBucket;
   step: number;
   peak: number;
+  /** Collapsed: severity as height, and no room for volume. */
+  band: boolean;
   inView: boolean;
   chosen: boolean;
   dimmed: boolean;
@@ -469,6 +591,48 @@ function Slice({
     .filter(Boolean)
     .join(" · ");
 
+  const chrome = `flex min-w-0 flex-1 flex-col rounded-[1px] ${
+    chosen ? "bg-sel" : "hover:bg-hover"
+  } ${dimmed ? "opacity-40" : ""} ${cursor ? "ring-1 ring-inset ring-fg" : ""}`;
+
+  if (band) {
+    const level =
+      bucket.err > 0
+        ? { px: BAND_ERR_PX, tone: "bg-err" }
+        : bucket.warn > 0
+          ? { px: BAND_WARN_PX, tone: "bg-warn" }
+          : bucket.total > 0
+            ? { px: BAND_LINE_PX, tone: "bg-info/40" }
+            : null;
+    return (
+      <div
+        id={id}
+        role="option"
+        aria-selected={chosen}
+        aria-label={label}
+        title={label}
+        className={chrome}
+      >
+        <span
+          aria-hidden="true"
+          className={`block w-full transition-none ${inView ? "bg-fg" : ""}`}
+          style={{ height: RULER_PX }}
+        />
+        <span
+          aria-hidden="true"
+          className="flex flex-1 flex-col justify-end overflow-hidden"
+        >
+          {level && (
+            <span
+              className={`block w-full transition-none ${level.tone}`}
+              style={{ height: level.px }}
+            />
+          )}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       id={id}
@@ -476,11 +640,7 @@ function Slice({
       aria-selected={chosen}
       aria-label={label}
       title={label}
-      className={`flex min-w-0 flex-1 flex-col rounded-[1px] ${
-        chosen ? "bg-sel" : "hover:bg-hover"
-      } ${dimmed ? "opacity-40" : ""} ${
-        cursor ? "ring-1 ring-inset ring-fg" : ""
-      }`}
+      className={chrome}
     >
       {/* Where the reader is. A rail rather than an outline because the
           viewport covers several slices at once and a row of outlines
@@ -525,9 +685,30 @@ function Slice({
   );
 }
 
-function Frame({ children }: { children: React.ReactNode }) {
+/**
+ * The strip's outline, at whichever of its two heights.
+ *
+ * Both are constants, so the collapse is one CSS transition on `height`
+ * and the list below it slides rather than jumps. The app-wide
+ * reduced-motion rule already flattens it; the variant says so here too.
+ */
+function Frame({
+  mode,
+  children,
+}: {
+  mode: Exclude<DensityStripMode, "off">;
+  children: React.ReactNode;
+}) {
+  const band = mode === "band";
   return (
-    <div className="flex-none border-b border-hair px-2.5 pb-1 pt-1.5">
+    <div
+      data-testid="log-density-strip"
+      data-mode={mode}
+      style={{ height: band ? BAND_PX : FULL_PX }}
+      className={`flex-none overflow-hidden border-b border-hair px-2.5 transition-[height] duration-200 ease-out motion-reduce:transition-none ${
+        band ? "py-[3px]" : "pb-1 pt-1.5"
+      }`}
+    >
       {children}
     </div>
   );
@@ -543,15 +724,21 @@ function Head({
   bursts = 0,
   warnings = 0,
   intake = false,
+  toggle,
 }: {
   left: string;
   errors?: number;
   bursts?: number;
   warnings?: number;
   intake?: boolean;
+  /** The way out of the chart, where the chart says what it is. */
+  toggle: ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-2 text-[11px] text-fg-fnt">
+    <div
+      className="flex items-center gap-2 text-[11px] leading-4 text-fg-fnt"
+      style={{ height: HEAD_PX }}
+    >
       <span className="text-fg-mut">{left}</span>
       {errors > 0 && (
         <span className="text-err">
@@ -576,6 +763,7 @@ function Head({
       <span className={`${intake ? "" : "ml-auto "}min-w-0 truncate`}>
         click to jump · drag to filter
       </span>
+      {toggle}
     </div>
   );
 }
@@ -586,11 +774,15 @@ function Placeholder({ children }: { children: React.ReactNode }) {
     <>
       <div
         className="flex items-center justify-center text-[11px] text-fg-fnt"
-        style={{ height: RULER_PX + MARK_PX + TRACK_PX + 1 }}
+        style={{ height: BARS_PX }}
       >
         {children}
       </div>
-      <div aria-hidden="true" className="mt-0.5 text-[10px] leading-[normal]">
+      <div
+        aria-hidden="true"
+        className="mt-0.5 text-[10px] leading-[14px]"
+        style={{ height: AXIS_PX }}
+      >
         &nbsp;
       </div>
     </>

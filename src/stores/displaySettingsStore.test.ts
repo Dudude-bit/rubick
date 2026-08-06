@@ -73,6 +73,16 @@ describe("displaySettingsStore migration", () => {
     expect(migrate({ peekWidth: 900 }, 3).peekWidth).toBe(900);
   });
 
+  it("gives every install written before version 4 the full density strip", () => {
+    expect(migrate({ peekWidth: 900 }, 3).densityStrip).toBe("full");
+    expect(migrate(undefined, 0).densityStrip).toBe("full");
+  });
+
+  it("keeps a density strip mode the user already chose", () => {
+    expect(migrate({ densityStrip: "band" }, 4).densityStrip).toBe("band");
+    expect(migrate({ densityStrip: "off" }, 4).densityStrip).toBe("off");
+  });
+
   it("pulls an out-of-range stored width back into bounds", () => {
     expect(migrate({ peekWidth: 40 }, 3).peekWidth).toBe(PEEK_WIDTH_MIN);
     expect(migrate({ peekWidth: 4000 }, 3).peekWidth).toBe(PEEK_WIDTH_MAX);

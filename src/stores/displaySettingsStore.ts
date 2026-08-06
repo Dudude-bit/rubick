@@ -5,6 +5,21 @@ export type TableDensity = "compact" | "comfortable";
 export type ResourceColouring = "full" | "minimal" | "off";
 
 /**
+ * How much of the log's density strip is drawn.
+ *
+ * "full" is the map: volume as height, the axis, the counts. "band" keeps
+ * the navigation and throws away the chart — a few pixels that still say
+ * where the errors are, still jump on click and still mark the viewport.
+ * "off" is for the reader who wants neither, and costs them the map.
+ *
+ * One preference for every surface the viewer is mounted on, the peek panel
+ * included: "do I want a chart above my log" is a fact about the reader, not
+ * about the pane, and splitting it per surface would mean setting it twice
+ * to be rid of it once.
+ */
+export type DensityStripMode = "full" | "band" | "off";
+
+/**
  * Bounds for the peek panel's width.
  *
  * The floor is the narrowest a two-column key/value row stays readable at;
@@ -23,6 +38,8 @@ export interface DisplaySettingsState {
   setResourceColouring: (value: ResourceColouring) => void;
   peekWidth: number;
   setPeekWidth: (width: number) => void;
+  densityStrip: DensityStripMode;
+  setDensityStrip: (mode: DensityStripMode) => void;
 }
 
 export const useDisplaySettingsStore = create<DisplaySettingsState>()(
@@ -42,6 +59,8 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
             PEEK_WIDTH_MAX
           ),
         }),
+      densityStrip: "full",
+      setDensityStrip: (mode) => set({ densityStrip: mode }),
     }),
     {
       name: "display-settings",
@@ -50,7 +69,7 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
       // ever picked it — a bare default change would reach nobody. Bumping
       // the version resets density once; the toolbar toggle puts it back
       // for anyone who did want the roomier rows.
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const state = persisted as Partial<DisplaySettingsState> | undefined;
         const withDensity =
@@ -67,6 +86,11 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
           ...withDensity,
           resourceColouring:
             withDensity?.resourceColouring ?? ("full" as ResourceColouring),
+          // Added in version 4, and filled the same way: an install written
+          // before it has no strip mode on disk, and persist rehydrates the
+          // stored payload over the initialiser's default.
+          densityStrip:
+            withDensity?.densityStrip ?? ("full" as DensityStripMode),
           peekWidth:
             typeof storedWidth === "number" && Number.isFinite(storedWidth)
               ? Math.min(Math.max(storedWidth, PEEK_WIDTH_MIN), PEEK_WIDTH_MAX)
