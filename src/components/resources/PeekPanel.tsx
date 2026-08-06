@@ -194,9 +194,6 @@ function PeekContent({
         </TabsList>
 
         {tabs.map((tab) => (
-          // No `flex` on the panel itself: Radix hides the inactive one with
-          // the `hidden` attribute, and a display utility would out-specify
-          // it and leave both panels claiming the same space.
           <TabsContent
             key={tab.id}
             value={tab.id}

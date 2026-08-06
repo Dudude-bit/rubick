@@ -40,7 +40,13 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info",
+      // Radix hides the inactive panel with the `hidden` attribute alone, and
+      // any display utility a caller puts on the panel out-specifies it: every
+      // inactive panel then stays in flow as an empty box carrying its own
+      // margin, and the selected tab is pushed down by the sum of the ones
+      // declared before it. Saying it again as a variant puts the hiding back
+      // out of reach of `flex` and `grid`.
+      "mt-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info data-[state=inactive]:hidden",
       className
     )}
     {...props}

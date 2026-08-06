@@ -355,6 +355,7 @@ export function PodDetail() {
         {
           id: "logs",
           label: "Logs",
+          kind: "surface",
           content: pod ? (
             <div className="h-[70vh] min-h-[400px]">
               <LogViewer

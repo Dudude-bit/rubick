@@ -76,6 +76,17 @@ export interface DetailTab {
   id: string;
   label: string;
   content: ReactNode;
+  /**
+   * What the tab is made of, which is what decides the space above it.
+   *
+   * "sections" is the page rhythm: a stack of blocks with 22px of canvas
+   * between them and 18px under the tab strip. "surface" is one full-height
+   * pane that brings its own chrome — a log viewer, an editor, a terminal —
+   * and the rhythm is wrong for it: the first row of such a pane is a
+   * toolbar, and canvas above a toolbar reads as a hole rather than as
+   * breathing room. Left off, a tab is a stack of sections.
+   */
+  kind?: "sections" | "surface";
 }
 
 interface ResourceDetailLayoutProps {
@@ -182,7 +193,11 @@ export function ResourceDetailLayout({
           <TabsContent
             key={tab.id}
             value={tab.id}
-            className="mt-[18px] flex flex-col gap-[22px]"
+            className={
+              tab.kind === "surface"
+                ? "mt-0"
+                : "mt-[18px] flex flex-col gap-[22px]"
+            }
           >
             {tab.content}
           </TabsContent>
