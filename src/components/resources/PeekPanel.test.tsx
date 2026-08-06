@@ -222,7 +222,11 @@ describe("PeekPanel", () => {
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
     expect(screen.getByText("0 of 1 ready")).toBeInTheDocument();
-    expect(screen.getByText("busybox:1.36")).toBeInTheDocument();
+    // The image is split into repository and tag, so it is matched by the
+    // copy button that carries the whole reference.
+    expect(
+      screen.getByRole("button", { name: "Copy image busybox:1.36" })
+    ).toBeInTheDocument();
     expect(await screen.findByText("BackOff")).toBeInTheDocument();
 
     expect(commands.listEvents).toHaveBeenCalledWith(

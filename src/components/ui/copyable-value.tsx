@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +31,28 @@ export interface CopyableValueProps {
   value: string;
   /** What the button announces, e.g. "Pod IP 10.42.0.6". */
   label?: string;
+  /**
+   * A structured rendering of the same `value` — an image reference split
+   * into registry, repository and tag. What is copied is still `value`.
+   */
+  children?: ReactNode;
+  /**
+   * For a value sitting inside a sentence, where the mark's reserved width is
+   * a hole between two words. It is then drawn only while confirming — and
+   * revealing it on hover instead would make the prose jitter under a pointer
+   * moving down a feed. What marks it at rest is the underline on hover.
+   */
+  quietMark?: boolean;
   className?: string;
 }
 
-export function CopyableValue({ value, label, className }: CopyableValueProps) {
+export function CopyableValue({
+  value,
+  label,
+  children,
+  quietMark,
+  className,
+}: CopyableValueProps) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -66,19 +91,21 @@ export function CopyableValue({ value, label, className }: CopyableValueProps) {
         className
       )}
     >
-      <span className="truncate">{value}</span>
-      <Mark
-        className={cn(
-          "h-2.5 w-2.5 flex-none transition-opacity",
-          // Reserved width either way, so confirming does not shift the text
-          // of every neighbouring row.
-          copied
-            ? "text-ok opacity-100"
-            : "text-fg-fnt opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-        )}
-        aria-hidden="true"
-        data-testid={copied ? "copyable-confirmed" : "copyable-mark"}
-      />
+      <span className="truncate">{children ?? value}</span>
+      {!(quietMark && !copied) && (
+        <Mark
+          className={cn(
+            "h-2.5 w-2.5 flex-none transition-opacity",
+            // Reserved width either way, so confirming does not shift the text
+            // of every neighbouring row.
+            copied
+              ? "text-ok opacity-100"
+              : "text-fg-fnt opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+          )}
+          aria-hidden="true"
+          data-testid={copied ? "copyable-confirmed" : "copyable-mark"}
+        />
+      )}
       <span className="sr-only" role="status">
         {copied ? "Copied" : ""}
       </span>

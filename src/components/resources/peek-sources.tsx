@@ -12,6 +12,7 @@ import {
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue } from "./key-values";
@@ -81,8 +82,7 @@ function images(containers: { name: string; image: string }[]): PeekGroup[] {
       count: containers.length > 1 ? containers.length : undefined,
       items: containers.map((container) => ({
         label: container.name,
-        value: container.image,
-        mono: true,
+        value: <ImageRef image={container.image} />,
       })),
     },
   ];

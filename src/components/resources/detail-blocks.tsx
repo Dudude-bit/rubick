@@ -1,12 +1,15 @@
+import { Fragment } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import { eventReasonMark } from "@/lib/event-reason";
+import { linkifyImages } from "@/lib/image-ref";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { usageRole } from "@/lib/metric-format";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
@@ -452,6 +455,30 @@ export function EventRows({
   );
 }
 
+/**
+ * An event message, with the image references it labels made copyable.
+ *
+ * Only what the message itself calls an image is touched — see
+ * `linkifyImages`. Running an image-shaped pattern over the rest of the
+ * sentence would claim a probe's `10.42.0.6:8080` and a ratio.
+ */
+function EventMessage({ message }: { message: string }) {
+  const segments = linkifyImages(message);
+  if (segments.length === 1 && segments[0].kind === "text")
+    return <>{message}</>;
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.kind === "text" ? (
+          <Fragment key={index}>{segment.text}</Fragment>
+        ) : (
+          <ImageRef key={index} image={segment.ref.reference} inline />
+        )
+      )}
+    </>
+  );
+}
+
 function EventRow({
   event,
   showObject,
@@ -520,7 +547,7 @@ function EventRow({
         {event.message && (
           <span className="text-fg-fnt">
             {showObject ? " — " : ""}
-            {event.message}
+            <EventMessage message={event.message} />
           </span>
         )}
       </span>

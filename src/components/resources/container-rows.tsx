@@ -4,6 +4,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { ClickablePorts } from "@/components/ui/clickable-port";
 import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
 import { DetailAction } from "@/components/resources/detail-blocks";
+import { ImageRef } from "@/components/resources/ImageRef";
 import { KeyValueList, type KeyValue } from "@/components/resources/detail-kv";
 import { statusRole } from "@/lib/status-role";
 import type {
@@ -91,7 +92,7 @@ export function ContainerRows({
         const state = runtime ? describeState(container.state) : null;
 
         const items: KeyValue[] = [
-          { label: "Image", value: container.image, mono: true },
+          { label: "Image", value: <ImageRef image={container.image} /> },
         ];
 
         if (runtime && state) {
