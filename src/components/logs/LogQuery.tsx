@@ -1,6 +1,11 @@
 import { useCallback, type KeyboardEvent } from "react";
 import { Search, X } from "lucide-react";
-import { parseQueryTerm, termLabel, type QueryTerm } from "./types";
+import {
+  formatTimeRange,
+  parseQueryTerm,
+  termLabel,
+  type QueryTerm,
+} from "./types";
 
 interface LogQueryProps {
   terms: QueryTerm[];
@@ -80,6 +85,11 @@ function Chip({
             ⌕
           </span>
           {term.value}
+        </>
+      ) : term.kind === "time" ? (
+        <>
+          time<span className="text-fg-fnt">=</span>
+          {formatTimeRange(term.from, term.to)}
         </>
       ) : (
         <>

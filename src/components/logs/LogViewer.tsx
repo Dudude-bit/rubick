@@ -15,9 +15,15 @@ import {
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend } from "./LogLegend";
 import { LogList } from "./LogList";
+import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
-import { countCollapsed, expandRuns, groupConsecutive } from "./grouping";
+import {
+  countCollapsed,
+  expandRuns,
+  groupConsecutive,
+  type LogRun,
+} from "./grouping";
 import {
   formatCount,
   logsToText,
@@ -189,6 +195,14 @@ export function LogViewer({
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
   const [autoScroll, setAutoScroll] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  // Where the reader is, in wall clock, so the strip can mark it. Two
+  // numbers rather than an object: React bails out of the re-render when
+  // neither has moved, and this is reported on every scroll and batch.
+  const [viewportFrom, setViewportFrom] = useState(0);
+  const [viewportTo, setViewportTo] = useState(0);
+  const [scrollTarget, setScrollTarget] = useState<{ index: number } | null>(
+    null
+  );
 
   const {
     logs,
@@ -229,12 +243,47 @@ export function LogViewer({
     return text.length > 0 ? text[text.length - 1].value : "";
   }, [terms, draft]);
 
-  const visibleLogs = useMemo(
+  /**
+   * Two filtered views, because the strip and the list are not asking the
+   * same question.
+   *
+   * `scoped` is everything the query allows except the time range;
+   * `visibleLogs` is that narrowed to the range. The strip draws `scoped`
+   * so the map keeps its full extent while a range is selected — filter
+   * the strip by its own selection and dragging out four minutes leaves a
+   * strip of four minutes, with nowhere left to drag back to.
+   */
+  const { scoped, visibleLogs } = useMemo(() => {
+    const time = effectiveTerms.find((term) => term.kind === "time");
+    const rest = time
+      ? effectiveTerms.filter((term) => term.kind !== "time")
+      : effectiveTerms;
+    const scoped = logs.filter(
+      (log) => !hidden.has(log.container) && matchesQuery(log, rest)
+    );
+    return {
+      scoped,
+      visibleLogs: time
+        ? scoped.filter((log) => log.epoch >= time.from && log.epoch <= time.to)
+        : scoped,
+    };
+  }, [logs, hidden, effectiveTerms]);
+
+  const timeRange = useMemo(() => {
+    const term = terms.find((entry) => entry.kind === "time");
+    return term ? { from: term.from, to: term.to } : null;
+  }, [terms]);
+
+  // What the strip's accumulator treats as "the same set, extended".
+  // Anything that reshuffles the filtered array has to appear here or the
+  // histogram would go on adding to slices built from a different query.
+  const scopeKey = useMemo(
     () =>
-      logs.filter(
-        (log) => !hidden.has(log.container) && matchesQuery(log, effectiveTerms)
-      ),
-    [logs, hidden, effectiveTerms]
+      `${namespace}/${podName}|${[...hidden].sort().join(",")}|${effectiveTerms
+        .filter((term) => term.kind !== "time")
+        .map(termLabel)
+        .join(",")}`,
+    [namespace, podName, hidden, effectiveTerms]
   );
 
   // Grouping runs after filtering, so a filter that leaves two repeats
@@ -248,6 +297,41 @@ export function LogViewer({
     [visibleLogs, runs, expandedRuns]
   );
   const collapsedCount = useMemo(() => countCollapsed(runs), [runs]);
+
+  const handleViewportRange = useCallback((from: number, to: number) => {
+    setViewportFrom(from);
+    setViewportTo(to);
+  }, []);
+
+  /**
+   * A slice, clicked. The follow has to come off in the same update — a
+   * list still pinned to the tail would scroll back within the quarter
+   * second, and the click would read as broken rather than as ignored.
+   */
+  const handleJumpToTime = useCallback(
+    (epoch: number) => {
+      if (rows.length === 0) return;
+      setAutoScroll(false);
+      setIsAtBottom(false);
+      setScrollTarget({ index: firstRowAtOrAfter(rows, epoch) });
+    },
+    [rows]
+  );
+
+  // At most one time range at a time, so a second drag replaces the first
+  // rather than intersecting with it — two ranges anded together is a
+  // question nobody asked by dragging.
+  const handleSelectRange = useCallback((from: number, to: number) => {
+    setAutoScroll(false);
+    setTerms((prev) => [
+      ...prev.filter((term) => term.kind !== "time"),
+      { kind: "time", from, to },
+    ]);
+  }, []);
+
+  const handleClearRange = useCallback(() => {
+    setTerms((prev) => prev.filter((term) => term.kind !== "time"));
+  }, []);
 
   const handleToggleRun = useCallback((id: number) => {
     setExpandedRuns((prev) => toggled(prev, id));
@@ -361,6 +445,22 @@ export function LogViewer({
 
   return (
     <div className="flex h-full flex-col">
+      {/* Above the toolbar because it is the first question, not the
+          fourth: the shape of the buffer is what tells the reader where
+          to point the query. */}
+      <LogDensityStrip
+        logs={scoped}
+        scope={scopeKey}
+        retained={retained}
+        headDropped={dropped > 0}
+        selection={timeRange}
+        viewportFrom={viewportFrom}
+        viewportTo={viewportTo}
+        onJump={handleJumpToTime}
+        onSelect={handleSelectRange}
+        onClearSelection={handleClearRange}
+      />
+
       <LogToolbar
         terms={terms}
         draft={draft}
@@ -431,6 +531,8 @@ export function LogViewer({
         onAtBottomChange={setIsAtBottom}
         resetKey={`${namespace}/${podName}`}
         oldestRetainedId={logs[0]?.id}
+        onViewportRangeChange={handleViewportRange}
+        scrollTarget={scrollTarget}
         onFieldClick={handleFieldClick}
         onLevelClick={handleLevelClick}
       >
@@ -566,6 +668,26 @@ function Action({
       {children}
     </button>
   );
+}
+
+/**
+ * The first row at or after an instant.
+ *
+ * Binary search over the rows the list is actually drawing, not over the
+ * buffer: a run of two thousand collapsed repeats is one row, and landing
+ * on the line's index would put the reader thousands of rows past where
+ * they pointed. Rows are ordered by time to within one reorder window,
+ * which is finer than any slice the strip can draw.
+ */
+function firstRowAtOrAfter(rows: LogRun[], epoch: number): number {
+  let low = 0;
+  let high = rows.length - 1;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (rows[mid].tail.epoch < epoch) low = mid + 1;
+    else high = mid;
+  }
+  return low;
 }
 
 /** Add or drop one member, without mutating the set the render read. */

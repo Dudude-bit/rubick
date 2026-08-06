@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -70,6 +71,18 @@ interface LogListProps {
    * this is dead.
    */
   oldestRetainedId: number | undefined;
+  /**
+   * The stretch of wall clock on screen right now, so the density strip
+   * can mark where the reader is. Reported as two numbers rather than a
+   * range object: the parent holds them as state and an unchanged number
+   * costs nothing, where a fresh object would re-render on every batch.
+   */
+  onViewportRangeChange?: (from: number, to: number) => void;
+  /**
+   * A row to scroll to. A new object is a new request — the strip hands
+   * one over on every click, including a second click on the same slice.
+   */
+  scrollTarget?: { index: number } | null;
   onFieldClick: (key: string, value: string) => void;
   onLevelClick: (level: LogLevel) => void;
   /** Shown in place of the list when there is nothing to window. */
@@ -92,12 +105,15 @@ export function LogList({
   onAtBottomChange,
   resetKey,
   oldestRetainedId,
+  onViewportRangeChange,
+  scrollTarget,
   onFieldClick,
   onLevelClick,
   children,
 }: LogListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const [viewportPx, setViewportPx] = useState(0);
 
   // The compiler cannot memoize a virtualizer and so skips whatever component
   // holds one. That skip is the reason this file exists separately from
@@ -183,6 +199,9 @@ export function LogList({
     let width = el.clientWidth;
     let frame = 0;
     const observer = new ResizeObserver(() => {
+      // Height is not a reason to re-measure rows, but it is what decides
+      // which of them are actually on screen — see the viewport range below.
+      setViewportPx(el.clientHeight);
       if (el.clientWidth === width) return;
       width = el.clientWidth;
       // Out of the observer callback for the same reason as above: dropping
@@ -191,6 +210,7 @@ export function LogList({
       frame = requestAnimationFrame(() => virtualizer.measure());
     });
     observer.observe(el);
+    setViewportPx(el.clientHeight);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
@@ -209,6 +229,43 @@ export function LogList({
     onFollowChange(true);
     onAtBottomChange(true);
   }, [resetKey, virtualizer, onAtBottomChange, onFollowChange]);
+
+  /**
+   * Which rows are genuinely on screen, and therefore what stretch of
+   * clock the strip should mark.
+   *
+   * The rendered window is deliberately wider than the viewport — sixteen
+   * rows of overscan at each end — so reporting what is rendered would
+   * mark a slice the reader cannot see. Intersecting against the scroll
+   * offset is the only reading that matches what is in front of them.
+   */
+  const items = virtualizer.getVirtualItems();
+  const scrollOffset = virtualizer.scrollOffset ?? 0;
+  let firstVisible = -1;
+  let lastVisible = -1;
+  for (const item of items) {
+    if (item.end <= scrollOffset || item.start >= scrollOffset + viewportPx) {
+      continue;
+    }
+    if (firstVisible < 0) firstVisible = item.index;
+    lastVisible = item.index;
+  }
+  const viewFrom = firstVisible >= 0 ? rows[firstVisible].head.epoch : 0;
+  const viewTo = lastVisible >= 0 ? rows[lastVisible].tail.epoch : 0;
+
+  useEffect(() => {
+    onViewportRangeChange?.(viewFrom, viewTo);
+  }, [viewFrom, viewTo, onViewportRangeChange]);
+
+  /**
+   * A click on the strip lands here. The follow is already off by the
+   * time this runs — the parent turns it off in the same update — so the
+   * scroll is not undone by the next batch pinning the tail.
+   */
+  useEffect(() => {
+    if (!scrollTarget) return;
+    virtualizer.scrollToIndex(scrollTarget.index, { align: "start" });
+  }, [scrollTarget, virtualizer]);
 
   useEffect(() => {
     const cache = virtualizer.itemSizeCache;
@@ -285,7 +342,7 @@ export function LogList({
             className="relative w-full"
             style={{ height: totalSize }}
           >
-            {virtualizer.getVirtualItems().map((item) => {
+            {items.map((item) => {
               const run = rows[item.index];
               return (
                 <div

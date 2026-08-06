@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 
 // ----- Mocks -----
 
@@ -28,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { LogViewer } from "./LogViewer";
 
 const props = {
@@ -43,7 +44,13 @@ function fireFailure(kind: "gone" | "broken", message: string) {
 }
 
 async function renderStreaming() {
-  render(<LogViewer {...props} />);
+  // The status bar reaches for a Tooltip the moment there is a line to
+  // describe the format of, which the app supplies at the root.
+  render(
+    <TooltipProvider>
+      <LogViewer {...props} />
+    </TooltipProvider>
+  );
   await waitFor(() => {
     expect(listeners["stream-failed"]).toBeDefined();
   });
@@ -128,6 +135,14 @@ describe("LogViewer when a live stream dies", () => {
     });
   });
 
+  it("keeps the density strip out of the way until there is a shape", async () => {
+    await renderStreaming();
+
+    // Not an empty 34px box that reads as a rendering fault.
+    expect(screen.getByText(/Nothing to map yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
   it("names every toolbar control", async () => {
     await renderStreaming();
 
@@ -140,5 +155,102 @@ describe("LogViewer when a live stream dies", () => {
         control.getAttribute("title");
       expect(name, `an unnamed control: ${control.outerHTML}`).toBeTruthy();
     }
+  });
+});
+
+/** One batch, as the backend emits it. Released after the reorder window. */
+function fireBatch(
+  lines: Array<{ at: number; level: string | null; message: string }>
+) {
+  act(() => {
+    listeners["log-batch"]!({
+      payload: {
+        stream_id: "stream-id-1",
+        lines: lines.map(({ at, level, message }) => ({
+          message,
+          timestamp: new Date(at).toISOString(),
+          level,
+          format: "plain",
+          fields: null,
+          raw: message,
+        })),
+      },
+    });
+  });
+}
+
+const START = Date.parse("2026-08-06T12:00:00.000Z");
+
+describe("the density strip", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  async function renderWithShape() {
+    await renderStreaming();
+    // Twenty seconds of quiet with one burst of errors in the middle of it.
+    fireBatch(
+      Array.from({ length: 120 }, (_, i) => ({
+        at: START + i * 167,
+        level: i >= 60 && i < 70 ? "error" : "info",
+        message: `line ${i}`,
+      }))
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("listbox")).toBeInTheDocument()
+    );
+    return screen.getByRole("listbox");
+  }
+
+  it("slices the buffer and says how, in words as well as bars", async () => {
+    const strip = await renderWithShape();
+
+    // 20 seconds of lines, sliced fine enough to be a map: gapless, so
+    // the slice count is the span over the slice and not the batch count.
+    expect(within(strip).getAllByRole("option").length).toBeGreaterThan(3);
+
+    // Bar heights are worth nothing to a screen reader, so the same
+    // findings are stated outright.
+    expect(
+      screen.getByText(/Density of the log over time: \d+ slices of/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Errors in \d+ slice/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Left and right arrows move between slices/)
+    ).toBeInTheDocument();
+  });
+
+  it("never leaves an error visible only as a colour", async () => {
+    const strip = await renderWithShape();
+
+    // In the header, as a count.
+    expect(screen.getByText(/10 errors in \d+ slice/)).toBeInTheDocument();
+    // And on the slice itself, as its accessible name.
+    expect(
+      within(strip)
+        .getAllByRole("option")
+        .filter((slice) =>
+          /errors/.test(slice.getAttribute("aria-label") ?? "")
+        ).length
+    ).toBeGreaterThan(0);
+  });
+
+  it("says so instead of drawing one bar over everything", async () => {
+    await renderStreaming();
+    fireBatch(
+      Array.from({ length: 30 }, (_, i) => ({
+        at: START + i,
+        level: "info",
+        message: `line ${i}`,
+      }))
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/too short a stretch to slice/)
+      ).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 });

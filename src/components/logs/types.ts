@@ -39,7 +39,15 @@ export type StreamedLogLine = LogLine & {
 export type QueryTerm =
   | { kind: "text"; value: string }
   | { kind: "level"; op: "=" | "≥"; value: LogLevel }
-  | { kind: "field"; key: string; op: "=" | "≠"; value: string };
+  | { kind: "field"; key: string; op: "=" | "≠"; value: string }
+  /**
+   * A stretch of wall clock, dragged out of the density strip. It is a
+   * term rather than a mode of the strip so that "the last four minutes"
+   * sits in the toolbar beside `level≥warn`, is visible as something the
+   * reader asked for, and comes off the same way — with its ×. Bounds in
+   * ms since epoch, both inclusive.
+   */
+  | { kind: "time"; from: number; to: number };
 
 export const HIDDEN_FIELD_KEYS = new Set([
   "message",
@@ -213,10 +221,23 @@ export function parseQueryTerm(input: string): QueryTerm | null {
   };
 }
 
+/**
+ * A dragged range as a clock reading. Seconds, because that is the
+ * finest slice the strip can produce, and a range whose ends read the
+ * same would look like a mistake.
+ */
+export function formatTimeRange(from: number, to: number): string {
+  return `${formatTimestamp(new Date(from).toISOString())}–${formatTimestamp(
+    new Date(to).toISOString()
+  )}`;
+}
+
 /** What the chip reads. Also its identity — two equal labels are one term. */
 export function termLabel(term: QueryTerm): string {
   if (term.kind === "text") return term.value;
   if (term.kind === "level") return `level${term.op}${term.value}`;
+  if (term.kind === "time")
+    return `time=${formatTimeRange(term.from, term.to)}`;
   return `${term.key}${term.op}${term.value}`;
 }
 
@@ -233,6 +254,13 @@ function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
     return term.op === "="
       ? level === term.value
       : LEVEL_RANK[level] >= LEVEL_RANK[term.value];
+  }
+  // On `epoch` rather than on the timestamp text: a line the container
+  // wrote without one still has a place on the strip, carried forward
+  // from its stream, and a range that skipped those lines would filter
+  // out exactly the untimestamped burst someone dragged over.
+  if (term.kind === "time") {
+    return log.epoch >= term.from && log.epoch <= term.to;
   }
   // `container` is not a parsed field but it is the one every reader asks
   // about by name, and the legend and the row detail both offer it as one.
