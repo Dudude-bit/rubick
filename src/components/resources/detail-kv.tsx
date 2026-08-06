@@ -1,8 +1,17 @@
 import * as React from "react";
+import { ChevronDown, ChevronRight, Copy } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { useCopyToClipboard } from "@/hooks";
 import { cn } from "@/lib/utils";
-import { TONE_CLASS, type KeyValue, type KeyValueTone } from "./key-values";
+import { DetailAction } from "./detail-blocks";
+import {
+  TONE_CLASS,
+  describeDocument,
+  expandDocument,
+  type KeyValue,
+  type KeyValueTone,
+} from "./key-values";
 
 /**
  * The metadata row every detail page is made of.
@@ -64,6 +73,52 @@ export function KeyValueRow({
   );
 }
 
+/**
+ * A value that is a document, folded.
+ *
+ * `kubectl.kubernetes.io/last-applied-configuration` is on almost every
+ * applied object and is two to twelve wrapped lines of single-line JSON —
+ * the tallest thing on the Overview tab of a page whose actual subject is
+ * elsewhere. It is still real data, so it is never dropped: the row states
+ * what it is holding, one control opens it, and Copy takes the whole value
+ * whether it is open or not. Opened, it borrows the ConfigMap page's answer
+ * to a long value — an indented `pre` behind a rule, capped and scrolling —
+ * because that answer was already right.
+ */
+function FoldedDocument({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = React.useState(false);
+  const copyToClipboard = useCopyToClipboard();
+  const expanded = React.useMemo(() => expandDocument(text), [text]);
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] text-fg-fnt">
+          {describeDocument(text)}
+        </span>
+        <div className="-my-0.5 ml-auto flex items-center gap-1">
+          <DetailAction
+            label={open ? "Hide" : "Show"}
+            icon={open ? ChevronDown : ChevronRight}
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+          />
+          <DetailAction
+            label="Copy"
+            icon={Copy}
+            onClick={() => copyToClipboard(text, `Value of ${label} copied.`)}
+          />
+        </div>
+      </div>
+      {open && (
+        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-[11px] text-fg-mid">
+          {expanded}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export interface KeyValueListProps {
   items: KeyValue[];
   /** Shown in place of the rows when there are none. */
@@ -88,7 +143,14 @@ export function KeyValueList({
           mono={item.mono}
           tone={item.tone}
         >
-          {item.value}
+          {item.document ? (
+            <FoldedDocument
+              label={typeof item.label === "string" ? item.label : "value"}
+              text={item.document}
+            />
+          ) : (
+            item.value
+          )}
         </KeyValueRow>
       ))}
     </dl>

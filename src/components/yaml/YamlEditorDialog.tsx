@@ -15,6 +15,7 @@ import { TextSkeleton } from "@/components/ui/skeleton";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { Spinner } from "@/components/ui/spinner";
+import { DetailAction } from "@/components/resources/detail-blocks";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
 import { AlertTriangle, Play, FileCheck, FileJson } from "lucide-react";
@@ -59,12 +60,7 @@ export function YamlEditorAction({
 
   const label = menuLabel ?? (readOnly ? "View YAML" : "Edit YAML");
 
-  return (
-    <Button variant="outline" size="sm" onClick={handleOpen}>
-      <FileJson className="mr-2 h-4 w-4" />
-      {label}
-    </Button>
-  );
+  return <DetailAction label={label} icon={FileJson} onClick={handleOpen} />;
 }
 
 // DropdownMenuItem-based action for use in action menus
