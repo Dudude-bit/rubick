@@ -4,6 +4,7 @@ import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ACTIVITY_ROW, ActivityEmpty, ActivityGroup } from "./primitives";
 
@@ -22,7 +23,9 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
 
   const handleNavigateToPod = (namespace: string, podName: string) => {
     onClose?.();
-    navigate(`/${ResourceType.Pod}/${namespace}/${podName}`);
+    // `ResourceType.Pod` is the kind, "Pod"; the route is the plural. Building
+    // the path by hand produced `/Pod/ns/name`, which matches nothing.
+    navigate(getResourceDetailUrl(ResourceType.Pod, podName, namespace));
   };
 
   if (!currentContext) {
