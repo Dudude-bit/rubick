@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 // ----- Mocks -----
 
@@ -29,6 +30,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { commands } from "@/lib/commands";
+import type { StreamLogConfig } from "@/generated/types";
 import { LogViewer } from "./LogViewer";
 
 const props = {
@@ -180,6 +183,89 @@ function fireBatch(
 }
 
 const START = Date.parse("2026-08-06T12:00:00.000Z");
+
+describe("a chip promoted to intake", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  async function withChips(...typed: string[]) {
+    await renderStreaming();
+    fireBatch(
+      Array.from({ length: 40 }, (_, i) => ({
+        at: START + i * 100,
+        level: "warn",
+        message: `line ${i}`,
+      }))
+    );
+    const input = screen.getByLabelText("Filter the log");
+    const user = userEvent.setup();
+    for (const term of typed) {
+      await user.type(input, `${term}{Enter}`);
+    }
+    return user;
+  }
+
+  /** What the status bar says the buffer holds. */
+  const kept = () =>
+    screen.getByText(/^of .* kept$/).parentElement?.textContent ?? "";
+
+  const configs = () =>
+    vi
+      .mocked(commands.streamPodLogs)
+      .mock.calls.map(([config]) => config as StreamLogConfig);
+
+  it("restarts the stream with the term, and keeps every line it holds", async () => {
+    const user = await withChips("level>=warn");
+
+    await waitFor(() => expect(kept()).toMatch(/^40/));
+    expect(configs()).toHaveLength(1);
+    expect(configs()[0].intake).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Keep only lines matching level≥warn/,
+      })
+    );
+
+    await waitFor(() => expect(configs()).toHaveLength(2), { timeout: 3000 });
+    const restarted = configs()[1];
+    expect(restarted.intake).toEqual([
+      { kind: "level", op: "≥", value: "warn" },
+    ]);
+    // Nothing is thrown away by promoting, so nothing is asked for again
+    // either: a backfill would hand back the tail the buffer still holds.
+    expect(restarted.tailLines).toBe(0);
+    expect(kept(), "the buffer is not cleared by promoting").toMatch(/^40/);
+  });
+
+  it("makes three flips one restart", async () => {
+    const user = await withChips("level>=warn", "boom");
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Keep only lines matching level≥warn/,
+      })
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Keep only lines matching boom/ })
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: /Stop discarding lines that do not match boom/,
+      })
+    );
+
+    await waitFor(() => expect(configs()).toHaveLength(2), { timeout: 3000 });
+    expect(configs()[1].intake).toEqual([
+      { kind: "level", op: "≥", value: "warn" },
+    ]);
+    // And no fourth: the settle window closed once.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(configs()).toHaveLength(2);
+  });
+});
 
 describe("the density strip", () => {
   beforeEach(() => {

@@ -8,6 +8,8 @@ import {
 import {
   FORMAT_DESCRIPTIONS,
   formatCount,
+  termLabel,
+  type QueryTerm,
   type StreamedLogLine,
 } from "./types";
 
@@ -26,6 +28,11 @@ interface LogStatusBarProps {
   shownCount: number;
   /** Lines the filter removed and lines standing behind a collapsed run. */
   hiddenCount: number;
+  /** The terms being kept at the source, as the stream is running them. */
+  intake: QueryTerm[];
+  /** The ids bounding the last unfiltered stretch — see the rates below. */
+  intakeFrom: number;
+  unfilteredFrom: number;
   isStreaming: boolean;
 }
 
@@ -43,11 +50,39 @@ export function LogStatusBar({
   limit,
   shownCount,
   hiddenCount,
+  intake,
+  intakeFrom,
+  unfilteredFrom,
   isStreaming,
 }: LogStatusBarProps) {
   const formatInfo = useMemo(() => describeFormat(logs), [logs]);
   const rate = useMemo(() => measureRate(logs), [logs]);
   const fill = limit > 0 ? Math.min(100, (retained / limit) * 100) : 0;
+
+  const intakeKey = intake.map(termLabel).join(" and ");
+
+  /**
+   * Both sides of the discard, read off the one buffer.
+   *
+   * Lines intake rejects are dropped in Rust and never reach this
+   * process, so the arriving rate cannot be measured while intake is on.
+   * It does not have to be: the lines between `unfilteredFrom` and
+   * `intakeFrom` arrived while nothing was being discarded and are
+   * still here, so they are the evidence for the full rate. Above
+   * `intakeFrom` are the kept ones. A sample straddling the two would report the
+   * old rate for as long as it took to refill, which is the one reading
+   * that would make the discard look like it never happened.
+   */
+  const { kept, arriving } = useMemo(
+    () =>
+      intakeKey === ""
+        ? { kept: null, arriving: null }
+        : {
+            kept: measureRate(logs, intakeFrom),
+            arriving: measureRate(logs, unfilteredFrom, intakeFrom - 1),
+          },
+    [intakeKey, logs, intakeFrom, unfilteredFrom]
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-[11px] text-fg-mut">
@@ -73,10 +108,37 @@ export function LogStatusBar({
           <TooltipTrigger asChild>
             <span className="cursor-help whitespace-nowrap text-fg-fnt">
               {formatInfo.label}
-              {rate !== null && ` · ${formatRate(rate)} lines/s`}
+              {/* Under intake this rate would be the kept one, said
+                  twice; the segment beside it says both instead. */}
+              {intakeKey === "" &&
+                rate !== null &&
+                ` · ${formatRate(rate)} lines/s`}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">{formatInfo.description}</TooltipContent>
+        </Tooltip>
+      )}
+
+      {intakeKey !== "" && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help whitespace-nowrap text-info">
+              <span aria-hidden="true">⇣ </span>
+              intake {intakeKey} ·{" "}
+              {kept !== null
+                ? `${formatRate(kept)} kept/s${arriving === null ? "" : ` of ${formatRate(arriving)}/s`}`
+                : arriving !== null
+                  ? `${formatRate(arriving)}/s arriving before it was set`
+                  : "keeping only what matches"}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            Lines that do not match are discarded before they reach the viewer,
+            so they cannot be counted here
+            {arriving !== null &&
+              ` — ${formatRate(arriving)} a second is what the lines still held from before intake were arriving at`}
+            .
+          </TooltipContent>
         </Tooltip>
       )}
       <span className="ml-auto whitespace-nowrap text-fg-fnt">
@@ -141,12 +203,29 @@ function describeFormat(logs: StreamedLogLine[]) {
  * arrives in one batch, and reporting that as the rate would say the pod
  * is writing a hundred thousand lines a second the moment the pane opens.
  */
-function measureRate(logs: StreamedLogLine[]): number | null {
-  if (logs.length < 2) return null;
-  const sample = logs.slice(-RATE_SAMPLE);
-  const span = sample[sample.length - 1].epoch - sample[0].epoch;
+function measureRate(
+  logs: StreamedLogLine[],
+  /** Ids to measure between, both ends inclusive. See the caller. */
+  fromId = 0,
+  toId = Number.MAX_SAFE_INTEGER
+): number | null {
+  // Ids ascend with arrival, so the window is a slice and finding it is
+  // a walk back from the end rather than a pass over the buffer.
+  let end = logs.length - 1;
+  while (end >= 0 && logs[end].id > toId) end--;
+  if (end < 0) return null;
+  let start = end;
+  while (
+    start > 0 &&
+    logs[start - 1].id >= fromId &&
+    end - start + 1 < RATE_SAMPLE
+  ) {
+    start--;
+  }
+  if (end - start < 1) return null;
+  const span = logs[end].epoch - logs[start].epoch;
   if (span <= 0) return null;
-  return ((sample.length - 1) / span) * 1000;
+  return ((end - start) / span) * 1000;
 }
 
 /**

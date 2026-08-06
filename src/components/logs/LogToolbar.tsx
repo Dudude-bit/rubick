@@ -46,6 +46,9 @@ interface LogToolbarProps {
   onDraftChange: (draft: string) => void;
   onAddTerm: (term: QueryTerm) => void;
   onRemoveTerm: (term: QueryTerm) => void;
+  /** Labels of the terms kept at the source rather than over the buffer. */
+  intake: ReadonlySet<string>;
+  onToggleIntake: (term: QueryTerm) => void;
   /** What the buffer can be filtered by, offered when the query is focused. */
   fields: FieldIndex;
   /** Backfill and retention in one number — see `DEFAULT_LOG_LIMIT`. */
@@ -85,6 +88,8 @@ export function LogToolbar({
   onDraftChange,
   onAddTerm,
   onRemoveTerm,
+  intake,
+  onToggleIntake,
   fields,
   limit,
   onLimitChange,
@@ -118,6 +123,8 @@ export function LogToolbar({
         onDraftChange={onDraftChange}
         onAddTerm={onAddTerm}
         onRemoveTerm={onRemoveTerm}
+        intake={intake}
+        onToggleIntake={onToggleIntake}
         fields={fields}
       />
 

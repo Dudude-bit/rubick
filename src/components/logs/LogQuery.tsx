@@ -8,7 +8,13 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { ChevronRight, Search, X } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ChevronRight,
+  Search,
+  X,
+} from "lucide-react";
 import {
   Popover,
   PopoverAnchor,
@@ -22,6 +28,7 @@ import {
   type FieldSuggestion,
 } from "./hooks/log-buffer";
 import {
+  canBeIntake,
   fieldTerm,
   formatCount,
   formatTimeRange,
@@ -51,6 +58,9 @@ interface LogQueryProps {
   onDraftChange: (draft: string) => void;
   onAddTerm: (term: QueryTerm) => void;
   onRemoveTerm: (term: QueryTerm) => void;
+  /** Labels of the terms currently kept at the source. See `Chip`. */
+  intake: ReadonlySet<string>;
+  onToggleIntake: (term: QueryTerm) => void;
   /** Counted as the buffer filled — see `FieldIndex`. */
   fields: FieldIndex;
 }
@@ -77,6 +87,8 @@ export function LogQuery({
   onDraftChange,
   onAddTerm,
   onRemoveTerm,
+  intake,
+  onToggleIntake,
   fields,
 }: LogQueryProps) {
   const [open, setOpen] = useState(false);
@@ -261,7 +273,13 @@ export function LogQuery({
             className="h-3.5 w-3.5 shrink-0 text-fg-fnt"
           />
           {terms.map((term) => (
-            <Chip key={termLabel(term)} term={term} onRemove={onRemoveTerm} />
+            <Chip
+              key={termLabel(term)}
+              term={term}
+              intake={intake.has(termLabel(term))}
+              onToggleIntake={onToggleIntake}
+              onRemove={onRemoveTerm}
+            />
           ))}
           {/* The chosen key, standing where a chip would, so the input is
               never asking for a value without saying whose. */}
@@ -449,39 +467,111 @@ function Hint({
   );
 }
 
+/**
+ * One clause, in one of its two modes.
+ *
+ * Every term arrives as a query: evaluated over the buffer, instant,
+ * reversible, costing nothing. The second button promotes that one term
+ * to intake, where it is evaluated in Rust before the line is kept — the
+ * only way to survive a pod that writes faster than the buffer can hold.
+ * Both modes filter what is on screen, and by the same evaluator on both
+ * sides (see `shared/log-query-conformance.json`), so the toggle changes
+ * what is *kept* and never what is *shown*.
+ *
+ * Intake takes the informational hue and an inset edge, as in the mock.
+ * Colour cannot be the only difference between a chip that throws data
+ * away and one that does not, so it also carries the ⇣ mark the strip
+ * and the status bar use for the same thing, and its toggle is a real
+ * pressed state with a name that says which direction it goes.
+ */
 function Chip({
   term,
+  intake,
+  onToggleIntake,
   onRemove,
 }: {
   term: QueryTerm;
+  intake: boolean;
+  onToggleIntake: (term: QueryTerm) => void;
   onRemove: (term: QueryTerm) => void;
 }) {
+  const label = termLabel(term);
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-sel px-1.5 font-mono text-[11px] leading-[18px] text-fg">
-      {term.kind === "text" ? (
-        <>
-          <span aria-hidden="true" className="text-fg-fnt">
-            ⌕
-          </span>
-          {term.value}
-        </>
-      ) : term.kind === "time" ? (
-        <>
-          time<span className="text-fg-fnt">=</span>
-          {formatTimeRange(term.from, term.to)}
-        </>
-      ) : (
-        <>
-          {term.kind === "level" ? "level" : term.key}
-          <span className="text-fg-fnt">{term.op}</span>
-          {term.value}
-        </>
+    <span
+      className={`inline-flex shrink-0 items-center rounded font-mono text-[11px] leading-[18px] ${
+        intake
+          ? "bg-info/[0.16] text-info ring-1 ring-inset ring-info/45"
+          : "bg-sel text-fg"
+      }`}
+      // The chip's own name, so the mode is read out with the term rather
+      // than left to the toggle beside it.
+      title={
+        intake
+          ? `${label} — intake: lines that do not match are discarded as they arrive`
+          : canBeIntake(term)
+            ? `${label} — a query over the buffered lines`
+            : `${label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.`
+      }
+    >
+      <span className="flex items-center gap-1 pl-1.5">
+        {intake && <span aria-hidden="true">⇣</span>}
+        {term.kind === "text" ? (
+          <>
+            {!intake && (
+              <span aria-hidden="true" className="text-fg-fnt">
+                ⌕
+              </span>
+            )}
+            {term.value}
+          </>
+        ) : term.kind === "time" ? (
+          <>
+            time<span className="text-fg-fnt">=</span>
+            {formatTimeRange(term.from, term.to)}
+          </>
+        ) : (
+          <>
+            {term.kind === "level" ? "level" : term.key}
+            <span className={intake ? "text-info/70" : "text-fg-fnt"}>
+              {term.op}
+            </span>
+            {term.value}
+          </>
+        )}
+      </span>
+      {canBeIntake(term) && (
+        <button
+          type="button"
+          aria-pressed={intake}
+          aria-label={
+            intake
+              ? `Stop discarding lines that do not match ${label} — new lines are kept from now on, the ones already discarded do not come back`
+              : `Keep only lines matching ${label} — the rest are discarded as they arrive`
+          }
+          title={
+            intake
+              ? `Back to a query. New lines are kept from now on; the ones already discarded do not come back.`
+              : `Keep only ${label}. Lines that do not match are discarded as they arrive, so the buffer holds more of what you asked for.`
+          }
+          onClick={() => onToggleIntake(term)}
+          className={`px-1 ${
+            intake ? "text-info hover:text-fg" : "text-fg-fnt hover:text-info"
+          }`}
+        >
+          {intake ? (
+            <ArrowUpFromLine aria-hidden="true" className="h-3 w-3" />
+          ) : (
+            <ArrowDownToLine aria-hidden="true" className="h-3 w-3" />
+          )}
+        </button>
       )}
       <button
         type="button"
-        title={`Remove ${termLabel(term)}`}
+        title={`Remove ${label}`}
         onClick={() => onRemove(term)}
-        className="text-fg-fnt hover:text-err"
+        className={`pr-1 ${
+          canBeIntake(term) ? "" : "pl-1"
+        } ${intake ? "text-info/70 hover:text-err" : "text-fg-fnt hover:text-err"}`}
       >
         <X className="h-3 w-3" />
       </button>

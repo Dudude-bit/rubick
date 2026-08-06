@@ -79,6 +79,12 @@ interface LogDensityStripProps {
   retained: number;
   /** The cap has evicted: the left edge is not the start of the log. */
   headDropped: boolean;
+  /**
+   * Intake is set, so the buffer this maps is not everything the
+   * container wrote. A map that quietly stops being a map is the one
+   * thing this exists to avoid, so the header says so.
+   */
+  intake: boolean;
   /** The committed range, so the strip draws what the chip says. */
   selection: { from: number; to: number } | null;
   /** The stretch of clock the list is showing, in ms since epoch. */
@@ -94,6 +100,7 @@ export function LogDensityStrip({
   scope,
   retained,
   headDropped,
+  intake,
   selection,
   viewportFrom,
   viewportTo,
@@ -282,14 +289,14 @@ export function LogDensityStrip({
 
   const spanMs = density.to - density.from;
   const summary = useMemo(
-    () => describe(density, headDropped),
-    [density, headDropped]
+    () => describe(density, headDropped, intake),
+    [density, headDropped, intake]
   );
 
   if (retained === 0) {
     return (
       <Frame>
-        <Head left="Density over time" />
+        <Head left="Density over time" intake={intake} />
         <Placeholder>
           Nothing to map yet — the strip fills in as lines arrive.
         </Placeholder>
@@ -300,7 +307,7 @@ export function LogDensityStrip({
   if (count === 0) {
     return (
       <Frame>
-        <Head left="Density over time" />
+        <Head left="Density over time" intake={intake} />
         <Placeholder>
           No line in the buffer matches the query, so there is no shape to show.
         </Placeholder>
@@ -313,7 +320,7 @@ export function LogDensityStrip({
   if (count < MIN_USEFUL_SLICES) {
     return (
       <Frame>
-        <Head left="Density over time" />
+        <Head left="Density over time" intake={intake} />
         <Placeholder>
           {density.lines === 1 ? (
             <>
@@ -340,6 +347,7 @@ export function LogDensityStrip({
         errors={density.errors}
         bursts={density.errorSlices}
         warnings={density.warnings}
+        intake={intake}
       />
 
       <div
@@ -534,11 +542,13 @@ function Head({
   errors = 0,
   bursts = 0,
   warnings = 0,
+  intake = false,
 }: {
   left: string;
   errors?: number;
   bursts?: number;
   warnings?: number;
+  intake?: boolean;
 }) {
   return (
     <div className="flex items-baseline gap-2 text-[11px] text-fg-fnt">
@@ -554,7 +564,18 @@ function Head({
           {formatCount(warnings)} {warnings === 1 ? "warning" : "warnings"}
         </span>
       )}
-      <span className="ml-auto truncate">click to jump · drag to filter</span>
+      {/* The one thing a map cannot leave to colour: what it covers. */}
+      {intake && (
+        <span
+          className="ml-auto shrink-0 text-info"
+          title="Intake discarded the rest before they reached the buffer, so they are not on this map."
+        >
+          <span aria-hidden="true">⇣ </span>maps kept lines only
+        </span>
+      )}
+      <span className={`${intake ? "" : "ml-auto "}min-w-0 truncate`}>
+        click to jump · drag to filter
+      </span>
     </div>
   );
 }
@@ -584,7 +605,11 @@ function Placeholder({ children }: { children: React.ReactNode }) {
  * are stated outright, and the keys that work the thing are named where
  * the mouse hints are visible.
  */
-function describe(density: Density, headDropped: boolean): string {
+function describe(
+  density: Density,
+  headDropped: boolean,
+  intake: boolean
+): string {
   if (density.buckets.length === 0) return "No lines to show.";
 
   const bursts = density.buckets.filter((bucket) => bucket.err > 0);
@@ -610,6 +635,8 @@ function describe(density: Density, headDropped: boolean): string {
       }.`,
     headDropped &&
       "Older lines have been dropped, so the strip begins later than the log does.",
+    intake &&
+      "Intake is set, so this covers only the lines it kept; the rest were discarded before they reached the buffer.",
     "Left and right arrows move between slices, Enter scrolls the log to one, shift with the arrows selects a time range, Escape clears it.",
   ]
     .filter(Boolean)

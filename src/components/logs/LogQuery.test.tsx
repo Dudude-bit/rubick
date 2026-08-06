@@ -55,7 +55,35 @@ function Harness({
       onDraftChange={setDraft}
       onAddTerm={onAddTerm}
       onRemoveTerm={() => {}}
+      intake={new Set()}
+      onToggleIntake={() => {}}
       fields={fields}
+    />
+  );
+}
+
+/** The chips as the toolbar draws them, with a mode per term. */
+function Chips({
+  terms,
+  intake = new Set<string>(),
+  onToggleIntake = () => {},
+  onRemoveTerm = () => {},
+}: {
+  terms: QueryTerm[];
+  intake?: ReadonlySet<string>;
+  onToggleIntake?: (term: QueryTerm) => void;
+  onRemoveTerm?: (term: QueryTerm) => void;
+}) {
+  return (
+    <LogQuery
+      terms={terms}
+      draft=""
+      onDraftChange={() => {}}
+      onAddTerm={() => {}}
+      onRemoveTerm={onRemoveTerm}
+      intake={intake}
+      onToggleIntake={onToggleIntake}
+      fields={STRUCTURED}
     />
   );
 }
@@ -224,5 +252,71 @@ describe("the query box, focused", () => {
 
     expect(names()).toEqual(["level2 lines", "container2 lines"]);
     expect(screen.getByText(/no structured fields/)).toBeInTheDocument();
+  });
+});
+
+const LEVEL: QueryTerm = { kind: "level", op: "≥", value: "warn" };
+const RANGE: QueryTerm = { kind: "time", from: 1, to: 2 };
+
+describe("a chip's mode", () => {
+  it("offers the promotion in words, not as a colour and an icon", () => {
+    render(<Chips terms={[LEVEL]} />);
+
+    const toggle = screen.getByRole("button", { name: /Keep only lines/ });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.getAttribute("aria-label")).toMatch(/level≥warn/);
+    // The direction is in the name: what it will do, not what it is.
+    expect(toggle.getAttribute("aria-label")).toMatch(/discarded as they/);
+  });
+
+  it("says the other direction once it is intake", () => {
+    render(<Chips terms={[LEVEL]} intake={new Set(["level≥warn"])} />);
+
+    const toggle = screen.getByRole("button", { name: /Stop discarding/ });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      toggle.getAttribute("aria-label"),
+      "the one thing a reader would otherwise assume wrong"
+    ).toMatch(/already discarded do not come back/);
+  });
+
+  it("keeps both buttons on the chip reachable from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onToggleIntake = vi.fn();
+    const onRemoveTerm = vi.fn();
+    render(
+      <Chips
+        terms={[LEVEL]}
+        onToggleIntake={onToggleIntake}
+        onRemoveTerm={onRemoveTerm}
+      />
+    );
+
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: /Keep only lines/ })
+    ).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onToggleIntake).toHaveBeenCalledWith(LEVEL);
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+    expect(onRemoveTerm).toHaveBeenCalledWith(LEVEL);
+  });
+
+  it("offers no toggle on a time range, and says why", () => {
+    // As intake a range would reject every line still to come, and the
+    // stream would go silent for good. An inert button is worse than none.
+    render(<Chips terms={[RANGE]} />);
+
+    expect(
+      screen.queryByRole("button", { name: /Keep only lines/ })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Remove time=/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle(/A time range cannot be intake/)
+    ).toBeInTheDocument();
   });
 });

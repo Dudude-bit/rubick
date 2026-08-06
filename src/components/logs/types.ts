@@ -255,6 +255,21 @@ export function formatTimeRange(from: number, to: number): string {
   )}`;
 }
 
+/**
+ * Which terms may be promoted to intake.
+ *
+ * Every kind but `time`. A time range is bounded in the past, so as
+ * intake it would reject every line the container writes from now on and
+ * the stream would go permanently silent — a toggle whose only effect is
+ * to stop the log. The cluster-side narrowing a range does deserve
+ * (`sinceTime`, pushed down by `LogConfig::to_log_params`) is a refetch
+ * of that window, not a filter on a following stream, and that is a
+ * different action from this toggle.
+ */
+export function canBeIntake(term: QueryTerm): boolean {
+  return term.kind !== "time";
+}
+
 /** What the chip reads. Also its identity — two equal labels are one term. */
 export function termLabel(term: QueryTerm): string {
   if (term.kind === "text") return term.value;

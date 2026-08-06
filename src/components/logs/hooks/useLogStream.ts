@@ -9,7 +9,7 @@ import {
 } from "@/lib/stream-failure";
 
 import { groupKeyFor } from "../normalize";
-import type { StreamedLogLine } from "../types";
+import type { QueryTerm, StreamedLogLine } from "../types";
 import {
   appendCapped,
   backfillPerContainer,
@@ -66,6 +66,16 @@ interface UseLogStreamOptions {
   containers: string[];
   /** Backfill and retention, together. See `DEFAULT_LOG_LIMIT`. */
   limit: number;
+  /**
+   * Terms every arriving line must satisfy to be kept at all, evaluated
+   * in Rust before the line costs an event, an IPC hop or a slot. Empty
+   * is the default and keeps everything.
+   *
+   * Changing this restarts the streams and nothing else: the buffer goes
+   * on holding every line it already has, which is why promoting a chip
+   * is not a destructive act and has nothing to confirm.
+   */
+  intake?: QueryTerm[];
 }
 
 interface UseLogStreamResult {
@@ -85,6 +95,20 @@ interface UseLogStreamResult {
    * which the viewer used to do silently.
    */
   dropped: number;
+  /**
+   * When a batch last landed, and the two ids that divide the buffer
+   * into what arrived under intake and what arrived without it.
+   *
+   * They exist because intake makes silence and rates ambiguous. The
+   * first lets a quiet pane say how long it has been quiet instead of
+   * looking dead. The other two bound the last unfiltered stretch —
+   * `[unfilteredFrom, intakeFrom)` — which is the only part of the
+   * buffer that can answer "how fast is this pod writing", since the
+   * lines intake rejects never reach this process at all.
+   */
+  lastBatchAt: number;
+  intakeFrom: number;
+  unfilteredFrom: number;
   /** True while at least one container's stream is attached. */
   isStreaming: boolean;
   isConnecting: boolean;
@@ -100,11 +124,16 @@ interface UseLogStreamResult {
   retry: () => void;
 }
 
+const NO_INTAKE: QueryTerm[] = [];
+/** What `intakeKey` reads as when nothing is being kept at the source. */
+const NO_INTAKE_KEY = JSON.stringify(NO_INTAKE);
+
 export function useLogStream({
   podName,
   namespace,
   containers,
   limit,
+  intake = NO_INTAKE,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -112,6 +141,9 @@ export function useLogStream({
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
+  const [lastBatchAt, setLastBatchAt] = useState(() => Date.now());
+  const [intakeFrom, setIntakeFrom] = useState(0);
+  const [unfilteredFrom, setUnfilteredFrom] = useState(0);
 
   const nextIdRef = useRef(0);
 
@@ -123,6 +155,20 @@ export function useLogStream({
     () => (containerKey === "" ? [] : containerKey.split("\u0000")),
     [containerKey]
   );
+
+  // The same trick one level up: the intake array is rebuilt by a filter
+  // in the viewer, so its identity moves on every render while its
+  // contents do not. Serialised, the effect below restarts on a real
+  // change and on nothing else.
+  const intakeKey = JSON.stringify(intake);
+  const intakeTerms = useMemo(
+    () => JSON.parse(intakeKey) as QueryTerm[],
+    [intakeKey]
+  );
+
+  /** What the attached streams were opened against. See `resuming` below. */
+  const opened = useRef<{ target: string; intake: string } | null>(null);
+  const target = `${namespace}/${podName}|${containerKey}|${limit}`;
 
   const clearLogs = useCallback(() => {
     setBuffer(emptyBuffer());
@@ -159,6 +205,7 @@ export function useLogStream({
       const window = orderByTimestamp(pending);
       pending = [];
       setBuffer((prev) => appendCapped(prev, window, limit));
+      setLastBatchAt(Date.now());
     };
 
     const stopAll = async () => {
@@ -189,9 +236,47 @@ export function useLogStream({
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (!active || isPaused || streamed.length === 0) return;
 
+      /**
+       * Picking up where the buffer left off, rather than starting a
+       * session. Two ways in, and the same handling for both:
+       *
+       * The reader flipped a chip — the lines already held were kept
+       * under the old rule and stay, because the new rule is about what
+       * arrives. Or intake is set and the stream is being reattached
+       * after a pause or a break — where a backfill is worse than
+       * useless, since `tailLines` is applied by the apiserver *before*
+       * intake sees the lines, so a narrow intake would answer a wipe of
+       * the buffer with a handful of survivors out of the last N.
+       *
+       * Either way there is no backfill: what it would return is the
+       * tail the buffer already holds, as duplicates.
+       */
+      const previous = opened.current;
+      const resuming =
+        previous !== null &&
+        previous.target === target &&
+        (previous.intake !== intakeKey || intakeTerms.length > 0);
+      opened.current = { target, intake: intakeKey };
+
       setIsConnecting(true);
       setFailures([]);
-      setBuffer(emptyBuffer());
+      if (!resuming) setBuffer(emptyBuffer());
+      // The next line to arrive is the first one under whatever this
+      // restart changed, so the boundaries move on the transitions and
+      // not on every restart: an intake edited while it is already on
+      // must not move the mark that says where unfiltered lines end, or
+      // the arriving rate would start measuring already-filtered ones.
+      const hadIntake = resuming && previous.intake !== NO_INTAKE_KEY;
+      const hasIntake = intakeTerms.length > 0;
+      if (!resuming || (hasIntake && !hadIntake)) {
+        setIntakeFrom(nextIdRef.current);
+      }
+      if (!resuming || (!hasIntake && hadIntake)) {
+        setUnfilteredFrom(nextIdRef.current);
+      }
+      // The clock on the silence starts at the attach rather than at
+      // whenever the old stream last said something.
+      setLastBatchAt(Date.now());
 
       // One listener pair for every container's stream, installed before
       // any of them is released. The backend holds each stream shut until
@@ -284,15 +369,15 @@ export function useLogStream({
             podName,
             namespace,
             container,
-            tailLines: backfillPerContainer(limit, streamed.length),
+            tailLines: resuming
+              ? 0
+              : backfillPerContainer(limit, streamed.length),
             follow: true,
             timestamps: true,
             previous: false,
             sinceSeconds: null,
             sinceTime: null,
-            // No intake control yet: every line arrives and the query
-            // does the narrowing over the buffer.
-            intake: [],
+            intake: intakeTerms,
           };
 
           try {
@@ -340,7 +425,17 @@ export function useLogStream({
     return () => {
       cleanup();
     };
-  }, [streamed, limit, podName, namespace, isPaused, retryTrigger]);
+  }, [
+    streamed,
+    limit,
+    podName,
+    namespace,
+    isPaused,
+    retryTrigger,
+    intakeKey,
+    intakeTerms,
+    target,
+  ]);
 
   return {
     logs: buffer.lines,
@@ -348,6 +443,9 @@ export function useLogStream({
     limit,
     fields: buffer.fields,
     dropped: buffer.dropped,
+    lastBatchAt,
+    intakeFrom,
+    unfilteredFrom,
     isStreaming,
     isConnecting,
     failures,

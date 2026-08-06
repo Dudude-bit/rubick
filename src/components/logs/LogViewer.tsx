@@ -1,4 +1,10 @@
-import { useState, useCallback, useMemo, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { Download, RefreshCw } from "lucide-react";
 import type { LogLevel } from "@/generated/types";
 import { Button } from "@/components/ui/button";
@@ -12,6 +18,7 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import { useIntake } from "./hooks/useIntake";
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend } from "./LogLegend";
 import { LogList } from "./LogList";
@@ -27,6 +34,7 @@ import {
 import {
   fieldTerm,
   formatCount,
+  formatSpan,
   logsToText,
   matchesQuery,
   termLabel,
@@ -75,10 +83,13 @@ function LogSkeleton() {
 function StreamFailureNotice({
   failure,
   podName,
+  intake,
   onRetry,
 }: {
   failure: ContainerFailure;
   podName: string;
+  /** Intake is set, so reconnecting will not fetch back the gap. */
+  intake: boolean;
   onRetry: () => void;
 }) {
   const gone = failure.kind === "gone";
@@ -99,6 +110,15 @@ function StreamFailureNotice({
         <p className="mt-0.5 break-words text-[11px] text-fg-mut">
           {failure.message}
         </p>
+        {/* A stream that died under intake leaves two gaps, not one: the
+            minutes it was down, and everything intake dropped before
+            that. Reconnecting closes neither. */}
+        {intake && !gone && (
+          <p className="mt-0.5 text-[11px] text-fg-fnt">
+            Intake is still set — reconnecting resumes from now, and what the
+            stream missed is not fetched back.
+          </p>
+        )}
       </div>
       {gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
@@ -161,6 +181,63 @@ function DroppedNotice({
   );
 }
 
+/**
+ * How long a stream under intake may say nothing before the pane says
+ * why. Short enough to answer the question while it is being asked,
+ * long enough that an ordinary gap between bursts does not trip it.
+ */
+const INTAKE_QUIET_MS = 12000;
+
+/**
+ * Nothing has matched intake for a while — which looks exactly like a
+ * stream that died.
+ *
+ * That is the one ambiguity intake introduces: a pane that has gone
+ * still is either a narrow filter working or a connection that dropped,
+ * and the reader cannot tell them apart by looking. This says which,
+ * names the terms doing it, and keeps counting so the silence reads as
+ * measured rather than as a freeze. Its own component because the clock
+ * ticks every second and the list beside it holds thousands of rows.
+ */
+function IntakeQuietNotice({
+  since,
+  terms,
+}: {
+  since: number;
+  terms: QueryTerm[];
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const quiet = now - since;
+  if (quiet < INTAKE_QUIET_MS) return null;
+
+  return (
+    <div
+      role="status"
+      data-testid="log-intake-quiet"
+      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+    >
+      <span aria-hidden="true" className="text-info">
+        ⇣{" "}
+      </span>
+      Nothing has matched{" "}
+      <span className="font-mono text-info">
+        {terms.map(termLabel).join(" and ")}
+      </span>{" "}
+      for {formatSpan(quiet)}.
+      <span className="text-fg-fnt">
+        {" "}
+        The stream is attached and reading — this is intake being narrow, not
+        the log stopping.
+      </span>
+    </div>
+  );
+}
+
 interface LogViewerProps {
   podName: string;
   namespace: string;
@@ -187,6 +264,21 @@ export function LogViewer({
       : new Set()
   );
   const [terms, setTerms] = useState<QueryTerm[]>([]);
+  /**
+   * Which terms are also kept at the source, by label.
+   *
+   * A mode per term rather than one intake control for the toolbar: the
+   * reader mixes them — `component=ingest` worth restarting the stream
+   * for, `level≥warn` worth flipping off a moment later without touching
+   * it — and a single toolbar-wide intake cannot express that.
+   *
+   * Kept beside the terms rather than inside them because `QueryTerm` is
+   * generated from Rust and is the shape the backend is handed; the mode
+   * is the viewer's business alone.
+   */
+  const [intakeLabels, setIntakeLabels] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [draft, setDraft] = useState("");
   const [limit, setLimit] = useState(DEFAULT_LOG_LIMIT);
   const [collapseRepeats, setCollapseRepeats] = useState(true);
@@ -208,6 +300,16 @@ export function LogViewer({
     null
   );
 
+  // Every chip filters the view; the ones flipped to intake also filter
+  // the stream, so the toggle changes what is kept and never what is
+  // shown. `useIntake` holds the set still for a moment so a run of
+  // flips is one restart.
+  const intakeTerms = useMemo(
+    () => terms.filter((term) => intakeLabels.has(termLabel(term))),
+    [terms, intakeLabels]
+  );
+  const intake = useIntake(intakeTerms);
+
   const {
     logs,
     retained,
@@ -217,10 +319,13 @@ export function LogViewer({
     isConnecting,
     isPaused,
     failures,
+    lastBatchAt,
+    intakeFrom,
+    unfilteredFrom,
     clearLogs,
     togglePause,
     retry,
-  } = useLogStream({ podName, namespace, containers, limit });
+  } = useLogStream({ podName, namespace, containers, limit, intake });
 
   const colors = useMemo(() => buildContainerColors(containers), [containers]);
 
@@ -363,10 +468,18 @@ export function LogViewer({
     setTerms((prev) =>
       prev.filter((existing) => termLabel(existing) !== label)
     );
+    // Taking the chip away takes its intake with it — which restarts the
+    // stream, and the same sentence gets said about the gap.
+    setIntakeLabels((prev) => (prev.has(label) ? without(prev, label) : prev));
+  }, []);
+
+  const handleToggleIntake = useCallback((term: QueryTerm) => {
+    setIntakeLabels((prev) => toggled(prev, termLabel(term)));
   }, []);
 
   const handleClearQuery = useCallback(() => {
     setTerms([]);
+    setIntakeLabels(new Set());
     setDraft("");
   }, []);
 
@@ -459,6 +572,7 @@ export function LogViewer({
         scope={scopeKey}
         retained={retained}
         headDropped={dropped > 0}
+        intake={intake.length > 0}
         selection={timeRange}
         viewportFrom={viewportFrom}
         viewportTo={viewportTo}
@@ -473,6 +587,8 @@ export function LogViewer({
         onDraftChange={setDraft}
         onAddTerm={handleAddTerm}
         onRemoveTerm={handleRemoveTerm}
+        intake={intakeLabels}
+        onToggleIntake={handleToggleIntake}
         fields={fields}
         limit={limit}
         onLimitChange={setLimit}
@@ -518,9 +634,17 @@ export function LogViewer({
           key={failure.container}
           failure={failure}
           podName={podName}
+          intake={intake.length > 0}
           onRetry={retry}
         />
       ))}
+
+      {/* Only while the stream is up and nothing else is explaining the
+          silence: a failed stream has its own notice above, and two
+          verdicts about the same quiet would compete. */}
+      {intake.length > 0 && isStreaming && failures.length === 0 && (
+        <IntakeQuietNotice since={lastBatchAt} terms={intake} />
+      )}
 
       <LogList
         logs={visibleLogs}
@@ -549,6 +673,7 @@ export function LogViewer({
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
+          intake={intake.length > 0}
           allHidden={shownContainers.length === 0 && containers.length > 0}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
@@ -564,6 +689,9 @@ export function LogViewer({
         limit={limit}
         shownCount={rows.length}
         hiddenCount={hiddenByView}
+        intake={intake}
+        intakeFrom={intakeFrom}
+        unfilteredFrom={unfilteredFrom}
         isStreaming={isStreaming}
       />
     </div>
@@ -580,6 +708,7 @@ function EmptyState({
   streaming,
   retained,
   filtered,
+  intake,
   allHidden,
   onClearQuery,
   onShowAll,
@@ -589,6 +718,8 @@ function EmptyState({
   streaming: boolean;
   retained: number;
   filtered: boolean;
+  /** Set, so "received" and "kept" are no longer the same number. */
+  intake: boolean;
   allHidden: boolean;
   onClearQuery: () => void;
   onShowAll: () => void;
@@ -620,7 +751,10 @@ function EmptyState({
         {filtered ? "No line matches the query." : "Nothing left to show."}
         <span className="text-fg-fnt">
           {" "}
-          {formatCount(retained)} lines received.
+          {/* Under intake these are not the lines the container wrote:
+              the rest were discarded before they got here, and clearing
+              the query cannot bring them back. */}
+          {formatCount(retained)} lines {intake ? "kept" : "received"}.
         </span>
         {filtered && <Action onClick={onClearQuery}>Clear the query</Action>}
       </Note>
@@ -701,5 +835,11 @@ function firstRowAtOrAfter(rows: LogRun[], epoch: number): number {
 function toggled<T>(set: ReadonlySet<T>, value: T): ReadonlySet<T> {
   const next = new Set(set);
   if (!next.delete(value)) next.add(value);
+  return next;
+}
+
+function without<T>(set: ReadonlySet<T>, value: T): ReadonlySet<T> {
+  const next = new Set(set);
+  next.delete(value);
   return next;
 }
