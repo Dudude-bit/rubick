@@ -10,6 +10,19 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::oneshot;
 
+/// How many lines to read when the caller does not say.
+///
+/// One concept, one answer: `stream_pod_logs` used to default to 100 and
+/// `get_pod_logs` to 1000, so the same request answered two different
+/// ways depending on which command served it. The viewer always sends an
+/// explicit value now — this is what everything else gets.
+pub const DEFAULT_TAIL_LINES: i64 = 1000;
+
+/// The one place the default is applied.
+fn tail_or_default(tail_lines: Option<i64>) -> i64 {
+    tail_lines.unwrap_or(DEFAULT_TAIL_LINES)
+}
+
 /// RAII guard that removes a log stream's entry from the global map
 /// when dropped — including on panic-unwind inside the spawned task.
 /// Without this, a panicking `streamer.stream_logs(...)` call leaves a
@@ -61,7 +74,7 @@ pub async fn stream_pod_logs(
 
     let mut log_config = LogConfig::new(&config.pod_name, &namespace)
         .with_follow(config.follow)
-        .with_tail(config.tail_lines.unwrap_or(100))
+        .with_tail(tail_or_default(config.tail_lines))
         .with_timestamps(config.timestamps)
         .with_previous(config.previous);
 
@@ -180,7 +193,7 @@ pub async fn get_pod_logs(
 
     let mut log_config = LogConfig::new(&pod_name, &namespace)
         .with_follow(false)
-        .with_tail(tail_lines.unwrap_or(1000))
+        .with_tail(tail_or_default(tail_lines))
         .with_previous(previous);
 
     if let Some(since_seconds) = since_seconds {
@@ -223,6 +236,15 @@ mod tests {
             cancel_tx,
             subscribe_tx: Some(subscribe_tx),
         }
+    }
+
+    #[test]
+    fn both_log_commands_default_to_the_same_tail() {
+        // The regression this guards: `stream_pod_logs` defaulted to 100
+        // and `get_pod_logs` to 1000, so "how many lines" had two
+        // answers depending on which command you asked.
+        assert_eq!(tail_or_default(None), DEFAULT_TAIL_LINES);
+        assert_eq!(tail_or_default(Some(42)), 42);
     }
 
     #[test]

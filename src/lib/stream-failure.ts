@@ -39,10 +39,27 @@ export function listenForStreamFailure(
   matchId: () => string | null,
   onFailure: (failure: StreamFailure) => void
 ): Promise<UnlistenFn> {
+  return listenForStreamFailures((streamId, failure) => {
+    if (streamId !== matchId()) return;
+    onFailure(failure);
+  });
+}
+
+/**
+ * The same subscription for a caller that owns several streams at once —
+ * the log viewer runs one per container — and has to know which of them
+ * died. One registration covers all of them, which keeps the gate simple:
+ * the listener is installed once, before the first stream is released,
+ * and every later `logStreamSubscribed` is therefore covered too.
+ */
+export function listenForStreamFailures(
+  onFailure: (streamId: string, failure: StreamFailure) => void
+): Promise<UnlistenFn> {
   return listen<StreamFailedPayload>("stream-failed", (event) => {
-    if (!event.payload.stream_id || event.payload.stream_id !== matchId()) {
-      return;
-    }
-    onFailure({ kind: event.payload.kind, message: event.payload.message });
+    if (!event.payload.stream_id) return;
+    onFailure(event.payload.stream_id, {
+      kind: event.payload.kind,
+      message: event.payload.message,
+    });
   });
 }

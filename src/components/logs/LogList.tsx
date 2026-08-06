@@ -10,9 +10,9 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 
-import { LogLineComponent } from "./LogLine";
-import type { StreamedLogLine } from "./hooks/useLogStream";
-import { logsToText, type ViewMode } from "./types";
+import { LogLineComponent, LogRunRow } from "./LogLine";
+import type { LogRun } from "./grouping";
+import { logsToText, type StreamedLogLine, type ViewMode } from "./types";
 
 /**
  * The output itself, windowed.
@@ -38,8 +38,16 @@ const BOTTOM_SLACK_PX = 48;
 const ESTIMATED_ROW_PX = 22;
 
 interface LogListProps {
-  /** Already filtered; the list windows exactly what it is given. */
+  /** Already filtered; the source the rows index into, and what a copy yields. */
   logs: StreamedLogLine[];
+  /**
+   * One per row. A run of 1 is an ordinary line; anything above that is
+   * a collapsed repeat. Rows rather than lines because the count the
+   * virtualiser needs is the count of things drawn.
+   */
+  rows: LogRun[];
+  expandedRuns: ReadonlySet<number>;
+  onToggleRun: (id: number) => void;
   viewMode: ViewMode;
   searchQuery: string;
   follow: boolean;
@@ -64,6 +72,9 @@ interface LogListProps {
 
 export function LogList({
   logs,
+  rows,
+  expandedRuns,
+  onToggleRun,
   viewMode,
   searchQuery,
   follow,
@@ -84,12 +95,12 @@ export function LogList({
   // LogViewer, and it stops here.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
-    count: logs.length,
+    count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ESTIMATED_ROW_PX,
     // Height is cached per line, not per position, so filtering — which
     // reshuffles every index — never hands a row someone else's height.
-    getItemKey: (index) => logs[index].id,
+    getItemKey: (index) => rows[index].id,
     overscan: 16,
     // Once the buffer is full every batch drops lines off the head. Without
     // an end anchor that shifts everything under a reader who has scrolled
@@ -114,7 +125,7 @@ export function LogList({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (follow && logs.length > 0) {
+    if (follow && rows.length > 0) {
       el.scrollTop = el.scrollHeight;
       onAtBottomChange(true);
       return;
@@ -124,7 +135,7 @@ export function LogList({
     onAtBottomChange(
       el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX
     );
-  }, [follow, logs, totalSize, onAtBottomChange]);
+  }, [follow, rows, totalSize, onAtBottomChange]);
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
@@ -192,11 +203,11 @@ export function LogList({
 
   useEffect(() => {
     const cache = virtualizer.itemSizeCache;
-    if (oldestRetainedId === undefined || cache.size <= logs.length * 2) return;
+    if (oldestRetainedId === undefined || cache.size <= rows.length * 2) return;
     for (const key of cache.keys()) {
       if (typeof key === "number" && key < oldestRetainedId) cache.delete(key);
     }
-  }, [oldestRetainedId, logs.length, virtualizer]);
+  }, [oldestRetainedId, rows.length, virtualizer]);
 
   /**
    * Select-all over a virtualised list is a trap: the DOM holds a screenful,
@@ -256,7 +267,7 @@ export function LogList({
         data-testid="log-scroll"
         className="h-full overflow-y-auto scrollbar-thin p-4 font-mono text-xs leading-relaxed outline-none focus-visible:ring-1 focus-visible:ring-hair"
       >
-        {logs.length === 0 ? (
+        {rows.length === 0 ? (
           children
         ) : (
           <div
@@ -265,30 +276,41 @@ export function LogList({
             className="relative w-full"
             style={{ height: totalSize }}
           >
-            {virtualizer.getVirtualItems().map((item) => (
-              <div
-                key={item.key}
-                data-index={item.index}
-                ref={virtualizer.measureElement}
-                className="absolute left-0 top-0 w-full"
-                style={{ transform: `translateY(${item.start}px)` }}
-              >
-                <LogLineComponent
-                  log={logs[item.index]}
-                  viewMode={viewMode}
-                  searchQuery={searchQuery}
-                  onFieldClick={onFieldClick}
-                  onLevelClick={onLevelClick}
-                />
-              </div>
-            ))}
+            {virtualizer.getVirtualItems().map((item) => {
+              const run = rows[item.index];
+              return (
+                <div
+                  key={item.key}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full"
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  {run.count > 1 ? (
+                    <LogRunRow
+                      run={run}
+                      expanded={expandedRuns.has(run.id)}
+                      onToggle={onToggleRun}
+                    />
+                  ) : (
+                    <LogLineComponent
+                      log={run.head}
+                      viewMode={viewMode}
+                      searchQuery={searchQuery}
+                      onFieldClick={onFieldClick}
+                      onLevelClick={onLevelClick}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* The follow is off and the tail has moved on without the reader —
           the one moment a log viewer owes them a way back. */}
-      {logs.length > 0 && !atBottom && (
+      {rows.length > 0 && !atBottom && (
         <button
           type="button"
           onClick={jumpToBottom}

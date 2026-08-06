@@ -5,13 +5,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
-import type { StreamFailure } from "@/lib/stream-failure";
 
-import { useLogStream } from "./hooks/useLogStream";
-import { LogToolbar } from "./LogToolbar";
+import {
+  useLogStream,
+  DEFAULT_LOG_LIMIT,
+  type ContainerFailure,
+} from "./hooks/useLogStream";
+import { LogToolbar, ALL_CONTAINERS } from "./LogToolbar";
 import { LogList } from "./LogList";
 import { LogFilters } from "./LogFilters";
 import { LogStatusBar } from "./LogStatusBar";
+import { countCollapsed, expandRuns, groupConsecutive } from "./grouping";
 import { logsToText, type ViewMode, type ActiveFilter } from "./types";
 
 /** Ragged bars at log-line rhythm — the shape the output will land in. */
@@ -48,15 +52,14 @@ function LogSkeleton() {
 function StreamFailureNotice({
   failure,
   podName,
-  container,
   onRetry,
 }: {
-  failure: StreamFailure;
+  failure: ContainerFailure;
   podName: string;
-  container: string;
   onRetry: () => void;
 }) {
   const gone = failure.kind === "gone";
+  const container = failure.container;
 
   return (
     <div
@@ -108,29 +111,41 @@ export function LogViewer({
 }: LogViewerProps) {
   const { toast } = useToast();
   const copyToClipboard = useCopyToClipboard();
+  // Every container by default: a sidecar bug is invisible one
+  // container at a time, and the pane opening on one of five was the
+  // reason the question could not be asked.
   const [selectedContainer, setSelectedContainer] = useState(
-    initialContainer || containers[0]
+    initialContainer || ALL_CONTAINERS
   );
   const [searchQuery, setSearchQuery] = useState("");
-  const [tailLines, setTailLines] = useState(100);
+  const [limit, setLimit] = useState(DEFAULT_LOG_LIMIT);
+  const [collapseRepeats, setCollapseRepeats] = useState(true);
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
   const [autoScroll, setAutoScroll] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
 
+  const streamedContainers =
+    selectedContainer === ALL_CONTAINERS ? containers : [selectedContainer];
+
   const {
     logs,
+    retained,
+    dropped,
     isStreaming,
     isConnecting,
-    failure,
+    failures,
     clearLogs,
     togglePause,
     retry,
   } = useLogStream({
     podName,
     namespace,
-    container: selectedContainer,
-    tailLines,
+    containers: streamedContainers,
+    limit,
   });
 
   // Filter logs based on search and active filters
@@ -161,6 +176,26 @@ export function LogViewer({
     return result;
   }, [logs, searchQuery, activeFilters]);
 
+  // Grouping runs after filtering, so a filter that leaves two repeats
+  // adjacent collapses them — the reader asked to see only these.
+  const runs = useMemo(
+    () => groupConsecutive(filteredLogs, collapseRepeats),
+    [filteredLogs, collapseRepeats]
+  );
+  const rows = useMemo(
+    () => expandRuns(filteredLogs, runs, expandedRuns),
+    [filteredLogs, runs, expandedRuns]
+  );
+  const collapsedCount = useMemo(() => countCollapsed(runs), [runs]);
+
+  const handleToggleRun = useCallback((id: number) => {
+    setExpandedRuns((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleAutoScrollToggle = useCallback(() => {
     // Turning it back on is the same act as jumping to the foot: the list
     // pins itself the moment `follow` flips true.
@@ -176,11 +211,15 @@ export function LogViewer({
   }, [copyToClipboard, filteredLogs]);
 
   const handleDownloadLogs = async () => {
+    // One container per file: `get_pod_logs` reads one container, and
+    // interleaving several one-shot reads would invent an ordering the
+    // API never gave.
+    const container = streamedContainers[0];
     try {
       const allLogs = await commands.getPodLogs(
         podName,
         namespace,
-        selectedContainer,
+        container,
         10000,
         null,
         false
@@ -190,7 +229,7 @@ export function LogViewer({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${podName}-${selectedContainer}-logs.txt`;
+      a.download = `${podName}-${container}-logs.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -254,8 +293,10 @@ export function LogViewer({
         onContainerChange={setSelectedContainer}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        tailLines={tailLines}
-        onTailLinesChange={setTailLines}
+        limit={limit}
+        onLimitChange={setLimit}
+        collapseRepeats={collapseRepeats}
+        onCollapseRepeatsChange={setCollapseRepeats}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         isStreaming={isStreaming}
@@ -271,17 +312,23 @@ export function LogViewer({
 
       <LogFilters filters={activeFilters} onRemoveFilter={handleRemoveFilter} />
 
-      {failure && (
+      {/* One notice per container whose stream died. Four containers can
+          still be streaming while the fifth is gone, and a single verdict
+          could not say which. */}
+      {failures.map((failure) => (
         <StreamFailureNotice
+          key={failure.container}
           failure={failure}
           podName={podName}
-          container={selectedContainer}
           onRetry={handleRetry}
         />
-      )}
+      ))}
 
       <LogList
         logs={filteredLogs}
+        rows={rows}
+        expandedRuns={expandedRuns}
+        onToggleRun={handleToggleRun}
         viewMode={viewMode}
         searchQuery={searchQuery}
         follow={autoScroll}
@@ -293,7 +340,7 @@ export function LogViewer({
         onFieldClick={handleFieldClick}
         onLevelClick={handleLevelClick}
       >
-        {failure && logs.length === 0 ? null : isConnecting &&
+        {failures.length > 0 && logs.length === 0 ? null : isConnecting &&
           logs.length === 0 ? (
           // Lines, not a spinner: the shape the output will take says "this
           // is a log about to arrive" where a spinner says only "wait".
@@ -330,9 +377,12 @@ export function LogViewer({
           stream from a dead pane. */}
       <LogStatusBar
         logs={logs}
+        retained={retained}
+        limit={limit}
+        dropped={dropped}
         filteredCount={filteredLogs.length}
+        collapsedCount={collapsedCount}
         isStreaming={isStreaming}
-        searchQuery={searchQuery}
       />
     </div>
   );

@@ -19,8 +19,17 @@ import {
   Rows3,
   AlignJustify,
   Code,
+  Layers,
 } from "lucide-react";
+import { LOG_LIMITS } from "./hooks/useLogStream";
 import type { ViewMode } from "./types";
+
+/**
+ * The default selection: every container streamed at once. A sentinel
+ * rather than an empty string because Radix's Select treats "" as
+ * "nothing chosen" and shows the placeholder.
+ */
+export const ALL_CONTAINERS = "__all__";
 
 interface LogToolbarProps {
   containers: string[];
@@ -28,8 +37,11 @@ interface LogToolbarProps {
   onContainerChange: (container: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  tailLines: number;
-  onTailLinesChange: (lines: number) => void;
+  /** Backfill and retention in one number — see `DEFAULT_LOG_LIMIT`. */
+  limit: number;
+  onLimitChange: (limit: number) => void;
+  collapseRepeats: boolean;
+  onCollapseRepeatsChange: (collapse: boolean) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   isStreaming: boolean;
@@ -49,8 +61,10 @@ export function LogToolbar({
   onContainerChange,
   searchQuery,
   onSearchChange,
-  tailLines,
-  onTailLinesChange,
+  limit,
+  onLimitChange,
+  collapseRepeats,
+  onCollapseRepeatsChange,
   viewMode,
   onViewModeChange,
   isStreaming,
@@ -73,6 +87,9 @@ export function LogToolbar({
           <SelectValue placeholder="Select container" />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value={ALL_CONTAINERS}>
+            All containers ({containers.length})
+          </SelectItem>
           {containers.map((container) => (
             <SelectItem key={container} value={container}>
               {container}
@@ -91,20 +108,34 @@ export function LogToolbar({
         />
       </div>
 
+      {/* One number, one meaning: it is what the stream backfills with
+          and what the viewer keeps. It used to be two, and only the
+          smaller one was on screen. */}
       <Select
-        value={tailLines.toString()}
-        onValueChange={(v) => onTailLinesChange(parseInt(v))}
+        value={limit.toString()}
+        onValueChange={(v) => onLimitChange(parseInt(v))}
       >
         <SelectTrigger className="w-32">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="100">100 lines</SelectItem>
-          <SelectItem value="500">500 lines</SelectItem>
-          <SelectItem value="1000">1000 lines</SelectItem>
-          <SelectItem value="5000">5000 lines</SelectItem>
+          {LOG_LIMITS.map((option) => (
+            <SelectItem key={option} value={option.toString()}>
+              Keep {option.toLocaleString()}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
+
+      <Button
+        variant={collapseRepeats ? "secondary" : "ghost"}
+        size="sm"
+        onClick={() => onCollapseRepeatsChange(!collapseRepeats)}
+        title="Collapse consecutive repeats into one row with a count"
+      >
+        <Layers className="mr-1 h-4 w-4" />
+        Repeats
+      </Button>
 
       <div className="flex items-center border rounded-md">
         <Button

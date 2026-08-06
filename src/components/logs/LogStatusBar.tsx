@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { LogLine, LogFormat } from "@/generated/types";
 import {
   Tooltip,
@@ -7,38 +7,27 @@ import {
 } from "@/components/ui/tooltip";
 import { FORMAT_DESCRIPTIONS } from "./types";
 
-// TEMP INSTRUMENTATION - remove before commit
-function DomProbe() {
-  const [n, setN] = useState<[number, number]>([0, 0]);
-  useEffect(() => {
-    const t = setInterval(() => {
-      const list = document.querySelector("[data-log-list]");
-      setN([
-        list ? list.querySelectorAll("*").length : -1,
-        document.getElementsByTagName("*").length,
-      ]);
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <span data-testid="dom-probe">
-      dom: {n[0]} / {n[1]}
-    </span>
-  );
-}
-
 interface LogStatusBarProps {
   logs: LogLine[];
+  /** Lines held right now, and the cap they are held against. */
+  retained: number;
+  limit: number;
+  /** Evicted from the head since the stream started; > 0 means lossy. */
+  dropped: number;
   filteredCount: number;
+  /** Lines standing behind a collapsed run rather than drawn on their own. */
+  collapsedCount: number;
   isStreaming: boolean;
-  searchQuery: string;
 }
 
 export function LogStatusBar({
   logs,
+  retained,
+  limit,
+  dropped,
   filteredCount,
+  collapsedCount,
   isStreaming,
-  searchQuery,
 }: LogStatusBarProps) {
   const formatInfo = useMemo(() => {
     if (logs.length === 0) return null;
@@ -87,13 +76,25 @@ export function LogStatusBar({
   return (
     <div className="flex items-center justify-between border-t border-hair px-4 py-1.5 text-xs text-fg-mut">
       <span>
-        {filteredCount} {filteredCount === 1 ? "line" : "lines"}
-        {searchQuery && logs.length !== filteredCount && (
-          <span> (filtered from {logs.length})</span>
+        {retained.toLocaleString()}{" "}
+        <span className="text-fg-fnt">of {limit.toLocaleString()} kept</span>
+        {/* The head being dropped was silent until now: the pane looked
+            like the whole log and was not. */}
+        {dropped > 0 && (
+          <span className="text-warn">
+            {" "}
+            · {dropped.toLocaleString()} older dropped
+          </span>
         )}
       </span>
       <div className="flex items-center gap-4">
-        <DomProbe />
+        <span className="text-fg-fnt">
+          {filteredCount.toLocaleString()} shown
+          {retained !== filteredCount &&
+            ` · ${(retained - filteredCount).toLocaleString()} filtered out`}
+          {collapsedCount > 0 &&
+            ` · ${collapsedCount.toLocaleString()} in collapsed repeats`}
+        </span>
         {formatInfo && (
           <Tooltip>
             <TooltipTrigger asChild>

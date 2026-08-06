@@ -1,10 +1,12 @@
 import { memo } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { LogLine as LogLineType } from "@/generated/types";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { runSpanMs, type LogRun } from "./grouping";
 import {
   ViewMode,
   HIDDEN_FIELD_KEYS,
@@ -12,6 +14,7 @@ import {
   LEVEL_COLORS,
   LEVEL_BORDER_COLORS,
   FORMAT_DESCRIPTIONS,
+  formatSpan,
   formatTimestamp,
 } from "./types";
 
@@ -147,6 +150,45 @@ export const LogLineComponent = memo(function LogLineComponent({
         )}
       </div>
     </div>
+  );
+});
+
+/**
+ * A run of consecutive repeats, standing in for the lines it collapsed.
+ * Deliberately plain — the count and the span are the facts it owes the
+ * reader, and the styling is the next change's business.
+ */
+export const LogRunRow = memo(function LogRunRow({
+  run,
+  expanded,
+  onToggle,
+}: {
+  run: LogRun;
+  expanded: boolean;
+  onToggle: (id: number) => void;
+}) {
+  const Caret = expanded ? ChevronDown : ChevronRight;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(run.id)}
+      className={`${ROW} w-full border-transparent text-left`}
+      aria-expanded={expanded}
+      data-testid="log-run"
+    >
+      <span className="w-20 shrink-0 text-fg-fnt">
+        {formatTimestamp(run.head.timestamp)}
+      </span>
+      <Caret className="mt-0.5 h-3 w-3 shrink-0 text-fg-fnt" />
+      <span className="min-w-0 flex-1 truncate text-fg-mut">
+        {run.head.message}
+      </span>
+      <span className="shrink-0 text-fg-mid">&times;{run.count}</span>
+      <span className="shrink-0 text-fg-fnt">
+        over {formatSpan(runSpanMs(run))}
+      </span>
+    </button>
   );
 });
 
