@@ -74,6 +74,7 @@ fn main() {
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
+            commands::cluster::get_kubeconfig_source,
             // Namespace management
             commands::namespace::list_namespaces,
             // Generic resource management

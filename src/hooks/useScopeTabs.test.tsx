@@ -170,7 +170,10 @@ describe("the kubeconfig", () => {
             name: "prod",
             cluster: "prod",
             user: "prod",
+            namespace: null,
             is_current: true,
+            server: null,
+            exec_command: null,
           },
         ],
       });

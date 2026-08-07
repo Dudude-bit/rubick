@@ -108,10 +108,14 @@ impl K8sClientManager {
             .iter()
             .map(|ctx| {
                 let context = ctx.context.as_ref();
+                let cluster = context.map(|c| c.cluster.clone()).unwrap_or_default();
+                let user = context.and_then(|c| c.user.clone()).unwrap_or_default();
                 ContextInfo {
                     name: ctx.name.clone(),
-                    cluster: context.map(|c| c.cluster.clone()).unwrap_or_default(),
-                    user: context.and_then(|c| c.user.clone()).unwrap_or_default(),
+                    server: server_for_cluster(kubeconfig, &cluster),
+                    exec_command: exec_command_for_user(kubeconfig, &user),
+                    cluster,
+                    user,
                     namespace: context.and_then(|c| c.namespace.clone()),
                     is_current: Some(&ctx.name) == current_context.as_ref(),
                 }
@@ -273,6 +277,35 @@ pub struct ClusterInfo {
     pub server_version: String,
     pub platform: String,
     pub git_version: String,
+}
+
+/// The API server URL a context will dial, as the kubeconfig writes it.
+fn server_for_cluster(kubeconfig: &Kubeconfig, cluster: &str) -> Option<String> {
+    kubeconfig
+        .clusters
+        .iter()
+        .find(|entry| entry.name == cluster)
+        .and_then(|entry| entry.cluster.as_ref())
+        .and_then(|cluster| cluster.server.clone())
+}
+
+/// The credential plugin a context runs, printed the way a shell would.
+///
+/// Arguments are joined with a single space and left unquoted: this is
+/// read, never executed, and quoting it would put characters on screen
+/// that the app is not going to send.
+fn exec_command_for_user(kubeconfig: &Kubeconfig, user: &str) -> Option<String> {
+    let exec = kubeconfig
+        .auth_infos
+        .iter()
+        .find(|entry| entry.name == user)
+        .and_then(|entry| entry.auth_info.as_ref())
+        .and_then(|auth| auth.exec.as_ref())?;
+    let command = exec.command.as_ref()?;
+    Some(match exec.args.as_ref() {
+        Some(args) if !args.is_empty() => format!("{command} {}", args.join(" ")),
+        _ => command.clone(),
+    })
 }
 
 /// Resolve a kubeconfig path: expands `~`, follows symlinks, and

@@ -402,6 +402,25 @@ export interface HelmRelease {
   sourceRef: string | null;
 }
 
+export interface KubeconfigSource {
+  candidates: KubeconfigCandidate[];
+  kubeconfig_env: string | null;
+  counts: KubeconfigCounts | null;
+  error: string | null;
+}
+
+export interface KubeconfigCounts {
+  contexts: number;
+  clusters: number;
+  users: number;
+}
+
+export interface KubeconfigCandidate {
+  path: string;
+  exists: boolean;
+  origin: string;
+}
+
 export interface ClusterInfo {
   context: string;
   server_version: string;
@@ -415,6 +434,8 @@ export interface ContextInfo {
   user: string;
   namespace: string | null;
   is_current: boolean;
+  server: string | null;
+  exec_command: string | null;
 }
 
 export interface NamespaceInfo {

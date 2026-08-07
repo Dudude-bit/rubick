@@ -15,6 +15,17 @@ pub struct ContextInfo {
     pub namespace: Option<String>,
     /// Whether this is the current context
     pub is_current: bool,
+    /// The cluster's API server URL, verbatim from the kubeconfig.
+    ///
+    /// This and `exec_command` exist so the connecting and failed screens
+    /// can print what the app is actually doing rather than a plausible
+    /// sentence about it. `None` means the kubeconfig does not say.
+    pub server: Option<String>,
+    /// The credential plugin this context runs before it can talk to the
+    /// API server — `command` plus its `args`, joined the way a shell
+    /// would print them. `None` when the context authenticates without
+    /// one (a client certificate, a static token, an OIDC provider).
+    pub exec_command: Option<String>,
 }
 
 /// Represents a Kubernetes cluster context with connection details
@@ -88,6 +99,8 @@ mod tests {
             user: "test-user".to_string(),
             namespace: Some("default".to_string()),
             is_current: true,
+            server: Some("https://127.0.0.1:6443".to_string()),
+            exec_command: None,
         };
 
         assert_eq!(info.name, "test");

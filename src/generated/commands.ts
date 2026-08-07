@@ -47,6 +47,7 @@ import type {
   IngressInfo,
   JobDetailInfo,
   JobInfo,
+  KubeconfigSource,
   LogLine,
   ManifestResult,
   NamespaceInfo,
@@ -583,6 +584,10 @@ export async function disconnectCluster(context: string): Promise<void> {
 
 export async function getClusterInfo(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("get_cluster_info", { context });
+}
+
+export async function getKubeconfigSource(): Promise<KubeconfigSource> {
+  return invoke<KubeconfigSource>("get_kubeconfig_source");
 }
 
 export async function debugKubectlPlugins(): Promise<unknown> {
