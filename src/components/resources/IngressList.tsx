@@ -236,6 +236,7 @@ export function IngressList() {
       }}
       staleTime={STALE_TIMES.resourceList}
       refetchInterval={watchFailed ? undefined : false}
+      live={!watchFailed}
       searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)

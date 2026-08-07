@@ -203,6 +203,7 @@ export function createResourceListPage<T extends ListableResource>(
         }
         staleTime={STALE_TIMES.resourceList}
         refetchInterval={watchFactory && !watchFailed ? false : undefined}
+        live={!!watchFactory && !watchFailed}
       />
     );
   };

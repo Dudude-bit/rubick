@@ -187,6 +187,7 @@ export function createWorkloadListPage<T extends Workload>(
           data={dataWithMetrics}
           isLoading={listQuery.isLoading || isLoadingPods}
           dataUpdatedAt={listQuery.dataUpdatedAt}
+          live={!!watchFactory && !watchFailed}
           getRowId={getResourceRowId}
           columns={columns}
           quickActions={quickActions}

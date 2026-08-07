@@ -233,6 +233,7 @@ export function CustomResourceList({
       }}
       staleTime={STALE_TIMES.resourceList}
       refetchInterval={watchFailed ? REFRESH_INTERVALS.resourceList : false}
+      live={!watchFailed}
       searchKey="name"
       searchPlaceholder={`Search ${crdKind}...`}
       embedded={embedded}

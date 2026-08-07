@@ -10,6 +10,8 @@ interface ResourceListHeaderProps {
   actions?: ReactNode;
   /** Timestamp when data was last fetched (from React Query's dataUpdatedAt) */
   dataUpdatedAt?: number;
+  /** A watch stream feeds this list and has not failed. */
+  live?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function ResourceListHeader({
   description,
   actions,
   dataUpdatedAt,
+  live,
 }: ResourceListHeaderProps) {
   return (
     <SectionHeader
@@ -32,7 +35,7 @@ export function ResourceListHeader({
       actions={
         <>
           {actions}
-          <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+          <DataFreshness dataUpdatedAt={dataUpdatedAt} live={live} />
         </>
       }
     />

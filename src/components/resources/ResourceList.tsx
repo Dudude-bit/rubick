@@ -36,8 +36,10 @@ export interface ResourceListProps<
   data?: T[];
   /** Optional loading state when using data override */
   isLoading?: boolean;
-  /** Optional dataUpdatedAt when using data override (for Live indicator) */
+  /** Optional dataUpdatedAt when using data override (for the freshness reading) */
   dataUpdatedAt?: number;
+  /** A watch stream feeds this list and has not failed. */
+  live?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
     | ColumnDef<T>[]
@@ -80,6 +82,7 @@ export function ResourceList<
   data,
   isLoading,
   dataUpdatedAt: externalDataUpdatedAt,
+  live,
   columns,
   emptyStateLabel,
   deleteConfig,
@@ -172,6 +175,7 @@ export function ResourceList<
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
+          live={live}
         />
       )}
       {headerContent}

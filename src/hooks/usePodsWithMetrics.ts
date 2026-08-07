@@ -115,5 +115,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     podStatus,
     isLoading: isLoadingPods || isLoadingMetrics,
     dataUpdatedAt,
+    /** The pod watch is subscribed and has not fallen back to polling. */
+    watchLive: !watchFailed,
   };
 }

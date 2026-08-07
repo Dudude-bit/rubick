@@ -261,6 +261,7 @@ export function NodeList() {
       emptyStateLabel={toPlural(ResourceType.Node)}
       staleTime={STALE_TIMES.resourceList}
       refetchInterval={watchFailed ? undefined : false}
+      live={!watchFailed}
       headerContent={
         nodeStatus?.status !== "available" ? (
           <MetricsStatusBanner status={nodeStatus} />
