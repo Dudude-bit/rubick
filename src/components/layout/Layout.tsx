@@ -8,10 +8,14 @@ import { PeekPanel } from "@/components/resources/PeekPanel";
 import { YamlEditorDialog } from "@/components/yaml";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
+import { useScopeTabs } from "@/hooks/useScopeTabs";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 export function Layout() {
   const currentContext = useClusterStore((s) => s.currentContext);
+  const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
+  useScopeTabs();
 
   return (
     <div
@@ -37,7 +41,12 @@ export function Layout() {
                 overflow as before. */}
             <div className="h-full animate-in fade-in duration-200">
               <Suspense fallback={<PageSkeleton className="p-0" />}>
-                <Outlet />
+                {/* A tab that has been parked has no watches and no
+                    connection, so what is cached under it was true minutes
+                    ago. Holding the outlet shut until the tab's route has
+                    landed and its scope is applied is what stops the reader
+                    being handed those numbers as though they were live. */}
+                {catchingUp ? <PageSkeleton className="p-0" /> : <Outlet />}
               </Suspense>
             </div>
           </main>

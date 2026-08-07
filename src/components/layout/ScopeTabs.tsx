@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Search } from "lucide-react";
 
 import { Kbd } from "@/components/ui/kbd";
+import { formatShortcut } from "@/lib/platform";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
   Popover,
@@ -16,15 +17,20 @@ import {
 } from "@/lib/cluster-identity";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
+import {
+  tabRouteLabel,
+  tabTitle,
+  useScopeTabStore,
+  type ScopeTab,
+} from "@/stores/scopeTabStore";
 
 const ALL_NAMESPACES = "all namespaces";
 
 /**
- * The window's scope strip. A tab is one cluster plus one namespace, and
- * the two are separate click targets: namespaces change dozens of times
- * an hour and clusters a few times a day, so a single merged list would
- * bury the frequent job under the rare one.
+ * The window's tab strip. A tab is a route plus the scope it is read under,
+ * and the cluster and the namespace are separate click targets: namespaces
+ * change dozens of times an hour and clusters a few times a day, so a
+ * single merged list would bury the frequent job under the rare one.
  */
 export function ScopeTabs() {
   const currentContext = useClusterStore((s) => s.currentContext);
@@ -40,8 +46,6 @@ export function ScopeTabs() {
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
   const openTab = useScopeTabStore((s) => s.openTab);
-
-  const [newTabOpen, setNewTabOpen] = useState(false);
 
   useEffect(() => {
     loadContexts();
@@ -72,22 +76,19 @@ export function ScopeTabs() {
 
   return (
     <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
-      <ContextPopover
-        open={newTabOpen}
-        onOpenChange={setNewTabOpen}
-        onSelect={(context) => {
-          setNewTabOpen(false);
-          openTab(context);
-        }}
+      {/* A new tab opens on the overview of the cluster already on screen:
+          a browser's new tab lands on a home page, not on a picker, and
+          inheriting the connection makes the shortcut instant. Pointing it
+          somewhere else is one click on its own cluster segment. */}
+      <button
+        type="button"
+        aria-label="New tab"
+        title={`New tab (${formatShortcut("mod+T")})`}
+        onClick={() => openTab()}
+        className="rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
       >
-        <button
-          type="button"
-          aria-label="Open another cluster"
-          className="rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
-        >
-          +
-        </button>
-      </ContextPopover>
+        +
+      </button>
 
       <div
         role="tablist"
@@ -97,10 +98,19 @@ export function ScopeTabs() {
         {tabs.map((tab) => (
           <ScopeTabItem
             key={tab.id}
-            tab={tab}
+            // The active tab's scope lives in `clusterStore`, not on the
+            // tab; a tab whose cluster is gone keeps the name it was
+            // pointed at, because nothing else remembers it.
+            tab={
+              tab.id === activeId && !tab.missing
+                ? {
+                    ...tab,
+                    context: currentContext,
+                    namespace: currentNamespace,
+                  }
+                : tab
+            }
             active={tab.id === activeId}
-            context={tab.id === activeId ? currentContext : tab.context}
-            namespace={tab.id === activeId ? currentNamespace : tab.namespace}
           />
         ))}
       </div>
@@ -119,17 +129,8 @@ export function ScopeTabs() {
   );
 }
 
-function ScopeTabItem({
-  tab,
-  active,
-  context,
-  namespace,
-}: {
-  tab: ScopeTab;
-  active: boolean;
-  context: string | null;
-  namespace: string;
-}) {
+function ScopeTabItem({ tab, active }: { tab: ScopeTab; active: boolean }) {
+  const { context, namespace } = tab;
   const switchContext = useClusterStore((s) => s.switchContext);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const connect = useClusterStore((s) => s.connect);
@@ -155,6 +156,18 @@ function ScopeTabItem({
     <div
       role="tab"
       aria-selected={active}
+      aria-label={tabTitle(tab)}
+      title={tabTitle(tab)}
+      onClick={() => {
+        if (!active) activateTab(tab.id);
+      }}
+      // Middle-click closes, as it does on every tab strip the reader has
+      // used. `onClick` never fires for the middle button.
+      onAuxClick={(event) => {
+        if (event.button !== 1) return;
+        event.preventDefault();
+        closeTab(tab.id);
+      }}
       className={cn(
         "flex min-w-0 items-center gap-[7px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
         active ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover"
@@ -181,13 +194,19 @@ function ScopeTabItem({
           />
           <ProviderMark
             provider={detectProvider(context ?? "")}
-            className="h-[13px] w-[13px]"
+            className="h-[13px] w-[13px] flex-none"
           />
-          <span className="whitespace-nowrap">{context ?? "no cluster"}</span>
+          <span className="truncate">{context ?? "no cluster"}</span>
+          {/* The kubeconfig no longer has this cluster, so the tab cannot
+              be made live. Saying so is better than a tab that silently
+              shows another cluster's data. */}
+          {tab.missing && (
+            <span className="flex-none text-fg-fnt">(missing)</span>
+          )}
         </button>
       </ContextPopover>
 
-      <span className="mx-px text-fg-fnt">/</span>
+      <span className="mx-px flex-none text-fg-fnt">/</span>
 
       <NamespacePopover
         open={open === "ns"}
@@ -199,17 +218,23 @@ function ScopeTabItem({
         }}
       >
         <button type="button" className={segClass(open === "ns")}>
-          <span className="whitespace-nowrap">
-            {namespace || ALL_NAMESPACES}
-          </span>
-          <span className="text-[9px] text-fg-fnt">▾</span>
+          <span className="truncate">{namespace || ALL_NAMESPACES}</span>
+          <span className="flex-none text-[9px] text-fg-fnt">▾</span>
         </button>
       </NamespacePopover>
 
+      {/* What the tab is showing. Plain here on purpose — the strip's
+          appearance is a separate job. */}
+      <span className="mx-px flex-none text-fg-fnt">·</span>
+      <span className="truncate">{tabRouteLabel(tab.href)}</span>
+
       <button
         type="button"
-        aria-label={`Close ${context ?? "scope"}`}
-        onClick={() => closeTab(tab.id)}
+        aria-label={`Close ${tabTitle(tab)}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          closeTab(tab.id);
+        }}
         className="flex-none text-fg-fnt transition-colors hover:text-fg"
       >
         <span aria-hidden="true">✕</span>

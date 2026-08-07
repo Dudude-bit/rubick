@@ -201,6 +201,12 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       pendingContext: null,
       error: null,
       errorContext: null,
+      isAuthenticating: false,
+      isLoading: false,
+      // A connect already in flight would otherwise resolve after this and
+      // hand the window back a cluster the user just left — bumping the
+      // attempt id is what makes disconnecting the last word.
+      connectionAttemptId: get().connectionAttemptId + 1,
     });
   },
 }));
