@@ -271,7 +271,15 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
       </span>
       <span className="text-right text-[11px] text-fg-mut">
         {usedNum === null ? (
-          <span className="text-fg-fnt">no metrics</span>
+          // A blank number here is almost never "this object uses
+          // nothing" — it is metrics-server not being installed, which
+          // is a cluster the reader can fix rather than a reading.
+          <span
+            className="text-fg-fnt"
+            title="metrics-server is not reporting for this object"
+          >
+            no metrics-server
+          </span>
         ) : (
           <UnitValue value={formatQuantity(usedNum, type, unit)} />
         )}

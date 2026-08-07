@@ -221,6 +221,12 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
+      // The generic fallback ("No resources of this type…") is the one
+      // message a CRD list must not show: the whole question a reader
+      // opens it with is whether this kind exists on the cluster at all.
+      emptyMessage={`The CRD is installed, but no ${crdKind} has been created${
+        namespace ? ` in ${namespace}` : ""
+      } yet.`}
       deleteConfig={{
         mutationFn: (item) =>
           commands.deleteCustomResource(

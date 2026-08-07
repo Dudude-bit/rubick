@@ -48,7 +48,10 @@ const WORD: Record<StatusRole, string> = {
 
 export function ChildRows({
   rows,
-  emptyMessage = "Nothing here",
+  // A default is what most callers ship with, so it has to name a state
+  // rather than shrug: "Nothing here" told the reader neither what was
+  // looked for nor whether the lookup worked.
+  emptyMessage = "Nothing of this kind belongs to this object.",
 }: {
   rows: ChildRow[];
   emptyMessage?: string;

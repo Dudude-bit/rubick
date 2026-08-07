@@ -46,6 +46,10 @@ export interface ResourceListProps<
     | ((setDeleteTarget: (item: T) => void) => ColumnDef<T>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
+  /** Overrides the table's message for "the scope genuinely has none of
+   *  these". Worth setting wherever the generic sentence would leave the
+   *  reader unsure whether the kind exists at all. */
+  emptyMessage?: string;
   /** Delete configuration */
   deleteConfig?: ResourceDeleteConfig<T>;
   /** Optional stale time override (default: 5000ms) */
@@ -85,6 +89,7 @@ export function ResourceList<
   live,
   columns,
   emptyStateLabel,
+  emptyMessage,
   deleteConfig,
   staleTime,
   refetchInterval,
@@ -190,6 +195,7 @@ export function ResourceList<
         getRowId={getRowId}
         groupByNamespace
         rowLabel={emptyStateLabel.toLowerCase()}
+        emptyMessage={emptyMessage}
       />
       {deleteConfig && (
         <ConfirmDialog

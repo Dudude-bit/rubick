@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import yaml from "js-yaml";
 
+import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -157,11 +158,7 @@ export function HelmDetail() {
   const manifest = release?.manifest || "# The release stored no manifest.";
 
   if (!isConnected) {
-    return (
-      <p className="text-xs text-fg-mut">
-        Connect to a cluster to read Helm releases.
-      </p>
-    );
+    return <ConnectClusterEmptyState resourceLabel="Helm releases" />;
   }
 
   // Flux owns its releases through a CRD; this page only speaks to Helm's

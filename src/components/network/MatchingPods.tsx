@@ -54,7 +54,10 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
     return (
       <Section>
         <SectionHeader title="Matching Pods" />
-        <p className="text-sm text-fg-mut">No selector defined</p>
+        <p className="text-sm text-fg-mut">
+          No selector — this object does not pick pods by label, so there is
+          nothing to match.
+        </p>
       </Section>
     );
   }
@@ -142,7 +145,10 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
           ))}
         </SectionBody>
       ) : (
-        <p className="text-sm text-fg-mut">No pods match this selector</p>
+        <p className="text-sm text-fg-mut">
+          No pod carries these labels, so nothing is behind this object right
+          now — check the labels on the workload that should be.
+        </p>
       )}
     </Section>
   );
