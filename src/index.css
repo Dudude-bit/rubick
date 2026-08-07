@@ -45,6 +45,15 @@
     --ctr-s: 62%;
     --ctr-l: 42%;
 
+    /* YAML syntax, same rule again with its own pair. A manifest is long runs
+     * of 12px mono rather than one tinted word in a row, so the identity
+     * strength is wrong for it in both directions: on dark it puts a scalar at
+     * 4.7:1, below the `--fg-mid` body grey it replaces, and on light it is
+     * more saturated than a whole document wants to be. Held at body contrast
+     * instead — which hue means what is in `yaml/editor-theme.ts`. */
+    --syn-s: 48%;
+    --syn-l: 34%;
+
     /* Event families. Quieter than identity because an event row already
      * spends hue on the object it names, and two tinted columns at the same
      * strength turn the feed into a swatch book. Lower still than the status
@@ -102,6 +111,8 @@
     --kind-l: 70%;
     --ctr-s: 44%;
     --ctr-l: 65%;
+    --syn-s: 42%;
+    --syn-l: 78%;
     --evt-s: 40%;
     --evt-l: 66%;
     --raise: 220 7% 18%;
