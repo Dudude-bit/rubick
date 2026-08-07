@@ -9,6 +9,7 @@ import {
   useDisplaySettingsStore,
   type ResourceColouring,
 } from "@/stores/displaySettingsStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 /** Where the click landed: the peek is a query parameter, not component state. */
 function LocationProbe() {
@@ -33,7 +34,22 @@ const colouring = (value: ResourceColouring) =>
   useDisplaySettingsStore.setState({ resourceColouring: value });
 
 describe("ResourceRef", () => {
-  beforeEach(() => colouring("full"));
+  beforeEach(() => {
+    colouring("full");
+    useScopeTabStore.setState({
+      tabs: [
+        {
+          id: "ref-tab",
+          context: null,
+          namespace: "",
+          href: "/events",
+          missing: false,
+        },
+      ],
+      activeId: "ref-tab",
+      pendingHref: null,
+    });
+  });
 
   describe("routing", () => {
     it("links a routable namespaced kind to its detail page", () => {
@@ -228,20 +244,53 @@ describe("ResourceRef", () => {
       expect(location()).toBe("/events?peek=pods%2Fns%2Fa-1");
     });
 
-    // A reference that cannot be opened in a new window is worse than the
-    // plain link it replaced, so the browser keeps every modified click.
+    // The webview has no second window, so the modified click that used to
+    // fall through to the browser opens a scope tab — the same promise.
     it.each([
-      ["ctrl", { ctrlKey: true }],
-      ["meta", { metaKey: true }],
-      ["shift", { shiftKey: true }],
-      ["middle button", { button: 1 }],
-    ])("leaves a %s click to the browser", (_label, init) => {
+      ["ctrl", { ctrlKey: true }, true],
+      ["meta", { metaKey: true }, true],
+      ["shift", { shiftKey: true }, false],
+    ])("opens a %s click in a new tab", (_label, init, background) => {
       renderRef();
       const link = screen.getByRole("link");
-      const handled = fireEvent.click(link, init);
-      expect(handled).toBe(true);
+      fireEvent.click(link, init);
+      const { tabs, activeId } = useScopeTabStore.getState();
+      expect(tabs).toHaveLength(2);
+      expect(tabs[1].href).toBe("/pods/ns/a-1");
+      expect(activeId === tabs[1].id).toBe(!background);
+      // The page underneath is untouched either way.
       expect(location()).toBe("/events");
       expect(link).toHaveAttribute("href", "/pods/ns/a-1");
+    });
+
+    it("opens a middle click behind the page being read", () => {
+      renderRef();
+      // Testing Library has no `auxClick` helper; React binds `onAuxClick`
+      // to the native `auxclick` event, so dispatch that one.
+      fireEvent(
+        screen.getByRole("link"),
+        new MouseEvent("auxclick", {
+          bubbles: true,
+          cancelable: true,
+          button: 1,
+        })
+      );
+      const { tabs, activeId } = useScopeTabStore.getState();
+      expect(tabs).toHaveLength(2);
+      expect(tabs[1].href).toBe("/pods/ns/a-1");
+      expect(activeId).toBe("ref-tab");
+      expect(location()).toBe("/events");
+    });
+
+    // Alt-click is the browser's save gesture, not a navigation.
+    it("leaves an alt click to the browser", () => {
+      renderRef();
+      const handled = fireEvent.click(screen.getByRole("link"), {
+        altKey: true,
+      });
+      expect(handled).toBe(true);
+      expect(useScopeTabStore.getState().tabs).toHaveLength(1);
+      expect(location()).toBe("/events");
     });
 
     it("hands a plain click to onClick without losing the href", async () => {

@@ -18,6 +18,13 @@ describe("formatShortcut", () => {
     expect(formatShortcut("alt+Enter", "windows")).toBe("Alt+Enter");
   });
 
+  // Cmd+Tab is the macOS app switcher, so tab cycling has to say Control
+  // outright rather than "whatever this platform calls the command key".
+  it("renders a literal ctrl apart from mod", () => {
+    expect(formatShortcut("ctrl+Tab", "macos")).toBe("⌃Tab");
+    expect(formatShortcut("ctrl+Tab", "linux")).toBe("Ctrl+Tab");
+  });
+
   it("passes unmodified keys through", () => {
     expect(formatShortcut("Esc", "linux")).toBe("Esc");
   });

@@ -11,6 +11,7 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { usePeek } from "@/hooks/usePeek";
 
 export interface ResourceRefProps {
@@ -20,10 +21,9 @@ export interface ResourceRefProps {
   /** Off where the surrounding column already says the kind. */
   showKind?: boolean;
   /**
-   * Called before the peek opens on a plain left click. Calling
-   * `preventDefault()` here keeps both the peek and the navigation from
-   * happening; the anchor keeps its real destination either way, so
-   * middle-click and modifier-click still open the page.
+   * Called before the peek opens on a plain left click, and before a
+   * modified one opens a tab. Calling `preventDefault()` here keeps both
+   * from happening; the anchor keeps its real destination either way.
    */
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   className?: string;
@@ -77,6 +77,7 @@ export function ResourceRef({
   className,
 }: ResourceRefProps) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
+  const openTab = useScopeTabStore((state) => state.openTab);
   const { open } = usePeek();
   const { stem, tail } = splitName(name);
   const resolved = isResourceType(kind) ? toKind(kind) : null;
@@ -178,29 +179,43 @@ export function ResourceRef({
     return <span className={cn(shell, className)}>{body}</span>;
   }
 
+  const to = getResourceDetailUrl(kind, name, namespace);
+
+  const openInTab = (
+    event: MouseEvent<HTMLAnchorElement>,
+    background: boolean
+  ) => {
+    // The webview has no second window to hand this to, so the modified
+    // click that used to fall through to the browser opens a scope tab
+    // instead — which is the same promise, kept.
+    event.preventDefault();
+    openTab({ href: to, background });
+  };
+
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (event.defaultPrevented) return;
-    // Only a plain left click belongs to the peek. Ctrl, cmd, shift and the
-    // middle button are how a reference is opened in a new window, and one
-    // that cannot be is worse than the plain link it replaced.
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
+    // Ctrl and cmd open behind, shift opens in front: the browser rule.
+    if (event.metaKey || event.ctrlKey) return openInTab(event, true);
+    if (event.shiftKey) return openInTab(event, false);
+    // Alt-click is the browser's save gesture; leave it alone.
+    if (event.button !== 0 || event.altKey) return;
     event.preventDefault();
     open({ kind, name, namespace });
   };
 
+  const handleAuxClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 1) return;
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+    openInTab(event, true);
+  };
+
   return (
     <Link
-      to={getResourceDetailUrl(kind, name, namespace)}
+      to={to}
       onClick={handleClick}
+      onAuxClick={handleAuxClick}
       // The name is split across spans so the tail can carry its own hue, and
       // the accessible-name algorithm joins those spans with a space — which
       // announces "k3d-agent -0" for a pod that is called neither. Naming the

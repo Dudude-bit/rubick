@@ -14,6 +14,8 @@ function spell(shortcut: string): string {
       switch (part.toLowerCase()) {
         case "mod":
           return isMac() ? "Command" : "Control";
+        case "ctrl":
+          return "Control";
         case "shift":
           return "Shift";
         case "alt":

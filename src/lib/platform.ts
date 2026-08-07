@@ -28,6 +28,10 @@ export function formatShortcut(shortcut: string, os: string = hostOs): string {
     switch (part.toLowerCase()) {
       case "mod":
         return mac ? "⌘" : "Ctrl";
+      // Literal Control, not "the platform's command key": Cmd+Tab is the
+      // macOS app switcher, so tab cycling is Ctrl+Tab everywhere.
+      case "ctrl":
+        return mac ? "⌃" : "Ctrl";
       case "shift":
         return mac ? "⇧" : "Shift";
       case "alt":
