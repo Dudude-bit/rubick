@@ -479,12 +479,15 @@ export function EnvironmentVariables({
   // Chrome after content, never before it. A container that declares no
   // variables was still getting a heading, a bordered source picker and a
   // chevron — three controls over an empty list, on four of the five
-  // containers of an ordinary pod. What is true is one line long.
-  if (!hasEnvVars) {
-    return (
-      <p className="text-xs text-fg-fnt">No environment variables declared</p>
-    );
-  }
+  // containers of an ordinary pod.
+  //
+  // Nothing at all, not a one-line denial: on `log-demo` that denial was the
+  // same sentence printed five times down the tab, which is longer than the
+  // fact it reports and reads as a fault rather than as an absence. Every
+  // other optional row here — ports, limits, last exit — is simply missing
+  // when it has no content, and a reader who wants the empty list has the
+  // YAML tab.
+  if (!hasEnvVars) return null;
 
   return (
     <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>

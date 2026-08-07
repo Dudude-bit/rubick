@@ -1,18 +1,19 @@
 import { ImageIcon, TerminalIcon } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ClickablePorts } from "@/components/ui/clickable-port";
 import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { KeyValueList, type KeyValue } from "@/components/resources/detail-kv";
-import { statusRole } from "@/lib/status-role";
-import { describeTermination, terminationWhen } from "@/lib/pod-status";
-import type {
-  ContainerInfo,
-  ContainerState,
-  DeploymentContainerInfo,
-} from "@/generated/types";
+import {
+  containerStatus,
+  describeTermination,
+  lastTermination,
+  terminationWhen,
+} from "@/lib/pod-status";
+import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
 
 /**
  * A pod's containers, and a deployment's container template, as metadata
@@ -28,36 +29,6 @@ function isRuntime(
   container: ContainerInfo | DeploymentContainerInfo
 ): container is ContainerInfo {
   return "ready" in container && "state" in container;
-}
-
-type StateSummary = { text: string; tone?: "warn" | "err" };
-
-/**
- * `state` is a tagged union; the previous card iterated it with
- * `Object.entries` and rendered the discriminant itself as the state name.
- */
-function describeState(state: ContainerState): StateSummary {
-  switch (state.type) {
-    case "running":
-      return { text: "Running" };
-    case "waiting": {
-      const reason = state.reason;
-      if (!reason) return { text: "Waiting", tone: "warn" };
-      return {
-        text: `Waiting · ${reason}`,
-        tone: statusRole(reason) === "err" ? "err" : "warn",
-      };
-    }
-    case "terminated": {
-      const when = terminationWhen(state.termination);
-      return {
-        text: `Terminated · ${describeTermination(state.termination)}${when ? ` · ${when}` : ""}`,
-        tone: state.termination.exitCode === 0 ? undefined : "err",
-      };
-    }
-    default:
-      return { text: "Unknown", tone: "warn" };
-  }
 }
 
 function quantities(record: Record<string, string>): string | null {
@@ -90,31 +61,30 @@ export function ContainerRows({
     <div className="flex flex-col gap-[22px]">
       {containers.map((container) => {
         const runtime = isRuntime(container);
-        const state = runtime ? describeState(container.state) : null;
+        const status = runtime ? containerStatus(container) : null;
 
         const items: KeyValue[] = [
           { label: "Image", value: <ImageRef image={container.image} /> },
         ];
 
-        if (runtime && state) {
-          items.push({ label: "State", value: state.text, tone: state.tone });
+        if (runtime) {
           items.push({
             label: "Restarts",
             value: container.restartCount,
             tone: container.restartCount > 0 ? "warn" : undefined,
           });
-          // A container that restarts is a container that died, and the
-          // count alone never said of what. Only shown when the current
-          // state is not already the termination being described.
-          if (
-            container.state.type !== "terminated" &&
-            container.lastTerminated
-          ) {
-            const when = terminationWhen(container.lastTerminated);
+          // A container that restarts is a container that died, and the count
+          // alone never said of what. The heading carries the state word, so
+          // this row carries only what the word could not: the exit code and
+          // when it happened, whether the death is the state the container is
+          // in now or the one it is backing off from.
+          const death = lastTermination(container);
+          if (death) {
+            const when = terminationWhen(death);
             items.push({
               label: "Last exit",
-              value: `${describeTermination(container.lastTerminated)}${when ? ` · ${when}` : ""}`,
-              tone: container.lastTerminated.exitCode === 0 ? undefined : "err",
+              value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
+              tone: death.exitCode === 0 ? undefined : "err",
             });
           }
           if (container.ports.length > 0) {
@@ -163,11 +133,17 @@ export function ContainerRows({
           <Section key={container.name}>
             <SectionHeader
               title={container.name}
+              // The container's state, where its readiness used to sit as a
+              // bare word. Readiness is folded into it: "Running" now means
+              // running *and* serving, and a container failing its readiness
+              // probe says "Not ready" rather than claiming Running in one
+              // place and denying it in another.
               count={
-                runtime && !container.ready ? (
-                  <span className="text-warn">not ready</span>
-                ) : runtime ? (
-                  "ready"
+                status ? (
+                  <StatusBadge
+                    status={status.text}
+                    roleOverride={status.role}
+                  />
                 ) : undefined
               }
               actions={

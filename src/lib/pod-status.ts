@@ -1,4 +1,9 @@
-import type { PodInfo, TerminationInfo } from "@/generated/types";
+import type {
+  ContainerState,
+  PodInfo,
+  TerminationInfo,
+} from "@/generated/types";
+import { statusRole, type StatusRole } from "@/lib/status-role";
 import { formatAge, formatDate } from "@/lib/utils";
 
 /**
@@ -44,6 +49,56 @@ export function lastTermination(container: {
 }): TerminationInfo | null {
   if (container.state.type === "terminated") return container.state.termination;
   return container.lastTerminated;
+}
+
+export interface ContainerStatus {
+  /** The word, in the vocabulary the pod's own status column uses. */
+  text: string;
+  role: StatusRole;
+}
+
+/**
+ * One container's state as a status, on the same terms the pod above it got
+ * in `pod_display`.
+ *
+ * The Containers tab used to print the discriminant — `Running`, `Waiting ·
+ * CrashLoopBackOff` — as an ordinary metadata value, so the most-read state
+ * in the app was the only one with no glyph and no role, while readiness sat
+ * apart from it as the word "ready" beside the heading. They are one fact:
+ * a container that is running and failing its readiness probe is not
+ * "Running", it is not ready, and that is what keeps the Service from
+ * sending it traffic.
+ */
+export function containerStatus(container: {
+  ready: boolean;
+  state: ContainerState;
+}): ContainerStatus {
+  const { state } = container;
+  switch (state.type) {
+    case "running":
+      return container.ready
+        ? { text: "Running", role: "ok" }
+        : { text: "Not ready", role: "warn" };
+    case "waiting": {
+      if (!state.reason) return { text: "Waiting", role: "pending" };
+      const role = statusRole(state.reason);
+      // Waiting is inherently a pending state, so a reason the role table
+      // has never heard of — an operator's, a runtime's — falls back to
+      // pending rather than to the neutral grey the table returns for it.
+      return {
+        text: state.reason,
+        role: role === "neutral" ? "pending" : role,
+      };
+    }
+    case "terminated": {
+      const { termination } = state;
+      if (termination.exitCode === 0 && termination.signal === null)
+        return { text: termination.reason ?? "Completed", role: "neutral" };
+      return { text: termination.reason ?? "Error", role: "err" };
+    }
+    default:
+      return { text: "Unknown", role: "warn" };
+  }
 }
 
 /** "653 restarts, last 4m ago" — the count on its own does not date itself. */
