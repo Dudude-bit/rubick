@@ -74,6 +74,8 @@ import type {
   ResourceQuery,
   ResourceReferences,
   RolloutStatus,
+  SearchHandle,
+  SearchRequest,
   SecretFilters,
   SecretInfo,
   ServiceFilters,
@@ -669,6 +671,22 @@ export async function getClusterStats(
   namespace: string | null
 ): Promise<ClusterStats> {
   return invoke<ClusterStats>("get_cluster_stats", { namespace });
+}
+
+export async function startResourceSearch(
+  request: SearchRequest
+): Promise<SearchHandle> {
+  return invoke<SearchHandle>("start_resource_search", { request });
+}
+
+export async function resourceSearchSubscribed(
+  searchId: string
+): Promise<void> {
+  return invoke<void>("resource_search_subscribed", { searchId });
+}
+
+export async function cancelResourceSearch(searchId: string): Promise<void> {
+  return invoke<void>("cancel_resource_search", { searchId });
 }
 
 export async function validateManifest(

@@ -181,6 +181,32 @@ pub enum AppEvent {
         kind: StreamFailureKind,
         message: String,
     },
+    /// A batch of cross-cluster search matches from one cluster.
+    ///
+    /// Emitted per (cluster, kind) as soon as that query answers, so a
+    /// four-cluster search paints three clusters' results while the
+    /// fourth is still connecting.
+    SearchHits {
+        search_id: String,
+        context: String,
+        hits: Vec<crate::search::SearchHit>,
+    },
+    /// One cluster's state within a search.
+    ///
+    /// Every active cluster emits exactly one terminal status —
+    /// `done`, `failed` or `skipped` — so the frontend never has to
+    /// guess whether an empty result list means "nothing matched" or
+    /// "this cluster never answered". `reason` + `message` carry the
+    /// why in words the reader can act on.
+    SearchStatus {
+        search_id: String,
+        context: String,
+        status: crate::search::SearchContextStatus,
+        reason: Option<crate::search::SearchFailureKind>,
+        message: Option<String>,
+        matched: u32,
+        truncated: bool,
+    },
     /// Terminal output received
     TerminalOutput { session_id: String, data: String },
     /// Terminal session closed
@@ -239,6 +265,8 @@ impl AppEvent {
             AppEvent::LogBatch { .. } => "log-batch",
             AppEvent::StreamFailed { .. } => "stream-failed",
             AppEvent::ResourceWatchEvent { .. } => "resource-event",
+            AppEvent::SearchHits { .. } => "search-hits",
+            AppEvent::SearchStatus { .. } => "search-status",
             AppEvent::TerminalOutput { .. } => "terminal-output",
             AppEvent::TerminalClosed { .. } => "terminal-closed",
             AppEvent::PortForwardStatus { .. } => "port-forward-status",
@@ -292,6 +320,32 @@ impl AppEvent {
                 "op": op,
                 "resource": resource,
                 "error": error,
+            }),
+            AppEvent::SearchHits {
+                search_id,
+                context,
+                hits,
+            } => serde_json::json!({
+                "search_id": search_id,
+                "context": context,
+                "hits": hits,
+            }),
+            AppEvent::SearchStatus {
+                search_id,
+                context,
+                status,
+                reason,
+                message,
+                matched,
+                truncated,
+            } => serde_json::json!({
+                "search_id": search_id,
+                "context": context,
+                "status": status,
+                "reason": reason,
+                "message": message,
+                "matched": matched,
+                "truncated": truncated,
             }),
             AppEvent::TerminalOutput { session_id, data } => serde_json::json!({
                 "session_id": session_id,
@@ -445,6 +499,20 @@ mod tests {
                 kind: StreamFailureKind::Gone,
                 message: "gone".into(),
             },
+            AppEvent::SearchHits {
+                search_id: "search-1".into(),
+                context: "prod".into(),
+                hits: vec![],
+            },
+            AppEvent::SearchStatus {
+                search_id: "search-1".into(),
+                context: "prod".into(),
+                status: crate::search::SearchContextStatus::Done,
+                reason: None,
+                message: None,
+                matched: 0,
+                truncated: false,
+            },
         ];
 
         for event in &samples {
@@ -562,6 +630,67 @@ mod tests {
         }
         .payload();
         assert_eq!(broken.get("kind").and_then(|v| v.as_str()), Some("broken"));
+    }
+
+    /// A cluster that failed and a cluster that matched nothing both
+    /// end a search with zero hits. The payload has to keep them
+    /// apart, or the palette repeats the "No output yet" lie one more
+    /// time — this time for a whole cluster.
+    #[test]
+    fn search_status_payload_separates_a_failure_from_an_empty_result() {
+        use crate::search::{SearchContextStatus, SearchFailureKind};
+
+        let empty = AppEvent::SearchStatus {
+            search_id: "s-1".into(),
+            context: "dev".into(),
+            status: SearchContextStatus::Done,
+            reason: None,
+            message: None,
+            matched: 0,
+            truncated: false,
+        }
+        .payload();
+        assert_eq!(empty.get("status").and_then(|v| v.as_str()), Some("done"));
+        assert!(empty.get("reason").is_some_and(serde_json::Value::is_null));
+
+        let failed = AppEvent::SearchStatus {
+            search_id: "s-1".into(),
+            context: "prod".into(),
+            status: SearchContextStatus::Failed,
+            reason: Some(SearchFailureKind::Unreachable),
+            message: Some("connection refused".into()),
+            matched: 0,
+            truncated: false,
+        }
+        .payload();
+        assert_eq!(
+            failed.get("status").and_then(|v| v.as_str()),
+            Some("failed")
+        );
+        assert_eq!(
+            failed.get("reason").and_then(|v| v.as_str()),
+            Some("unreachable"),
+            "the frontend switches on kebab-case reasons"
+        );
+        assert_eq!(
+            failed.get("message").and_then(|v| v.as_str()),
+            Some("connection refused"),
+        );
+
+        let skipped = AppEvent::SearchStatus {
+            search_id: "s-1".into(),
+            context: "stage".into(),
+            status: SearchContextStatus::Skipped,
+            reason: Some(SearchFailureKind::NotConnected),
+            message: Some("not connected".into()),
+            matched: 0,
+            truncated: false,
+        }
+        .payload();
+        assert_eq!(
+            skipped.get("reason").and_then(|v| v.as_str()),
+            Some("not-connected"),
+        );
     }
 
     #[test]

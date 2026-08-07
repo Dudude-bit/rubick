@@ -78,6 +78,10 @@ fn main() {
             commands::namespace::list_namespaces,
             // Generic resource management
             commands::resources::list_resources,
+            // Cross-cluster search
+            commands::search::start_resource_search,
+            commands::search::resource_search_subscribed,
+            commands::search::cancel_resource_search,
             // CRD commands
             commands::crds::list_crds,
             commands::crds::get_crd,

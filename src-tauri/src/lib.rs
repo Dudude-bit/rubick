@@ -17,6 +17,7 @@ pub mod logs;
 pub mod metrics;
 pub mod plugins;
 pub mod resources;
+pub mod search;
 pub mod shell;
 pub mod state;
 pub mod terminal;

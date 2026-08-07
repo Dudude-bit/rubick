@@ -289,6 +289,28 @@ export interface ManifestResult {
   exit_code: number;
 }
 
+export interface SearchHandle {
+  searchId: string;
+  targets: SearchTarget[];
+}
+
+export interface SearchTarget {
+  context: string;
+  status: SearchContextStatus;
+  reason: SearchFailureKind | null;
+  message: string | null;
+}
+
+export interface SearchRequest {
+  query: string;
+  contexts: string[];
+  allContexts: boolean;
+  namespace?: string;
+  kinds?: string[];
+  connect: boolean;
+  limitPerContext?: number;
+}
+
 export interface ClusterStats {
   pods: PodStats;
   deployments: DeploymentStats;
@@ -1164,6 +1186,21 @@ export interface ResourceFilters {
   fieldSelector: string | null;
   limit: number | null;
 }
+
+export type SearchFailureKind =
+  | "not-connected"
+  | "unknown-context"
+  | "unreachable"
+  | "timeout"
+  | "forbidden"
+  | "other";
+
+export type SearchContextStatus =
+  | "connecting"
+  | "searching"
+  | "done"
+  | "failed"
+  | "skipped";
 
 export type EnvVarSourceType =
   | "configMapKeyRef"
