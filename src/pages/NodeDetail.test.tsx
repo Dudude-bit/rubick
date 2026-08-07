@@ -129,7 +129,11 @@ describe("NodeDetail", () => {
 
   it("renders the node name in the page title", () => {
     renderPage();
-    expect(screen.getByText("test-node-1")).toBeInTheDocument();
+    // The title is a `ResourceName`, so the identity tail is its own span:
+    // the heading's text content is the name, its `getByText` is not.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+      "test-node-1"
+    );
   });
 
   it("shows the role badge when the node has a role", () => {

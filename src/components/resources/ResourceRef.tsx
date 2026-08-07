@@ -1,8 +1,6 @@
 import type { MouseEvent } from "react";
 import { Link } from "react-router-dom";
-import { CircleDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { splitName, identHue, kindHue } from "@/lib/resource-identity";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   getResourceDefinition,
@@ -10,9 +8,9 @@ import {
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
-import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { usePeek } from "@/hooks/usePeek";
+import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 
 export interface ResourceRefProps {
   kind: string;
@@ -76,104 +74,15 @@ export function ResourceRef({
   onClick,
   className,
 }: ResourceRefProps) {
-  const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
   const openTab = useScopeTabStore((state) => state.openTab);
   const { open } = usePeek();
-  const { stem, tail } = splitName(name);
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  // A kind the registry does not carry — ReplicaSet, a HelmRelease, any CRD
-  // an event names — still has to reserve the mark's width, or it sits flush
-  // left while every other row in the column is indented behind an icon.
-  const Icon = resolved ? getResourceDefinition(resolved).icon : CircleDashed;
 
-  // Full spends the hue on identity, so the kind falls back to its icon;
-  // minimal keeps that icon hue and nothing else; off tints nothing.
-  const kindStyle =
-    colouring === "off"
-      ? undefined
-      : { color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))` };
-  // The tint marks whichever part of the name says *which* object this is.
-  // Usually that is the generated tail. But a node is `k3d-k8s-gui-dev-agent-0`
-  // — every sibling shares all of it but the last few characters, and the tail
-  // the splitter finds is the ordinal `-0`, two characters of colour on a
-  // thirty-character string. Where the tail is that thin, or absent, the name
-  // itself is the identity and the whole of it is tinted.
-  const identityStyle =
-    colouring === "full"
-      ? { color: `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))` }
-      : undefined;
-  const tailCarriesIdentity = tail.length > 2;
-  const stemStyle = tailCarriesIdentity ? undefined : identityStyle;
-  const tailStyle = identityStyle;
-  // Dim the stem only when the tail is the tinted part; a name tinted end to
-  // end must not be half grey.
-  const stemClass =
-    colouring === "full" && tailCarriesIdentity
-      ? "text-fg-mut"
-      : stemStyle
-        ? undefined
-        : "text-fg";
-  // Minimal spends no hue on identity, so the tail falls back to being the
-  // quiet half of the name — which is still more than `off`, where the whole
-  // name reads at one weight.
-  const tailClass =
-    colouring === "full"
-      ? undefined
-      : colouring === "minimal"
-        ? "text-fg-fnt"
-        : "text-fg";
-
-  const body = (
-    <>
-      <Icon
-        className={cn(
-          "h-2.5 w-2.5 flex-none self-center",
-          colouring === "off" && "text-fg-mut"
-        )}
-        style={kindStyle}
-        aria-hidden="true"
-        data-testid="resource-ref-icon"
-      />
-      <span className="truncate font-mono">
-        {/* The kind reaches a screen reader either way — when it is shown as
-            an icon only, the text still has to name it. */}
-        {showKind ? (
-          <>
-            <span
-              className={cn(colouring !== "full" && "text-fg-mut")}
-              style={colouring === "full" ? kindStyle : undefined}
-              data-testid="resource-ref-kind"
-            >
-              {kind}
-            </span>
-            <span className="text-fg-fnt">/</span>
-          </>
-        ) : (
-          <span className="sr-only">{kind} </span>
-        )}
-        <span
-          className={stemClass}
-          style={stemStyle}
-          data-testid="resource-ref-stem"
-        >
-          {stem}
-        </span>
-        <span
-          className={tailClass}
-          style={tailStyle}
-          data-testid="resource-ref-tail"
-        >
-          {tail}
-        </span>
-      </span>
-    </>
-  );
+  const body = <ResourceName kind={kind} name={name} showKind={showKind} />;
 
   // No `max-w-full`: inside an inline parent that percentage resolves against
   // a width computed without the icon, which clips two characters off every
   // name in the command palette. `min-w-0` is what lets a real bound shrink it.
-  const shell =
-    "-mx-0.5 inline-flex min-w-0 items-baseline gap-1 rounded-[3px] px-0.5";
+  const shell = RESOURCE_NAME_SHELL;
 
   if (!isRoutableKind(kind, namespace)) {
     return <span className={cn(shell, className)}>{body}</span>;
