@@ -1,3 +1,12 @@
+import {
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Clock,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+
 /**
  * Semantic role for a Kubernetes status string.
  *
@@ -6,6 +15,41 @@
  * hand, which is how 137 colour literals accumulated in one file.
  */
 export type StatusRole = "ok" | "pending" | "warn" | "err" | "neutral";
+
+/**
+ * Shape, not decoration. Severity has to survive greyscale and the roughly
+ * one reader in twelve who cannot separate the red from the green, so the
+ * glyphs are chosen to differ in outline: a tick, a clock, a triangle, a
+ * cross, a dash.
+ *
+ * They live beside the roles rather than in `StatusBadge` because a badge is
+ * not the only place a role is drawn — a condition row, a container block and
+ * a pod picker all say the same five things, and five copies of this table is
+ * how `pending` came to be amber in one of them and blue in the rest.
+ */
+export const ROLE_ICON: Record<StatusRole, LucideIcon> = {
+  ok: CircleCheck,
+  pending: Clock,
+  warn: TriangleAlert,
+  err: CircleX,
+  neutral: CircleMinus,
+};
+
+export const ROLE_TEXT: Record<StatusRole, string> = {
+  ok: "text-ok",
+  pending: "text-info",
+  warn: "text-warn",
+  err: "text-err",
+  neutral: "text-fg-mut",
+};
+
+export const ROLE_DOT: Record<StatusRole, string> = {
+  ok: "bg-ok",
+  pending: "bg-info",
+  warn: "bg-warn",
+  err: "bg-err",
+  neutral: "bg-fg-fnt",
+};
 
 const ROLES: Record<StatusRole, readonly string[]> = {
   ok: [

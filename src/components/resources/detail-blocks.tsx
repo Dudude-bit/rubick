@@ -3,14 +3,12 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
-import {
-  conditionVerdict,
-  type ConditionVerdict,
-} from "@/lib/condition-health";
+import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import { linkifyImages } from "@/lib/image-ref";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { usageRole } from "@/lib/metric-format";
+import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { ImageRef } from "./ImageRef";
@@ -94,20 +92,15 @@ export function DetailAction({
   );
 }
 
-const VERDICT_TONE: Record<ConditionVerdict, string> = {
-  good: "text-fg-mut",
-  unknown: "text-warn",
-  bad: "text-err",
-};
-
-const VERDICT_GLYPH: Record<ConditionVerdict, string> = {
-  good: "●",
-  unknown: "▲",
-  bad: "▲",
-};
-
+/**
+ * 190px is `PodReadyToStartContainers` in the 12px mono face with a character
+ * to spare. The column used to be 140px, which clipped that condition — the
+ * longest one a pod has and the only one whose name is the whole sentence —
+ * to `PodReadyToStartCont…`, i.e. to the two words it shares with nothing.
+ * A CRD can still invent something longer, so the `title` stays.
+ */
 const CONDITION_ROW =
-  "grid grid-cols-[10px_minmax(0,140px)_58px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,190px)_58px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
 export function ConditionRows({
   conditions,
@@ -132,23 +125,33 @@ export function ConditionRows({
 }
 
 function ConditionRow({ condition }: { condition: ConditionInfo }) {
-  const verdict = conditionVerdict(condition);
-  const tone = VERDICT_TONE[verdict];
+  const role = conditionRole(condition);
+  // Colour is spent on anomalies only. A pod reports six conditions and five
+  // of them are satisfied on every healthy pod in the cluster; five green
+  // ticks per row is the wall of colour that makes the sixth invisible. The
+  // satisfied condition keeps its glyph — a tick still says "met" — and gives
+  // up its hue, exactly as the composition bar's healthy segment does.
+  const tone = role === "ok" ? "text-fg-mut" : ROLE_TEXT[role];
+  const Icon = ROLE_ICON[role];
   const age = useRealtimeAge(condition.lastTransitionTime ?? null);
   const detail = condition.message || condition.reason;
 
   return (
     <div className={CONDITION_ROW}>
-      {/* The glyph differs in shape as well as colour: a condition list is
-       *  the first thing read on a broken node, and hue alone would not
-       *  survive a colour deficiency. */}
-      <span
-        className={cn("justify-self-center text-[9px]", tone)}
+      {/* Every row carries a mark, and the five marks differ in outline as
+       *  well as hue: a condition list is the first thing read on a broken
+       *  node, and a list where the healthy half was a dot and the unhealthy
+       *  half a triangle told the reader nothing about which of the two
+       *  unhealthy kinds — unreadable or failed — each one was. */}
+      <Icon
+        className={cn("h-2.5 w-2.5 justify-self-center self-center", tone)}
         aria-hidden="true"
+        data-testid="condition-icon"
+      />
+      <span
+        className={cn("truncate font-mono font-medium", tone)}
+        title={condition.type}
       >
-        {VERDICT_GLYPH[verdict]}
-      </span>
-      <span className={cn("truncate font-mono font-medium", tone)}>
         {condition.type}
       </span>
       <span className={cn("truncate text-[11px]", tone)}>

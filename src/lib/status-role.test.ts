@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { statusRole } from "@/lib/status-role";
+import {
+  ROLE_DOT,
+  ROLE_ICON,
+  ROLE_TEXT,
+  statusRole,
+  type StatusRole,
+} from "@/lib/status-role";
+import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
+
+const ROLES: StatusRole[] = ["ok", "pending", "warn", "err", "neutral"];
 
 describe("statusRole", () => {
   it("maps healthy states", () => {
@@ -76,5 +85,30 @@ describe("statusRole", () => {
 
   it("keeps a healthy pod quiet", () => {
     expect(statusRole("Running")).toBe("ok");
+  });
+});
+
+describe("role marks", () => {
+  it("gives every role its own shape", () => {
+    // Hue is the channel a greyscale screenshot and a red-green deficiency
+    // both lose. If two roles shared a glyph, a condition list or a container
+    // block would be saying one thing in one channel.
+    expect(new Set(ROLES.map((role) => ROLE_ICON[role])).size).toBe(
+      ROLES.length
+    );
+  });
+
+  it("never reuses a kind's glyph", () => {
+    // A status mark and a `ResourceRef`'s kind mark sit in adjacent columns
+    // of the same table row; sharing one collapses two channels into one.
+    const kinds = new Set(RESOURCE_REGISTRY.map((entry) => entry.icon));
+    for (const role of ROLES) expect(kinds.has(ROLE_ICON[role])).toBe(false);
+  });
+
+  it("answers every role in every channel", () => {
+    for (const role of ROLES) {
+      expect(ROLE_TEXT[role]).toMatch(/^text-/);
+      expect(ROLE_DOT[role]).toMatch(/^bg-/);
+    }
   });
 });

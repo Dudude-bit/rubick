@@ -13,46 +13,14 @@
  * drowning the one row that crashed.
  */
 import * as React from "react";
-import {
-  CircleCheck,
-  CircleMinus,
-  CircleX,
-  Clock,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { statusRole, type StatusRole } from "@/lib/status-role";
-
-const ROLE_CLASS: Record<StatusRole, string> = {
-  ok: "text-ok",
-  pending: "text-info",
-  warn: "text-warn",
-  err: "text-err",
-  neutral: "text-fg-mut",
-};
-
-/**
- * Shape, not decoration. Severity has to survive greyscale and the roughly
- * one reader in twelve who cannot separate the red from the green, so the
- * glyphs are chosen to differ in outline: a tick, a clock, a triangle, a
- * cross, a dash.
- */
-const ROLE_ICON: Record<StatusRole, LucideIcon> = {
-  ok: CircleCheck,
-  pending: Clock,
-  warn: TriangleAlert,
-  err: CircleX,
-  neutral: CircleMinus,
-};
-
-const DOT_CLASS: Record<StatusRole, string> = {
-  ok: "bg-ok",
-  pending: "bg-info",
-  warn: "bg-warn",
-  err: "bg-err",
-  neutral: "bg-fg-fnt",
-};
+import {
+  ROLE_DOT,
+  ROLE_ICON,
+  ROLE_TEXT,
+  statusRole,
+  type StatusRole,
+} from "@/lib/status-role";
 
 export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** Raw status from the API, e.g. "Running", "CrashLoopBackOff". */
@@ -89,7 +57,7 @@ export function StatusBadge({
         // box with no vertical padding: the status must never be what
         // decides how tall a table row is.
         "inline-flex items-center gap-1 font-mono text-[11px] font-medium leading-4",
-        ROLE_CLASS[resolved],
+        ROLE_TEXT[resolved],
         className
       )}
       {...props}
@@ -98,7 +66,7 @@ export function StatusBadge({
         <span
           className={cn(
             "h-1.5 w-1.5 flex-none rounded-full",
-            DOT_CLASS[resolved]
+            ROLE_DOT[resolved]
           )}
         />
       ) : (
