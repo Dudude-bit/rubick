@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 
+import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
@@ -29,6 +30,7 @@ import {
   providerLabel,
 } from "@/lib/cluster-identity";
 import { cn } from "@/lib/utils";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
 import {
   splitByRecency,
   useClusterRecencyStore,
@@ -231,28 +233,17 @@ function NewTabButton() {
             No contexts in the kubeconfig.
           </p>
         )}
-        {contexts.map((ctx) => {
-          const color = clusterColor(ctx.name);
-          return (
-            <ContextMenuItem
-              key={ctx.name}
-              onSelect={() => openTab({ context: ctx.name })}
-              className="grid grid-cols-[6px_1fr] items-center gap-[9px]"
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: color }}
-              />
-              <span className="flex items-center gap-[7px] overflow-hidden">
-                <ProviderMark
-                  provider={detectProvider(ctx.name)}
-                  style={{ color }}
-                />
-                <span className="truncate font-mono">{ctx.name}</span>
-              </span>
-            </ContextMenuItem>
-          );
-        })}
+        {/* The same row the picker and the front door use, so a renamed or
+            recoloured cluster is renamed and recoloured here too. */}
+        {contexts.map((ctx) => (
+          <ContextMenuItem
+            key={ctx.name}
+            onSelect={() => openTab({ context: ctx.name })}
+            className="p-0"
+          >
+            <ClusterRow context={ctx.name} />
+          </ContextMenuItem>
+        ))}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => openTab()}>
           {/* Named by what it does rather than by the cluster, because the
@@ -289,7 +280,9 @@ function ScopeTabItem({
 
   const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
   const [tip, setTip] = useState(false);
-  const color = clusterColor(context);
+  const mark = useClusterMark(context);
+  const alias = mark.alias?.trim();
+  const color = clusterColor(context, mark.hue);
   const route = tabRouteLabel(tab.href);
   // A cluster the kubeconfig has lost is the odd one out however many
   // clusters are open — that is exactly when the name is the fact the
@@ -383,7 +376,7 @@ function ScopeTabItem({
         <div
           role="tab"
           aria-selected={active}
-          aria-label={tabTitle(tab)}
+          aria-label={tabTitle(tab, alias)}
           data-active={active}
           onClick={() => {
             if (!active) activateTab(tab.id);
@@ -424,36 +417,42 @@ function ScopeTabItem({
             activeContext={context}
             onSelect={pickCluster}
           >
-            <button
-              type="button"
-              className={cn(
-                segClass(open === "ctx"),
-                showName ? "min-w-[4rem] [flex-shrink:6]" : "flex-none",
-                tab.missing && "min-w-[6.5rem]"
-              )}
-            >
-              {/* Only the dot carries the cluster colour here — the mark
-                  stays at text contrast so the tab reads as one label and
-                  the colour signal has a single owner. A cluster the
-                  kubeconfig has lost gets a ring instead of a fill, so the
-                  state survives with the hue taken away. */}
-              <span
+            {/* Right, not Down: the strip is walked with Left and Right, but
+                this is the one segment where a menu is the point, and Down
+                is already spoken for by the `+` beside it. */}
+            <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
+              <button
+                type="button"
+                aria-haspopup="menu"
                 className={cn(
-                  "h-1.5 w-1.5 flex-none rounded-full",
-                  tab.missing && "border border-fg-fnt"
+                  segClass(open === "ctx"),
+                  showName ? "min-w-[4rem] [flex-shrink:6]" : "flex-none",
+                  tab.missing && "min-w-[6.5rem]"
                 )}
-                style={tab.missing ? undefined : { background: color }}
-              />
-              <ProviderMark
-                provider={detectProvider(context ?? "")}
-                className="h-[13px] w-[13px] flex-none"
-              />
-              {showName && (
-                <span className="min-w-0 truncate">
-                  {context ?? "no cluster"}
-                </span>
-              )}
-            </button>
+              >
+                {/* Only the dot carries the cluster colour here — the mark
+                    stays at text contrast so the tab reads as one label and
+                    the colour signal has a single owner. A cluster the
+                    kubeconfig has lost gets a ring instead of a fill, so the
+                    state survives with the hue taken away. */}
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 flex-none rounded-full",
+                    tab.missing && "border border-fg-fnt"
+                  )}
+                  style={tab.missing ? undefined : { background: color }}
+                />
+                <ProviderMark
+                  provider={detectProvider(context ?? "")}
+                  className="h-[13px] w-[13px] flex-none"
+                />
+                {showName && (
+                  <span className="min-w-0 truncate">
+                    {alias ?? context ?? "no cluster"}
+                  </span>
+                )}
+              </button>
+            </ClusterMenu>
           </ContextPopover>
 
           {/* Not a suffix on the name but a state of the tab, in the same
@@ -518,7 +517,7 @@ function ScopeTabItem({
 
           <button
             type="button"
-            aria-label={`Close ${tabTitle(tab)}`}
+            aria-label={`Close ${tabTitle(tab, alias)}`}
             onClick={(event) => {
               event.stopPropagation();
               closeTab(tab.id);

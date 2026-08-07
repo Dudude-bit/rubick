@@ -17,6 +17,7 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
@@ -132,9 +133,17 @@ export function Sidebar() {
  * Which cluster this window is pointed at is the fact that decides whether a
  * command is routine or an outage; the product's own name is something the
  * user already knows and can never act on.
+ *
+ * It is also the one place a rename is not allowed to win outright. The tab
+ * strip and the front door can show a nickname alone because both are one
+ * hover or one glance from the truth; this row is on screen the whole time
+ * and is what somebody checks before they run something. So a renamed
+ * cluster gets both lines here — the name they gave it, and under it, at
+ * the faintest contrast the theme has, the context name itself.
  */
 function ClusterRow() {
   const currentContext = useClusterStore((s) => s.currentContext);
+  const alias = useClusterMark(currentContext).alias?.trim();
   const isConnected = useClusterStore((s) => s.isConnected);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
@@ -148,8 +157,22 @@ function ClusterRow() {
         className="h-[15px] w-[15px] flex-none"
         style={{ color: "var(--cluster)" }}
       />
-      <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
-        {currentContext ?? "no cluster"}
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
+          {alias ?? currentContext ?? "no cluster"}
+        </span>
+        {alias && currentContext && (
+          // Clipped from the front, not the back. This rail is 200px wide
+          // and an ARN spends its first thirty characters on a region and
+          // an account number; cut the usual way it reads
+          // `arn:aws:eks:us-east-1:1…`, which is the half that cannot tell
+          // prod from staging. `direction: rtl` moves the ellipsis to the
+          // start and leaves the run itself in order, because the name is
+          // ASCII from end to end.
+          <span className="truncate text-left font-mono text-[10px] leading-[12px] text-fg-fnt [direction:rtl]">
+            {currentContext}
+          </span>
+        )}
       </span>
       {/* The halo is what makes a 7px dot readable in peripheral vision,
           which is the only way this indicator is ever looked at. */}

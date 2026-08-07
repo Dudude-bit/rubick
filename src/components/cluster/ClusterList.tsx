@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -130,36 +131,50 @@ function ClusterListRow({
   );
 
   return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={false}
-      data-cluster-row
-      onClick={() => onSelect(context)}
-      className={cn(
-        "group -mx-[7px] rounded-[5px] text-left transition-colors hover:bg-hover",
-        "focus:bg-sel focus:outline-none"
-      )}
-    >
-      <ClusterRow
-        context={context}
-        failed={failed}
-        meta={
-          <span className="flex items-center gap-1.5">
-            {failed
-              ? "failed"
-              : lastUsedAt
-                ? `last used ${age} ago`
-                : providerLabel(detectProvider(context)).toLowerCase()}
-            {/* The way in is only worth its width on the row the reader
-                is standing on. */}
-            <Kbd
-              shortcut="Enter"
-              className="hidden leading-[13px] group-focus:inline-block"
-            />
-          </span>
-        }
-      />
-    </button>
+    // Right is the key, not Down: Down already walks this list, and a menu
+    // that stole it would make the list unusable to get to the menu.
+    <ClusterMenu context={context} openKeys={["ArrowRight"]}>
+      <button
+        type="button"
+        role="option"
+        aria-selected={false}
+        aria-haspopup="menu"
+        data-cluster-row
+        onClick={() => onSelect(context)}
+        className={cn(
+          "group -mx-[7px] rounded-[5px] text-left transition-colors hover:bg-hover",
+          "focus:bg-sel focus:outline-none"
+        )}
+      >
+        <ClusterRow
+          context={context}
+          failed={failed}
+          meta={
+            <span className="flex items-center gap-1.5">
+              {failed
+                ? "failed"
+                : lastUsedAt
+                  ? `last used ${age} ago`
+                  : providerLabel(detectProvider(context)).toLowerCase()}
+              {/* Both ways in are only worth their width on the row the
+                  reader is standing on. The arrow is spelled out for
+                  screen readers by `aria-keyshortcuts` on the trigger, so
+                  the glyph here is decoration and says so. */}
+              <Kbd
+                shortcut="Enter"
+                className="hidden leading-[13px] group-focus:inline-block"
+              />
+              <span
+                aria-hidden="true"
+                className="hidden items-center gap-1 group-focus:inline-flex"
+              >
+                <Kbd shortcut="→" className="leading-[13px]" />
+                rename
+              </span>
+            </span>
+          }
+        />
+      </button>
+    </ClusterMenu>
   );
 }

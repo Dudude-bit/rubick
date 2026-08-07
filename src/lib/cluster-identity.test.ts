@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CLUSTER_HUES,
   DANGER_CLUSTER_COLOR,
   clusterColor,
+  clusterHueColor,
   clusterNameParts,
   detectProvider,
   isProductionContext,
@@ -72,6 +74,46 @@ describe("clusterColor", () => {
 
   it("falls back to a neutral colour with no context", () => {
     expect(clusterColor(null)).toBe("hsl(var(--fg-fnt))");
+  });
+});
+
+describe("a colour chosen by hand", () => {
+  it("beats the one derived from the name", () => {
+    expect(clusterColor("k3d-dev", 224)).toBe(clusterHueColor(224));
+    expect(clusterColor("k3d-dev", 224)).not.toBe(clusterColor("k3d-dev"));
+  });
+
+  it("beats the danger colour, because the derivation cannot read", () => {
+    // `product-catalog-dev` is not production, and the substring rule has
+    // no way to know that. The reader does.
+    expect(clusterColor("product-catalog-dev")).toBe(DANGER_CLUSTER_COLOR);
+    expect(clusterColor("product-catalog-dev", 92)).toBe(clusterHueColor(92));
+  });
+
+  it("leaves the derived colour alone when nothing was chosen", () => {
+    expect(clusterColor("k3d-dev", null)).toBe(clusterColor("k3d-dev"));
+    expect(clusterColor("eks-prod", undefined)).toBe(DANGER_CLUSTER_COLOR);
+  });
+
+  it("spends only the hue, so both themes keep their own calibration", () => {
+    expect(clusterHueColor(184)).toBe("hsl(184 var(--ident-s) var(--ident-l))");
+  });
+});
+
+describe("the hues on offer", () => {
+  it("keeps every pair far enough apart to be told apart", () => {
+    for (let i = 1; i < CLUSTER_HUES.length; i++) {
+      expect(CLUSTER_HUES[i] - CLUSTER_HUES[i - 1]).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it("offers nothing that could be mistaken for the danger colour", () => {
+    // The warm arc is `--err` and `--warn`, and 340 is close enough to red
+    // at a 6px dot that a chosen colour could impersonate production.
+    for (const hue of CLUSTER_HUES) {
+      expect(hue).toBeGreaterThan(60);
+      expect(hue).toBeLessThan(340);
+    }
   });
 });
 

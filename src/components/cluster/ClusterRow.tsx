@@ -5,6 +5,7 @@ import {
   detectProvider,
 } from "@/lib/cluster-identity";
 import { cn } from "@/lib/utils";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
 
 /**
  * One cluster, wherever a cluster is offered.
@@ -21,6 +22,12 @@ import { cn } from "@/lib/utils";
  * clusters apart, and the colour is the thing that does it on every other
  * surface in the window. A cluster that just refused the connection is
  * the one exception, because a red dot is the fact worth reading first.
+ *
+ * A renamed cluster reads as two lines, not one: the name this person gave
+ * it, and under it, dimmed, the context name itself. This is the list you
+ * pick a cluster from, so it is the last place an alias is allowed to be
+ * the only thing on offer — you have to know which context you are about to
+ * connect to before you press Enter on it.
  */
 export function ClusterRow({
   context,
@@ -38,7 +45,9 @@ export function ClusterRow({
   className?: string;
 }) {
   const { prefix, label } = clusterNameParts(context);
-  const color = clusterColor(context);
+  const mark = useClusterMark(context);
+  const alias = mark.alias?.trim();
+  const color = clusterColor(context, mark.hue);
 
   return (
     <span
@@ -57,10 +66,25 @@ export function ClusterRow({
           style={{ color }}
           className="flex-none"
         />
-        <span className="truncate font-mono">
-          {prefix && <span className="text-fg-fnt">{prefix}</span>}
-          <span className={selected ? "text-fg" : "text-fg-mid"}>{label}</span>
-        </span>
+        {alias ? (
+          <span className="flex min-w-0 flex-col">
+            <span
+              className={cn("truncate", selected ? "text-fg" : "text-fg-mid")}
+            >
+              {alias}
+            </span>
+            <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+              {context}
+            </span>
+          </span>
+        ) : (
+          <span className="truncate font-mono">
+            {prefix && <span className="text-fg-fnt">{prefix}</span>}
+            <span className={selected ? "text-fg" : "text-fg-mid"}>
+              {label}
+            </span>
+          </span>
+        )}
       </span>
       {meta != null && (
         <span

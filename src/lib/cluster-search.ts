@@ -23,14 +23,29 @@ export type MatchRung = (typeof RUNGS)[number];
 
 export interface ContextMatch {
   context: string;
+  /**
+   * The string `marks` index into — the context name, or the name this
+   * person gave it. A cluster is offered under whichever of the two the
+   * reader actually typed at.
+   */
+  matched: string;
+  /** `matched` is an alias, not the context name. */
+  viaAlias: boolean;
   rung: MatchRung;
   /**
-   * Half-open `[start, end)` ranges of `context` the needle landed on, so
+   * Half-open `[start, end)` ranges of `matched` the needle landed on, so
    * the row can mark them and the ranking can be read off the screen
    * instead of taken on faith.
    */
   marks: Array<[number, number]>;
   /** Tie-break within a rung, never across rungs. */
+  distance: number;
+}
+
+/** How a name matched, before it is known whose name it was. */
+interface Rungs {
+  rung: MatchRung;
+  marks: Array<[number, number]>;
   distance: number;
 }
 
@@ -110,45 +125,20 @@ function subsequenceOf(needle: string, haystack: string): number[] | null {
   return indices;
 }
 
-/**
- * Which rung `context` sits on for `needle`, or null for none of them.
- *
- * An empty needle is not "no rung": it is the reader who has typed `!` and
- * nothing else, and every cluster is still a candidate.
- */
-export function matchContext(
-  needle: string,
-  context: string
-): ContextMatch | null {
-  const query = needle.toLowerCase();
-  const value = context.toLowerCase();
-
-  if (query === "") {
-    return { context, rung: "prefix", marks: [], distance: value.length };
-  }
-
+/** Which rung one string sits on for `needle`, or null for none of them. */
+function climb(query: string, text: string): Rungs | null {
+  const value = text.toLowerCase();
   const gap = distance(query, value);
 
   if (value === query) {
-    return {
-      context,
-      rung: "exact",
-      marks: [[0, context.length]],
-      distance: 0,
-    };
+    return { rung: "exact", marks: [[0, text.length]], distance: 0 };
   }
   if (value.startsWith(query)) {
-    return {
-      context,
-      rung: "prefix",
-      marks: [[0, query.length]],
-      distance: gap,
-    };
+    return { rung: "prefix", marks: [[0, query.length]], distance: gap };
   }
   const at = value.indexOf(query);
   if (at !== -1) {
     return {
-      context,
       rung: "substring",
       marks: [[at, at + query.length]],
       distance: gap,
@@ -156,14 +146,60 @@ export function matchContext(
   }
   const indices = subsequenceOf(query, value);
   if (indices) {
-    return {
-      context,
-      rung: "subsequence",
-      marks: runs(indices),
-      distance: gap,
-    };
+    return { rung: "subsequence", marks: runs(indices), distance: gap };
   }
   return null;
+}
+
+/** Best rung first, then shortest distance. Used to pick between two names. */
+function better(a: Rungs, b: Rungs): Rungs {
+  const rung = RUNGS.indexOf(a.rung) - RUNGS.indexOf(b.rung);
+  if (rung !== 0) return rung < 0 ? a : b;
+  return a.distance <= b.distance ? a : b;
+}
+
+/**
+ * Which rung a cluster sits on for `needle`, or null for none of them.
+ *
+ * A cluster that has been renamed is climbed twice, and the better of the
+ * two rungs wins. The alias exists precisely so nobody has to type the ARN
+ * again; one that could not be searched for would leave the mouse as the
+ * only way to reach the cluster it names. The name that matched is carried
+ * back so the row can show which of the two the reader hit.
+ *
+ * An empty needle is not "no rung": it is the reader who has typed `!` and
+ * nothing else, and every cluster is still a candidate.
+ */
+export function matchContext(
+  needle: string,
+  context: string,
+  alias?: string
+): ContextMatch | null {
+  const query = needle.toLowerCase();
+
+  if (query === "") {
+    return {
+      context,
+      matched: alias || context,
+      viaAlias: !!alias,
+      rung: "prefix",
+      marks: [],
+      distance: context.length,
+    };
+  }
+
+  const onName = climb(query, context);
+  const onAlias = alias ? climb(query, alias) : null;
+  if (!onName && !onAlias) return null;
+
+  const viaAlias =
+    !onName || (!!onAlias && better(onAlias, onName) === onAlias);
+  return {
+    context,
+    matched: viaAlias ? (alias as string) : context,
+    viaAlias,
+    ...((viaAlias ? onAlias : onName) as Rungs),
+  };
 }
 
 /**
@@ -175,10 +211,12 @@ export function matchContext(
  */
 export function rankContexts(
   needle: string,
-  contexts: readonly string[]
+  contexts: readonly string[],
+  /** What this person calls a cluster, where they call it something. */
+  aliasOf?: (context: string) => string | undefined
 ): ContextMatch[] {
   const matches = contexts
-    .map((context) => matchContext(needle, context))
+    .map((context) => matchContext(needle, context, aliasOf?.(context)))
     .filter((match): match is ContextMatch => match !== null);
 
   if (needle === "") return matches;

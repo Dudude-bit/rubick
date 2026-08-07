@@ -39,10 +39,15 @@ import {
   parseBang,
   rankContexts,
   splitMarks,
+  type ContextMatch,
 } from "@/lib/cluster-search";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import {
+  aliasOf,
+  useClusterIdentityStore,
+} from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import type { RecentItem } from "@/generated/types";
@@ -95,6 +100,27 @@ const quickActions = [
 const ROWS_PER_CLUSTER = 5;
 
 /**
+ * The name the ladder landed on, with the part the reader typed marked.
+ *
+ * The unmatched text is dimmed only when there is something to dim it
+ * against: with nothing typed yet every name is equally a candidate, and
+ * greying the whole list says the opposite.
+ */
+function highlight(match: ContextMatch): ReactNode {
+  return splitMarks(match.matched, match.marks).map((part, index) =>
+    part.matched ? (
+      <mark key={index} className="rounded-[2px] bg-warn/25 text-fg">
+        {part.text}
+      </mark>
+    ) : (
+      <span key={index} className={match.marks.length > 0 ? "text-fg-fnt" : ""}>
+        {part.text}
+      </span>
+    )
+  );
+}
+
+/**
  * Which clusters the query runs against.
  *
  * `current` is the default and is today's behaviour: every keystroke would
@@ -133,7 +159,11 @@ type Entry =
       id: string;
       kind: "cluster";
       context: string;
+      /** What it is called. The context name when it is called nothing else. */
       label: ReactNode;
+      /** The context name, on a second line, when the first one is not it. */
+      sub?: ReactNode;
+      hue?: number;
       meta: ReactNode;
     }
   | { id: string; kind: "all-clusters" }
@@ -191,6 +221,7 @@ export function CommandPalette() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const isConnected = useClusterStore((s) => s.isConnected);
+  const marks = useClusterIdentityStore((s) => s.marks);
   const openTab = useScopeTabStore((s) => s.openTab);
 
   // A bang is only ever at the start, so it survives the rest of the query
@@ -274,37 +305,25 @@ export function CommandPalette() {
       }
       const ranked = rankContexts(
         bang.needle,
-        contexts.map((ctx) => ctx.name)
+        contexts.map((ctx) => ctx.name),
+        (context) => aliasOf(marks, context)
       );
       for (const match of ranked) {
+        const alias = aliasOf(marks, match.context);
         out.push({
           id: `ctx:${match.context}`,
           kind: "cluster",
           context: match.context,
-          // The unmatched text is dimmed only when there is something to
-          // dim it against: with nothing typed yet every name is equally
-          // a candidate, and greying the whole list says the opposite.
-          label: (
-            <>
-              {splitMarks(match.context, match.marks).map((part, index) =>
-                part.matched ? (
-                  <mark
-                    key={index}
-                    className="rounded-[2px] bg-warn/25 text-fg"
-                  >
-                    {part.text}
-                  </mark>
-                ) : (
-                  <span
-                    key={index}
-                    className={match.marks.length > 0 ? "text-fg-fnt" : ""}
-                  >
-                    {part.text}
-                  </span>
-                )
-              )}
-            </>
-          ),
+          hue: marks[match.context]?.hue,
+          // Whichever of the two names the reader hit is the one that
+          // carries the marks; the other one is still printed, because a
+          // list you pick a cluster from cannot show only a nickname.
+          label: alias && !match.viaAlias ? alias : highlight(match),
+          sub: alias
+            ? match.viaAlias
+              ? match.context
+              : highlight(match)
+            : undefined,
           meta: match.context === currentContext ? "live" : "not connected",
         });
       }
@@ -314,7 +333,7 @@ export function CommandPalette() {
           kind: "hint",
           // The ladder refuses a name it cannot justify rather than
           // offering the nearest one, so an empty list is a real answer.
-          text: `No cluster in the kubeconfig contains “${bang.needle}”.`,
+          text: `No cluster in the kubeconfig answers to “${bang.needle}”.`,
         });
       }
       return out;
@@ -454,6 +473,7 @@ export function CommandPalette() {
     hits.length,
     hitsByContext,
     isConnected,
+    marks,
     query,
     recentItems,
     scope,
@@ -919,13 +939,24 @@ function EntryRow({
         <Row {...shared}>
           <span
             className="h-1.5 w-1.5 flex-none rounded-full"
-            style={{ background: clusterColor(entry.context) }}
+            style={{ background: clusterColor(entry.context, entry.hue) }}
           />
           <ProviderMark
             provider={detectProvider(entry.context)}
             className="h-[13px] w-[13px] flex-none"
           />
-          <span className="min-w-0 truncate font-mono">{entry.label}</span>
+          <span className="flex min-w-0 flex-col">
+            {/* A name a person typed is prose; a context name is a token
+                you paste into a shell. Only the second one is mono. */}
+            <span className={cn("truncate", !entry.sub && "font-mono")}>
+              {entry.label}
+            </span>
+            {entry.sub && (
+              <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+                {entry.sub}
+              </span>
+            )}
+          </span>
           <span className="ml-auto flex-none text-[11px] text-fg-fnt">
             {entry.meta}
           </span>

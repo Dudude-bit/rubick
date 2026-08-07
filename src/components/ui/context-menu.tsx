@@ -29,8 +29,9 @@ const ContextMenuPortal = ContextMenuPrimitive.Portal;
  * Windows and most Linux desktops turn Shift+F10 and the Menu key into a
  * `contextmenu` event by themselves, but not every keyboard has that key,
  * and a right-click-only affordance is not an affordance for everyone. Down
- * is the same key that opens a `<select>`, and it goes through the same
- * event so the menu behaves identically however it was asked for.
+ * is the same key that opens a `<select>`, which is why it is the default —
+ * but a trigger sitting inside a list Down already walks has to name its
+ * own key, hence `openKeys`.
  *
  * Synthesising the event is the only route: `ContextMenu.Root` has no
  * controlled `open`. It is dispatched at the trigger's own bottom-left,
@@ -39,13 +40,17 @@ const ContextMenuPortal = ContextMenuPrimitive.Portal;
  */
 const ContextMenuTrigger = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>
->(({ onKeyDown, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger> & {
+    /** Keys that open it, on top of the platform's own. */
+    openKeys?: readonly string[];
+  }
+>(({ onKeyDown, openKeys = ["ArrowDown"], ...props }, ref) => (
   <ContextMenuPrimitive.Trigger
     ref={ref}
+    aria-keyshortcuts={openKeys.join(" ")}
     onKeyDown={(event) => {
       onKeyDown?.(event);
-      if (event.defaultPrevented || event.key !== "ArrowDown") return;
+      if (event.defaultPrevented || !openKeys.includes(event.key)) return;
       event.preventDefault();
       const box = event.currentTarget.getBoundingClientRect();
       event.currentTarget.dispatchEvent(

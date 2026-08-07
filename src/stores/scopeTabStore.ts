@@ -325,9 +325,17 @@ export function tabRouteLabel(href: string): string {
   return isResourceType(last) ? getDisplayPlural(last).toLowerCase() : last;
 }
 
-/** The whole tab in one line, for a tooltip or an accessible name. */
-export function tabTitle(tab: ScopeTab): string {
-  const cluster = tab.context ?? "no cluster";
+/**
+ * The whole tab in one line, for a tooltip or an accessible name.
+ *
+ * A renamed cluster is named twice — what the tab reads, and what it
+ * actually is. Dropping either would leave a reader who cannot see the
+ * strip with a name that matches nothing they can act on, or a name that
+ * matches nothing they can see.
+ */
+export function tabTitle(tab: ScopeTab, alias?: string): string {
+  const name = tab.context ?? "no cluster";
+  const cluster = alias ? `${alias} (${name})` : name;
   const scope = tab.missing ? `${cluster} (missing)` : cluster;
   return `${scope} · ${tab.namespace || "all namespaces"} · ${tabRouteLabel(tab.href)}`;
 }

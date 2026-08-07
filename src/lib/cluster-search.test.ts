@@ -118,3 +118,51 @@ describe("the bang", () => {
     expect(matchesAllClusters("prod")).toBe(false);
   });
 });
+
+describe("a cluster that has been renamed", () => {
+  const called = (name: string) => (context: string) =>
+    context === ARN ? name : undefined;
+
+  it("is found by the name this person gave it", () => {
+    const ranked = rankContexts("payments", [ARN, GKE], called("payments"));
+
+    expect(ranked.map((match) => match.context)).toEqual([ARN]);
+    expect(ranked[0].viaAlias).toBe(true);
+    expect(ranked[0].matched).toBe("payments");
+  });
+
+  it("is still found by the context name it actually has", () => {
+    const ranked = rankContexts("us-east", [ARN, GKE], called("payments"));
+
+    expect(ranked[0].context).toBe(ARN);
+    expect(ranked[0].viaAlias).toBe(false);
+    expect(ranked[0].matched).toBe(ARN);
+  });
+
+  it("climbs on whichever of its two names goes higher", () => {
+    // `pay` is a prefix of the alias and only a subsequence of the ARN, so
+    // the alias is the rung the cluster is offered on.
+    const match = matchContext("pay", ARN, "payments");
+    expect(match?.rung).toBe("prefix");
+    expect(match?.viaAlias).toBe(true);
+  });
+
+  it("marks the name it matched, not the other one", () => {
+    const match = matchContext("ment", ARN, "payments");
+    expect(splitMarks(match!.matched, match!.marks)).toEqual([
+      { text: "pay", matched: false },
+      { text: "ment", matched: true },
+      { text: "s", matched: false },
+    ]);
+  });
+
+  it("is still offered with nothing typed after the bang", () => {
+    const match = matchContext("", ARN, "payments");
+    expect(match?.matched).toBe("payments");
+    expect(match?.marks).toEqual([]);
+  });
+
+  it("is refused when neither name is on the ladder", () => {
+    expect(matchContext("zzz", ARN, "payments")).toBeNull();
+  });
+});

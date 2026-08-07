@@ -23,6 +23,7 @@ vi.mock("@/hooks/useClusterSummary", () => ({
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ScopeTabs } from "./ScopeTabs";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 
@@ -54,6 +55,7 @@ const tabs = () => screen.getAllByRole("tab");
 
 beforeEach(() => {
   localStorage.clear();
+  useClusterIdentityStore.setState({ marks: {} });
   useClusterStore.setState({
     contexts: [],
     currentContext: "k3d-dev",
@@ -135,6 +137,35 @@ describe("what a tab says", () => {
     });
     mount();
     expect(tabs()[0]).not.toHaveAttribute("title");
+  });
+});
+
+describe("a cluster that has been renamed", () => {
+  beforeEach(() => {
+    useClusterIdentityStore.setState({
+      marks: { "k3d-dev": { alias: "payments" } },
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b", context: "prod-eu" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+  });
+
+  it("wears the name it was given where the strip names a cluster", () => {
+    mount();
+    expect(within(tabs()[0]).getByText("payments")).toBeInTheDocument();
+    expect(within(tabs()[0]).queryByText("k3d-dev")).not.toBeInTheDocument();
+  });
+
+  it("keeps the context name in the accessible name, beside the alias", () => {
+    // A reader who cannot see the strip still has to know which context is
+    // about to be acted on; one who can needs the name they gave it.
+    mount();
+    expect(tabs()[0]).toHaveAttribute(
+      "aria-label",
+      "payments (k3d-dev) · all namespaces · overview"
+    );
   });
 });
 

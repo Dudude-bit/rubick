@@ -9,11 +9,13 @@ import { YamlEditorDialog } from "@/components/yaml";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "@/hooks/useScopeTabs";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 export function Layout() {
   const currentContext = useClusterStore((s) => s.currentContext);
+  const { hue } = useClusterMark(currentContext);
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   useScopeTabs();
 
@@ -24,7 +26,9 @@ export function Layout() {
       // property on the shell and every consumer reads `--cluster`
       // instead of being handed a colour prop.
       style={
-        { "--cluster": clusterColor(currentContext) } as React.CSSProperties
+        {
+          "--cluster": clusterColor(currentContext, hue),
+        } as React.CSSProperties
       }
     >
       {/* 2px along the top edge: unmissable in peripheral vision, zero

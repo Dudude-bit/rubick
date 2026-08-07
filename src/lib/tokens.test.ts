@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+import { CLUSTER_HUES } from "./cluster-identity";
+
 const css = readFileSync("src/index.css", "utf8");
 const light = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
 const dark = css.slice(css.indexOf(".dark {"));
@@ -27,6 +29,13 @@ function hsl(block: string, role: string): [number, number, number] {
   );
   if (!match) throw new Error(`${role} is not an hsl triple`);
   return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** `--ident-s: 58%` -> 58. Saturation and lightness stand on their own. */
+function percent(block: string, role: string): number {
+  const match = new RegExp(`${role}:\\s*([\\d.]+)%`).exec(block);
+  if (!match) throw new Error(`${role} is not a percentage`);
+  return Number(match[1]);
 }
 
 function alpha(block: string, role: string): number {
@@ -87,5 +96,50 @@ describe("role tokens", () => {
   it("keeps the two themes on opposite sides of mid grey", () => {
     expect(hsl(dark, "--canvas")[2]).toBeLessThan(50);
     expect(hsl(light, "--canvas")[2]).toBeGreaterThan(50);
+  });
+});
+
+/** HSL in the same units the CSS uses, to sRGB in 0..1. */
+function rgb([h, s, l]: [number, number, number]): [number, number, number] {
+  const sat = s / 100;
+  const light = l / 100;
+  const a = sat * Math.min(light, 1 - light);
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [channel(0), channel(8), channel(4)];
+}
+
+function contrast(
+  a: [number, number, number],
+  b: [number, number, number]
+): number {
+  const luminance = (colour: [number, number, number]) => {
+    const [r, g, bl] = colour.map((v) =>
+      v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    );
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+describe("the hues a cluster can be painted", () => {
+  // The whole reason a chosen colour is a hue and not a colour is that the
+  // saturation and lightness it is worn at belong to the theme. That only
+  // buys anything if every hue on offer survives both of them — a swatch
+  // picked on the dark canvas that vanishes on the near-white one is
+  // exactly the failure this arrangement exists to prevent.
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ])("stays legible against the %s canvas", (_name, block) => {
+    const canvas = rgb(hsl(block, "--canvas"));
+    const s = percent(block, "--ident-s");
+    const l = percent(block, "--ident-l");
+    for (const hue of CLUSTER_HUES) {
+      expect(contrast(rgb([hue, s, l]), canvas)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

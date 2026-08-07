@@ -104,14 +104,49 @@ const IDENTITY_PALETTE = [
 export const DANGER_CLUSTER_COLOR = "hsl(var(--err))";
 
 /**
+ * The hues a cluster's colour can be *set* to by hand.
+ *
+ * The same ring `identHue` draws from, thinned to the rungs that survive
+ * being 6px wide on opposite ends of a tab strip. Five, not more: the
+ * ring's two greens are a near-miss on each other at that size — checked on
+ * screen, not on paper — and the rung past pink is the magenta that sits
+ * next to `--err`, which is what production wears. A swatch nobody can tell
+ * from the danger colour is worse than one fewer swatch.
+ *
+ * Only the hue is chosen here. Saturation and lightness stay in
+ * `--ident-s` / `--ident-l`, which are per-theme and already calibrated for
+ * text, so a hue picked on the dark canvas cannot vanish on the near-white
+ * one. `tokens.test.ts` holds both themes to that.
+ */
+export const CLUSTER_HUES = [132, 184, 224, 274, 318] as const;
+
+/** A chosen hue as a CSS colour, the same shape the rest of the app uses. */
+export function clusterHueColor(hue: number): string {
+  return `hsl(${hue} var(--ident-s) var(--ident-l))`;
+}
+
+/**
  * Colour for a context, as a CSS colour usable in `--cluster`.
  *
  * Anything that looks like production gets the danger colour without
  * being configured — the protection has to work on first launch, before
  * anyone has assigned anything. Everything else gets a colour derived
  * from the name, so it is stable across restarts and across machines.
+ *
+ * A hue chosen by hand beats both, because the derivation cannot read: it
+ * paints `product-catalog-dev` in the danger colour and two unrelated
+ * clusters the same blue, and the only reader who can tell those apart is
+ * the one sitting in front of it. Nothing is lost by letting them —
+ * `isProductionContext` is a separate question and is not moved by a
+ * swatch, and no warm hue is on offer, so a chosen colour can never
+ * impersonate `--err`.
  */
-export function clusterColor(context: string | null | undefined): string {
+export function clusterColor(
+  context: string | null | undefined,
+  /** The hue this person picked for it, if they picked one. */
+  hue?: number | null
+): string {
+  if (hue != null) return clusterHueColor(hue);
   if (!context) return "hsl(var(--fg-fnt))";
   if (context.toLowerCase().includes("prod")) return DANGER_CLUSTER_COLOR;
 
