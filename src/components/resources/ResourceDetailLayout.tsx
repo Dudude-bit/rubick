@@ -113,6 +113,19 @@ interface ResourceDetailLayoutProps {
   statusBadge?: ReactNode;
   /** Qualifiers shown beside the name. */
   badges?: ReactNode;
+  /**
+   * What this page lets you do to the object, as `DetailAction`s.
+   *
+   * Rendered at the right end of the tab strip rather than in the header.
+   * How many fit: the peek panel folds its overflow into a More menu past
+   * five controls in a row, and that budget is not re-derived here because
+   * nothing reaches it — a Pod's four is the widest set in the app and a
+   * Deployment's Scale, Restart and Delete is three. What is scarce on this
+   * row is width rather than count, since the tab strip is on it too, so the
+   * rule is which of the two gives way: the actions are pinned to the right
+   * at their natural width and the tab labels truncate, because an action
+   * that wrapped onto a second line would undo the whole point of the row.
+   */
   actions?: ReactNode;
 
   onBack: () => void;
@@ -193,9 +206,7 @@ export function ResourceDetailLayout({
           createdAt={createdAt}
           status={statusBadge}
           meta={badges}
-          actions={actions}
           onBack={onBack}
-          compact={surface}
         />
 
         {/* `contents` so the page's own blocks keep sitting in this column at
@@ -211,20 +222,35 @@ export function ResourceDetailLayout({
           onValueChange={onTabChange}
           className={surface ? "flex min-h-0 flex-1 flex-col" : undefined}
         >
-          {/* The strip is an underline, not a pill row: the window already has
-              a pill tab strip for scopes, and two of them on one screen read as
-              the same control at two levels. */}
-          <TabsList className="h-auto w-full flex-none justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
-            {tabs.map((tab) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                className="-mb-px h-7 rounded-none border-b border-transparent px-0.5 pb-1.5 pt-0 text-xs font-normal text-fg-mut shadow-none transition-colors hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
-              >
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* One control row rather than two. The strip is an underline, not a
+              pill row: the window already has a pill tab strip for scopes, and
+              two of them on one screen read as the same control at two levels.
+              The page's actions share the row's hairline so it reads as one
+              band, and are held off by a pip — a control sitting flush against
+              a tab strip reads as another destination, and "Delete" is the one
+              word in the app that must never be mistaken for a place to go. */}
+          <div className="flex flex-none items-stretch gap-3">
+            <TabsList className="h-auto min-w-0 flex-1 justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="-mb-px h-7 min-w-0 truncate rounded-none border-b border-transparent px-0.5 pb-1.5 pt-0 text-xs font-normal text-fg-mut shadow-none transition-colors hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+                >
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {actions && (
+              <div className="flex flex-none items-center gap-1 border-b border-hair">
+                <span
+                  aria-hidden="true"
+                  className="mr-2 h-3.5 w-px flex-none bg-hair"
+                />
+                {actions}
+              </div>
+            )}
+          </div>
 
           {tabs.map((tab) => (
             <TabsContent

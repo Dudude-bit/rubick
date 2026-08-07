@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
+import { ResourceName } from "@/components/resources/ResourceName";
 import { getResourceListUrl } from "@/lib/navigation-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
@@ -25,29 +26,27 @@ export interface ResourceDetailHeaderProps {
   /** Facts that qualify the name: node roles, an ingress class, a count. */
   meta?: ReactNode;
   createdAt?: string | null;
-  actions?: ReactNode;
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
-  /**
-   * One line instead of two, for a tab that is a full-height work surface.
-   *
-   * The trail, the name, its status and its actions survive; the age and the
-   * qualifying badges do not. Reading a log needs to know which pod is
-   * talking and to be able to act on it — everything else it was carrying is
-   * a click away on Overview, and here it is 200px of log.
-   */
-  compact?: boolean;
 }
 
 /**
- * The top of every detail page.
+ * The top of every detail page: one line, and only identity on it.
  *
  * The name used to be a 24px title with a 32px icon beside it, which made the
  * heaviest thing on the page the one fact the user just clicked to get here.
- * It is now breadcrumb-scale: the trail says where you are and gets you back
- * to the list, and the row below carries the name, its status, its age and the
- * actions — everything else belongs in the metadata blocks under it.
+ * It then became two breadcrumb-scale rows — the trail on one, the name and
+ * the page's actions on the other — above a page that already has a tab strip
+ * of its own, so a detail page opened with two bands of chrome before the
+ * first fact and a third one under them.
+ *
+ * The actions have moved to that strip, and once they are gone nothing is
+ * left on the second row that will not fit on the first: the trail, the name,
+ * its status, its qualifiers and its age are all breadcrumb-scale. One row
+ * also means the header stops changing shape when the reader clicks Logs — it
+ * used to collapse from two rows to one on a full-height tab, and a header
+ * that restructures itself under the pointer reads as the page reloading.
  */
 export function ResourceDetailHeader({
   name,
@@ -58,10 +57,8 @@ export function ResourceDetailHeader({
   status,
   meta,
   createdAt,
-  actions,
   onBack,
   dataUpdatedAt,
-  compact,
 }: ResourceDetailHeaderProps) {
   const trail = (
     <>
@@ -88,49 +85,44 @@ export function ResourceDetailHeader({
     </>
   );
 
+  // The same two marks every list gives this object — the kind glyph and the
+  // identity tint — rather than a hand-rolled plain title. It is deliberately
+  // not a `ResourceRef`: the reader is already here, and a link to the page
+  // you are on is a promise the app cannot keep. The breadcrumb above already
+  // names the kind, so only the glyph carries it.
   const title = (
-    <h1 className="truncate font-mono text-[13px] font-semibold tracking-tight text-fg">
-      {name}
+    <h1 className="flex min-w-0 items-baseline gap-1.5 text-[13px] font-semibold tracking-tight text-fg">
+      <ResourceName
+        kind={kind}
+        name={name}
+        showKind={false}
+        iconClassName="h-3 w-3"
+      />
     </h1>
   );
 
-  const trailing = (
-    <div className="ml-auto flex flex-none items-center gap-1">
-      {actions}
-      <DataFreshness dataUpdatedAt={dataUpdatedAt} />
-    </div>
-  );
-
-  if (compact) {
-    return (
-      <div className="flex items-center gap-x-1.5 text-[11px] text-fg-fnt">
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      {/* Tighter than the row around it: the trail and the name are one path,
+          and 10px between a slash and its segment breaks that path into
+          separate words. */}
+      <div className="flex min-w-0 items-center gap-x-1.5 text-[11px] text-fg-fnt">
         {trail}
         <span aria-hidden="true">/</span>
         {title}
-        {status}
-        {trailing}
       </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1 text-[11px] text-fg-fnt">
-        {trail}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        {title}
-        {status}
-        {meta}
-        {createdAt && (
-          <span
-            className="text-[11px] text-fg-fnt"
-            title={formatDate(createdAt) ?? undefined}
-          >
-            <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
-          </span>
-        )}
-        {trailing}
+      {status}
+      {meta}
+      {createdAt && (
+        <span
+          className="text-[11px] text-fg-fnt"
+          title={formatDate(createdAt) ?? undefined}
+        >
+          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
+        </span>
+      )}
+      <div className="ml-auto flex flex-none items-center">
+        <DataFreshness dataUpdatedAt={dataUpdatedAt} />
       </div>
     </div>
   );

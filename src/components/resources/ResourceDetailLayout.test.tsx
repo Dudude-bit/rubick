@@ -84,6 +84,54 @@ describe("ResourceDetailLayout with only surface tabs", () => {
 });
 
 /**
+ * One band of chrome, not two. The page's actions belong on the tab strip's
+ * row, and the header keeps only what says which object this is.
+ */
+describe("ResourceDetailLayout chrome", () => {
+  const withActions = (activeTab: string, kind?: "sections" | "surface") =>
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        createdAt="2020-01-01T00:00:00Z"
+        activeTab={activeTab}
+        actions={<button type="button">Delete</button>}
+        tabs={[
+          { id: "overview", label: "Overview", content: null },
+          { id: "yaml", label: "YAML", kind, content: null },
+        ]}
+      />
+    );
+
+  it("puts the actions on the tab strip's row", () => {
+    withActions("overview");
+    const row = screen.getByRole("tablist").parentElement;
+    expect(row).toContainElement(
+      screen.getByRole("button", { name: "Delete" })
+    );
+  });
+
+  it("keeps them off the header, which is now identity only", () => {
+    withActions("overview");
+    const header = screen
+      .getByRole("heading", { level: 1 })
+      .closest("div")?.parentElement;
+    expect(header).not.toContainElement(
+      screen.getByRole("button", { name: "Delete" })
+    );
+  });
+
+  // The header used to drop the age and the qualifying badges on a full-height
+  // tab, to buy back the second row it needed for the actions. It is one row
+  // either way now, so there is nothing to buy and nothing to drop — and a
+  // header that restructures itself when the reader clicks Logs reads as the
+  // page reloading.
+  it("says the same things on a full-height tab as on any other", () => {
+    withActions("yaml", "surface");
+    expect(screen.getByText(/old/)).toBeInTheDocument();
+  });
+});
+
+/**
  * The strip is a heading. Whatever a tab opens with does not get to say the
  * word the reader just clicked, and no block gets to say the kind the
  * breadcrumb and the title already carry.
