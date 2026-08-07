@@ -32,7 +32,9 @@ export function ConnectClusterEmptyState({
         </h2>
         <p className="mt-[3px] text-xs text-fg-mut">
           {resourceLabel
-            ? `${resourceLabel} are read from a cluster, and this window is not on one yet.`
+            ? // Callers hand this label in whichever case their page title
+              // uses, and it starts a sentence here.
+              `${resourceLabel[0].toUpperCase()}${resourceLabel.slice(1)} are read from a cluster, and this window is not on one yet.`
             : "This window is not on a cluster yet."}
         </p>
 
