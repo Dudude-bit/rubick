@@ -260,6 +260,90 @@ describe("useResourceSearch", () => {
     );
   });
 
+  it("runs the identical request again when the attempt is bumped", async () => {
+    const { rerender } = renderHook(
+      ({ attempt }: { attempt: number }) =>
+        useResourceSearch({ query: "api", attempt }),
+      { initialProps: { attempt: 0 } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(commands.startResourceSearch).toHaveBeenCalledTimes(1);
+
+    // A retry asks exactly the question that failed, so nothing else in
+    // the request changes — and without the attempt nothing would happen.
+    rerender({ attempt: 1 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(commands.startResourceSearch).toHaveBeenCalledTimes(2);
+    expect(startedRequests[1]).toEqual(startedRequests[0]);
+  });
+
+  it("keeps the roster across a keystroke, and the hits with the old query", async () => {
+    targetsForNextStart = [
+      ...searching("dev"),
+      {
+        context: "prod",
+        status: "skipped",
+        reason: "not-connected",
+        message: null,
+      },
+    ];
+    const { result, rerender } = renderHook(
+      ({ query }: { query: string }) =>
+        useResourceSearch({ query, contexts: ["dev", "prod"] }),
+      { initialProps: { query: "api" } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    emit("search-hits", {
+      search_id: "search-1",
+      context: "dev",
+      hits: [hit("dev", "api-0")],
+    });
+    emit("search-status", {
+      search_id: "search-1",
+      context: "dev",
+      status: "done",
+      reason: null,
+      message: null,
+      matched: 1,
+      truncated: false,
+    });
+
+    // Mid-debounce for the next query: "no clusters answered" over a
+    // fan-out that is still there would be a lie once per keystroke.
+    rerender({ query: "apis" });
+    expect(result.current.hits).toEqual([]);
+    expect(result.current.isSearching).toBe(true);
+    expect(result.current.clusters.map((c) => c.status)).toEqual([
+      "searching",
+      "skipped",
+    ]);
+  });
+
+  it("drops the roster when the clusters themselves change", async () => {
+    targetsForNextStart = searching("dev");
+    const { result, rerender } = renderHook(
+      ({ contexts }: { contexts: string[] }) =>
+        useResourceSearch({ query: "api", contexts }),
+      { initialProps: { contexts: ["dev"] } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(result.current.clusters).toHaveLength(1);
+
+    rerender({ contexts: ["prod"] });
+    expect(result.current.clusters).toEqual([]);
+  });
+
   it("stays idle below the minimum query length", async () => {
     const { result } = renderHook(() => useResourceSearch({ query: "a" }));
     await act(async () => {

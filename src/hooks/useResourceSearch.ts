@@ -72,6 +72,12 @@ export interface UseResourceSearchOptions {
   limitPerContext?: number;
   enabled?: boolean;
   debounceMs?: number;
+  /**
+   * Bump to run the same request again. A retry after a cluster failed
+   * asks an identical question, so nothing else in the key changes and
+   * without this the effect would correctly decide there is nothing to do.
+   */
+  attempt?: number;
 }
 
 export interface ResourceSearchResult {
@@ -131,15 +137,15 @@ export function useResourceSearch({
   limitPerContext,
   enabled = true,
   debounceMs = DEFAULT_DEBOUNCE_MS,
+  attempt = 0,
 }: UseResourceSearchOptions): ResourceSearchResult {
-  // The key the state belongs to. Keeping it inside state lets the
-  // hook return IDLE for a query it has not answered yet, instead of
-  // resetting state from inside the effect (and briefly showing the
-  // previous query's results under the new one).
-  const [state, setState] = useState<ResourceSearchResult & { key: string }>({
-    ...IDLE,
-    key: "",
-  });
+  // The key the state belongs to, and the set of clusters it is about.
+  // Keeping them inside state lets the hook answer for a query it has
+  // not run yet without resetting state from inside the effect (and
+  // briefly showing the previous query's results under the new one).
+  const [state, setState] = useState<
+    ResourceSearchResult & { key: string; scope: string }
+  >({ ...IDLE, key: "", scope: "" });
 
   // Consumers build these arrays inline, so the effect depends on
   // their contents rather than their identity — and rebuilds the
@@ -150,6 +156,9 @@ export function useResourceSearch({
   const trimmed = query.trim();
   const active = enabled && trimmed.length >= MIN_SEARCH_LENGTH;
 
+  /** Which clusters are being asked, regardless of what they are asked. */
+  const scope = [contextsKey, String(allContexts)].join(SEP);
+
   const key = active
     ? [
         trimmed,
@@ -158,6 +167,7 @@ export function useResourceSearch({
         String(allContexts),
         namespace ?? "",
         String(connect),
+        String(attempt),
       ].join(SEP)
     : "";
 
@@ -200,6 +210,7 @@ export function useResourceSearch({
         const clusters = handle.targets.map(fromTarget);
         setState({
           key,
+          scope,
           hits: [],
           clusters,
           isSearching: clusters.some((c) => !isTerminal(c.status)),
@@ -252,6 +263,7 @@ export function useResourceSearch({
         if (disposed) return;
         setState({
           key,
+          scope,
           hits: [],
           clusters: [],
           isSearching: false,
@@ -275,14 +287,34 @@ export function useResourceSearch({
     connect,
     limitPerContext,
     debounceMs,
+    attempt,
+    scope,
   ]);
 
   return useMemo(() => {
     if (state.key !== key) {
-      // Debouncing, or a stale answer to a query that has moved on.
-      return { ...IDLE, isSearching: active };
+      // Debouncing, or a stale answer to a query that has moved on. The
+      // hits belong to the old query and go; the roster does not, and
+      // dropping it would flash "no clusters answered" over a fan-out
+      // that is still standing — once per keystroke.
+      const carried =
+        state.scope === scope
+          ? state.clusters.map((cluster) =>
+              // A cluster nobody connected is not about to be searched
+              // either, so it keeps saying so.
+              cluster.status === "skipped"
+                ? cluster
+                : {
+                    ...cluster,
+                    status: "searching" as const,
+                    matched: 0,
+                    truncated: false,
+                  }
+            )
+          : [];
+      return { hits: [], clusters: carried, isSearching: active, error: null };
     }
-    const { key: _key, ...result } = state;
+    const { key: _key, scope: _scope, ...result } = state;
     return result;
-  }, [state, key, active]);
+  }, [state, key, active, scope]);
 }
