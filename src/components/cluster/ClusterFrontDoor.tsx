@@ -85,10 +85,31 @@ export function ClusterFrontDoor() {
   );
 }
 
+/**
+ * The column this screen is, and where it sits.
+ *
+ * Centred across the window, because a screen whose only job is one short
+ * list has nothing to justify pinning it to a corner of a 1600px canvas.
+ *
+ * Down the page it is not centred but offset from the top, and that is the
+ * part worth arguing. This block grows: one context is four lines, fifteen
+ * is a full page. Centring would slide the heading upward with every
+ * cluster added, so the same screen would meet two people in two different
+ * places. A fixed offset keeps "Connect a cluster" where it was last time,
+ * and lets the list grow downward into the room below it — which is the
+ * direction a list grows anyway.
+ *
+ * The offset is a fraction of the window rather than a constant so it stays
+ * a proportion on a laptop and on a monitor, and it is clamped at both ends
+ * so a short window does not lose the heading off the top and a tall one
+ * does not strand it in the middle.
+ */
 function Door({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-w-[560px] animate-in fade-in duration-200">
-      {children}
+    <div className="flex h-full justify-center">
+      <div className="w-full max-w-[560px] pb-10 pt-[clamp(2rem,16vh,10rem)] animate-in fade-in duration-200">
+        {children}
+      </div>
     </div>
   );
 }
