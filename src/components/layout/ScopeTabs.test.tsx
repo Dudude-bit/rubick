@@ -168,3 +168,34 @@ describe("a cluster the kubeconfig has lost", () => {
     expect(screen.getByText("old")).toBeInTheDocument();
   });
 });
+
+describe("a tab with no cluster", () => {
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: null })],
+      activeId: "a",
+      pendingHref: null,
+    });
+  });
+
+  it("collapses to one segment, and it is a verb", () => {
+    mount();
+    const strip = tabs()[0];
+    expect(within(strip).getByText("Choose a cluster")).toBeInTheDocument();
+    // The scope that cannot exist yet, and the page with nothing on it.
+    expect(strip.textContent).not.toContain("no cluster");
+    expect(strip.textContent).not.toContain("all namespaces");
+    expect(strip.textContent).not.toContain("overview");
+  });
+
+  it("keeps its place, because it is where a cluster gets picked", () => {
+    mount();
+    expect(tabs()).toHaveLength(1);
+  });
+
+  it("offers no close on the only tab, which has nothing to fall back to", () => {
+    mount();
+    expect(screen.queryByLabelText("Close tab")).not.toBeInTheDocument();
+  });
+});

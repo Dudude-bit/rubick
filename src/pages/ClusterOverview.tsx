@@ -3,6 +3,7 @@ import { AlertCircle } from "lucide-react";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
 import { Section } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
@@ -35,20 +36,10 @@ export function ClusterOverview() {
     refetch,
   } = useClusterOverview(currentNamespace);
 
-  if (!isConnected) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Section className="max-w-sm text-center">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Welcome to K8s GUI
-          </h1>
-          <p className="text-sm text-fg-mut">
-            Pick a cluster in the scope tab above to get started.
-          </p>
-        </Section>
-      </div>
-    );
-  }
+  // Not an empty overview but a different screen: with no cluster there
+  // is no scope to be empty of anything, and the one thing the reader
+  // needs is the list of clusters the kubeconfig already named.
+  if (!isConnected) return <ClusterFrontDoor />;
 
   // Skeleton only on the first load — a refetch keeps the previous state on
   // screen so the layout never flashes empty while polling.

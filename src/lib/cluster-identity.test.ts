@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DANGER_CLUSTER_COLOR,
   clusterColor,
+  clusterNameParts,
   detectProvider,
   isProductionContext,
   providerLabel,
@@ -71,5 +72,37 @@ describe("clusterColor", () => {
 
   it("falls back to a neutral colour with no context", () => {
     expect(clusterColor(null)).toBe("hsl(var(--fg-fnt))");
+  });
+});
+
+describe("clusterNameParts", () => {
+  it("dims the ARN an EKS context is mostly made of", () => {
+    expect(clusterNameParts("arn:aws:eks:us-east-1:1234:cluster/prod")).toEqual(
+      {
+        prefix: "arn:aws:eks:us-east-1:1234:cluster/",
+        label: "prod",
+      }
+    );
+  });
+
+  it("dims the project and zone a GKE context leads with", () => {
+    expect(clusterNameParts("gke_acme-prod_europe-west1_main")).toEqual({
+      prefix: "gke_acme-prod_europe-west1_",
+      label: "main",
+    });
+  });
+
+  it("leaves a plain name whole", () => {
+    expect(clusterNameParts("k3d-k8s-gui-dev")).toEqual({
+      prefix: "",
+      label: "k3d-k8s-gui-dev",
+    });
+  });
+
+  it("keeps the whole name when the split would leave nothing to read", () => {
+    expect(clusterNameParts("gke_acme_")).toEqual({
+      prefix: "",
+      label: "gke_acme_",
+    });
   });
 });

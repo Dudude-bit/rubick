@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 
+import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
@@ -28,6 +29,10 @@ import {
   providerLabel,
 } from "@/lib/cluster-identity";
 import { cn } from "@/lib/utils";
+import {
+  splitByRecency,
+  useClusterRecencyStore,
+} from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   tabRouteLabel,
@@ -156,6 +161,7 @@ export function ScopeTabs() {
             tab={tab}
             active={tab.id === activeId}
             namesCluster={multiCluster}
+            closable={shown.length > 1}
           />
         ))}
       </div>
@@ -265,11 +271,14 @@ function ScopeTabItem({
   tab,
   active,
   namesCluster,
+  closable,
 }: {
   tab: ScopeTab;
   active: boolean;
   /** The strip holds more than one cluster, so the name is worth its width. */
   namesCluster: boolean;
+  /** The strip has somewhere to fall back to if this tab goes. */
+  closable: boolean;
 }) {
   const { context, namespace } = tab;
   const switchContext = useClusterStore((s) => s.switchContext);
@@ -282,10 +291,10 @@ function ScopeTabItem({
   const [tip, setTip] = useState(false);
   const color = clusterColor(context);
   const route = tabRouteLabel(tab.href);
-  // A tab with no cluster, or one the kubeconfig has lost, is the odd one
-  // out however many clusters are open — that is exactly when the name is
-  // the fact the reader needs.
-  const showName = namesCluster || tab.missing || !context;
+  // A cluster the kubeconfig has lost is the odd one out however many
+  // clusters are open — that is exactly when the name is the fact the
+  // reader needs.
+  const showName = namesCluster || tab.missing;
 
   // A segment on a parked tab is a way back to that scope, not a picker
   // for it: opening a list that edits a scope the window is not showing
@@ -298,6 +307,72 @@ function ScopeTabItem({
     }
     setOpen(next ? which : null);
   };
+
+  const pickCluster = (next: string) => {
+    setOpen(null);
+    if (next === context) return;
+    switchContext(next);
+    connect(next);
+  };
+
+  // A tab with no cluster keeps its place — it is where a cluster gets
+  // picked, so it cannot vanish — but it stops describing an absence.
+  // `no cluster / all namespaces / overview` is two segments naming a
+  // scope that cannot exist and a page with nothing on it; one segment
+  // survives, and it is a verb.
+  if (!context && !tab.missing) {
+    return (
+      <div
+        role="tab"
+        aria-selected={active}
+        data-active={active}
+        onClick={() => {
+          if (!active) activateTab(tab.id);
+        }}
+        onAuxClick={(event) => {
+          if (event.button !== 1 || !closable) return;
+          event.preventDefault();
+          closeTab(tab.id);
+        }}
+        className="flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]"
+      >
+        <ContextPopover
+          open={open === "ctx"}
+          onOpenChange={guard("ctx")}
+          activeContext={null}
+          onSelect={pickCluster}
+        >
+          <button
+            type="button"
+            className={cn(
+              segClass(open === "ctx"),
+              "text-info ring-1 ring-inset ring-info/45 hover:bg-info/10",
+              open === "ctx" && "bg-info/10 hover:bg-info/10"
+            )}
+          >
+            <ProviderMark
+              provider="generic"
+              className="h-[13px] w-[13px] flex-none"
+            />
+            Choose a cluster
+          </button>
+        </ContextPopover>
+        {closable && (
+          <button
+            type="button"
+            aria-label="Close tab"
+            onClick={(event) => {
+              event.stopPropagation();
+              closeTab(tab.id);
+            }}
+            className="flex-none pl-0.5 text-fg-fnt transition-colors hover:text-fg"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     // Controlled, so the tooltip stands down while a picker is open rather
@@ -347,12 +422,7 @@ function ScopeTabItem({
             open={open === "ctx"}
             onOpenChange={guard("ctx")}
             activeContext={context}
-            onSelect={(next) => {
-              setOpen(null);
-              if (next === context) return;
-              switchContext(next);
-              connect(next);
-            }}
+            onSelect={pickCluster}
           >
             <button
               type="button"
@@ -500,6 +570,13 @@ function ContextPopover({
   activeContext?: string | null;
 }) {
   const contexts = useClusterStore((s) => s.contexts);
+  const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
+
+  // The same order the front door uses. Two cluster lists that disagree
+  // about which cluster is first is exactly the drift that made them one
+  // component in the first place.
+  const { recent, rest } = splitByRecency(contexts, lastUsed);
+  const ordered = [...recent, ...rest];
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -515,10 +592,8 @@ function ContextPopover({
               No contexts in the kubeconfig.
             </p>
           )}
-          {contexts.map((ctx) => {
+          {ordered.map((ctx) => {
             const selected = ctx.name === activeContext;
-            const color = clusterColor(ctx.name);
-            const provider = detectProvider(ctx.name);
             return (
               <button
                 key={ctx.name}
@@ -527,28 +602,19 @@ function ContextPopover({
                 aria-selected={selected}
                 onClick={() => onSelect(ctx.name)}
                 className={cn(
-                  "grid w-full grid-cols-[6px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors hover:bg-hover",
+                  "w-full rounded-[5px] transition-colors hover:bg-hover",
                   selected && "bg-sel"
                 )}
               >
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: color }}
+                <ClusterRow
+                  context={ctx.name}
+                  selected={selected}
+                  meta={
+                    <span className="text-[10px] uppercase tracking-[0.05em]">
+                      {providerLabel(detectProvider(ctx.name))}
+                    </span>
+                  }
                 />
-                <span className="flex items-center gap-[7px] overflow-hidden">
-                  <ProviderMark provider={provider} style={{ color }} />
-                  <span
-                    className={cn(
-                      "truncate font-mono",
-                      selected ? "text-fg" : "text-fg-mid"
-                    )}
-                  >
-                    {ctx.name}
-                  </span>
-                </span>
-                <span className="text-[10px] uppercase tracking-[0.05em] text-fg-fnt">
-                  {providerLabel(provider)}
-                </span>
               </button>
             );
           })}

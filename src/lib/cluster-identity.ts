@@ -63,6 +63,32 @@ export function providerLabel(provider: ClusterProvider): string {
 }
 
 /**
+ * Split a context name into the boilerplate its provider prepends and the
+ * part that actually names the cluster.
+ *
+ * `arn:aws:eks:us-east-1:1234:cluster/prod` and
+ * `gke_acme-prod_europe-west1_main` are, to a reader scanning a list,
+ * fifty characters of account number followed by the one word they are
+ * looking for. Neither half can be dropped — the account and the project
+ * are what tell two `prod`s apart — so the prefix is kept and dimmed.
+ *
+ * The full name is never rewritten: `prefix + label` is the input.
+ */
+export function clusterNameParts(context: string): {
+  prefix: string;
+  label: string;
+} {
+  const provider = detectProvider(context);
+  const separator = provider === "eks" ? "/" : provider === "gke" ? "_" : null;
+  const cut = separator ? context.lastIndexOf(separator) : -1;
+  // A separator at the very end leaves nothing to read, so the whole name
+  // stays at full contrast rather than dimming into a blank row.
+  return cut > 0 && cut < context.length - 1
+    ? { prefix: context.slice(0, cut + 1), label: context.slice(cut + 1) }
+    : { prefix: "", label: context };
+}
+
+/**
  * The identity palette. Role tokens, not hex: the colour is a runtime
  * value carried in a CSS custom property, but the values it can take are
  * still the theme's. `--err` is reserved for production and never
