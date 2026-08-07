@@ -6,6 +6,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -14,11 +19,18 @@ import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
 
 /**
- * The window's bottom line: what the keyboard does on the left, what the
- * window is pointed at on the right. It is the only always-visible place
+ * The window's bottom line: what the keyboard does on the left, what is
+ * true of the connection on the right. It is the only always-visible place
  * that carries a live problem count, so the number is red the moment it
  * is non-zero — the user should never have to open a page to learn that
  * something broke.
+ *
+ * It reports states, never names. The cluster used to be spelled out here
+ * as well as in the sidebar and in the tab, three times in one window for
+ * a fact that does not change while you read it; now that a tab carries a
+ * route as well as a scope, the strip and the sidebar are enough. What is
+ * left here is the only thing this line knew that they did not: whether
+ * the connection behind them is actually up.
  */
 export function StatusBar() {
   const currentContext = useClusterStore((s) => s.currentContext);
@@ -45,25 +57,30 @@ export function StatusBar() {
       <ThemeControl />
 
       {connecting ? (
-        <span>connecting to {pendingContext ?? currentContext}…</span>
+        // The one place a name still belongs: mid-connect the sidebar and
+        // the tab are still showing the cluster being left behind.
+        <span className="truncate">
+          connecting to {pendingContext ?? currentContext}…
+        </span>
       ) : error ? (
-        <button
-          type="button"
-          onClick={() => connect(errorContext ?? currentContext ?? undefined)}
-          title={error}
-          className="text-err transition-colors hover:text-fg"
-        >
-          connection failed — retry
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() =>
+                connect(errorContext ?? currentContext ?? undefined)
+              }
+              className="text-err transition-colors hover:text-fg"
+            >
+              connection failed — retry
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="end" className="max-w-[420px]">
+            {error}
+          </TooltipContent>
+        </Tooltip>
       ) : isConnected ? (
-        <span className="truncate">{currentContext}</span>
-      ) : (
-        <span>not connected</span>
-      )}
-
-      {isConnected && !error && (
         <>
-          <span>·</span>
           <span>{podCount} pods</span>
           <span>·</span>
           <span className={cn(problemCount > 0 && "text-err")}>
@@ -73,6 +90,8 @@ export function StatusBar() {
             {problemsTruncated > 0 && "+"}
           </span>
         </>
+      ) : (
+        <span>not connected</span>
       )}
     </footer>
   );

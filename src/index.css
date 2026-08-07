@@ -180,6 +180,17 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--fg-fnt));
   }
+
+  /* A 38px strip has no room to spend 8px on a scrollbar, and it does not
+   * need one: a tab clipped by the edge is the overflow signal, and the
+   * active tab is scrolled into view whenever it changes. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* XTerm.js overrides for better theme integration */

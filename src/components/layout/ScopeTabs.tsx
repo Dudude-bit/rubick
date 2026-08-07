@@ -1,14 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 
 import { Kbd } from "@/components/ui/kbd";
-import { formatShortcut } from "@/lib/platform";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import {
   clusterColor,
@@ -31,6 +35,25 @@ const ALL_NAMESPACES = "all namespaces";
  * and the cluster and the namespace are separate click targets: namespaces
  * change dozens of times an hour and clusters a few times a day, so a
  * single merged list would bury the frequent job under the rare one.
+ *
+ * What a tab says, in the order it gives things up:
+ *
+ * 1. The cluster's colour dot and provider mark are never dropped and never
+ *    shrink — acting on the wrong cluster is the expensive mistake here.
+ * 2. The route is the tab's name and the only part of it that is written
+ *    nowhere else on screen, so it shrinks last and has a floor of its own.
+ * 3. The namespace gives way first, because the active tab's namespace is
+ *    also the one the page itself is filtered by.
+ * 4. The cluster's *name* is spent only where it discriminates: a strip
+ *    holding one cluster drops it on every tab, because the sidebar has
+ *    just said it and the dot still guards the mistake. The moment a second
+ *    cluster is open, every tab names itself.
+ *
+ * Width is shrink-to-a-floor-then-scroll, the Firefox rule rather than the
+ * Chrome one: tabs take their natural width, shrink together as the strip
+ * fills, and stop at a floor wide enough to still read a route. Past that
+ * the strip scrolls instead of grinding every tab into an unreadable
+ * sliver. Nothing stretches, so one tab is one tab's worth of chrome.
  */
 export function ScopeTabs() {
   const currentContext = useClusterStore((s) => s.currentContext);
@@ -46,6 +69,8 @@ export function ScopeTabs() {
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
   const openTab = useScopeTabStore((s) => s.openTab);
+
+  const stripRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadContexts();
@@ -74,43 +99,76 @@ export function ScopeTabs() {
     connect,
   ]);
 
+  // Scrolling is only an acceptable overflow policy if the tab you just
+  // switched to cannot be the one off the edge. Ctrl+1..9 and Ctrl+Tab
+  // reach every tab; this is what makes them land somewhere visible.
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId, tabs.length]);
+
+  // The active tab's scope lives in `clusterStore`, not on the tab; a tab
+  // whose cluster is gone keeps the name it was pointed at, because nothing
+  // else remembers it.
+  const shown = useMemo(
+    () =>
+      tabs.map((tab) =>
+        tab.id === activeId && !tab.missing
+          ? { ...tab, context: currentContext, namespace: currentNamespace }
+          : tab
+      ),
+    [tabs, activeId, currentContext, currentNamespace]
+  );
+
+  const multiCluster =
+    new Set(shown.map((tab) => tab.context).filter(Boolean)).size > 1;
+
   return (
     <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
-      {/* A new tab opens on the overview of the cluster already on screen:
+      {/* Outside the scroller on purpose: however far the strip has been
+          scrolled, the way to open a tab has not moved.
+
+          A new tab opens on the overview of the cluster already on screen:
           a browser's new tab lands on a home page, not on a picker, and
           inheriting the connection makes the shortcut instant. Pointing it
           somewhere else is one click on its own cluster segment. */}
-      <button
-        type="button"
-        aria-label="New tab"
-        title={`New tab (${formatShortcut("mod+T")})`}
-        onClick={() => openTab()}
-        className="rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
-      >
-        +
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="New tab"
+            onClick={() => openTab()}
+            className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+          >
+            +
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="flex items-center gap-1.5">
+          New tab
+          <Kbd shortcut="mod+T" className="leading-[13px]" />
+        </TooltipContent>
+      </Tooltip>
 
       <div
+        ref={stripRef}
         role="tablist"
         aria-label="Open scopes"
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+        // A tab strip is one line, so a trackpad's vertical gesture is the
+        // gesture a reader will use on it.
+        onWheel={(event) => {
+          const el = event.currentTarget;
+          if (el.scrollWidth <= el.clientWidth) return;
+          el.scrollLeft += event.deltaY || event.deltaX;
+        }}
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
       >
-        {tabs.map((tab) => (
+        {shown.map((tab) => (
           <ScopeTabItem
             key={tab.id}
-            // The active tab's scope lives in `clusterStore`, not on the
-            // tab; a tab whose cluster is gone keeps the name it was
-            // pointed at, because nothing else remembers it.
-            tab={
-              tab.id === activeId && !tab.missing
-                ? {
-                    ...tab,
-                    context: currentContext,
-                    namespace: currentNamespace,
-                  }
-                : tab
-            }
+            tab={tab}
             active={tab.id === activeId}
+            namesCluster={multiCluster}
           />
         ))}
       </div>
@@ -129,7 +187,16 @@ export function ScopeTabs() {
   );
 }
 
-function ScopeTabItem({ tab, active }: { tab: ScopeTab; active: boolean }) {
+function ScopeTabItem({
+  tab,
+  active,
+  namesCluster,
+}: {
+  tab: ScopeTab;
+  active: boolean;
+  /** The strip holds more than one cluster, so the name is worth its width. */
+  namesCluster: boolean;
+}) {
   const { context, namespace } = tab;
   const switchContext = useClusterStore((s) => s.switchContext);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
@@ -138,7 +205,13 @@ function ScopeTabItem({ tab, active }: { tab: ScopeTab; active: boolean }) {
   const closeTab = useScopeTabStore((s) => s.closeTab);
 
   const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
+  const [tip, setTip] = useState(false);
   const color = clusterColor(context);
+  const route = tabRouteLabel(tab.href);
+  // A tab with no cluster, or one the kubeconfig has lost, is the odd one
+  // out however many clusters are open — that is exactly when the name is
+  // the fact the reader needs.
+  const showName = namesCluster || tab.missing || !context;
 
   // A segment on a parked tab is a way back to that scope, not a picker
   // for it: opening a list that edits a scope the window is not showing
@@ -153,93 +226,180 @@ function ScopeTabItem({ tab, active }: { tab: ScopeTab; active: boolean }) {
   };
 
   return (
-    <div
-      role="tab"
-      aria-selected={active}
-      aria-label={tabTitle(tab)}
-      title={tabTitle(tab)}
-      onClick={() => {
-        if (!active) activateTab(tab.id);
-      }}
-      // Middle-click closes, as it does on every tab strip the reader has
-      // used. `onClick` never fires for the middle button.
-      onAuxClick={(event) => {
-        if (event.button !== 1) return;
-        event.preventDefault();
-        closeTab(tab.id);
-      }}
-      className={cn(
-        "flex min-w-0 items-center gap-[7px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
-        active ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover"
-      )}
-    >
-      <ContextPopover
-        open={open === "ctx"}
-        onOpenChange={guard("ctx")}
-        activeContext={context}
-        onSelect={(next) => {
-          setOpen(null);
-          if (next === context) return;
-          switchContext(next);
-          connect(next);
-        }}
-      >
-        <button type="button" className={segClass(open === "ctx")}>
-          {/* Only the dot carries the cluster colour here — the mark
-              stays at text contrast so the tab reads as one label and
-              the colour signal has a single owner. */}
-          <span
-            className="h-1.5 w-1.5 flex-none rounded-full"
-            style={{ background: color }}
-          />
-          <ProviderMark
-            provider={detectProvider(context ?? "")}
-            className="h-[13px] w-[13px] flex-none"
-          />
-          <span className="truncate">{context ?? "no cluster"}</span>
-          {/* The kubeconfig no longer has this cluster, so the tab cannot
-              be made live. Saying so is better than a tab that silently
-              shows another cluster's data. */}
-          {tab.missing && (
-            <span className="flex-none text-fg-fnt">(missing)</span>
+    // Controlled, so the tooltip stands down while a picker is open rather
+    // than floating over the list the reader is trying to read — which is
+    // what the native `title` did and could not be told not to.
+    <Tooltip open={tip && open === null} onOpenChange={setTip}>
+      <TooltipTrigger asChild>
+        <div
+          role="tab"
+          aria-selected={active}
+          aria-label={tabTitle(tab)}
+          data-active={active}
+          onClick={() => {
+            if (!active) activateTab(tab.id);
+          }}
+          // Middle-click closes, as it does on every tab strip the reader has
+          // used. `onClick` never fires for the middle button.
+          onAuxClick={(event) => {
+            if (event.button !== 1) return;
+            event.preventDefault();
+            closeTab(tab.id);
+          }}
+          className={cn(
+            // Natural width, no growing, a cap a long object name reaches
+            // and a floor it stops at: an empty strip is not a reason to
+            // stretch a tab, and a contested one gives up characters before
+            // it gives up tabs. Below the floor the strip scrolls.
+            //
+            // The floor is stated here rather than left to the segments'
+            // own minimums because a flex item's intrinsic minimum is not
+            // reliably the sum of its children's, and a tab narrower than
+            // its own parts is a tab with its label written over itself —
+            // hence `overflow-hidden` as the backstop.
+            "flex max-w-[26rem] shrink items-center gap-[5px] overflow-hidden rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            // A lost cluster needs room for the one fact only this tab still
+            // holds — the name it was pointed at — and for the word that says
+            // it is gone.
+            tab.missing
+              ? "min-w-[21rem]"
+              : showName
+                ? "min-w-[17.5rem]"
+                : "min-w-[13.5rem]",
+            active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
-        </button>
-      </ContextPopover>
+        >
+          <ContextPopover
+            open={open === "ctx"}
+            onOpenChange={guard("ctx")}
+            activeContext={context}
+            onSelect={(next) => {
+              setOpen(null);
+              if (next === context) return;
+              switchContext(next);
+              connect(next);
+            }}
+          >
+            <button
+              type="button"
+              className={cn(
+                segClass(open === "ctx"),
+                showName ? "min-w-[4rem] [flex-shrink:6]" : "flex-none",
+                tab.missing && "min-w-[6.5rem]"
+              )}
+            >
+              {/* Only the dot carries the cluster colour here — the mark
+                  stays at text contrast so the tab reads as one label and
+                  the colour signal has a single owner. A cluster the
+                  kubeconfig has lost gets a ring instead of a fill, so the
+                  state survives with the hue taken away. */}
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 flex-none rounded-full",
+                  tab.missing && "border border-fg-fnt"
+                )}
+                style={tab.missing ? undefined : { background: color }}
+              />
+              <ProviderMark
+                provider={detectProvider(context ?? "")}
+                className="h-[13px] w-[13px] flex-none"
+              />
+              {showName && (
+                <span className="min-w-0 truncate">
+                  {context ?? "no cluster"}
+                </span>
+              )}
+            </button>
+          </ContextPopover>
 
-      <span className="mx-px flex-none text-fg-fnt">/</span>
+          {/* Not a suffix on the name but a state of the tab, in the same
+              micro-label the context list uses for a provider. The tab
+              cannot be made live and nothing about it is going to change
+              until the kubeconfig does. */}
+          {tab.missing && (
+            <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-[0.05em] text-fg-fnt">
+              missing
+            </span>
+          )}
 
-      <NamespacePopover
-        open={open === "ns"}
-        onOpenChange={guard("ns")}
-        namespace={namespace}
-        onSelect={(next) => {
-          setOpen(null);
-          switchNamespace(next);
-        }}
-      >
-        <button type="button" className={segClass(open === "ns")}>
-          <span className="truncate">{namespace || ALL_NAMESPACES}</span>
-          <span className="flex-none text-[9px] text-fg-fnt">▾</span>
-        </button>
-      </NamespacePopover>
+          <span aria-hidden="true" className="flex-none text-fg-fnt">
+            /
+          </span>
 
-      {/* What the tab is showing. Plain here on purpose — the strip's
-          appearance is a separate job. */}
-      <span className="mx-px flex-none text-fg-fnt">·</span>
-      <span className="truncate">{tabRouteLabel(tab.href)}</span>
+          <NamespacePopover
+            open={open === "ns"}
+            onOpenChange={guard("ns")}
+            namespace={namespace}
+            onSelect={(next) => {
+              setOpen(null);
+              switchNamespace(next);
+            }}
+          >
+            <button
+              type="button"
+              // A floor here as well as on the route: a namespace ground
+              // down to a bare chevron is not a shorter label, it is a
+              // segment that has stopped saying anything and kept its
+              // punctuation.
+              className={cn(
+                segClass(open === "ns"),
+                "min-w-[3.5rem] [flex-shrink:6]"
+              )}
+            >
+              <span className="min-w-0 truncate">
+                {namespace || ALL_NAMESPACES}
+              </span>
+              <span aria-hidden="true" className="flex-none text-[9px]">
+                ▾
+              </span>
+            </button>
+          </NamespacePopover>
 
-      <button
-        type="button"
-        aria-label={`Close ${tabTitle(tab)}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          closeTab(tab.id);
-        }}
-        className="flex-none text-fg-fnt transition-colors hover:text-fg"
-      >
-        <span aria-hidden="true">✕</span>
-      </button>
-    </div>
+          <span aria-hidden="true" className="flex-none text-fg-fnt">
+            /
+          </span>
+
+          {/* The tab's name. One `/` throughout makes cluster, namespace and
+              page one path — the same trail a detail page draws — and the
+              page end of it carries the strongest colour in the tab,
+              because it is the part that says which tab this is. */}
+          <span
+            className={cn(
+              "min-w-[4.5rem] truncate [flex-shrink:1]",
+              active ? "text-fg" : "text-fg-mut"
+            )}
+          >
+            {route}
+          </span>
+
+          <button
+            type="button"
+            aria-label={`Close ${tabTitle(tab)}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              closeTab(tab.id);
+            }}
+            className="ml-auto flex-none pl-0.5 text-fg-fnt transition-colors hover:text-fg"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+      </TooltipTrigger>
+
+      {/* Exactly what the strip had to drop, at full length. */}
+      <TooltipContent side="bottom" align="start" className="max-w-[340px]">
+        <p className="text-fg">{route}</p>
+        <p className="truncate font-mono">
+          {context ?? "no cluster"} / {namespace || ALL_NAMESPACES}
+        </p>
+        {tab.missing && (
+          <p className="mt-0.5">
+            This cluster is no longer in the kubeconfig, so the tab cannot be
+            made live.
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -247,7 +407,7 @@ function ScopeTabItem({ tab, active }: { tab: ScopeTab; active: boolean }) {
  *  lists you are looking at while both stay visible. */
 function segClass(on: boolean) {
   return cn(
-    "inline-flex min-w-0 items-center gap-1.5 rounded px-[5px] py-0.5 transition-colors hover:bg-hover",
+    "inline-flex items-center gap-1.5 rounded px-[5px] py-0.5 transition-colors hover:bg-hover",
     on && "bg-sel hover:bg-sel"
   );
 }

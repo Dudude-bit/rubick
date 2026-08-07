@@ -24,6 +24,9 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
       observe() {}
