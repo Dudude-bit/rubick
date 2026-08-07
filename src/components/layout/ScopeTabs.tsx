@@ -4,6 +4,14 @@ import { Check, Search } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -68,7 +76,6 @@ export function ScopeTabs() {
 
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
-  const openTab = useScopeTabStore((s) => s.openTab);
 
   const stripRef = useRef<HTMLDivElement>(null);
 
@@ -127,28 +134,8 @@ export function ScopeTabs() {
   return (
     <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
       {/* Outside the scroller on purpose: however far the strip has been
-          scrolled, the way to open a tab has not moved.
-
-          A new tab opens on the overview of the cluster already on screen:
-          a browser's new tab lands on a home page, not on a picker, and
-          inheriting the connection makes the shortcut instant. Pointing it
-          somewhere else is one click on its own cluster segment. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            aria-label="New tab"
-            onClick={() => openTab()}
-            className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
-          >
-            +
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="flex items-center gap-1.5">
-          New tab
-          <Kbd shortcut="mod+T" className="leading-[13px]" />
-        </TooltipContent>
-      </Tooltip>
+          scrolled, the way to open a tab has not moved. */}
+      <NewTabButton />
 
       <div
         ref={stripRef}
@@ -184,6 +171,93 @@ export function ScopeTabs() {
         <Kbd shortcut="mod+K" className="leading-[13px]" />
       </button>
     </div>
+  );
+}
+
+/**
+ * The way to open a tab, in its two meanings.
+ *
+ * A left click opens a tab on the cluster already on screen: a browser's
+ * new tab lands on a home page, not on a picker, and inheriting the
+ * connection makes the shortcut instant.
+ *
+ * The other reason to open a tab is to go somewhere else, and that used to
+ * be what this button did — until a tab became a route plus a scope, which
+ * made picking a cluster afterwards a second step. Right click gives it
+ * back: one gesture, one new tab, on the cluster you named.
+ */
+function NewTabButton() {
+  const contexts = useClusterStore((s) => s.contexts);
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const openTab = useScopeTabStore((s) => s.openTab);
+  const [menu, setMenu] = useState(false);
+  const [tip, setTip] = useState(false);
+
+  return (
+    <ContextMenu onOpenChange={setMenu}>
+      <Tooltip open={tip && !menu} onOpenChange={setTip}>
+        <TooltipTrigger asChild>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="New tab. Menu key opens it on another cluster."
+              aria-haspopup="menu"
+              onClick={() => openTab()}
+              className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+            >
+              +
+            </button>
+          </ContextMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[240px]">
+          <p className="flex items-center gap-1.5">
+            New tab here
+            <Kbd shortcut="mod+T" className="leading-[13px]" />
+          </p>
+          <p className="mt-0.5">Right click for another cluster.</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <ContextMenuContent className="w-[244px]">
+        <ContextMenuLabel>New tab on</ContextMenuLabel>
+        {contexts.length === 0 && (
+          <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+            No contexts in the kubeconfig.
+          </p>
+        )}
+        {contexts.map((ctx) => {
+          const color = clusterColor(ctx.name);
+          return (
+            <ContextMenuItem
+              key={ctx.name}
+              onSelect={() => openTab({ context: ctx.name })}
+              className="grid grid-cols-[6px_1fr] items-center gap-[9px]"
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: color }}
+              />
+              <span className="flex items-center gap-[7px] overflow-hidden">
+                <ProviderMark
+                  provider={detectProvider(ctx.name)}
+                  style={{ color }}
+                />
+                <span className="truncate font-mono">{ctx.name}</span>
+              </span>
+            </ContextMenuItem>
+          );
+        })}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => openTab()}>
+          {/* Named by what it does rather than by the cluster, because the
+              cluster it lands on is whichever one is on screen. */}
+          New tab here
+          <span className="ml-auto pl-4 text-fg-fnt">
+            {currentContext ?? "no cluster"}
+          </span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
