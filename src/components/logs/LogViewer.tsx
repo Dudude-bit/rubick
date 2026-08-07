@@ -6,12 +6,18 @@ import {
   type ReactNode,
 } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import type { LogLevel } from "@/generated/types";
+import type { ContainerInfo, LogLevel } from "@/generated/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import {
+  describeTermination,
+  lastTermination,
+  terminationAt,
+  terminationWhen,
+} from "@/lib/pod-status";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 import {
@@ -84,17 +90,25 @@ function LogSkeleton() {
 function StreamFailureNotice({
   failure,
   podName,
+  container: info,
   intake,
   onRetry,
 }: {
   failure: ContainerFailure;
   podName: string;
+  /** The container's own status, when the pod object is at hand. */
+  container?: ContainerInfo;
   /** Intake is set, so reconnecting will not fetch back the gap. */
   intake: boolean;
   onRetry: () => void;
 }) {
   const gone = failure.kind === "gone";
   const container = failure.container;
+  // Why it is gone, which the stream error never says: it reports that
+  // the container is no longer running, and the exit code, the reason
+  // and the time are sitting in the pod's own status the whole while.
+  const termination = info ? lastTermination(info) : null;
+  const when = termination ? terminationWhen(termination) : null;
 
   return (
     <div
@@ -108,6 +122,20 @@ function StreamFailureNotice({
             ? `Stream ended — ${podName}/${container} is gone.`
             : `Lost the log stream from ${podName}/${container}.`}
         </p>
+        {termination && (
+          <p
+            className="mt-0.5 text-[11px] text-err"
+            data-testid="log-stream-termination"
+            title={terminationAt(termination)}
+          >
+            It exited {describeTermination(termination)}
+            {when ? `, ${when}` : ""}
+            {info && info.restartCount > 0
+              ? ` · ${info.restartCount} ${info.restartCount === 1 ? "restart" : "restarts"} so far`
+              : ""}
+            .
+          </p>
+        )}
         <p className="mt-0.5 break-words text-[11px] text-fg-mut">
           {failure.message}
         </p>
@@ -294,11 +322,24 @@ function IntakeQuietNotice({
 interface LogViewerProps {
   podName: string;
   namespace: string;
-  containers: string[];
+  /**
+   * The pod's containers, not just their names: a stream that ends
+   * because a container died can only say why if it can reach that
+   * container's `lastTerminated`.
+   */
+  containers: ContainerInfo[];
 }
 
-export function LogViewer({ podName, namespace, containers }: LogViewerProps) {
+export function LogViewer({
+  podName,
+  namespace,
+  containers: containerInfos,
+}: LogViewerProps) {
   const { toast } = useToast();
+  const containers = useMemo(
+    () => containerInfos.map((container) => container.name),
+    [containerInfos]
+  );
   const copyToClipboard = useCopyToClipboard();
   // Every container streams, always. Hiding one is a view filter and
   // nothing more: stopping its stream would make its line count a lie
@@ -698,6 +739,9 @@ export function LogViewer({ podName, namespace, containers }: LogViewerProps) {
           key={failure.container}
           failure={failure}
           podName={podName}
+          container={containerInfos.find(
+            (info) => info.name === failure.container
+          )}
           intake={intake.length > 0}
           onRetry={retry}
         />

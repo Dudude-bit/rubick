@@ -31,14 +31,36 @@ vi.mock("@/lib/commands", () => ({
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
-import type { StreamLogConfig } from "@/generated/types";
+import type {
+  ContainerInfo,
+  StreamLogConfig,
+  TerminationInfo,
+} from "@/generated/types";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { LogViewer } from "./LogViewer";
+
+function container(
+  name: string,
+  overrides: Partial<ContainerInfo> = {}
+): ContainerInfo {
+  return {
+    name,
+    image: "busybox:1.36",
+    ready: true,
+    state: { type: "running" },
+    lastTerminated: null,
+    restartCount: 0,
+    ports: [],
+    env: [],
+    envFrom: [],
+    ...overrides,
+  };
+}
 
 const props = {
   podName: "log-demo-7f9",
   namespace: "default",
-  containers: ["app"],
+  containers: [container("app")],
 };
 
 function fireFailure(kind: "gone" | "broken", message: string) {
@@ -122,6 +144,46 @@ describe("LogViewer when a live stream dies", () => {
       screen.queryByRole("button", { name: /Reconnect/ }),
       "a deleted pod cannot be reconnected to"
     ).not.toBeInTheDocument();
+  });
+
+  it("says how the container died, not only that it is gone", async () => {
+    const termination: TerminationInfo = {
+      exitCode: 1,
+      signal: null,
+      reason: "Error",
+      message: null,
+      startedAt: null,
+      finishedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    };
+    render(
+      <TooltipProvider>
+        <LogViewer
+          {...props}
+          containers={[
+            container("app", {
+              ready: false,
+              state: { type: "waiting", reason: "CrashLoopBackOff" },
+              lastTerminated: termination,
+              restartCount: 653,
+            }),
+          ]}
+        />
+      </TooltipProvider>
+    );
+    await waitFor(() => {
+      expect(listeners["stream-failed"]).toBeDefined();
+    });
+
+    fireFailure("gone", "container app is no longer running.");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-stream-termination")).toBeInTheDocument();
+    });
+    // The exit code, the reason, when, and how often — all of it was in
+    // the pod status while the pane said only "no longer running".
+    expect(screen.getByTestId("log-stream-termination")).toHaveTextContent(
+      "It exited Error · exit 1, 4m ago · 653 restarts so far."
+    );
   });
 
   it("marks the dead container in the legend, not just above the list", async () => {
@@ -412,7 +474,14 @@ describe("what the pane shows on open", () => {
   it("hides no container", async () => {
     render(
       <TooltipProvider>
-        <LogViewer {...props} containers={["app", "sidecar", "proxy"]} />
+        <LogViewer
+          {...props}
+          containers={[
+            container("app"),
+            container("sidecar"),
+            container("proxy"),
+          ]}
+        />
       </TooltipProvider>
     );
     await waitFor(() => {
