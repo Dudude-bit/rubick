@@ -23,7 +23,7 @@ export function PodListCard({
           kind: ResourceType.Pod,
           name: pod.name,
           namespace: pod.namespace,
-          status: pod.status?.phase || "Unknown",
+          status: pod.status?.display || "Unknown",
           detail: (
             <>
               {ready}

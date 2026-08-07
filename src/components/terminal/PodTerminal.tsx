@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -178,15 +179,12 @@ export function PodTerminal({
           (item) => item.name === containerName
         );
 
-        if (container) {
-          if (container.state.type === "terminated") {
-            const reason = container.state.reason
-              ? `: ${container.state.reason}`
-              : "";
-            setUnavailableReason(`Container terminated${reason}`);
-            disconnect();
-            return;
-          }
+        if (container?.state.type === "terminated") {
+          setUnavailableReason(
+            `Container terminated · ${describeTermination(container.state.termination)}`
+          );
+          disconnect();
+          return;
         }
 
         const phase = pod.status.phase.toLowerCase();

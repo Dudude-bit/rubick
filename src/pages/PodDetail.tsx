@@ -40,6 +40,11 @@ import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { failingCondition } from "@/lib/condition-health";
 import { statusRole } from "@/lib/status-role";
+import {
+  describeRestarts,
+  describeTermination,
+  terminationWhen,
+} from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
 
@@ -78,10 +83,15 @@ function describeWaiting(
     };
   }
   if (reason.toLowerCase() === "crashloopbackoff") {
+    const last = container.lastTerminated;
     return {
       reason,
       headline: `${container.name} starts and then exits, over and over`,
-      detail: `${container.restartCount} restarts so far. What it printed before it last died is in Logs.`,
+      detail: last
+        ? `${container.restartCount} restarts so far; the last run ended ${describeTermination(last)}${
+            terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
+          }. What it printed before it died is in Logs.`
+        : `${container.restartCount} restarts so far. What it printed before it last died is in Logs.`,
       tone: "err",
     };
   }
@@ -125,11 +135,12 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
         tab: "containers",
       };
     }
-    if (state.type === "terminated" && state.exit_code !== 0) {
+    if (state.type === "terminated" && state.termination.exitCode !== 0) {
+      const { termination } = state;
       return {
-        reason: state.reason ?? "Error",
-        headline: `${container.name} exited with ${state.exit_code}`,
-        detail: `${state.reason ?? "Error"} — the last run of this container did not finish cleanly.`,
+        reason: termination.reason ?? "Error",
+        headline: `${container.name} exited with ${termination.exitCode}`,
+        detail: `${describeTermination(termination)} — the last run of this container did not finish cleanly.`,
         tone: "err",
         tab: "containers",
       };
@@ -375,10 +386,16 @@ export function PodDetail() {
     },
     {
       label: "Restarts",
-      value: pod?.restartCount ?? 0,
-      mono: true,
+      value: pod ? describeRestarts(pod) : 0,
       tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
     },
+    // Where the raw phase stays reachable — "the pod really is in phase
+    // Running while its container loops" is a thing an SRE has to be able
+    // to check. Only when it disagrees with the header, which is the only
+    // time the two are not the same word twice.
+    ...(pod && pod.status.phase !== pod.status.display
+      ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+      : []),
     {
       label: "Containers",
       value: pod
@@ -406,13 +423,20 @@ export function PodDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       statusBadge={
-        pod?.status.phase ? <StatusBadge status={pod.status.phase} /> : null
+        pod?.status.display ? (
+          <StatusBadge
+            status={pod.status.display}
+            title={`Phase ${pod.status.phase}`}
+          />
+        ) : null
       }
-      // The phase is not the problem: `Pending` is true of a pod waiting for
-      // a node and of one whose image does not exist. The kubelet's word for
-      // it rides beside the phase, on every tab.
+      // The kubelet's word for the trouble, on every tab — but only when
+      // the badge is not already saying it. Now the badge carries the
+      // derived status, `CrashLoopBackOff CrashLoopBackOff` is what the
+      // unconditional version renders.
       badges={
-        problem && (
+        problem &&
+        problem.reason !== pod?.status.display && (
           <span
             className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
           >
@@ -494,7 +518,7 @@ export function PodDetail() {
             <LogViewer
               podName={pod.name}
               namespace={pod.namespace}
-              containers={pod.containers.map((c) => c.name)}
+              containers={pod.containers}
             />
           ) : null,
         },

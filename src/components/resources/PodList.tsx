@@ -24,6 +24,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
+import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
 
 // Helper to format ready containers count
@@ -49,7 +50,15 @@ export function PodList() {
       {
         id: "status",
         header: "Status",
-        cell: ({ row }) => <StatusBadge status={row.original.status.phase} />,
+        // The derived status, not the phase: a pod that has crashed 653
+        // times is in phase `Running` and nobody means that by "how is
+        // it". The phase rides along in the tooltip so it is not lost.
+        cell: ({ row }) => (
+          <StatusBadge
+            status={row.original.status.display}
+            title={`Phase ${row.original.status.phase}`}
+          />
+        ),
       },
       createCpuColumn<PodWithMetrics>(),
       createMemoryColumn<PodWithMetrics>(),
@@ -65,6 +74,9 @@ export function PodList() {
       {
         id: "restarts",
         header: "Restarts",
+        // kubectl prints the count with the age of the last one, and it is
+        // the half that carries the news: 653 an hour ago and 653 last
+        // week are the same number and not the same pod.
         cell: ({ row }) => (
           <span
             className={
@@ -74,6 +86,12 @@ export function PodList() {
             }
           >
             {row.original.restartCount}
+            {row.original.restartCount > 0 && row.original.lastRestartAt && (
+              <span className="text-fg-fnt">
+                {" "}
+                ({formatAge(row.original.lastRestartAt)} ago)
+              </span>
+            )}
           </span>
         ),
       },

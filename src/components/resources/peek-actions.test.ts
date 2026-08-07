@@ -22,6 +22,7 @@ function container(
     image: "busybox:1.36",
     ready: state.type === "running",
     state,
+    lastTerminated: null,
     restartCount: 0,
     ports: ports.map((containerPort) => ({
       name: null,
@@ -40,6 +41,7 @@ function pod(overrides: Partial<PodInfo> = {}): PodInfo {
     uid: "pod-uid",
     status: {
       phase: "Running",
+      display: "Running",
       ready: true,
       conditions: [],
       message: null,
@@ -53,6 +55,7 @@ function pod(overrides: Partial<PodInfo> = {}): PodInfo {
     annotations: {},
     createdAt: "2026-08-05T00:00:00Z",
     restartCount: 0,
+    lastRestartAt: null,
     cpuRequests: null,
     cpuLimits: null,
     memoryRequests: null,
@@ -113,6 +116,7 @@ describe("why a pod action cannot run", () => {
     name: "unschedulable-demo",
     status: {
       phase: "Pending",
+      display: "Pending",
       ready: false,
       conditions: [],
       message: "0/3 nodes are available: insufficient cpu.",
@@ -144,13 +148,24 @@ describe("why a pod action cannot run", () => {
     const done = pod({
       status: {
         phase: "Succeeded",
+        display: "Completed",
         ready: false,
         conditions: [],
         message: null,
         reason: null,
       },
       containers: [
-        container("app", { type: "terminated", exit_code: 0, reason: null }),
+        container("app", {
+          type: "terminated",
+          termination: {
+            exitCode: 0,
+            signal: null,
+            reason: null,
+            message: null,
+            startedAt: null,
+            finishedAt: null,
+          },
+        }),
       ],
     } as Partial<PodInfo>);
     expect(find(all("Pod", done), "shell")?.reason).toMatch(

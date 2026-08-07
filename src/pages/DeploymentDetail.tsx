@@ -372,7 +372,7 @@ export function DeploymentDetail() {
                 </SelectTrigger>
                 <SelectContent>
                   {pods.map((pod) => {
-                    const phase = pod.status?.phase || "Unknown";
+                    const phase = pod.status?.display || "Unknown";
                     return (
                       <SelectItem key={pod.name} value={pod.name}>
                         <span className="flex items-center gap-2">
@@ -403,7 +403,7 @@ export function DeploymentDetail() {
                 key={`${logPod.namespace}:${logPod.name}`}
                 podName={logPod.name}
                 namespace={logPod.namespace}
-                containers={logPod.containers?.map((c) => c.name) || []}
+                containers={logPod.containers ?? []}
               />
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">

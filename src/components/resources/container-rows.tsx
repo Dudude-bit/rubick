@@ -7,6 +7,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { KeyValueList, type KeyValue } from "@/components/resources/detail-kv";
 import { statusRole } from "@/lib/status-role";
+import { describeTermination, terminationWhen } from "@/lib/pod-status";
 import type {
   ContainerInfo,
   ContainerState,
@@ -48,10 +49,10 @@ function describeState(state: ContainerState): StateSummary {
       };
     }
     case "terminated": {
-      const reason = state.reason ? ` · ${state.reason}` : "";
+      const when = terminationWhen(state.termination);
       return {
-        text: `Terminated${reason} · exit ${state.exit_code}`,
-        tone: state.exit_code === 0 ? undefined : "err",
+        text: `Terminated · ${describeTermination(state.termination)}${when ? ` · ${when}` : ""}`,
+        tone: state.termination.exitCode === 0 ? undefined : "err",
       };
     }
     default:
@@ -102,6 +103,20 @@ export function ContainerRows({
             value: container.restartCount,
             tone: container.restartCount > 0 ? "warn" : undefined,
           });
+          // A container that restarts is a container that died, and the
+          // count alone never said of what. Only shown when the current
+          // state is not already the termination being described.
+          if (
+            container.state.type !== "terminated" &&
+            container.lastTerminated
+          ) {
+            const when = terminationWhen(container.lastTerminated);
+            items.push({
+              label: "Last exit",
+              value: `${describeTermination(container.lastTerminated)}${when ? ` · ${when}` : ""}`,
+              tone: container.lastTerminated.exitCode === 0 ? undefined : "err",
+            });
+          }
           if (container.ports.length > 0) {
             items.push({
               label: "Ports",

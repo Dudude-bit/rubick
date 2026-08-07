@@ -66,7 +66,7 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
   const statusCounts =
     pods?.reduce(
       (acc, pod) => {
-        const phase = pod.status.phase || "Unknown";
+        const phase = pod.status.display || "Unknown";
         acc[phase] = (acc[phase] || 0) + 1;
         return acc;
       },
@@ -124,7 +124,7 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
             >
               <div className="flex items-center gap-3">
                 <Circle
-                  className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.phase || "Unknown")}`}
+                  className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.display || "Unknown")}`}
                 />
                 <ResourceRef
                   kind={ResourceType.Pod}
@@ -134,7 +134,7 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
                 />
               </div>
               <div className="flex items-center gap-3 text-sm text-fg-mut">
-                <span>{pod.status.phase}</span>
+                <span>{pod.status.display}</span>
                 {pod.podIp && (
                   <span className="text-xs">
                     <CopyableAddress value={pod.podIp} label="Pod IP" />

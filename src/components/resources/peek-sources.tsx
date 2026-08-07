@@ -6,6 +6,7 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
+import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
 import {
   getApiVersion,
@@ -96,7 +97,7 @@ const workloadStatus = (ready: number, desired: number) =>
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   Pod: source(commands.getPod, (pod) => ({
-    status: pod.status.phase,
+    status: pod.status.display,
     createdAt: pod.createdAt,
     groups: [
       {
@@ -113,8 +114,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           },
           {
             label: "Restarts",
-            value: pod.restartCount,
-            mono: true,
+            value: describeRestarts(pod),
             tone: pod.restartCount > 0 ? "warn" : undefined,
           },
           {
@@ -122,6 +122,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             value: `${pod.containers.filter((c) => c.ready).length} of ${pod.containers.length} ready`,
             tone: pod.containers.some((c) => !c.ready) ? "warn" : undefined,
           },
+          // Only when it disagrees with the badge above. `Phase Running`
+          // under a `Running` badge is the same word twice; `Phase
+          // Running` under `CrashLoopBackOff` is the fact an SRE came for.
+          ...(pod.status.phase !== pod.status.display
+            ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+            : []),
           ...(pod.status.message || pod.status.reason
             ? [
                 {

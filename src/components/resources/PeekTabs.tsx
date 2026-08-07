@@ -193,7 +193,7 @@ function describeSilence(
     "The scheduler has not placed it on a node yet.";
 
   return {
-    title: `No container has started — this pod is ${pod.status.phase}.`,
+    title: `No container has started — this pod is ${pod.status.display}.`,
     detail: `${explanation} Recent events on the Overview tab say more.`,
   };
 }
@@ -223,7 +223,7 @@ function PeekLogsTab({
       key={`${target.namespace}/${target.name}`}
       podName={pod.name}
       namespace={pod.namespace}
-      containers={pod.containers.map((container) => container.name)}
+      containers={pod.containers}
     />
   );
 }

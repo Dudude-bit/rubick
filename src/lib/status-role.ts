@@ -24,6 +24,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "progressing",
     "creating",
     "containercreating",
+    "podinitializing",
+    "schedulinggated",
     "terminating",
     "pendinginstall",
     "pendingupgrade",
@@ -65,6 +67,22 @@ function normalize(status: string): string {
   return status.toLowerCase().replace(/[\s_-]/g, "");
 }
 
+/** `Init:2/3` — an init container is still working, and none has failed. */
+const INIT_PROGRESS = /^\d+\/\d+$/;
+/** What kubectl prints when a termination carried no reason of its own. */
+const EXIT = /^exitcode:(\d+)$/;
+const SIGNAL = /^signal:\d+$/;
+
 export function statusRole(status: string): StatusRole {
-  return LOOKUP.get(normalize(status)) ?? "neutral";
+  let key = normalize(status);
+  // kubectl prefixes the whole init phase, so `Init:ImagePullBackOff` is
+  // an image that cannot be pulled and has to read as one.
+  if (key.startsWith("init:")) {
+    key = key.slice(5);
+    if (INIT_PROGRESS.test(key)) return "pending";
+  }
+  const exit = EXIT.exec(key);
+  if (exit) return exit[1] === "0" ? "neutral" : "err";
+  if (SIGNAL.test(key)) return "err";
+  return LOOKUP.get(key) ?? "neutral";
 }
