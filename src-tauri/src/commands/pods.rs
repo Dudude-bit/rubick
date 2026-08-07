@@ -44,9 +44,14 @@ pub async fn list_pods(
     let pod_list = api.list(&lp).await?;
     let mut pods: Vec<PodInfo> = pod_list.items.iter().map(PodInfo::from).collect();
 
-    // Apply status filter if specified (client-side filtering)
+    // Client-side, and against both readings of "status": the caller may
+    // be naming the phase (`Running`) or the status the app shows
+    // (`CrashLoopBackOff`), and only one of those is a phase at all.
     if let Some(status) = &filters.status_filter {
-        pods.retain(|p| p.status.phase.eq_ignore_ascii_case(status));
+        pods.retain(|p| {
+            p.status.phase.eq_ignore_ascii_case(status)
+                || p.status.display.eq_ignore_ascii_case(status)
+        });
     }
 
     Ok(pods)

@@ -3,7 +3,8 @@
 
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{
-    Container, EnvVar, EnvVarSource as K8sEnvVarSource, NodeCondition, PodCondition, PodStatus,
+    Container, ContainerStateTerminated, EnvVar, EnvVarSource as K8sEnvVarSource, NodeCondition,
+    PodCondition, PodStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -213,6 +214,12 @@ pub struct ContainerInfo {
     pub image: String,
     pub ready: bool,
     pub state: ContainerState,
+    /// How the previous run of this container ended.
+    ///
+    /// The only place the exit code of a crash-looping container exists:
+    /// its *current* state is `Waiting · CrashLoopBackOff`, which says
+    /// that it dies and never why.
+    pub last_terminated: Option<TerminationInfo>,
     pub restart_count: i32,
     pub ports: Vec<ContainerPortInfo>,
     pub env: Vec<EnvVarInfo>,
@@ -225,7 +232,7 @@ impl ContainerInfo {
             .and_then(|s| s.container_statuses.as_ref())
             .and_then(|cs| cs.iter().find(|c| c.name == container.name));
 
-        let (ready, state, restart_count) = if let Some(cs) = container_status {
+        let (ready, state, last_terminated, restart_count) = if let Some(cs) = container_status {
             let state = if cs.state.as_ref().and_then(|s| s.running.as_ref()).is_some() {
                 ContainerState::Running
             } else if let Some(waiting) = cs.state.as_ref().and_then(|s| s.waiting.as_ref()) {
@@ -234,16 +241,21 @@ impl ContainerInfo {
                 }
             } else if let Some(terminated) = cs.state.as_ref().and_then(|s| s.terminated.as_ref()) {
                 ContainerState::Terminated {
-                    exit_code: terminated.exit_code,
-                    reason: terminated.reason.clone(),
+                    termination: TerminationInfo::from(terminated),
                 }
             } else {
                 ContainerState::Unknown
             };
 
-            (cs.ready, state, cs.restart_count)
+            let last = cs
+                .last_state
+                .as_ref()
+                .and_then(|s| s.terminated.as_ref())
+                .map(TerminationInfo::from);
+
+            (cs.ready, state, last, cs.restart_count)
         } else {
-            (false, ContainerState::Unknown, 0)
+            (false, ContainerState::Unknown, None, 0)
         };
 
         let ports = container
@@ -265,10 +277,37 @@ impl ContainerInfo {
             image: container.image.clone().unwrap_or_default(),
             ready,
             state,
+            last_terminated,
             restart_count,
             ports,
             env: extract_env_vars(container),
             env_from: extract_env_from(container),
+        }
+    }
+}
+
+/// How a container run ended, current or previous.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminationInfo {
+    pub exit_code: i32,
+    /// Set instead of a meaningful exit code when the kernel killed it.
+    pub signal: Option<i32>,
+    pub reason: Option<String>,
+    pub message: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
+}
+
+impl From<&ContainerStateTerminated> for TerminationInfo {
+    fn from(terminated: &ContainerStateTerminated) -> Self {
+        Self {
+            exit_code: terminated.exit_code,
+            signal: terminated.signal.filter(|s| *s != 0),
+            reason: terminated.reason.clone(),
+            message: terminated.message.clone(),
+            started_at: terminated.started_at.as_ref().map(|t| t.0),
+            finished_at: terminated.finished_at.as_ref().map(|t| t.0),
         }
     }
 }
@@ -278,13 +317,8 @@ impl ContainerInfo {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContainerState {
     Running,
-    Waiting {
-        reason: Option<String>,
-    },
-    Terminated {
-        exit_code: i32,
-        reason: Option<String>,
-    },
+    Waiting { reason: Option<String> },
+    Terminated { termination: TerminationInfo },
     Unknown,
 }
 

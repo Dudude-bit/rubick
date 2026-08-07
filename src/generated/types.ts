@@ -666,6 +666,7 @@ export interface PodInfo {
   annotations: Record<string, string>;
   createdAt: string | null;
   restartCount: number;
+  lastRestartAt: string | null;
   cpuRequests: string | null;
   cpuLimits: string | null;
   memoryRequests: string | null;
@@ -678,6 +679,7 @@ export interface ContainerInfo {
   image: string;
   ready: boolean;
   state: ContainerState;
+  lastTerminated: TerminationInfo | null;
   restartCount: number;
   ports: ContainerPortInfo[];
   env: EnvVarInfo[];
@@ -690,8 +692,18 @@ export interface ContainerPortInfo {
   protocol: string;
 }
 
+export interface TerminationInfo {
+  exitCode: number;
+  signal: number | null;
+  reason: string | null;
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export interface PodStatusInfo {
   phase: string;
+  display: string;
   ready: boolean;
   conditions: ConditionInfo[];
   message: string | null;
@@ -1232,7 +1244,7 @@ export type EnvVarSourceType =
 export type ContainerState =
   | { type: "running" }
   | { type: "waiting"; reason: string | null }
-  | { type: "terminated"; exit_code: number; reason: string | null }
+  | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
 
 export type MetricsStatusKind =

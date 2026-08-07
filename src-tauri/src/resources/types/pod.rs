@@ -1,7 +1,7 @@
 //! Pod-specific types: `PodInfo`, `PodStatusInfo`.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::{Pod, PodStatus};
+use k8s_openapi::api::core::v1::Pod;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -10,6 +10,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::utils::{format_cpu, parse_cpu, parse_memory};
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
+use super::pod_display::{display_status, restarts};
 
 /// Simplified pod information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +28,10 @@ pub struct PodInfo {
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<DateTime<Utc>>,
     pub restart_count: i32,
+    /// When the most recent restart happened, which is what makes a
+    /// restart count readable: 653 an hour ago and 653 last week are the
+    /// same number and not the same pod.
+    pub last_restart_at: Option<DateTime<Utc>>,
     // Resource requests/limits (from spec)
     pub cpu_requests: Option<String>, // aggregated from all containers
     pub cpu_limits: Option<String>,   // aggregated from all containers
@@ -50,9 +55,7 @@ impl From<&Pod> for PodInfo {
             })
             .unwrap_or_default();
 
-        let restart_count = status
-            .and_then(|s| s.container_statuses.as_ref())
-            .map_or(0, |cs| cs.iter().map(|c| c.restart_count).sum());
+        let (restart_count, last_restart_at) = restarts(pod);
 
         // Aggregate resource requests and limits from all containers
         let (cpu_requests, cpu_limits, memory_requests, memory_limits) =
@@ -111,7 +114,7 @@ impl From<&Pod> for PodInfo {
             name: pod.name_any(),
             namespace: pod.namespace().unwrap_or_default(),
             uid: pod.uid().unwrap_or_default(),
-            status: PodStatusInfo::from_pod_status(status),
+            status: PodStatusInfo::from_pod(pod),
             node_name: spec.and_then(|s| s.node_name.clone()),
             pod_ip: status.and_then(|s| s.pod_ip.clone()),
             host_ip: status.and_then(|s| s.host_ip.clone()),
@@ -120,6 +123,7 @@ impl From<&Pod> for PodInfo {
             annotations: pod.annotations().clone(),
             created_at: pod.creation_timestamp().map(|t| t.0),
             restart_count,
+            last_restart_at,
             cpu_requests,
             cpu_limits,
             memory_requests,
@@ -133,7 +137,12 @@ impl From<&Pod> for PodInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PodStatusInfo {
+    /// The raw `.status.phase`. Kept because it is a real fact an SRE
+    /// sometimes wants — a pod can be in phase `Running` while its only
+    /// container loops — but it is never what the app leads with.
     pub phase: String,
+    /// What `kubectl get pod` prints. See `pod_display`.
+    pub display: String,
     pub ready: bool,
     pub conditions: Vec<ConditionInfo>,
     pub message: Option<String>,
@@ -141,12 +150,14 @@ pub struct PodStatusInfo {
 }
 
 impl PodStatusInfo {
-    fn from_pod_status(status: Option<&PodStatus>) -> Self {
-        let status = match status {
+    fn from_pod(pod: &Pod) -> Self {
+        let display = display_status(pod);
+        let status = match pod.status.as_ref() {
             Some(s) => s,
             None => {
                 return Self {
                     phase: "Unknown".to_string(),
+                    display,
                     ready: false,
                     conditions: vec![],
                     message: None,
@@ -172,6 +183,7 @@ impl PodStatusInfo {
                 .phase
                 .clone()
                 .unwrap_or_else(|| "Unknown".to_string()),
+            display,
             ready,
             conditions,
             message: status.message.clone(),
