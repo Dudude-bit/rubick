@@ -64,6 +64,11 @@ const DeploymentDetail = lazy(() =>
     default: m.DeploymentDetail,
   }))
 );
+const ReplicaSetDetail = lazy(() =>
+  import("@/pages/ReplicaSetDetail").then((m) => ({
+    default: m.ReplicaSetDetail,
+  }))
+);
 const ServiceDetail = lazy(() =>
   import("@/pages/ServiceDetail").then((m) => ({ default: m.ServiceDetail }))
 );
@@ -231,6 +236,12 @@ export default function App() {
             <Route
               path={`${toPlural(ResourceType.Deployment)}/:namespace/:name`}
               element={<DeploymentDetail />}
+            />
+            {/* A detail route and no list route: a ReplicaSet is somewhere
+                you land, never somewhere you browse. */}
+            <Route
+              path={`${toPlural(ResourceType.ReplicaSet)}/:namespace/:name`}
+              element={<ReplicaSetDetail />}
             />
             <Route
               path={`${toPlural(ResourceType.Service)}/:namespace/:name`}

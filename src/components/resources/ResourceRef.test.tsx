@@ -152,13 +152,10 @@ describe("ResourceRef", () => {
     );
 
     // A ragged left edge is exactly what an icon column exists to prevent.
-    it.each(["ReplicaSet", "HelmRelease"])(
-      "reserves the mark's width for %s, which the registry does not carry",
-      (kind) => {
-        wrap(<ResourceRef kind={kind} name="traefik" namespace="ns" />);
-        expect(screen.getByTestId("resource-ref-icon")).toBeInTheDocument();
-      }
-    );
+    it("reserves the mark's width for a kind the registry does not carry", () => {
+      wrap(<ResourceRef kind="HelmRelease" name="traefik" namespace="ns" />);
+      expect(screen.getByTestId("resource-ref-icon")).toBeInTheDocument();
+    });
 
     it("still names the kind when it is not routable", () => {
       wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);

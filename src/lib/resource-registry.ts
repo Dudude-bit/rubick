@@ -1,5 +1,6 @@
 import {
   Box,
+  Boxes,
   Layers,
   Database,
   Server,
@@ -41,6 +42,21 @@ export const RESOURCE_REGISTRY = [
     plural: "deployments",
     displayPlural: "Deployments",
     icon: Layers,
+    apiVersion: "apps/v1",
+    scope: "namespaced",
+    category: "workloads",
+  },
+  {
+    kind: "ReplicaSet",
+    plural: "replicasets",
+    displayPlural: "ReplicaSets",
+    // Not `Copy`, which is the DaemonSet's "one per node": the grouped boxes
+    // are the Pod's own cube repeated, which is what a ReplicaSet is.
+    //
+    // The plural here is never a nav row — nothing lists ReplicaSets. It is
+    // read by `getResourceDetailUrl` and by the peek's URL, both of which
+    // need the path segment `App.tsx` serves the detail route on.
+    icon: Boxes,
     apiVersion: "apps/v1",
     scope: "namespaced",
     category: "workloads",

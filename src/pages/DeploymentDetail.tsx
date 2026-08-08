@@ -37,11 +37,13 @@ import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
   conditionsMark,
+  countMark,
   kindGlyph,
   podsMark,
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
+import { RevisionRows } from "@/components/resources/child-rows";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
@@ -109,6 +111,15 @@ export function DeploymentDetail() {
     staleTime: STALE_TIMES.resourceList,
     refetchInterval: REFRESH_INTERVALS.resourceList,
     refetchOnWindowFocus: false,
+  });
+
+  const { data: revisions = [] } = useQuery({
+    queryKey: ["deployment-replicasets", namespace, name],
+    queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
+    enabled: !!namespace && !!name,
+    placeholderData: keepPreviousData,
+    staleTime: STALE_TIMES.resourceList,
+    refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
   const { podMetrics, podStatus } = useMetrics({
@@ -374,6 +385,15 @@ export function DeploymentDetail() {
       glyph: kindGlyph(ResourceType.Pod),
       mark: podsMark(pods),
       content: <PodListCard pods={pods} />,
+    },
+    {
+      id: toPlural(ResourceType.ReplicaSet),
+      label: "Revisions",
+      glyph: kindGlyph(ResourceType.ReplicaSet),
+      // A count rather than a severity: an old revision at zero is what a
+      // rollout leaves behind, not a fault.
+      mark: countMark(revisions.length),
+      content: <RevisionRows revisions={revisions} />,
     },
     {
       id: "logs",

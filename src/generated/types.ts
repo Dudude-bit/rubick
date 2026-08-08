@@ -658,6 +658,36 @@ export interface DeploymentCondition {
   message: string | null;
 }
 
+export interface DeploymentInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  replicas: ReplicaInfo;
+  strategy: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+  conditions: ConditionInfo[];
+  ownerReferences: OwnerReference[];
+}
+
+export interface ReplicaInfo {
+  desired: number;
+  ready: number;
+  available: number;
+  updated: number;
+}
+
+export interface CliAvailability {
+  available: boolean;
+  version: string | null;
+  error: string | null;
+  path: string | null;
+  searchedPaths: string[];
+}
+
 export interface PodInfo {
   name: string;
   namespace: string;
@@ -718,34 +748,27 @@ export interface PodStatusInfo {
   reason: string | null;
 }
 
-export interface DeploymentInfo {
+export interface ReplicaSetInfo {
   name: string;
   namespace: string;
   uid: string;
-  replicas: ReplicaInfo;
-  strategy: string | null;
+  replicas: ReplicaSetReplicaInfo;
+  revision: string | null;
+  currentRevision: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  createdAt: string | null;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
+  createdAt: string | null;
 }
 
-export interface ReplicaInfo {
+export interface ReplicaSetReplicaInfo {
   desired: number;
+  current: number;
   ready: number;
   available: number;
-  updated: number;
-}
-
-export interface CliAvailability {
-  available: boolean;
-  version: string | null;
-  error: string | null;
-  path: string | null;
-  searchedPaths: string[];
 }
 
 export interface ClusterMetricsResponse {

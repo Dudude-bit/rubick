@@ -34,10 +34,15 @@ export interface ResourceRefProps {
  * `/customresourcedefinitions/:crdName/instances/...`, which cannot be built
  * from kind and name alone. Everything else here maps to `/<plural>/...`,
  * which is exactly what `getResourceDetailUrl` produces.
+ *
+ * ReplicaSet is the mirror of Namespace and Event: a detail route and no
+ * list page, because nobody browses revisions — you arrive at one from the
+ * event that scaled it, a pod's owner chain or a Deployment's rollout.
  */
 const ROUTABLE = new Set<ResourceKind>([
   "Pod",
   "Deployment",
+  "ReplicaSet",
   "StatefulSet",
   "DaemonSet",
   "Job",

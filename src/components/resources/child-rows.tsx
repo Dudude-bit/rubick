@@ -7,7 +7,7 @@ import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { ResourceRef } from "./ResourceRef";
-import type { JobInfo } from "@/generated/types";
+import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -108,6 +108,54 @@ function ChildRowItem({ row }: { row: ChildRow }) {
         {row.timestamp ? age : "—"}
       </span>
     </div>
+  );
+}
+
+/**
+ * The revisions a Deployment has, newest first.
+ *
+ * A Deployment keeps its old ReplicaSets around scaled to zero, so most of
+ * this list is history rather than trouble: the state word is which revision
+ * is live, and the count beside it is how many pods each is actually running.
+ */
+export function RevisionRows({
+  revisions,
+  emptyMessage = "This Deployment has no ReplicaSets",
+}: {
+  revisions: ReplicaSetInfo[];
+  emptyMessage?: string;
+}) {
+  return (
+    <ChildRows
+      emptyMessage={emptyMessage}
+      rows={revisions.map((rs) => {
+        const { desired, ready } = rs.replicas;
+        const live = rs.revision !== null && rs.revision === rs.currentRevision;
+        return {
+          kind: ResourceType.ReplicaSet,
+          name: rs.name,
+          namespace: rs.namespace,
+          status: live ? "Current" : "Superseded",
+          detail: (
+            <>
+              {rs.revision !== null && (
+                <span className="text-fg-fnt">revision {rs.revision} · </span>
+              )}
+              {desired === 0 ? (
+                <span className="text-fg-fnt">scaled to zero</span>
+              ) : (
+                <>
+                  {ready}
+                  <span className="text-fg-fnt">/{desired}</span>
+                  <span className="text-fg-fnt"> ready</span>
+                </>
+              )}
+            </>
+          ),
+          timestamp: rs.createdAt,
+        };
+      })}
+    />
   );
 }
 

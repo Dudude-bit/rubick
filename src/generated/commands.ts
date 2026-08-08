@@ -70,6 +70,7 @@ import type {
   RegistryImageResult,
   RegistryImportEntry,
   RegistrySearchRequest,
+  ReplicaSetInfo,
   ResourceFilters,
   ResourceListItem,
   ResourceQuery,
@@ -375,6 +376,30 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
 
 export async function getClusterMetrics(): Promise<ClusterMetricsResponse> {
   return invoke<ClusterMetricsResponse>("get_cluster_metrics");
+}
+
+export async function getReplicaset(
+  name: string,
+  namespace: string | null
+): Promise<ReplicaSetInfo> {
+  return invoke<ReplicaSetInfo>("get_replicaset", { name, namespace });
+}
+
+export async function getReplicasetPods(
+  name: string,
+  namespace: string | null
+): Promise<PodInfo[]> {
+  return invoke<PodInfo[]>("get_replicaset_pods", { name, namespace });
+}
+
+export async function getDeploymentReplicasets(
+  name: string,
+  namespace: string | null
+): Promise<ReplicaSetInfo[]> {
+  return invoke<ReplicaSetInfo[]>("get_deployment_replicasets", {
+    name,
+    namespace,
+  });
 }
 
 export async function checkKubectlAvailability(): Promise<CliAvailability> {

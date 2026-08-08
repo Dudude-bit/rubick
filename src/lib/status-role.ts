@@ -68,6 +68,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "succeeded",
     "bound",
     "deployed",
+    // The revision a Deployment is on, against the "superseded" ones below.
+    "current",
     "true",
   ],
   pending: [
