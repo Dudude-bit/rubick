@@ -133,7 +133,10 @@ export function StatefulSetDetail() {
               title="Conditions"
               count={statefulSet?.conditions.length}
             />
-            <ConditionRows conditions={statefulSet?.conditions ?? []} />
+            <ConditionRows
+              conditions={statefulSet?.conditions ?? []}
+              subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+            />
           </Section>
         ),
       },

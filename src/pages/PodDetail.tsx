@@ -41,6 +41,7 @@ import {
   UsageRow,
 } from "@/components/resources/detail-blocks";
 import { ImageRef } from "@/components/resources/ImageRef";
+import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -188,7 +189,12 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
         condition.type === "PodScheduled"
           ? "No node will take this pod"
           : `${condition.type} is ${condition.status}`,
-      detail: condition.message ?? condition.reason ?? "",
+      detail: (
+        <ResourceMessage
+          message={condition.message ?? condition.reason ?? ""}
+          subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
+        />
+      ),
       tone: condition.reason === "Unschedulable" ? "err" : "warn",
       tab: "conditions",
     };
@@ -200,7 +206,12 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
     return {
       reason: pod.status.reason ?? "Failed",
       headline: pod.status.reason ?? "This pod failed",
-      detail: pod.status.message ?? "",
+      detail: (
+        <ResourceMessage
+          message={pod.status.message ?? ""}
+          subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
+        />
+      ),
       tone: "err",
       tab: "conditions",
     };
@@ -644,7 +655,10 @@ export function PodDetail() {
                 title="Conditions"
                 count={pod?.status.conditions.length}
               />
-              <ConditionRows conditions={pod?.status.conditions ?? []} />
+              <ConditionRows
+                conditions={pod?.status.conditions ?? []}
+                subject={{ kind: ResourceType.Pod, name, namespace }}
+              />
             </Section>
           ),
         },

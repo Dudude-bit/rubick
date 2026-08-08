@@ -5,6 +5,7 @@ import {
   Composition,
   type CompositionSegment,
 } from "@/components/resources/detail-blocks";
+import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import {
   isRoutableKind,
   ResourceRef,
@@ -156,7 +157,17 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
           <span className="text-fg-fnt"> · {problem.namespace}</span>
         )}
         {problem.detail && (
-          <span className="text-fg-fnt"> — {problem.detail}</span>
+          <span className="text-fg-fnt">
+            {" — "}
+            <ResourceMessage
+              message={problem.detail}
+              subject={{
+                kind: problem.kind,
+                name: problem.name,
+                namespace: problem.namespace,
+              }}
+            />
+          </span>
         )}
       </span>
       <Sparkline

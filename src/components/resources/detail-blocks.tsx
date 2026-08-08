@@ -1,17 +1,16 @@
-import { Fragment } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
-import { linkifyImages } from "@/lib/image-ref";
+import type { MessageSubject } from "@/lib/message-refs";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { usageRole } from "@/lib/metric-format";
 import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { ImageRef } from "./ImageRef";
+import { ResourceMessage } from "./ResourceMessage";
 import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
@@ -105,9 +104,16 @@ const CONDITION_ROW =
 export function ConditionRows({
   conditions,
   emptyMessage = "No conditions reported",
+  subject,
 }: {
   conditions: ConditionInfo[];
   emptyMessage?: string;
+  /**
+   * The object these conditions belong to. A controller writes about its own
+   * namespace without naming it — `ReplicaSet "x" has timed out progressing`
+   * — so without this the names in a condition stay text.
+   */
+  subject?: MessageSubject;
 }) {
   if (conditions.length === 0) {
     return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
@@ -118,13 +124,20 @@ export function ConditionRows({
         <ConditionRow
           key={`${condition.type}/${condition.lastTransitionTime ?? ""}`}
           condition={condition}
+          subject={subject}
         />
       ))}
     </div>
   );
 }
 
-function ConditionRow({ condition }: { condition: ConditionInfo }) {
+function ConditionRow({
+  condition,
+  subject,
+}: {
+  condition: ConditionInfo;
+  subject?: MessageSubject;
+}) {
   const role = conditionRole(condition);
   // Colour is spent on anomalies only. A pod reports six conditions and five
   // of them are satisfied on every healthy pod in the cluster; five green
@@ -161,7 +174,13 @@ function ConditionRow({ condition }: { condition: ConditionInfo }) {
         {condition.reason && detail !== condition.reason && (
           <span className="font-mono text-fg-mut">{condition.reason} </span>
         )}
-        <span className="text-fg-fnt">{detail ?? "—"}</span>
+        <span className="text-fg-fnt">
+          {detail ? (
+            <ResourceMessage message={detail} subject={subject} />
+          ) : (
+            "—"
+          )}
+        </span>
       </span>
       <span
         className="text-right text-[11px] text-fg-fnt"
@@ -496,30 +515,6 @@ export function EventRows({
   );
 }
 
-/**
- * An event message, with the image references it labels made copyable.
- *
- * Only what the message itself calls an image is touched — see
- * `linkifyImages`. Running an image-shaped pattern over the rest of the
- * sentence would claim a probe's `10.42.0.6:8080` and a ratio.
- */
-function EventMessage({ message }: { message: string }) {
-  const segments = linkifyImages(message);
-  if (segments.length === 1 && segments[0].kind === "text")
-    return <>{message}</>;
-  return (
-    <>
-      {segments.map((segment, index) =>
-        segment.kind === "text" ? (
-          <Fragment key={index}>{segment.text}</Fragment>
-        ) : (
-          <ImageRef key={index} image={segment.ref.reference} inline />
-        )
-      )}
-    </>
-  );
-}
-
 function EventRow({
   event,
   showObject,
@@ -535,6 +530,13 @@ function EventRow({
   const age = useRealtimeAge(event.lastTimestamp ?? null);
   const count = event.count ?? 0;
   const { family, Icon, color } = eventReasonMark(event.reason ?? null);
+  // Almost every name a controller writes is in its own namespace and it
+  // does not say so; the involved object is the one thing that knows which.
+  const subject = {
+    kind: event.involvedObject.kind,
+    name: event.involvedObject.name,
+    namespace: event.involvedObject.namespace ?? event.namespace,
+  };
   // Two independent channels, one per column: the mark on the left is
   // severity and only severity, the mark on the reason is family and only
   // family. Where they meet, severity takes the colour outright — a Warning
@@ -577,9 +579,9 @@ function EventRow({
       <span className="truncate text-fg-mid">
         {showObject && (
           <ResourceRef
-            kind={event.involvedObject.kind}
-            name={event.involvedObject.name}
-            namespace={event.involvedObject.namespace ?? event.namespace}
+            kind={subject.kind}
+            name={subject.name}
+            namespace={subject.namespace}
           />
         )}
         {showNamespace && event.namespace && (
@@ -588,7 +590,7 @@ function EventRow({
         {event.message && (
           <span className="text-fg-fnt">
             {showObject ? " — " : ""}
-            <EventMessage message={event.message} />
+            <ResourceMessage message={event.message} subject={subject} />
           </span>
         )}
       </span>

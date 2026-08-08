@@ -44,6 +44,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { RevisionRows } from "@/components/resources/child-rows";
+import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
@@ -462,7 +463,10 @@ export function DeploymentDetail() {
             title="Conditions"
             count={deployment?.conditions.length}
           />
-          <ConditionRows conditions={deployment?.conditions ?? []} />
+          <ConditionRows
+            conditions={deployment?.conditions ?? []}
+            subject={{ kind: ResourceType.Deployment, name, namespace }}
+          />
         </Section>
       ),
     },
@@ -522,7 +526,10 @@ export function DeploymentDetail() {
     >
       {isRolloutInProgress && rolloutStatus && (
         <p className="text-[11px] text-info">
-          {rolloutMessage}
+          <ResourceMessage
+            message={rolloutMessage ?? ""}
+            subject={{ kind: ResourceType.Deployment, name, namespace }}
+          />
           <span className="text-fg-fnt">
             {" "}
             · {rolloutReady}/{rolloutDesired} pods ready

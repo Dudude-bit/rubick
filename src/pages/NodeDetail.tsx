@@ -192,7 +192,10 @@ export function NodeDetail() {
             title="Conditions"
             count={node?.status.conditions.length}
           />
-          <ConditionRows conditions={node?.status.conditions ?? []} />
+          <ConditionRows
+            conditions={node?.status.conditions ?? []}
+            subject={{ kind: ResourceType.Node, name }}
+          />
         </Section>
       ),
     },

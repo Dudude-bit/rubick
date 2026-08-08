@@ -138,7 +138,10 @@ export function JobDetail() {
         content: (
           <Section>
             <SectionHeader title="Conditions" count={job?.conditions.length} />
-            <ConditionRows conditions={job?.conditions ?? []} />
+            <ConditionRows
+              conditions={job?.conditions ?? []}
+              subject={{ kind: ResourceType.Job, name, namespace }}
+            />
           </Section>
         ),
       },

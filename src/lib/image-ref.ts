@@ -1,12 +1,11 @@
 /**
- * Container image references, and the one place in free text they may be
- * recognised.
+ * The grammar of a container image reference: given something already known
+ * to be an image — a container's `image` field, the inside of a quoted
+ * reference — it says how to split it.
  *
- * Two separate jobs live here on purpose. `parseImageRef` is the *grammar*:
- * given something already known to be an image — a container's `image` field,
- * the inside of a quoted reference — it says how to split it. `linkifyImages`
- * is the *detector*: given a sentence, it says which spans are images at all.
- * Keeping them apart is what stops the grammar from being run over prose,
+ * Detection is deliberately somewhere else. `linkifyMessage` in
+ * `message-refs` decides which spans of a sentence are images at all, and
+ * keeping the two apart is what stops this grammar from being run over prose,
  * where it would happily claim `ratio:0.82` and `10.42.0.6:8080`.
  */
 
@@ -79,50 +78,4 @@ export function parseImageRef(input: string): ImageReference | null {
   }
 
   return { reference: input, registry, repository: rest, tag, digest };
-}
-
-export type MessageSegment =
-  | { kind: "text"; text: string }
-  | { kind: "image"; ref: ImageReference };
-
-/**
- * The only shape trusted in free text: the word `image` (or `images`),
- * whitespace, then a double-quoted reference. Every kubelet message that
- * names one says it this way — `Container image "x" already present on
- * machine`, `Failed to pull image "x"`, `Back-off pulling image "x"`.
- *
- * The quotes are consumed with the match so the renderer owns them; a copy
- * affordance sitting inside the quotation marks reads as part of the string
- * being quoted.
- */
-const LABELLED_IMAGE = /\bimages?\s+"([^"\n]+)"/gi;
-
-export function linkifyImages(message: string): MessageSegment[] {
-  const segments: MessageSegment[] = [];
-  let cursor = 0;
-
-  LABELLED_IMAGE.lastIndex = 0;
-  for (
-    let match = LABELLED_IMAGE.exec(message);
-    match !== null;
-    match = LABELLED_IMAGE.exec(message)
-  ) {
-    const ref = parseImageRef(match[1]);
-    // Labelled but unparseable — an empty pair of quotes, a sentence where
-    // the reference should be. Prose is the safe reading.
-    if (!ref) continue;
-    // The quotes belong to the image segment; the word `image ` before them
-    // stays prose.
-    const start = match.index + match[0].length - match[1].length - 2;
-    if (start > cursor) {
-      segments.push({ kind: "text", text: message.slice(cursor, start) });
-    }
-    segments.push({ kind: "image", ref });
-    cursor = match.index + match[0].length;
-  }
-
-  if (cursor < message.length) {
-    segments.push({ kind: "text", text: message.slice(cursor) });
-  }
-  return segments;
 }

@@ -216,6 +216,7 @@ export function ReplicaSetDetail() {
             <ConditionRows
               conditions={replicaSet?.conditions ?? []}
               emptyMessage="This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod."
+              subject={{ kind: ResourceType.ReplicaSet, name, namespace }}
             />
           </Section>
         ),

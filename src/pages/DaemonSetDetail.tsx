@@ -137,7 +137,10 @@ export function DaemonSetDetail() {
               title="Conditions"
               count={daemonSet?.conditions.length}
             />
-            <ConditionRows conditions={daemonSet?.conditions ?? []} />
+            <ConditionRows
+              conditions={daemonSet?.conditions ?? []}
+              subject={{ kind: ResourceType.DaemonSet, name, namespace }}
+            />
           </Section>
         ),
       },

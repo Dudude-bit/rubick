@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseImageRef, linkifyImages } from "./image-ref";
+import { parseImageRef } from "./image-ref";
 
 describe("parseImageRef", () => {
   it("splits the shapes the cluster actually runs", () => {
@@ -83,68 +83,9 @@ describe("parseImageRef", () => {
 
   it("is a grammar, not a detector", () => {
     // These are legal references, and the parser says so. Refusing prose is
-    // `linkifyImages`'s job — which is why it never runs the grammar over a
+    // `linkifyMessage`'s job — which is why it never runs the grammar over a
     // sentence, only over what the sentence labelled as an image.
     expect(parseImageRef("ratio:0.82")).not.toBeNull();
     expect(parseImageRef("10.42.0.6:8080")).not.toBeNull();
-  });
-});
-
-const text = (segments: ReturnType<typeof linkifyImages>) =>
-  segments.map((s) => (s.kind === "text" ? s.text : s.ref.reference)).join("|");
-
-describe("linkifyImages", () => {
-  it("matches a quoted reference the message itself calls an image", () => {
-    expect(
-      text(
-        linkifyImages(
-          'Container image "busybox:1.36" already present on machine'
-        )
-      )
-    ).toBe("Container image |busybox:1.36| already present on machine");
-    expect(
-      text(linkifyImages('Back-off pulling image "registry.invalid/nope:v9"'))
-    ).toBe("Back-off pulling image |registry.invalid/nope:v9");
-    expect(
-      text(
-        linkifyImages('Successfully pulled image "nginx:1.27-alpine" in 1.2s')
-      )
-    ).toBe("Successfully pulled image |nginx:1.27-alpine| in 1.2s");
-  });
-
-  it("keeps the quotes with the image, not with the prose", () => {
-    const segments = linkifyImages('Pulling image "busybox:1.36"');
-    expect(segments[0]).toEqual({ kind: "text", text: "Pulling image " });
-    expect(segments[1]).toMatchObject({ kind: "image" });
-    expect(segments).toHaveLength(2);
-  });
-
-  it("takes every labelled reference in one message", () => {
-    const message =
-      'Failed to pull image "nope:v9": failed to pull and unpack image "docker.io/library/nope:v9": failed to resolve reference "docker.io/library/nope:v9": not found';
-    const images = linkifyImages(message).filter((s) => s.kind === "image");
-    // The third quoted reference follows the word `reference`, not `image`.
-    expect(images).toHaveLength(2);
-  });
-
-  it("refuses everything the message did not call an image", () => {
-    for (const message of [
-      'Created container "busybox"', // quoted, image-shaped, labelled a container
-      "Started container cron",
-      "Readiness probe failed: HTTP probe failed with statuscode: 503",
-      "Liveness probe failed: dial tcp 10.42.0.6:8080: connect: connection refused",
-      "0/1 nodes are available: 1 node(s) had untolerated taint",
-      "Stopping container app, ratio:0.82 over budget at 12:30:45",
-      'imagePullSecrets "regcred" not found', // no whitespace after the word
-      'Failed to pull image "": rpc error', // labelled, but not a reference
-      'Failed to pull image "no such file or directory"',
-    ]) {
-      const segments = linkifyImages(message);
-      expect(segments, message).toEqual([{ kind: "text", text: message }]);
-    }
-  });
-
-  it("returns nothing for an empty message", () => {
-    expect(linkifyImages("")).toEqual([]);
   });
 });
