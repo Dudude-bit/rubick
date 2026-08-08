@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { BadgeCheck, GitBranch, ListTree, Tag, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -18,10 +18,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { SchemaViewer } from "@/components/crds/SchemaViewer";
 import { CustomResourceList } from "@/components/resources/CustomResourceList";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
-  ResourceDetailLayout,
+  conditionsMark,
+  countMark,
+  kindGlyph,
+  viewGlyph,
   type DetailTab,
-} from "@/components/resources/ResourceDetailLayout";
+} from "@/components/resources/detail-tab";
 import {
   ConditionRows,
   DetailAction,
@@ -154,6 +158,8 @@ export function CrdDetail() {
     {
       id: "versions",
       label: "Versions",
+      glyph: viewGlyph(GitBranch),
+      mark: countMark(crd?.versions.length ?? 0),
       content: (
         <Section>
           <SectionHeader
@@ -208,6 +214,7 @@ export function CrdDetail() {
     {
       id: "schema",
       label: "Schema",
+      glyph: viewGlyph(ListTree),
       content: (
         <Section>
           <SectionHeader
@@ -253,6 +260,10 @@ export function CrdDetail() {
     {
       id: "instances",
       label: "Instances",
+      // The CRD's own kind, so the tab carries whatever mark the list of
+      // these objects carries everywhere else — a dashed circle and the
+      // neutral hue for a kind the registry has never heard of.
+      glyph: kindGlyph(crd?.kind ?? ""),
       content: crd && (
         <CustomResourceList
           crdName={crd.name}
@@ -269,6 +280,8 @@ export function CrdDetail() {
     {
       id: "conditions",
       label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(conditions),
       content: (
         <Section>
           <SectionHeader title="Conditions" count={conditions.length} />
@@ -279,6 +292,7 @@ export function CrdDetail() {
     {
       id: "metadata",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection

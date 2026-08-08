@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { RefreshCw, Scale, Trash2 } from "lucide-react";
+import {
+  AlignLeft,
+  BadgeCheck,
+  Info,
+  Layers2,
+  RefreshCw,
+  Scale,
+  Trash2,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -26,10 +34,14 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
-  ResourceDetailLayout,
+  conditionsMark,
+  kindGlyph,
+  podsMark,
+  viewGlyph,
   type DetailTab,
-} from "@/components/resources/ResourceDetailLayout";
+} from "@/components/resources/detail-tab";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
@@ -317,6 +329,7 @@ export function DeploymentDetail() {
     {
       id: "overview",
       label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
         <>
           <KeyValueSection
@@ -337,6 +350,7 @@ export function DeploymentDetail() {
     {
       id: "container-template",
       label: "Template",
+      glyph: viewGlyph(Layers2),
       content: (
         <ContainerRows
           containers={deployment?.containers ?? []}
@@ -348,11 +362,14 @@ export function DeploymentDetail() {
     {
       id: toPlural(ResourceType.Pod),
       label: "Pods",
+      glyph: kindGlyph(ResourceType.Pod),
+      mark: podsMark(pods),
       content: <PodListCard pods={pods} />,
     },
     {
       id: "logs",
       label: "Logs",
+      glyph: viewGlyph(AlignLeft),
       kind: "surface",
       content: (
         <div className="flex h-full flex-col">
@@ -408,6 +425,8 @@ export function DeploymentDetail() {
     {
       id: "conditions",
       label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(deployment?.conditions),
       content: (
         <Section>
           <SectionHeader

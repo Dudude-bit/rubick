@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -8,6 +8,12 @@ import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  conditionsMark,
+  kindGlyph,
+  podsMark,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
   Composition,
@@ -90,6 +96,7 @@ export function JobDetail() {
       {
         id: "overview",
         label: "Overview",
+        glyph: viewGlyph(Info),
         content: (
           <>
             <KeyValueSection
@@ -110,6 +117,7 @@ export function JobDetail() {
       {
         id: "container-template",
         label: "Template",
+        glyph: viewGlyph(Layers2),
         content: (
           <ContainerRows
             containers={job?.containers ?? []}
@@ -120,6 +128,8 @@ export function JobDetail() {
       {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
+        glyph: kindGlyph(ResourceType.Pod),
+        mark: podsMark(pods),
         content: (
           <PodListCard pods={pods} emptyMessage="No pods for this job" />
         ),
@@ -127,6 +137,8 @@ export function JobDetail() {
       {
         id: "conditions",
         label: "Conditions",
+        glyph: viewGlyph(BadgeCheck),
+        mark: conditionsMark(job?.conditions),
         content: (
           <Section>
             <SectionHeader title="Conditions" count={job?.conditions.length} />

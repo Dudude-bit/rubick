@@ -1,4 +1,6 @@
-import type { DetailTab } from "./ResourceDetailLayout";
+import { Braces } from "lucide-react";
+
+import { viewGlyph, type DetailTab } from "./detail-tab";
 import { YamlTabContent, type YamlTabContentProps } from "./YamlTabContent";
 
 /**
@@ -11,6 +13,7 @@ export function yamlTab(props: YamlTabContentProps): DetailTab {
   return {
     id: "yaml",
     label: "YAML",
+    glyph: viewGlyph(Braces),
     kind: "surface",
     content: <YamlTabContent {...props} />,
   };

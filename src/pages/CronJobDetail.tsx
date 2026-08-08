@@ -1,12 +1,17 @@
 import { useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  countMark,
+  kindGlyph,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { JobRows } from "@/components/resources/child-rows";
 import {
@@ -150,6 +155,7 @@ export function CronJobDetail() {
       {
         id: "overview",
         label: "Overview",
+        glyph: viewGlyph(Info),
         content: (
           <>
             <KeyValueSection
@@ -170,6 +176,7 @@ export function CronJobDetail() {
       {
         id: "container-template",
         label: "Template",
+        glyph: viewGlyph(Layers2),
         content: (
           <ContainerRows
             containers={cronJob?.containers ?? []}
@@ -180,6 +187,8 @@ export function CronJobDetail() {
       {
         id: toPlural(ResourceType.Job),
         label: "Jobs",
+        glyph: kindGlyph(ResourceType.Job),
+        mark: countMark(jobs.length),
         content: (
           <Section>
             <SectionHeader

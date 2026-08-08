@@ -12,7 +12,13 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
+import { ExternalLink, Filter, Plug, Tag } from "lucide-react";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  countMark,
+  kindGlyph,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import {
   KeyValueSection,
   type KeyValue,
@@ -95,11 +101,14 @@ export function ServiceDetail() {
     {
       id: "access",
       label: "Access",
+      glyph: viewGlyph(ExternalLink),
       content: service ? <ServiceAccessInfo service={service} /> : null,
     },
     {
       id: "ports",
       label: "Ports",
+      glyph: viewGlyph(Plug),
+      mark: countMark(ports.length),
       content: (
         <Section>
           <SectionHeader title="Ports" count={ports.length} />
@@ -145,6 +154,7 @@ export function ServiceDetail() {
     {
       id: "selector",
       label: "Selector",
+      glyph: viewGlyph(Filter),
       content: (
         <KeyValueSection
           title="Pod selector"
@@ -157,6 +167,7 @@ export function ServiceDetail() {
     {
       id: "pods",
       label: "Pods",
+      glyph: kindGlyph(ResourceType.Pod),
       content: service ? (
         <MatchingPods
           namespace={service.namespace}
@@ -167,6 +178,7 @@ export function ServiceDetail() {
     {
       id: "labels",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection

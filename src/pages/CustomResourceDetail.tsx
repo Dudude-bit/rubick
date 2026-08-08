@@ -1,17 +1,15 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Activity, ListTree, Tag, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
-import {
-  ResourceDetailLayout,
-  type DetailTab,
-} from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -275,6 +273,7 @@ export function CustomResourceDetail() {
     {
       id: "spec",
       label: "Spec",
+      glyph: viewGlyph(ListTree),
       content: (
         <Section>
           <SectionHeader title="Spec" />
@@ -291,6 +290,7 @@ export function CustomResourceDetail() {
           {
             id: "status",
             label: "Status",
+            glyph: viewGlyph(Activity),
             content: (
               <Section>
                 <SectionHeader title="Status" count={status ?? undefined} />
@@ -303,6 +303,7 @@ export function CustomResourceDetail() {
     {
       id: "metadata",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection

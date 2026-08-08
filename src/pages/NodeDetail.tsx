@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Bug } from "lucide-react";
+import { BadgeCheck, Bug, Info, Tag } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -10,6 +10,7 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugNodeDialog } from "@/components/debug";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { conditionsMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
   ConditionRows,
   DetailAction,
@@ -159,6 +160,7 @@ export function NodeDetail() {
     {
       id: "info",
       label: "Info",
+      glyph: viewGlyph(Info),
       content: (
         <>
           <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
@@ -182,6 +184,8 @@ export function NodeDetail() {
     {
       id: "conditions",
       label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(node?.status.conditions),
       content: (
         <Section>
           <SectionHeader
@@ -195,6 +199,7 @@ export function NodeDetail() {
     {
       id: "labels",
       label: "Labels",
+      glyph: viewGlyph(Tag),
       content: (
         <KeyValueSection
           title="Labels"

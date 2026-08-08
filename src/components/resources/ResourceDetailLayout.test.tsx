@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { Info } from "lucide-react";
 
 import { SectionHeader } from "@/components/ui/section";
 import { ResourceDetailLayout } from "./ResourceDetailLayout";
+import {
+  countMark,
+  kindGlyph,
+  liveMark,
+  severityMark,
+  viewGlyph,
+  type DetailTab,
+} from "./detail-tab";
 
 const wrap = (ui: React.ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
@@ -32,7 +41,15 @@ describe("ResourceDetailLayout with only surface tabs", () => {
       <ResourceDetailLayout
         {...base}
         activeTab="yaml"
-        tabs={[{ id: "yaml", label: "YAML", kind: "surface", content: null }]}
+        tabs={[
+          {
+            id: "yaml",
+            label: "YAML",
+            glyph: viewGlyph(Info),
+            kind: "surface",
+            content: null,
+          },
+        ]}
       >
         <p>capacity 2Gi</p>
       </ResourceDetailLayout>
@@ -48,8 +65,19 @@ describe("ResourceDetailLayout with only surface tabs", () => {
         {...base}
         activeTab="logs"
         tabs={[
-          { id: "overview", label: "Overview", content: null },
-          { id: "logs", label: "Logs", kind: "surface", content: null },
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "logs",
+            label: "Logs",
+            glyph: viewGlyph(Info),
+            kind: "surface",
+            content: null,
+          },
         ]}
       >
         <p>capacity 2Gi</p>
@@ -70,8 +98,19 @@ describe("ResourceDetailLayout with only surface tabs", () => {
         {...base}
         activeTab="overview"
         tabs={[
-          { id: "overview", label: "Overview", content: null },
-          { id: "logs", label: "Logs", kind: "surface", content: null },
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "logs",
+            label: "Logs",
+            glyph: viewGlyph(Info),
+            kind: "surface",
+            content: null,
+          },
         ]}
       >
         <p>capacity 2Gi</p>
@@ -96,8 +135,19 @@ describe("ResourceDetailLayout chrome", () => {
         activeTab={activeTab}
         actions={<button type="button">Delete</button>}
         tabs={[
-          { id: "overview", label: "Overview", content: null },
-          { id: "yaml", label: "YAML", kind, content: null },
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "yaml",
+            label: "YAML",
+            glyph: viewGlyph(Info),
+            kind,
+            content: null,
+          },
         ]}
       />
     );
@@ -146,6 +196,7 @@ describe("ResourceDetailLayout captions", () => {
           {
             id: "conditions",
             label: "Conditions",
+            glyph: viewGlyph(Info),
             content: <SectionHeader title="Conditions" />,
           },
         ]}
@@ -165,6 +216,7 @@ describe("ResourceDetailLayout captions", () => {
           {
             id: "conditions",
             label: "Conditions",
+            glyph: viewGlyph(Info),
             content: <SectionHeader title="Conditions" count={3} />,
           },
         ]}
@@ -178,7 +230,14 @@ describe("ResourceDetailLayout captions", () => {
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
-        tabs={[{ id: "overview", label: "Overview", content: null }]}
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+        ]}
       >
         <SectionHeader title="PersistentVolume" />
       </ResourceDetailLayout>
@@ -197,6 +256,7 @@ describe("ResourceDetailLayout captions", () => {
           {
             id: "access",
             label: "Access",
+            glyph: viewGlyph(Info),
             content: <SectionHeader title="Reachable at" />,
           },
         ]}
@@ -205,5 +265,166 @@ describe("ResourceDetailLayout captions", () => {
     expect(
       screen.getByRole("heading", { name: "Reachable at" })
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * The strip is scanned, not read. A tab without a glyph is a tab that has to
+ * be read to be told from its neighbours, and one page shipping four glyphs
+ * beside fourteen bare words is worse than none of them having any — so the
+ * rule is enforced twice: the type will not compile a tab without one, and
+ * the strip is asserted to draw one for every tab it is given.
+ */
+describe("ResourceDetailLayout glyphs", () => {
+  const glyphOf = (name: string | RegExp) =>
+    screen.getByRole("tab", { name }).querySelector("svg");
+
+  it("will not compile a tab that ships without a glyph", () => {
+    // @ts-expect-error - `glyph` is required. If this line ever stops being an
+    // error, eighteen pages have quietly been allowed to drop theirs.
+    const glyphless: DetailTab = { id: "x", label: "X", content: null };
+    expect(glyphless.label).toBe("X");
+  });
+
+  it("draws one for every tab, and hides it from the accessible name", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "pods",
+            label: "Pods",
+            glyph: kindGlyph("Pod"),
+            content: null,
+          },
+        ]}
+      />
+    );
+    for (const tab of screen.getAllByRole("tab")) {
+      const glyphs = tab.querySelectorAll("svg");
+      expect(glyphs).toHaveLength(1);
+      expect(glyphs[0]).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+
+  /**
+   * A tab that names a kind keeps that kind's hue whether or not it is the
+   * open one — meeting the same cube on a Deployment's Pods tab that was
+   * clicked in the sidebar is the entire reason kinds carry a hue.
+   */
+  it("tints a tab that names a kind, active or not", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "pods",
+            label: "Pods",
+            glyph: kindGlyph("Pod"),
+            content: null,
+          },
+        ]}
+      />
+    );
+    expect(glyphOf("Pods")?.getAttribute("style")).toContain("var(--kind-s)");
+  });
+
+  /** A view is a verb. Giving it a hue would claim it is a resource. */
+  it("leaves a tab that names a view untinted", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+        ]}
+      />
+    );
+    expect(glyphOf("Overview")?.getAttribute("style") ?? "").not.toContain(
+      "hsl"
+    );
+  });
+});
+
+/**
+ * A mark earns its pixels by changing which tab gets clicked, and it never
+ * spends colour alone: the words are in the accessible name, because a red
+ * disc is nothing at all to a reader who cannot see red.
+ */
+describe("ResourceDetailLayout tab marks", () => {
+  const strip = (mark: DetailTab["mark"]) =>
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "containers",
+            label: "Containers",
+            glyph: kindGlyph("Pod"),
+            mark,
+            content: null,
+          },
+        ]}
+      />
+    );
+
+  it("says how many a collection holds, so an empty one needs no click", () => {
+    strip(countMark(0));
+    expect(screen.getByRole("tab", { name: /Containers/ })).toHaveTextContent(
+      "Containers0"
+    );
+  });
+
+  it("puts a severity dot's meaning into words", () => {
+    strip(severityMark("err", "1 of 4 failing"));
+    expect(
+      screen.getByRole("tab", { name: "Containers — 1 of 4 failing" })
+    ).toBeInTheDocument();
+  });
+
+  it("does the same for a live session", () => {
+    strip(liveMark("session attached to app"));
+    expect(
+      screen.getByRole("tab", { name: "Containers — session attached to app" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The only animated thing in the strip, which is what lets it mean one
+   * thing — and it stops for a reader who asked motion to stop.
+   */
+  it("animates the live dot and nothing else, and not under reduced motion", () => {
+    strip(liveMark("session attached to app"));
+    const dot = screen
+      .getByRole("tab", { name: /Containers/ })
+      .querySelector("span[aria-hidden='true']");
+    expect(dot?.className).toContain("animate-tab-live");
+    expect(dot?.className).toContain("motion-reduce:animate-none");
   });
 });

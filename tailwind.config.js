@@ -56,6 +56,14 @@ export default {
           from: { opacity: '0', transform: 'scale(0.95)' },
           to: { opacity: '1', transform: 'scale(1)' },
         },
+        // A ring rather than a blink: the dot marks a session that is still
+        // attached, and something that flashes on and off in a tab strip
+        // reads as an error asking to be dismissed.
+        'tab-live': {
+          '0%': { boxShadow: '0 0 0 0 hsl(var(--ok) / 0.6)' },
+          '70%': { boxShadow: '0 0 0 4px hsl(var(--ok) / 0)' },
+          '100%': { boxShadow: '0 0 0 0 hsl(var(--ok) / 0)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -66,6 +74,7 @@ export default {
         'scale-in': 'scale-in var(--animation-normal) ease-out',
         'fade-in-fast': 'fade-in var(--animation-fast) ease-out',
         'fade-in-slow': 'fade-in var(--animation-slow) ease-out',
+        'tab-live': 'tab-live 2.4s ease-out infinite',
       },
       fontFamily: {
         // "Variable" suffix matches the family name @fontsource-variable

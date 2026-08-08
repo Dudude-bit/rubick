@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Link2, Table2, Tag, Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ReferencedBy } from "@/components/resources/ReferencedBy";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { DataSection } from "@/components/resources/data-rows";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
@@ -58,6 +59,8 @@ export function SecretDetail() {
     {
       id: "data",
       label: "Data",
+      glyph: viewGlyph(Table2),
+      mark: countMark(dataKeys.length),
       content: (
         <DataSection
           data={secretData}
@@ -71,6 +74,7 @@ export function SecretDetail() {
     {
       id: "references",
       label: "Referenced by",
+      glyph: viewGlyph(Link2),
       content:
         name && namespace ? (
           <ReferencedBy
@@ -83,6 +87,7 @@ export function SecretDetail() {
     {
       id: "metadata",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection

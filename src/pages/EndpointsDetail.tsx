@@ -10,7 +10,9 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
+import { Plug, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -94,6 +96,8 @@ export function EndpointsDetail() {
     {
       id: "addresses",
       label: "Backends",
+      glyph: viewGlyph(Waypoints),
+      mark: countMark(backends.length),
       content: (
         <Section>
           <SectionHeader
@@ -163,6 +167,8 @@ export function EndpointsDetail() {
     {
       id: "ports",
       label: "Ports",
+      glyph: viewGlyph(Plug),
+      mark: countMark(allPorts.length),
       content: (
         <Section>
           <SectionHeader title="Ports" count={allPorts.length} />

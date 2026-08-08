@@ -1,7 +1,16 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Bug, Network, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlignLeft,
+  ArrowRight,
+  BadgeCheck,
+  Bug,
+  Info,
+  Network,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -15,6 +24,13 @@ import { PodTerminal } from "@/components/terminal/PodTerminal";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  conditionsMark,
+  countMark,
+  kindGlyph,
+  severityMark,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
   ConditionRows,
@@ -52,7 +68,8 @@ import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
   reason: string;
-  headline: ReactNode;
+  /** A sentence, not a node: the tab strip puts it in an accessible name. */
+  headline: string;
   detail: ReactNode;
   tone: "err" | "warn";
   /** The tab that holds the rest of the story. */
@@ -511,6 +528,7 @@ export function PodDetail() {
         {
           id: "overview",
           label: "Overview",
+          glyph: viewGlyph(Info),
           content: (
             <>
               <KeyValueSection
@@ -531,6 +549,16 @@ export function PodDetail() {
         {
           id: "containers",
           label: "Containers",
+          // A container has no kind of its own; it is what a Pod is made of,
+          // so it arrives under the Pod's cube and the Pod's hue — the same
+          // mark the reader clicked to get here.
+          glyph: kindGlyph(ResourceType.Pod),
+          // The dot displaces the count rather than joining it: a pod with a
+          // dead container is not asking how many it has.
+          mark:
+            problem?.tab === "containers"
+              ? severityMark(problem.tone, problem.headline)
+              : countMark(pod ? podContainers(pod).length : 0),
           content: pod ? (
             <ContainerRows
               containers={podContainers(pod)}
@@ -544,6 +572,7 @@ export function PodDetail() {
         {
           id: "logs",
           label: "Logs",
+          glyph: viewGlyph(AlignLeft),
           kind: "surface",
           content: pod ? (
             <LogViewer
@@ -558,6 +587,8 @@ export function PodDetail() {
         {
           id: "conditions",
           label: "Conditions",
+          glyph: viewGlyph(BadgeCheck),
+          mark: conditionsMark(pod?.status.conditions),
           content: (
             <Section>
               <SectionHeader

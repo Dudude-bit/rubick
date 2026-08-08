@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  History,
+  RefreshCw,
+  RotateCcw,
+  ScrollText,
+  SlidersHorizontal,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
 import yaml from "js-yaml";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
@@ -18,10 +27,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
-  ResourceDetailLayout,
+  countMark,
+  viewGlyph,
   type DetailTab,
-} from "@/components/resources/ResourceDetailLayout";
+} from "@/components/resources/detail-tab";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import {
@@ -223,6 +234,8 @@ export function HelmDetail() {
     {
       id: "history",
       label: "History",
+      glyph: viewGlyph(History),
+      mark: countMark(history.length),
       content: (
         <Section>
           <SectionHeader
@@ -307,6 +320,7 @@ export function HelmDetail() {
     {
       id: "values",
       label: "Values",
+      glyph: viewGlyph(SlidersHorizontal),
       kind: "surface",
       content: (
         <YamlTabContent
@@ -320,6 +334,7 @@ export function HelmDetail() {
     {
       id: "manifest",
       label: "Manifest",
+      glyph: viewGlyph(ScrollText),
       kind: "surface",
       content: (
         <YamlTabContent
@@ -335,6 +350,7 @@ export function HelmDetail() {
           {
             id: "notes",
             label: "Notes",
+            glyph: viewGlyph(StickyNote),
             // Not a surface: NOTES.txt is usually four lines, and a pane
             // stretched to the window would be one sentence over a page of
             // canvas.

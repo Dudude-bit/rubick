@@ -1,7 +1,8 @@
-import { Trash2 } from "lucide-react";
+import { SlidersHorizontal, Trash2 } from "lucide-react";
 
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import {
   KeyValueSection,
@@ -59,6 +60,8 @@ export function StorageClassDetail() {
     {
       id: "parameters",
       label: "Parameters",
+      glyph: viewGlyph(SlidersHorizontal),
+      mark: countMark(Object.keys(parameters).length),
       content: (
         <KeyValueSection
           title="Parameters"

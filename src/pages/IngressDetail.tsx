@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Lock, Route, Tag } from "lucide-react";
 
 import {
   Table,
@@ -14,6 +14,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  countMark,
+  kindGlyph,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -208,6 +213,7 @@ export function IngressDetail() {
     {
       id: "access",
       label: "Access",
+      glyph: viewGlyph(ExternalLink),
       content: (
         <Section>
           <SectionHeader
@@ -285,6 +291,8 @@ export function IngressDetail() {
     {
       id: "rules",
       label: "Rules",
+      glyph: viewGlyph(Route),
+      mark: countMark(rules.length),
       content: (
         <Section>
           <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
@@ -366,6 +374,7 @@ export function IngressDetail() {
     {
       id: "tls",
       label: "TLS",
+      glyph: viewGlyph(Lock),
       content: (
         <Section>
           <SectionHeader title="TLS" count={tlsConfigs.length || undefined} />
@@ -391,6 +400,7 @@ export function IngressDetail() {
     {
       id: "metadata",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
@@ -411,6 +421,8 @@ export function IngressDetail() {
     {
       id: "events",
       label: "Events",
+      glyph: kindGlyph(ResourceType.Event),
+      mark: countMark(events.length),
       content: (
         <Section>
           <SectionHeader

@@ -7,15 +7,26 @@
  */
 
 import type { ReactNode } from "react";
-import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowLeft, CircleDashed, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { kindHue } from "@/lib/resource-identity";
+import {
+  getResourceDefinition,
+  isResourceType,
+  toKind,
+} from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailAction } from "./detail-blocks";
+import type { DetailTab, DetailTabGlyph, DetailTabMark } from "./detail-tab";
+
+/** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
+export type { DetailTab } from "./detail-tab";
 
 interface DetailErrorProps {
   error: Error | string | null;
@@ -73,27 +84,115 @@ export function DetailError({
   );
 }
 
-export interface DetailTab {
-  id: string;
-  label: string;
-  content: ReactNode;
-  /**
-   * What the tab is made of, which is what decides the space above it and
-   * who owns the page's height.
-   *
-   * "sections" is the page rhythm: a stack of blocks with 22px of canvas
-   * between them and 18px under the tab strip, in a page that flows and
-   * scrolls. "surface" is one full-height pane that brings its own chrome —
-   * a log viewer, an editor, a terminal. Two things follow from that. The
-   * rhythm is wrong for it: the first row of such a pane is a toolbar, and
-   * canvas above a toolbar reads as a hole rather than as breathing room.
-   * And the height is its: a pane with its own scrollbar inside a page with
-   * another one is two scrollbars over the same content, and the reader has
-   * to scroll the outer one to see the foot of the inner. A surface tab
-   * pins the page to the window and takes every pixel the chrome above it
-   * does not.
-   */
-  kind?: "sections" | "surface";
+/** 5px, which is the smallest disc that still reads as round rather than as dirt. */
+const DOT = "h-[5px] w-[5px] flex-none rounded-full";
+
+/**
+ * A mark, and the words it stands for.
+ *
+ * Colour never carries it alone. The dot sits beside a label that changed,
+ * and `says` reaches the accessible name — "Containers — 1 of 4 failing" —
+ * because a red disc is nothing at all to a reader who cannot see red.
+ */
+function TabMark({
+  mark,
+  isActive,
+}: {
+  mark: DetailTabMark;
+  isActive: boolean;
+}) {
+  if (mark.shows === "count") {
+    return (
+      <span
+        className={cn(
+          "flex-none text-[11px] tabular-nums",
+          isActive ? "text-fg-mut" : "text-fg-fnt"
+        )}
+      >
+        {mark.of}
+      </span>
+    );
+  }
+  if (mark.shows === "severity") {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(DOT, mark.tone === "err" ? "bg-err" : "bg-warn")}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(DOT, "animate-tab-live bg-ok motion-reduce:animate-none")}
+    />
+  );
+}
+
+/**
+ * One tab, drawn by the two rules rather than by its label.
+ *
+ * The hue is read from the same `kindHue` the sidebar and every reference
+ * use, and honours the colouring setting for the same reason they do: a
+ * reader who turned identity colour off did not ask for one strip to keep it.
+ */
+function DetailTabTrigger({
+  tab,
+  isActive,
+}: {
+  tab: DetailTab;
+  isActive: boolean;
+}) {
+  const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
+  const { Icon, hue } = resolveGlyph(tab.glyph, colouring !== "off");
+  const says =
+    tab.mark && tab.mark.shows !== "count"
+      ? `${tab.label} — ${tab.mark.says}`
+      : null;
+
+  return (
+    <TabsTrigger
+      value={tab.id}
+      title={
+        says ??
+        (tab.mark?.shows === "count"
+          ? `${tab.label} — ${tab.mark.of}`
+          : undefined)
+      }
+      aria-label={says ?? undefined}
+      className="group -mb-px h-8 min-w-0 justify-start gap-1.5 rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+    >
+      {/* `flex-none` on both the glyph and the mark, `truncate` only on the
+          label: a tab that gave up its glyph to fit would lose the half of
+          itself that can be read without reading. */}
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "h-3.5 w-3.5 flex-none",
+          hue === null &&
+            (isActive ? "text-fg" : "text-fg-fnt group-hover:text-fg-mut")
+        )}
+        style={
+          hue === null
+            ? undefined
+            : { color: `hsl(${hue} var(--kind-s) var(--kind-l))` }
+        }
+      />
+      <span className="truncate">{tab.label}</span>
+      {tab.mark && <TabMark mark={tab.mark} isActive={isActive} />}
+    </TabsTrigger>
+  );
+}
+
+function resolveGlyph(glyph: DetailTabGlyph, tinted: boolean) {
+  if (glyph.names === "view") return { Icon: glyph.icon, hue: null };
+  const resolved = isResourceType(glyph.kind) ? toKind(glyph.kind) : null;
+  return {
+    // A kind the registry does not carry — a CRD's own kind, on its Instances
+    // tab — gets the same dashed circle it gets in every list of them.
+    Icon: resolved ? getResourceDefinition(resolved).icon : CircleDashed,
+    hue: tinted ? kindHue(glyph.kind) : null,
+  };
 }
 
 interface ResourceDetailLayoutProps {
@@ -230,15 +329,13 @@ export function ResourceDetailLayout({
               a tab strip reads as another destination, and "Delete" is the one
               word in the app that must never be mistaken for a place to go. */}
           <div className="flex flex-none items-stretch gap-3">
-            <TabsList className="h-auto min-w-0 flex-1 justify-start gap-3 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
+            <TabsList className="h-auto min-w-0 flex-1 justify-start gap-4 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
               {tabs.map((tab) => (
-                <TabsTrigger
+                <DetailTabTrigger
                   key={tab.id}
-                  value={tab.id}
-                  className="-mb-px h-7 min-w-0 truncate rounded-none border-b border-transparent px-0.5 pb-1.5 pt-0 text-xs font-normal text-fg-mut shadow-none transition-colors hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
-                >
-                  {tab.label}
-                </TabsTrigger>
+                  tab={tab}
+                  isActive={tab.id === activeTab}
+                />
               ))}
             </TabsList>
             {actions && (

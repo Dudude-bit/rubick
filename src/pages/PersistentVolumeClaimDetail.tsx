@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { countMark, kindGlyph } from "@/components/resources/detail-tab";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -111,6 +112,8 @@ export function PersistentVolumeClaimDetail() {
     {
       id: "events",
       label: "Events",
+      glyph: kindGlyph(ResourceType.Event),
+      mark: countMark(events.length),
       content: (
         <Section>
           <SectionHeader
