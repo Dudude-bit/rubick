@@ -148,8 +148,18 @@ export function EndpointsDetail() {
                         <span className="text-fg-fnt">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-fg-mut">
-                      {address.nodeName ?? "—"}
+                    <TableCell>
+                      {/* The column heading says Node, and the target cell
+                          beside it has been a reference all along. */}
+                      {address.nodeName ? (
+                        <ResourceRef
+                          kind={ResourceType.Node}
+                          name={address.nodeName}
+                          showKind={false}
+                        />
+                      ) : (
+                        <span className="text-fg-fnt">—</span>
+                      )}
                     </TableCell>
                     {showSubset && (
                       <TableCell className="text-fg-fnt">

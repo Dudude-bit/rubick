@@ -21,6 +21,7 @@ import {
   ConditionRows,
   DetailAction,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -192,6 +193,7 @@ export function StatefulSetDetail() {
       value: statefulSet ? declaredContainers(statefulSet).length : 0,
       mono: true,
     },
+    serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),
   ];
 
   return (

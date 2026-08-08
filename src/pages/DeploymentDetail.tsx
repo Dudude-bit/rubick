@@ -53,6 +53,7 @@ import {
   DetailAction,
   UsageRow,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
   type KeyValue,
@@ -344,6 +345,7 @@ export function DeploymentDetail() {
       value: deployment ? declaredContainers(deployment).length : 0,
       mono: true,
     },
+    serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace),
   ];
 
   const tabs: DetailTab[] = [

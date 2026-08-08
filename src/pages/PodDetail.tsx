@@ -43,6 +43,7 @@ import {
 import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { VolumeRows } from "@/components/resources/volume-rows";
 import {
   KeyValueSection,
   type KeyValue,
@@ -481,6 +482,26 @@ export function PodDetail() {
         : "—",
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
+    {
+      // The identity every request this pod makes is authorised as. The
+      // reference has nowhere to go — `isRoutableKind` rejects ServiceAccount,
+      // so it renders as the glyph and the tinted name and no link — but it
+      // is the same object under the same mark wherever it is named, and the
+      // day the kind gets a page it lights up without a change here.
+      label: "Service account",
+      value: pod?.serviceAccountName ? (
+        <ResourceRef
+          kind="ServiceAccount"
+          name={pod.serviceAccountName}
+          namespace={pod.namespace}
+          showKind={false}
+        />
+      ) : (
+        // The API server fills this in; a pod that states nothing still runs
+        // as something, and saying "none" would be wrong.
+        "default"
+      ),
+    },
   ];
 
   const problem = useMemo(() => podProblem(pod), [pod]);
@@ -571,6 +592,9 @@ export function PodDetail() {
           glyph: viewGlyph(Info),
           content: (
             <>
+              {pod && (
+                <VolumeRows volumes={pod.volumes} namespace={pod.namespace} />
+              )}
               <KeyValueSection
                 title="Labels"
                 count={Object.keys(pod?.labels ?? {}).length}

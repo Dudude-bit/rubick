@@ -18,6 +18,7 @@ import {
   Composition,
   ConditionRows,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -155,6 +156,7 @@ export function ReplicaSetDetail() {
       value: replicaSet ? declaredContainers(replicaSet).length : 0,
       mono: true,
     },
+    serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace),
   ];
 
   const tabs = useMemo(

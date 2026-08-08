@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_ROW,
@@ -127,8 +129,16 @@ export function PortForwardsTab({ onClose }: PortForwardsTabProps) {
                   )}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-fg-mid">
-                    {session.pod}
+                  <span className="block truncate">
+                    {/* The panel's whole job is telling you what is running
+                        and against what; the target was the one thing in it
+                        you could not get to. */}
+                    <ResourceRef
+                      kind={ResourceType.Pod}
+                      name={session.pod}
+                      namespace={session.namespace}
+                      showKind={false}
+                    />
                   </span>
                   <span className="block truncate font-mono text-[11px] text-fg-fnt">
                     {session.namespace} · :{session.localPort} → :
@@ -196,7 +206,13 @@ export function PortForwardsTab({ onClose }: PortForwardsTabProps) {
                     )}
                   </span>
                   <span className="block truncate font-mono text-[11px] text-fg-fnt">
-                    {config.pod} · :{config.localPort} → :{config.remotePort}
+                    <ResourceRef
+                      kind={ResourceType.Pod}
+                      name={config.pod}
+                      namespace={config.namespace}
+                      showKind={false}
+                    />{" "}
+                    · :{config.localPort} → :{config.remotePort}
                   </span>
                 </span>
                 <ActivityAction

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ACTIVITY_ROW, ActivityEmpty, ActivityGroup } from "./primitives";
 
 interface TerminalsTabProps {
@@ -61,13 +62,26 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
                   : { tone: "bg-fg-fnt", label: session.status };
 
           return (
-            <button
+            // A `role="link"` div rather than a button, because the pod name
+            // inside it is a real anchor now and an anchor cannot live in a
+            // button. Same split the resource tables use: the row opens the
+            // page, the name opens the peek.
+            <div
               key={session.id}
-              type="button"
-              className={cn(ACTIVITY_ROW, "w-full text-left hover:bg-hover")}
-              onClick={() =>
-                handleNavigateToPod(session.namespace, session.podName)
-              }
+              role="link"
+              tabIndex={0}
+              className={cn(
+                ACTIVITY_ROW,
+                "w-full cursor-pointer text-left hover:bg-hover"
+              )}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("a")) return;
+                handleNavigateToPod(session.namespace, session.podName);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                handleNavigateToPod(session.namespace, session.podName);
+              }}
             >
               {/* The status word rides in the secondary line so the dot is
                   never the only thing carrying it. */}
@@ -76,8 +90,13 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
                 className={cn("h-1.5 w-1.5 flex-none rounded-full", state.tone)}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-fg-mid">
-                  {session.podName}
+                <span className="block truncate">
+                  <ResourceRef
+                    kind={ResourceType.Pod}
+                    name={session.podName}
+                    namespace={session.namespace}
+                    showKind={false}
+                  />
                 </span>
                 <span className="block truncate font-mono text-[11px] text-fg-fnt">
                   {session.namespace} · {session.containerName} · {state.label}
@@ -87,7 +106,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
                 timestamp={session.createdAt}
                 className="flex-none text-[11px] text-fg-fnt"
               />
-            </button>
+            </div>
           );
         })}
       </ActivityGroup>

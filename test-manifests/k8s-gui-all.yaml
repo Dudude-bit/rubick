@@ -503,3 +503,120 @@ spec:
             - name: report
               image: busybox:1.36
               command: ["sh", "-c", "echo report written"]
+---
+# `mounts-demo`: a pod that draws on every kind of source a reference can
+# reach — a ConfigMap volume, a Secret volume, a claim, an env var from a
+# ConfigMap key and one from a Secret key, a bulk envFrom, and a service
+# account. `unread-config` is mounted by nothing on purpose: a volume no
+# container reads is a silent mistake, and this is the specimen for it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mounts-demo
+  namespace: k8s-gui-test
+  labels:
+    app: mounts-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mounts-demo
+  template:
+    metadata:
+      labels:
+        app: mounts-demo
+    spec:
+      serviceAccountName: k8s-gui-test
+      initContainers:
+        - name: seed
+          image: busybox:1.36
+          command: ["sh", "-c", "echo seeding from /etc/app; sleep 1"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/app
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo serving; sleep 30; done"]
+          env:
+            - name: APP_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: demo-config
+                  key: app.conf
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-secret
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: demo-config
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/app
+              readOnly: true
+            - name: app-secret
+              mountPath: /etc/creds
+            - name: data
+              mountPath: /var/lib/data
+            - name: scratch
+              mountPath: /tmp/scratch
+      volumes:
+        - name: app-config
+          configMap:
+            name: demo-config
+        - name: app-secret
+          secret:
+            secretName: demo-secret
+        - name: data
+          persistentVolumeClaim:
+            claimName: pvc-demo
+        - name: scratch
+          emptyDir: {}
+        - name: unread-config
+          configMap:
+            name: demo-config
+---
+# A TLS certificate lives in a Secret, and "which Secret holds the cert for
+# this host" is the question the Ingress TLS tab exists to answer. `log-demo`
+# is deliberately left without TLS as the warning specimen, so the reference
+# needs one of its own.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tls-demo-cert
+  namespace: k8s-gui-test
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    not-a-real-certificate
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    not-a-real-key
+    -----END PRIVATE KEY-----
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tls-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - tls-demo.local
+      secretName: tls-demo-cert
+  rules:
+    - host: tls-demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80

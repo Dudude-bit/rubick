@@ -21,6 +21,7 @@ import {
   ConditionRows,
   DetailAction,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
   type KeyValue,
@@ -197,6 +198,7 @@ export function JobDetail() {
       value: job ? declaredContainers(job).length : 0,
       mono: true,
     },
+    serviceAccountRow(job?.serviceAccountName, job?.namespace),
   ];
 
   return (

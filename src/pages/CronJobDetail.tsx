@@ -24,6 +24,7 @@ import {
   DetailAction,
   Headline,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
   type KeyValue,
@@ -239,6 +240,7 @@ export function CronJobDetail() {
       value: cronJob ? declaredContainers(cronJob).length : 0,
       mono: true,
     },
+    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
   ];
 
   return (

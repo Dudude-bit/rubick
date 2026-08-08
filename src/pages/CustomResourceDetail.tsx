@@ -249,9 +249,16 @@ export function CustomResourceDetail() {
         ]
       : []),
     {
+      // The CRD is what says this object's shape, and it has a page of its
+      // own. The label already says what it is, so the reference does not.
       label: "Definition",
-      value: decodedCrdName,
-      mono: true,
+      value: (
+        <ResourceRef
+          kind={ResourceType.CustomResourceDefinition}
+          name={decodedCrdName}
+          showKind={false}
+        />
+      ),
     },
   ];
 

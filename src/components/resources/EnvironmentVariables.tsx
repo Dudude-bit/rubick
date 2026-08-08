@@ -88,19 +88,33 @@ const FILTER_ORDER = [
   "envFrom",
 ] as const satisfies readonly FilterOption[];
 
+/**
+ * Which object a variable was drawn from, and which entry of it.
+ *
+ * The key is printed beside the reference and is deliberately *not* part of
+ * it: `database.url` inside a ConfigMap is not an object and has no URL, so
+ * making it look like one would promise a destination that cannot exist. The
+ * reference goes to the ConfigMap — which is the page where that key and its
+ * value are on screen — and the key says which line to read when you get
+ * there.
+ */
 function SourceCell({
   type,
   name,
+  sourceKey,
   namespace,
 }: {
   type: SourceType;
   name?: string;
+  sourceKey?: string;
   namespace?: string;
 }) {
   const isSecret = type === "secret" || type === "envFromSecret";
   const isConfigMap = type === "configmap" || type === "envFromConfigMap";
   return (
     <span className="text-[11px] text-fg-fnt">
+      {/* The word already says the kind, so the reference does not repeat
+          it — `configmap app-config`, not `configmap ConfigMap/app-config`. */}
       {SOURCE_LABEL[type]}
       {name && " "}
       {name &&
@@ -114,6 +128,9 @@ function SourceCell({
         ) : (
           <span className="font-mono text-fg-mut">{name}</span>
         ))}
+      {name && sourceKey && (
+        <span className="font-mono text-fg-fnt"> → {sourceKey}</span>
+      )}
     </span>
   );
 }
@@ -575,7 +592,10 @@ export function EnvironmentVariables({
                 <TableRow>
                   <TableHead className="w-[200px]">Name</TableHead>
                   <TableHead>Value</TableHead>
-                  <TableHead className="w-[200px]">Source</TableHead>
+                  {/* Wide enough for `configmap demo-config → database.url` on one
+                      line: the object and the key it points into are one fact,
+                      and wrapping between them reads as two. */}
+                  <TableHead className="w-[280px]">Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -594,7 +614,21 @@ export function EnvironmentVariables({
                       <TableCell className="font-mono text-xs font-medium">
                         {isPlaceholder ? (
                           <span className="text-fg-fnt">
-                            (all keys from {ev.sourceName})
+                            all keys from{" "}
+                            {ev.sourceName && namespace ? (
+                              <ResourceRef
+                                kind={
+                                  isSecret
+                                    ? ResourceType.Secret
+                                    : ResourceType.ConfigMap
+                                }
+                                name={ev.sourceName}
+                                namespace={namespace}
+                                showKind={false}
+                              />
+                            ) : (
+                              ev.sourceName
+                            )}
                           </span>
                         ) : (
                           ev.name
@@ -624,6 +658,12 @@ export function EnvironmentVariables({
                         <SourceCell
                           type={ev.sourceType}
                           name={ev.sourceName}
+                          // On an envFrom row the key *is* the variable's
+                          // name, already the first column; repeating it
+                          // here would print it twice on the same line.
+                          sourceKey={
+                            ev.isFromEnvFrom ? undefined : ev.sourceKey
+                          }
                           namespace={namespace}
                         />
                       </TableCell>

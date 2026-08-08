@@ -21,6 +21,7 @@ import {
   ConditionRows,
   DetailAction,
 } from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
   type KeyValue,
@@ -178,6 +179,7 @@ export function DaemonSetDetail() {
       value: daemonSet ? declaredContainers(daemonSet).length : 0,
       mono: true,
     },
+    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
   ];
 
   return (

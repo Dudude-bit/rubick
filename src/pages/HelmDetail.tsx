@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  Boxes,
   ExternalLink,
   History,
   RefreshCw,
@@ -35,6 +36,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { YamlTabContent } from "@/components/resources/YamlTabContent";
 import { DetailAction } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
   type KeyValue,
@@ -46,6 +48,10 @@ import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { installedObjects } from "@/lib/helm-manifest";
+
+const INSTALLED_ROW =
+  "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
 
 /**
  * Helm stores values as JSON; the tab shows them as YAML, because that is
@@ -167,6 +173,10 @@ export function HelmDetail() {
     [release?.values]
   );
   const manifest = release?.manifest || "# The release stored no manifest.";
+  const installed = useMemo(
+    () => installedObjects(release?.manifest ?? "", release?.namespace ?? ""),
+    [release?.manifest, release?.namespace]
+  );
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel="Helm releases" />;
@@ -313,6 +323,55 @@ export function HelmDetail() {
                 })}
               </TableBody>
             </Table>
+          )}
+        </Section>
+      ),
+    },
+    {
+      id: "resources",
+      label: "Resources",
+      glyph: viewGlyph(Boxes),
+      mark: countMark(installed.length),
+      content: (
+        <Section>
+          <SectionHeader
+            title="Installed by this release"
+            count={installed.length || undefined}
+          />
+          {installed.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              The stored manifest declares no objects.
+            </p>
+          ) : (
+            <div>
+              {installed.map((object) => (
+                <div
+                  key={`${object.kind}/${object.namespace}/${object.name}`}
+                  className={INSTALLED_ROW}
+                >
+                  <span className="truncate text-fg-mut">{object.kind}</span>
+                  <span className="min-w-0 truncate">
+                    {/* The kind is its own column; repeating it in the
+                        reference would print it twice on every row. */}
+                    <ResourceRef
+                      kind={object.kind}
+                      name={object.name}
+                      namespace={object.namespace}
+                      showKind={false}
+                    />
+                  </span>
+                  {/* Only where the chart put the object somewhere else. The
+                      header already says which namespace the release is in,
+                      and printing it on every row also claimed a namespace
+                      for the cluster-scoped kinds, which have none. */}
+                  <span className="truncate text-[11px] text-fg-fnt">
+                    {object.namespace === release?.namespace
+                      ? ""
+                      : object.namespace}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </Section>
       ),

@@ -385,7 +385,21 @@ export function IngressDetail() {
           ) : (
             <KeyValueList
               items={tlsConfigs.map((config) => ({
-                label: config.secretName || "(auto-generated)",
+                // The certificate lives in a Secret in this namespace, and
+                // "which Secret holds the cert for this host" is the question
+                // this tab exists to answer — so the label is the way to it.
+                // `showKind` is off: the block is titled TLS and every row in
+                // it is a Secret.
+                label: config.secretName ? (
+                  <ResourceRef
+                    kind={ResourceType.Secret}
+                    name={config.secretName}
+                    namespace={ingress?.namespace}
+                    showKind={false}
+                  />
+                ) : (
+                  "(auto-generated)"
+                ),
                 value: config.isCatchAll
                   ? "catch-all · applies to every host not listed"
                   : config.hosts.join(", ") || "no hosts",

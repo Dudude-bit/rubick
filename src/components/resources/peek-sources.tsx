@@ -21,6 +21,7 @@ import {
 } from "@/lib/resource-registry";
 import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
+import { ClaimRef } from "./storage-refs";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue } from "./key-values";
 import type { ContainerPhase, OwnerReference } from "@/generated/types";
@@ -420,7 +421,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     ],
   })),
 
-  Ingress: source(commands.getIngress, (ingress) => ({
+  Ingress: source(commands.getIngress, (ingress, target) => ({
     createdAt: ingress.createdAt,
     groups: [
       {
@@ -454,8 +455,18 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: ingress.rules.flatMap((rule) =>
           rule.paths.map((path) => ({
             label: `${rule.host || "*"}${path.path}`,
-            value: `${path.backendService}:${path.backendPort}`,
-            mono: true,
+            // The path is the label; the value is where it goes, and where
+            // it goes is a Service in this ingress's own namespace.
+            value: path.backendService ? (
+              <>
+                {ref("Service", path.backendService, target.namespace)}
+                <span className="font-mono text-fg-fnt">
+                  :{path.backendPort}
+                </span>
+              </>
+            ) : (
+              "no backend"
+            ),
           }))
         ),
         emptyMessage: "No rules",
@@ -558,7 +569,18 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           title: "Storage",
           items: [
             { label: "Capacity", value: volume.capacity, mono: true },
-            { label: "Claim", value: volume.claim || "unbound", mono: true },
+            {
+              label: "Claim",
+              // The detail page and the list have used `ClaimRef` here since
+              // it existed; the peek was printing the same `ns/name` as text,
+              // so the same fact carried a glyph on two screens and neither
+              // on the third.
+              value: volume.claim ? (
+                <ClaimRef claim={volume.claim} />
+              ) : (
+                "unbound"
+              ),
+            },
             {
               label: "Storage class",
               value: volume.storageClass
