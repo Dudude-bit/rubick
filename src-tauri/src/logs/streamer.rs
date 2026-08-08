@@ -5,7 +5,9 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
-use crate::state::{readable_cause, AppEvent, LogLineEvent, StreamFailureKind};
+use crate::state::{
+    is_missing_previous_run, readable_cause, AppEvent, LogLineEvent, StreamFailureKind,
+};
 use chrono::Utc;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::Api, Client};
@@ -51,15 +53,15 @@ impl LogStreamer {
         let mut params = config.to_log_params();
         params.follow = false;
 
-        let logs = api
-            .logs(&config.pod, &params)
-            .await
-            .map_err(|e| Error::LogStream(format!("Failed to get logs: {e}")))?;
-
         let container = config
             .container
             .clone()
             .unwrap_or_else(|| "main".to_string());
+
+        let logs = api
+            .logs(&config.pod, &params)
+            .await
+            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?;
 
         Ok(parser::parse_logs(
             &logs,
@@ -105,7 +107,7 @@ impl LogStreamer {
         let stream = match api.log_stream(&config.pod, &params).await {
             Ok(stream) => stream,
             Err(e) => {
-                let error = Error::LogStream(format!("Failed to start log stream: {e}"));
+                let error = log_error(&e.to_string(), &container, "Failed to start log stream");
                 let cause = readable_cause(&error);
                 let kind = StreamFailureKind::classify(&error);
                 emit_failure(
@@ -119,6 +121,10 @@ impl LogStreamer {
                         StreamFailureKind::Broken => {
                             format!("Could not attach to the logs of {target} — {cause}.")
                         }
+                        StreamFailureKind::NoPreviousRun => format!(
+                            "There is no previous run of {container} to show — \
+                             it has not restarted since {target} started."
+                        ),
                     },
                 );
                 return Err(error);
@@ -188,8 +194,11 @@ impl LogStreamer {
                             // the container exited. Silence here is
                             // what made a deleted pod read as "No
                             // output yet". A one-shot read ending is
-                            // just the read finishing, so say nothing.
-                            if config.follow {
+                            // just the read finishing, so say nothing —
+                            // and so is a previous run, which is
+                            // complete before it is asked for and ends
+                            // the moment it has been handed over.
+                            if config.follow && !config.previous {
                                 ended_because_gone = true;
                             }
                             break;
@@ -231,6 +240,22 @@ impl LogStreamer {
 
         Ok(())
     }
+}
+
+/// Wrap an apiserver log failure, keeping "there is no previous run"
+/// separate from "the read failed".
+///
+/// Both arrive as the same `kube::Error` and the apiserver's text for
+/// the first ends in "not found", so flattening them into one
+/// `LogStream` string is what made a container that has simply never
+/// restarted indistinguishable from a pod that has been deleted.
+fn log_error(cause: &str, container: &str, context: &str) -> Error {
+    if is_missing_previous_run(cause) {
+        return Error::NoPreviousRun {
+            container: container.to_string(),
+        };
+    }
+    Error::LogStream(format!("{context}: {cause}"))
 }
 
 /// Tell the frontend a stream stopped on its own. Send failures are

@@ -76,6 +76,16 @@ pub enum Error {
     #[error("Log streaming error: {0}")]
     LogStream(String),
 
+    /// A previous run was asked for and there is not one.
+    ///
+    /// Its own variant rather than a `LogStream` string because the
+    /// caller has to act on it differently: the container has never
+    /// restarted, so there is no earlier log and nothing to retry. The
+    /// apiserver phrases it as a 400 ending in "not found", which every
+    /// generic rule in this codebase reads as "the pod is gone".
+    #[error("No previous run: {container} has not restarted, so there is no earlier log")]
+    NoPreviousRun { container: String },
+
     /// Cache errors
     #[error("Cache error: {0}")]
     Cache(String),
@@ -180,6 +190,7 @@ impl ErrorExt for Error {
             Error::Plugin(_) => "PLUGIN_ERROR",
             Error::Terminal(_) => "TERMINAL_ERROR",
             Error::LogStream(_) => "LOG_STREAM_ERROR",
+            Error::NoPreviousRun { .. } => "NO_PREVIOUS_RUN",
             Error::Cache(_) => "CACHE_ERROR",
             Error::Timeout(_) => "TIMEOUT",
             Error::WebSocket(_) => "WEBSOCKET_ERROR",

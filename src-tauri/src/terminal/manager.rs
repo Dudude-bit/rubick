@@ -178,7 +178,11 @@ impl TerminalManager {
                             StreamFailureKind::Gone => {
                                 format!("There is no container left to attach to — {cause}.")
                             }
-                            StreamFailureKind::Broken => {
+                            // An exec has no previous run to ask for, so
+                            // that kind cannot arrive here; if it ever
+                            // did it would still mean the shell did not
+                            // open.
+                            StreamFailureKind::Broken | StreamFailureKind::NoPreviousRun => {
                                 format!("Could not open the shell — {cause}.")
                             }
                         },

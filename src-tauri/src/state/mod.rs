@@ -10,7 +10,9 @@
 mod events;
 mod sessions;
 
-pub use events::{readable_cause, AppEvent, LogLineEvent, StreamFailureKind, WatchOp};
+pub use events::{
+    is_missing_previous_run, readable_cause, AppEvent, LogLineEvent, StreamFailureKind, WatchOp,
+};
 pub use sessions::{AuthSessionControl, LogStream, PortForwardSession, Session};
 
 use crate::client::K8sClientManager;

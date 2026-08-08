@@ -72,10 +72,14 @@ export function LogLegend({
             </span>
             {failure && (
               <span
-                className={failure.kind === "gone" ? "text-warn" : "text-err"}
+                className={failure.kind === "broken" ? "text-err" : "text-warn"}
                 title={failure.message}
               >
-                {failure.kind === "gone" ? "· ended" : "· lost"}
+                {failure.kind === "broken"
+                  ? "· lost"
+                  : failure.kind === "gone"
+                    ? "· ended"
+                    : "· no earlier run"}
               </span>
             )}
           </button>

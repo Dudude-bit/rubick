@@ -36,6 +36,7 @@ import type {
   StreamLogConfig,
   TerminationInfo,
 } from "@/generated/types";
+import type { StreamFailureKind } from "@/lib/stream-failure";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { LogViewer } from "./LogViewer";
 
@@ -47,6 +48,7 @@ function container(
     name,
     image: "busybox:1.36",
     ready: true,
+    phase: "app",
     state: { type: "running" },
     lastTerminated: null,
     restartCount: 0,
@@ -63,7 +65,7 @@ const props = {
   containers: [container("app")],
 };
 
-function fireFailure(kind: "gone" | "broken", message: string) {
+function fireFailure(kind: StreamFailureKind, message: string) {
   listeners["stream-failed"]!({
     payload: { stream_id: "stream-id-1", kind, message },
   });
@@ -183,6 +185,29 @@ describe("LogViewer when a live stream dies", () => {
     // the pod status while the pane said only "no longer running".
     expect(screen.getByTestId("log-stream-termination")).toHaveTextContent(
       "It exited Error · exit 1, 4m ago · 653 restarts so far."
+    );
+  });
+
+  // "There is no earlier run" and "we could not fetch it" arrive on the
+  // same channel and the apiserver phrases the first as a 400 ending in
+  // "not found". Read as a failure it would offer Reconnect for a
+  // question that has no answer however many times it is asked.
+  it("reads a missing previous run as an absence, not as a broken stream", async () => {
+    await renderStreaming();
+
+    fireFailure(
+      "no-previous-run",
+      "There is no previous run of app to show — it has not restarted."
+    );
+
+    const notice = await screen.findByTestId("log-stream-failure");
+    expect(notice).toHaveTextContent("No previous run of app");
+    expect(notice).not.toHaveTextContent("Lost the log stream");
+    expect(
+      within(notice).queryByRole("button", { name: /reconnect/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("log-legend")).toHaveTextContent(
+      "no earlier run"
     );
   });
 

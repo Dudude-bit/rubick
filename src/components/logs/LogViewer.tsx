@@ -103,6 +103,10 @@ function StreamFailureNotice({
   onRetry: () => void;
 }) {
   const gone = failure.kind === "gone";
+  // Not a failure at all: the container has never restarted, so the
+  // previous run that was asked for does not exist. Reconnecting would
+  // ask the same unanswerable question again.
+  const absent = failure.kind === "no-previous-run";
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
   // the container is no longer running, and the exit code, the reason
@@ -117,10 +121,12 @@ function StreamFailureNotice({
       className="flex flex-none items-start justify-between gap-3 border-b border-hair px-3 py-1.5"
     >
       <div className="min-w-0">
-        <p className={`text-xs ${gone ? "text-warn" : "text-err"}`}>
-          {gone
-            ? `Stream ended — ${podName}/${container} is gone.`
-            : `Lost the log stream from ${podName}/${container}.`}
+        <p className={`text-xs ${gone || absent ? "text-warn" : "text-err"}`}>
+          {absent
+            ? `No previous run of ${container} — it has not restarted.`
+            : gone
+              ? `Stream ended — ${podName}/${container} is gone.`
+              : `Lost the log stream from ${podName}/${container}.`}
         </p>
         {termination && (
           <p
@@ -142,16 +148,16 @@ function StreamFailureNotice({
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
-        {intake && !gone && (
+        {intake && !gone && !absent && (
           <p className="mt-0.5 text-[11px] text-fg-fnt">
             Intake is still set — reconnecting resumes from now, and what the
             stream missed is not fetched back.
           </p>
         )}
       </div>
-      {gone ? (
+      {gone || absent ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-          Nothing left to reconnect to
+          {absent ? "Nothing earlier to show" : "Nothing left to reconnect to"}
         </span>
       ) : (
         <Button

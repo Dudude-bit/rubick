@@ -45,8 +45,11 @@ pub enum WatchOp {
 /// The two read completely differently on screen and only one of them
 /// has an action behind it, so the distinction has to survive the trip
 /// to the frontend rather than being flattened into one message.
+// kebab-case, not lowercase: `gone` and `broken` are unaffected, and a
+// multi-word variant has to arrive as `no-previous-run` rather than as
+// an unreadable `nopreviousrun`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum StreamFailureKind {
     /// The thing being streamed is no longer there: the pod was
     /// deleted, the container exited, the log source reached EOF while
@@ -57,6 +60,25 @@ pub enum StreamFailureKind {
     /// kube-apiserver, a read error mid-stream. Retrying is worth
     /// offering.
     Broken,
+    /// The previous run that was asked for does not exist: the
+    /// container has never restarted, so there is nothing before the
+    /// run already on screen. Nothing is wrong — the question has no
+    /// answer, and the control that asked it should say so instead of
+    /// reporting a failure.
+    NoPreviousRun,
+}
+
+/// The apiserver's phrasing when `--previous` is asked of a container
+/// that has never restarted: a 400 reading `previous terminated
+/// container "wait-for-db" in pod "init-demo" not found`.
+///
+/// It has to be recognised before the generic rule below, which sees
+/// the trailing "not found" and would announce that the pod is gone —
+/// the exact lie `StreamFailureKind` exists to prevent, aimed this time
+/// at a pod sitting there perfectly intact.
+#[must_use]
+pub fn is_missing_previous_run(text: &str) -> bool {
+    text.contains("previous terminated container")
 }
 
 impl StreamFailureKind {
@@ -71,10 +93,17 @@ impl StreamFailureKind {
     /// which is the failure mode this whole event exists to kill.
     #[must_use]
     pub fn classify(error: &crate::error::Error) -> Self {
+        if matches!(error, crate::error::Error::NoPreviousRun { .. }) {
+            return Self::NoPreviousRun;
+        }
         if matches!(error, crate::error::Error::NotFound { .. }) {
             return Self::Gone;
         }
-        let text = error.to_string().to_lowercase();
+        let text = error.to_string();
+        if is_missing_previous_run(&text) {
+            return Self::NoPreviousRun;
+        }
+        let text = text.to_lowercase();
         if text.contains("not found") || text.contains("notfound") {
             Self::Gone
         } else {
@@ -719,6 +748,51 @@ mod tests {
             )),
             StreamFailureKind::Broken,
         );
+    }
+
+    /// A container that has never restarted has no previous run, and
+    /// the apiserver says so in a sentence ending "not found". Read by
+    /// the generic rule that would be `Gone` — the pod announced as
+    /// deleted while it sits in the list, running.
+    #[test]
+    fn classify_separates_a_missing_previous_run_from_a_missing_pod() {
+        use crate::error::Error;
+
+        // Verbatim from k3d, `kubectl logs init-demo -c wait-for-db --previous`.
+        let apiserver = "Failed to start log stream: ApiError: previous terminated \
+                         container \"wait-for-db\" in pod \"init-demo\" not found: BadRequest";
+        assert_eq!(
+            StreamFailureKind::classify(&Error::LogStream(apiserver.into())),
+            StreamFailureKind::NoPreviousRun,
+        );
+        assert_eq!(
+            StreamFailureKind::classify(&Error::NoPreviousRun {
+                container: "wait-for-db".into()
+            }),
+            StreamFailureKind::NoPreviousRun,
+        );
+        // And the real disappearance still reads as one.
+        assert_eq!(
+            StreamFailureKind::classify(&Error::LogStream(
+                "Failed to start log stream: ApiError: pods \"init-demo\" not found: NotFound"
+                    .into()
+            )),
+            StreamFailureKind::Gone,
+        );
+    }
+
+    /// The frontend switches on the bare string. `lowercase` would have
+    /// emitted `nopreviousrun`.
+    #[test]
+    fn stream_failure_kinds_serialize_kebab_case() {
+        let kinds = [
+            (StreamFailureKind::Gone, "gone"),
+            (StreamFailureKind::Broken, "broken"),
+            (StreamFailureKind::NoPreviousRun, "no-previous-run"),
+        ];
+        for (kind, expected) in kinds {
+            assert_eq!(serde_json::to_value(kind).unwrap(), expected);
+        }
     }
 
     #[test]

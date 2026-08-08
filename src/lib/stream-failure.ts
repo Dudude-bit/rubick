@@ -8,8 +8,17 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * container exited — and no retry undoes it. `broken` is a transport
  * failure over a resource that may well still be running, so the panel
  * that shows it owes the reader a way back.
+ *
+ * `noPreviousRun` is neither: the previous run that was asked for does
+ * not exist because the container has never restarted. It is its own
+ * kind because the apiserver phrases it as a 400 ending in "not found",
+ * which would otherwise be read as the pod having been deleted — and
+ * because "there is nothing to show" and "we could not show it" have to
+ * look different on screen. A caller can tell in advance:
+ * `container.lastTerminated` is set for exactly the containers that
+ * have a previous run to read.
  */
-export type StreamFailureKind = "gone" | "broken";
+export type StreamFailureKind = "gone" | "broken" | "no-previous-run";
 
 export interface StreamFailure {
   kind: StreamFailureKind;
