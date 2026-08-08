@@ -233,6 +233,15 @@ pub struct ContainerInfo {
     pub name: String,
     pub image: String,
     pub ready: bool,
+    /// The kubelet's "this container's startup probe has passed".
+    ///
+    /// Distinct from `ready` and from a running state, and the field
+    /// `printPod` reads for a restartable init container: a sidecar counts
+    /// towards `READY` when it is `Started && Ready`, where an app
+    /// container counts when it is `Ready && Running`. Standing one in for
+    /// the other happens to agree today, which is not the same as being
+    /// the rule.
+    pub started: bool,
     pub phase: ContainerPhase,
     pub state: ContainerState,
     /// How the previous run of this container ended.
@@ -286,7 +295,9 @@ impl ContainerInfo {
     ) -> Self {
         let container_status = statuses.and_then(|cs| cs.iter().find(|c| c.name == container.name));
 
-        let (ready, state, last_terminated, restart_count) = if let Some(cs) = container_status {
+        let (ready, started, state, last_terminated, restart_count) = if let Some(cs) =
+            container_status
+        {
             let state = if cs.state.as_ref().and_then(|s| s.running.as_ref()).is_some() {
                 ContainerState::Running
             } else if let Some(waiting) = cs.state.as_ref().and_then(|s| s.waiting.as_ref()) {
@@ -307,9 +318,15 @@ impl ContainerInfo {
                 .and_then(|s| s.terminated.as_ref())
                 .map(TerminationInfo::from);
 
-            (cs.ready, state, last, cs.restart_count)
+            (
+                cs.ready,
+                cs.started.unwrap_or(false),
+                state,
+                last,
+                cs.restart_count,
+            )
         } else {
-            (false, ContainerState::Unknown, None, 0)
+            (false, false, ContainerState::Unknown, None, 0)
         };
 
         let ports = container
@@ -330,6 +347,7 @@ impl ContainerInfo {
             name: container.name.clone(),
             image: container.image.clone().unwrap_or_default(),
             ready,
+            started,
             phase,
             state,
             last_terminated,

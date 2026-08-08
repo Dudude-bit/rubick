@@ -53,6 +53,7 @@ function container(
     name,
     image: "busybox:1.36",
     ready: true,
+    started: true,
     phase: "app",
     state: { type: "running" },
     lastTerminated: null,

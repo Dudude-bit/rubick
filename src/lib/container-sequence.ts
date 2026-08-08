@@ -198,17 +198,38 @@ export interface PodReadiness {
  *   so `[...init, ...app].filter(c => c.ready)` reads `3/3` on a pod
  *   kubectl calls `2/2`.
  *
- * kubectl's own numerator test is `Ready && State.Running != nil` for app
- * containers and `Started && Ready` for sidecars. `ContainerInfo` carries
- * no `started` — the kubelet only clears it below `ready`, so `ready` and
- * a running state stand in for both, and one predicate covers the two.
+ * The two halves are counted by different predicates because kubectl
+ * counts them by different predicates: an app container is `Ready &&
+ * State.Running`, a sidecar is `Started && Ready`. `started` is the
+ * kubelet's startup-probe verdict and is its own field, which is why the
+ * walk below reads it rather than standing a running state in for it.
  */
 export function podReadiness(pod: PodContainerLists): PodReadiness {
-  const lifetime = lifetimeContainers(pod);
-  const ready = lifetime.filter(
-    (c) => c.ready && c.state.type === "running"
-  ).length;
-  return { ready, total: lifetime.length, allReady: ready === lifetime.length };
+  const total = lifetimeContainers(pod).length;
+  const ready =
+    pod.containers.filter((c) => c.ready && c.state.type === "running").length +
+    startedSidecars(pod).length;
+  return { ready, total, allReady: ready === total };
+}
+
+/**
+ * The sidecars kubectl reaches before it gives up on the init sequence.
+ *
+ * `printPod` walks `initContainerStatuses` from the front and stops at
+ * the first entry that neither exited 0 nor is a started sidecar — so a
+ * sidecar declared *after* an init container that is still going has not
+ * been reached, and does not count however ready it looks. Nothing on the
+ * container itself says that; it is the position, exactly as it is in the
+ * sequence UI.
+ */
+function startedSidecars(pod: PodContainerLists): ContainerInfo[] {
+  const reached: ContainerInfo[] = [];
+  for (const container of pod.initContainers ?? []) {
+    if (containerSucceeded(container)) continue;
+    if (container.phase !== "sidecar" || !container.started) break;
+    if (container.ready) reached.push(container);
+  }
+  return reached;
 }
 
 export interface PodPort {

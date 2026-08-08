@@ -25,6 +25,7 @@ function container(
     name,
     image: "busybox:1.36",
     ready: false,
+    started: true,
     phase: "app",
     state: { type: "running" },
     lastTerminated: null,

@@ -684,6 +684,7 @@ export interface ContainerInfo {
   name: string;
   image: string;
   ready: boolean;
+  started: boolean;
   phase: ContainerPhase;
   state: ContainerState;
   lastTerminated: TerminationInfo | null;

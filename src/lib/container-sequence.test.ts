@@ -33,18 +33,27 @@ function container(
   name: string,
   overrides: Partial<ContainerInfo> = {}
 ): ContainerInfo {
-  return {
+  const built = {
     name,
     image: "busybox:1.36",
     ready: false,
-    phase: "app",
-    state: { type: "running" },
+    started: false,
+    phase: "app" as const,
+    state: { type: "running" as const },
     lastTerminated: null,
     restartCount: 0,
     ports: [],
     env: [],
     envFrom: [],
     ...overrides,
+  };
+  // The kubelet sets `started` with the run itself, so a fixture that is
+  // running but not started describes a pod that cannot exist — and it is
+  // the field kubectl counts a sidecar by, so getting it wrong here would
+  // let a broken tally pass.
+  return {
+    ...built,
+    started: overrides.started ?? built.state.type === "running",
   };
 }
 
@@ -324,6 +333,30 @@ describe("podReadiness", () => {
         ],
       }).ready
     ).toBe(0);
+  });
+
+  it("does not count a sidecar the init sequence has not reached yet", () => {
+    // `printPod` walks the init statuses and stops at the first that has
+    // neither exited 0 nor started, so a proxy declared behind a stuck
+    // migration is not counted however ready it looks — and `started` is
+    // the field that decides it, which is why `ContainerInfo` carries it.
+    expect(
+      podReadiness({
+        initContainers: [
+          container("migrate", {
+            phase: "init",
+            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            lastTerminated: termination({ exitCode: 1 }),
+          }),
+          container("proxy", { phase: "sidecar", ready: true }),
+        ],
+        containers: [
+          container("app", {
+            state: { type: "waiting", reason: "PodInitializing" },
+          }),
+        ],
+      })
+    ).toEqual({ ready: 0, total: 2, allReady: false });
   });
 
   it("cannot be handed one of the two lists", () => {
