@@ -12,6 +12,7 @@ import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type { PeekTarget } from "@/hooks/usePeek";
+import { podContainers } from "@/lib/container-sequence";
 import { ContainerRows } from "./container-rows";
 import { DataSection } from "./data-rows";
 import { DetailAction } from "./detail-blocks";
@@ -173,7 +174,11 @@ function RowsSkeleton({ rows = 6 }: { rows?: number }) {
 function describeSilence(
   pod: PodInfo
 ): { title: string; detail: string } | null {
-  const started = pod.containers.some(
+  // Init containers count. A pod in `Init:CrashLoopBackOff` has no app
+  // container that has ever started and one init container that has
+  // started nine times — declaring it silent hid the only log in the pod
+  // that says anything at all.
+  const started = podContainers(pod).some(
     (container) =>
       container.state.type === "running" ||
       container.state.type === "terminated" ||
@@ -181,7 +186,7 @@ function describeSilence(
   );
   if (started) return null;
 
-  const waiting = pod.containers.find(
+  const waiting = podContainers(pod).find(
     (container) => container.state.type === "waiting"
   );
   const reason =
@@ -223,7 +228,7 @@ function PeekLogsTab({
       key={`${target.namespace}/${target.name}`}
       podName={pod.name}
       namespace={pod.namespace}
-      containers={pod.containers}
+      containers={podContainers(pod)}
     />
   );
 }
@@ -248,7 +253,10 @@ function PeekContainersTab({
   }
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
-      <ContainerRows containers={pod.containers} namespace={pod.namespace} />
+      <ContainerRows
+        containers={podContainers(pod)}
+        namespace={pod.namespace}
+      />
     </div>
   );
 }

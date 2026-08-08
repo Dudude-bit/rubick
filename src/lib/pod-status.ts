@@ -1,4 +1,5 @@
 import type {
+  ContainerPhase,
   ContainerState,
   PodInfo,
   TerminationInfo,
@@ -72,6 +73,9 @@ export interface ContainerStatus {
 export function containerStatus(container: {
   ready: boolean;
   state: ContainerState;
+  /** When it runs. Absent for a spec template, which has no runtime at all. */
+  phase?: ContainerPhase;
+  lastTerminated?: TerminationInfo | null;
 }): ContainerStatus {
   const { state } = container;
   switch (state.type) {
@@ -80,6 +84,18 @@ export function containerStatus(container: {
         ? { text: "Running", role: "ok" }
         : { text: "Not ready", role: "warn" };
     case "waiting": {
+      // `PodInitializing` on an init container that has never run is the
+      // kubelet saying "not your turn", and printing its word for it
+      // reads as though the container were coming up. It is queued
+      // behind an earlier step, which may never finish.
+      if (
+        container.phase !== undefined &&
+        container.phase !== "app" &&
+        !container.lastTerminated &&
+        state.reason === "PodInitializing"
+      ) {
+        return { text: "Never started", role: "pending" };
+      }
       if (!state.reason) return { text: "Waiting", role: "pending" };
       const role = statusRole(state.reason);
       // Waiting is inherently a pending state, so a reason the role table

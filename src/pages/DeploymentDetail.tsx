@@ -45,6 +45,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
+import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   parseCPU as parseKubernetesCPU,
@@ -391,7 +392,7 @@ export function DeploymentDetail() {
                 key={`${logPod.namespace}:${logPod.name}`}
                 podName={logPod.name}
                 namespace={logPod.namespace}
-                containers={logPod.containers ?? []}
+                containers={podContainers(logPod)}
               />
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">

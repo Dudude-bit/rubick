@@ -1,4 +1,11 @@
-import { ImageIcon, TerminalIcon } from "lucide-react";
+import {
+  Check,
+  ImageIcon,
+  Minus,
+  ScrollText,
+  TerminalIcon,
+  X,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -7,6 +14,11 @@ import { EnvironmentVariables } from "@/components/resources/EnvironmentVariable
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { KeyValueList, type KeyValue } from "@/components/resources/detail-kv";
+import {
+  containerSequence,
+  type ContainerStep,
+  type StepMark,
+} from "@/lib/container-sequence";
 import {
   containerStatus,
   describeTermination,
@@ -23,6 +35,14 @@ import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
  * container has a state and a restart count, only a template has declared
  * requests and limits — so the row list is built per container instead of
  * being forced into one shared table.
+ *
+ * A pod's containers are also not a set. Init containers run in order and
+ * each waits on the one before it, sidecars start during init and never
+ * finish, app containers run together — so runtime containers are grouped
+ * by phase and the init group is drawn as a rail. One renderer for all
+ * three: an init container and an app container differ by *when* they
+ * run, not by what they are, and every block below means the same thing
+ * for both.
  */
 
 function isRuntime(
@@ -37,13 +57,57 @@ function quantities(record: Record<string, string>): string | null {
   return entries.map(([key, value]) => `${key} ${value}`).join(" · ");
 }
 
+/**
+ * The mark on the rail. Four silhouettes rather than four colours, for
+ * the reason `status-role` gives: severity has to survive greyscale.
+ * `queued` is a dash and not a clock — nothing is counting down, the
+ * step before it may never finish.
+ */
+const STEP_MARK: Record<
+  StepMark,
+  { icon: typeof Check | null; ring: string; text: string; dot?: string }
+> = {
+  done: { icon: Check, ring: "ring-ok/[0.5]", text: "text-ok" },
+  failed: { icon: X, ring: "ring-err/[0.6]", text: "text-err" },
+  running: {
+    icon: null,
+    ring: "ring-info/[0.5]",
+    text: "text-info",
+    dot: "bg-info",
+  },
+  queued: { icon: Minus, ring: "ring-hair", text: "text-fg-fnt" },
+};
+
+function StepMarker({ mark }: { mark: StepMark }) {
+  const { icon: Icon, ring, text, dot } = STEP_MARK[mark];
+  return (
+    <span
+      aria-hidden="true"
+      className={`relative z-10 flex h-[13px] w-[13px] flex-none items-center justify-center rounded-full bg-canvas ring-1 ${ring} ${text}`}
+    >
+      {Icon ? (
+        <Icon className="h-2 w-2" />
+      ) : (
+        <span className={`h-1 w-1 rounded-full ${dot}`} />
+      )}
+    </span>
+  );
+}
+
 export interface ContainerRowsProps {
+  /**
+   * Runtime containers of every phase at once, in run order:
+   * `[...pod.initContainers, ...pod.containers]`. Or a deployment's spec
+   * template, which has no phases and is drawn as one group.
+   */
   containers: (ContainerInfo | DeploymentContainerInfo)[];
   namespace?: string;
   /** Enables the port-forward affordance on a running container's ports. */
   podName?: string;
   onOpenShell?: (containerName: string) => void;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
+  /** Opens the log viewer soloed on this container. */
+  onOpenLogs?: (containerName: string) => void;
 }
 
 export function ContainerRows({
@@ -52,131 +116,241 @@ export function ContainerRows({
   podName,
   onOpenShell,
   onUpdateImage,
+  onOpenLogs,
 }: ContainerRowsProps) {
   if (containers.length === 0) {
     return <p className="text-xs text-fg-fnt">No containers</p>;
   }
 
+  const runtime = containers.filter(isRuntime);
+  // A spec template has no runtime and therefore no sequence; mixing the
+  // two never happens, so the flat rendering stays for that one caller.
+  if (runtime.length !== containers.length) {
+    return (
+      <div className="flex flex-col gap-[22px]">
+        {containers.map((container) => (
+          <ContainerBlock
+            key={container.name}
+            container={container}
+            namespace={namespace}
+            podName={podName}
+            onOpenShell={onOpenShell}
+            onUpdateImage={onUpdateImage}
+            onOpenLogs={onOpenLogs}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const groups = containerSequence(runtime);
+  // One group is the whole pod, and the tab strip has already said
+  // "Containers" — a caption over it would only say it again.
+  const captioned = groups.length > 1;
+
   return (
-    <div className="flex flex-col gap-[22px]">
-      {containers.map((container) => {
-        const runtime = isRuntime(container);
-        const status = runtime ? containerStatus(container) : null;
-
-        const items: KeyValue[] = [
-          { label: "Image", value: <ImageRef image={container.image} /> },
-        ];
-
-        if (runtime) {
-          items.push({
-            label: "Restarts",
-            value: container.restartCount,
-            tone: container.restartCount > 0 ? "warn" : undefined,
-          });
-          // A container that restarts is a container that died, and the count
-          // alone never said of what. The heading carries the state word, so
-          // this row carries only what the word could not: the exit code and
-          // when it happened, whether the death is the state the container is
-          // in now or the one it is backing off from.
-          const death = lastTermination(container);
-          if (death) {
-            const when = terminationWhen(death);
-            items.push({
-              label: "Last exit",
-              value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
-              tone: death.exitCode === 0 ? undefined : "err",
-            });
-          }
-          if (container.ports.length > 0) {
-            items.push({
-              label: "Ports",
-              value:
-                podName && namespace ? (
-                  <ClickablePorts
-                    ports={container.ports}
-                    podName={podName}
-                    podNamespace={namespace}
+    <div className="flex flex-col gap-7">
+      {groups.map((group) => (
+        <div key={group.phase} className="flex flex-col gap-2.5">
+          {captioned && (
+            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+              {group.title}
+              <span className="font-normal normal-case tracking-normal">
+                {" · "}
+                {group.caption}
+              </span>
+            </p>
+          )}
+          <div className="flex flex-col gap-[22px]">
+            {group.steps.map((step, index) => (
+              <div
+                key={step.container.name}
+                className="relative grid grid-cols-[13px_1fr] gap-x-2.5"
+              >
+                {/* The rail, drawn only where there is an order to draw:
+                    the init sequence. It runs from this mark into the
+                    gap above the next one, which is what makes "seed is
+                    behind migrate" readable without a sentence. */}
+                {group.phase === "init" && index < group.steps.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-[-28px] left-[6px] top-4 w-px bg-hair"
                   />
-                ) : (
-                  container.ports
-                    .map((p) => `${p.containerPort}/${p.protocol}`)
-                    .join(" · ")
-                ),
-              mono: true,
-            });
-          }
-        }
-
-        if (!runtime) {
-          if (container.ports.length > 0) {
-            items.push({
-              label: "Ports",
-              value: container.ports.join(" · "),
-              mono: true,
-            });
-          }
-          const requests = quantities(container.resources.requests);
-          const limits = quantities(container.resources.limits);
-          if (requests)
-            items.push({ label: "Requests", value: requests, mono: true });
-          items.push({
-            label: "Limits",
-            // A container with no limit can consume the node; saying so beats
-            // omitting the row and letting it read as "not applicable".
-            value: limits ?? "none set",
-            mono: limits != null,
-            tone: limits ? undefined : "warn",
-          });
-        }
-
-        return (
-          <Section key={container.name}>
-            <SectionHeader
-              title={container.name}
-              // The container's state, where its readiness used to sit as a
-              // bare word. Readiness is folded into it: "Running" now means
-              // running *and* serving, and a container failing its readiness
-              // probe says "Not ready" rather than claiming Running in one
-              // place and denying it in another.
-              count={
-                status ? (
-                  <StatusBadge
-                    status={status.text}
-                    roleOverride={status.role}
-                  />
-                ) : undefined
-              }
-              actions={
-                <>
-                  {runtime && onOpenShell && (
-                    <DetailAction
-                      label="Shell"
-                      icon={TerminalIcon}
-                      onClick={() => onOpenShell(container.name)}
-                    />
-                  )}
-                  {!runtime && onUpdateImage && (
-                    <DetailAction
-                      label="Update image"
-                      icon={ImageIcon}
-                      onClick={() =>
-                        onUpdateImage(container.name, container.image)
-                      }
-                    />
-                  )}
-                </>
-              }
-            />
-            <KeyValueList items={items} />
-            <EnvironmentVariables
-              env={container.env}
-              envFrom={container.envFrom}
-              containerName={container.name}
-              namespace={namespace}
-            />
-          </Section>
-        );
-      })}
+                )}
+                <StepMarker mark={step.mark} />
+                <ContainerBlock
+                  container={step.container}
+                  step={step}
+                  namespace={namespace}
+                  podName={podName}
+                  onOpenShell={onOpenShell}
+                  onUpdateImage={onUpdateImage}
+                  onOpenLogs={onOpenLogs}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
+  );
+}
+
+function ContainerBlock({
+  container,
+  step,
+  namespace,
+  podName,
+  onOpenShell,
+  onUpdateImage,
+  onOpenLogs,
+}: {
+  container: ContainerInfo | DeploymentContainerInfo;
+  /** Present only for a runtime container, which is the only kind with one. */
+  step?: ContainerStep;
+  namespace?: string;
+  podName?: string;
+  onOpenShell?: (containerName: string) => void;
+  onUpdateImage?: (containerName: string, currentImage: string) => void;
+  onOpenLogs?: (containerName: string) => void;
+}) {
+  const runtime = isRuntime(container);
+  const status = step?.status ?? (runtime ? containerStatus(container) : null);
+
+  const items: KeyValue[] = [
+    { label: "Image", value: <ImageRef image={container.image} /> },
+  ];
+
+  if (runtime) {
+    items.push({
+      label: "Restarts",
+      value: container.restartCount,
+      tone: container.restartCount > 0 ? "warn" : undefined,
+    });
+    // A container that restarts is a container that died, and the count
+    // alone never said of what. The heading carries the state word, so
+    // this row carries only what the word could not: the exit code and
+    // when it happened, whether the death is the state the container is
+    // in now or the one it is backing off from.
+    // Not on a step that ended cleanly: `Completed · exit 0` under a
+    // heading that already reads Completed, beside a note that already
+    // says when it finished, is the same fact three times.
+    const death = step?.mark === "done" ? null : lastTermination(container);
+    if (death) {
+      const when = terminationWhen(death);
+      items.push({
+        label: "Last exit",
+        value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
+        tone: death.exitCode === 0 ? undefined : "err",
+      });
+    }
+    if (container.ports.length > 0) {
+      items.push({
+        label: "Ports",
+        value:
+          podName && namespace ? (
+            <ClickablePorts
+              ports={container.ports}
+              podName={podName}
+              podNamespace={namespace}
+            />
+          ) : (
+            container.ports
+              .map((p) => `${p.containerPort}/${p.protocol}`)
+              .join(" · ")
+          ),
+        mono: true,
+      });
+    }
+  }
+
+  if (!runtime) {
+    if (container.ports.length > 0) {
+      items.push({
+        label: "Ports",
+        value: container.ports.join(" · "),
+        mono: true,
+      });
+    }
+    const requests = quantities(container.resources.requests);
+    const limits = quantities(container.resources.limits);
+    if (requests)
+      items.push({ label: "Requests", value: requests, mono: true });
+    items.push({
+      label: "Limits",
+      // A container with no limit can consume the node; saying so beats
+      // omitting the row and letting it read as "not applicable".
+      value: limits ?? "none set",
+      mono: limits != null,
+      tone: limits ? undefined : "warn",
+    });
+  }
+
+  // A container that has never run has no log to open, and offering one
+  // that lands on an empty pane is worse than not offering it.
+  const hasLogs = step ? step.mark !== "queued" : runtime;
+
+  return (
+    <Section>
+      <SectionHeader
+        title={container.name}
+        // The container's state, where its readiness used to sit as a
+        // bare word. Readiness is folded into it: "Running" now means
+        // running *and* serving, and a container failing its readiness
+        // probe says "Not ready" rather than claiming Running in one
+        // place and denying it in another.
+        count={
+          status ? (
+            <StatusBadge status={status.text} roleOverride={status.role} />
+          ) : undefined
+        }
+        // What the state word could not say on its own: that this step
+        // never got a turn, that this log is finished and will not grow,
+        // that the app is waiting on init rather than being quiet.
+        description={
+          step?.note ? (
+            <span
+              className={step.mark === "failed" ? "text-err" : "text-fg-fnt"}
+            >
+              {step.note}
+            </span>
+          ) : undefined
+        }
+        actions={
+          <>
+            {runtime && onOpenLogs && hasLogs && (
+              <DetailAction
+                label="Logs"
+                icon={ScrollText}
+                onClick={() => onOpenLogs(container.name)}
+              />
+            )}
+            {/* A shell needs a process to attach to. Offered on a
+                container that has never started, it can only fail. */}
+            {runtime && onOpenShell && container.state.type === "running" && (
+              <DetailAction
+                label="Shell"
+                icon={TerminalIcon}
+                onClick={() => onOpenShell(container.name)}
+              />
+            )}
+            {!runtime && onUpdateImage && (
+              <DetailAction
+                label="Update image"
+                icon={ImageIcon}
+                onClick={() => onUpdateImage(container.name, container.image)}
+              />
+            )}
+          </>
+        }
+      />
+      <KeyValueList items={items} />
+      <EnvironmentVariables
+        env={container.env}
+        envFrom={container.envFrom}
+        containerName={container.name}
+        namespace={namespace}
+      />
+    </Section>
   );
 }
