@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { useEffect } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Info } from "lucide-react";
@@ -119,6 +120,78 @@ describe("ResourceDetailLayout with only surface tabs", () => {
     expect(screen.getByText("capacity 2Gi").parentElement).not.toHaveClass(
       "hidden"
     );
+  });
+});
+
+/**
+ * A surface tab holds something live: an attached shell, a log stream, an
+ * editor's undo history. Radix unmounts the panel of every tab that is not the
+ * open one, so a shell opened here died the instant the reader clicked Logs —
+ * which is the whole reason the shell was moved onto a tab. Unmounting a
+ * surface is not hiding it, it is ending it.
+ *
+ * The other half of the rule matters just as much: a surface nobody has opened
+ * must not be mounted, or arriving on a pod would open an exec session into it.
+ */
+describe("ResourceDetailLayout surface tabs and what lives in them", () => {
+  const mounted = vi.fn();
+
+  function Session() {
+    useEffect(() => {
+      mounted();
+    }, []);
+    return <p>attached to app</p>;
+  }
+
+  const withShell = (activeTab: string) => ({
+    ...base,
+    activeTab,
+    tabs: [
+      {
+        id: "overview",
+        label: "Overview",
+        glyph: viewGlyph(Info),
+        content: null,
+      },
+      {
+        id: "shell",
+        label: "Shell",
+        glyph: viewGlyph(Info),
+        kind: "surface" as const,
+        content: <Session />,
+      },
+    ],
+  });
+
+  it("keeps a session alive through a trip to another tab and back", () => {
+    mounted.mockClear();
+    const { rerender } = wrap(<ResourceDetailLayout {...withShell("shell")} />);
+    expect(mounted).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MemoryRouter>
+        <ResourceDetailLayout {...withShell("overview")} />
+      </MemoryRouter>
+    );
+    // Still in the DOM, merely off the screen: `hidden` is what a reader loses
+    // when they click away, and the session is not theirs to lose with it.
+    expect(screen.getByText("attached to app")).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ResourceDetailLayout {...withShell("shell")} />
+      </MemoryRouter>
+    );
+    // The number that matters: a second mount would be a second `openPodShell`
+    // and a dead prompt where the reader left a live one.
+    expect(mounted).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mount a surface nobody has opened", () => {
+    mounted.mockClear();
+    wrap(<ResourceDetailLayout {...withShell("overview")} />);
+    expect(screen.queryByText("attached to app")).not.toBeInTheDocument();
+    expect(mounted).not.toHaveBeenCalled();
   });
 });
 

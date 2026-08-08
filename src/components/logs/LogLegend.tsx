@@ -1,4 +1,5 @@
-import type { ContainerInfo, ContainerPhase } from "@/generated/types";
+import type { ContainerInfo } from "@/generated/types";
+import { PHASE_LABEL } from "@/lib/container-sequence";
 
 import type { ContainerFailure } from "./hooks/useLogStream";
 import { formatCount } from "./types";
@@ -19,12 +20,6 @@ interface LogLegendProps {
   onSolo: (container: string) => void;
   onShowAll: () => void;
 }
-
-/** Only where it changes the meaning of the name beside it. */
-const PHASE_LABEL: Partial<Record<ContainerPhase, string>> = {
-  init: "init",
-  sidecar: "sidecar",
-};
 
 /**
  * The legend, which is also the filter.

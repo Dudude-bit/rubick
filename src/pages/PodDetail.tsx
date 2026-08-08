@@ -9,6 +9,7 @@ import {
   Info,
   Network,
   RefreshCw,
+  SquareTerminal,
   Trash2,
 } from "lucide-react";
 
@@ -20,7 +21,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
 import { LogViewer } from "@/components/logs/LogViewer";
-import { PodTerminal } from "@/components/terminal/PodTerminal";
+import { PodShell } from "@/components/terminal/PodShell";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -28,6 +29,7 @@ import {
   conditionsMark,
   countMark,
   kindGlyph,
+  liveMark,
   severityMark,
   viewGlyph,
 } from "@/components/resources/detail-tab";
@@ -63,6 +65,7 @@ import {
   terminationWhen,
 } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
 
 interface PodProblem {
@@ -215,10 +218,19 @@ export function PodDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedShell = searchParams.get("shell");
 
-  const [showTerminal, setShowTerminal] = useState(!!requestedShell);
-  const [selectedContainer, setSelectedContainer] = useState<string | null>(
-    requestedShell
-  );
+  // Which container the Shell tab is attached to, once the reader has said.
+  // `container: null` is the reader having ended the session, which is not the
+  // same as never having chosen: the tab attaches to whatever can take a shell
+  // when nobody has said, and re-attaching to one somebody just closed would
+  // be a loop rather than a tab.
+  //
+  // Carried with the pod it was chosen on, for the reason `logRequest` is: this
+  // page stays mounted across a move to another pod, and `app` means a
+  // different container there.
+  const [shellChoice, setShellChoice] = useState<{
+    pod: string;
+    container: string | null;
+  } | null>(null);
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
@@ -250,6 +262,9 @@ export function PodDetail() {
     fetchResource: (name, namespace) => commands.getPod(name, namespace),
     deleteResource: (name, namespace) =>
       commands.deletePod(name, namespace, null),
+    // A link that asked for a shell asked to land on it, not to arrive at the
+    // Overview with a terminal running somewhere off screen.
+    defaultTab: requestedShell ? "shell" : undefined,
   });
 
   const {
@@ -309,13 +324,19 @@ export function PodDetail() {
     },
   });
 
-  const openTerminal = (containerName: string) => {
-    setSelectedContainer(containerName);
-    setShowTerminal(true);
-  };
-
   const podKey = `${namespace}/${name}`;
   const logContainer = logRequest?.pod === podKey ? logRequest.container : null;
+
+  // The URL's `?shell=` is about this route, so it needs no pod key of its
+  // own; a choice made by clicking does.
+  const choice = shellChoice?.pod === podKey ? shellChoice : null;
+  const shellContainer = choice ? choice.container : requestedShell;
+  const shellEnded = choice !== null && choice.container === null;
+
+  const openTerminal = (containerName: string) => {
+    setShellChoice({ pod: podKey, container: containerName });
+    setActiveTab("shell");
+  };
 
   const openLogs = (containerName: string) => {
     setLogRequest({ pod: podKey, container: containerName });
@@ -329,8 +350,7 @@ export function PodDetail() {
         { replace: false }
       );
     } else {
-      setSelectedContainer(result.containerName);
-      setShowTerminal(true);
+      openTerminal(result.containerName);
     }
   };
 
@@ -339,7 +359,7 @@ export function PodDetail() {
   const isDebugPod = pod?.labels?.["k8s-gui/debug-pod"] === "true";
 
   const handleTerminalClose = useCallback(() => {
-    setShowTerminal(false);
+    setShellChoice({ pod: podKey, container: null });
     // The URL asked for this shell; once it is closed it would be lying, and
     // a reload would reopen a terminal nobody asked for again.
     if (searchParams.has("shell")) {
@@ -381,7 +401,7 @@ export function PodDetail() {
         duration: 10000,
       });
     }
-  }, [isDebugPod, pod, toast, navigate, searchParams, setSearchParams]);
+  }, [isDebugPod, pod, podKey, toast, navigate, searchParams, setSearchParams]);
 
   const handleFindReplacement = savedLabels
     ? () =>
@@ -452,6 +472,14 @@ export function PodDetail() {
   ];
 
   const problem = useMemo(() => podProblem(pod), [pod]);
+
+  // A shell the reader opened and left is invisible the moment they click
+  // Logs. The store already knows it is there; the dot is how the tab says so.
+  const shellSession = useTerminalSessionStore((state) =>
+    state.sessions.find(
+      (session) => session.podName === name && session.namespace === namespace
+    )
+  );
 
   return (
     <ResourceDetailLayout
@@ -585,6 +613,26 @@ export function PodDetail() {
           ) : null,
         },
         {
+          id: "shell",
+          label: "Shell",
+          glyph: viewGlyph(SquareTerminal),
+          kind: "surface",
+          mark: shellSession
+            ? liveMark(`session attached to ${shellSession.containerName}`)
+            : undefined,
+          content: pod ? (
+            <PodShell
+              pod={pod}
+              container={shellContainer}
+              ended={shellEnded}
+              onChoose={openTerminal}
+              onOpenLogs={openLogs}
+              onDebug={() => setDebugDialogOpen(true)}
+              onEnd={handleTerminalClose}
+            />
+          ) : null,
+        },
+        {
           id: "conditions",
           label: "Conditions",
           glyph: viewGlyph(BadgeCheck),
@@ -684,22 +732,6 @@ export function PodDetail() {
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />
-      )}
-
-      {showTerminal && selectedContainer && pod && (
-        <Section>
-          <SectionHeader title={`Shell · ${selectedContainer}`} />
-          {/* The xterm viewport paints its own background, so the frame only
-              has to hold the canvas colour until the terminal attaches. */}
-          <div className="relative h-[500px] overflow-hidden rounded border border-hair bg-canvas">
-            <PodTerminal
-              podName={pod.name}
-              namespace={pod.namespace}
-              containerName={selectedContainer}
-              onClose={handleTerminalClose}
-            />
-          </div>
-        </Section>
       )}
     </ResourceDetailLayout>
   );

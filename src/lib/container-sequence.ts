@@ -19,6 +19,15 @@ import {
 /** The silhouette a step gets on the rail. */
 export type StepMark = "done" | "failed" | "running" | "queued";
 
+/**
+ * The word beside a container's name, where it changes what the name means.
+ * An app container gets none: it is what a reader assumes a container is.
+ */
+export const PHASE_LABEL: Partial<Record<ContainerPhase, string>> = {
+  init: "init",
+  sidecar: "sidecar",
+};
+
 export interface ContainerStep {
   container: ContainerInfo;
   mark: StepMark;

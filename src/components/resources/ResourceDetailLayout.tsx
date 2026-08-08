@@ -6,7 +6,7 @@
  * the occasional hairline, which is the same rhythm the overview uses.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, CircleDashed, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -195,6 +195,30 @@ function resolveGlyph(glyph: DetailTabGlyph, tinted: boolean) {
   };
 }
 
+/**
+ * Which tabs have been opened at least once.
+ *
+ * Radix unmounts the panel of every tab that is not the open one, which is
+ * right for a stack of blocks and wrong for a surface: a surface is a place
+ * with something live in it — an attached shell, a log stream, an editor's
+ * undo history — and unmounting it is not hiding it, it is ending it. So a
+ * surface panel stays mounted once it has been opened.
+ *
+ * Once it has been *opened*, and not before: force-mounting every surface on
+ * arrival would open an exec session into a pod nobody asked to shell into,
+ * and start a log stream for a reader who came for the Overview.
+ *
+ * The set is grown in render rather than in an effect: by the time this render
+ * runs the tab is already the active one, and its panel has to be in this
+ * pass's output. Adding a member nobody has read yet schedules nothing and is
+ * idempotent, so a double render arrives at the same set.
+ */
+function useOpenedTabs(activeTab: string): ReadonlySet<string> {
+  const [opened] = useState<Set<string>>(() => new Set());
+  opened.add(activeTab);
+  return opened;
+}
+
 interface ResourceDetailLayoutProps {
   resource: unknown;
   isLoading: boolean;
@@ -259,6 +283,8 @@ export function ResourceDetailLayout({
   onTabChange,
   children,
 }: ResourceDetailLayoutProps) {
+  const opened = useOpenedTabs(activeTab);
+
   if (isLoading) {
     return <DetailSkeleton />;
   }
@@ -353,6 +379,12 @@ export function ResourceDetailLayout({
             <TabsContent
               key={tab.id}
               value={tab.id}
+              // `data-[state=inactive]:hidden` on the shared panel is what
+              // takes a force-mounted one off the screen: Radix only sets the
+              // `hidden` attribute for panels it would have unmounted.
+              forceMount={
+                tab.kind === "surface" && opened.has(tab.id) ? true : undefined
+              }
               className={
                 tab.kind === "surface"
                   ? // A floor rather than `min-h-0`: below it the window is too
