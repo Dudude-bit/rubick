@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { Download, RefreshCw } from "lucide-react";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/pod-status";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
+import { initialFocus, type FocusReason } from "./focus";
 import {
   useLogStream,
   DEFAULT_LOG_LIMIT,
@@ -93,6 +95,7 @@ function StreamFailureNotice({
   container: info,
   intake,
   onRetry,
+  onShowCurrentRun,
 }: {
   failure: ContainerFailure;
   podName: string;
@@ -101,8 +104,19 @@ function StreamFailureNotice({
   /** Intake is set, so reconnecting will not fetch back the gap. */
   intake: boolean;
   onRetry: () => void;
+  /** The way out of an earlier run that does not exist. */
+  onShowCurrentRun: () => void;
 }) {
   const gone = failure.kind === "gone";
+  // A container that has never started has no log, and the apiserver
+  // says so in 300 characters of `BadRequest (ErrorResponse { ... })`.
+  // The pod's own status has the reason in one word, and a stream that
+  // could never have attached is not a stream that was lost.
+  const unstarted =
+    info !== undefined &&
+    info.state.type === "waiting" &&
+    info.lastTerminated === null &&
+    info.restartCount === 0;
   // Not a failure at all: the container has never restarted, so the
   // previous run that was asked for does not exist. Reconnecting would
   // ask the same unanswerable question again.
@@ -121,13 +135,23 @@ function StreamFailureNotice({
       className="flex flex-none items-start justify-between gap-3 border-b border-hair px-3 py-1.5"
     >
       <div className="min-w-0">
-        <p className={`text-xs ${gone || absent ? "text-warn" : "text-err"}`}>
+        <p
+          className={`text-xs ${gone || absent || unstarted ? "text-warn" : "text-err"}`}
+        >
           {absent
             ? `No previous run of ${container} — it has not restarted.`
-            : gone
-              ? `Stream ended — ${podName}/${container} is gone.`
-              : `Lost the log stream from ${podName}/${container}.`}
+            : unstarted
+              ? `${container} has not started, so it has nothing to say yet.`
+              : gone
+                ? `Stream ended — ${podName}/${container} is gone.`
+                : `Lost the log stream from ${podName}/${container}.`}
         </p>
+        {unstarted && info.state.type === "waiting" && info.state.reason && (
+          <p className="mt-0.5 text-[11px] text-fg-mut">
+            The kubelet is holding it at{" "}
+            <span className="font-mono">{info.state.reason}</span>.
+          </p>
+        )}
         {termination && (
           <p
             className="mt-0.5 text-[11px] text-err"
@@ -142,9 +166,11 @@ function StreamFailureNotice({
             .
           </p>
         )}
-        <p className="mt-0.5 break-words text-[11px] text-fg-mut">
-          {failure.message}
-        </p>
+        {!unstarted && (
+          <p className="mt-0.5 break-words text-[11px] text-fg-mut">
+            {failure.message}
+          </p>
+        )}
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
@@ -155,9 +181,15 @@ function StreamFailureNotice({
           </p>
         )}
       </div>
-      {gone || absent ? (
+      {/* Not a retry: asking again cannot conjure a run that never
+          happened. The way out is the run that does exist. */}
+      {absent ? (
+        <NoticeAction onClick={onShowCurrentRun}>
+          Show the current run
+        </NoticeAction>
+      ) : gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-          {absent ? "Nothing earlier to show" : "Nothing left to reconnect to"}
+          Nothing left to reconnect to
         </span>
       ) : (
         <Button
@@ -325,21 +357,230 @@ function IntakeQuietNotice({
   );
 }
 
+/**
+ * The pane opened somewhere the reader did not put it, said out loud.
+ *
+ * Two narrowings the viewer applies on its own — one container instead
+ * of all of them, one run instead of the current one — and both of them
+ * are lies unless they are stated where the reader is looking. A log
+ * that silently shows history is the worst kind of log.
+ */
+function FocusNotice({
+  reason,
+  onShowAll,
+  onShowCurrentRun,
+}: {
+  reason: FocusReason;
+  onShowAll: () => void;
+  onShowCurrentRun: () => void;
+}) {
+  const split = reason.kind === "phase-split";
+  const readingPrevious =
+    reason.kind === "previous-run" ||
+    (reason.kind === "failing-init" && reason.previous);
+  return (
+    <div
+      role="status"
+      data-testid="log-focus-notice"
+      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] ${
+        split ? "text-fg-mut" : "text-warn"
+      }`}
+    >
+      {reason.kind === "failing-init" && (
+        <p>
+          Opened on <span className="font-mono">{reason.container}</span> alone
+          — the pod is stuck in init, so nothing after it has written a line.
+          {reason.previous && (
+            <span>
+              {" "}
+              These are the lines of the run that failed, not of the current
+              one.
+            </span>
+          )}
+        </p>
+      )}
+      {reason.kind === "previous-run" && (
+        <p>
+          Showing the run of{" "}
+          <span className="font-mono">{reason.container}</span> that failed, not
+          the current one — it has restarted since, and the current run has
+          printed nothing yet.
+        </p>
+      )}
+      {reason.kind === "phase-split" && (
+        <p>
+          <span className="font-mono">{reason.containers.join(", ")}</span> ran
+          before the pod started, minutes older than everything else here — held
+          out rather than interleaved at the top of the buffer.
+        </p>
+      )}
+      <div className="ml-auto flex items-center gap-3">
+        {readingPrevious && (
+          <NoticeAction onClick={onShowCurrentRun}>
+            Show the current run
+          </NoticeAction>
+        )}
+        {reason.kind !== "previous-run" && (
+          <NoticeAction onClick={onShowAll}>
+            {split ? "Interleave them anyway" : "Show every container"}
+          </NoticeAction>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A finished container's log is complete, and a pane cannot show that.
+ *
+ * An init container that ended twenty minutes ago looks exactly like an
+ * app container that has gone quiet, down to Follow sitting there doing
+ * nothing. The difference is not visible anywhere in the output, so it
+ * is stated above it.
+ */
+function FinishedNotice({ container }: { container: ContainerInfo }) {
+  const termination = lastTermination(container);
+  const when = termination ? terminationWhen(termination) : null;
+  const kind =
+    container.phase === "sidecar" ? "a sidecar" : "an init container";
+  return (
+    <div
+      role="status"
+      data-testid="log-finished-notice"
+      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      title={termination ? terminationAt(termination) : undefined}
+    >
+      Reading <span className="font-mono">{container.name}</span>, {kind}. It
+      finished{when ? ` ${when}` : ""}, so this log is complete and will not
+      grow.
+    </div>
+  );
+}
+
+/**
+ * Every container in view answering "there is nothing earlier", in one
+ * line instead of one banner each.
+ *
+ * A pod whose containers have never restarted has as many of these to
+ * say as it has containers, and said separately they buried the log they
+ * were describing. It is one fact about the pane: this run does not
+ * exist, and the current one does.
+ */
+function NoEarlierRunNotice({
+  containers,
+  onShowCurrentRun,
+}: {
+  containers: string[];
+  onShowCurrentRun: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      data-testid="log-no-earlier-run"
+      className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] text-warn"
+    >
+      <p>
+        No earlier run of{" "}
+        <span className="font-mono">{containers.join(", ")}</span> — none of
+        them has restarted, so there is nothing before the run they are on.
+      </p>
+      <div className="ml-auto">
+        <NoticeAction onClick={onShowCurrentRun}>
+          Show the current run
+        </NoticeAction>
+      </div>
+    </div>
+  );
+}
+
+function NoticeAction({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-info hover:bg-hover"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Digits solo by the position the legend draws, `0` shows everything.
+ *
+ * Bound on the window rather than on the legend because the reader's
+ * focus is in the query box or nowhere at all, and a shortcut that
+ * needs the legend focused first is not a shortcut. Two guards keep it
+ * honest: a digit typed into the query is a digit, and a viewer parked
+ * behind a hidden tab must not answer for the one on screen.
+ */
+function useSoloShortcuts(
+  root: React.RefObject<HTMLElement | null>,
+  count: number,
+  onSolo: (index: number) => void,
+  onShowAll: () => void
+) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!/^[0-9]$/.test(event.key)) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+      const node = root.current;
+      if (!node || !node.isConnected || node.closest("[hidden]")) return;
+
+      const digit = Number(event.key);
+      if (digit === 0) {
+        event.preventDefault();
+        onShowAll();
+        return;
+      }
+      if (digit > count) return;
+      event.preventDefault();
+      onSolo(digit - 1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [root, count, onSolo, onShowAll]);
+}
+
 interface LogViewerProps {
   podName: string;
   namespace: string;
   /**
-   * The pod's containers, not just their names: a stream that ends
-   * because a container died can only say why if it can reach that
-   * container's `lastTerminated`.
+   * Every container the pod ran, init first and in run order — see
+   * `podContainers`. Not just their names: a stream that ends because a
+   * container died can only say why if it can reach that container's
+   * `lastTerminated`, and which run to open on is decided from the same
+   * field.
    */
   containers: ContainerInfo[];
+  /**
+   * A container to open alone, asked for from the Containers tab. Read
+   * once, on mount, which is why the caller keys the viewer by it: a
+   * request that arrives mid-session is a different reading of a
+   * different log, not a filter change.
+   */
+  soloContainer?: string | null;
 }
 
 export function LogViewer({
   podName,
   namespace,
   containers: containerInfos,
+  soloContainer,
 }: LogViewerProps) {
   const { toast } = useToast();
   const containers = useMemo(
@@ -358,7 +599,19 @@ export function LogViewer({
   // anywhere near the reader that four fifths were being withheld. A
   // filter the reader did not set is not a filter, it is a lie about how
   // much log there is.
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  //
+  // Except when the pod is held in init. Then "show everything" shows
+  // nothing — the app container has never started — and the one log
+  // that answers the question is the failing init container's previous
+  // run. Decided once, on mount, and announced above the output.
+  const [focus] = useState(() => initialFocus(containerInfos, soloContainer));
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(focus.hidden);
+  const [previousRun, setPreviousRun] = useState(focus.previous);
+  /** Retired the moment the reader touches the legend: it describes an
+   *  opening state, and a stale explanation is worse than none. */
+  const [focusReason, setFocusReason] = useState<FocusReason | null>(
+    focus.reason
+  );
   const [terms, setTerms] = useState<QueryTerm[]>([]);
   /**
    * Which terms are also kept at the source, by label.
@@ -429,7 +682,14 @@ export function LogViewer({
     clearLogs,
     togglePause,
     retry,
-  } = useLogStream({ podName, namespace, containers, limit, intake });
+  } = useLogStream({
+    podName,
+    namespace,
+    containers,
+    limit,
+    previous: previousRun,
+    intake,
+  });
 
   const colors = useMemo(() => buildContainerColors(containers), [containers]);
 
@@ -552,11 +812,57 @@ export function LogViewer({
   }, []);
 
   const handleToggleContainer = useCallback((name: string) => {
+    setFocusReason(null);
     setHidden((prev) => toggled(prev, name));
   }, []);
 
   const handleShowAllContainers = useCallback(() => {
+    setFocusReason(null);
     setHidden(new Set());
+  }, []);
+
+  /**
+   * Everything else off — or, on the container that is already alone,
+   * everything back on. One gesture in both directions, which is what
+   * makes it safe to reach for on a five-container pod.
+   */
+  const handleSoloContainer = useCallback(
+    (name: string) => {
+      setFocusReason(null);
+      setHidden((prev) => {
+        const alone = !prev.has(name) && containers.length - prev.size === 1;
+        return alone
+          ? new Set()
+          : new Set(containers.filter((other) => other !== name));
+      });
+    },
+    [containers]
+  );
+
+  const handleSoloByIndex = useCallback(
+    (index: number) => {
+      const name = containers[index];
+      if (name !== undefined) handleSoloContainer(name);
+    },
+    [containers, handleSoloContainer]
+  );
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useSoloShortcuts(
+    rootRef,
+    containers.length,
+    handleSoloByIndex,
+    handleShowAllContainers
+  );
+
+  const handlePreviousRunToggle = useCallback(() => {
+    setFocusReason(null);
+    setPreviousRun((on) => !on);
+  }, []);
+
+  const handleShowCurrentRun = useCallback(() => {
+    setFocusReason(null);
+    setPreviousRun(false);
   }, []);
 
   const handleAddTerm = useCallback((term: QueryTerm) => {
@@ -640,13 +946,16 @@ export function LogViewer({
           container,
           10000,
           null,
-          false
+          // The file has to be the log on screen. Downloading the current
+          // run while the pane reads the previous one hands the reader a
+          // different log under the same name.
+          previousRun
         );
         const blob = new Blob([logsToText(allLogs)], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `${podName}-${container}.log`;
+        anchor.download = `${podName}-${container}${previousRun ? "-previous" : ""}.log`;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -660,14 +969,68 @@ export function LogViewer({
         variant: "destructive",
       });
     }
-  }, [containers, namespace, podName, shownContainers, toast]);
+  }, [containers, namespace, podName, previousRun, shownContainers, toast]);
 
   // What the reader is not being shown: dropped by the query or by the
   // legend, plus the lines standing behind a collapsed run.
   const hiddenByView = retained - visibleLogs.length + collapsedCount;
 
+  // Offered where it can answer. The kubelet sets `lastTerminated` for
+  // exactly the container instances whose logs `--previous` still
+  // fetches, so this is knowable before asking rather than from an error.
+  const offerPreviousRun = containerInfos.some(
+    (info) => info.lastTerminated !== null
+  );
+
+  // A container reading alone, finished, from a phase of the pod's life
+  // that is over. Derived from the current view rather than from the
+  // opening one: it is as true after a solo as it was on mount.
+  const finished = useMemo(() => {
+    if (shownContainers.length !== 1) return null;
+    const info = containerInfos.find(
+      (entry) => entry.name === shownContainers[0]
+    );
+    if (!info || info.phase === "app" || info.state.type !== "terminated") {
+      return null;
+    }
+    return info;
+  }, [containerInfos, shownContainers]);
+
+  // "There is no earlier run of this one" is a fact about a container,
+  // not about the pane, and the legend chip already carries it beside the
+  // name. It is only worth a banner when it is the whole answer — every
+  // container in view saying it, so the pane is empty because of it.
+  // Otherwise a three-container pod stacked three warnings over a log
+  // that was reading perfectly well.
+  const absentInView = failures.filter(
+    (failure) =>
+      failure.kind === "no-previous-run" && !hidden.has(failure.container)
+  );
+  const nothingEarlier =
+    shownContainers.length > 0 &&
+    absentInView.length === shownContainers.length;
+  const bannered = failures.filter((failure) => {
+    // Hiding a container hides everything about it, its trouble
+    // included. A soloed pane that stacks three banners about
+    // containers the reader took out of view is arguing with the
+    // filter it was just given — the legend marks them, and unhiding
+    // one brings its sentence back with it.
+    if (hidden.has(failure.container)) return false;
+    if (failure.kind === "no-previous-run") {
+      return nothingEarlier && absentInView.length === 1;
+    }
+    // An init container that finished ends its stream on the way out.
+    // That is the read completing, not the container disappearing —
+    // the legend says "ended" and the notice above says the log is
+    // whole, and "is gone" over a successful step is alarm for nothing.
+    const info = containerInfos.find(
+      (entry) => entry.name === failure.container
+    );
+    return !(failure.kind === "gone" && info?.state.type === "terminated");
+  });
+
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full flex-col">
       {/* Above the toolbar because it is the first question, not the
           fourth: the shape of the buffer is what tells the reader where
           to point the query. Hidden outright, it leaves nothing behind —
@@ -703,6 +1066,9 @@ export function LogViewer({
         onLimitChange={setLimit}
         collapseRepeats={collapseRepeats}
         onCollapseRepeatsChange={setCollapseRepeats}
+        previousRun={previousRun}
+        offerPreviousRun={offerPreviousRun}
+        onPreviousRunToggle={handlePreviousRunToggle}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         isStreaming={isStreaming}
@@ -720,14 +1086,43 @@ export function LogViewer({
       />
 
       <LogLegend
-        containers={containers}
+        containers={containerInfos}
         colors={colors}
         counts={counts}
         hidden={hidden}
         failures={failures}
         onToggle={handleToggleContainer}
+        onSolo={handleSoloContainer}
         onShowAll={handleShowAllContainers}
       />
+
+      {/* Directly under the legend it narrowed, and above everything that
+          explains the output — the reader has to know which containers
+          and which run these lines are before reading a line of them. */}
+      {focusReason && (
+        <FocusNotice
+          reason={focusReason}
+          onShowAll={handleShowAllContainers}
+          onShowCurrentRun={handleShowCurrentRun}
+        />
+      )}
+
+      {/* Not while a failure above is already accounting for the pane: a
+          finished container whose earlier run does not exist would
+          otherwise be told its complete log is on screen when nothing
+          is. */}
+      {!focusReason &&
+        finished &&
+        !bannered.some((failure) => failure.container === finished.name) && (
+          <FinishedNotice container={finished} />
+        )}
+
+      {nothingEarlier && absentInView.length > 1 && (
+        <NoEarlierRunNotice
+          containers={absentInView.map((failure) => failure.container)}
+          onShowCurrentRun={handleShowCurrentRun}
+        />
+      )}
 
       {dropped > 0 && (
         <DroppedNotice
@@ -740,7 +1135,7 @@ export function LogViewer({
       {/* One notice per container whose stream died. Four containers can
           still be streaming while the fifth is gone, and a single verdict
           could not say which. */}
-      {failures.map((failure) => (
+      {bannered.map((failure) => (
         <StreamFailureNotice
           key={failure.container}
           failure={failure}
@@ -750,6 +1145,7 @@ export function LogViewer({
           )}
           intake={intake.length > 0}
           onRetry={retry}
+          onShowCurrentRun={handleShowCurrentRun}
         />
       ))}
 

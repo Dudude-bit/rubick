@@ -67,6 +67,18 @@ interface UseLogStreamOptions {
   /** Backfill and retention, together. See `DEFAULT_LOG_LIMIT`. */
   limit: number;
   /**
+   * Read the run before the current one instead of the current one.
+   *
+   * For a crash loop this is the only readable answer: the container is
+   * backing off, its current run has printed nothing, and the run that
+   * printed the reason is the one before it. Whole-pane rather than
+   * per-container, because "which run am I reading" is a question about
+   * the pane and a buffer holding two different runs at once could not
+   * answer it. Containers with nothing earlier come back
+   * `no-previous-run`, which is a fact and not a failure.
+   */
+  previous?: boolean;
+  /**
    * Terms every arriving line must satisfy to be kept at all, evaluated
    * in Rust before the line costs an event, an IPC hop or a slot. Empty
    * is the default and keeps everything.
@@ -133,6 +145,7 @@ export function useLogStream({
   namespace,
   containers,
   limit,
+  previous = false,
   intake = NO_INTAKE,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
@@ -168,7 +181,10 @@ export function useLogStream({
 
   /** What the attached streams were opened against. See `resuming` below. */
   const opened = useRef<{ target: string; intake: string } | null>(null);
-  const target = `${namespace}/${podName}|${containerKey}|${limit}`;
+  // `previous` belongs in the key: it selects a different run, so the
+  // buffer must not be resumed across a flip — the lines already held
+  // are from the other run and would be interleaved with it silently.
+  const target = `${namespace}/${podName}|${containerKey}|${limit}|${previous}`;
 
   const clearLogs = useCallback(() => {
     setBuffer(emptyBuffer());
@@ -251,11 +267,11 @@ export function useLogStream({
        * Either way there is no backfill: what it would return is the
        * tail the buffer already holds, as duplicates.
        */
-      const previous = opened.current;
+      const lastOpened = opened.current;
       const resuming =
-        previous !== null &&
-        previous.target === target &&
-        (previous.intake !== intakeKey || intakeTerms.length > 0);
+        lastOpened !== null &&
+        lastOpened.target === target &&
+        (lastOpened.intake !== intakeKey || intakeTerms.length > 0);
       opened.current = { target, intake: intakeKey };
 
       setIsConnecting(true);
@@ -266,7 +282,7 @@ export function useLogStream({
       // not on every restart: an intake edited while it is already on
       // must not move the mark that says where unfiltered lines end, or
       // the arriving rate would start measuring already-filtered ones.
-      const hadIntake = resuming && previous.intake !== NO_INTAKE_KEY;
+      const hadIntake = resuming && lastOpened.intake !== NO_INTAKE_KEY;
       const hasIntake = intakeTerms.length > 0;
       if (!resuming || (hasIntake && !hadIntake)) {
         setIntakeFrom(nextIdRef.current);
@@ -374,7 +390,7 @@ export function useLogStream({
               : backfillPerContainer(limit, streamed.length),
             follow: true,
             timestamps: true,
-            previous: false,
+            previous,
             sinceSeconds: null,
             sinceTime: null,
             intake: intakeTerms,
@@ -434,6 +450,7 @@ export function useLogStream({
     retryTrigger,
     intakeKey,
     intakeTerms,
+    previous,
     target,
   ]);
 

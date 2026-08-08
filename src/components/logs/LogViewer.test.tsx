@@ -22,7 +22,12 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    streamPodLogs: vi.fn(async () => "stream-id-1"),
+    // One id per container, so a test can kill one stream and leave the
+    // rest attached. The single-container pod most tests use keeps the
+    // original id.
+    streamPodLogs: vi.fn(async (config: { container: string }) =>
+      config.container === "app" ? "stream-id-1" : `stream-${config.container}`
+    ),
     stopLogStream: vi.fn(async () => undefined),
     logStreamSubscribed: vi.fn(async () => undefined),
     getPodLogs: vi.fn(async () => []),
@@ -65,9 +70,13 @@ const props = {
   containers: [container("app")],
 };
 
-function fireFailure(kind: StreamFailureKind, message: string) {
+function fireFailure(
+  kind: StreamFailureKind,
+  message: string,
+  streamId = "stream-id-1"
+) {
   listeners["stream-failed"]!({
-    payload: { stream_id: "stream-id-1", kind, message },
+    payload: { stream_id: streamId, kind, message },
   });
 }
 
@@ -540,5 +549,378 @@ describe("what the pane shows on open", () => {
       screen.getByRole("button", { name: "Show every line" })
     );
     expect(screen.queryByTestId("log-grouped-notice")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The pod that is stuck in init is the whole reason this exists. Its app
+ * container has never started, so the pane that opens on everything
+ * opens on nothing, while the log that says why sits on a container the
+ * viewer did not know existed, on a run it could not ask for.
+ */
+describe("LogViewer on a pod held in init", () => {
+  const stuck = [
+    container("wait-for-db", {
+      phase: "init",
+      state: {
+        type: "terminated",
+        termination: {
+          exitCode: 0,
+          signal: null,
+          reason: "Completed",
+          message: null,
+          startedAt: null,
+          finishedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+        },
+      },
+    }),
+    container("migrate", {
+      phase: "init",
+      ready: false,
+      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      restartCount: 9,
+      lastTerminated: {
+        exitCode: 1,
+        signal: null,
+        reason: "Error",
+        message: null,
+        startedAt: null,
+        finishedAt: new Date(Date.now() - 40 * 1000).toISOString(),
+      },
+    }),
+    container("app", {
+      ready: false,
+      state: { type: "waiting", reason: "PodInitializing" },
+    }),
+  ];
+
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  async function renderStuck() {
+    render(
+      <TooltipProvider>
+        <LogViewer {...props} containers={stuck} />
+      </TooltipProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+  }
+
+  it("opens on the failing init container's previous run", async () => {
+    await renderStuck();
+
+    const configs = vi
+      .mocked(commands.streamPodLogs)
+      .mock.calls.map(([config]) => config as StreamLogConfig);
+    // Every container still streams — hiding one is a view filter and
+    // nothing more — but all of them read the earlier run, because the
+    // pane can only be reading one run at a time and say which.
+    expect(configs.map((c) => c.container).sort()).toEqual([
+      "app",
+      "migrate",
+      "wait-for-db",
+    ]);
+    expect(configs.every((c) => c.previous)).toBe(true);
+
+    const chips = within(screen.getByTestId("log-legend")).getAllByRole(
+      "button"
+    );
+    const pressed = chips
+      .filter((chip) => chip.getAttribute("aria-pressed") === "true")
+      .map((chip) => chip.textContent);
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]).toContain("migrate");
+  });
+
+  it("says which container and which run, where the reader is looking", async () => {
+    await renderStuck();
+    const notice = screen.getByTestId("log-focus-notice");
+    expect(notice).toHaveTextContent("Opened on migrate alone");
+    expect(notice).toHaveTextContent("the pod is stuck in init");
+    expect(notice).toHaveTextContent(
+      "These are the lines of the run that failed, not of the current one."
+    );
+    expect(
+      screen.getByRole("button", { name: "Show the current run" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show every container" })
+    ).toBeInTheDocument();
+  });
+
+  it("reopens the streams on the current run when asked", async () => {
+    await renderStuck();
+    vi.mocked(commands.streamPodLogs).mockClear();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the current run" })
+    );
+
+    await waitFor(() => {
+      expect(commands.streamPodLogs).toHaveBeenCalled();
+    });
+    const configs = vi
+      .mocked(commands.streamPodLogs)
+      .mock.calls.map(([config]) => config as StreamLogConfig);
+    expect(configs.every((c) => c.previous)).toBe(false);
+    expect(screen.queryByTestId("log-focus-notice")).not.toBeInTheDocument();
+  });
+
+  it("keeps a container's missing earlier run to one line in the legend", async () => {
+    await renderStuck();
+    // `app` has never restarted, so asking for its previous run comes
+    // back empty. `migrate` is reading perfectly well beside it, so this
+    // is a fact about one container and belongs on its chip — banners
+    // for it would bury the log they were describing.
+    fireFailure("no-previous-run", "There is no previous run of app to show.");
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("log-legend")).getByText("· no earlier run")
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("log-stream-failure")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("log-no-earlier-run")).not.toBeInTheDocument();
+  });
+
+  it("banners only the container in view, not the ones behind the legend", async () => {
+    await renderStuck();
+    for (const [name, id] of [
+      ["wait-for-db", "stream-wait-for-db"],
+      ["app", "stream-id-1"],
+    ] as const) {
+      fireFailure(
+        "no-previous-run",
+        `There is no previous run of ${name} to show.`,
+        id
+      );
+    }
+
+    // Soloed onto the one container that has nothing earlier: one
+    // banner, for it. `app` is hidden and failed the same way, and a
+    // banner about a container the reader cannot see is noise.
+    await userEvent.keyboard("1");
+    await waitFor(() => {
+      expect(screen.getAllByTestId("log-stream-failure")).toHaveLength(1);
+    });
+    expect(screen.getByTestId("log-stream-failure")).toHaveTextContent(
+      "No previous run of wait-for-db"
+    );
+    expect(
+      screen.getByRole("button", { name: "Show the current run" })
+    ).toBeInTheDocument();
+  });
+
+  it("does not call a finished step's stream ending a disappearance", async () => {
+    await renderStuck();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the current run" })
+    );
+    await waitFor(() => {
+      expect(commands.streamPodLogs).toHaveBeenCalled();
+    });
+
+    // `wait-for-db` succeeded. Reading it to the end is the read
+    // finishing, and "is gone" over a step that worked is alarm for
+    // nothing — the legend says "ended", the notice says the log is whole.
+    fireFailure(
+      "gone",
+      "container wait-for-db is no longer running.",
+      "stream-wait-for-db"
+    );
+    await userEvent.keyboard("1");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-finished-notice")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("log-stream-failure")).not.toBeInTheDocument();
+    expect(screen.getByTestId("log-legend")).toHaveTextContent("ended");
+  });
+
+  it("says a container that never started has nothing to say, not that the stream broke", async () => {
+    await renderStuck();
+    // The apiserver answers a stream for a `PodInitializing` container
+    // with 300 characters of `BadRequest (ErrorResponse { ... })`. The
+    // pod's own status has the reason in one word.
+    fireFailure(
+      "broken",
+      'ApiError: container "app" in pod "init-demo" is waiting to start: PodInitializing: BadRequest (ErrorResponse { status: "Failure" })'
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show every container" })
+    );
+
+    const notice = await screen.findByTestId("log-stream-failure");
+    expect(notice).toHaveTextContent("app has not started");
+    expect(notice).toHaveTextContent("PodInitializing");
+    expect(notice).not.toHaveTextContent("ErrorResponse");
+  });
+
+  it("says it once, with the way out, when nothing in view has an earlier run", async () => {
+    await renderStuck();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show every container" })
+    );
+
+    // Three containers that have never restarted, and the pane is empty
+    // because of it. Three banners is not three answers, it is one
+    // answer three times over the log it is hiding.
+    for (const name of ["wait-for-db", "migrate"]) {
+      fireFailure(
+        "no-previous-run",
+        `There is no previous run of ${name} to show.`,
+        `stream-${name}`
+      );
+    }
+    fireFailure("no-previous-run", "There is no previous run of app to show.");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-no-earlier-run")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("log-no-earlier-run")).toHaveTextContent(
+      "none of them has restarted"
+    );
+    expect(screen.queryByTestId("log-stream-failure")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Isolating one of five containers cost four clicks, one per container
+ * to mute. Solo is the mute/solo pair from every audio tool: the same
+ * gesture takes everything else off and puts it back.
+ */
+describe("soloing a container", () => {
+  const many = [
+    container("app"),
+    container("proxy", { phase: "sidecar" }),
+    container("web"),
+  ];
+
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  async function renderMany() {
+    render(
+      <TooltipProvider>
+        <LogViewer {...props} containers={many} />
+      </TooltipProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+    return within(screen.getByTestId("log-legend"));
+  }
+
+  const pressedNames = (legend: ReturnType<typeof within>): (string | null)[] =>
+    legend
+      .getAllByRole("button")
+      .filter(
+        (chip: HTMLElement) => chip.getAttribute("aria-pressed") === "true"
+      )
+      .map((chip: HTMLElement) => chip.textContent);
+
+  it("takes everything else off on a double-click, and back on again", async () => {
+    const legend = await renderMany();
+    const proxy = legend.getByRole("button", { name: /proxy/ });
+
+    await userEvent.dblClick(proxy);
+    expect(pressedNames(legend)).toHaveLength(1);
+
+    await userEvent.dblClick(proxy);
+    expect(pressedNames(legend)).toHaveLength(3);
+  });
+
+  it("solos by position from the keyboard, and 0 brings them back", async () => {
+    const legend = await renderMany();
+
+    await userEvent.keyboard("3");
+    const soloed = pressedNames(legend);
+    expect(soloed).toHaveLength(1);
+    expect(soloed[0]).toContain("web");
+
+    await userEvent.keyboard("0");
+    expect(pressedNames(legend)).toHaveLength(3);
+  });
+
+  it("leaves a digit typed into the query alone", async () => {
+    const legend = await renderMany();
+    // The query box is the one place in this pane where a digit is a
+    // digit; a shortcut that fires there would make it untypeable.
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter the log" })
+    );
+    await userEvent.keyboard("2");
+
+    expect(pressedNames(legend)).toHaveLength(3);
+  });
+});
+
+/**
+ * An init container that finished twenty minutes ago looks exactly like
+ * an app container that has gone quiet, down to Follow sitting there
+ * doing nothing.
+ */
+describe("reading a container whose run is over", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  it("holds finished init lines out of a running pod and offers them", async () => {
+    render(
+      <TooltipProvider>
+        <LogViewer
+          {...props}
+          containers={[
+            container("prepare", {
+              phase: "init",
+              state: {
+                type: "terminated",
+                termination: {
+                  exitCode: 0,
+                  signal: null,
+                  reason: "Completed",
+                  message: null,
+                  startedAt: null,
+                  finishedAt: new Date(
+                    Date.now() - 21 * 60 * 1000
+                  ).toISOString(),
+                },
+              },
+            }),
+            container("proxy", { phase: "sidecar" }),
+            container("app"),
+          ]}
+        />
+      </TooltipProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("log-focus-notice")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("log-focus-notice")).toHaveTextContent(
+      "ran before the pod started"
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Interleave them anyway" })
+    );
+    expect(screen.queryByTestId("log-focus-notice")).not.toBeInTheDocument();
+
+    // Soloed, the pane says the log is finished rather than letting the
+    // reader wonder why Follow is doing nothing.
+    await userEvent.dblClick(
+      within(screen.getByTestId("log-legend")).getByRole("button", {
+        name: /prepare/,
+      })
+    );
+    expect(screen.getByTestId("log-finished-notice")).toHaveTextContent(
+      "so this log is complete and will not grow"
+    );
   });
 });

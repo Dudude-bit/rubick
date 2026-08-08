@@ -22,6 +22,7 @@ import {
   ArrowDown,
   Copy,
   Download,
+  History,
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
@@ -83,6 +84,16 @@ interface LogToolbarProps {
   onLimitChange: (limit: number) => void;
   collapseRepeats: boolean;
   onCollapseRepeatsChange: (collapse: boolean) => void;
+  /**
+   * Reading the run before the current one, and whether there is one to
+   * read. A container's `lastTerminated` is set for exactly the runs the
+   * apiserver will still serve with `--previous`, so the control is
+   * offered only where it can answer — an always-present toggle whose
+   * only reply is "there is nothing earlier" is not a control.
+   */
+  previousRun: boolean;
+  offerPreviousRun: boolean;
+  onPreviousRunToggle: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   isStreaming: boolean;
@@ -125,6 +136,9 @@ export function LogToolbar({
   onLimitChange,
   collapseRepeats,
   onCollapseRepeatsChange,
+  previousRun,
+  offerPreviousRun,
+  onPreviousRunToggle,
   viewMode,
   onViewModeChange,
   isStreaming,
@@ -186,6 +200,21 @@ export function LogToolbar({
       >
         Repeats
       </ToolbarToggle>
+
+      {offerPreviousRun && (
+        <ToolbarToggle
+          on={previousRun}
+          onClick={onPreviousRunToggle}
+          title={
+            previousRun
+              ? "Reading the run before the current one — click for the current run"
+              : "Read the run before the current one, which for a crash loop is the run that printed the reason"
+          }
+        >
+          <History aria-hidden="true" className="h-3 w-3" />
+          Previous run
+        </ToolbarToggle>
+      )}
 
       <ToolbarToggle
         on={autoScroll}

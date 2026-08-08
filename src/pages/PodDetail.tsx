@@ -39,6 +39,7 @@ import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { failingCondition } from "@/lib/condition-health";
+import { podContainers } from "@/lib/container-sequence";
 import { statusRole } from "@/lib/status-role";
 import {
   describeRestarts,
@@ -123,7 +124,12 @@ function describeWaiting(
 function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
 
-  for (const container of pod.containers) {
+  // Init containers included, and first: a pod in `Init:CrashLoopBackOff`
+  // has app containers that all read `PodInitializing`, so scanning only
+  // `.containers` found nothing wrong with the one pod whose trouble has
+  // a name. `podContainers` puts the sequence in run order, so the first
+  // thing found is the first thing that broke.
+  for (const container of podContainers(pod)) {
     const state = container.state;
     if (
       state.type === "waiting" &&
@@ -197,6 +203,10 @@ export function PodDetail() {
     requestedShell
   );
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
+  // Which container the Logs tab was sent to read, from a row in the
+  // Containers tab. The viewer decides where to open on its own when
+  // nobody has asked, so this stays null for an ordinary visit.
+  const [logContainer, setLogContainer] = useState<string | null>(null);
 
   const {
     resource: pod,
@@ -277,6 +287,11 @@ export function PodDetail() {
   const openTerminal = (containerName: string) => {
     setSelectedContainer(containerName);
     setShowTerminal(true);
+  };
+
+  const openLogs = (containerName: string) => {
+    setLogContainer(containerName);
+    setActiveTab("logs");
   };
 
   const handleDebugStart = (result: DebugResult) => {
@@ -436,7 +451,11 @@ export function PodDetail() {
       // unconditional version renders.
       badges={
         problem &&
-        problem.reason !== pod?.status.display && (
+        // `endsWith` rather than equality: a pod held in init displays
+        // `Init:CrashLoopBackOff`, and the init container's own reason is
+        // the tail of it — printing both is the same word twice with a
+        // prefix.
+        !pod?.status.display?.endsWith(problem.reason) && (
           <span
             className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
           >
@@ -503,10 +522,11 @@ export function PodDetail() {
           label: "Containers",
           content: pod ? (
             <ContainerRows
-              containers={pod.containers}
+              containers={podContainers(pod)}
               namespace={pod.namespace}
               podName={pod.name}
               onOpenShell={openTerminal}
+              onOpenLogs={openLogs}
             />
           ) : null,
         },
@@ -516,9 +536,11 @@ export function PodDetail() {
           kind: "surface",
           content: pod ? (
             <LogViewer
+              key={`logs:${logContainer ?? ""}`}
               podName={pod.name}
               namespace={pod.namespace}
-              containers={pod.containers}
+              containers={podContainers(pod)}
+              soloContainer={logContainer}
             />
           ) : null,
         },
