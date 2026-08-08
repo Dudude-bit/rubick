@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Tooltip,
@@ -40,6 +41,9 @@ import { SourceIcon } from "./SourceIcon";
 
 const getHelmReleaseRowId = (row: HelmRelease) =>
   `${row.source}-${row.namespace}-${row.name}`;
+
+const helmReleaseHref = (row: HelmRelease) =>
+  `/helm/${row.source}/${row.namespace}/${row.name}`;
 
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
@@ -82,16 +86,12 @@ export function HelmReleasesTab({
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <button
-            className="text-left font-mono text-info hover:underline"
-            onClick={() =>
-              navigate(
-                `/helm/${row.original.source}/${row.original.namespace}/${row.original.name}`
-              )
-            }
+          <RouteLink
+            to={helmReleaseHref(row.original)}
+            className="font-mono text-info hover:underline"
           >
             {row.original.name}
-          </button>
+          </RouteLink>
         ),
       },
       { accessorKey: "namespace", header: "Namespace" },
@@ -293,7 +293,7 @@ export function HelmReleasesTab({
         searchPlaceholder="Search releases..."
         searchKey="name"
         getRowId={getHelmReleaseRowId}
-        getRowHref={(row) => `/helm/${row.source}/${row.namespace}/${row.name}`}
+        getRowHref={helmReleaseHref}
       />
     </div>
   );

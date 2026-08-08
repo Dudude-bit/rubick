@@ -1,5 +1,4 @@
 import { useCallback, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 
 /** Keyboard action mapping: key -> callback */
 export interface KeyboardAction {
@@ -14,10 +13,6 @@ export interface KeyboardAction {
 interface UseTableKeyboardNavOptions {
   /** Total number of rows */
   rowCount: number;
-  /** Generate href for row navigation */
-  getRowHref?: (rowIndex: number) => string | undefined;
-  /** Custom action on Enter key */
-  onRowAction?: (rowIndex: number) => void;
   /** Whether keyboard navigation is enabled */
   enabled?: boolean;
   /** Custom keyboard actions */
@@ -43,14 +38,11 @@ interface UseTableKeyboardNavReturn {
 
 export function useTableKeyboardNav({
   rowCount,
-  getRowHref,
-  onRowAction,
   enabled = true,
   keyboardActions = [],
 }: UseTableKeyboardNavOptions): UseTableKeyboardNavReturn {
   const [rawFocusedRowIndex, setFocusedRowIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   // Clamp the stored index to the current row count at *read* time
   // rather than syncing via a useEffect → setState dance. The effect
@@ -107,17 +99,8 @@ export function useTableKeyboardNav({
             focusRow(currentIndex - 1);
           }
           break;
-        case "Enter":
-          e.preventDefault();
-          if (getRowHref) {
-            const href = getRowHref(currentIndex);
-            if (href) {
-              navigate(href);
-            }
-          } else if (onRowAction) {
-            onRowAction(currentIndex);
-          }
-          break;
+        // Enter is deliberately absent: activating a row is the same gesture
+        // as clicking it, modifiers and all, so the row owns it.
         case "Home":
           e.preventDefault();
           focusRow(0);
@@ -133,15 +116,7 @@ export function useTableKeyboardNav({
           break;
       }
     },
-    [
-      enabled,
-      rowCount,
-      getRowHref,
-      onRowAction,
-      navigate,
-      focusRow,
-      keyboardActions,
-    ]
+    [enabled, rowCount, focusRow, keyboardActions]
   );
 
   const getRowProps = useCallback(

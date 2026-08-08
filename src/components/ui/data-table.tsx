@@ -32,6 +32,7 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
+import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import {
   ChevronLeft,
   ChevronRight,
@@ -145,6 +146,7 @@ export function DataTable<TData, TValue>({
   rowLabel = "rows",
 }: DataTableProps<TData, TValue>) {
   const navigate = useNavigate();
+  const linkGesture = useLinkGesture();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -205,10 +207,11 @@ export function DataTable<TData, TValue>({
   // Keyboard navigation setup (need focusedRowIndex before creating columns)
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
 
+  // Enter is left to the row itself: the hook is indexed by visual position
+  // and would have to be handed a row order that grouping only settles at
+  // render time, and it cannot see the modifiers on the key press anyway.
   const { containerRef, focusedRowIndex, getRowProps } = useTableKeyboardNav({
     rowCount: data.length,
-    getRowHref: undefined, // Will be set properly after table is created
-    onRowAction: undefined,
     enabled: keyboardNavEnabled,
   });
 
@@ -289,9 +292,14 @@ export function DataTable<TData, TValue>({
     table.setPageIndex(0);
   };
 
-  // Handle row click
-  const handleRowClick = (row: TData, event: React.MouseEvent) => {
-    // Don't navigate if clicking on interactive elements
+  // A row is not an anchor — the name cell inside it is — but the whitespace
+  // beside the name still opens the row, and it reads the gesture through the
+  // same code, so a modifier means the same thing wherever it lands.
+  const handleRowGesture = (
+    row: TData,
+    event: React.MouseEvent | React.KeyboardEvent
+  ) => {
+    // Quick actions, menus and the row's own links are their own targets.
     const target = event.target as HTMLElement;
     if (
       target.closest("button") ||
@@ -302,9 +310,14 @@ export function DataTable<TData, TValue>({
       return;
     }
 
-    if (getRowHref) {
-      navigate(getRowHref(row));
-    } else if (onRowClick) {
+    const href = getRowHref?.(row);
+    if (href) {
+      // A list is where you are already browsing, so plain click goes there
+      // rather than peeking: the peek exists to check a name mentioned
+      // elsewhere without losing the page, and here the page is the list.
+      linkGesture(event, href, () => navigate(href));
+    } else if (onRowClick && readLinkIntent(event) === "activate") {
+      // No destination, so nothing to open a tab on; only a plain click acts.
       onRowClick(row);
     }
   };
@@ -315,8 +328,12 @@ export function DataTable<TData, TValue>({
     : String(pagination.pageSize);
 
   const renderRow = (row: Row<TData>, index: number) => {
-    const rowProps = keyboardNavEnabled ? getRowProps(index) : {};
+    const rowProps = keyboardNavEnabled ? getRowProps(index) : undefined;
     const isFocused = focusedRowIndex === index;
+    const act = isClickable
+      ? (event: React.MouseEvent | React.KeyboardEvent) =>
+          handleRowGesture(row.original, event)
+      : undefined;
 
     return (
       <TableRow
@@ -328,8 +345,16 @@ export function DataTable<TData, TValue>({
           isFocused && "ring-1 ring-inset ring-info",
           "relative group"
         )}
-        onClick={
-          isClickable ? (e) => handleRowClick(row.original, e) : undefined
+        onClick={act}
+        onAuxClick={act}
+        onKeyDown={
+          rowProps &&
+          ((event: React.KeyboardEvent) => {
+            rowProps.onKeyDown(event);
+            // The hook owns the arrows, Home/End and Escape. Enter is an
+            // activation, so it belongs to the click's gesture instead.
+            if (event.key === "Enter") act?.(event);
+          })
         }
         onMouseEnter={() => setHoveredRowIndex(index)}
         onMouseLeave={() => setHoveredRowIndex(null)}

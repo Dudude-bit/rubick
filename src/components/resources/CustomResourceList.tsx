@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
+import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -91,17 +92,19 @@ export function CustomResourceList({
   const baseColumns = useMemo<ColumnDef<CustomResourceListItem>[]>(() => {
     const cols: ColumnDef<CustomResourceListItem>[] = [];
 
-    // Name column (always first) - use simple text since row is clickable
+    // The name is the row's identity and where a person aims, so it carries
+    // the real anchor. An instance's path is built from the CRD, not from
+    // kind and name, which is why this is not a ResourceRef.
     cols.push({
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <Link
+        <RouteLink
           to={getDetailPath(row.original)}
           className="font-mono text-info hover:underline"
         >
           {row.original.name}
-        </Link>
+        </RouteLink>
       ),
     });
 

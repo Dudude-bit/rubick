@@ -11,6 +11,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { DataTable } from "@/components/ui/data-table";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RouteLink } from "@/components/ui/route-link";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
@@ -94,12 +95,12 @@ export function Crds() {
         accessorKey: "kind",
         header: "Kind",
         cell: ({ row }) => (
-          <Link
+          <RouteLink
             to={crdHref(row.original.name)}
             className="font-mono text-info hover:underline"
           >
             {row.original.kind}
-          </Link>
+          </RouteLink>
         ),
       },
       {
