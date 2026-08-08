@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentProps } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Terminal as TerminalIcon } from "lucide-react";
 import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
+import type { StatusRole } from "@/lib/status-role";
 
 /** Used only if `--canvas` cannot be read; matches the dark canvas token. */
 const CANVAS_FALLBACK = "rgb(26, 28, 30)";
@@ -221,33 +221,27 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     }
   }, [terminalTheme]);
 
-  const statusLabel = (() => {
+  /**
+   * The session state in the app's one status vocabulary.
+   *
+   * A filled green chip saying `Connected` was the last one left in the
+   * app — every other status is mono text and a role glyph, and the chip
+   * was shouting a fact that is true almost all the time. The role is
+   * given rather than derived: `statusRole` reads Kubernetes words, and
+   * "Connected" is not one of them.
+   */
+  const [statusLabel, statusRoleOverride]: [string, StatusRole] = (() => {
     switch (status) {
       case "connecting":
-        return "Connecting";
+        return ["Connecting", "pending"];
       case "connected":
-        return "Connected";
+        return ["Connected", "ok"];
       case "closed":
-        return "Ended";
+        return ["Ended", "neutral"];
       case "error":
-        return "Error";
+        return ["Error", "err"];
       default:
-        return "Idle";
-    }
-  })();
-
-  const statusVariant: ComponentProps<typeof Badge>["variant"] = (() => {
-    switch (status) {
-      case "connected":
-        return "success";
-      case "error":
-        return "error";
-      case "connecting":
-        return "secondary";
-      case "closed":
-        return "secondary";
-      default:
-        return "outline";
+        return ["Idle", "neutral"];
     }
   })();
 
@@ -271,7 +265,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={statusVariant}>{statusLabel}</Badge>
+          <StatusBadge status={statusLabel} roleOverride={statusRoleOverride} />
           {error && status !== "connected" && (
             <span className="max-w-[240px] truncate text-xs text-fg-mut">
               {error}
