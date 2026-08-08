@@ -4,8 +4,11 @@ import { Link } from "react-router-dom";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
 import { ResourceName } from "@/components/resources/ResourceName";
-import { getResourceListUrl } from "@/lib/navigation-utils";
-import { toPlural, type ResourceKind } from "@/lib/resource-registry";
+import {
+  getResourceListUrl,
+  toPlural,
+  type ResourceKind,
+} from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 
 export interface ResourceDetailHeaderProps {
@@ -16,8 +19,13 @@ export interface ResourceDetailHeaderProps {
    * Where the breadcrumb's kind segment points. Defaults to the registry's
    * list route, which is wrong for kinds the registry does not own: a Helm
    * release lists at `/helm`, and a custom resource's parent is its CRD.
+   *
+   * `null` says there is nowhere to go, and the segment becomes plain text.
+   * A ReplicaSet has a detail route and no list page on purpose, and a
+   * breadcrumb reading `replicasets` that leads to a blank window is a worse
+   * bug than the missing page it advertises.
    */
-  listUrl?: string;
+  listUrl?: string | null;
   /** The word in that segment, when the registry's plural is not it. */
   listLabel?: string;
   namespace?: string;
@@ -60,6 +68,11 @@ export function ResourceDetailHeader({
   onBack,
   dataUpdatedAt,
 }: ResourceDetailHeaderProps) {
+  const segment = {
+    to: listUrl === null ? null : (listUrl ?? getResourceListUrl(kind)),
+    label: listLabel ?? toPlural(kind as ResourceKind),
+  };
+
   const trail = (
     <>
       <button
@@ -70,12 +83,16 @@ export function ResourceDetailHeader({
       >
         <ArrowLeft className="h-3.5 w-3.5" />
       </button>
-      <Link
-        to={listUrl ?? getResourceListUrl(kind)}
-        className="flex-none rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
-      >
-        {listLabel ?? toPlural(kind as ResourceKind)}
-      </Link>
+      {segment.to ? (
+        <Link
+          to={segment.to}
+          className="flex-none rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
+        >
+          {segment.label}
+        </Link>
+      ) : (
+        <span className="flex-none px-1 py-0.5">{segment.label}</span>
+      )}
       {namespace && (
         <>
           <span aria-hidden="true">/</span>

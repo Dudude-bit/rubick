@@ -23,19 +23,3 @@ export function getResourceDetailUrl(
   }
   return `/${plural}/${name}`;
 }
-
-/**
- * Get the URL for a resource list page
- *
- * @param resourceKind - The kind of the resource
- * @returns URL path for the resource list page
- *
- * @example
- * getResourceListUrl("Pod") // "/pods"
- * getResourceListUrl("Deployment") // "/deployments"
- */
-export function getResourceListUrl(
-  resourceKind: ResourceKind | string
-): string {
-  return `/${toPlural(resourceKind as ResourceKind)}`;
-}

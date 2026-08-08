@@ -225,8 +225,11 @@ interface ResourceDetailLayoutProps {
   error: Error | string | null;
   /** Kind, used for the breadcrumb and every "not found" message. */
   resourceKind: string;
-  /** Breadcrumb overrides for kinds the resource registry does not own. */
-  listUrl?: string;
+  /**
+   * Breadcrumb overrides for kinds the resource registry does not own, and
+   * `null` for a kind with no list page to send the reader to.
+   */
+  listUrl?: string | null;
   listLabel?: string;
 
   /** The object's name. */

@@ -501,3 +501,41 @@ describe("ResourceDetailLayout tab marks", () => {
     expect(dot?.className).toContain("motion-reduce:animate-none");
   });
 });
+
+/**
+ * The kind segment of the breadcrumb is a `<Link>` on every page, and an
+ * unrouted destination inside the layout route matches no branch at all —
+ * React Router renders nothing and the whole shell disappears. A kind with no
+ * list page has to say the word without offering it.
+ */
+describe("the breadcrumb's kind segment", () => {
+  const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: null,
+    },
+  ];
+
+  it("links to the list route the sidebar uses", () => {
+    wrap(<ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />);
+    expect(
+      screen.getByRole("link", { name: "persistentvolumes" })
+    ).toHaveAttribute("href", "/storage/persistentvolumes");
+  });
+
+  it("is plain text when there is nowhere to go", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    expect(screen.getByText("replicasets")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "replicasets" })).toBeNull();
+  });
+});
