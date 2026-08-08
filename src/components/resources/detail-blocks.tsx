@@ -99,7 +99,14 @@ export function DetailAction({
  * A CRD can still invent something longer, so the `title` stays.
  */
 const CONDITION_ROW =
-  "grid grid-cols-[10px_minmax(0,190px)_58px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
+  "grid items-baseline gap-2.5 px-1.5 py-[3px] text-xs grid-cols-[10px_minmax(0,190px)_58px_minmax(0,1fr)_46px]";
+
+/**
+ * The same row with the trailing age column taken out — see `ConditionRows`
+ * for when it is not there to take out.
+ */
+const CONDITION_ROW_UNDATED =
+  "grid items-baseline gap-2.5 px-1.5 py-[3px] text-xs grid-cols-[10px_minmax(0,190px)_58px_minmax(0,1fr)]";
 
 export function ConditionRows({
   conditions,
@@ -118,6 +125,11 @@ export function ConditionRows({
   if (conditions.length === 0) {
     return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
   }
+  // A pod's conditions carry no message at all — that is the whole list on
+  // every healthy pod — so its age column would be a strip of numbers at the
+  // far right of a quarter-width of nothing. When no row here has a sentence
+  // to print, every age moves into the sentence's place and the column goes.
+  const dated = conditions.some((c) => c.message || c.reason);
   return (
     <div>
       {conditions.map((condition) => (
@@ -125,6 +137,7 @@ export function ConditionRows({
           key={`${condition.type}/${condition.lastTransitionTime ?? ""}`}
           condition={condition}
           subject={subject}
+          dated={dated}
         />
       ))}
     </div>
@@ -134,9 +147,12 @@ export function ConditionRows({
 function ConditionRow({
   condition,
   subject,
+  dated,
 }: {
   condition: ConditionInfo;
   subject?: MessageSubject;
+  /** Whether the list reserved a trailing column for the transition time. */
+  dated: boolean;
 }) {
   const role = conditionRole(condition);
   // Colour is spent on anomalies only. A pod reports six conditions and five
@@ -144,13 +160,28 @@ function ConditionRow({
   // ticks per row is the wall of colour that makes the sixth invisible. The
   // satisfied condition keeps its glyph — a tick still says "met" — and gives
   // up its hue, exactly as the composition bar's healthy segment does.
-  const tone = role === "ok" ? "text-fg-mut" : ROLE_TEXT[role];
+  //
+  // What it does not give up is a shape: three greys stand in for the hue, so
+  // the row still says which of its parts is the one being read. The type is
+  // the name the reader came for and sits at full strength; whatever the
+  // condition has to say sits a step under it; the status word and the time
+  // sit a step under that. On an anomaly the type and the status word take the
+  // role colour back, which is the whole of the difference between the row you
+  // are meant to land on and the four above it.
+  const satisfied = role === "ok";
+  const tone = satisfied ? "text-fg-mut" : ROLE_TEXT[role];
   const Icon = ROLE_ICON[role];
   const age = useRealtimeAge(condition.lastTransitionTime ?? null);
+  const stamp = formatDate(condition.lastTransitionTime) ?? undefined;
   const detail = condition.message || condition.reason;
+  // The one fact a satisfied condition has that its glyph has not already
+  // given: since when. It reads on from the status word — `Ready True for 3d`
+  // — which is why it goes where the sentence would, and why the row then has
+  // no second place to print it.
+  const held = !detail && condition.lastTransitionTime;
 
   return (
-    <div className={CONDITION_ROW}>
+    <div className={dated ? CONDITION_ROW : CONDITION_ROW_UNDATED}>
       {/* Every row carries a mark, and the five marks differ in outline as
        *  well as hue: a condition list is the first thing read on a broken
        *  node, and a list where the healthy half was a dot and the unhealthy
@@ -162,32 +193,38 @@ function ConditionRow({
         data-testid="condition-icon"
       />
       <span
-        className={cn("truncate font-mono font-medium", tone)}
+        className={cn(
+          "truncate font-mono font-medium",
+          satisfied ? "text-fg" : tone
+        )}
         title={condition.type}
       >
         {condition.type}
       </span>
-      <span className={cn("truncate text-[11px]", tone)}>
+      {/* Kept next to the glyph that already said "met" because for a
+       *  `MemoryPressure` the word that means met is `False`, and the reader
+       *  with `kubectl describe` open beside this needs to see which. */}
+      <span
+        className={cn("truncate text-[11px]", satisfied ? "text-fg-fnt" : tone)}
+      >
         {condition.status}
       </span>
-      <span className="truncate text-fg-mid">
+      <span className="truncate text-fg-mut">
         {condition.reason && detail !== condition.reason && (
-          <span className="font-mono text-fg-mut">{condition.reason} </span>
+          <span className="font-mono">{condition.reason} </span>
         )}
-        <span className="text-fg-fnt">
-          {detail ? (
-            <ResourceMessage message={detail} subject={subject} />
-          ) : (
-            "—"
-          )}
+        {detail && <ResourceMessage message={detail} subject={subject} />}
+        {held && (
+          <span className="text-fg-fnt" title={stamp}>
+            for {age}
+          </span>
+        )}
+      </span>
+      {dated && (
+        <span className="text-right text-[11px] text-fg-fnt" title={stamp}>
+          {detail && condition.lastTransitionTime ? age : ""}
         </span>
-      </span>
-      <span
-        className="text-right text-[11px] text-fg-fnt"
-        title={formatDate(condition.lastTransitionTime) ?? undefined}
-      >
-        {condition.lastTransitionTime ? age : "—"}
-      </span>
+      )}
     </div>
   );
 }
