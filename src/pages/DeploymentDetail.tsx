@@ -53,7 +53,6 @@ import {
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { cn } from "@/lib/utils";
 import type { DeploymentInfo } from "@/generated/types";
 
 export function DeploymentDetail() {
@@ -376,19 +375,8 @@ export function DeploymentDetail() {
                     return (
                       <SelectItem key={pod.name} value={pod.name}>
                         <span className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              phase === "Running"
-                                ? "bg-ok"
-                                : phase === "Pending"
-                                  ? "bg-warn"
-                                  : "bg-err"
-                            )}
-                            aria-hidden="true"
-                          />
                           <span className="font-mono">{pod.name}</span>
-                          <span className="text-fg-fnt">{phase}</span>
+                          <StatusBadge status={phase} showDot />
                         </span>
                       </SelectItem>
                     );

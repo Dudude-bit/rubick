@@ -9,20 +9,11 @@ import {
   KeyValueSection,
   type KeyValue,
 } from "@/components/resources/detail-kv";
+import { ClaimRef } from "@/components/resources/storage-refs";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
-
-/** `spec.claimRef` arrives serialised as `namespace/name`. */
-function splitClaim(claim: string): { namespace?: string; name: string } {
-  const slash = claim.indexOf("/");
-  if (slash === -1) return { name: claim };
-  return {
-    namespace: claim.slice(0, slash),
-    name: claim.slice(slash + 1),
-  };
-}
 
 export function PersistentVolumeDetail() {
   const {
@@ -44,8 +35,6 @@ export function PersistentVolumeDetail() {
     defaultTab: "yaml",
   });
 
-  const claim = pv?.claim ? splitClaim(pv.claim) : null;
-
   const facts: KeyValue[] = [
     { label: "Capacity", value: pv?.capacity ?? "—", mono: true },
     {
@@ -57,17 +46,12 @@ export function PersistentVolumeDetail() {
       label: "Claim",
       // A volume with no claim is storage nobody is using — the one fact on
       // this page that is worth a colour. Bound is the correct, quiet case.
-      value: claim ? (
-        <ResourceRef
-          kind={ResourceType.PersistentVolumeClaim}
-          name={claim.name}
-          namespace={claim.namespace}
-          showKind={false}
-        />
+      value: pv?.claim ? (
+        <ClaimRef claim={pv.claim} />
       ) : (
         "unbound — no claim is using this volume"
       ),
-      tone: claim ? undefined : "warn",
+      tone: pv?.claim ? undefined : "warn",
     },
     {
       label: "Storage class",

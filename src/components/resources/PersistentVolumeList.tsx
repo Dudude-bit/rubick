@@ -4,6 +4,7 @@ import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ClaimRef, StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
@@ -30,16 +31,12 @@ const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   {
     accessorKey: "claim",
     header: "Claim",
-    cell: ({ row }) => (
-      <span className="font-mono text-fg-mut">{row.original.claim || "—"}</span>
-    ),
+    cell: ({ row }) => <ClaimRef claim={row.original.claim} />,
   },
   {
     accessorKey: "storageClass",
     header: "Storage Class",
-    cell: ({ row }) => (
-      <span className="text-fg-mut">{row.original.storageClass || "—"}</span>
-    ),
+    cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
   {
     accessorKey: "age",

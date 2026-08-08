@@ -1,9 +1,9 @@
 import {
-  CircleCheck,
-  CircleMinus,
-  CircleX,
+  Check,
   Clock,
+  Minus,
   TriangleAlert,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,20 +19,28 @@ export type StatusRole = "ok" | "pending" | "warn" | "err" | "neutral";
 /**
  * Shape, not decoration. Severity has to survive greyscale and the roughly
  * one reader in twelve who cannot separate the red from the green, so the
- * glyphs are chosen to differ in outline: a tick, a clock, a triangle, a
+ * glyphs are chosen to differ in *silhouette*: a tick, a clock, a triangle, a
  * cross, a dash.
  *
  * They live beside the roles rather than in `StatusBadge` because a badge is
  * not the only place a role is drawn — a condition row, a container block and
  * a pod picker all say the same five things, and five copies of this table is
  * how `pending` came to be amber in one of them and blue in the rest.
+ *
+ * These used to be the circled variants — `CircleCheck`, `CircleX`,
+ * `CircleMinus` — and a greyscale crop of the condition list is what showed
+ * that at the 10px these are drawn at, the ring is the whole glyph: ok and
+ * err were one silhouette apart by a two-pixel smudge, and hue was doing all
+ * the work the shape was supposed to be doing. Uncircled, the outlines are a
+ * diagonal V, a round face, a triangle, a cross and a line, which is five
+ * things a reader can tell apart with the colour taken away.
  */
 export const ROLE_ICON: Record<StatusRole, LucideIcon> = {
-  ok: CircleCheck,
+  ok: Check,
   pending: Clock,
   warn: TriangleAlert,
-  err: CircleX,
-  neutral: CircleMinus,
+  err: X,
+  neutral: Minus,
 };
 
 export const ROLE_TEXT: Record<StatusRole, string> = {

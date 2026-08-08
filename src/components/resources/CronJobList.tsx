@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import {
@@ -35,7 +36,7 @@ const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     // state of every cronjob and stays quiet text.
     cell: ({ row }) =>
       row.original.suspend ? (
-        <span className="text-warn">Yes</span>
+        <StatusBadge status="Suspended" />
       ) : (
         <span className="text-fg-fnt">No</span>
       ),

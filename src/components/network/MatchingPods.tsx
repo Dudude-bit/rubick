@@ -2,31 +2,16 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useNavigate } from "react-router-dom";
-import { Circle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 interface MatchingPodsProps {
   namespace: string;
   selector: Record<string, string>;
-}
-
-function getPodStatusColor(phase: string): string {
-  switch (phase) {
-    case "Running":
-      return "text-ok";
-    case "Pending":
-      return "text-warn";
-    case "Succeeded":
-      return "text-info";
-    case "Failed":
-      return "text-err";
-    default:
-      return "text-fg-fnt";
-  }
 }
 
 export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
@@ -123,9 +108,6 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
               className="flex cursor-pointer items-center justify-between px-2 py-2.5 hover:bg-hover transition-colors"
             >
               <div className="flex items-center gap-3">
-                <Circle
-                  className={`h-3 w-3 fill-current ${getPodStatusColor(pod.status.display || "Unknown")}`}
-                />
                 <ResourceRef
                   kind={ResourceType.Pod}
                   name={pod.name}
@@ -134,7 +116,7 @@ export function MatchingPods({ namespace, selector }: MatchingPodsProps) {
                 />
               </div>
               <div className="flex items-center gap-3 text-sm text-fg-mut">
-                <span>{pod.status.display}</span>
+                <StatusBadge status={pod.status.display || "Unknown"} />
                 {pod.podIp && (
                   <span className="text-xs">
                     <CopyableAddress value={pod.podIp} label="Pod IP" />

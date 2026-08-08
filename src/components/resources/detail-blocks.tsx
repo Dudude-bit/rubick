@@ -217,8 +217,14 @@ export function ProblemSummary({
         {detail && (
           <p className="mt-0.5 break-words text-xs text-fg-mut">{detail}</p>
         )}
+        {/* Under its own sentence, not flushed to the far edge of a 1160px
+         *  row: "See containers" a thousand pixels from the reason it
+         *  belongs to reads as one of the page's actions rather than as the
+         *  way to the rest of this one. */}
+        {action && (
+          <div className="-ml-1.5 mt-0.5 flex items-center">{action}</div>
+        )}
       </div>
-      {action && <div className="flex flex-none items-center">{action}</div>}
     </div>
   );
 }

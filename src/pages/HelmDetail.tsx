@@ -255,7 +255,6 @@ export function HelmDetail() {
               <TableBody>
                 {history.map((rev) => {
                   const current = rev.revision === release?.revision;
-                  const revFailed = statusRole(rev.status) === "err";
                   return (
                     <TableRow
                       key={rev.revision}
@@ -271,14 +270,7 @@ export function HelmDetail() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={cn(
-                            "text-[11px]",
-                            revFailed ? "text-err" : "text-fg-mut"
-                          )}
-                        >
-                          {rev.status}
-                        </span>
+                        <StatusBadge status={rev.status} />
                       </TableCell>
                       <TableCell className="font-mono text-fg-mut">
                         {rev.chart}

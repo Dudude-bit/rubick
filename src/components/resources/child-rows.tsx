@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { statusRole, type StatusRole } from "@/lib/status-role";
+import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
@@ -29,18 +29,16 @@ export interface ChildRow {
   timestamp?: string | null;
 }
 
-const DOT: Record<StatusRole, string> = {
-  ok: "bg-ok",
-  pending: "bg-warn",
-  warn: "bg-warn",
-  err: "bg-err",
-  neutral: "bg-fg-fnt",
-};
-
-/** Only an abnormal state colours its word; running and completed stay quiet. */
+/**
+ * Only an abnormal state colours its word; running and completed stay quiet.
+ * The dot is `ROLE_DOT`, shared — this file had its own copy in which
+ * `pending` was amber while every other surface drew it blue, so one pod in
+ * ContainerCreating looked like a different severity depending on which
+ * screen you were on.
+ */
 const WORD: Record<StatusRole, string> = {
   ok: "text-fg-fnt",
-  pending: "text-warn",
+  pending: "text-info",
   warn: "text-warn",
   err: "text-err",
   neutral: "text-fg-fnt",
@@ -90,7 +88,7 @@ function ChildRowItem({ row }: { row: ChildRow }) {
       className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
     >
       <span
-        className={cn("h-[7px] w-[7px] rounded-full", DOT[role])}
+        className={cn("h-[7px] w-[7px] rounded-full", ROLE_DOT[role])}
         aria-hidden="true"
       />
       <span className="flex min-w-0 items-baseline gap-2">

@@ -9,6 +9,7 @@ import {
   isRoutableKind,
   ResourceRef,
 } from "@/components/resources/ResourceRef";
+import { eventReasonMark } from "@/lib/event-reason";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { cn, formatAge } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
@@ -119,6 +120,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
   const tone = isCritical ? "text-err" : "text-warn";
   const routable = isRoutableKind(problem.kind, problem.namespace);
   const restarts = problem.restarts ?? 0;
+  const { Icon: ProblemIcon } = eventReasonMark(problem.reason);
 
   const body = (
     <>
@@ -127,8 +129,21 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
       <span className={cn("justify-self-center text-[9px]", tone)}>
         {isCritical ? "●" : "▲"}
       </span>
-      <span className={cn("truncate font-mono font-medium", tone)}>
-        {problem.reason}
+      <span
+        className={cn(
+          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+          tone
+        )}
+      >
+        {/* The same family mark the event feed gives this reason. Severity
+         *  keeps the colour — the ranking on this screen is by severity and
+         *  nothing may compete with it — so the family contributes only its
+         *  shape, exactly as it does on a Warning in the feed. */}
+        <ProblemIcon
+          className="h-2.5 w-2.5 flex-none self-center"
+          aria-hidden="true"
+        />
+        <span className="truncate">{problem.reason}</span>
       </span>
       <span className="truncate text-fg-mid">
         <ResourceRef
@@ -547,29 +562,41 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
       <SectionHeader title="Warning events" count="last hour, by reason" />
       <SectionBody>
         {warnings.map((warning) => (
-          <div
-            key={warning.reason}
-            className="grid grid-cols-[150px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs"
-          >
-            <span className="truncate font-mono font-medium text-warn">
-              {warning.reason}
-              {warning.count > 1 && <Unit> ×{warning.count}</Unit>}
-            </span>
-            <span className="truncate text-fg-mid">
-              {warning.object && (
-                <span className="font-mono">{warning.object}</span>
-              )}
-              {warning.object && warning.sample && " "}
-              {warning.sample && (
-                <span className="text-fg-fnt">{warning.sample}</span>
-              )}
-            </span>
-            <span className="text-right text-[11px] text-fg-fnt">
-              {formatAge(warning.lastSeen)}
-            </span>
-          </div>
+          <WarningRow key={warning.reason} warning={warning} />
         ))}
       </SectionBody>
     </Section>
+  );
+}
+
+function WarningRow({ warning }: { warning: WarningGroup }) {
+  // Every row here is a Warning, so severity owns the colour outright and the
+  // family mark contributes only shape — the feed's rule, applied to the one
+  // event surface that was still rendering a reason as a bare word.
+  const { Icon } = eventReasonMark(warning.reason);
+
+  return (
+    <div className="grid grid-cols-[150px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs">
+      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-warn">
+        <Icon
+          className="h-2.5 w-2.5 flex-none self-center"
+          aria-hidden="true"
+        />
+        <span className="truncate">
+          {warning.reason}
+          {warning.count > 1 && <Unit> ×{warning.count}</Unit>}
+        </span>
+      </span>
+      <span className="truncate text-fg-mid">
+        {warning.object && <span className="font-mono">{warning.object}</span>}
+        {warning.object && warning.sample && " "}
+        {warning.sample && (
+          <span className="text-fg-fnt">{warning.sample}</span>
+        )}
+      </span>
+      <span className="text-right text-[11px] text-fg-fnt">
+        {formatAge(warning.lastSeen)}
+      </span>
+    </div>
   );
 }

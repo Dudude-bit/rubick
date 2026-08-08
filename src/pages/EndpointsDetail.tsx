@@ -7,6 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -124,8 +125,10 @@ export function EndpointsDetail() {
                     <TableCell>
                       <CopyableAddress value={address.ip} label="Address" />
                     </TableCell>
-                    <TableCell className={ready ? "text-fg-mut" : "text-warn"}>
-                      {ready ? "Ready" : "Not ready"}
+                    <TableCell>
+                      <StatusBadge status={ready ? "Ready" : "NotReady"}>
+                        {ready ? "Ready" : "Not ready"}
+                      </StatusBadge>
                     </TableCell>
                     <TableCell>
                       {address.targetRef ? (

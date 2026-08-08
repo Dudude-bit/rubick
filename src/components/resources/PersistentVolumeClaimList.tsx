@@ -5,12 +5,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
+import { ResourceRef } from "./ResourceRef";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
@@ -35,11 +37,16 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     accessorKey: "volume",
     header: "Volume",
-    cell: ({ row }) => (
-      <span className="font-mono text-fg-mut">
-        {row.original.volume || "—"}
-      </span>
-    ),
+    cell: ({ row }) =>
+      row.original.volume ? (
+        <ResourceRef
+          kind={ResourceType.PersistentVolume}
+          name={row.original.volume}
+          showKind={false}
+        />
+      ) : (
+        <span className="text-fg-fnt">—</span>
+      ),
   },
   createCapacityColumn<PersistentVolumeClaimInfo>(),
   createAccessModesColumn<PersistentVolumeClaimInfo>(),
@@ -47,9 +54,7 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     accessorKey: "storageClass",
     header: "Storage Class",
     cell: ({ row }) => (
-      <span className="text-fg-mut">
-        {row.original.storageClass || "default"}
-      </span>
+      <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),
   },
   {
