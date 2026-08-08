@@ -206,7 +206,15 @@ export function PodDetail() {
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
   // nobody has asked, so this stays null for an ordinary visit.
-  const [logContainer, setLogContainer] = useState<string | null>(null);
+  //
+  // The pod it was asked for is stored with it: this page stays mounted
+  // across a move to another pod, and a container name is not unique
+  // between them — carrying `app` over would solo a container in a pod
+  // nobody asked about.
+  const [logRequest, setLogRequest] = useState<{
+    pod: string;
+    container: string;
+  } | null>(null);
 
   const {
     resource: pod,
@@ -289,8 +297,11 @@ export function PodDetail() {
     setShowTerminal(true);
   };
 
+  const podKey = `${namespace}/${name}`;
+  const logContainer = logRequest?.pod === podKey ? logRequest.container : null;
+
   const openLogs = (containerName: string) => {
-    setLogContainer(containerName);
+    setLogRequest({ pod: podKey, container: containerName });
     setActiveTab("logs");
   };
 
