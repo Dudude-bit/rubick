@@ -3,12 +3,14 @@
 
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{
-    Container, ContainerStateTerminated, EnvVar, EnvVarSource as K8sEnvVarSource, NodeCondition,
-    PodCondition, PodStatus,
+    Container, ContainerStateTerminated, ContainerStatus, EnvVar, EnvVarSource as K8sEnvVarSource,
+    NodeCondition, PodCondition, PodStatus,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::resources::serialization::OwnerReference;
+
+use super::pod_display::is_sidecar;
 
 /// Extract owner references from Kubernetes metadata
 pub fn extract_owner_references(
@@ -206,6 +208,24 @@ impl From<&NodeCondition> for ConditionInfo {
 
 // ============= Container =============
 
+/// When a container runs, relative to the rest of the pod.
+///
+/// One container type with a phase rather than a parallel
+/// `InitContainerInfo`: an init container and an app container differ by
+/// when they run, not by what they are, and every field below means the
+/// same thing for both. `Sidecar` is an init container with
+/// `restartPolicy: Always` — it starts during init and never finishes,
+/// so it belongs to neither group on screen. The judgement is made once,
+/// in `pod_display`, and shipped; the frontend never sees a restart
+/// policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ContainerPhase {
+    App,
+    Init,
+    Sidecar,
+}
+
 /// Container information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -213,12 +233,19 @@ pub struct ContainerInfo {
     pub name: String,
     pub image: String,
     pub ready: bool,
+    pub phase: ContainerPhase,
     pub state: ContainerState,
     /// How the previous run of this container ended.
     ///
     /// The only place the exit code of a crash-looping container exists:
     /// its *current* state is `Waiting · CrashLoopBackOff`, which says
     /// that it dies and never why.
+    ///
+    /// It is also the answer to "is there a previous run to read?" —
+    /// the kubelet sets `lastState.terminated` for exactly the container
+    /// instances whose logs `--previous` can still fetch, so a caller
+    /// offering that control can tell beforehand whether it would work
+    /// instead of finding out from an error.
     pub last_terminated: Option<TerminationInfo>,
     pub restart_count: i32,
     pub ports: Vec<ContainerPortInfo>,
@@ -227,10 +254,37 @@ pub struct ContainerInfo {
 }
 
 impl ContainerInfo {
+    /// A `.spec.containers` entry, matched to `.status.containerStatuses`.
     pub fn from_container(container: &Container, pod_status: Option<&PodStatus>) -> Self {
-        let container_status = pod_status
-            .and_then(|s| s.container_statuses.as_ref())
-            .and_then(|cs| cs.iter().find(|c| c.name == container.name));
+        Self::build(
+            container,
+            pod_status.and_then(|s| s.container_statuses.as_ref()),
+            ContainerPhase::App,
+        )
+    }
+
+    /// A `.spec.initContainers` entry, matched to
+    /// `.status.initContainerStatuses` — a different list, which is why
+    /// init containers were invisible while this only read one of them.
+    pub fn from_init_container(container: &Container, pod_status: Option<&PodStatus>) -> Self {
+        let phase = if is_sidecar(container) {
+            ContainerPhase::Sidecar
+        } else {
+            ContainerPhase::Init
+        };
+        Self::build(
+            container,
+            pod_status.and_then(|s| s.init_container_statuses.as_ref()),
+            phase,
+        )
+    }
+
+    fn build(
+        container: &Container,
+        statuses: Option<&Vec<ContainerStatus>>,
+        phase: ContainerPhase,
+    ) -> Self {
+        let container_status = statuses.and_then(|cs| cs.iter().find(|c| c.name == container.name));
 
         let (ready, state, last_terminated, restart_count) = if let Some(cs) = container_status {
             let state = if cs.state.as_ref().and_then(|s| s.running.as_ref()).is_some() {
@@ -276,6 +330,7 @@ impl ContainerInfo {
             name: container.name.clone(),
             image: container.image.clone().unwrap_or_default(),
             ready,
+            phase,
             state,
             last_terminated,
             restart_count,

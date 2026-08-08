@@ -13,8 +13,8 @@ pub mod pod_display;
 pub mod service;
 
 pub use common::{
-    extract_owner_references, ConditionInfo, ContainerInfo, ContainerPortInfo, ContainerState,
-    EnvFromInfo, EnvVarInfo, EnvVarSourceInfo, EnvVarSourceType, TerminationInfo,
+    extract_owner_references, ConditionInfo, ContainerInfo, ContainerPhase, ContainerPortInfo,
+    ContainerState, EnvFromInfo, EnvVarInfo, EnvVarSourceInfo, EnvVarSourceType, TerminationInfo,
 };
 pub use deployment::{
     DeploymentContainerInfo, DeploymentContainerResources, DeploymentInfo, ReplicaInfo,

@@ -16,7 +16,9 @@
 //! `From` impl — gets it for free.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod, PodStatus};
+use k8s_openapi::api::core::v1::{
+    Container, ContainerStateTerminated, ContainerStatus, Pod, PodStatus,
+};
 
 /// The kubelet's placeholder while it sets a pod up; kubectl skips it in
 /// favour of the `Init:i/n` progress counter.
@@ -54,13 +56,21 @@ fn last_terminated(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
 }
 
 /// Init containers that keep running alongside the app containers.
-fn is_sidecar(pod: &Pod, index: usize) -> bool {
+///
+/// The one place that judgement is made. `ContainerInfo` ships it to
+/// the frontend as a phase so nothing downstream has to know that a
+/// sidecar is spelled `restartPolicy: Always` on an init container.
+#[must_use]
+pub fn is_sidecar(container: &Container) -> bool {
+    container.restart_policy.as_deref() == Some(ALWAYS)
+}
+
+fn sidecar_at(pod: &Pod, index: usize) -> bool {
     pod.spec
         .as_ref()
         .and_then(|s| s.init_containers.as_ref())
         .and_then(|c| c.get(index))
-        .and_then(|c| c.restart_policy.as_deref())
-        == Some(ALWAYS)
+        .is_some_and(is_sidecar)
 }
 
 /// The first init container that has not finished, if there is one. It
@@ -77,7 +87,7 @@ fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
                 .as_ref()
                 .and_then(|s| s.terminated.as_ref())
                 .is_some_and(|t| t.exit_code == 0);
-            let up = is_sidecar(pod, *index) && cs.started.unwrap_or(false);
+            let up = sidecar_at(pod, *index) && cs.started.unwrap_or(false);
             !done && !up
         })
 }
@@ -198,7 +208,7 @@ pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
         for (index, cs) in statuses.iter().enumerate() {
             total += cs.restart_count;
             note(&mut last, cs);
-            if is_sidecar(pod, index) {
+            if sidecar_at(pod, index) {
                 sidecar_total += cs.restart_count;
                 note(&mut sidecar_last, cs);
             }

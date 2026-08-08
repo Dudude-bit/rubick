@@ -24,6 +24,19 @@ pub struct PodInfo {
     pub pod_ip: Option<String>,
     pub host_ip: Option<String>,
     pub containers: Vec<ContainerInfo>,
+    /// `.spec.initContainers`, in the order the kubelet runs them.
+    ///
+    /// The order is the whole point: an init container that is waiting
+    /// at position 2 has not failed, it has not been given a turn, and
+    /// no per-container state says that on its own. Sidecars stay in
+    /// this list at their spec position and are told apart by `phase` —
+    /// hoisting them into a list of their own would throw the position
+    /// away, and it is the position that explains the ones behind them.
+    ///
+    /// Kept beside `containers` rather than merged into it because the
+    /// two answer different questions, and because everything already
+    /// reading `containers` means app containers by it.
+    pub init_containers: Vec<ContainerInfo>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -51,6 +64,15 @@ impl From<&Pod> for PodInfo {
                 s.containers
                     .iter()
                     .map(|c| ContainerInfo::from_container(c, status))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let init_containers = spec
+            .and_then(|s| s.init_containers.as_ref())
+            .map(|cs| {
+                cs.iter()
+                    .map(|c| ContainerInfo::from_init_container(c, status))
                     .collect()
             })
             .unwrap_or_default();
@@ -119,6 +141,7 @@ impl From<&Pod> for PodInfo {
             pod_ip: status.and_then(|s| s.pod_ip.clone()),
             host_ip: status.and_then(|s| s.host_ip.clone()),
             containers,
+            init_containers,
             labels: pod.labels().clone(),
             annotations: pod.annotations().clone(),
             created_at: pod.creation_timestamp().map(|t| t.0),
@@ -189,5 +212,243 @@ impl PodStatusInfo {
             message: status.message.clone(),
             reason: status.reason.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::{ContainerPhase, ContainerState};
+    use k8s_openapi::api::core::v1::{
+        Container, ContainerState as K8sContainerState, ContainerStateRunning,
+        ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, PodSpec, PodStatus,
+    };
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+
+    fn init_container(name: &str, sidecar: bool) -> Container {
+        Container {
+            name: name.to_string(),
+            image: Some("busybox:1.36".to_string()),
+            restart_policy: sidecar.then(|| "Always".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn status(name: &str, state: K8sContainerState) -> ContainerStatus {
+        ContainerStatus {
+            name: name.to_string(),
+            state: Some(state),
+            ..Default::default()
+        }
+    }
+
+    fn succeeded(at: DateTime<Utc>) -> K8sContainerState {
+        K8sContainerState {
+            terminated: Some(ContainerStateTerminated {
+                exit_code: 0,
+                reason: Some("Completed".to_string()),
+                finished_at: Some(Time(at)),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn waiting(reason: &str) -> K8sContainerState {
+        K8sContainerState {
+            waiting: Some(ContainerStateWaiting {
+                reason: Some(reason.to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// `init-demo`: `wait-for-db` succeeds, `migrate` crash-loops,
+    /// `seed` never gets a turn, and the app container never starts.
+    fn init_demo(finished_at: DateTime<Utc>, failed_at: DateTime<Utc>) -> Pod {
+        let mut migrate = status("migrate", waiting("CrashLoopBackOff"));
+        migrate.restart_count = 4;
+        migrate.last_state = Some(K8sContainerState {
+            terminated: Some(ContainerStateTerminated {
+                exit_code: 1,
+                reason: Some("Error".to_string()),
+                finished_at: Some(Time(failed_at)),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        Pod {
+            spec: Some(PodSpec {
+                init_containers: Some(vec![
+                    init_container("wait-for-db", false),
+                    init_container("migrate", false),
+                    init_container("seed", false),
+                ]),
+                containers: vec![init_container("app", false)],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                phase: Some("Pending".to_string()),
+                init_container_statuses: Some(vec![
+                    status("wait-for-db", succeeded(finished_at)),
+                    migrate,
+                    status("seed", waiting("PodInitializing")),
+                ]),
+                container_statuses: Some(vec![status("app", waiting("PodInitializing"))]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn init_containers_reach_the_frontend_in_the_order_they_run() {
+        let info = PodInfo::from(&init_demo(Utc::now(), Utc::now()));
+
+        assert_eq!(
+            info.init_containers
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["wait-for-db", "migrate", "seed"],
+            "spec order is the run order, and it is the only thing that says \
+             `seed` did not fail but never started",
+        );
+        assert_eq!(
+            info.containers
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["app"],
+            "app containers stay where every existing consumer looks for them",
+        );
+    }
+
+    #[test]
+    fn a_failing_init_container_carries_the_exit_it_is_backing_off_from() {
+        let failed_at = Utc::now();
+        let info = PodInfo::from(&init_demo(Utc::now(), failed_at));
+        let migrate = &info.init_containers[1];
+
+        assert!(matches!(
+            &migrate.state,
+            ContainerState::Waiting { reason } if reason.as_deref() == Some("CrashLoopBackOff")
+        ));
+        assert_eq!(migrate.restart_count, 4);
+        let death = migrate
+            .last_terminated
+            .as_ref()
+            .expect("a crash-looping container has a previous run to read");
+        assert_eq!(death.exit_code, 1);
+        assert_eq!(death.finished_at, Some(failed_at));
+    }
+
+    /// The distinction the whole rail exists to draw: one of these has
+    /// run and failed, the other has never been started.
+    #[test]
+    fn a_never_started_init_container_has_no_previous_run() {
+        let info = PodInfo::from(&init_demo(Utc::now(), Utc::now()));
+
+        assert!(info.init_containers[1].last_terminated.is_some());
+        assert!(
+            info.init_containers[2].last_terminated.is_none(),
+            "`seed` never ran, so a previous-run request for it has no answer",
+        );
+        assert_eq!(info.init_containers[2].restart_count, 0);
+    }
+
+    /// A finished init container is a historical fact, not an absence.
+    /// The state has to carry *when*, or the only thing the UI can say
+    /// is "not running" — which is also true of a container that has
+    /// not started yet.
+    #[test]
+    fn a_finished_init_container_reports_when_it_finished() {
+        let finished_at = Utc::now();
+        let info = PodInfo::from(&init_demo(finished_at, Utc::now()));
+
+        match &info.init_containers[0].state {
+            ContainerState::Terminated { termination } => {
+                assert_eq!(termination.exit_code, 0);
+                assert_eq!(termination.finished_at, Some(finished_at));
+            }
+            other => panic!("expected a finished init container, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn every_container_says_which_phase_it_belongs_to() {
+        let info = PodInfo::from(&init_demo(Utc::now(), Utc::now()));
+
+        assert!(info
+            .init_containers
+            .iter()
+            .all(|c| c.phase == ContainerPhase::Init));
+        assert_eq!(info.containers[0].phase, ContainerPhase::App);
+    }
+
+    /// `sidecar-demo`: `proxy` is an init container that never finishes.
+    /// The frontend must not have to know it is spelled
+    /// `restartPolicy: Always`.
+    #[test]
+    fn a_sidecar_is_marked_as_one_without_shipping_its_restart_policy() {
+        let mut proxy = status(
+            "proxy",
+            K8sContainerState {
+                running: Some(ContainerStateRunning::default()),
+                ..Default::default()
+            },
+        );
+        proxy.started = Some(true);
+
+        let pod = Pod {
+            spec: Some(PodSpec {
+                init_containers: Some(vec![
+                    init_container("prepare", false),
+                    init_container("proxy", true),
+                ]),
+                containers: vec![init_container("app", false)],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                phase: Some("Running".to_string()),
+                init_container_statuses: Some(vec![
+                    status("prepare", succeeded(Utc::now())),
+                    proxy,
+                ]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let info = PodInfo::from(&pod);
+        assert_eq!(info.init_containers[0].phase, ContainerPhase::Init);
+        assert_eq!(
+            info.init_containers[1].phase,
+            ContainerPhase::Sidecar,
+            "a sidecar keeps its position in the init sequence and is told \
+             apart by phase, not by being moved to another list",
+        );
+        assert!(matches!(
+            info.init_containers[1].state,
+            ContainerState::Running
+        ));
+    }
+
+    #[test]
+    fn a_pod_without_init_containers_reports_an_empty_sequence() {
+        let pod = Pod {
+            spec: Some(PodSpec {
+                containers: vec![init_container("app", false)],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                phase: Some("Running".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert!(PodInfo::from(&pod).init_containers.is_empty());
     }
 }

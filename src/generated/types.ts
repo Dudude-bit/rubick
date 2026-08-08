@@ -662,6 +662,7 @@ export interface PodInfo {
   podIp: string | null;
   hostIp: string | null;
   containers: ContainerInfo[];
+  initContainers: ContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
@@ -678,6 +679,7 @@ export interface ContainerInfo {
   name: string;
   image: string;
   ready: boolean;
+  phase: ContainerPhase;
   state: ContainerState;
   lastTerminated: TerminationInfo | null;
   restartCount: number;
@@ -1246,6 +1248,8 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
+
+export type ContainerPhase = "app" | "init" | "sidecar";
 
 export type MetricsStatusKind =
   | "available"
