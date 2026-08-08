@@ -16,8 +16,12 @@ import { ImageRef } from "@/components/resources/ImageRef";
 import { KeyValueList, type KeyValue } from "@/components/resources/detail-kv";
 import {
   containerSequence,
+  podContainers,
+  templateSequence,
   type ContainerStep,
+  type PodContainerLists,
   type StepMark,
+  type TemplateContainerLists,
 } from "@/lib/container-sequence";
 import {
   containerStatus,
@@ -25,7 +29,11 @@ import {
   lastTermination,
   terminationWhen,
 } from "@/lib/pod-status";
-import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
+import type {
+  ContainerInfo,
+  ContainerPhase,
+  DeploymentContainerInfo,
+} from "@/generated/types";
 
 /**
  * A pod's containers, and a deployment's container template, as metadata
@@ -36,13 +44,17 @@ import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
  * requests and limits — so the row list is built per container instead of
  * being forced into one shared table.
  *
- * A pod's containers are also not a set. Init containers run in order and
- * each waits on the one before it, sidecars start during init and never
- * finish, app containers run together — so runtime containers are grouped
- * by phase and the init group is drawn as a rail. One renderer for all
- * three: an init container and an app container differ by *when* they
- * run, not by what they are, and every block below means the same thing
- * for both.
+ * Neither is a set. Init containers run in order and each waits on the
+ * one before it, sidecars start during init and never finish, app
+ * containers run together — so both views are grouped by phase and the
+ * init group is drawn as a rail. One renderer for all three phases and
+ * for both views: an init container and an app container differ by *when*
+ * they run, not by what they are, and five detail pages sharing one
+ * template type have to share the grouping too or they drift.
+ *
+ * The two are given as whole lists rather than one array because handing
+ * this component `deployment.containers` is exactly the bug it exists to
+ * fix, and a prop that cannot be passed is a better guard than a comment.
  */
 
 function isRuntime(
@@ -78,8 +90,18 @@ const STEP_MARK: Record<
   queued: { icon: Minus, ring: "ring-hair", text: "text-fg-fnt" },
 };
 
-function StepMarker({ mark }: { mark: StepMark }) {
-  const { icon: Icon, ring, text, dot } = STEP_MARK[mark];
+function Marker({ mark }: { mark: StepMark | null }) {
+  // No mark is the template's case: there is no run, so there is nothing
+  // for a tick or a cross to be about. The pip is only the position, and
+  // says so by being the same weight as the rail it sits on.
+  const {
+    icon: Icon,
+    ring,
+    text,
+    dot,
+  } = mark
+    ? STEP_MARK[mark]
+    : { icon: null, ring: "ring-hair", text: "text-fg-fnt", dot: "bg-fg-fnt" };
   return (
     <span
       aria-hidden="true"
@@ -94,13 +116,7 @@ function StepMarker({ mark }: { mark: StepMark }) {
   );
 }
 
-export interface ContainerRowsProps {
-  /**
-   * Runtime containers of every phase at once, in run order:
-   * `[...pod.initContainers, ...pod.containers]`. Or a deployment's spec
-   * template, which has no phases and is drawn as one group.
-   */
-  containers: (ContainerInfo | DeploymentContainerInfo)[];
+interface ContainerRowsCommon {
   namespace?: string;
   /** Enables the port-forward affordance on a running container's ports. */
   podName?: string;
@@ -110,49 +126,58 @@ export interface ContainerRowsProps {
   onOpenLogs?: (containerName: string) => void;
 }
 
-export function ContainerRows({
-  containers,
-  namespace,
-  podName,
-  onOpenShell,
-  onUpdateImage,
-  onOpenLogs,
-}: ContainerRowsProps) {
-  if (containers.length === 0) {
+export type ContainerRowsProps = ContainerRowsCommon &
+  (
+    | { pod: PodContainerLists | undefined; template?: never }
+    | { template: TemplateContainerLists | undefined; pod?: never }
+  );
+
+/** A group of blocks, with the rail drawn where there is an order to draw. */
+interface Row {
+  container: ContainerInfo | DeploymentContainerInfo;
+  step?: ContainerStep;
+}
+
+interface Group {
+  phase: ContainerPhase;
+  title: string;
+  caption: string;
+  /** Ordered, and the order is the payload for `init`. */
+  rows: Row[];
+}
+
+export function ContainerRows(props: ContainerRowsProps) {
+  const { namespace, podName, onOpenShell, onUpdateImage, onOpenLogs } = props;
+
+  const groups: Group[] = props.pod
+    ? containerSequence(podContainers(props.pod)).map((group) => ({
+        ...group,
+        rows: group.steps.map((step) => ({ container: step.container, step })),
+      }))
+    : props.template
+      ? templateSequence(props.template).map((group) => ({
+          ...group,
+          rows: group.containers.map((container) => ({ container })),
+        }))
+      : [];
+
+  if (groups.length === 0) {
     return <p className="text-xs text-fg-fnt">No containers</p>;
   }
 
-  const runtime = containers.filter(isRuntime);
-  // A spec template has no runtime and therefore no sequence; mixing the
-  // two never happens, so the flat rendering stays for that one caller.
-  if (runtime.length !== containers.length) {
-    return (
-      <div className="flex flex-col gap-[22px]">
-        {containers.map((container) => (
-          <ContainerBlock
-            key={container.name}
-            container={container}
-            namespace={namespace}
-            podName={podName}
-            onOpenShell={onOpenShell}
-            onUpdateImage={onUpdateImage}
-            onOpenLogs={onOpenLogs}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  const groups = containerSequence(runtime);
   // One group is the whole pod, and the tab strip has already said
-  // "Containers" — a caption over it would only say it again.
-  const captioned = groups.length > 1;
+  // "Containers" — a caption over it would only say it again. A template
+  // with one group has no sequence either, so it loses the rail with it:
+  // a pip beside every row of the deployment that declares nothing but an
+  // app container is decoration.
+  const grouped = groups.length > 1;
+  const marked = grouped || props.pod !== undefined;
 
   return (
     <div className="flex flex-col gap-7">
       {groups.map((group) => (
         <div key={group.phase} className="flex flex-col gap-2.5">
-          {captioned && (
+          {grouped && (
             <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
               {group.title}
               <span className="font-normal normal-case tracking-normal">
@@ -162,25 +187,31 @@ export function ContainerRows({
             </p>
           )}
           <div className="flex flex-col gap-[22px]">
-            {group.steps.map((step, index) => (
+            {group.rows.map((row, index) => (
               <div
-                key={step.container.name}
-                className="relative grid grid-cols-[13px_1fr] gap-x-2.5"
+                key={row.container.name}
+                className={
+                  marked
+                    ? "relative grid grid-cols-[13px_1fr] gap-x-2.5"
+                    : "relative"
+                }
               >
                 {/* The rail, drawn only where there is an order to draw:
                     the init sequence. It runs from this mark into the
                     gap above the next one, which is what makes "seed is
                     behind migrate" readable without a sentence. */}
-                {group.phase === "init" && index < group.steps.length - 1 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute bottom-[-28px] left-[6px] top-4 w-px bg-hair"
-                  />
-                )}
-                <StepMarker mark={step.mark} />
+                {marked &&
+                  group.phase === "init" &&
+                  index < group.rows.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-[-28px] left-[6px] top-4 w-px bg-hair"
+                    />
+                  )}
+                {marked && <Marker mark={row.step?.mark ?? null} />}
                 <ContainerBlock
-                  container={step.container}
-                  step={step}
+                  container={row.container}
+                  step={row.step}
                   namespace={namespace}
                   podName={podName}
                   onOpenShell={onOpenShell}

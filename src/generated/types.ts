@@ -461,6 +461,7 @@ export interface CronJobDetailInfo {
   lastSchedule: string | null;
   lastSuccessfulTime: string | null;
   containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   ownerReferences: OwnerReference[];
@@ -479,6 +480,7 @@ export interface OwnerReference {
 export interface DeploymentContainerInfo {
   name: string;
   image: string;
+  phase: ContainerPhase;
   ports: number[];
   resources: DeploymentContainerResources;
   env: EnvVarInfo[];
@@ -537,6 +539,7 @@ export interface JobDetailInfo {
   startTime: string | null;
   completionTime: string | null;
   containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -574,6 +577,7 @@ export interface DaemonSetDetailInfo {
   available: number;
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   selector: Record<string, string>;
@@ -600,6 +604,7 @@ export interface StatefulSetDetailInfo {
   podManagementPolicy: string | null;
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -719,6 +724,7 @@ export interface DeploymentInfo {
   replicas: ReplicaInfo;
   strategy: string | null;
   containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
@@ -1243,13 +1249,13 @@ export type EnvVarSourceType =
   | "fieldRef"
   | "resourceFieldRef";
 
+export type ContainerPhase = "app" | "init" | "sidecar";
+
 export type ContainerState =
   | { type: "running" }
   | { type: "waiting"; reason: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
-
-export type ContainerPhase = "app" | "init" | "sidecar";
 
 export type MetricsStatusKind =
   | "available"

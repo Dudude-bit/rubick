@@ -37,6 +37,7 @@ function buildCronJob(
     lastSchedule: new Date(Date.now() - 3_600_000).toISOString(),
     lastSuccessfulTime: new Date(Date.now() - 3_600_000).toISOString(),
     containers: [],
+    initContainers: [],
     labels: {},
     annotations: {},
     ownerReferences: [],

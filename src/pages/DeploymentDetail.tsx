@@ -44,6 +44,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { declaredContainers } from "@/lib/container-sequence";
 import {
   ConditionRows,
   DetailAction,
@@ -156,7 +157,15 @@ export function DeploymentDetail() {
     let totalMemoryLimits = 0;
     let totalMemoryRequests = 0;
 
-    deployment.containers.forEach((c) => {
+    // Sidecars, not just app containers: a native sidecar runs for the
+    // life of the pod, so the scheduler adds its request to the app
+    // containers' and the ceiling this chart draws has to match. An
+    // ordinary init container has exited before any of this is measured.
+    const sustained = declaredContainers(deployment).filter(
+      (c) => c.phase !== "init"
+    );
+
+    sustained.forEach((c) => {
       if (c.resources?.limits?.cpu) {
         totalCpuLimits += parseKubernetesCPU(c.resources.limits.cpu);
       }
@@ -320,7 +329,7 @@ export function DeploymentDetail() {
     { label: "Up to date", value: replicas?.updated ?? 0, mono: true },
     {
       label: "Containers",
-      value: deployment?.containers.length ?? 0,
+      value: deployment ? declaredContainers(deployment).length : 0,
       mono: true,
     },
   ];
@@ -353,7 +362,7 @@ export function DeploymentDetail() {
       glyph: viewGlyph(Layers2),
       content: (
         <ContainerRows
-          containers={deployment?.containers ?? []}
+          template={deployment}
           namespace={namespace}
           onUpdateImage={openImageDialog}
         />

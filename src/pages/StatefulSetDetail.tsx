@@ -15,6 +15,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { declaredContainers } from "@/lib/container-sequence";
 import {
   Composition,
   ConditionRows,
@@ -112,12 +113,7 @@ export function StatefulSetDetail() {
         id: "container-template",
         label: "Template",
         glyph: viewGlyph(Layers2),
-        content: (
-          <ContainerRows
-            containers={statefulSet?.containers ?? []}
-            namespace={namespace}
-          />
-        ),
+        content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
       {
         id: toPlural(ResourceType.Pod),
@@ -190,7 +186,7 @@ export function StatefulSetDetail() {
     },
     {
       label: "Containers",
-      value: statefulSet?.containers.length ?? 0,
+      value: statefulSet ? declaredContainers(statefulSet).length : 0,
       mono: true,
     },
   ];

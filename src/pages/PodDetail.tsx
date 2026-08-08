@@ -590,7 +590,7 @@ export function PodDetail() {
               : countMark(pod ? podContainers(pod).length : 0),
           content: pod ? (
             <ContainerRows
-              containers={podContainers(pod)}
+              pod={pod}
               namespace={pod.namespace}
               podName={pod.name}
               onOpenShell={openTerminal}

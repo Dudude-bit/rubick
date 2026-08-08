@@ -6,7 +6,12 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
-import { podContainers, podReadiness } from "@/lib/container-sequence";
+import {
+  declaredContainers,
+  podReadiness,
+  PHASE_LABEL,
+  type ContainerLists,
+} from "@/lib/container-sequence";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
 import {
@@ -18,7 +23,7 @@ import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue } from "./key-values";
-import type { OwnerReference } from "@/generated/types";
+import type { ContainerPhase, OwnerReference } from "@/generated/types";
 
 /**
  * What each kind says about itself in the peek's Overview tab.
@@ -76,14 +81,37 @@ function controlledBy(
   ];
 }
 
-function images(containers: { name: string; image: string }[]): PeekGroup[] {
+/**
+ * Every image the thing runs, in run order, each row saying which kind of
+ * container it belongs to.
+ *
+ * Given the lists rather than an array, because `images(x.containers)` is
+ * precisely how this group came to leave out a mesh proxy on all five
+ * workload kinds. There is no room for the sequence UI in a peek row, so
+ * the phase arrives as the word beside the name that the pod's Containers
+ * tab prints for the same reason: without it, a reader counting three
+ * images cannot tell which one their pod is actually serving from.
+ */
+function images(
+  lists: ContainerLists<{ name: string; image: string; phase: ContainerPhase }>
+): PeekGroup[] {
+  const containers = declaredContainers(lists);
   if (!containers.length) return [];
   return [
     {
       title: "Images",
       count: containers.length > 1 ? containers.length : undefined,
       items: containers.map((container) => ({
-        label: container.name,
+        label: (
+          <>
+            {container.name}
+            {PHASE_LABEL[container.phase] && (
+              <span className="ml-1.5 text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+                {PHASE_LABEL[container.phase]}
+              </span>
+            )}
+          </>
+        ),
         value: <ImageRef image={container.image} />,
       })),
     },
@@ -146,7 +174,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         // Every image, init and sidecar included: "which proxy build was
         // injected into this pod" is a question asked of this row, and the
         // app container's image never answers it.
-        ...images(podContainers(pod)),
+        ...images(pod),
         {
           title: "Requests and limits",
           items: [
@@ -194,7 +222,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         ],
       },
       ...controlledBy(deployment.ownerReferences, deployment.namespace),
-      ...images(deployment.containers),
+      ...images(deployment),
     ],
   })),
 
@@ -221,7 +249,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: "Update strategy", value: set.updateStrategy || "—" },
         ],
       },
-      ...images(set.containers),
+      ...images(set),
     ],
   })),
 
@@ -243,7 +271,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: "Update strategy", value: set.updateStrategy || "—" },
         ],
       },
-      ...images(set.containers),
+      ...images(set),
     ],
   })),
 
@@ -275,7 +303,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         ],
       },
       ...controlledBy(job.ownerReferences, job.namespace),
-      ...images(job.containers),
+      ...images(job),
     ],
   })),
 
@@ -300,7 +328,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: "Concurrency", value: cron.concurrencyPolicy || "Allow" },
         ],
       },
-      ...images(cron.containers),
+      ...images(cron),
     ],
   })),
 

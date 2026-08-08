@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{DeploymentContainerInfo, OptionTimeExt};
+use crate::resources::{DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
 /// Basic CronJob info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +64,9 @@ pub struct CronJobDetailInfo {
     pub last_schedule: Option<String>,
     pub last_successful_time: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
+    /// The template's `initContainers`, in the order the kubelet would run
+    /// them, with each sidecar marked by its `phase`.
+    pub init_containers: Vec<DeploymentContainerInfo>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub owner_references: Vec<OwnerReference>,
@@ -75,17 +78,10 @@ impl From<&CronJob> for CronJobDetailInfo {
         let spec = cj.spec.as_ref();
         let status = cj.status.as_ref();
 
-        let containers = spec
-            .and_then(|s| s.job_template.spec.as_ref())
-            .and_then(|job_spec| job_spec.template.spec.as_ref())
-            .map(|pod_spec| {
-                pod_spec
-                    .containers
-                    .iter()
-                    .map(DeploymentContainerInfo::from)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let template = TemplateContainers::of(
+            spec.and_then(|s| s.job_template.spec.as_ref())
+                .and_then(|job_spec| job_spec.template.spec.as_ref()),
+        );
 
         Self {
             name: cj.name_any(),
@@ -107,7 +103,8 @@ impl From<&CronJob> for CronJobDetailInfo {
             last_successful_time: status
                 .and_then(|s| s.last_successful_time.as_ref())
                 .to_rfc3339_opt(),
-            containers,
+            containers: template.containers,
+            init_containers: template.init_containers,
             labels: cj.labels().clone(),
             annotations: cj.annotations().clone(),
             owner_references: extract_owner_references(cj.metadata.owner_references.as_ref()),

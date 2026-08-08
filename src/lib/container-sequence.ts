@@ -2,6 +2,7 @@ import type {
   ContainerInfo,
   ContainerPhase,
   ContainerPortInfo,
+  DeploymentContainerInfo,
 } from "@/generated/types";
 import {
   containerStatus,
@@ -49,6 +50,59 @@ export interface ContainerGroup {
   steps: ContainerStep[];
 }
 
+/** The heading a phase gets, the same word for a run and a declaration. */
+const GROUP_TITLE: Record<ContainerPhase, string> = {
+  init: "Init",
+  sidecar: "Sidecars",
+  app: "Containers",
+};
+
+/** A container, or a declaration of one — anything that knows when it runs. */
+interface Phased {
+  phase: ContainerPhase;
+}
+
+/**
+ * The two lists a pod object and a workload template both carry.
+ *
+ * Generic because the split is the same fact in both: `initContainers` is
+ * a separate field in the API object, and everything already reading
+ * `containers` means app containers by it. Taking *this* rather than an
+ * array is what makes `podReadiness(pod.containers)` — and every other
+ * form of the bug — a type error instead of a convention.
+ */
+export interface ContainerLists<T extends Phased> {
+  initContainers?: T[];
+  containers: T[];
+}
+
+export type PodContainerLists = ContainerLists<ContainerInfo>;
+/** A Deployment, StatefulSet, DaemonSet, Job or CronJob's pod template. */
+export type TemplateContainerLists = ContainerLists<DeploymentContainerInfo>;
+
+/**
+ * Both lists, in the order the kubelet runs them.
+ *
+ * The two are separate on the wire because they are separate in the API
+ * object, and every consumer that wants "the containers of this thing"
+ * wants them concatenated in this order — a caller handed only
+ * `.containers` is the bug this whole piece exists to fix, on a pod and
+ * on the five kinds that share one template type alike.
+ */
+export function declaredContainers<T extends Phased>(
+  lists: ContainerLists<T>
+): T[] {
+  return [...(lists.initContainers ?? []), ...lists.containers];
+}
+
+function splitByPhase<T extends Phased>(containers: readonly T[]) {
+  return {
+    init: containers.filter((c) => c.phase === "init"),
+    sidecars: containers.filter((c) => c.phase === "sidecar"),
+    app: containers.filter((c) => c.phase === "app"),
+  };
+}
+
 /** Terminated cleanly — the only outcome that lets the sequence advance. */
 export function containerSucceeded(container: ContainerInfo): boolean {
   const { state } = container;
@@ -76,31 +130,9 @@ function markOf(container: ContainerInfo): StepMark {
   return "queued";
 }
 
-/**
- * A pod, as far as anything asking about its containers is concerned.
- *
- * Every helper below takes *this*, never one of the two lists. That is
- * deliberate and it is the guard: `podReadiness(pod.containers)` does not
- * compile, because a `ContainerInfo[]` has no `.containers`. Reading
- * `.containers` alone is the whole bug class, and the only way to stop it
- * coming back is to make the wrong argument a type error rather than a
- * convention somebody has to remember.
- */
-export interface PodContainerLists {
-  initContainers?: ContainerInfo[];
-  containers: ContainerInfo[];
-}
-
-/**
- * Every container the pod ran, in the order it ran them.
- *
- * The two lists are separate on the wire because they are separate in
- * the API object, and every consumer that wants "the pod's containers"
- * wants them concatenated in this order — a viewer handed only
- * `.containers` is the bug this whole piece exists to fix.
- */
+/** Every container the pod ran, in the order it ran them. */
 export function podContainers(pod: PodContainerLists): ContainerInfo[] {
-  return [...(pod.initContainers ?? []), ...pod.containers];
+  return declaredContainers(pod);
 }
 
 /**
@@ -334,11 +366,7 @@ function noteFor(
 export function containerSequence(
   containers: readonly ContainerInfo[]
 ): ContainerGroup[] {
-  const init = containers.filter((c) => c.phase === "init");
-  const sidecars = containers.filter((c) => c.phase === "sidecar");
-  const app = containers.filter(
-    (c) => c.phase !== "init" && c.phase !== "sidecar"
-  );
+  const { init, sidecars, app } = splitByPhase(containers);
 
   // The first init container that has not succeeded is what everything
   // after it is waiting on — including the app containers.
@@ -358,7 +386,7 @@ export function containerSequence(
   if (init.length > 0) {
     groups.push({
       phase: "init",
-      title: "Init",
+      title: GROUP_TITLE.init,
       caption: "run in order before the pod starts, each waiting on the last",
       steps: init.map(step),
     });
@@ -366,7 +394,7 @@ export function containerSequence(
   if (sidecars.length > 0) {
     groups.push({
       phase: "sidecar",
-      title: "Sidecars",
+      title: GROUP_TITLE.sidecar,
       // Neither group: sidecars start during init and never finish, so
       // filing them with the init sequence would imply they completed
       // and filing them with the app containers would imply they
@@ -378,12 +406,68 @@ export function containerSequence(
   if (app.length > 0) {
     groups.push({
       phase: "app",
-      title: "Containers",
+      title: GROUP_TITLE.app,
       caption:
         blockedBy !== null
           ? "never started — the pod is still in init"
           : "run together for the life of the pod",
       steps: app.map(step),
+    });
+  }
+  return groups;
+}
+
+export interface TemplateGroup {
+  phase: ContainerPhase;
+  title: string;
+  caption: string;
+  /** In the order the template declares them, which is the order they run. */
+  containers: DeploymentContainerInfo[];
+}
+
+/**
+ * The same three groups for a template, said in the tense a template
+ * deserves.
+ *
+ * A declaration has no run to report, so there is no `ContainerStep`
+ * here: no mark, no state badge, no "finished 3s ago". Position still
+ * means something — the kubelet runs init containers in the order they
+ * are written — and that is the one live-looking thing kept, because it
+ * is a fact about the spec rather than about any pod made from it.
+ *
+ * The captions carry the whole difference between the two views. "started
+ * during init and still running" is a claim about a process; the template
+ * can only say what will happen when a pod is made, and saying more would
+ * be the same class of lie as calling a queued container "never started".
+ */
+export function templateSequence(
+  template: TemplateContainerLists
+): TemplateGroup[] {
+  const { init, sidecars, app } = splitByPhase(declaredContainers(template));
+
+  const groups: TemplateGroup[] = [];
+  if (init.length > 0) {
+    groups.push({
+      phase: "init",
+      title: GROUP_TITLE.init,
+      caption: "run in order before each pod starts, each waiting on the last",
+      containers: init,
+    });
+  }
+  if (sidecars.length > 0) {
+    groups.push({
+      phase: "sidecar",
+      title: GROUP_TITLE.sidecar,
+      caption: "start during init and run for the life of each pod",
+      containers: sidecars,
+    });
+  }
+  if (app.length > 0) {
+    groups.push({
+      phase: "app",
+      title: GROUP_TITLE.app,
+      caption: "run together for the life of each pod",
+      containers: app,
     });
   }
   return groups;

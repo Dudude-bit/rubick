@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt};
+use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
 /// Basic DaemonSet info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +52,9 @@ pub struct DaemonSetDetailInfo {
     pub available: i32,
     pub update_strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
+    /// The template's `initContainers`, in the order the kubelet would run
+    /// them, with each sidecar marked by its `phase`.
+    pub init_containers: Vec<DeploymentContainerInfo>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub selector: BTreeMap<String, String>,
@@ -65,16 +68,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
         let spec = ds.spec.as_ref();
         let status = ds.status.as_ref();
 
-        let containers = spec
-            .and_then(|s| s.template.spec.as_ref())
-            .map(|pod_spec| {
-                pod_spec
-                    .containers
-                    .iter()
-                    .map(DeploymentContainerInfo::from)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let template = TemplateContainers::of(spec.and_then(|s| s.template.spec.as_ref()));
 
         let conditions = status
             .and_then(|s| s.conditions.as_ref())
@@ -97,7 +91,8 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             update_strategy: spec
                 .and_then(|s| s.update_strategy.as_ref())
                 .and_then(|s| s.type_.clone()),
-            containers,
+            containers: template.containers,
+            init_containers: template.init_containers,
             labels: ds.labels().clone(),
             annotations: ds.annotations().clone(),
             selector,

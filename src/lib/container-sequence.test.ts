@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { ContainerInfo, TerminationInfo } from "@/generated/types";
+import type {
+  ContainerInfo,
+  DeploymentContainerInfo,
+  TerminationInfo,
+} from "@/generated/types";
 import {
   containerSequence,
+  declaredContainers,
   podContainers,
   podPorts,
   podReadiness,
   shellTargets,
+  templateSequence,
 } from "./container-sequence";
 
 function termination(
@@ -162,6 +168,78 @@ describe("podContainers", () => {
         containers: [container("app")],
       }).map((c) => c.name)
     ).toEqual(["wait-for-db", "migrate", "app"]);
+  });
+});
+
+function declared(
+  name: string,
+  overrides: Partial<DeploymentContainerInfo> = {}
+): DeploymentContainerInfo {
+  return {
+    name,
+    image: "busybox:1.36",
+    phase: "app",
+    ports: [],
+    resources: { requests: {}, limits: {} },
+    env: [],
+    envFrom: [],
+    ...overrides,
+  };
+}
+
+/**
+ * The `meshed-demo` specimen's template: an ordinary init container, a
+ * native sidecar, and the app container. All five kinds that share
+ * `DeploymentContainerInfo` showed only `app` before this.
+ */
+const meshedTemplate = {
+  initContainers: [
+    declared("wait-for-config", { phase: "init" as const }),
+    declared("proxy", { phase: "sidecar" as const }),
+  ],
+  containers: [declared("app")],
+};
+
+describe("templateSequence", () => {
+  it("groups a template the way the pod's Containers tab groups a run", () => {
+    expect(
+      templateSequence(meshedTemplate).map((group) => [
+        group.phase,
+        group.containers.map((c) => c.name),
+      ])
+    ).toEqual([
+      ["init", ["wait-for-config"]],
+      ["sidecar", ["proxy"]],
+      ["app", ["app"]],
+    ]);
+  });
+
+  it("says what will happen rather than what has, because nothing has", () => {
+    // A template is a declaration. "started during init and still
+    // running" is a claim about a process, and there is no process — it
+    // would be the same lie as calling a queued container failed.
+    const captions = templateSequence(meshedTemplate).map((g) => g.caption);
+    expect(captions).toEqual([
+      "run in order before each pod starts, each waiting on the last",
+      "start during init and run for the life of each pod",
+      "run together for the life of each pod",
+    ]);
+  });
+
+  it("leaves an ordinary template as one group, with no sequence to draw", () => {
+    // The common case, and it must not grow a rail: spec order between
+    // two app containers says nothing, unlike between two init ones.
+    expect(templateSequence({ containers: [declared("app")] })).toHaveLength(1);
+  });
+});
+
+describe("declaredContainers", () => {
+  it("carries a template's init containers, which five detail pages dropped", () => {
+    expect(declaredContainers(meshedTemplate).map((c) => c.name)).toEqual([
+      "wait-for-config",
+      "proxy",
+      "app",
+    ]);
   });
 });
 

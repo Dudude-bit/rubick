@@ -18,6 +18,7 @@ pub use common::{
 };
 pub use deployment::{
     DeploymentContainerInfo, DeploymentContainerResources, DeploymentInfo, ReplicaInfo,
+    TemplateContainers,
 };
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};

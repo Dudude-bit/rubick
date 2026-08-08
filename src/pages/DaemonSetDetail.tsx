@@ -15,6 +15,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { declaredContainers } from "@/lib/container-sequence";
 import {
   Composition,
   ConditionRows,
@@ -116,12 +117,7 @@ export function DaemonSetDetail() {
         id: "container-template",
         label: "Template",
         glyph: viewGlyph(Layers2),
-        content: (
-          <ContainerRows
-            containers={daemonSet?.containers ?? []}
-            namespace={namespace}
-          />
-        ),
+        content: <ContainerRows template={daemonSet} namespace={namespace} />,
       },
       {
         id: toPlural(ResourceType.Pod),
@@ -176,7 +172,7 @@ export function DaemonSetDetail() {
     { label: "Available", value: available, mono: true },
     {
       label: "Containers",
-      value: daemonSet?.containers.length ?? 0,
+      value: daemonSet ? declaredContainers(daemonSet).length : 0,
       mono: true,
     },
   ];

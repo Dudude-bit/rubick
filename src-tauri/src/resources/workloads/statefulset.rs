@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt};
+use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +60,9 @@ pub struct StatefulSetDetailInfo {
     pub pod_management_policy: Option<String>,
     pub update_strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
+    /// The template's `initContainers`, in the order the kubelet would run
+    /// them, with each sidecar marked by its `phase`.
+    pub init_containers: Vec<DeploymentContainerInfo>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
@@ -72,16 +75,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
         let spec = ss.spec.as_ref();
         let status = ss.status.as_ref();
 
-        let containers = spec
-            .and_then(|s| s.template.spec.as_ref())
-            .map(|pod_spec| {
-                pod_spec
-                    .containers
-                    .iter()
-                    .map(DeploymentContainerInfo::from)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let template = TemplateContainers::of(spec.and_then(|s| s.template.spec.as_ref()));
 
         let conditions = status
             .and_then(|s| s.conditions.as_ref())
@@ -102,7 +96,8 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             update_strategy: spec
                 .and_then(|s| s.update_strategy.as_ref())
                 .and_then(|s| s.type_.clone()),
-            containers,
+            containers: template.containers,
+            init_containers: template.init_containers,
             labels: ss.labels().clone(),
             annotations: ss.annotations().clone(),
             conditions,

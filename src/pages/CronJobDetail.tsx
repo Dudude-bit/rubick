@@ -13,6 +13,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { declaredContainers } from "@/lib/container-sequence";
 import { JobRows } from "@/components/resources/child-rows";
 import {
   describeCron,
@@ -177,12 +178,7 @@ export function CronJobDetail() {
         id: "container-template",
         label: "Template",
         glyph: viewGlyph(Layers2),
-        content: (
-          <ContainerRows
-            containers={cronJob?.containers ?? []}
-            namespace={namespace}
-          />
-        ),
+        content: <ContainerRows template={cronJob} namespace={namespace} />,
       },
       {
         id: toPlural(ResourceType.Job),
@@ -240,7 +236,7 @@ export function CronJobDetail() {
     },
     {
       label: "Containers",
-      value: cronJob?.containers.length ?? 0,
+      value: cronJob ? declaredContainers(cronJob).length : 0,
       mono: true,
     },
   ];
