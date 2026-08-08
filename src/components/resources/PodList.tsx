@@ -15,7 +15,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
 } from "./columns";
-import type { ContainerInfo } from "@/generated/types";
+import { podReadiness } from "@/lib/container-sequence";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "./ResourceList";
 import { ResourceRef } from "./ResourceRef";
@@ -26,12 +26,6 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
-
-// Helper to format ready containers count
-function formatReady(containers: ContainerInfo[]): string {
-  const ready = containers.filter((c) => c.ready).length;
-  return `${ready}/${containers.length}`;
-}
 
 export function PodList() {
   const navigate = useNavigate();
@@ -65,11 +59,17 @@ export function PodList() {
       {
         id: "ready",
         header: "Ready",
-        cell: ({ row }) => (
-          <span className="font-mono text-fg-mid">
-            {formatReady(row.original.containers)}
-          </span>
-        ),
+        // The number people compare against `kubectl get pod` in the next
+        // window, so it is kubectl's number: sidecars in both halves,
+        // finished init containers in neither.
+        cell: ({ row }) => {
+          const { ready, total } = podReadiness(row.original);
+          return (
+            <span className="font-mono text-fg-mid">
+              {ready}/{total}
+            </span>
+          );
+        },
       },
       {
         id: "restarts",

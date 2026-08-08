@@ -46,6 +46,7 @@ import {
   type PeekAction,
   type PeekActionId,
 } from "./peek-actions";
+import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
 import { ScaleDialog } from "./ScaleDialog";
 
 /**
@@ -174,7 +175,8 @@ export function PeekActions({
   };
 
   const openShell = () => {
-    const container = reachableContainer(pod) ?? pod?.containers[0];
+    const container =
+      reachableContainer(pod) ?? (pod ? lifetimeContainers(pod)[0] : undefined);
     if (!container) return;
     navigate(
       `${getResourceDetailUrl("Pod", target.name, namespace)}?shell=${encodeURIComponent(container.name)}`
@@ -259,7 +261,9 @@ export function PeekActions({
           onOpenChange={(open) => setDialog(open ? "debug" : null)}
           podName={pod.name}
           namespace={pod.namespace}
-          containers={pod.containers.map((container) => container.name)}
+          containers={lifetimeContainers(pod).map(
+            (container) => container.name
+          )}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />
@@ -323,11 +327,16 @@ export function PeekActions({
   );
 }
 
-/** The port a forward to this pod would default to: the first one declared. */
+/**
+ * The port a forward to this pod would default to: the first one the app
+ * containers declare, and only then a sidecar's — `podPorts` puts them in
+ * that order, so the default is the reader's own port rather than the
+ * proxy that was injected beside it.
+ */
 function podForward(pod: PodInfo | undefined): ForwardBackend | null {
   if (!pod) return null;
-  const port = pod.containers.flatMap((container) => container.ports)[0];
-  return port ? { podName: pod.name, port: port.containerPort } : null;
+  const first = podPorts(pod)[0];
+  return first ? { podName: pod.name, port: first.port.containerPort } : null;
 }
 
 async function resolveServiceBackend(

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { ContainerInfo, TerminationInfo } from "@/generated/types";
-import { containerSequence, podContainers } from "./container-sequence";
+import {
+  containerSequence,
+  podContainers,
+  podPorts,
+  podReadiness,
+  shellTargets,
+} from "./container-sequence";
 
 function termination(
   overrides: Partial<TerminationInfo> = {}
@@ -156,5 +162,169 @@ describe("podContainers", () => {
         containers: [container("app")],
       }).map((c) => c.name)
     ).toEqual(["wait-for-db", "migrate", "app"]);
+  });
+});
+
+/**
+ * The `sidecar-demo` specimen, exactly as the cluster reports it: a
+ * finished ordinary init container, a running sidecar, a running app
+ * container. `kubectl get pod sidecar-demo` says `2/2`.
+ *
+ * `prepare` carrying `ready: true` is not a mistake in this fixture — the
+ * kubelet really does leave it set on an init container that exited 0,
+ * and it is the whole reason a tally over both lists reads `3/3`.
+ */
+const meshedPod = {
+  initContainers: [
+    container("prepare", {
+      phase: "init" as const,
+      ready: true,
+      state: { type: "terminated" as const, termination: termination() },
+    }),
+    container("proxy", {
+      phase: "sidecar" as const,
+      ready: true,
+      ports: [{ name: "proxy", containerPort: 15001, protocol: "TCP" }],
+    }),
+  ],
+  containers: [
+    container("app", {
+      ready: true,
+      ports: [{ name: "http", containerPort: 8080, protocol: "TCP" }],
+    }),
+  ],
+};
+
+describe("podReadiness", () => {
+  it("counts a sidecar in both halves and an ordinary init container in neither", () => {
+    // Verified against `kubectl get pod -n k8s-gui-test`, which reports
+    // this pod 2/2. Reading `.containers` alone says 1/1; adding every
+    // init container says 3/3; both are wrong in the same window.
+    expect(podReadiness(meshedPod)).toEqual({
+      ready: 2,
+      total: 2,
+      allReady: true,
+    });
+  });
+
+  it("keeps the sidecar in the denominator when it is the thing that is down", () => {
+    expect(
+      podReadiness({
+        ...meshedPod,
+        initContainers: [
+          meshedPod.initContainers[0],
+          container("proxy", {
+            phase: "sidecar",
+            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            lastTerminated: termination({ exitCode: 1 }),
+          }),
+        ],
+      })
+    ).toEqual({ ready: 1, total: 2, allReady: false });
+  });
+
+  it("reports 0 of 1 for a pod stuck in init, as kubectl does", () => {
+    // `init-demo`: `Init:CrashLoopBackOff`, nothing running, `0/1`.
+    expect(
+      podReadiness({
+        initContainers: stuckInInit.slice(0, 3),
+        containers: [stuckInInit[3]],
+      })
+    ).toEqual({ ready: 0, total: 1, allReady: false });
+  });
+
+  it("does not count a container that is ready but no longer running", () => {
+    // kubectl's numerator is `Ready && Running`; a job pod whose container
+    // has exited is `0/1` however its last `ready` was left.
+    expect(
+      podReadiness({
+        containers: [
+          container("app", {
+            ready: true,
+            state: { type: "terminated", termination: termination() },
+          }),
+        ],
+      }).ready
+    ).toBe(0);
+  });
+
+  it("cannot be handed one of the two lists", () => {
+    // The guard, and the reason it is here rather than in a comment: this
+    // line is a type error, `tsc --noEmit` is a gate, and an unused
+    // `@ts-expect-error` fails just as loudly. Widening `podReadiness` to
+    // take a `ContainerInfo[]` — which is how every one of these call
+    // sites was wrong in the first place — breaks the build.
+    // @ts-expect-error a pod's containers are not a pod
+    expect(() => podReadiness(meshedPod.containers)).toThrow();
+  });
+});
+
+describe("podPorts", () => {
+  it("offers the sidecar's port, and the app's first", () => {
+    expect(
+      podPorts(meshedPod).map(({ container: c, port }) => [
+        c.name,
+        port.containerPort,
+      ])
+    ).toEqual([
+      ["app", 8080],
+      ["proxy", 15001],
+    ]);
+  });
+
+  it("leaves out a port declared by an ordinary init container", () => {
+    // It has exited. Nothing is listening on it, and a forward to it fails.
+    expect(
+      podPorts({
+        initContainers: [
+          container("prepare", {
+            phase: "init",
+            state: { type: "terminated", termination: termination() },
+            ports: [{ name: null, containerPort: 9999, protocol: "TCP" }],
+          }),
+        ],
+        containers: [meshedPod.containers[0]],
+      }).map(({ port }) => port.containerPort)
+    ).toEqual([8080]);
+  });
+});
+
+describe("shellTargets", () => {
+  it("can reach a sidecar, and reaches the app container first", () => {
+    expect(shellTargets(meshedPod).map((c) => c.name)).toEqual([
+      "app",
+      "proxy",
+    ]);
+  });
+
+  it("does not make a finished init container look attachable", () => {
+    expect(shellTargets(meshedPod).map((c) => c.name)).not.toContain("prepare");
+  });
+
+  it("falls to the sidecar when it is the only live process left", () => {
+    expect(
+      shellTargets({
+        ...meshedPod,
+        containers: [
+          container("app", {
+            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            lastTerminated: termination({ exitCode: 1 }),
+          }),
+        ],
+      }).map((c) => c.name)
+    ).toEqual(["proxy"]);
+  });
+
+  it("offers an init container that is running right now", () => {
+    // A long migration is the one shell in the pod worth having, and it is
+    // liveness that decides this, not which list the container came from.
+    expect(
+      shellTargets({
+        initContainers: [container("migrate", { phase: "init" })],
+        containers: [
+          container("app", { state: { type: "waiting", reason: null } }),
+        ],
+      }).map((c) => c.name)
+    ).toEqual(["migrate"]);
   });
 });

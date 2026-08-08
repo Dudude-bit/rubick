@@ -57,7 +57,11 @@ import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { failingCondition } from "@/lib/condition-health";
-import { podContainers } from "@/lib/container-sequence";
+import {
+  lifetimeContainers,
+  podContainers,
+  podReadiness,
+} from "@/lib/container-sequence";
 import { statusRole } from "@/lib/status-role";
 import {
   describeRestarts,
@@ -462,12 +466,9 @@ export function PodDetail() {
     {
       label: "Containers",
       value: pod
-        ? `${pod.containers.filter((c) => c.ready).length} of ${pod.containers.length} ready`
+        ? `${podReadiness(pod).ready} of ${podReadiness(pod).total} ready`
         : "—",
-      tone:
-        pod && pod.containers.some((c) => !c.ready)
-          ? ("warn" as const)
-          : undefined,
+      tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
   ];
 
@@ -728,7 +729,7 @@ export function PodDetail() {
           onOpenChange={setDebugDialogOpen}
           podName={pod.name}
           namespace={pod.namespace}
-          containers={pod.containers.map((c) => c.name)}
+          containers={lifetimeContainers(pod).map((c) => c.name)}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />

@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import {
+  podContainers,
+  podPorts,
+  shellTargets,
+} from "@/lib/container-sequence";
 import { toKind, toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
 
@@ -123,24 +128,25 @@ function actionsFor(
 
 const FINISHED_PHASES = new Set(["succeeded", "completed"]);
 
-function running(pod: PodInfo) {
-  return pod.containers.find(
-    (container) => container.state.type === "running" && container.ready
-  );
-}
-
-/** The container a shell or a forward would reach, ready or merely running. */
+/**
+ * The container a shell or a forward would reach.
+ *
+ * `shellTargets` decides both what counts and what comes first — app
+ * container, then sidecar, then a running init container. On a meshed pod
+ * whose app container has not come up, the sidecar is a real shell and
+ * this used to report there was none.
+ */
 export function reachableContainer(pod: PodInfo | undefined) {
   if (!pod) return undefined;
-  return (
-    running(pod) ??
-    pod.containers.find((container) => container.state.type === "running")
-  );
+  return shellTargets(pod)[0];
 }
 
 /** "app is waiting · ImagePullBackOff", when the API says that much. */
 function waitingNote(pod: PodInfo): string {
-  const waiting = pod.containers.find(
+  // Init containers included: a pod held at `Init:ImagePullBackOff` has
+  // app containers that all read `PodInitializing`, and the one container
+  // that knows what is wrong is in the other list.
+  const waiting = podContainers(pod).find(
     (container) => container.state.type === "waiting"
   );
   if (!waiting || waiting.state.type !== "waiting") return "";
@@ -167,9 +173,7 @@ function podActions(pod: PodInfo | undefined): PeekAction[] {
     shellReason = `No container is running yet — this pod is ${phase}${waitingNote(pod)}.`;
   }
 
-  const declaresPorts = !!pod?.containers.some(
-    (container) => container.ports.length > 0
-  );
+  const declaresPorts = !!pod && podPorts(pod).length > 0;
   let forwardReason: string | undefined;
   if (pod && !declaresPorts) {
     forwardReason =

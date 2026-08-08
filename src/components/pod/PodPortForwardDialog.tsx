@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PHASE_LABEL, podPorts } from "@/lib/container-sequence";
 import type { PodInfo, PortForwardSessionInfo } from "@/generated/types";
 
 export interface PortForwardFormState {
@@ -63,14 +64,13 @@ export function PodPortForwardDialog({
   portForwardStatusBySession,
   onStopSession,
 }: PodPortForwardDialogProps) {
-  const allPorts = pod.containers.flatMap((container) =>
-    container.ports.map((port) => ({
-      containerName: container.name,
-      port: port.containerPort,
-      name: port.name,
-      protocol: port.protocol,
-    }))
-  );
+  // Sidecars included, app ports first. A mesh proxy's port is the one a
+  // forward is usually aimed at, and it is not on `.containers` at all.
+  const allPorts = podPorts(pod);
+  // Only worth the ink once more than one container is offering ports —
+  // otherwise every preset repeats the same name.
+  const showOwner =
+    new Set(allPorts.map((entry) => entry.container.name)).size > 1;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,24 +95,34 @@ export function PodPortForwardDialog({
             <div className="space-y-2">
               <Label>Quick presets</Label>
               <div className="flex flex-wrap gap-2">
-                {allPorts.map((p) => (
+                {allPorts.map(({ container, port }) => (
                   <Button
-                    key={`${p.containerName}-${p.port}`}
+                    key={`${container.name}-${port.containerPort}`}
                     variant="outline"
                     size="sm"
                     onClick={() =>
                       setForm((prev) => ({
                         ...prev,
-                        localPort: String(p.port),
-                        remotePort: String(p.port),
-                        name: p.name || `${pod.name}:${p.port}`,
+                        localPort: String(port.containerPort),
+                        remotePort: String(port.containerPort),
+                        name: port.name || `${pod.name}:${port.containerPort}`,
                       }))
                     }
                   >
-                    {p.name ? `${p.name} (${p.port})` : String(p.port)}
+                    {port.name
+                      ? `${port.name} (${port.containerPort})`
+                      : String(port.containerPort)}
                     <span className="ml-1 text-xs text-fg-mut">
-                      {p.protocol}
+                      {port.protocol}
                     </span>
+                    {showOwner && (
+                      <span className="ml-1.5 font-mono text-xs text-fg-fnt">
+                        · {container.name}
+                        {PHASE_LABEL[container.phase]
+                          ? ` ${PHASE_LABEL[container.phase]}`
+                          : ""}
+                      </span>
+                    )}
                   </Button>
                 ))}
               </div>

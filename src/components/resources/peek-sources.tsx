@@ -6,6 +6,7 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
+import { podContainers, podReadiness } from "@/lib/container-sequence";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
 import {
@@ -96,68 +97,74 @@ const workloadStatus = (ready: number, desired: number) =>
   desired > 0 && ready >= desired ? "Ready" : "Progressing";
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
-  Pod: source(commands.getPod, (pod) => ({
-    status: pod.status.display,
-    createdAt: pod.createdAt,
-    groups: [
-      {
-        title: "Placement",
-        items: [
-          {
-            label: "Node",
-            value: pod.nodeName ? ref("Node", pod.nodeName) : "unscheduled",
-            tone: pod.nodeName ? undefined : "warn",
-          },
-          {
-            label: "Pod IP",
-            value: <CopyableAddress value={pod.podIp} label="Pod IP" />,
-          },
-          {
-            label: "Restarts",
-            value: describeRestarts(pod),
-            tone: pod.restartCount > 0 ? "warn" : undefined,
-          },
-          {
-            label: "Containers",
-            value: `${pod.containers.filter((c) => c.ready).length} of ${pod.containers.length} ready`,
-            tone: pod.containers.some((c) => !c.ready) ? "warn" : undefined,
-          },
-          // Only when it disagrees with the badge above. `Phase Running`
-          // under a `Running` badge is the same word twice; `Phase
-          // Running` under `CrashLoopBackOff` is the fact an SRE came for.
-          ...(pod.status.phase !== pod.status.display
-            ? [{ label: "Phase", value: pod.status.phase, mono: true }]
-            : []),
-          ...(pod.status.message || pod.status.reason
-            ? [
-                {
-                  label: "Reason",
-                  value: pod.status.message || pod.status.reason || "",
-                  tone: "err" as const,
-                },
-              ]
-            : []),
-        ],
-      },
-      ...controlledBy(pod.ownerReferences, pod.namespace),
-      ...images(pod.containers),
-      {
-        title: "Requests and limits",
-        items: [
-          {
-            label: "CPU",
-            value: `${pod.cpuRequests || "—"} → ${pod.cpuLimits || "unlimited"}`,
-            mono: true,
-          },
-          {
-            label: "Memory",
-            value: `${pod.memoryRequests || "—"} → ${pod.memoryLimits || "unlimited"}`,
-            mono: true,
-          },
-        ],
-      },
-    ],
-  })),
+  Pod: source(commands.getPod, (pod) => {
+    const readiness = podReadiness(pod);
+    return {
+      status: pod.status.display,
+      createdAt: pod.createdAt,
+      groups: [
+        {
+          title: "Placement",
+          items: [
+            {
+              label: "Node",
+              value: pod.nodeName ? ref("Node", pod.nodeName) : "unscheduled",
+              tone: pod.nodeName ? undefined : "warn",
+            },
+            {
+              label: "Pod IP",
+              value: <CopyableAddress value={pod.podIp} label="Pod IP" />,
+            },
+            {
+              label: "Restarts",
+              value: describeRestarts(pod),
+              tone: pod.restartCount > 0 ? "warn" : undefined,
+            },
+            {
+              label: "Containers",
+              value: `${readiness.ready} of ${readiness.total} ready`,
+              tone: readiness.allReady ? undefined : "warn",
+            },
+            // Only when it disagrees with the badge above. `Phase Running`
+            // under a `Running` badge is the same word twice; `Phase
+            // Running` under `CrashLoopBackOff` is the fact an SRE came for.
+            ...(pod.status.phase !== pod.status.display
+              ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+              : []),
+            ...(pod.status.message || pod.status.reason
+              ? [
+                  {
+                    label: "Reason",
+                    value: pod.status.message || pod.status.reason || "",
+                    tone: "err" as const,
+                  },
+                ]
+              : []),
+          ],
+        },
+        ...controlledBy(pod.ownerReferences, pod.namespace),
+        // Every image, init and sidecar included: "which proxy build was
+        // injected into this pod" is a question asked of this row, and the
+        // app container's image never answers it.
+        ...images(podContainers(pod)),
+        {
+          title: "Requests and limits",
+          items: [
+            {
+              label: "CPU",
+              value: `${pod.cpuRequests || "—"} → ${pod.cpuLimits || "unlimited"}`,
+              mono: true,
+            },
+            {
+              label: "Memory",
+              value: `${pod.memoryRequests || "—"} → ${pod.memoryLimits || "unlimited"}`,
+              mono: true,
+            },
+          ],
+        },
+      ],
+    };
+  }),
 
   Deployment: source(commands.getDeployment, (deployment) => ({
     status: workloadStatus(

@@ -3,6 +3,7 @@ import { Terminal, TerminalMetadata } from "./Terminal";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
@@ -174,8 +175,10 @@ export function PodTerminal({
       try {
         const pod = await commands.getPod(podName, namespace);
 
-        // Check regular containers
-        const container = pod.containers?.find(
+        // Both lists: a shell attached to a sidecar is attached to an
+        // entry of `.initContainers`, and looking for it in `.containers`
+        // found nothing and left the pane open over a dead process.
+        const container = podContainers(pod).find(
           (item) => item.name === containerName
         );
 

@@ -243,7 +243,7 @@ function PeekContainersTab({
   isLoading: boolean;
 }) {
   if (isLoading || !pod) return <RowsSkeleton rows={5} />;
-  if (pod.containers.length === 0) {
+  if (podContainers(pod).length === 0) {
     return (
       <TabNote
         title="This pod declares no containers."

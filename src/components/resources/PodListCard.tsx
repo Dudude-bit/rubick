@@ -1,3 +1,4 @@
+import { podReadiness } from "@/lib/container-sequence";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
 import type { PodInfo } from "@/generated/types";
@@ -16,8 +17,7 @@ export function PodListCard({
     <ChildRows
       emptyMessage={emptyMessage}
       rows={pods.map((pod) => {
-        const total = pod.containers?.length ?? 0;
-        const ready = pod.containers?.filter((c) => c.ready).length ?? 0;
+        const { ready, total } = podReadiness(pod);
         const restarts = pod.restartCount ?? 0;
         return {
           kind: ResourceType.Pod,

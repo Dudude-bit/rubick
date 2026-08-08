@@ -5,9 +5,11 @@ import {
   PHASE_LABEL,
   containerSucceeded,
   podContainers,
+  shellTargets,
+  whyNoShell,
 } from "@/lib/container-sequence";
 import { lastTermination, terminationWhen } from "@/lib/pod-status";
-import type { ContainerInfo, PodInfo } from "@/generated/types";
+import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
 
@@ -20,38 +22,6 @@ import { PodTerminal } from "./PodTerminal";
  * out of the bottom of a page that scrolls. Everything here is wiring:
  * `PodTerminal` still owns the session and every way one can end.
  */
-
-/** Waiting reasons that mean "not yet", rather than "no". */
-const NOT_STARTED = new Set([
-  "podinitializing",
-  "containercreating",
-  "creating",
-]);
-
-/**
- * Why a shell cannot attach to this container, or nothing if it can.
- *
- * The container stays on the chooser either way, struck out and carrying the
- * reason: a container that silently is not on the list makes the reader
- * wonder whether they misremembered its name, and the answer to "why can I
- * not shell into `prepare`" is a fact about `prepare`, not an absence.
- */
-function whyNoShell(container: ContainerInfo): string | null {
-  const { state } = container;
-  if (state.type === "running") return null;
-  if (state.type === "terminated") {
-    return state.termination.exitCode === 0
-      ? "finished, nothing to attach to"
-      : `exited ${state.termination.exitCode}, nothing to attach to`;
-  }
-  if (state.type === "waiting") {
-    const reason = state.reason ?? "";
-    if (NOT_STARTED.has(reason.toLowerCase())) return "has not started";
-    if (container.lastTerminated) return "not running between restarts";
-    return reason ? `not running · ${reason}` : "not running";
-  }
-  return "state unknown, nothing to attach to";
-}
 
 /** `whitespace-nowrap` because a container name broken across two lines
  *  with a hyphen reads as two names. */
@@ -307,18 +277,18 @@ export function PodShell({
     [containers]
   );
 
-  const attachable = containers.filter((c) => whyNoShell(c) === null);
+  // Phase order, so the shell that opens by itself is the reader's own
+  // container and a sidecar is only picked when nothing else can take one.
+  // The chooser above stays in run order — there, position is what explains
+  // a container that never got a turn.
+  const attachable = useMemo(() => shellTargets(pod), [pod]);
   // A chosen container is kept even once it dies: the terminal's own banner
   // says what happened to it, where quietly re-pointing at a sibling would
   // hand the reader another container's prompt under the name they picked.
   const chosen = container
     ? (containers.find((c) => c.name === container) ?? null)
     : null;
-  const target =
-    chosen ??
-    (ended
-      ? null
-      : (attachable.find((c) => c.phase === "app") ?? attachable[0] ?? null));
+  const target = chosen ?? (ended ? null : (attachable[0] ?? null));
 
   const hollow = attachable.length === 0 ? noShell(pod) : null;
 
