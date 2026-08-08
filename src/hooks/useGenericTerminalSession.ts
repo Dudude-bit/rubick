@@ -28,7 +28,13 @@ export function useGenericTerminalSession({
   const [error, setError] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void)[]>([]);
   const statusRef = useRef<SessionStatus>("idle");
-  const isMountedRef = useRef(false);
+  // A component is mounted while its own effects run. Starting this at `false`
+  // meant the effect below — declared first, so it runs first — could not tell
+  // that it was, and skipped the `setStatus("connected")` that every keystroke
+  // is gated on. It only bit when the session id was already known at mount,
+  // which is what happens the first time the lazy xterm chunk loads slower
+  // than `openPodShell` answers.
+  const isMountedRef = useRef(true);
   const currentSessionIdRef = useRef<string | null>(null);
 
   // Use refs for callbacks to avoid re-running effect when they change
@@ -40,6 +46,14 @@ export function useGenericTerminalSession({
     onOutputRef.current = onOutput;
     onCloseRef.current = onClose;
   }, [onOutput, onClose]);
+
+  // `send` and `resize` are called from xterm's own handlers rather than from
+  // a render, so they read the status from a ref — which was declared and then
+  // never written. Every keystroke typed into a pod shell was compared against
+  // a permanent "idle" and dropped.
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const cleanupSession = useCallback(async () => {
     unlistenRef.current.forEach((u) => u());
