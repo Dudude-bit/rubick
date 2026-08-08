@@ -22,5 +22,5 @@ pub use deployment::{
 };
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};
-pub use pod::{PodInfo, PodStatusInfo};
+pub use pod::{PodInfo, PodStatusInfo, PodVolumeInfo, VolumeMountInfo, VolumeObjectRef};
 pub use service::{ServiceInfo, ServicePortInfo};

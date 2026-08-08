@@ -585,6 +585,17 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
   // family mark contributes only shape — the feed's rule, applied to the one
   // event surface that was still rendering a reason as a bare word.
   const { Icon } = eventReasonMark(warning.reason);
+  // The same `Kind/name` this row always printed, now under the mark and hue
+  // every other naming of the same object carries. `showKind` stays on for
+  // exactly that reason: nothing beside it says the kind.
+  const subject =
+    warning.objectKind && warning.objectName
+      ? {
+          kind: warning.objectKind,
+          name: warning.objectName,
+          namespace: warning.namespace,
+        }
+      : null;
 
   return (
     <div className="grid grid-cols-[150px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs">
@@ -599,10 +610,25 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         </span>
       </span>
       <span className="truncate text-fg-mid">
-        {warning.object && <span className="font-mono">{warning.object}</span>}
-        {warning.object && warning.sample && " "}
+        {subject && (
+          <ResourceRef
+            kind={subject.kind}
+            name={subject.name}
+            namespace={subject.namespace}
+          />
+        )}
+        {subject && warning.sample && " "}
         {warning.sample && (
-          <span className="text-fg-fnt">{warning.sample}</span>
+          <span className="text-fg-fnt">
+            {/* The panel above this one has linkified the same sentence since
+             *  the segmenter shipped. It could not here because the group
+             *  carried a `"Kind/name"` string and no namespace, so every name
+             *  in the message had nothing to be resolved against. */}
+            <ResourceMessage
+              message={warning.sample}
+              subject={subject ?? undefined}
+            />
+          </span>
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">

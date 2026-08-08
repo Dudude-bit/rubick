@@ -462,6 +462,7 @@ export interface CronJobDetailInfo {
   lastSuccessfulTime: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   ownerReferences: OwnerReference[];
@@ -540,6 +541,7 @@ export interface JobDetailInfo {
   completionTime: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -578,6 +580,7 @@ export interface DaemonSetDetailInfo {
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   selector: Record<string, string>;
@@ -605,6 +608,7 @@ export interface StatefulSetDetailInfo {
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -666,6 +670,7 @@ export interface DeploymentInfo {
   strategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
@@ -708,6 +713,27 @@ export interface PodInfo {
   memoryRequests: string | null;
   memoryLimits: string | null;
   ownerReferences: OwnerReference[];
+  volumes: PodVolumeInfo[];
+  serviceAccountName: string | null;
+}
+
+export interface PodVolumeInfo {
+  name: string;
+  source: string;
+  refs: VolumeObjectRef[];
+  mounts: VolumeMountInfo[];
+}
+
+export interface VolumeMountInfo {
+  container: string;
+  path: string;
+  readOnly: boolean;
+  subPath: string | null;
+}
+
+export interface VolumeObjectRef {
+  kind: string;
+  name: string;
 }
 
 export interface ContainerInfo {
@@ -757,6 +783,7 @@ export interface ReplicaSetInfo {
   currentRevision: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
+  serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -972,7 +999,9 @@ export interface WarningGroup {
   count: number;
   lastSeen: string | null;
   sample: string | null;
-  object: string | null;
+  objectKind: string | null;
+  objectName: string | null;
+  namespace: string | null;
 }
 
 export interface NodeSummary {

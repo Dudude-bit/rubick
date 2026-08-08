@@ -141,8 +141,17 @@ pub struct WarningGroup {
     pub last_seen: Option<String>,
     /// Most recent message for this reason.
     pub sample: Option<String>,
-    /// Object the most recent event referred to.
-    pub object: Option<String>,
+    /// The object the most recent event referred to, kept apart the way
+    /// `ClusterProblem` keeps it. It used to be one `"Kind/name"` string with
+    /// the namespace thrown away, which is why the panel above this one could
+    /// link a message and this one could not: the same sentence needs a kind,
+    /// a name *and* a namespace to be resolved against, and two thirds of one
+    /// is a guess.
+    pub object_kind: Option<String>,
+    pub object_name: Option<String>,
+    /// The involved object's namespace, not the event's: an event about a
+    /// pod is recorded beside it, but a cluster-scoped object's event is not.
+    pub namespace: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -549,7 +558,9 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
             count: 0,
             last_seen: None,
             sample: None,
-            object: None,
+            object_kind: None,
+            object_name: None,
+            namespace: None,
         });
         entry.count += event.count.unwrap_or(1);
         let last_rfc = last.map(|t| t.to_rfc3339());
@@ -557,12 +568,12 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
         if entry.last_seen.is_none() || last_rfc > entry.last_seen {
             entry.last_seen = last_rfc;
             entry.sample = event.message.clone();
-            entry.object = event.involved_object.name.as_ref().map(|n| {
-                match event.involved_object.kind.as_deref() {
-                    Some(kind) => format!("{kind}/{n}"),
-                    None => n.clone(),
-                }
-            });
+            entry.object_kind = event.involved_object.kind.clone();
+            entry.object_name = event.involved_object.name.clone();
+            // Deliberately not `event.metadata.namespace`, which is `default`
+            // for an event about a Node — inheriting it would file a
+            // cluster-scoped object inside a namespace it does not live in.
+            entry.namespace = event.involved_object.namespace.clone();
         }
     }
 

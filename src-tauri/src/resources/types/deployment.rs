@@ -30,6 +30,8 @@ pub struct DeploymentInfo {
     /// The template's `initContainers`, in the order the kubelet would run
     /// them, with each sidecar marked by its `phase`.
     pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold; see `TemplateContainers`.
+    pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -75,6 +77,11 @@ pub struct DeploymentContainerInfo {
 pub struct TemplateContainers {
     pub containers: Vec<DeploymentContainerInfo>,
     pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold. It rides here rather than being
+    /// read again per kind for the reason the container lists do: five kinds
+    /// reach the same `PodSpec` by five different paths, and the one that
+    /// forgets is the one that silently shows nothing.
+    pub service_account_name: Option<String>,
 }
 
 impl TemplateContainers {
@@ -94,6 +101,7 @@ impl TemplateContainers {
                 .iter()
                 .map(|c| DeploymentContainerInfo::declared(c, init_phase(c)))
                 .collect(),
+            service_account_name: spec.and_then(|s| s.service_account_name.clone()),
         }
     }
 }
@@ -164,6 +172,7 @@ impl From<&Deployment> for DeploymentInfo {
                 .and_then(|s| s.type_.clone()),
             containers: template.containers,
             init_containers: template.init_containers,
+            service_account_name: template.service_account_name,
             labels: deployment.labels().clone(),
             annotations: deployment.annotations().clone(),
             created_at: deployment.creation_timestamp().map(|t| t.0),

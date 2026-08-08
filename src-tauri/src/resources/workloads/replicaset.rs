@@ -50,6 +50,8 @@ pub struct ReplicaSetInfo {
     /// The template's `initContainers`, in the order the kubelet would run
     /// them, with each sidecar marked by its `phase`.
     pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold; see `TemplateContainers`.
+    pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
@@ -90,6 +92,7 @@ impl ReplicaSetInfo {
             current_revision,
             containers: template.containers,
             init_containers: template.init_containers,
+            service_account_name: template.service_account_name,
             labels: rs.labels().clone(),
             annotations: rs.annotations().clone(),
             conditions,

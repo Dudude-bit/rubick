@@ -67,6 +67,8 @@ pub struct CronJobDetailInfo {
     /// The template's `initContainers`, in the order the kubelet would run
     /// them, with each sidecar marked by its `phase`.
     pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold; see `TemplateContainers`.
+    pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub owner_references: Vec<OwnerReference>,
@@ -105,6 +107,7 @@ impl From<&CronJob> for CronJobDetailInfo {
                 .to_rfc3339_opt(),
             containers: template.containers,
             init_containers: template.init_containers,
+            service_account_name: template.service_account_name,
             labels: cj.labels().clone(),
             annotations: cj.annotations().clone(),
             owner_references: extract_owner_references(cj.metadata.owner_references.as_ref()),

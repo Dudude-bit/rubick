@@ -63,6 +63,8 @@ pub struct StatefulSetDetailInfo {
     /// The template's `initContainers`, in the order the kubelet would run
     /// them, with each sidecar marked by its `phase`.
     pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold; see `TemplateContainers`.
+    pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
@@ -98,6 +100,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
                 .and_then(|s| s.type_.clone()),
             containers: template.containers,
             init_containers: template.init_containers,
+            service_account_name: template.service_account_name,
             labels: ss.labels().clone(),
             annotations: ss.annotations().clone(),
             conditions,
