@@ -110,30 +110,32 @@ export function AzureProfilesSection() {
   };
 
   return (
-    <ProfileSection
-      title="Azure"
-      addLabel="Add profile"
-      onAdd={openCreateDialog}
-      isLoading={isLoading}
-      isEmpty={!profiles || profiles.length === 0}
-      emptyMessage="No profiles — using the default az login credentials."
-    >
-      {profiles?.map((item) => (
-        <ProfileRow
-          key={item.name}
-          name={item.name}
-          detail={
-            item.profile.tenantId
-              ? `tenant ${item.profile.tenantId.slice(0, 8)}…`
-              : undefined
-          }
-          description={item.profile.description}
-          onTest={() => testMutation.mutate(item.name)}
-          onEdit={() => openEditDialog(item.name, item.profile)}
-          onDelete={() => deleteMutation.mutate(item.name)}
-          busy={testMutation.isPending || deleteMutation.isPending}
-        />
-      ))}
+    <>
+      <ProfileSection
+        title="Azure"
+        addLabel="Add profile"
+        onAdd={openCreateDialog}
+        isLoading={isLoading}
+        isEmpty={!profiles || profiles.length === 0}
+        emptyMessage="No profiles — using the default az login credentials."
+      >
+        {profiles?.map((item) => (
+          <ProfileRow
+            key={item.name}
+            name={item.name}
+            detail={
+              item.profile.tenantId
+                ? `tenant ${item.profile.tenantId.slice(0, 8)}…`
+                : undefined
+            }
+            description={item.profile.description}
+            onTest={() => testMutation.mutate(item.name)}
+            onEdit={() => openEditDialog(item.name, item.profile)}
+            onDelete={() => deleteMutation.mutate(item.name)}
+            busy={testMutation.isPending || deleteMutation.isPending}
+          />
+        ))}
+      </ProfileSection>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -240,6 +242,6 @@ export function AzureProfilesSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ProfileSection>
+    </>
   );
 }
