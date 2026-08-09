@@ -18,13 +18,9 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import { logDebug, logError, logInfo } from "@/lib/logger";
-import { registerBuiltInPlugins } from "@/lib/crd-plugins/plugins";
 import { STALE_TIMES } from "@/lib/refresh";
 import { commands } from "@/lib/commands";
 import { setHostOs } from "@/lib/platform";
-
-// Register built-in CRD plugins for enhanced UI
-registerBuiltInPlugins();
 
 const formatKey = (key: unknown) => {
   try {

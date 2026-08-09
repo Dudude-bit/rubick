@@ -1,27 +1,21 @@
 /**
- * Cert-Manager CRD Plugin
+ * cert-manager's own custom resources: Certificate, Issuer, ClusterIssuer,
+ * CertificateRequest, Order, Challenge.
  *
- * Provides enhanced UI for cert-manager.io CRDs:
- * - Certificate
- * - Issuer
- * - ClusterIssuer
- * - CertificateRequest
- * - Order
- * - Challenge
+ * Its CRDs state far more than a printer column reproduces — which Secret a
+ * Certificate writes, which issuer signed it, how long the result has left —
+ * and none of that is guessable from a CRD the app has never seen.
  */
 
-import { Shield } from "lucide-react";
-import type {
-  CrdPlugin,
-  CrdPluginColumn,
-  CrdPluginStatusConfig,
-} from "../types";
-import { matchByGroup, getValueByPath, daysUntil } from "../utils";
+import type { CrdColumn, CrdStatus } from "../kit";
+import { getValueByPath, matchByGroup } from "../kit";
+import type { CrdView } from "../registry";
+import { daysUntil } from "@/lib/utils";
 
 /**
  * Status configuration for Certificate resources
  */
-const certificateStatusConfig: CrdPluginStatusConfig = {
+const certificateStatusConfig: CrdStatus = {
   getStatus: (resource) => {
     const conditions = getValueByPath(resource, "status.conditions") as
       | Array<{ type: string; status: string }>
@@ -51,7 +45,7 @@ const certificateStatusConfig: CrdPluginStatusConfig = {
 /**
  * Columns for Certificate list
  */
-const certificateColumns: CrdPluginColumn[] = [
+const certificateColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -66,16 +60,12 @@ const certificateColumns: CrdPluginColumn[] = [
       return readyCondition?.status === "True" ? "True" : "False";
     },
     cell: (value) => String(value ?? "-"),
-    width: 80,
-    sortable: true,
   },
   {
     id: "secret",
     header: "Secret",
     accessor: (resource) => getValueByPath(resource, "spec.secretName"),
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: true,
   },
   {
     id: "issuer",
@@ -89,8 +79,6 @@ const certificateColumns: CrdPluginColumn[] = [
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;
     },
     cell: (value) => String(value ?? "-"),
-    width: 180,
-    sortable: true,
   },
   {
     id: "dnsNames",
@@ -102,8 +90,6 @@ const certificateColumns: CrdPluginColumn[] = [
       return dnsNames?.length ?? 0;
     },
     cell: (value) => (typeof value === "number" ? `${value} names` : "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "expiry",
@@ -118,15 +104,13 @@ const certificateColumns: CrdPluginColumn[] = [
       if (days === 1) return "Tomorrow";
       return `${days} days`;
     },
-    width: 100,
-    sortable: true,
   },
 ];
 
 /**
  * Columns for Issuer/ClusterIssuer list
  */
-const issuerColumns: CrdPluginColumn[] = [
+const issuerColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -141,8 +125,6 @@ const issuerColumns: CrdPluginColumn[] = [
       return readyCondition?.status === "True" ? "True" : "False";
     },
     cell: (value) => String(value ?? "-"),
-    width: 80,
-    sortable: true,
   },
   {
     id: "type",
@@ -162,8 +144,6 @@ const issuerColumns: CrdPluginColumn[] = [
       return "Unknown";
     },
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "server",
@@ -195,15 +175,13 @@ const issuerColumns: CrdPluginColumn[] = [
       return null;
     },
     cell: (value) => String(value ?? "-"),
-    width: 200,
-    sortable: false,
   },
 ];
 
 /**
  * Columns for CertificateRequest list
  */
-const certificateRequestColumns: CrdPluginColumn[] = [
+const certificateRequestColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -224,8 +202,6 @@ const certificateRequestColumns: CrdPluginColumn[] = [
       return "Pending";
     },
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "issuer",
@@ -239,78 +215,34 @@ const certificateRequestColumns: CrdPluginColumn[] = [
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;
     },
     cell: (value) => String(value ?? "-"),
-    width: 180,
-    sortable: true,
   },
   {
     id: "requestor",
     header: "Requestor",
     accessor: (resource) => getValueByPath(resource, "spec.username"),
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: true,
   },
 ];
 
 /**
- * Main Cert-Manager plugin
- *
- * This plugin enhances the UI for all cert-manager.io resources
+ * Every kind in `cert-manager.io`, and a column set for the three whose
+ * shapes differ. Anything newer falls back to the Certificate columns
+ * rather than to nothing.
  */
-export const certManagerPlugin: CrdPlugin = {
-  id: "cert-manager",
-  name: "Cert-Manager",
-  description: "Enhanced UI for cert-manager.io custom resources",
-  icon: Shield,
-  color: "#326CE5", // Kubernetes blue
-
-  // Match all cert-manager.io resources
+export const crd: CrdView = {
   matches: matchByGroup("cert-manager.io"),
-
-  // Higher priority to override generic handling
-  priority: 100,
-
-  // Dynamic columns based on kind
-  columns: certificateColumns, // Default to Certificate columns
-
-  // Status configuration
-  status: certificateStatusConfig,
-
-  // Transform list items to add computed fields
-  transformListItem: (item) => {
-    const conditions = getValueByPath(item, "status.conditions") as
-      | Array<{ type: string; status: string; message?: string }>
-      | undefined;
-
-    const readyCondition = conditions?.find((c) => c.type === "Ready");
-    const notAfter = getValueByPath(item, "status.notAfter") as
-      | string
-      | undefined;
-
-    return {
-      ...item,
-      _isReady: readyCondition?.status === "True",
-      _readyMessage: readyCondition?.message,
-      _expiresIn: notAfter ? daysUntil(notAfter) : null,
-    };
+  columnsFor: (kind) => {
+    switch (kind.toLowerCase()) {
+      case "certificate":
+        return certificateColumns;
+      case "issuer":
+      case "clusterissuer":
+        return issuerColumns;
+      case "certificaterequest":
+        return certificateRequestColumns;
+      default:
+        return certificateColumns;
+    }
   },
+  status: certificateStatusConfig,
 };
-
-/**
- * Get columns based on the specific cert-manager kind
- */
-export function getCertManagerColumns(kind: string): CrdPluginColumn[] {
-  switch (kind.toLowerCase()) {
-    case "certificate":
-      return certificateColumns;
-    case "issuer":
-    case "clusterissuer":
-      return issuerColumns;
-    case "certificaterequest":
-      return certificateRequestColumns;
-    default:
-      return certificateColumns;
-  }
-}
-
-export default certManagerPlugin;

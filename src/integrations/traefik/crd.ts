@@ -1,26 +1,20 @@
 /**
- * Traefik CRD Plugin
+ * Traefik's own custom resources: IngressRoute, Middleware, TLSOption and
+ * the rest of the routing objects it configures itself with.
  *
- * Provides enhanced UI for traefik.io CRDs:
- * - IngressRoute
- * - IngressRouteTCP
- * - IngressRouteUDP
- * - Middleware
- * - MiddlewareTCP
- * - TLSOption
- * - TLSStore
- * - ServersTransport
- * - TraefikService
+ * A Traefik cluster does not use Ingress; it uses IngressRoute, and a
+ * printer column shows neither the hosts it serves nor the services it
+ * sends them to.
  */
 
-import { Route } from "lucide-react";
-import type { CrdPlugin, CrdPluginColumn } from "../types";
-import { matchByPattern, getValueByPath } from "../utils";
+import type { CrdColumn } from "../kit";
+import { getValueByPath, matchByPattern, NO_STATUS } from "../kit";
+import type { CrdView } from "../registry";
 
 /**
  * Columns for IngressRoute list
  */
-const ingressRouteColumns: CrdPluginColumn[] = [
+const ingressRouteColumns: CrdColumn[] = [
   {
     id: "entryPoints",
     header: "Entry Points",
@@ -34,8 +28,6 @@ const ingressRouteColumns: CrdPluginColumn[] = [
       if (!Array.isArray(value) || value.length === 0) return "-";
       return value.join(", ");
     },
-    width: 120,
-    sortable: false,
   },
   {
     id: "hosts",
@@ -63,8 +55,6 @@ const ingressRouteColumns: CrdPluginColumn[] = [
       if (value.length === 1) return value[0];
       return `${value[0]} +${value.length - 1}`;
     },
-    width: 180,
-    sortable: false,
   },
   {
     id: "services",
@@ -93,8 +83,6 @@ const ingressRouteColumns: CrdPluginColumn[] = [
       if (value.length === 1) return value[0];
       return `${value.length} services`;
     },
-    width: 150,
-    sortable: false,
   },
   {
     id: "middlewares",
@@ -120,8 +108,6 @@ const ingressRouteColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value}` : "-",
-    width: 100,
-    sortable: true,
   },
   {
     id: "tls",
@@ -140,15 +126,13 @@ const ingressRouteColumns: CrdPluginColumn[] = [
       return "Yes";
     },
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: false,
   },
 ];
 
 /**
  * Columns for Middleware list
  */
-const middlewareColumns: CrdPluginColumn[] = [
+const middlewareColumns: CrdColumn[] = [
   {
     id: "type",
     header: "Type",
@@ -192,8 +176,6 @@ const middlewareColumns: CrdPluginColumn[] = [
       return "Unknown";
     },
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: true,
   },
   {
     id: "details",
@@ -241,30 +223,24 @@ const middlewareColumns: CrdPluginColumn[] = [
       return null;
     },
     cell: (value) => String(value ?? "-"),
-    width: 250,
-    sortable: false,
   },
 ];
 
 /**
  * Columns for TLSOption list
  */
-const tlsOptionColumns: CrdPluginColumn[] = [
+const tlsOptionColumns: CrdColumn[] = [
   {
     id: "minVersion",
     header: "Min Version",
     accessor: (resource) => getValueByPath(resource, "spec.minVersion"),
     cell: (value) => String(value ?? "Default"),
-    width: 120,
-    sortable: true,
   },
   {
     id: "maxVersion",
     header: "Max Version",
     accessor: (resource) => getValueByPath(resource, "spec.maxVersion"),
     cell: (value) => String(value ?? "Default"),
-    width: 120,
-    sortable: true,
   },
   {
     id: "cipherSuites",
@@ -277,64 +253,31 @@ const tlsOptionColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value} suites` : "Default",
-    width: 120,
-    sortable: true,
   },
   {
     id: "sniStrict",
     header: "SNI Strict",
     accessor: (resource) => getValueByPath(resource, "spec.sniStrict"),
     cell: (value) => (value === true ? "Yes" : "No"),
-    width: 100,
-    sortable: true,
   },
 ];
 
 /**
- * Main Traefik plugin
+ * Both API groups: `traefik.containo.us` is what a cluster that has not
+ * been through the v3 migration still serves.
  *
- * Matches both traefik.io and traefik.containo.us (legacy) API groups
+ * Traefik's objects carry no status at all — the proxy's opinion of a route
+ * lives in its own dashboard, not on the resource — so nothing is claimed
+ * about their health.
  */
-export const traefikPlugin: CrdPlugin = {
-  id: "traefik",
-  name: "Traefik",
-  description: "Enhanced UI for Traefik proxy custom resources",
-  icon: Route,
-  color: "#24A1C1", // Traefik teal
-
-  // Match both traefik.io and traefik.containo.us (legacy)
+export const crd: CrdView = {
   matches: matchByPattern(/^traefik\.(io|containo\.us)$/),
-
-  // Higher priority
-  priority: 100,
-
-  // Default columns for IngressRoute
-  columns: ingressRouteColumns,
-
-  // Status based on conditions (if present)
-  status: {
-    getStatus: () => null, // Traefik resources typically don't have status
-    getVariant: () => "outline",
-  },
-};
-
-/**
- * Get columns based on the specific Traefik kind
- */
-export function getTraefikColumns(kind: string): CrdPluginColumn[] {
-  const kindLower = kind.toLowerCase();
-
-  if (kindLower.includes("ingressroute")) {
+  columnsFor: (kind) => {
+    const kindLower = kind.toLowerCase();
+    if (kindLower.includes("ingressroute")) return ingressRouteColumns;
+    if (kindLower.includes("middleware")) return middlewareColumns;
+    if (kindLower.includes("tlsoption")) return tlsOptionColumns;
     return ingressRouteColumns;
-  }
-  if (kindLower.includes("middleware")) {
-    return middlewareColumns;
-  }
-  if (kindLower.includes("tlsoption")) {
-    return tlsOptionColumns;
-  }
-
-  return ingressRouteColumns; // Default
-}
-
-export default traefikPlugin;
+  },
+  status: NO_STATUS,
+};

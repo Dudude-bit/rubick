@@ -1,25 +1,18 @@
 /**
- * Istio CRD Plugin
+ * Istio's networking, security and telemetry objects.
  *
- * Provides enhanced UI for Istio service mesh CRDs:
- * - VirtualService
- * - DestinationRule
- * - Gateway
- * - ServiceEntry
- * - Sidecar
- * - AuthorizationPolicy
- * - PeerAuthentication
- * - RequestAuthentication
+ * The mesh's whole configuration is custom resources, so a flat list of
+ * anonymous rows is the entire picture a vanilla view gives of it.
  */
 
-import { Network } from "lucide-react";
-import type { CrdPlugin, CrdPluginColumn } from "../types";
-import { getValueByPath } from "../utils";
+import type { CrdColumn } from "../kit";
+import { getValueByPath, NO_STATUS } from "../kit";
+import type { CrdView } from "../registry";
 
 /**
  * Columns for VirtualService list
  */
-const virtualServiceColumns: CrdPluginColumn[] = [
+const virtualServiceColumns: CrdColumn[] = [
   {
     id: "hosts",
     header: "Hosts",
@@ -34,8 +27,6 @@ const virtualServiceColumns: CrdPluginColumn[] = [
       if (value.length === 1) return String(value[0]);
       return `${value[0]} +${value.length - 1}`;
     },
-    width: 200,
-    sortable: false,
   },
   {
     id: "gateways",
@@ -50,8 +41,6 @@ const virtualServiceColumns: CrdPluginColumn[] = [
       if (!Array.isArray(value) || value.length === 0) return "mesh";
       return value.join(", ");
     },
-    width: 150,
-    sortable: false,
   },
   {
     id: "httpRoutes",
@@ -64,8 +53,6 @@ const virtualServiceColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value}` : "-",
-    width: 100,
-    sortable: true,
   },
   {
     id: "tcpRoutes",
@@ -76,8 +63,6 @@ const virtualServiceColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value}` : "-",
-    width: 100,
-    sortable: true,
   },
   {
     id: "destinations",
@@ -108,22 +93,18 @@ const virtualServiceColumns: CrdPluginColumn[] = [
       if (value.length === 1) return String(value[0]);
       return `${value.length} services`;
     },
-    width: 180,
-    sortable: false,
   },
 ];
 
 /**
  * Columns for DestinationRule list
  */
-const destinationRuleColumns: CrdPluginColumn[] = [
+const destinationRuleColumns: CrdColumn[] = [
   {
     id: "host",
     header: "Host",
     accessor: (resource) => getValueByPath(resource, "spec.host"),
     cell: (value) => String(value ?? "-"),
-    width: 200,
-    sortable: true,
   },
   {
     id: "trafficPolicy",
@@ -143,8 +124,6 @@ const destinationRuleColumns: CrdPluginColumn[] = [
       return features.length > 0 ? features.join(", ") : "Default";
     },
     cell: (value) => String(value ?? "-"),
-    width: 200,
-    sortable: false,
   },
   {
     id: "subsets",
@@ -159,8 +138,6 @@ const destinationRuleColumns: CrdPluginColumn[] = [
       if (!Array.isArray(value) || value.length === 0) return "-";
       return value.join(", ");
     },
-    width: 150,
-    sortable: false,
   },
   {
     id: "exportTo",
@@ -177,15 +154,13 @@ const destinationRuleColumns: CrdPluginColumn[] = [
       if (value.includes(".")) return "Same namespace";
       return value.join(", ");
     },
-    width: 120,
-    sortable: false,
   },
 ];
 
 /**
  * Columns for Gateway list
  */
-const gatewayColumns: CrdPluginColumn[] = [
+const gatewayColumns: CrdColumn[] = [
   {
     id: "selector",
     header: "Selector",
@@ -203,8 +178,6 @@ const gatewayColumns: CrdPluginColumn[] = [
         .join(", ");
     },
     cell: (value) => String(value ?? "-"),
-    width: 180,
-    sortable: false,
   },
   {
     id: "servers",
@@ -231,8 +204,6 @@ const gatewayColumns: CrdPluginColumn[] = [
       if (value.length === 1) return String(value[0]);
       return `${value.length} servers`;
     },
-    width: 250,
-    sortable: false,
   },
   {
     id: "tlsEnabled",
@@ -248,15 +219,13 @@ const gatewayColumns: CrdPluginColumn[] = [
       return servers.some((s) => s.tls && s.tls.mode !== "PASSTHROUGH");
     },
     cell: (value) => (value ? "Yes" : "No"),
-    width: 80,
-    sortable: true,
   },
 ];
 
 /**
  * Columns for ServiceEntry list
  */
-const serviceEntryColumns: CrdPluginColumn[] = [
+const serviceEntryColumns: CrdColumn[] = [
   {
     id: "hosts",
     header: "Hosts",
@@ -271,24 +240,18 @@ const serviceEntryColumns: CrdPluginColumn[] = [
       if (value.length === 1) return String(value[0]);
       return `${value[0]} +${value.length - 1}`;
     },
-    width: 200,
-    sortable: false,
   },
   {
     id: "location",
     header: "Location",
     accessor: (resource) => getValueByPath(resource, "spec.location"),
     cell: (value) => String(value ?? "MESH_EXTERNAL"),
-    width: 130,
-    sortable: true,
   },
   {
     id: "resolution",
     header: "Resolution",
     accessor: (resource) => getValueByPath(resource, "spec.resolution"),
     cell: (value) => String(value ?? "NONE"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "ports",
@@ -308,8 +271,6 @@ const serviceEntryColumns: CrdPluginColumn[] = [
       if (!Array.isArray(value) || value.length === 0) return "-";
       return value.join(", ");
     },
-    width: 150,
-    sortable: false,
   },
   {
     id: "endpoints",
@@ -322,22 +283,18 @@ const serviceEntryColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value}` : "-",
-    width: 100,
-    sortable: true,
   },
 ];
 
 /**
  * Columns for AuthorizationPolicy list
  */
-const authorizationPolicyColumns: CrdPluginColumn[] = [
+const authorizationPolicyColumns: CrdColumn[] = [
   {
     id: "action",
     header: "Action",
     accessor: (resource) => getValueByPath(resource, "spec.action"),
     cell: (value) => String(value ?? "ALLOW"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "selector",
@@ -353,8 +310,6 @@ const authorizationPolicyColumns: CrdPluginColumn[] = [
         .join(", ");
     },
     cell: (value) => String(value ?? "-"),
-    width: 180,
-    sortable: false,
   },
   {
     id: "rules",
@@ -367,24 +322,14 @@ const authorizationPolicyColumns: CrdPluginColumn[] = [
     },
     cell: (value) =>
       typeof value === "number" && value > 0 ? `${value} rules` : "No rules",
-    width: 100,
-    sortable: true,
   },
 ];
 
 /**
- * Main Istio plugin
- *
- * Matches all networking.istio.io and security.istio.io resources
+ * The three groups a mesh's configuration is spread across. Istio's objects
+ * do not report conditions, so nothing is claimed about their health.
  */
-export const istioPlugin: CrdPlugin = {
-  id: "istio",
-  name: "Istio",
-  description: "Enhanced UI for Istio service mesh resources",
-  icon: Network,
-  color: "#466BB0", // Istio blue
-
-  // Match Istio networking and security API groups
+export const crd: CrdView = {
   matches: (group) => {
     const normalizedGroup = group.toLowerCase();
     return (
@@ -393,39 +338,23 @@ export const istioPlugin: CrdPlugin = {
       normalizedGroup === "telemetry.istio.io"
     );
   },
-
-  priority: 100,
-
-  // Default to VirtualService columns
-  columns: virtualServiceColumns,
-
-  // Istio resources typically don't have status conditions
-  status: {
-    getStatus: () => null,
-    getVariant: () => "outline",
+  columnsFor: (kind) => {
+    switch (kind.toLowerCase()) {
+      case "virtualservice":
+        return virtualServiceColumns;
+      case "destinationrule":
+        return destinationRuleColumns;
+      case "gateway":
+        return gatewayColumns;
+      case "serviceentry":
+        return serviceEntryColumns;
+      case "authorizationpolicy":
+      case "peerauthentication":
+      case "requestauthentication":
+        return authorizationPolicyColumns;
+      default:
+        return virtualServiceColumns;
+    }
   },
+  status: NO_STATUS,
 };
-
-/**
- * Get columns based on the specific Istio kind
- */
-export function getIstioColumns(kind: string): CrdPluginColumn[] {
-  switch (kind.toLowerCase()) {
-    case "virtualservice":
-      return virtualServiceColumns;
-    case "destinationrule":
-      return destinationRuleColumns;
-    case "gateway":
-      return gatewayColumns;
-    case "serviceentry":
-      return serviceEntryColumns;
-    case "authorizationpolicy":
-    case "peerauthentication":
-    case "requestauthentication":
-      return authorizationPolicyColumns;
-    default:
-      return virtualServiceColumns;
-  }
-}
-
-export default istioPlugin;

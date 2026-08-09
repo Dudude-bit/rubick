@@ -1,5 +1,6 @@
 import { commands } from "@/lib/commands";
-import { defineIntegration } from "../registry";
+import { defineVendor } from "../registry";
+import { crd } from "./crd";
 
 /**
  * cert-manager.
@@ -12,8 +13,14 @@ import { defineIntegration } from "../registry";
  * Note what it does *not* provide: the expiry date. `tls.crt` states that
  * itself, the app reads it on any cluster, and putting it behind this would
  * gate the free half of the value on an install.
+ *
+ * Two facets, and they answer to different rules. `provides` is gated on
+ * the backend's CRD scan, because a capability that answered on a cluster
+ * without cert-manager would fail at runtime on every request. `crd` is
+ * not: a `cert-manager.io` list page can only be reached when the group
+ * exists, so the group *is* the detection.
  */
-export default defineIntegration({
+export default defineVendor({
   id: "cert-manager",
   name: "cert-manager",
   gives: "why a certificate has not renewed, from the object that failed",
@@ -21,4 +28,5 @@ export default defineIntegration({
     "certificate.issuance": ({ namespace, secretName }) =>
       commands.getCertificateIssuance(namespace, secretName),
   },
+  crd,
 });

@@ -29,14 +29,12 @@ export function IntegrationsSettings() {
 
   return (
     <SettingsGroup title={context ? `Extensions · ${context}` : "Extensions"}>
-      {statuses.map(({ integration, installed, version }) => (
+      {statuses.map(({ vendor, installed, version }) => (
         <SettingRow
-          key={integration.id}
-          label={integration.name}
+          key={vendor.id}
+          label={vendor.name}
           hint={
-            installed
-              ? `Gives ${integration.gives}`
-              : `Would give ${integration.gives}`
+            installed ? `Gives ${vendor.gives}` : `Would give ${vendor.gives}`
           }
           control={
             <span

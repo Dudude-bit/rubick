@@ -1,25 +1,64 @@
 /**
- * The capability registry — the only door into `src/integrations/`.
+ * Everything the app knows about a specific vendor's product, and the only
+ * door into it.
  *
- * A surface asks for a capability and gets an implementation or nothing. It
- * never learns which extension answered, or whether one did.
+ * Kubernetes core is what the kubeconfig already reaches and what every
+ * cluster answers for. This tree is the rest: cert-manager, Traefik, Istio,
+ * Flux, and the three clouds' spellings of the facts their nodes already
+ * carry. A surface asks for a facet and gets an implementation or nothing.
+ * It never learns which vendor answered, or whether one did.
+ *
+ * The name is `integrations/` and it spans all three tiers, including tier
+ * one, which is neither detected nor configured. What decides that
+ * something lives here is not the tier but one question: *is this knowledge
+ * about a specific vendor's product?* See `registry.ts` for the rest of the
+ * rule and for what is deliberately outside it.
+ *
+ * ## Adding a vendor
+ *
+ * Two files, both in this tree, and nothing anywhere else:
+ *
+ * 1. `src/integrations/<id>/index.ts` — `defineVendor({ … })` with the
+ *    facets it has. Put anything bulky beside it in the same folder:
+ *    `crd.ts` for a page of column definitions, a client, a config form.
+ * 2. `src/integrations/index.ts` — one import and one entry in
+ *    {@link VENDORS}.
+ *
+ * That is the whole procedure. No surface is edited, no switch statement
+ * grows a case, nothing is registered at startup, and no test outside this
+ * tree changes — every consumer reads the facet through a derivation below,
+ * so a new vendor's labels, columns and marks appear wherever the existing
+ * ones already do.
+ *
+ * Two exceptions, both of which stay inside the tree: a genuinely new
+ * *capability* (as opposed to a new supplier of an existing one) adds a key
+ * to `Capabilities` in `registry.ts` and needs a surface written to consume
+ * it; and a new cluster *flavour* adds a member to `ClusterProvider` there
+ * too, because that union is what keeps the mark table exhaustive.
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
 import certManager from "./cert-manager";
-import type { CapabilityKey, Capabilities, Integration } from "./registry";
+import flux from "./flux";
+import istio from "./istio";
+import traefik from "./traefik";
+import type { CapabilityKey, Capabilities, CrdView, Vendor } from "./registry";
 
-export type { CapabilityKey, Capabilities, Integration };
+export type { CapabilityKey, Capabilities, CrdView, Vendor };
 
 /**
- * Every extension that ships in the binary.
+ * Every vendor that ships in the binary.
  *
  * A list, not a plugin API: third parties loading code into the app is a
- * different product with a different threat model.
+ * different product with a different threat model. Order is meaningful and
+ * is the only tie-break in the tree — where two vendors could claim the
+ * same node label or the same context name, the earlier one wins, so the
+ * more specific vendor goes first.
  */
-const INTEGRATIONS: Integration[] = [certManager];
+const VENDORS: Vendor[] = [certManager, traefik, flux, istio];
 
 /**
  * What is installed in the connected cluster.
@@ -51,22 +90,27 @@ export function useCapability<K extends CapabilityKey>(
   const installed = new Set(
     data.filter((entry) => entry.installed).map((entry) => entry.id)
   );
-  const found = INTEGRATIONS.find(
-    (integration) =>
-      installed.has(integration.id) && key in integration.provides
+  const found = VENDORS.find(
+    (vendor) =>
+      installed.has(vendor.id) && vendor.provides && key in vendor.provides
   );
-  return (found?.provides[key] as Capabilities[K] | undefined) ?? null;
+  return (found?.provides?.[key] as Capabilities[K] | undefined) ?? null;
 }
 
 export interface IntegrationStatus {
-  integration: Integration;
+  vendor: Vendor;
   installed: boolean;
   version: string | null;
 }
 
 /**
- * Every extension and whether this cluster has it — for the one screen that
- * is allowed to name them.
+ * Every vendor whose *capabilities* this cluster could supply, and whether
+ * it has them — for the one screen that is allowed to name them.
+ *
+ * Only vendors with `provides` appear. A vendor whose whole contribution is
+ * a CRD view or a node-label spelling has no row here and should not: there
+ * is nothing to install for it, nothing to connect, and nothing a reader
+ * could do with the knowledge that the app understands Istio's columns.
  */
 export function useIntegrations(): {
   statuses: IntegrationStatus[];
@@ -75,10 +119,10 @@ export function useIntegrations(): {
 } {
   const { data, isPending, error } = useDetected();
   return {
-    statuses: INTEGRATIONS.map((integration) => {
-      const detected = data?.find((entry) => entry.id === integration.id);
+    statuses: VENDORS.filter((vendor) => vendor.provides).map((vendor) => {
+      const detected = data?.find((entry) => entry.id === vendor.id);
       return {
-        integration,
+        vendor,
         installed: detected?.installed ?? false,
         version: detected?.version ?? null,
       };
@@ -86,4 +130,22 @@ export function useIntegrations(): {
     isPending,
     error,
   };
+}
+
+/**
+ * The vendor view for a custom resource's API group, or `null` for the
+ * thousands of CRDs nobody here has heard of — which get the CRD's own
+ * printer columns, exactly as they did before this tree existed.
+ *
+ * No detection call: reaching a `cert-manager.io` list page requires the
+ * group to exist, so the group is the detection.
+ */
+export function useCrdView(group: string, kind: string): CrdView | null {
+  return useMemo(() => crdViewFor(group, kind), [group, kind]);
+}
+
+function crdViewFor(group: string, kind: string): CrdView | null {
+  return (
+    VENDORS.find((vendor) => vendor.crd?.matches(group, kind))?.crd ?? null
+  );
 }

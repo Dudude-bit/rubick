@@ -1,24 +1,18 @@
 /**
- * Flux Helm CRD Plugin
+ * Flux's Helm objects: HelmRelease, HelmRepository, HelmChart.
  *
- * Provides enhanced UI for Flux CD Helm-related CRDs:
- * - HelmRelease (helm.toolkit.fluxcd.io)
- * - HelmRepository (source.toolkit.fluxcd.io)
- * - HelmChart (source.toolkit.fluxcd.io)
+ * A Flux-managed release is not in Helm's own storage in the shape the Helm
+ * pages read, so these are where its chart, version and source actually are.
  */
 
-import { Package } from "lucide-react";
-import type {
-  CrdPlugin,
-  CrdPluginColumn,
-  CrdPluginStatusConfig,
-} from "../types";
-import { matchMultiple, getValueByPath } from "../utils";
+import type { CrdColumn, CrdStatus } from "../kit";
+import { getValueByPath, matchMultiple } from "../kit";
+import type { CrdView } from "../registry";
 
 /**
  * Status configuration for Flux resources (uses standard conditions)
  */
-const fluxStatusConfig: CrdPluginStatusConfig = {
+const fluxStatusConfig: CrdStatus = {
   getStatus: (resource) => {
     const conditions = getValueByPath(resource, "status.conditions") as
       | Array<{ type: string; status: string; reason?: string }>
@@ -60,7 +54,7 @@ const fluxStatusConfig: CrdPluginStatusConfig = {
 /**
  * Columns for HelmRelease list
  */
-const helmReleaseColumns: CrdPluginColumn[] = [
+const helmReleaseColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -79,8 +73,6 @@ const helmReleaseColumns: CrdPluginColumn[] = [
       return "False";
     },
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "chart",
@@ -96,8 +88,6 @@ const helmReleaseColumns: CrdPluginColumn[] = [
       return chartSpec?.chart ?? "-";
     },
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: true,
   },
   {
     id: "version",
@@ -120,8 +110,6 @@ const helmReleaseColumns: CrdPluginColumn[] = [
       return chartSpec?.version ?? "*";
     },
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "sourceRef",
@@ -138,31 +126,25 @@ const helmReleaseColumns: CrdPluginColumn[] = [
       return `${kind}/${chartSpec.sourceRef.name}`;
     },
     cell: (value) => String(value ?? "-"),
-    width: 180,
-    sortable: false,
   },
   {
     id: "targetNamespace",
     header: "Target NS",
     accessor: (resource) => getValueByPath(resource, "spec.targetNamespace"),
     cell: (value) => String(value ?? "(same)"),
-    width: 120,
-    sortable: true,
   },
   {
     id: "suspended",
     header: "Suspended",
     accessor: (resource) => getValueByPath(resource, "spec.suspend") === true,
     cell: (value) => (value ? "Yes" : "No"),
-    width: 90,
-    sortable: true,
   },
 ];
 
 /**
  * Columns for HelmRepository list
  */
-const helmRepositoryColumns: CrdPluginColumn[] = [
+const helmRepositoryColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -177,8 +159,6 @@ const helmRepositoryColumns: CrdPluginColumn[] = [
       return readyCondition?.status === "True" ? "True" : "False";
     },
     cell: (value) => String(value ?? "-"),
-    width: 80,
-    sortable: true,
   },
   {
     id: "url",
@@ -193,8 +173,6 @@ const helmRepositoryColumns: CrdPluginColumn[] = [
       }
       return url;
     },
-    width: 300,
-    sortable: false,
   },
   {
     id: "type",
@@ -206,16 +184,12 @@ const helmRepositoryColumns: CrdPluginColumn[] = [
       return repoType ?? "default";
     },
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: true,
   },
   {
     id: "interval",
     header: "Interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: false,
   },
   {
     id: "artifact",
@@ -228,15 +202,13 @@ const helmRepositoryColumns: CrdPluginColumn[] = [
       if (isNaN(date.getTime())) return "-";
       return date.toLocaleString();
     },
-    width: 180,
-    sortable: true,
   },
 ];
 
 /**
  * Columns for HelmChart list
  */
-const helmChartColumns: CrdPluginColumn[] = [
+const helmChartColumns: CrdColumn[] = [
   {
     id: "ready",
     header: "Ready",
@@ -251,16 +223,12 @@ const helmChartColumns: CrdPluginColumn[] = [
       return readyCondition?.status === "True" ? "True" : "False";
     },
     cell: (value) => String(value ?? "-"),
-    width: 80,
-    sortable: true,
   },
   {
     id: "chart",
     header: "Chart",
     accessor: (resource) => getValueByPath(resource, "spec.chart"),
     cell: (value) => String(value ?? "-"),
-    width: 150,
-    sortable: true,
   },
   {
     id: "version",
@@ -277,8 +245,6 @@ const helmChartColumns: CrdPluginColumn[] = [
       return getValueByPath(resource, "spec.version") ?? "*";
     },
     cell: (value) => String(value ?? "-"),
-    width: 120,
-    sortable: true,
   },
   {
     id: "sourceRef",
@@ -295,77 +261,37 @@ const helmChartColumns: CrdPluginColumn[] = [
       return `${sourceRef.kind ?? "HelmRepository"}/${sourceRef.name}`;
     },
     cell: (value) => String(value ?? "-"),
-    width: 200,
-    sortable: false,
   },
   {
     id: "interval",
     header: "Interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
     cell: (value) => String(value ?? "-"),
-    width: 100,
-    sortable: false,
   },
 ];
 
 /**
- * Main Flux Helm plugin
- *
- * Matches HelmRelease, HelmRepository, and HelmChart from Flux
+ * Flux owns all of `helm.toolkit.fluxcd.io`, and only the Helm half of
+ * `source.toolkit.fluxcd.io` — the Git and OCI sources in that group are a
+ * different shape and get the generic view until somebody writes them.
  */
-export const fluxHelmPlugin: CrdPlugin = {
-  id: "flux-helm",
-  name: "Flux Helm",
-  description: "Enhanced UI for Flux CD Helm resources",
-  icon: Package,
-  color: "#5166D9", // Flux purple
-
-  // Match Flux Helm-related API groups
+export const crd: CrdView = {
   matches: matchMultiple([
     ["helm.toolkit.fluxcd.io"],
     ["source.toolkit.fluxcd.io", "HelmRepository"],
     ["source.toolkit.fluxcd.io", "HelmChart"],
   ]),
-
-  priority: 100,
-
-  // Default to HelmRelease columns
-  columns: helmReleaseColumns,
-
-  status: fluxStatusConfig,
-
-  // Add computed fields for easier filtering
-  transformListItem: (item) => {
-    const conditions = getValueByPath(item, "status.conditions") as
-      | Array<{ type: string; status: string; reason?: string }>
-      | undefined;
-
-    const readyCondition = conditions?.find((c) => c.type === "Ready");
-    const isSuspended = getValueByPath(item, "spec.suspend") === true;
-
-    return {
-      ...item,
-      _isReady: readyCondition?.status === "True",
-      _isSuspended: isSuspended,
-      _statusReason: readyCondition?.reason,
-    };
+  columnsFor: (kind) => {
+    switch (kind.toLowerCase()) {
+      case "helmrelease":
+        return helmReleaseColumns;
+      case "helmrepository":
+        return helmRepositoryColumns;
+      case "helmchart":
+        return helmChartColumns;
+      default:
+        return helmReleaseColumns;
+    }
   },
+  status: fluxStatusConfig,
 };
-
-/**
- * Get columns based on the specific Flux Helm kind
- */
-export function getFluxHelmColumns(kind: string): CrdPluginColumn[] {
-  switch (kind.toLowerCase()) {
-    case "helmrelease":
-      return helmReleaseColumns;
-    case "helmrepository":
-      return helmRepositoryColumns;
-    case "helmchart":
-      return helmChartColumns;
-    default:
-      return helmReleaseColumns;
-  }
-}
-
-export default fluxHelmPlugin;

@@ -10,8 +10,7 @@ import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { statusRole } from "@/lib/status-role";
-import { usePlugin } from "@/lib/crd-plugins";
-import { getKindSpecificColumns } from "@/lib/crd-plugins/plugins";
+import { useCrdView } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
@@ -47,8 +46,8 @@ export function CustomResourceList({
 }: CustomResourceListProps) {
   const { currentNamespace } = useClusterStore();
 
-  // Get plugin for this CRD (if any)
-  const plugin = usePlugin(crdGroup, crdKind, crdPlural);
+  // How the vendor that installed this CRD draws it, if the app knows one.
+  const crdView = useCrdView(crdGroup, crdKind);
 
   const navigate = useNavigate();
   const namespace = scope === "Namespaced" ? currentNamespace : null;
@@ -88,7 +87,7 @@ export function CustomResourceList({
     [navigate, getDetailPath]
   );
 
-  // Build columns from printer columns and plugin
+  // Build columns from the vendor's view, or from the CRD's printer columns
   const baseColumns = useMemo<ColumnDef<CustomResourceListItem>[]>(() => {
     const cols: ColumnDef<CustomResourceListItem>[] = [];
 
@@ -113,14 +112,10 @@ export function CustomResourceList({
       cols.push(createNamespaceColumn<CustomResourceListItem>());
     }
 
-    // Try to get plugin-specific columns first
-    const pluginColumns = plugin
-      ? getKindSpecificColumns(plugin.id, crdKind) || plugin.columns
-      : null;
+    const vendorColumns = crdView?.columnsFor(crdKind);
 
-    if (pluginColumns && pluginColumns.length > 0) {
-      // Use plugin columns
-      for (const pc of pluginColumns) {
+    if (vendorColumns && vendorColumns.length > 0) {
+      for (const pc of vendorColumns) {
         cols.push({
           id: pc.id,
           header: pc.header,
@@ -129,8 +124,8 @@ export function CustomResourceList({
             if (pc.cell) {
               return pc.cell(value);
             }
-            // Default formatting with status config from plugin
-            if (plugin?.status && typeof value === "string") {
+            // Default formatting with the status config the vendor supplied
+            if (crdView && typeof value === "string") {
               return <StatusBadge status={value} />;
             }
             if (value === null || value === undefined) {
@@ -161,7 +156,7 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, plugin, getDetailPath]);
+  }, [crdKind, scope, printerColumns, crdView, getDetailPath]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
