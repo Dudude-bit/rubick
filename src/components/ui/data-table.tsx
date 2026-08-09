@@ -49,6 +49,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
 
@@ -75,12 +76,8 @@ interface DataTableProps<TData, TValue> {
   /** Shown when the cluster genuinely has none of this resource. The
    *  "no search matches" case is handled separately. */
   emptyMessage?: string;
-  /**
-   * Opt in to namespace captions. Only takes effect when the data spans
-   * more than one namespace: a single-namespace view stays a flat list,
-   * because a caption that repeats the tab's scope is noise.
-   */
-  groupByNamespace?: boolean;
+  /** Opt in to caption rows above runs of related rows. */
+  grouping?: RowGrouping<TData> | null;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
 }
@@ -122,12 +119,6 @@ function createActionsColumn<TData, TValue>(
   };
 }
 
-/** Namespaces are the one grouping key every namespaced resource shares. */
-function rowNamespace(row: unknown): string | null {
-  const ns = (row as { namespace?: string | null } | null)?.namespace;
-  return typeof ns === "string" && ns.length > 0 ? ns : null;
-}
-
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -142,7 +133,7 @@ export function DataTable<TData, TValue>({
   enableKeyboardNav,
   getRowId,
   emptyMessage = "No resources of this type in the current scope.",
-  groupByNamespace = false,
+  grouping = null,
   rowLabel = "rows",
 }: DataTableProps<TData, TValue>) {
   const navigate = useNavigate();
@@ -176,26 +167,26 @@ export function DataTable<TData, TValue>({
     ? "py-[3px] px-2.5 whitespace-nowrap"
     : "py-2 px-2.5";
 
-  // A caption that repeats a scope the user already picked is noise, so
-  // grouping only switches on once the rows genuinely span namespaces.
+  // Grouping only switches on once the data has enough groups to be worth
+  // captioning at all — which is also what keeps an unmanaged cluster's Nodes
+  // page exactly the flat list it was.
   const groupingActive = React.useMemo(() => {
-    if (!groupByNamespace) return false;
+    if (!grouping) return false;
     const seen = new Set<string>();
     for (const item of data) {
-      const ns = rowNamespace(item);
-      if (ns) seen.add(ns);
-      if (seen.size > 1) return true;
+      const key = grouping.keyOf(item);
+      if (key) seen.add(key);
     }
-    return false;
-  }, [data, groupByNamespace]);
+    return seen.size >= (grouping.minGroups ?? 1);
+  }, [data, grouping]);
 
-  // The caption carries the namespace, so the column beneath it would say
-  // the same word on every row.
   const columnVisibility = React.useMemo<VisibilityState>(() => {
     const state: VisibilityState = {};
-    if (groupingActive) state.namespace = false;
+    if (groupingActive) {
+      for (const id of grouping?.hides ?? []) state[id] = false;
+    }
     return state;
-  }, [groupingActive]);
+  }, [groupingActive, grouping]);
 
   // Determine if we should use virtual scroll based on data size
   const shouldVirtualScroll =
@@ -368,32 +359,38 @@ export function DataTable<TData, TValue>({
     );
   };
 
-  // One caption per namespace, rows beneath it in first-seen order. Built
-  // as a flat list so the keyboard-nav index stays the visual position and
-  // does not skip over the captions.
+  // One caption per group, rows beneath it in first-seen order. Built as a
+  // flat list so the keyboard-nav index stays the visual position and does
+  // not skip over the captions.
   const body: React.ReactNode[] = [];
-  if (groupingActive) {
+  if (groupingActive && grouping) {
     const groups = new Map<string, Row<TData>[]>();
+    const ungrouped: Row<TData>[] = [];
     for (const row of rows) {
-      const ns = rowNamespace(row.original) ?? "—";
-      const bucket = groups.get(ns);
+      const key = grouping.keyOf(row.original);
+      if (key === null) {
+        ungrouped.push(row);
+        continue;
+      }
+      const bucket = groups.get(key);
       if (bucket) bucket.push(row);
-      else groups.set(ns, [row]);
+      else groups.set(key, [row]);
     }
     let index = 0;
-    for (const [ns, groupRows] of groups) {
-      const noun =
-        groupRows.length === 1 ? rowLabel.replace(/s$/, "") : rowLabel;
+    // No caption over these: the data did not say which group they are in,
+    // and a heading reading "ungrouped" would turn that silence into a claim.
+    for (const row of ungrouped) body.push(renderRow(row, index++));
+    for (const [key, groupRows] of groups) {
       body.push(
-        <TableRow key={`ns-${ns}`} data-quiet className="border-0">
+        <TableRow key={`group-${key}`} data-quiet className="border-0">
           <TableCell
             colSpan={visibleColumnCount}
             className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
           >
-            {ns}{" "}
-            <span className="font-mono text-fg-mut">
-              · {groupRows.length} {noun}
-            </span>
+            {grouping.caption(
+              key,
+              groupRows.map((row) => row.original)
+            )}
           </TableCell>
         </TableRow>
       );

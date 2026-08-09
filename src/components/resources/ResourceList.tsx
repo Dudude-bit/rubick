@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { DataTable } from "@/components/ui/data-table";
+import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { useResource } from "@/hooks/useResource";
@@ -74,6 +75,12 @@ export interface ResourceListProps<
     | ((setDeleteTarget: (item: T) => void) => QuickAction<T>[]);
   /** Function to get unique row ID (for stable keys during data updates) */
   getRowId?: (row: T, index: number) => string;
+  /**
+   * A grouping the kind knows better than its namespace — node pools, so far.
+   * Namespaces are the default because they are the one key every namespaced
+   * kind carries.
+   */
+  grouping?: RowGrouping<T> | null;
 }
 
 export function ResourceList<
@@ -101,6 +108,7 @@ export function ResourceList<
   getRowHref,
   quickActions,
   getRowId,
+  grouping,
 }: ResourceListProps<T>) {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
@@ -193,7 +201,7 @@ export function ResourceList<
         getRowHref={getRowHref}
         quickActions={resolvedQuickActions}
         getRowId={getRowId}
-        groupByNamespace
+        grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
         rowLabel={emptyStateLabel.toLowerCase()}
         emptyMessage={emptyMessage}
       />

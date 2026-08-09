@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Eye } from "lucide-react";
 
 import { DataTable } from "./data-table";
+import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
@@ -219,5 +220,75 @@ describe("DataTable rows", () => {
       expect(tabs()).toHaveLength(2);
       expect(isActive(0)).toBe(true);
     });
+  });
+});
+
+describe("row grouping", () => {
+  const grouped = (
+    data: Item[],
+    grouping: RowGrouping<Item>,
+    cols: ColumnDef<Item>[] = columns
+  ) =>
+    wrap(
+      <DataTable<Item, unknown>
+        columns={cols}
+        data={data}
+        grouping={grouping}
+      />
+    );
+
+  const byLetter: RowGrouping<Item> = {
+    keyOf: (row) => (row.name.startsWith("a") ? "the a pool" : null),
+    caption: (key, rows) => `${key} · ${rows.length}`,
+  };
+
+  /**
+   * The case that must not regress: a cluster where nothing carries the
+   * grouping key gets exactly the table it had before grouping existed — no
+   * captions, and above all no "ungrouped" heading, which would turn silence
+   * into a claim.
+   */
+  it("draws a flat list when nothing states a group", () => {
+    grouped(DATA, { keyOf: () => null, caption: () => "never" });
+    expect(screen.getAllByRole("row")).toHaveLength(1 + DATA.length);
+  });
+
+  /** Namespaces ask for two groups; one pool still earns its caption. */
+  it("honours a minimum before captioning anything", () => {
+    grouped(DATA, { ...byLetter, keyOf: () => "one", minGroups: 2 });
+    expect(screen.queryByText(/one/)).toBeNull();
+    grouped(DATA, { ...byLetter, keyOf: () => "one" });
+    expect(screen.getByText("one · 2")).toBeInTheDocument();
+  });
+
+  /**
+   * A node the cloud says nothing about, sitting beside a managed pool, still
+   * has to be reachable — and has to be drawn without being filed under a
+   * group nobody stated.
+   */
+  it("draws rows with no group first and without a caption", () => {
+    grouped(DATA, byLetter);
+    const text = screen
+      .getAllByRole("row")
+      .map((tr) => tr.textContent ?? "")
+      .filter((line) => line !== "");
+    expect(text.filter((line) => line.includes("pool"))).toHaveLength(1);
+    expect(text.findIndex((line) => line.includes("b-2"))).toBeLessThan(
+      text.findIndex((line) => line.includes("the a pool"))
+    );
+  });
+
+  /** A caption saying the same word on every row below it is one column of noise. */
+  it("hides the column the caption has taken over", () => {
+    const withNamespace: ColumnDef<Item>[] = [
+      ...columns,
+      { id: "namespace", header: "Namespace", cell: () => "ns" },
+    ];
+    grouped(
+      DATA,
+      { ...byLetter, keyOf: () => "one", hides: ["namespace"] },
+      withNamespace
+    );
+    expect(screen.queryByText("Namespace")).toBeNull();
   });
 });

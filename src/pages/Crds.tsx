@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { DataTable } from "@/components/ui/data-table";
+import { byNamespace } from "@/components/ui/row-grouping";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RouteLink } from "@/components/ui/route-link";
@@ -198,7 +199,7 @@ export function Crds() {
         searchPlaceholder="Search CRDs..."
         getRowId={getCrdRowId}
         getRowHref={(row) => crdHref(row.name)}
-        groupByNamespace
+        grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
         emptyMessage="This cluster has no custom resource definitions."
       />
