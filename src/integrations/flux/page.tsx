@@ -190,8 +190,8 @@ function ReconcilersTab({
           Flux is installed here and applying nothing.
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No Kustomization and no HelmRelease exists in this cluster. The
-          controllers are running and waiting to be given something.
+          No Kustomization and no HelmRelease exists in this cluster, so nothing
+          has been given to its controllers to apply.
         </p>
       </div>
     );
