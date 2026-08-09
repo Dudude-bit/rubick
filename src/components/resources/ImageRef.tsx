@@ -1,8 +1,7 @@
 import type { MouseEvent } from "react";
 import { ExternalLink } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
 import { CopyableValue } from "@/components/ui/copyable-value";
-import { toast } from "@/components/ui/use-toast";
+import { openExternal } from "@/lib/open-external";
 import {
   parseImageRef,
   registryLink,
@@ -125,7 +124,7 @@ function RegistryLinkMark({
     // The row underneath usually navigates, and a click that both leaves for
     // the browser and opens a detail page is a click nobody meant to make.
     event.stopPropagation();
-    void openInBrowser(link);
+    void openExternal(link.url, link.site);
   };
 
   return (
@@ -148,25 +147,4 @@ function RegistryLinkMark({
       <ExternalLink className="h-2.5 w-2.5" aria-hidden="true" />
     </a>
   );
-}
-
-async function openInBrowser(link: RegistryLink) {
-  try {
-    await open(link.url);
-  } catch {
-    // There may be no browser to hand this to — a bare container, a sandbox.
-    // Saying nothing would look like a dead control, so the address is put
-    // where the reader can still use it and the toast says which it is.
-    const copied = await navigator.clipboard
-      .writeText(link.url)
-      .then(() => true)
-      .catch(() => false);
-    toast({
-      title: "Could not open your browser",
-      description: copied
-        ? `The ${link.site} address is on your clipboard instead: ${link.url}`
-        : `${link.site} has it at ${link.url}`,
-      variant: "destructive",
-    });
-  }
 }

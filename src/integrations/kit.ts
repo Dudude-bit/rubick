@@ -43,6 +43,41 @@ export function plural(count: number, noun: string): string {
 }
 
 /**
+ * One entry of the `status.conditions` array every operator writes.
+ *
+ * The one shape a vendor's objects genuinely share with every other vendor's:
+ * a type, a status, and — the part that is worth a page — the controller's
+ * own sentence about why. That message is never paraphrased anywhere in this
+ * tree; a rewritten error is a second guess at somebody else's failure.
+ */
+export interface VendorCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: string;
+}
+
+export function conditionsOf(
+  resource: CustomResourceInfo | CustomResourceDetailInfo
+): VendorCondition[] {
+  const conditions = getValueByPath(resource, "status.conditions");
+  return Array.isArray(conditions) ? (conditions as VendorCondition[]) : [];
+}
+
+/** One condition by type, or `null` where the controller has not written it. */
+export function conditionOf(
+  resource: CustomResourceInfo | CustomResourceDetailInfo,
+  conditionType: string
+): VendorCondition | null {
+  return (
+    conditionsOf(resource).find(
+      (condition) => condition.type === conditionType
+    ) ?? null
+  );
+}
+
+/**
  * The `Ready` condition's status, for the several vendors whose objects
  * all state health the same way — `"True"`, `"False"`, or `null` where the
  * controller has not written one yet.
@@ -51,11 +86,7 @@ export function readyStatus(
   resource: CustomResourceInfo | CustomResourceDetailInfo,
   conditionType: string = "Ready"
 ): string | null {
-  const conditions = getValueByPath(resource, "status.conditions") as
-    | Array<{ type?: string; status?: string }>
-    | undefined;
-  if (!Array.isArray(conditions)) return null;
-  return conditions.find((c) => c.type === conditionType)?.status ?? null;
+  return conditionOf(resource, conditionType)?.status ?? null;
 }
 
 /** A column a vendor adds to the list of one of its own kinds. */

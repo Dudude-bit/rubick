@@ -33,9 +33,8 @@
 
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Box, ChevronRight, Filter, Globe, Plug, Search } from "lucide-react";
+import { Box, Filter, Globe, Plug } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -49,8 +48,15 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { cn } from "@/lib/utils";
 import { crdObjectPath, plural } from "../kit";
+import {
+  Cell,
+  Column,
+  FilterBox,
+  Finding as FindingBlock,
+  TroubleRow,
+  type Tone,
+} from "../page-kit";
 import {
   servedGroupName,
   useBacking,
@@ -284,19 +290,12 @@ function RoutesTab({
   return (
     <div className="flex flex-col">
       <div className="mb-1 flex items-center gap-3">
-        <div className="relative w-[260px]">
-          <Search
-            className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-fg-fnt"
-            aria-hidden
-          />
-          <Input
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter by host, service or object"
-            aria-label="Filter hosts"
-            className="h-7 pl-7 text-xs"
-          />
-        </div>
+        <FilterBox
+          value={filter}
+          onChange={setFilter}
+          placeholder="Filter by host, service or object"
+          label="Filter hosts"
+        />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
             ? `${shown.length} of ${groups.length}`
@@ -334,9 +333,9 @@ function RoutesTab({
 }
 
 /** The word at the right of a host line: what is true of it right now. */
-function hostState(group: HostGroup): { text: string; tone: string } {
+function hostState(group: HostGroup): { text: string; tone: Tone } {
   const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: "nothing behind it", tone: "text-err" };
+  if (stop) return { text: "nothing behind it", tone: "err" };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -346,16 +345,16 @@ function hostState(group: HostGroup): { text: string; tone: string } {
         certificate.kind === "certificate" && certificate.expiry?.expired
           ? "certificate expired"
           : "certificate running out",
-      tone: "text-err",
+      tone: "err",
     };
   }
   if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: "served in the clear", tone: "text-warn" };
+    return { text: "served in the clear", tone: "warn" };
   }
   if (group.findings.length > 0) {
-    return { text: "worth a look", tone: "text-warn" };
+    return { text: "worth a look", tone: "warn" };
   }
-  return { text: "serving", tone: "text-ok" };
+  return { text: "serving", tone: "ok" };
 }
 
 function HostRow({
@@ -367,12 +366,6 @@ function HostRow({
   sources: TraefikSources | null;
   openByDefault: boolean;
 }) {
-  // The reader's decision wins once they have made one; until then the row
-  // follows the data. Snapshotting it into state on mount made whether a
-  // broken host opened itself depend on which of the page's three queries
-  // answered first.
-  const [chosen, setChosen] = useState<boolean | null>(null);
-  const open = chosen ?? openByDefault;
   const state = hostState(group);
   const tls = group.tlsSecrets[0];
   // A route that declares no entry point is bound to all of them, and
@@ -391,49 +384,28 @@ function HostRow({
     : [];
 
   return (
-    <div className="border-b border-hair py-2">
-      <button
-        type="button"
-        onClick={() => setChosen(!open)}
-        aria-expanded={open}
-        className="flex w-full items-baseline gap-2 text-left"
-      >
-        <ChevronRight
-          aria-hidden
-          className={cn(
-            "size-3 flex-none translate-y-0.5 text-fg-fnt transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        <span className="truncate font-mono text-[12.5px] text-fg">
-          {group.host ?? "any host"}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[11px] text-fg-fnt">
+    <TroubleRow
+      title={group.host ?? "any host"}
+      meta={
+        <>
           {plural(group.routes.length, "path")}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? "every entry point" : summarise(entryPoints)}`}
           {tls ? ` · TLS from ${tls.secretName}` : " · no TLS"}
-        </span>
-        <span className={cn("flex-none text-[11px]", state.tone)}>
-          {state.text}
-        </span>
-      </button>
-
-      {open && (
-        <div className="ml-5 mt-2 flex flex-col gap-3">
-          <Paths group={group} sources={sources} />
-          {sources && <Chain group={group} sources={sources} />}
-          <Findings group={group} />
-        </div>
-      )}
-      {/* A finding is why the reader is here, so it survives the row being
-          closed — collapsing hides the detail, never the problem. */}
-      {!open && group.findings.length > 0 && (
-        <div className="ml-5 mt-1.5">
-          <Findings group={group} brief />
-        </div>
-      )}
-    </div>
+        </>
+      }
+      state={state}
+      openByDefault={openByDefault}
+      // A finding is why the reader is here, so it survives the row being
+      // closed — collapsing hides the detail, never the problem.
+      brief={
+        group.findings.length > 0 ? <Findings group={group} brief /> : undefined
+      }
+    >
+      <Paths group={group} sources={sources} />
+      {sources && <Chain group={group} sources={sources} />}
+      <Findings group={group} />
+    </TroubleRow>
   );
 }
 
@@ -559,49 +531,6 @@ function SourceRef({ route }: { route: TraefikRoute }) {
 }
 
 // --- the chain ----------------------------------------------------------
-
-function Cell({
-  children,
-  bad,
-  under,
-}: {
-  children: React.ReactNode;
-  bad?: boolean;
-  under?: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid",
-        bad && "border-err/50 text-err"
-      )}
-    >
-      <span className="block truncate">{children}</span>
-      {under != null && (
-        <span className="mt-0.5 block truncate font-sans text-[10px] text-fg-fnt">
-          {under}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function Column({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col pr-3">
-      <span className="mb-1.5 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
-        {label}
-      </span>
-      <div className="flex flex-col gap-1.5">{children}</div>
-    </div>
-  );
-}
 
 /**
  * One host's chain, in the order a request travels it.
@@ -838,30 +767,15 @@ function FindingLine({
 }) {
   const said = describeFinding(finding);
   return (
-    <div
-      className={cn(
-        "border-l-2 pl-2.5",
-        finding.severity === "err" ? "border-err" : "border-warn"
-      )}
-    >
-      <p
-        className={cn(
-          "text-[11.5px]",
-          finding.severity === "err" ? "text-err" : "text-warn"
-        )}
-      >
-        {said.title}
-      </p>
-      {!brief && (
-        <p className="mt-0.5 text-[11.5px] text-fg-mut">{said.note}</p>
-      )}
+    <FindingBlock tone={finding.severity} title={said.title}>
+      {!brief && said.note}
       {/* Core above, extension below, in that order and never the other way
           round: the finding reads whole on a cluster with cert-manager
           nowhere in it. */}
       {!brief && finding.kind === "certificate" && (
         <RenewalNote issuance={issuance} secretName={finding.secretName} />
       )}
-    </div>
+    </FindingBlock>
   );
 }
 

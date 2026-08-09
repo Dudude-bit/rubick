@@ -51,6 +51,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { integrationPagePath } from "./paths";
+import argocd from "./argocd";
 import aws from "./aws";
 import azure from "./azure";
 import certManager from "./cert-manager";
@@ -97,6 +98,7 @@ export type {
 const VENDORS: Vendor[] = [
   certManager,
   traefik,
+  argocd,
   flux,
   istio,
   k3s,

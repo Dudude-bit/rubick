@@ -81,6 +81,7 @@ describe("useCrdView", () => {
     ["traefik.io", "IngressRoute", "Hosts"],
     ["traefik.containo.us", "IngressRoute", "Hosts"],
     ["helm.toolkit.fluxcd.io", "HelmRelease", "Chart"],
+    ["argoproj.io", "Application", "Sync"],
     ["networking.istio.io", "VirtualService", "Gateways"],
   ])("draws %s/%s with the vendor's own columns", (group, kind, header) => {
     const columns = view(group, kind)?.columnsFor(kind);
@@ -93,7 +94,11 @@ describe("useCrdView", () => {
    * wrote, which is the fallback the absent view selects.
    */
   it.each([
-    ["argoproj.io", "Application"],
+    // `argoproj.io` is not Argo CD's alone: Argo Rollouts and Argo Workflows
+    // put their kinds in the same group, and drawing a Workflow with a sync
+    // status it does not have is what claiming the group would cause.
+    ["argoproj.io", "Workflow"],
+    ["argoproj.io", "Rollout"],
     ["source.toolkit.fluxcd.io", "GitRepository"],
     ["", "Widget"],
   ])("claims nothing for %s/%s", (group, kind) => {

@@ -1,28 +1,41 @@
-import { GitBranch } from "lucide-react";
+import { Layers } from "lucide-react";
 
 import { crdObjectPath } from "../kit";
 import { defineVendor } from "../registry";
 import { crd } from "./crd";
+import { countReconcilers, HELM_RELEASES_CRD } from "./data";
 import { facts } from "./facts";
-
-const HELM_RELEASES_CRD = "helmreleases.helm.toolkit.fluxcd.io";
 
 /**
  * Flux CD.
  *
- * Tier two. `delivery.source` — who deployed this object, from which commit,
- * and whether it has drifted — is the capability this vendor is eventually
- * for, and it would be a second field here rather than a second folder
- * anywhere else.
+ * Tier two, with nothing behind a credential at all: every fact its page draws
+ * is in its CRDs' own `status.conditions`, and unlike Argo there is no second
+ * half in a vendor API and no vendor UI to link to. That is what makes the
+ * page the only place the whole picture exists.
+ *
+ * It earns one for the reason `registry.ts` states: it owns objects and a
+ * topology no core object can host. Flux's topology is specifically *not*
+ * Argo's — a source fetches, a reconciler applies, and several appliers share
+ * one source — which is why there are two pages and not one "GitOps" page.
+ *
+ * The reverse direction — the "managed by" line on the object Flux applied —
+ * is `owner.ts`, which resolves the claim against the owner's own inventory
+ * rather than trusting a label. It is not in `provides` yet because no surface
+ * consumes it.
  */
 export default defineVendor({
   id: "flux",
   name: "Flux",
   extension: {
     gives:
-      "Flux's own objects read as delivery, and the route from a Helm release to the object that reconciles it",
-    icon: GitBranch,
+      "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
+    icon: Layers,
     facts,
+  },
+  page: {
+    count: countReconcilers,
+    load: () => import("./page"),
   },
   crd,
 });
@@ -37,3 +50,5 @@ export default defineVendor({
  */
 export const helmReleasePath = (namespace: string, name: string) =>
   crdObjectPath(HELM_RELEASES_CRD, namespace, name);
+
+export { ownerOf as fluxOwnerOf } from "./owner";

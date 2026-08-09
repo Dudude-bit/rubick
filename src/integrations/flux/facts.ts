@@ -1,48 +1,46 @@
 /**
  * What Flux is doing for this cluster right now.
  *
- * Kustomizations only, and one list. `kustomize-controller` is what
- * detection keys on, so the CRD this reads is the one whose presence said
- * Flux was here — the call cannot be made against a cluster that would
- * refuse it. Adding HelmReleases would be a second list against a CRD that
- * a source-only install does not have, and a row that says "could not read
- * them" on a working Flux is worse than a row that says one true thing.
+ * The same reads the page makes, so the row names the two states a list of
+ * Kustomizations cannot: a reconciler that is suspended — `Ready` from its
+ * last run, reconciling nothing — and one frozen behind a source that stopped
+ * fetching, which reports `Ready` as well. A count is inventory and stays
+ * quiet; those two are why anybody would open the page.
  */
 
-import { commands } from "@/lib/commands";
-
-import { crdObjectsPath, plural, readyStatus } from "../kit";
+import { integrationPagePath } from "../paths";
+import { plural } from "../kit";
 import type { VendorFact } from "../registry";
-
-const KUSTOMIZATIONS_CRD = "kustomizations.kustomize.toolkit.fluxcd.io";
+import { fetchPicture } from "./data";
 
 export async function facts(): Promise<VendorFact[]> {
-  const kustomizations = await commands.listCustomResources(
-    KUSTOMIZATIONS_CRD,
-    null,
-    null,
-    null
-  );
-
-  // Not-Ready is Flux's own word for "the cluster does not match git and I
-  // could not make it". A Kustomization the controller has not reached yet
-  // has no condition at all, which is neither reconciled nor failing.
-  const failing = kustomizations.filter(
-    (kustomization) => readyStatus(kustomization) === "False"
-  );
+  const { reconcilers, sources } = await fetchPicture();
 
   const lines: VendorFact[] = [
-    { text: plural(kustomizations.length, "Kustomization") },
+    { text: plural(reconcilers.length, "reconciler") },
   ];
 
-  if (failing.length > 0) {
-    lines.push({
-      text: `${failing.length} not reconciled`,
-      tone: "err",
-    });
+  const failing = reconcilers.filter(
+    (reconciler) => reconciler.worst === "err"
+  ).length;
+  if (failing > 0) {
+    lines.push({ text: `${failing} not reconciled`, tone: "err" });
   }
-  if (kustomizations.length > 0) {
-    lines.push({ text: "Show them", to: crdObjectsPath(KUSTOMIZATIONS_CRD) });
+
+  const suspended = reconcilers.filter(
+    (reconciler) => reconciler.suspended
+  ).length;
+  if (suspended > 0) {
+    lines.push({ text: `${suspended} suspended`, tone: "warn" });
+  }
+
+  const stopped = sources.filter((source) => source.ready === false).length;
+  if (stopped > 0) {
+    lines.push({ text: `${stopped} source not fetching`, tone: "err" });
+  }
+
+  if (reconcilers.length > 0) {
+    lines.push({ text: "Show them", to: integrationPagePath("flux") });
   }
 
   return lines;

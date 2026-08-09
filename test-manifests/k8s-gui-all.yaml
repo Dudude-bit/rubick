@@ -1200,3 +1200,318 @@ spec:
                 name: log-demo
                 port:
                   number: 80
+---
+# --- Argo CD and Flux, for the two delivery pages ------------------------
+#
+# Both controllers have to be installed first — they are not in this file,
+# because a vendor's own install manifest is thirty thousand lines and is
+# published by the vendor:
+#
+#   kubectl apply -f https://github.com/fluxcd/flux2/releases/latest/download/install.yaml
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#
+# Three of the states below cannot be declared, because each of them is a
+# *transition*: an object that worked and then stopped. Apply this file,
+# wait for everything to go green, and then:
+#
+#   kubectl -n argocd patch application analytics --type merge \
+#     -p '{"operation":{"sync":{"revision":"master","syncOptions":["CreateNamespace=true"]}}}'
+#   kubectl -n argo-analytics set image deploy/podinfo podinfod=ghcr.io/stefanprodan/podinfo:6.5.4
+#   kubectl -n flux-system patch kustomization tenant-b --type merge -p '{"spec":{"suspend":true}}'
+#   kubectl -n flux-system patch gitrepository podinfo --type merge \
+#     -p '{"spec":{"url":"https://github.com/k8s-gui-demo/podinfo-moved"}}'
+#
+# The last one is the important one: it breaks a source that had already
+# fetched, which is what leaves the appliers under it reporting Ready from a
+# revision nothing can refresh — the state the Flux page exists to show and
+# the one a fresh apply can never produce.
+# A Flux Kustomization does not create its targetNamespace, and neither
+# does an Argo Application without CreateNamespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-apps
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-ingress
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-tenant-b
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-analytics
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: prod
+  namespace: argocd
+spec:
+  description: The demo project the k8s-gui Argo CD page reads
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: "*"
+      server: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+# Healthy and synced: the ordinary case, and the one that must stay quiet.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-podinfo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# Finding one: sync failing with auto-sync on. The destination namespace does
+# not exist and CreateNamespace is deliberately absent, so the API server
+# refuses every object and Argo retries for ever.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-shop-nowhere
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+---
+# Finding two: out of sync with auto-sync off. Identical to Argo's status
+# column and the opposite problem — nothing is retrying, and nothing will
+# change until a person decides. Needs the sync-then-drift steps above.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: analytics
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-analytics
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+---
+# A generated Application: editing the Application it makes is pointless.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: tenant-a
+  template:
+    metadata:
+      name: "{{name}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/stefanprodan/podinfo
+        path: kustomize
+        targetRevision: master
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "argo-{{name}}"
+      syncPolicy:
+        automated: {}
+        syncOptions:
+          - CreateNamespace=true
+---
+# What makes Argo's UI address knowable at all. Without an Ingress in front of
+# argocd-server there is no route from the reader's machine, and the page says
+# so instead of offering a link into a connection error.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  rules:
+    - host: argocd.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
+---
+# The source that fetches, and is then broken by hand — see the note above.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 2m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+---
+# A source that never fetches at all: a different sentence from one that
+# stopped, because nothing under it has ever been applied.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: infra
+  namespace: flux-system
+spec:
+  interval: 2m
+  url: https://github.com/k8s-gui-demo/private-infra
+  ref:
+    branch: main
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-apps
+---
+# The root of a dependsOn chain, and the one to fix.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform
+  namespace: flux-system
+spec:
+  interval: 5m
+  retryInterval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: infra
+  path: ./clusters/prod
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-monitoring
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: ingress
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-ingress
+---
+# Suspended after a successful run — see the patch above. It keeps Ready=True
+# and reconciles nothing, which is the one state that looks perfect.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tenant-b
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-tenant-b
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: https://stefanprodan.github.io/podinfo
+---
+# A reconciler whose source is a chart repository and whose unit is a version.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: podinfo
+      version: "6.5.4"
+      sourceRef:
+        kind: HelmRepository
+        name: podinfo
+  targetNamespace: flux-helm
+  install:
+    createNamespace: true

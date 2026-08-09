@@ -55,6 +55,7 @@ const MARKERS: &[(&str, &[&str])] = &[
     ),
     ("flux", &["kustomizations.kustomize.toolkit.fluxcd.io"]),
     ("istio", &["virtualservices.networking.istio.io"]),
+    ("argocd", &["applications.argoproj.io"]),
 ];
 
 fn detect_by_marker(
