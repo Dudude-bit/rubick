@@ -319,6 +319,10 @@ export function tabRouteLabel(href: string): string {
 
   const segments = path.split("/").filter(Boolean);
   if (segments.length === 0) return "overview";
+  // A settings section is only ever read beside the word Settings. On its
+  // own in a tab strip, "appearance" or "about" names nothing the reader
+  // can place, so the page keeps its own name.
+  if (segments[0] === "settings") return "settings";
   // A known plural in the last position is a list page — `/workloads/pods`
   // as much as `/nodes`. Anything else is the object the route shows.
   const last = segments.at(-1) as string;

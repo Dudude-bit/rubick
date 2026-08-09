@@ -228,7 +228,8 @@ export default function App() {
               path="helm/:source/:namespace/:name"
               element={<HelmDetail />}
             />
-            <Route path="settings" element={<Settings />} />
+            {/* A splat, because each settings section is its own URL. */}
+            <Route path="settings/*" element={<Settings />} />
             <Route
               path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}
               element={<PodDetail />}

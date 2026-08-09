@@ -31,7 +31,7 @@ export function HelmStatusBanner({
       <p className={cn("flex items-center gap-1.5 text-[11px]", className)}>
         <AlertTriangle className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
         <span className="text-warn">Helm CLI not found.</span>
-        <Link to="/settings" className="text-info hover:underline">
+        <Link to="/settings/clusters" className="text-info hover:underline">
           Configure it in Settings
         </Link>
       </p>
@@ -61,7 +61,7 @@ export function HelmStatusBanner({
         </p>
         {helm.error && <p className="text-fg-fnt">{helm.error}</p>}
         <p className="flex items-center gap-3 pt-0.5">
-          <Link to="/settings" className="text-info hover:underline">
+          <Link to="/settings/clusters" className="text-info hover:underline">
             Configure in Settings
           </Link>
           <a

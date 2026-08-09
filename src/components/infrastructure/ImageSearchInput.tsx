@@ -159,7 +159,7 @@ export function ImageSearchInput({
             Registry
           </Label>
           <Link
-            to="/settings"
+            to="/settings/registries"
             className="text-[11px] text-info hover:underline"
           >
             Manage

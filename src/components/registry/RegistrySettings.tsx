@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -299,11 +299,9 @@ export function RegistrySettings() {
   };
 
   return (
+    // No header: the settings section this lives in already names it and
+    // says what it is for, and two titles stacked read as two panels.
     <Section>
-      <SectionHeader
-        title="Container Registries"
-        description="Manage registry endpoints and credentials for image search."
-      />
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[220px] flex-1 space-y-1.5">

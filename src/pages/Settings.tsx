@@ -1,248 +1,173 @@
-import { useThemeStore } from "@/stores/themeStore";
-import { useUpdaterStore } from "@/stores/updaterStore";
-import {
-  useDisplaySettingsStore,
-  type ResourceColouring,
-} from "@/stores/displaySettingsStore";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
-import { useQuery } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import { useToast } from "@/components/ui/use-toast";
-import { PortForwardManager } from "@/components/port-forward/PortForwardManager";
+import { Navigate, Route, Routes } from "react-router-dom";
+
 import { RegistrySettings } from "@/components/registry/RegistrySettings";
-import { CloudProfiles } from "@/components/settings/CloudProfiles";
-import { CliSettings } from "@/components/settings/CliSettings";
+import { AboutSettings } from "@/components/settings/AboutSettings";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
+import { ClustersSettings } from "@/components/settings/ClustersSettings";
 import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
-import { KubeconfigSettings } from "@/components/settings/KubeconfigSettings";
-import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
+import { SettingsNav } from "@/components/settings/SettingsNav";
+import { SettingsSearchable } from "@/components/settings/settings-row";
 import {
-  Download,
-  RefreshCw,
-  AlertCircle,
-  Sun,
-  Moon,
-  Monitor,
-} from "lucide-react";
+  SettingsSearchProvider,
+  SettingsSectionScope,
+  useSettingsSearch,
+} from "@/components/settings/settings-search";
+import {
+  DEFAULT_SETTINGS_SECTION,
+  SETTINGS_SECTIONS,
+} from "@/components/settings/settings-sections";
+import { useClusterStore } from "@/stores/clusterStore";
+import { cn } from "@/lib/utils";
 
-const THEMES = [
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
-  { value: "system", label: "System", Icon: Monitor },
-] as const;
+/**
+ * The nav does not fold, and the arithmetic is why.
+ *
+ * Three things share the width: the app's rail at 208, this page's own
+ * padding at 32, the section nav at 184, and a pane that needs about 520
+ * to still fit a path field with its browse button beside it. That puts
+ * the fold at a 944px window — and the app's `minWidth` is 1024, so the
+ * narrowest window anybody can drag to still leaves the pane 600px. A
+ * strip layout here would be a branch that cannot run.
+ */
 
-const COLOURINGS = [
-  { value: "full", label: "Full", hint: "Kind and identifier both coloured" },
-  {
-    value: "minimal",
-    label: "Minimal",
-    hint: "Kind by icon, identifier dimmed",
-  },
-  { value: "off", label: "Off", hint: "No colour on resource names" },
-] as const;
+function sectionContent(id: string, connected: boolean) {
+  switch (id) {
+    case "appearance":
+      return <AppearanceSettings />;
+    case "clusters":
+      return <ClustersSettings />;
+    case "integrations":
+      return connected ? (
+        <IntegrationsSettings />
+      ) : (
+        // An empty list and an unanswerable question look the same and
+        // mean different things: one says the cluster has none of these,
+        // the other that nothing was asked.
+        <div className="max-w-[64ch] py-8">
+          <h3 className="text-xs font-medium text-fg">No cluster connected</h3>
+          <p className="mt-1.5 text-xs text-fg-mut">
+            Connect a cluster and this will say what it has. Every extension
+            here is detected by asking the API server for its CRDs, and there is
+            no API server to ask.
+          </p>
+        </div>
+      );
+    case "registries":
+      // Registries keeps its own editor, which is not built from rows —
+      // so the section is indexed as one thing.
+      return (
+        <SettingsSearchable keywords="registry registries image pull credentials docker ecr gcr harbor basic bearer token username password">
+          <RegistrySettings />
+        </SettingsSearchable>
+      );
+    case "about":
+      return <AboutSettings />;
+    default:
+      return null;
+  }
+}
 
-export function Settings() {
-  const { theme, setTheme } = useThemeStore();
-  const { resourceColouring, setResourceColouring } = useDisplaySettingsStore();
-  const { toast } = useToast();
-  const {
-    available: updateAvailable,
-    version: updateVersion,
-    checking: updateChecking,
-    downloading: updateDownloading,
-    progress: updateProgress,
-    error: updateError,
-    autoCheckEnabled,
-    setAutoCheckEnabled,
-    checkForUpdates,
-    downloadAndInstall,
-  } = useUpdaterStore();
+function SettingsShell({ activeId }: { activeId: string }) {
+  const { query, terms, counts } = useSettingsSearch();
+  const currentContext = useClusterStore((state) => state.currentContext);
+  const searching = terms.length > 0;
 
-  const { data: appInfo } = useQuery({
-    queryKey: ["appInfo"],
-    queryFn: commands.getAppInfo,
-    staleTime: Infinity,
-  });
+  const active =
+    SETTINGS_SECTIONS.find((section) => section.id === activeId) ??
+    SETTINGS_SECTIONS[0];
+  const matched = counts[active.id] ?? 0;
 
   return (
-    // No page title: the breadcrumb above already reads "Settings", and the
-    // first group caption starts the content immediately.
-    <div className="flex max-w-3xl flex-col gap-5 animate-in fade-in duration-200">
-      <SettingsGroup title="Appearance">
-        <SettingRow
-          label="Theme"
-          hint="System follows your desktop's light/dark preference."
-          control={
-            <RadioGroup
-              value={theme}
-              onValueChange={(value) =>
-                setTheme(value as "light" | "dark" | "system")
-              }
-              className="flex items-center gap-0.5"
-            >
-              {THEMES.map(({ value, label, Icon }) => (
-                <div key={value}>
-                  <RadioGroupItem
-                    value={value}
-                    id={`theme-${value}`}
-                    className="peer sr-only"
-                  />
-                  <Label
-                    htmlFor={`theme-${value}`}
-                    className="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg"
-                  >
-                    <Icon className="h-3 w-3" aria-hidden="true" />
-                    {label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          }
-        />
-        <SettingRow
-          label="Resource colouring"
-          hint="Colour tells resource kinds apart and gives each object a stable tint. Minimal keeps the icon only."
-          control={
-            <RadioGroup
-              value={resourceColouring}
-              onValueChange={(value) =>
-                setResourceColouring(value as ResourceColouring)
-              }
-              className="flex items-center gap-0.5"
-            >
-              {COLOURINGS.map(({ value, label, hint }) => (
-                <div key={value}>
-                  <RadioGroupItem
-                    value={value}
-                    id={`colouring-${value}`}
-                    className="peer sr-only"
-                  />
-                  <Label
-                    htmlFor={`colouring-${value}`}
-                    title={hint}
-                    className="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg"
-                  >
-                    {label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          }
-        />
-      </SettingsGroup>
+    <div className="flex h-full min-h-0 flex-row">
+      <SettingsNav activeId={active.id} />
 
-      <KubeconfigSettings />
-      <CloudProfiles />
-      <CliSettings />
-      <IntegrationsSettings />
-      <RegistrySettings />
-      <PortForwardManager />
+      <div className="min-w-0 flex-1 overflow-auto scrollbar-thin pb-8 pl-5 pr-1 pt-1">
+        {/* Capped, because a row 950px wide puts the control it belongs to
+            at the other end of the screen from its label. */}
+        <div className="max-w-3xl">
+          <div className="flex items-baseline gap-2.5">
+            <h1 className="text-[13px] font-semibold text-fg">
+              {active.label}
+            </h1>
+            <span className="text-[11px] text-fg-fnt">
+              {searching ? (
+                matched === 0 ? (
+                  <>nothing here matches &ldquo;{query}&rdquo;</>
+                ) : (
+                  <>
+                    {matched} setting{matched === 1 ? "" : "s"} match
+                    {matched === 1 ? "es" : ""} &ldquo;{query}&rdquo;
+                  </>
+                )
+              ) : active.clusterScoped && currentContext ? (
+                <>
+                  in <span className="font-mono">{currentContext}</span>
+                </>
+              ) : null}
+            </span>
+          </div>
+          <p className="mb-4 mt-0.5 max-w-[70ch] text-[11px] text-fg-fnt">
+            {active.description}
+          </p>
 
-      <SettingsGroup title="About">
-        <SettingRow
-          label="Version"
-          control={
-            <span className="font-mono text-xs text-fg">
-              {appInfo?.version ?? "…"}
-            </span>
-          }
-        />
-        <SettingRow
-          label="Tauri"
-          control={
-            <span className="font-mono text-xs text-fg-mut">
-              {appInfo?.tauriVersion ?? "…"}
-            </span>
-          }
-        />
-        <SettingRow
-          label="Framework"
-          control={
-            <span className="text-xs text-fg-mut">React + TypeScript</span>
-          }
-        />
-        <SettingRow
-          label="Updates"
-          hint={
-            updateError ? (
-              <span className="flex items-center gap-1 text-err">
-                <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                {updateError}
-              </span>
-            ) : updateAvailable && updateVersion ? (
-              `Version ${updateVersion} is available.`
-            ) : (
-              "You are running the latest version."
-            )
-          }
-          control={
-            updateAvailable && !updateDownloading ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  toast({
-                    title: "Downloading update",
-                    description: "The app restarts automatically when ready.",
-                  });
-                  downloadAndInstall();
-                }}
+          {SETTINGS_SECTIONS.map((section) => {
+            const isActive = section.id === active.id;
+            // A search that only counted the section you are standing in
+            // would dim the other four regardless of what they hold, so a
+            // query is what mounts them. Nothing is fetched for a section
+            // nobody has asked about until somebody starts typing.
+            if (!isActive && !searching) return null;
+            return (
+              <div
+                key={section.id}
+                className={cn(!isActive && "hidden")}
+                hidden={!isActive}
               >
-                <Download className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                Download &amp; install
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  const update = await checkForUpdates();
-                  if (update) {
-                    toast({
-                      title: "Update available",
-                      description: `Version ${update.version} is ready to download.`,
-                    });
-                  } else if (!updateError) {
-                    toast({
-                      title: "No updates",
-                      description: "You're running the latest version.",
-                    });
-                  }
-                }}
-                disabled={updateChecking || updateDownloading}
-              >
-                <RefreshCw
-                  className={`mr-1.5 h-3 w-3 ${updateChecking ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-                {updateChecking ? "Checking…" : "Check for updates"}
-              </Button>
-            )
-          }
-        >
-          {updateDownloading && (
-            <div className="flex items-center gap-2">
-              <Progress value={updateProgress} className="max-w-xs" />
-              <span className="font-mono text-[11px] text-fg-mut">
-                {updateProgress}%
-              </span>
-            </div>
-          )}
-        </SettingRow>
-        <SettingRow
-          label="Automatic updates"
-          hint="Check on startup and every 30 minutes."
-          control={
-            <Switch
-              aria-label="Automatic updates"
-              checked={autoCheckEnabled}
-              onCheckedChange={setAutoCheckEnabled}
-            />
-          }
-        />
-      </SettingsGroup>
+                <SettingsSectionScope id={section.id}>
+                  {sectionContent(section.id, Boolean(currentContext))}
+                </SettingsSectionScope>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Settings, as five sections rather than one scroll of eight groups.
+ *
+ * Every section is a URL, because a settings page you cannot link
+ * somebody to is the one screen in the app that cannot be pointed at —
+ * and three places already link here meaning a particular part of it.
+ *
+ * An unknown section redirects to the default instead of rendering the
+ * blank shell an unmatched child route otherwise leaves behind. `replace`
+ * keeps the typo out of the history so Back still goes back.
+ */
+export function Settings() {
+  return (
+    <SettingsSearchProvider>
+      <Routes>
+        <Route
+          index
+          element={<Navigate to={DEFAULT_SETTINGS_SECTION} replace />}
+        />
+        {SETTINGS_SECTIONS.map((section) => (
+          <Route
+            key={section.id}
+            path={section.id}
+            element={<SettingsShell activeId={section.id} />}
+          />
+        ))}
+        <Route
+          path="*"
+          element={
+            <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />
+          }
+        />
+      </Routes>
+    </SettingsSearchProvider>
   );
 }
