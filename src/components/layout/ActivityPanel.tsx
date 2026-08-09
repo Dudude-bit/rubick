@@ -120,7 +120,7 @@ export function ActivityPanel() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
-          {tab === "ports" && <PortForwardsTab onClose={handleClose} />}
+          {tab === "ports" && <PortForwardsTab />}
           {tab === "terminals" && <TerminalsTab onClose={handleClose} />}
           {tab === "jobs" && <BackgroundJobsTab />}
         </div>
