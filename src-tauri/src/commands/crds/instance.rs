@@ -19,9 +19,16 @@ use super::types::{CustomResourceDetailInfo, CustomResourceInfo};
 
 /// Load the CRD by name and return a dynamic `Api<DynamicObject>`
 /// scoped to its storage version. Used by every instance command.
+///
+/// `listing` is the difference between the two kinds of caller: a list
+/// with no namespace means every namespace, while a get or a delete with
+/// none means the default one. Collapsing both onto `for_command` narrowed
+/// every unscoped list to `default`, and the answer that came back — none
+/// of them, on a cluster full of them — looked exactly like a true one.
 async fn crd_to_dynamic_api(
     crd_name: &str,
     namespace: Option<String>,
+    listing: bool,
     state: &State<'_, AppState>,
 ) -> Result<Api<DynamicObject>> {
     let crd: CustomResourceDefinition =
@@ -56,10 +63,12 @@ async fn crd_to_dynamic_api(
 
     let is_namespaced = spec.scope == "Namespaced";
 
-    let ctx = if is_namespaced {
-        ResourceContext::for_command(state, namespace)?
-    } else {
+    let ctx = if !is_namespaced {
         ResourceContext::for_list(state, None)?
+    } else if listing {
+        ResourceContext::for_list(state, namespace)?
+    } else {
+        ResourceContext::for_command(state, namespace)?
     };
 
     Ok(ctx.dynamic_api_for_resource(&api_resource, !is_namespaced))
@@ -76,7 +85,7 @@ pub async fn list_custom_resources(
 ) -> Result<Vec<CustomResourceInfo>> {
     crate::validation::validate_dns_subdomain(&crd_name)?;
 
-    let api = crd_to_dynamic_api(&crd_name, namespace, &state).await?;
+    let api = crd_to_dynamic_api(&crd_name, namespace, true, &state).await?;
     let params = build_list_params(label_selector.as_deref(), None, limit);
     let list = api.list(&params).await?;
 
@@ -98,7 +107,7 @@ pub async fn get_custom_resource(
     crate::validation::validate_dns_subdomain(&crd_name)?;
     crate::validation::validate_dns_subdomain(&name)?;
 
-    let api = crd_to_dynamic_api(&crd_name, namespace, &state).await?;
+    let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
     let obj = api.get(&name).await?;
 
     Ok(dynamic_object_to_detail_info(&obj))
@@ -115,7 +124,7 @@ pub async fn get_custom_resource_yaml(
     crate::validation::validate_dns_subdomain(&crd_name)?;
     crate::validation::validate_dns_subdomain(&name)?;
 
-    let api = crd_to_dynamic_api(&crd_name, namespace, &state).await?;
+    let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
     let obj = api.get(&name).await?;
 
     let yaml = serde_yaml::to_string(&obj).map_err(|e| Error::Serialization(e.to_string()))?;
@@ -133,7 +142,7 @@ pub async fn delete_custom_resource(
     crate::validation::validate_dns_subdomain(&crd_name)?;
     crate::validation::validate_dns_subdomain(&name)?;
 
-    let api = crd_to_dynamic_api(&crd_name, namespace, &state).await?;
+    let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
     api.delete(&name, &DeleteParams::default()).await?;
 
     Ok(())
