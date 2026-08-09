@@ -8,6 +8,7 @@ import {
 
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { useIntegrationPages } from "@/integrations";
 import { detectProvider } from "@/lib/cluster-identity";
 import {
   ResourceType,
@@ -97,9 +98,15 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
       resource(ResourceType.Secret, "secrets"),
     ],
   },
-  {
-    items: [{ label: "Settings", path: "/settings", icon: Settings }],
-  },
+];
+
+/**
+ * After the Integrations category, which sits between the fixed nav and this
+ * — everything above is what every cluster has, and Settings is the last row
+ * on every screen the app has ever drawn.
+ */
+const TAIL: NavItem[] = [
+  { label: "Settings", path: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
@@ -112,18 +119,61 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
         {GROUPS.map((group, index) => (
           <div key={group.caption ?? `ungrouped-${index}`}>
-            {group.caption && (
-              <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
-                {group.caption}
-              </div>
-            )}
+            {group.caption && <GroupCaption>{group.caption}</GroupCaption>}
             {group.items.map((item) => (
               <NavRow key={item.path} item={item} overview={overview} />
             ))}
           </div>
         ))}
+        <IntegrationsGroup />
+        <div>
+          {TAIL.map((item) => (
+            <NavRow key={item.path} item={item} overview={overview} />
+          ))}
+        </div>
       </nav>
     </aside>
+  );
+}
+
+function GroupCaption({ children }: { children: string }) {
+  return (
+    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The one group that is absent rather than empty.
+ *
+ * Every other caption in this rail names something every cluster has. This
+ * one names what *this* cluster happens to have installed, and on most
+ * clusters that is nothing — so it draws nothing at all, not a caption over
+ * a gap.
+ *
+ * Hiding a feature is normally the wrong answer, and it is the right one
+ * here only because Settings → Integrations already names every extension
+ * the app knows, installed or not, with what each one would give. "What
+ * could this app do" has a screen built for it; the sidebar stays a list of
+ * things you actually have.
+ */
+function IntegrationsGroup() {
+  const pages = useIntegrationPages();
+  if (pages.length === 0) return null;
+
+  return (
+    <div>
+      <GroupCaption>Integrations</GroupCaption>
+      {pages.map((page) => (
+        <NavRow
+          key={page.path}
+          item={{ label: page.name, path: page.path, icon: page.icon }}
+          overview={undefined}
+          value={page.count}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -201,9 +251,12 @@ function ClusterRow() {
 function NavRow({
   item,
   overview,
+  value,
 }: {
   item: NavItem;
   overview: ClusterOverview | undefined;
+  /** A count this row carries itself, for a row the overview knows nothing about. */
+  value?: number | null;
 }) {
   const updateAvailable = useUpdaterStore((state) => state.available);
   const badge = item.path === "/settings" && updateAvailable;
@@ -236,7 +289,13 @@ function NavRow({
             )}
           </div>
           {item.label}
-          <NavCount item={item} overview={overview} />
+          {value === undefined ? (
+            <NavCount item={item} overview={overview} />
+          ) : (
+            value !== null && (
+              <span className="ml-auto text-[11px] text-fg-fnt">{value}</span>
+            )
+          )}
         </>
       )}
     </NavLink>

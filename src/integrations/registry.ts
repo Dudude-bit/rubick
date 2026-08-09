@@ -1,11 +1,31 @@
 /**
  * The seam.
  *
- * A vendor contributes *facets*, not pages. Nobody opens a cert-manager page
- * — they are looking at an Ingress and want to know why its certificate has
- * not renewed. So a vendor declares what it can supply and the surface asks
- * for the facet rather than for the vendor by name. A lint rule keeps that
- * honest: nothing outside `src/integrations/` may import a vendor folder.
+ * A vendor declares what it can supply and the surface asks for the facet
+ * rather than for the vendor by name. A lint rule keeps that honest: nothing
+ * outside `src/integrations/` may import a vendor folder.
+ *
+ * ## Powers, and sometimes a page
+ *
+ * This file used to say a vendor contributes facets and never pages, and
+ * used Prometheus to argue it: nobody opens a Prometheus page, they are
+ * looking at a pod and want its last six hours. That is right about
+ * Prometheus and wrong as a general rule, and the line it was missing is
+ * this one — **a vendor gets a page when it owns objects and a topology no
+ * core object can host.**
+ *
+ * "What hosts does this cluster serve, and where does each one go" is a real
+ * question with no object to hang it off. It is not a property of a Service
+ * or a Deployment; it is the routing layer's own shape, and that is what
+ * earns {@link Vendor.page}. Prometheus still gets none: every fact it has
+ * belongs on the pod or the node it is about, and a page would be a place to
+ * go and find the same numbers with less context.
+ *
+ * Most vendors are both, and the halves stay honest about their jobs.
+ * cert-manager's expiry belongs on the Ingress that serves the certificate —
+ * a power, through {@link Capabilities} — and its list of every Certificate
+ * with a failing chain belongs on a page. {@link Extension} is the third
+ * thing: is it here, is it healthy, what does it give.
  *
  * ## The three tiers
  *
@@ -72,7 +92,7 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { IssuanceStory } from "@/generated/types";
 import type { CrdColumn, CrdStatus } from "./kit";
@@ -148,6 +168,41 @@ export interface Extension {
    * objects it would count do not exist.
    */
   facts?: () => Promise<VendorFact[]>;
+}
+
+/**
+ * The screen a vendor owns, and its row in the sidebar.
+ *
+ * Declared here for the same reason {@link Extension} is: the shell needs a
+ * route, a label, a glyph and a number, and it must get all four without
+ * learning that Traefik exists. `App.tsx` serves one route for every vendor
+ * page there will ever be, and the sidebar category is derived rather than
+ * written — so a second vendor page costs one folder and one line in
+ * {@link VENDORS}, and no file outside this tree changes.
+ *
+ * A page belongs to a vendor that also declares an {@link Extension}, and
+ * that is not a formality: the row takes its name and its glyph from the
+ * extension, and the category lists only *detected* extensions, so a vendor
+ * with a page and no extension would have a screen nothing could reach.
+ */
+export interface VendorPage {
+  /**
+   * The number at the end of the sidebar row — how many of the things the
+   * page actually lists, which is the same rule the resource rows follow.
+   *
+   * Not "how many of the vendor's CRDs exist": Traefik on a k3d cluster
+   * serves plain Ingresses and may own no IngressRoute at all, and a row
+   * reading `0` over a page with twelve hosts on it would be a lie about an
+   * empty page. `null` is the answer where the cluster refused to say, and
+   * draws nothing rather than a zero.
+   */
+  count: () => Promise<number | null>;
+  /**
+   * The page, imported when the reader opens it. A vendor page is a whole
+   * screen with its own parsing and its own queries; keeping it out of the
+   * first chunk is the difference between a facet and a cost everybody pays.
+   */
+  load: () => Promise<{ default: ComponentType }>;
 }
 
 /**
@@ -257,6 +312,8 @@ export interface Vendor {
   id: string;
   name: string;
   extension?: Extension;
+  /** Also the URL segment: `/integrations/<id>`. */
+  page?: VendorPage;
   provides?: Partial<Capabilities>;
   crd?: CrdView;
   nodeLabels?: NodeLabels;

@@ -133,6 +133,11 @@ const ConfigMapDetail = lazy(() =>
 const SecretDetail = lazy(() =>
   import("@/pages/SecretDetail").then((m) => ({ default: m.SecretDetail }))
 );
+const IntegrationPage = lazy(() =>
+  import("@/pages/IntegrationPage").then((m) => ({
+    default: m.IntegrationPage,
+  }))
+);
 
 export default function App() {
   const { theme } = useThemeStore();
@@ -230,6 +235,11 @@ export default function App() {
             />
             {/* A splat, because each settings section is its own URL. */}
             <Route path="settings/*" element={<Settings />} />
+            {/* One route for every vendor page: the shell resolves the slug
+                through the integrations registry and never names a vendor.
+                Which tab is open is a query parameter, so a scope tab parks
+                and restores the whole screen. */}
+            <Route path="integrations/:slug" element={<IntegrationPage />} />
             <Route
               path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}
               element={<PodDetail />}

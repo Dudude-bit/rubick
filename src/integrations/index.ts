@@ -24,11 +24,14 @@
  * 2. `src/integrations/index.ts` — one import and one entry in
  *    {@link VENDORS}.
  *
- * That is the whole procedure. No surface is edited, no switch statement
- * grows a case, nothing is registered at startup, and no test outside this
- * tree changes — every consumer reads the facet through a derivation below,
- * so a new vendor's labels, columns and marks appear wherever the existing
- * ones already do.
+ * That is the whole procedure, and it holds for a vendor that brings a whole
+ * screen: `page: { count, load }` beside `extension` puts a row in the
+ * sidebar's Integrations category and serves the screen at
+ * `/integrations/<id>`, through the one route `App.tsx` already has. No
+ * surface is edited, no switch statement grows a case, nothing is registered
+ * at startup, and no test outside this tree changes — every consumer reads
+ * the facet through a derivation below, so a new vendor's labels, columns,
+ * marks and pages appear wherever the existing ones already do.
  *
  * Two exceptions, both of which stay inside the tree: a genuinely new
  * *capability* (as opposed to a new supplier of an existing one) adds a key
@@ -38,9 +41,16 @@
  */
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import {
+  lazy,
+  useMemo,
+  type ComponentType,
+  type LazyExoticComponent,
+} from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { integrationPagePath } from "./paths";
 import aws from "./aws";
 import azure from "./azure";
 import certManager from "./cert-manager";
@@ -61,6 +71,7 @@ import type {
   Flavour,
   Vendor,
   VendorFact,
+  VendorPage,
 } from "./registry";
 
 export type {
@@ -71,6 +82,7 @@ export type {
   Extension,
   Vendor,
   VendorFact,
+  VendorPage,
 };
 
 /**
@@ -250,6 +262,126 @@ function factsStateOf(
   return { state: "loading" };
 }
 
+// --- the pages ----------------------------------------------------------
+
+/**
+ * Every vendor that owns a screen, in registry order.
+ *
+ * Narrowed on `extension` as well as on `page`, because the sidebar row a
+ * page gets is drawn from the extension's glyph and the vendor's name, and
+ * the category lists only what the cluster was detected to have.
+ */
+const PAGES: ReadonlyArray<
+  Vendor & { extension: Extension; page: VendorPage }
+> = VENDORS.filter(
+  (vendor): vendor is Vendor & { extension: Extension; page: VendorPage } =>
+    vendor.page !== undefined && vendor.extension !== undefined
+);
+
+/**
+ * `React.lazy` per vendor, made once.
+ *
+ * Calling `lazy()` in render would hand React a new component type on every
+ * pass, which remounts the page and re-runs its queries on every keystroke
+ * the reader types into it.
+ */
+const LAZY = new Map<string, LazyExoticComponent<ComponentType>>();
+
+function lazyPageOf(vendorId: string, page: VendorPage) {
+  const made = LAZY.get(vendorId);
+  if (made) return made;
+  const component = lazy(page.load);
+  LAZY.set(vendorId, component);
+  return component;
+}
+
+export interface IntegrationPageEntry {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  path: string;
+  /** `null` while it is being read, and where the cluster refused to say. */
+  count: number | null;
+}
+
+/**
+ * The Integrations category: one row per *detected* vendor that owns a
+ * screen, or an empty list.
+ *
+ * Empty is the answer for most clusters and the caller must draw nothing at
+ * all for it — not an empty group, not a placeholder. Hiding it is only safe
+ * because Settings → Integrations names every extension the app knows,
+ * installed or not, with what each one would give; that screen is where
+ * "what could this app do" is answered, and this one stays a list of things
+ * the cluster actually has.
+ */
+export function useIntegrationPages(): IntegrationPageEntry[] {
+  const { data } = useDetected();
+
+  const detected = PAGES.filter((vendor) =>
+    data?.some((entry) => entry.id === vendor.id && entry.installed)
+  );
+
+  const counts = useQueries({
+    queries: detected.map((vendor) => ({
+      queryKey: ["integration-page-count", vendor.id],
+      queryFn: () => vendor.page.count(),
+      staleTime: FACTS_STALE_TIME,
+    })),
+  });
+
+  return detected.map((vendor, index) => ({
+    id: vendor.id,
+    name: vendor.name,
+    icon: vendor.extension.icon,
+    path: integrationPagePath(vendor.id),
+    count: counts[index]?.data ?? null,
+  }));
+}
+
+/**
+ * What is at `/integrations/<slug>`.
+ *
+ * Four answers rather than a component or `null`, because the three
+ * not-a-page cases read differently to somebody who arrived by a stale link,
+ * a restored tab or a cluster switch: a slug no vendor claims is a typo, a
+ * vendor the cluster does not have is a cluster answer, and detection still
+ * running is neither.
+ */
+export type IntegrationPageState =
+  | { state: "detecting" }
+  | { state: "unknown" }
+  | { state: "absent"; name: string; icon: LucideIcon }
+  | {
+      state: "ready";
+      name: string;
+      icon: LucideIcon;
+      Page: LazyExoticComponent<ComponentType>;
+    };
+
+export function useIntegrationPage(
+  slug: string | undefined
+): IntegrationPageState {
+  const { data, isPending } = useDetected();
+  const vendor = PAGES.find((candidate) => candidate.id === slug);
+
+  if (!vendor) return { state: "unknown" };
+  if (isPending || !data) return { state: "detecting" };
+
+  const installed = data.some(
+    (entry) => entry.id === vendor.id && entry.installed
+  );
+  if (!installed) {
+    return { state: "absent", name: vendor.name, icon: vendor.extension.icon };
+  }
+  return {
+    state: "ready",
+    name: vendor.name,
+    icon: vendor.extension.icon,
+    Page: lazyPageOf(vendor.id, vendor.page),
+  };
+}
+
 /**
  * The vendor view for a custom resource's API group, or `null` for the
  * thousands of CRDs nobody here has heard of — which get the CRD's own
@@ -342,3 +474,4 @@ export function flavourOf(provider: ClusterProvider): Flavour | null {
  * one in an `import` is.
  */
 export { helmReleasePath as fluxHelmReleasePath };
+export { integrationPagePath };

@@ -965,3 +965,238 @@ spec:
                 name: log-demo
                 port:
                   number: 80
+
+---
+# --- Traefik routing page ------------------------------------------------
+#
+# The hosts the Traefik integration page draws, and the findings it draws
+# them for. Every one exists to make a finding real rather than to be
+# plausible: a route whose Service has no ready endpoints, a route whose
+# backend was never created, a host served in the clear, two objects claiming
+# one path, and two match rules the app refuses to paraphrase.
+#
+# `expiring-tls` is not here, because a certificate checked into a file is an
+# expired certificate a week later. Make it beside this:
+#
+#   openssl req -x509 -newkey rsa:2048 -nodes -days 4 \
+#     -keyout tls.key -out tls.crt -subj "/CN=expiring.k8s-gui.test" \
+#     -addext "subjectAltName=DNS:expiring.k8s-gui.test"
+#   kubectl -n k8s-gui-test create secret tls expiring-tls \
+#     --cert=tls.crt --key=tls.key
+#
+# Cleanup, which also takes the Ingress below with it:
+#
+#   kubectl -n k8s-gui-test delete \
+#     ingressroute/shop-api ingressroute/unready-route \
+#     ingressroute/mystery-route ingressroute/canary-route \
+#     middleware/strip-api middleware/rate-limit middleware/orphan-auth \
+#     ingress/ghost-traefik ingress/internal-plain ingress/legacy-old \
+#     ingress/legacy-new ingress/expiring-demo secret/expiring-tls
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api
+  namespace: k8s-gui-test
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: k8s-gui-test
+spec:
+  rateLimit:
+    average: 100
+    burst: 200
+---
+# Referenced by nothing. The Middlewares tab is the only place in the app
+# that can say so.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: orphan-auth
+  namespace: k8s-gui-test
+spec:
+  basicAuth:
+    secret: demo-secret
+---
+# A healthy chain: entry point -> rule -> two middlewares -> service -> pods.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: shop-api
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`shop.k8s-gui.test`) && PathPrefix(`/api`)
+      kind: Rule
+      middlewares:
+        - name: strip-api
+        - name: rate-limit
+      services:
+        - name: log-demo
+          port: 80
+  tls:
+    secretName: shop-tls
+---
+# Pods running, none of them ready: the case every list page draws as healthy.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: unready-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`unready.k8s-gui.test`)
+      kind: Rule
+      services:
+        - name: unready-demo
+          port: 80
+---
+# A backend that was never created.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ghost-traefik
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ghost.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: never-created
+                port:
+                  number: 80
+---
+# Bound to the plain entry point, with no TLS and no redirect middleware.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: internal-plain
+  namespace: k8s-gui-test
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: internal.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Two objects, one host, one path. Which one Traefik serves is not something
+# these objects settle, and the page says so rather than picking.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legacy-old
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: legacy.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legacy-new
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: legacy.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: stateful-demo
+                port:
+                  number: 80
+---
+# A negated rule. The app refuses to paraphrase it and prints it as written.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mystery-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: "!PathPrefix(`/private`) && Host(`mystery.k8s-gui.test`)"
+      kind: Rule
+      services:
+        - name: log-demo
+          port: 80
+---
+# A rule the app reads in part: the host is a fact, the header matcher is not
+# interpreted and is shown verbatim.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: canary-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`canary.k8s-gui.test`) && HeaderRegexp(`X-Canary`, `^(on|yes)$`)
+      kind: Rule
+      services:
+        - name: log-demo
+          port: 80
+---
+# The host whose certificate is running out. Its Secret is made by the
+# openssl lines above, because a checked-in certificate expires.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: expiring-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - expiring.k8s-gui.test
+      secretName: expiring-tls
+  rules:
+    - host: expiring.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
