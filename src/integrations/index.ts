@@ -37,7 +37,7 @@
  * too, because that union is what keeps the mark table exhaustive.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
@@ -51,16 +51,27 @@ import k3s from "./k3s";
 import karpenter from "./karpenter";
 import minikube from "./minikube";
 import traefik from "./traefik";
+import { normalizeTauriError } from "@/lib/error-utils";
 import type {
   CapabilityKey,
   Capabilities,
   ClusterProvider,
   CrdView,
+  Extension,
   Flavour,
   Vendor,
+  VendorFact,
 } from "./registry";
 
-export type { CapabilityKey, Capabilities, ClusterProvider, CrdView, Vendor };
+export type {
+  CapabilityKey,
+  Capabilities,
+  ClusterProvider,
+  CrdView,
+  Extension,
+  Vendor,
+  VendorFact,
+};
 
 /**
  * Every vendor that ships in the binary.
@@ -121,39 +132,122 @@ export function useCapability<K extends CapabilityKey>(
   return (found?.provides?.[key] as Capabilities[K] | undefined) ?? null;
 }
 
+/**
+ * A detected extension's facts, or the reason there are none.
+ *
+ * `failed` is a third thing from installed and absent, and it has to be:
+ * a row that fell back to an empty fact list would state, in the app's own
+ * quiet voice, that a cluster with two hundred certificates has none.
+ */
+export type FactsState =
+  | { state: "none" }
+  | { state: "loading" }
+  | { state: "ready"; facts: VendorFact[] }
+  | { state: "failed"; reason: string };
+
 export interface IntegrationStatus {
   vendor: Vendor;
+  /** Narrowed off the vendor, because only vendors with one are listed. */
+  extension: Extension;
   installed: boolean;
   version: string | null;
+  facts: FactsState;
 }
 
 /**
- * Every vendor whose *capabilities* this cluster could supply, and whether
- * it has them — for the one screen that is allowed to name them.
+ * How long a count is allowed to stand before it is read again.
  *
- * Only vendors with `provides` appear. A vendor whose whole contribution is
- * a CRD view or a node-label spelling has no row here and should not: there
- * is nothing to install for it, nothing to connect, and nothing a reader
- * could do with the knowledge that the app understands Istio's columns.
+ * The pane is glanced at, not watched, so nothing polls: opening it reads
+ * the cluster, and opening it again within the minute does not. A number on
+ * screen is therefore at most one pane-open old, which is why it is stated
+ * without a timestamp and without a live mark — it never claims to be
+ * either.
  */
-export function useIntegrations(): {
+const FACTS_STALE_TIME = 60_000;
+
+/** Every vendor that is an installable extension, in registry order. */
+const EXTENSIONS: ReadonlyArray<Vendor & { extension: Extension }> =
+  VENDORS.filter(
+    (vendor): vendor is Vendor & { extension: Extension } =>
+      vendor.extension !== undefined
+  );
+
+/** The names the Integrations pane says it looked for when it found none. */
+export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.map(
+  (vendor) => vendor.name
+);
+
+/**
+ * Every extension this cluster could have, whether it has it, and what the
+ * ones it has are currently doing — for the one screen allowed to name them.
+ *
+ * Only vendors declaring {@link Extension} appear, which is what keeps the
+ * cluster's own flavour out: GKE and k3s are vendors in this tree too, and
+ * "Google Cloud · not installed" is nonsense — you cannot have a cluster
+ * and not have the thing running it.
+ *
+ * Facts are fetched for detected extensions only. An absent one is not
+ * asked about, because the objects it would count cannot exist; and nothing
+ * is fetched at all unless the reader is standing on the pane, so mounting
+ * this to answer a search query costs no requests.
+ */
+export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
   isPending: boolean;
   error: Error | null;
 } {
   const { data, isPending, error } = useDetected();
+
+  const detected = EXTENSIONS.map((vendor) => {
+    const entry = data?.find((candidate) => candidate.id === vendor.id);
+    return {
+      vendor,
+      installed: entry?.installed ?? false,
+      version: entry?.version ?? null,
+    };
+  });
+
+  const asking = detected.filter(
+    ({ vendor, installed }) => installed && vendor.extension.facts
+  );
+
+  const results = useQueries({
+    queries: asking.map(({ vendor }) => ({
+      queryKey: ["integration-facts", vendor.id],
+      queryFn: () => vendor.extension.facts!(),
+      enabled: facts,
+      staleTime: FACTS_STALE_TIME,
+    })),
+  });
+
   return {
-    statuses: VENDORS.filter((vendor) => vendor.provides).map((vendor) => {
-      const detected = data?.find((entry) => entry.id === vendor.id);
+    statuses: detected.map(({ vendor, installed, version }) => {
+      const index = asking.findIndex((entry) => entry.vendor.id === vendor.id);
       return {
         vendor,
-        installed: detected?.installed ?? false,
-        version: detected?.version ?? null,
+        extension: vendor.extension,
+        installed,
+        version,
+        facts: factsStateOf(index === -1 ? undefined : results[index]),
       };
     }),
     isPending,
     error,
   };
+}
+
+function factsStateOf(
+  result: { data?: VendorFact[]; error: Error | null } | undefined
+): FactsState {
+  if (!result) return { state: "none" };
+  // Checked before `data`, because react-query keeps the last good answer
+  // through a failed refetch and a count nobody could re-read is not a
+  // count worth printing.
+  if (result.error) {
+    return { state: "failed", reason: normalizeTauriError(result.error) };
+  }
+  if (result.data) return { state: "ready", facts: result.data };
+  return { state: "loading" };
 }
 
 /**

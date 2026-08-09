@@ -24,7 +24,7 @@
 import type { CertificateFacts } from "@/generated/types";
 
 /** The last point a normal change still fits. */
-const ACT_SOON_DAYS = 14;
+export const ACT_SOON_DAYS = 14;
 /** Past the weekend: an interrupt rather than a change. */
 const NO_PROCESS_LEFT_DAYS = 3;
 

@@ -1,6 +1,9 @@
+import { ShieldCheck } from "lucide-react";
+
 import { commands } from "@/lib/commands";
 import { defineVendor } from "../registry";
 import { crd } from "./crd";
+import { facts } from "./facts";
 
 /**
  * cert-manager.
@@ -23,7 +26,11 @@ import { crd } from "./crd";
 export default defineVendor({
   id: "cert-manager",
   name: "cert-manager",
-  gives: "why a certificate has not renewed, from the object that failed",
+  extension: {
+    gives: "why a certificate has not renewed, from the object that failed",
+    icon: ShieldCheck,
+    facts,
+  },
   provides: {
     "certificate.issuance": ({ namespace, secretName }) =>
       commands.getCertificateIssuance(namespace, secretName),

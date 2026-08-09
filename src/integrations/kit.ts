@@ -12,7 +12,51 @@ import type {
   CustomResourceInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { CrdView } from "./registry";
+
+const CRDS = toPlural(ResourceType.CustomResourceDefinition);
+
+/**
+ * The route to the objects of one CRD, and to one of them.
+ *
+ * Built here rather than spelled out per vendor because it has already
+ * drifted once: a literal `/crds/…` in a vendor folder named a segment no
+ * route has, and the link went nowhere with nothing to say so.
+ */
+export function crdObjectsPath(crdName: string): string {
+  return `/${CRDS}/${encodeURIComponent(crdName)}?tab=instances`;
+}
+
+export function crdObjectPath(
+  crdName: string,
+  namespace: string | null,
+  name: string
+): string {
+  const base = `/${CRDS}/${encodeURIComponent(crdName)}/instances`;
+  return namespace ? `${base}/${namespace}/${name}` : `${base}/${name}`;
+}
+
+/** "1 certificate", "7 certificates". */
+export function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * The `Ready` condition's status, for the several vendors whose objects
+ * all state health the same way — `"True"`, `"False"`, or `null` where the
+ * controller has not written one yet.
+ */
+export function readyStatus(
+  resource: CustomResourceInfo | CustomResourceDetailInfo,
+  conditionType: string = "Ready"
+): string | null {
+  const conditions = getValueByPath(resource, "status.conditions") as
+    | Array<{ type?: string; status?: string }>
+    | undefined;
+  if (!Array.isArray(conditions)) return null;
+  return conditions.find((c) => c.type === conditionType)?.status ?? null;
+}
 
 /** A column a vendor adds to the list of one of its own kinds. */
 export interface CrdColumn {

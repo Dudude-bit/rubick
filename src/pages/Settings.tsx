@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
  * strip layout here would be a branch that cannot run.
  */
 
-function sectionContent(id: string, connected: boolean) {
+function sectionContent(id: string, connected: boolean, active: boolean) {
   switch (id) {
     case "appearance":
       return <AppearanceSettings />;
@@ -38,7 +38,12 @@ function sectionContent(id: string, connected: boolean) {
       return <ClustersSettings />;
     case "integrations":
       return connected ? (
-        <IntegrationsSettings />
+        // A query mounts every section so its rows can be counted. Mounting
+        // is not visiting, and what an extension is currently doing costs a
+        // list call per detected vendor to find out — so the pane indexes
+        // itself either way and only asks the cluster when it is the one
+        // being read.
+        <IntegrationsSettings active={active} />
       ) : (
         // An empty list and an unanswerable question look the same and
         // mean different things: one says the cluster has none of these,
@@ -124,7 +129,11 @@ function SettingsShell({ activeId }: { activeId: string }) {
                 hidden={!isActive}
               >
                 <SettingsSectionScope id={section.id}>
-                  {sectionContent(section.id, Boolean(currentContext))}
+                  {sectionContent(
+                    section.id,
+                    Boolean(currentContext),
+                    isActive
+                  )}
                 </SettingsSectionScope>
               </div>
             );

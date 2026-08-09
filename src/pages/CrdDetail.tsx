@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, GitBranch, ListTree, Tag, Trash2 } from "lucide-react";
 
@@ -48,7 +48,13 @@ export function CrdDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const copyToClipboard = useCopyToClipboard();
-  const [activeTab, setActiveTab] = useState("versions");
+  const [searchParams] = useSearchParams();
+  // Only the initial value. A link that says "show me the objects" has to
+  // land on them, and a reader who then clicks another tab has changed
+  // their mind — re-reading the URL after that would take it back.
+  const [activeTab, setActiveTab] = useState(
+    () => searchParams.get("tab") ?? "versions"
+  );
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 

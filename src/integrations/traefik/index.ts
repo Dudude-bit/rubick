@@ -1,16 +1,23 @@
+import { Router } from "lucide-react";
+
 import { defineVendor } from "../registry";
 import { crd } from "./crd";
+import { facts } from "./facts";
 
 /**
  * Traefik.
  *
- * Tier two, and only the CRD facet: nothing here asks the cluster anything
- * it is not already asking. No `gives` and so no Settings row, because
- * there is nothing for a reader to decide — the columns appear on a
- * `traefik.io` list page and cannot appear anywhere else.
+ * Tier two. Nothing here is configured — the CRDs are in the API server or
+ * they are not — and nothing is fetched until the reader opens the one
+ * screen that names it.
  */
 export default defineVendor({
   id: "traefik",
   name: "Traefik",
+  extension: {
+    gives: "IngressRoutes read as routing rather than as raw custom resources",
+    icon: Router,
+    facts,
+  },
   crd,
 });

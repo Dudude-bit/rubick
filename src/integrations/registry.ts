@@ -24,7 +24,27 @@
  *   gated on the backend's CRD scan.
  * - **Tier 3 — configured.** Needs its own address and usually a credential
  *   the kubeconfig does not carry. Nothing is tier 3 yet; Prometheus and the
- *   cloud APIs are the first candidates.
+ *   cloud APIs are the first candidates. {@link Extension} already carries
+ *   the shape one would need — a row is a name, a power, and a list of
+ *   facts, and "connected · answered 2s ago · Edit" is a fact with a route
+ *   on it — so the first tier-3 vendor adds a producer of that state, not a
+ *   second kind of row. What is deliberately *not* here is a config schema,
+ *   a probe or a credential store: an abstraction for zero implementations
+ *   is a costume, and inventing one would also put a configured integration
+ *   on screen that nobody configured.
+ *
+ * ## Why facts are a field and not a capability
+ *
+ * {@link Extension.facts} looks like it wants to be a {@link Capabilities}
+ * key, and it fails both halves of what a capability key is for. A
+ * capability exists so a surface can ask for a *power* without learning
+ * which vendor answered; the Integrations pane is the one screen whose
+ * whole job is to name the vendor, and it draws the facts directly under
+ * that name. And a capability's absence must have a good answer on the
+ * consuming surface — the absence of facts has no answer to give, it is
+ * simply a shorter row. So it is a field on the vendor, beside the other
+ * facets, and the pane reads it the same way the node list reads
+ * {@link Vendor.nodeLabels}.
  *
  * ## What decides that something lives here
  *
@@ -51,6 +71,7 @@
  * an event bus, third-party loading. What has to be right is the boundary.
  */
 
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { IssuanceStory } from "@/generated/types";
@@ -77,6 +98,57 @@ export interface Capabilities {
 }
 
 export type CapabilityKey = keyof Capabilities;
+
+/**
+ * One thing an extension is currently doing for this cluster.
+ *
+ * A count is quiet and a problem is coloured, which is the same discipline
+ * the condition rows and the tab marks already follow: `7 certificates` is
+ * inventory and `1 renewal failing` is why you came. Borrowing a tone for
+ * inventory spends the only signal this row has.
+ */
+export interface VendorFact {
+  text: string;
+  /** Only a problem has one. */
+  tone?: "warn" | "err";
+  /**
+   * Where the reader continues, and the reason this stays a status list
+   * rather than growing into a dashboard: every fact ends in the part of
+   * the app already built for the objects it counted.
+   */
+  to?: string;
+}
+
+/**
+ * The row a vendor gets in Settings → Integrations.
+ *
+ * Structural rather than a convention about which other field is filled
+ * in, and that is the point: a cluster's own flavour is a vendor in this
+ * tree too, and "Google Cloud · not installed" is nonsense. GKE cannot
+ * appear in that list by anybody forgetting a rule — it would have to
+ * declare itself an installable extension, which it plainly is not.
+ */
+export interface Extension {
+  /**
+   * What the reader gets for having it, in the words of the thing they get
+   * — never a list of the objects it reads. This is the row's whole job,
+   * and it must name a power the app actually has: a row promising a
+   * feature nothing implements is an advert, and this screen has none.
+   */
+  gives: string;
+  icon: LucideIcon;
+  /**
+   * What it is doing for this cluster right now — the second half of the
+   * same sentence `gives` starts.
+   *
+   * Optional per vendor, and it has to be: the tree is cheap to add to
+   * exactly because a vendor may declare one facet and no others, and a
+   * row with nothing but `gives` is still worth drawing. Called only for
+   * a vendor the cluster actually has, and never for an absent one — the
+   * objects it would count do not exist.
+   */
+  facts?: () => Promise<VendorFact[]>;
+}
 
 /**
  * How this vendor's own custom resources are drawn — tier 2, and its own
@@ -184,12 +256,7 @@ export interface Vendor {
   /** Matches the `id` the backend's detection reports, where it detects one. */
   id: string;
   name: string;
-  /**
-   * What the reader gets for having it, in the words of the thing they get
-   * — never a list of the objects it reads. This is the whole job of the
-   * Settings row, and only a vendor with {@link Vendor.provides} has one.
-   */
-  gives?: string;
+  extension?: Extension;
   provides?: Partial<Capabilities>;
   crd?: CrdView;
   nodeLabels?: NodeLabels;
