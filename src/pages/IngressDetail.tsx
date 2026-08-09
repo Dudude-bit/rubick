@@ -26,12 +26,18 @@ import {
   KeyValueSection,
   type KeyValue,
 } from "@/components/resources/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import {
+  recordToKeyValues,
+  TONE_CLASS,
+} from "@/components/resources/key-values";
+import { CertificateLine } from "@/components/resources/CertificateFacts";
 import { TrafficChain } from "@/components/resources/TrafficChain";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useTlsCertificates } from "@/hooks/useTlsCertificates";
+import { expiryOf } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
@@ -158,6 +164,25 @@ export function IngressDetail() {
   const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
 
   const connections = useConnections(ResourceType.Ingress, name, namespace);
+  const certificates = useTlsCertificates(
+    ingress?.namespace ?? namespace,
+    tlsConfigs.flatMap((config) =>
+      config.secretName ? [config.secretName] : []
+    )
+  );
+
+  // The soonest expiry across every certificate this Ingress serves: one
+  // Ingress with four hosts has four certificates, and the badge can only
+  // carry the one that runs out first.
+  const soonest = tlsConfigs
+    .map((config) =>
+      config.secretName
+        ? certificates.data?.get(config.secretName)?.certificate
+        : undefined
+    )
+    .filter((cert) => cert != null)
+    .map((cert) => expiryOf(cert))
+    .sort((a, b) => a.days - b.days)[0];
 
   const {
     data: events = [],
@@ -205,12 +230,19 @@ export function IngressDetail() {
     { label: "Paths", value: accessUrls.length, mono: true },
     {
       label: "TLS",
-      value: hasTls
-        ? hasCatchAllTls
-          ? "catch-all certificate"
-          : `${tlsHosts.length} host${tlsHosts.length === 1 ? "" : "s"}`
-        : "none — traffic is unencrypted",
-      tone: hasTls ? (hasCatchAllTls ? "warn" : undefined) : "warn",
+      // Once the certificate has been read, how long it has left is a more
+      // useful answer than how many hosts it covers — the host count is a
+      // shape, and the expiry is a date somebody has to act on.
+      value: !hasTls
+        ? "none — traffic is unencrypted"
+        : soonest
+          ? soonest.text
+          : hasCatchAllTls
+            ? "catch-all certificate"
+            : `${tlsHosts.length} host${tlsHosts.length === 1 ? "" : "s"}`,
+      tone: !hasTls
+        ? "warn"
+        : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
     },
   ];
 
@@ -406,10 +438,21 @@ export function IngressDetail() {
                 ) : (
                   "(auto-generated)"
                 ),
-                value: config.isCatchAll
-                  ? "catch-all · applies to every host not listed"
-                  : config.hosts.join(", ") || "no hosts",
-                mono: !config.isCatchAll,
+                value: (
+                  <span className="flex flex-col gap-0.5">
+                    <span className={cn(!config.isCatchAll && "font-mono")}>
+                      {config.isCatchAll
+                        ? "catch-all · applies to every host not listed"
+                        : config.hosts.join(", ") || "no hosts"}
+                    </span>
+                    {config.secretName && (
+                      <CertificateLine
+                        read={certificates.data?.get(config.secretName)}
+                        hosts={config.hosts}
+                      />
+                    )}
+                  </span>
+                ),
                 tone: config.isCatchAll ? ("warn" as const) : undefined,
               }))}
             />
@@ -496,9 +539,16 @@ export function IngressDetail() {
             </span>
           )}
           <span
-            className={cn("text-[11px]", hasTls ? "text-fg-fnt" : "text-warn")}
+            className={cn(
+              "text-[11px]",
+              !hasTls
+                ? "text-warn"
+                : soonest?.tone
+                  ? TONE_CLASS[soonest.tone]
+                  : "text-fg-fnt"
+            )}
           >
-            {hasTls ? "TLS" : "no TLS"}
+            {!hasTls ? "no TLS" : (soonest?.tone && soonest.text) || "TLS"}
           </span>
         </>
       }
@@ -509,7 +559,7 @@ export function IngressDetail() {
     >
       <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
 
-      <TrafficChain query={connections} />
+      <TrafficChain query={connections} certificates={certificates.data} />
     </ResourceDetailLayout>
   );
 }

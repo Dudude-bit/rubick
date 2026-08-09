@@ -739,3 +739,229 @@ spec:
                 apiGroup: k8s.example.com
                 kind: StorageBucket
                 name: assets
+---
+# --- cert-manager fixtures -------------------------------------------------
+# Everything below needs cert-manager in the cluster; without it these
+# objects are skipped and the rest of this file still applies, which is
+# itself the state worth testing:
+#
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+#
+# A self-signed root, so nothing here ever talks to a real CA, and a local
+# ACME server (Pebble) whose HTTP-01 validation cannot reach these hosts —
+# which is the failing issuance chain the feature exists for, with no risk
+# to anybody's Let's Encrypt rate limit.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: k8s-gui-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: k8s-gui-root-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: k8s-gui test root
+  secretName: k8s-gui-root-ca
+  duration: 87600h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: k8s-gui-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: k8s-gui-ca
+spec:
+  ca:
+    secretName: k8s-gui-root-ca
+---
+# Healthy: 90 days, renews 30 days out. The quiet case, and the one most
+# certificates are in forever.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: shop-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: shop-tls
+  duration: 2160h
+  renewBefore: 720h
+  commonName: shop.k8s-gui.test
+  dnsNames:
+    - shop.k8s-gui.test
+    - www.shop.k8s-gui.test
+  issuerRef:
+    name: k8s-gui-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Near expiry: issued for 10 days and told not to renew until the last hour,
+# so it sits inside the window a reader is supposed to act in.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: checkout-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: checkout-tls
+  duration: 240h
+  renewBefore: 1h
+  commonName: checkout.k8s-gui.test
+  dnsNames:
+    - checkout.k8s-gui.test
+  issuerRef:
+    name: k8s-gui-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - shop.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: shop.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: checkout
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - checkout.k8s-gui.test
+      secretName: checkout-tls
+  rules:
+    - host: checkout.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Pebble: a local ACME server. Its HTTP-01 validation reaches out to
+# <host>:5002, which does not resolve for these test hosts — so the Order
+# gets a Challenge and the Challenge fails with a sentence worth reading.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pebble
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: pebble
+  ports:
+    - name: acme
+      port: 14000
+      targetPort: 14000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pebble
+  namespace: k8s-gui-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pebble
+  template:
+    metadata:
+      labels:
+        app: pebble
+    spec:
+      containers:
+        - name: pebble
+          image: ghcr.io/letsencrypt/pebble:latest
+          args: ["-config", "/test/config/pebble-config.json"]
+          env:
+            - name: PEBBLE_VA_NOSLEEP
+              value: "1"
+          ports:
+            - containerPort: 14000
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: pebble-acme
+  namespace: k8s-gui-test
+spec:
+  acme:
+    server: https://pebble.k8s-gui-test.svc:14000/dir
+    skipTLSVerify: true
+    privateKeySecretRef:
+      name: pebble-acme-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+# The screen the whole feature exists for: an ACME certificate whose
+# challenge cannot complete, four objects deep.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: promo-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: promo-tls
+  commonName: promo.k8s-gui.test
+  dnsNames:
+    - promo.k8s-gui.test
+  issuerRef:
+    name: pebble-acme
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - promo.k8s-gui.test
+      secretName: promo-tls
+  rules:
+    - host: promo.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80

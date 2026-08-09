@@ -79,6 +79,7 @@ import type {
   RolloutStatus,
   SearchHandle,
   SearchRequest,
+  SecretData,
   SecretFilters,
   SecretInfo,
   ServiceFilters,
@@ -88,6 +89,7 @@ import type {
   StorageClassInfo,
   StreamLogConfig,
   ThemeConfig,
+  TlsCertificate,
   UpdaterConfig,
   YamlHistoryEntryDto,
 } from "./types";
@@ -1180,8 +1182,8 @@ export async function getSecret(
 export async function getSecretData(
   name: string,
   namespace: string | null
-): Promise<Record<string, string>> {
-  return invoke<Record<string, string>>("get_secret_data", { name, namespace });
+): Promise<SecretData> {
+  return invoke<SecretData>("get_secret_data", { name, namespace });
 }
 
 export async function getSecretYaml(
@@ -1239,6 +1241,16 @@ export async function deleteConfigmap(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_configmap", { name, namespace });
+}
+
+export async function getTlsCertificates(
+  namespace: string,
+  secretNames: string[]
+): Promise<TlsCertificate[]> {
+  return invoke<TlsCertificate[]>("get_tls_certificates", {
+    namespace,
+    secretNames,
+  });
 }
 
 export async function listServices(

@@ -144,6 +144,8 @@ fn main() {
             commands::config_resources::get_secret_data,
             commands::config_resources::get_secret_yaml,
             commands::config_resources::delete_secret,
+            // TLS certificates — core, and readable without cert-manager
+            commands::certificates::get_tls_certificates,
             // Resource references command
             commands::config_resources::get_resource_references,
             commands::connections::get_resource_connections,

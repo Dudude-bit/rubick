@@ -39,6 +39,7 @@ mod network;
 mod resource_types;
 mod serialization;
 mod storage;
+mod tls;
 mod types;
 mod workloads;
 
@@ -47,5 +48,6 @@ pub use network::*;
 pub use resource_types::ResourceType;
 pub use serialization::*;
 pub use storage::*;
+pub use tls::*;
 pub use types::*;
 pub use workloads::*;

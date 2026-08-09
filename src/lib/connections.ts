@@ -21,6 +21,7 @@ import type {
   ObjectRef,
   Relation,
   ResourceConnections,
+  TlsCertificate,
   Usage,
 } from "@/generated/types";
 
@@ -263,7 +264,26 @@ export interface ChainHopStop {
   note: string;
 }
 
-export type ChainHop = ChainHopObject | ChainHopPods | ChainHopStop;
+/**
+ * The certificate the connection is made under, above the Ingress.
+ *
+ * It is a hop rather than a fact on the Ingress hop because it is where the
+ * path stops for a browser: an expired certificate refuses the connection
+ * before any of the rest of this chain is consulted.
+ */
+export interface ChainHopCertificate {
+  at: "certificate";
+  secret: ObjectRef;
+  hosts: string[];
+  /** `undefined` until the read comes back. */
+  read: TlsCertificate | undefined;
+}
+
+export type ChainHop =
+  | ChainHopObject
+  | ChainHopPods
+  | ChainHopStop
+  | ChainHopCertificate;
 
 export interface ChainPath {
   key: string;
@@ -329,6 +349,39 @@ function podsHop(pods: ObjectRef[]): ChainHopPods {
 }
 
 /**
+ * Which Secret an Ingress serves TLS from, and for which hosts.
+ *
+ * Read off the same `ingressTls` edge the Connections tab uses — no second
+ * request, and no second reading of `spec.tls`.
+ */
+export function tlsSecrets(
+  conns: ResourceConnections
+): { secret: ObjectRef; hosts: string[] }[] {
+  return verb(conns.edges, "uses")
+    .filter(
+      (edge) =>
+        sameObject(edge.from, conns.subject) && edge.to.kind === "Secret"
+    )
+    .flatMap((edge) =>
+      edge.relation.usages
+        .filter((use) => use.how === "ingressTls")
+        .map((use) => ({ secret: edge.to, hosts: use.hosts }))
+    );
+}
+
+/**
+ * Whether a `spec.tls` entry covers any of the hosts on this path.
+ *
+ * An entry with no hosts is the catch-all the Ingress spec allows, and it
+ * covers every host the Ingress routes — which is why an empty list is a
+ * match rather than a miss.
+ */
+function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
+  if (tlsHosts.length === 0) return true;
+  return pathHosts.some((host) => host === "" || tlsHosts.includes(host));
+}
+
+/**
  * How traffic gets in, one path per Service that fronts the subject.
  *
  * A path with a single hop is not a path — a Service nothing routes to and
@@ -336,10 +389,14 @@ function podsHop(pods: ObjectRef[]): ChainHopPods {
  * `chainSilence` states the absence in one line instead. That is what keeps a
  * Deployment with no Service in front of it from costing a diagram.
  */
-export function trafficChains(conns: ResourceConnections): ChainPath[] {
+export function trafficChains(
+  conns: ResourceConnections,
+  certificates?: Map<string, TlsCertificate>
+): ChainPath[] {
   const subject = conns.subject;
   const routes = verb(conns.edges, "routes");
   const selects = verb(conns.edges, "selects");
+  const tls = tlsSecrets(conns);
 
   const fronting: ObjectRef[] =
     subject.kind === "Service"
@@ -371,6 +428,17 @@ export function trafficChains(conns: ResourceConnections): ChainPath[] {
       const hops: ChainHop[] = [];
       if (subject.kind === "Ingress") {
         const mine = routes.filter((edge) => sameObject(edge.to, service));
+        const hosts = mine.map((edge) => edge.relation.host ?? "");
+        for (const entry of tls.filter((cert) =>
+          servesAny(cert.hosts, hosts)
+        )) {
+          hops.push({
+            at: "certificate",
+            secret: entry.secret,
+            hosts: entry.hosts,
+            read: certificates?.get(entry.secret.name),
+          });
+        }
         hops.push({ ...routeHop(mine, subject), self: true });
         hops.push(
           service.kind === "Service"

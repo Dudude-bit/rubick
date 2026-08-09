@@ -17,11 +17,13 @@
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
+import { expiryOf } from "@/lib/certificates";
 import { chainSilence, trafficChains, type ChainHop } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
+import { CertificateLine } from "./CertificateFacts";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
-import type { ObjectRef } from "@/generated/types";
+import type { ObjectRef, TlsCertificate } from "@/generated/types";
 
 /**
  * A name at a hop. A missing object keeps its glyph and its hue and loses
@@ -46,20 +48,22 @@ function HopName({ object }: { object: ObjectRef }) {
   );
 }
 
-function Rail({
-  tone,
-  into,
-}: {
-  tone: "on" | "bad";
-  into: "on" | "bad" | null;
-}) {
+type HopTone = "on" | "warn" | "bad";
+
+const NODE_TONE: Record<HopTone, string> = {
+  on: "border-fg bg-fg",
+  warn: "border-warn",
+  bad: "border-err",
+};
+
+function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
   return (
     <div className="flex flex-col items-center">
       <span
         aria-hidden="true"
         className={cn(
           "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
-          tone === "bad" ? "border-err" : "border-fg bg-fg"
+          NODE_TONE[tone]
         )}
       />
       {into && (
@@ -75,7 +79,17 @@ function Rail({
   );
 }
 
-const toneOf = (hop: ChainHop) => (hop.at === "stop" ? "bad" : "on");
+function toneOf(hop: ChainHop): HopTone {
+  if (hop.at === "stop") return "bad";
+  if (hop.at === "certificate") {
+    // Not read back yet is not a finding; read back and unreadable is.
+    if (!hop.read) return "on";
+    if (!hop.read.certificate) return "warn";
+    const tone = expiryOf(hop.read.certificate).tone;
+    return tone === "err" ? "bad" : (tone ?? "on");
+  }
+  return "on";
+}
 
 function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
   const last = next === undefined;
@@ -119,6 +133,12 @@ function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
             <span className="text-[11px] text-fg-fnt">{hop.summary}</span>
           </span>
         )}
+        {hop.at === "certificate" && (
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <HopName object={hop.secret} />
+            <CertificateLine read={hop.read} hosts={hop.hosts} />
+          </span>
+        )}
         {hop.at === "stop" && (
           <>
             <p className="text-xs text-err">{hop.title}</p>
@@ -130,7 +150,18 @@ function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
   );
 }
 
-export function TrafficChain({ query }: { query: ConnectionsQuery }) {
+export function TrafficChain({
+  query,
+  certificates,
+}: {
+  query: ConnectionsQuery;
+  /**
+   * The certificates behind this Ingress's TLS Secrets, where the page has
+   * read them. Absent, the chain draws exactly what it drew before — the
+   * certificate hop is an addition and never a precondition.
+   */
+  certificates?: Map<string, TlsCertificate>;
+}) {
   const { data, isPending, error } = query;
 
   if (isPending) {
@@ -144,7 +175,7 @@ export function TrafficChain({ query }: { query: ConnectionsQuery }) {
     );
   }
 
-  const paths = trafficChains(data);
+  const paths = trafficChains(data, certificates);
   if (paths.length === 0) {
     const silence = chainSilence(data);
     // A quiet single line, and no heading over it: a heading plus one

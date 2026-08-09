@@ -60,4 +60,50 @@ describe("DataSection", () => {
       screen.getByText("This ConfigMap holds no keys")
     ).toBeInTheDocument();
   });
+
+  /**
+   * Would break if a private key became renderable or copyable. The backend
+   * withholds it, and the row that stands in for it must not offer either
+   * control — a Reveal on a value the app does not hold is a button that
+   * either lies or, worse, one day starts working.
+   */
+  it("offers neither reveal nor copy for a withheld value", () => {
+    render(
+      <DataSection
+        data={{ "tls.crt": "-----BEGIN CERTIFICATE-----" }}
+        withheld={{ "tls.key": "a private key — the app never shows one" }}
+        keys={["tls.crt", "tls.key"]}
+        sensitive
+      />
+    );
+
+    expect(screen.getByText("tls.key")).toBeInTheDocument();
+    expect(
+      screen.getByText("a private key — the app never shows one")
+    ).toBeInTheDocument();
+
+    // One Reveal and one Copy, both belonging to tls.crt.
+    expect(screen.getAllByRole("button", { name: "Reveal" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1);
+  });
+
+  /**
+   * Would break if a withheld key were drawn as one the reader simply
+   * cannot see — a different and untrue claim, and one that sends them to
+   * ask for permissions they already have.
+   */
+  it("does not blame the reader's access for a withheld value", () => {
+    render(
+      <DataSection
+        data={{}}
+        withheld={{ "tls.key": "a private key — the app never shows one" }}
+        keys={["tls.key"]}
+        sensitive
+      />
+    );
+
+    expect(
+      screen.queryByText("not readable with this access")
+    ).not.toBeInTheDocument();
+  });
 });

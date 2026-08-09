@@ -27,6 +27,12 @@ export interface DataSectionProps {
   keys?: string[];
   /** Mask every value until the reader asks for it. */
   sensitive?: boolean;
+  /**
+   * Keys the backend refuses to hand over, and why — a private key, and
+   * nothing else so far. Said in the row rather than left to read as "not
+   * readable with this access", which would be a different and untrue claim.
+   */
+  withheld?: Record<string, string>;
   isLoading?: boolean;
   emptyMessage?: string;
 }
@@ -36,6 +42,7 @@ export function DataSection({
   data,
   keys = [],
   sensitive = false,
+  withheld = {},
   isLoading = false,
   emptyMessage = "No data keys",
 }: DataSectionProps) {
@@ -43,11 +50,19 @@ export function DataSection({
   const copyToClipboard = useCopyToClipboard();
 
   const entries = useMemo(() => {
-    const names = new Set([...Object.keys(data), ...keys]);
+    const names = new Set([
+      ...Object.keys(data),
+      ...Object.keys(withheld),
+      ...keys,
+    ]);
     return [...names]
       .sort((a, b) => a.localeCompare(b))
-      .map((key) => ({ key, value: data[key] as string | undefined }));
-  }, [data, keys]);
+      .map((key) => ({
+        key,
+        value: data[key] as string | undefined,
+        refusal: withheld[key] as string | undefined,
+      }));
+  }, [data, keys, withheld]);
 
   const toggle = (key: string) =>
     setRevealed((prev) => {
@@ -114,7 +129,7 @@ export function DataSection({
         }
       />
       <div className="flex flex-col">
-        {entries.map(({ key, value }) => {
+        {entries.map(({ key, value, refusal }) => {
           const isRevealed = !sensitive || revealed.has(key);
           return (
             <div
@@ -125,12 +140,19 @@ export function DataSection({
                 <span className="min-w-0 break-all font-mono text-xs font-medium text-fg">
                   {key}
                 </span>
-                <span className="text-[11px] text-fg-fnt">
-                  {value === undefined
-                    ? isLoading
-                      ? "reading…"
-                      : "not readable with this access"
-                    : `${value.length} chars`}
+                <span
+                  className={cn(
+                    "text-[11px]",
+                    refusal ? "text-fg-mut" : "text-fg-fnt"
+                  )}
+                >
+                  {refusal
+                    ? refusal
+                    : value === undefined
+                      ? isLoading
+                        ? "reading…"
+                        : "not readable with this access"
+                      : `${value.length} chars`}
                 </span>
                 {value !== undefined && (
                   <div className="ml-auto flex items-center gap-1">

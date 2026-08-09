@@ -144,7 +144,14 @@ pub async fn get_manifest(
 
     let resource = api.get(&name).await?;
 
-    let yaml = serde_yaml::to_string(&resource).map_err(|e| Error::Serialization(e.to_string()))?;
+    // Every detail page's YAML tab comes through here, Secrets included, and
+    // base64 is not a control: `tls.key` in a manifest is one `base64 -d`
+    // from being the key.
+    let mut object =
+        serde_json::to_value(&resource).map_err(|e| Error::Serialization(e.to_string()))?;
+    crate::resources::redact_private_keys(&mut object);
+
+    let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
 
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }

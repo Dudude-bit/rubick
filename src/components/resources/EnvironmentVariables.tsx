@@ -295,7 +295,10 @@ export function EnvironmentVariables({
     const cache: DataCache = {};
     allSecretNames.forEach((name, i) => {
       const q = secretQueries[i];
-      if (q?.data) cache[name] = q.data;
+      // Only the values the backend was willing to hand over. A withheld
+      // key stays out of the cache, so an env var reading it is drawn as
+      // one whose value the app does not have rather than as an empty one.
+      if (q?.data) cache[name] = q.data.values;
       else if (q?.isError) cache[name] = {};
     });
     return cache;

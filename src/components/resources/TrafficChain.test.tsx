@@ -108,6 +108,100 @@ describe("TrafficChain", () => {
     expect(screen.queryByText("How traffic gets here")).not.toBeInTheDocument();
   });
 
+  it("carries the certificate above the Ingress, and reads without one", () => {
+    /** The certificate is the first thing a browser consults, so it is the
+     *  top of the chain. And it is core: a cluster with nothing installed
+     *  on it still gets the expiry, because `tls.crt` states it. The second
+     *  half of this test is the promise the extension seam makes — the
+     *  chain must be whole before any extension has said anything. */
+    const conns: ResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "shop",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "traefik" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: {
+            kind: "Secret",
+            name: "shop-tls",
+            namespace: "k8s-gui-test",
+            existence: "notChecked",
+            facts: null,
+          },
+          relation: {
+            verb: "uses",
+            usages: [{ how: "ingressTls", hosts: ["shop.k8s-gui.test"] }],
+          },
+        },
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: service,
+          relation: {
+            verb: "routes",
+            host: "shop.k8s-gui.test",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: true,
+          },
+        },
+      ],
+      stops: [],
+      notLookedAt: [],
+    };
+
+    const withCert = wrap(
+      <TrafficChain
+        query={query(conns)}
+        certificates={
+          new Map([
+            [
+              "shop-tls",
+              {
+                secretName: "shop-tls",
+                problem: null,
+                certificate: {
+                  subject: "shop.k8s-gui.test",
+                  issuer: "k8s-gui test root",
+                  dnsNames: ["shop.k8s-gui.test"],
+                  notBefore: "2020-01-01T00:00:00Z",
+                  notAfter: "2999-01-01T00:00:00Z",
+                  serial: "01",
+                  selfSigned: false,
+                  chainLength: 1,
+                },
+              },
+            ],
+          ])
+        }
+      />
+    );
+    expect(withCert.container.textContent).toContain("shop-tls");
+    expect(withCert.container.textContent).toMatch(/valid for \d+ days/);
+    withCert.unmount();
+
+    const bare = wrap(<TrafficChain query={query(conns)} />);
+    expect(bare.container.textContent).toContain("shop-tls");
+    expect(bare.container.textContent).toContain("shop.k8s-gui.test/");
+    expect(bare.container.textContent).toContain("demo");
+  });
+
   it("does not draw a chain it has not read yet", () => {
     /** Loading is its own screen. A blank space where the chain will be
      *  reads as "nothing routes here", which is the one wrong answer. */

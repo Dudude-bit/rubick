@@ -6,12 +6,14 @@ import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
+import { CertificateSection } from "@/components/resources/CertificateFacts";
 import { DataSection } from "@/components/resources/data-rows";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { SecretInfo } from "@/generated/types";
@@ -38,14 +40,17 @@ export function SecretDetail() {
 
   const connections = useConnections(ResourceType.Secret, name, namespace);
 
-  const { data: secretData = {}, isLoading: isDataLoading } = useQuery({
+  const { data: secretData, isLoading: isDataLoading } = useQuery({
     queryKey: ["secret-data", name, namespace],
-    queryFn: async () => {
-      if (!name || !namespace) return {};
-      return commands.getSecretData(name, namespace);
-    },
+    queryFn: () => commands.getSecretData(name!, namespace ?? null),
     enabled: !!name && !!namespace,
   });
+
+  const isTls = secret?.type === "kubernetes.io/tls";
+  const certificates = useTlsCertificates(
+    namespace,
+    isTls && name ? [name] : []
+  );
 
   if (!secret && !isLoading && !error) {
     return null;
@@ -66,7 +71,8 @@ export function SecretDetail() {
       mark: countMark(dataKeys.length),
       content: (
         <DataSection
-          data={secretData}
+          data={secretData?.values ?? {}}
+          withheld={secretData?.withheld}
           keys={dataKeys}
           sensitive
           isLoading={isDataLoading}
@@ -140,6 +146,12 @@ export function SecretDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    />
+    >
+      {/* Above the tabs, because on a TLS Secret the certificate is what
+          the page is about and the keys under it are how it is stored. */}
+      {isTls && name && (
+        <CertificateSection read={certificates.data?.get(name)} />
+      )}
+    </ResourceDetailLayout>
   );
 }

@@ -29,6 +29,23 @@ export type ServiceFilters = {
   serviceType: string | null;
 } & ResourceFilters;
 
+export interface TlsCertificate {
+  secretName: string;
+  certificate: CertificateFacts | null;
+  problem: string | null;
+}
+
+export interface CertificateFacts {
+  subject: string | null;
+  issuer: string | null;
+  dnsNames: string[];
+  notBefore: string;
+  notAfter: string;
+  serial: string;
+  selfSigned: boolean;
+  chainLength: number;
+}
+
 export interface ConfigMapInfo {
   name: string;
   namespace: string;
@@ -68,6 +85,11 @@ export interface ResourceReference {
   namespace: string;
   containerName: string | null;
   key: string | null;
+}
+
+export interface SecretData {
+  values: Record<string, string>;
+  withheld: Record<string, string>;
 }
 
 export interface SecretInfo {
