@@ -13,6 +13,7 @@
  * into a sentence.
  */
 
+import { groupMounts } from "./mounts";
 import type {
   ChainStop,
   ConnectionEdge,
@@ -56,13 +57,20 @@ const join = (...parts: (string | null | undefined | false)[]) =>
 
 // --- what the cluster said, in words ------------------------------------
 
-/** One way an object is drawn on. Every field here came from the backend. */
-function describeUsage(usage: Usage, container = false): string {
+/**
+ * One way an object is drawn on. Every field here came from the backend.
+ *
+ * `containers` is the containers this one line covers — several, where a
+ * mount was grouped — and null where naming them would be noise.
+ */
+function describeUsage(usage: Usage, containers: string[] | null): string {
   // Leading rather than trailing: on their own lines these read as a column
   // of containers, and "mounted at /etc/app in app" invites the path to be
   // read as part of the sentence.
   const inside = (text: string) =>
-    container && "container" in usage ? `${usage.container} · ${text}` : text;
+    containers && containers.length > 0
+      ? `${containers.join(", ")} · ${text}`
+      : text;
   switch (usage.how) {
     case "mount": {
       const where = usage.projected
@@ -91,18 +99,49 @@ function describeUsage(usage: Usage, container = false): string {
 /**
  * Every way one object draws on another.
  *
+ * Mounts are grouped before they are worded, so two containers mounting one
+ * volume at one path are one line naming both rather than the same path
+ * printed twice. Two mounts that genuinely differ — the same path, one of
+ * them read-only — stay two lines, because the difference is the finding.
+ *
  * Two ways read as a sentence — "mounted at /etc/app, and APP_MESSAGE reads
  * app.conf" — and the row stays one line. Past that a sentence stops being
  * one: a ConfigMap that a pod mounts twice, reads a key from and imports
  * wholesale is five clauses nobody finishes, so each way becomes its own
- * line and picks up the container that distinguishes it. Naming the
- * container only here is deliberate — it is noise on a single mount and the
- * only thing telling two identical mount paths apart.
+ * line. Containers are named where they tell two lines apart, and nowhere
+ * else: one line covering three containers is not ambiguous, and the roster
+ * on it would be read on every pod page in the app for no answer.
+ *
+ * No "all containers" here, unlike the pod's Volumes block. That summary is
+ * a claim about a denominator — the pod's whole container list — which the
+ * edge does not carry, and which a ConfigMap page listing four pods that use
+ * it could not know for any of them.
  */
 export function describeUsages(usages: Usage[]): string[] {
-  const many = usages.length > 2;
-  const ways = [...new Set(usages.map((use) => describeUsage(use, many)))];
-  return many ? ways : [sentence(ways)].filter(Boolean);
+  const groups = groupMounts(usages.filter((use) => use.how === "mount"));
+  const rest = usages.filter((use) => use.how !== "mount");
+  const drawnBy = new Set(
+    usages.flatMap((use) => ("container" in use ? [use.container] : []))
+  );
+
+  const say = (containers: boolean) => [
+    ...new Set([
+      ...groups.map((group) =>
+        describeUsage(group.mount, containers ? group.containers : null)
+      ),
+      ...rest.map((use) =>
+        describeUsage(
+          use,
+          containers && "container" in use ? [use.container] : null
+        )
+      ),
+    ]),
+  ];
+
+  const ways = say(false);
+  if (ways.length > 2 || (ways.length > 1 && drawnBy.size > 1))
+    return say(true);
+  return [sentence(ways)].filter(Boolean);
 }
 
 /** What the far end knows about itself, where it is worth a line. */

@@ -598,7 +598,13 @@ export function PodDetail() {
           content: (
             <>
               {pod && (
-                <VolumeRows volumes={pod.volumes} namespace={pod.namespace} />
+                <VolumeRows
+                  volumes={pod.volumes}
+                  namespace={pod.namespace}
+                  containerCount={
+                    pod.containers.length + pod.initContainers.length
+                  }
+                />
               )}
               <KeyValueSection
                 title="Labels"

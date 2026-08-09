@@ -1,5 +1,5 @@
 import { Section, SectionHeader } from "@/components/ui/section";
-import { cn } from "@/lib/utils";
+import { groupMounts, mountedBy } from "@/lib/mounts";
 import { ResourceRef } from "./ResourceRef";
 import type { PodVolumeInfo } from "@/generated/types";
 
@@ -24,9 +24,13 @@ const VOLUME_ROW =
 export function VolumeRows({
   volumes,
   namespace,
+  containerCount,
 }: {
   volumes: PodVolumeInfo[];
   namespace: string;
+  /** Every container the pod declares, init containers included — what
+   *  lets the third column say "all containers" and mean it. */
+  containerCount: number;
 }) {
   if (volumes.length === 0) {
     return (
@@ -71,7 +75,7 @@ export function VolumeRows({
                 </span>
               ))}
             </span>
-            <Mounts volume={volume} />
+            <Mounts volume={volume} containerCount={containerCount} />
           </div>
         ))}
       </div>
@@ -79,25 +83,59 @@ export function VolumeRows({
   );
 }
 
-function Mounts({ volume }: { volume: PodVolumeInfo }) {
+/**
+ * Where the volume is mounted — one line per distinct mount, not per
+ * container.
+ *
+ * `ingest, web · /etc/app from app.conf, read-only`. Three kinds of thing in
+ * three tones: who mounts it, the literal path in mono, and the qualifiers in
+ * neither the path's typeface nor its weight. That last part is the point of
+ * the rewrite — `ro` sat inside the run of path text and read as part of it,
+ * and a subPath joined to the path with a slash was indistinguishable from a
+ * longer path, which is not what it is: it is a path inside the volume.
+ * `read-only` is the word the Connections tab already uses for the same flag.
+ *
+ * Container identity colour (`--ctr-*`) is deliberately not used. It means
+ * something in the log gutter because a legend there says which container is
+ * which; in a three-column table with no legend it would be a second tinted
+ * channel competing with the reference links the middle column carries and
+ * with `--warn` on the row below.
+ */
+function Mounts({
+  volume,
+  containerCount,
+}: {
+  volume: PodVolumeInfo;
+  containerCount: number;
+}) {
   if (volume.mounts.length === 0) {
     // Declared and read by no container. The YAML does not point at it and
     // nothing fails, so the pod runs without the config somebody added.
     return <span className="text-[11px] text-warn">mounted by nothing</span>;
   }
   return (
-    <span className="min-w-0 truncate text-[11px] text-fg-fnt">
-      {volume.mounts.map((mount, index) => (
-        <span key={`${mount.container}${mount.path}`}>
-          {index > 0 && " · "}
-          <span className="text-fg-mut">{mount.container}</span>{" "}
-          <span className={cn("font-mono", mount.readOnly && "text-fg-fnt")}>
-            {mount.path}
+    <span className="min-w-0 break-words text-[11px] text-fg-fnt">
+      {groupMounts(volume.mounts).map(({ key, mount, containers }) => {
+        const who = mountedBy(containers, containerCount);
+        return (
+          <span key={key} className="block">
+            {who && (
+              <>
+                <span className="text-fg-mut">{who}</span>
+                {" · "}
+              </>
+            )}
+            <span className="font-mono text-fg-mid">{mount.path}</span>
+            {mount.subPath && (
+              <>
+                {" from "}
+                <span className="font-mono text-fg-mut">{mount.subPath}</span>
+              </>
+            )}
+            {mount.readOnly && ", read-only"}
           </span>
-          {mount.subPath && <span className="font-mono">/{mount.subPath}</span>}
-          {mount.readOnly && " ro"}
-        </span>
-      ))}
+        );
+      })}
     </span>
   );
 }

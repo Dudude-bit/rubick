@@ -267,11 +267,11 @@ describe("the groups", () => {
     ]);
   });
 
-  it("breaks a pile of usages into lines and names the container", () => {
+  it("breaks a pile of usages into lines and names the containers", () => {
     /** A ConfigMap mounted by two containers at the same path, read as an
      *  environment variable and imported wholesale is five clauses in one
-     *  sentence, two of them identical. Lines make it readable; the
-     *  container is what tells the two mounts apart. */
+     *  sentence. Lines make it readable — and the two containers mounting
+     *  one path share a line rather than printing that path twice. */
     expect(
       describeUsages([
         mount,
@@ -280,10 +280,37 @@ describe("the groups", () => {
         { how: "envFrom", container: "app" },
       ])
     ).toEqual([
-      "app · mounted at /etc/app",
-      "seed · mounted at /etc/app",
+      "app, seed · mounted at /etc/app",
       "app · APP_MESSAGE reads app.conf",
       "app · every key becomes an environment variable",
+    ]);
+  });
+
+  it("says one mount once, however many containers make it", () => {
+    /** The service-account volume, which every container of every pod in
+     *  the cluster mounts read-only at the longest path in Kubernetes. One
+     *  line per container printed that path once per container, and the
+     *  containers are left off a line no other line contends with. */
+    expect(
+      describeUsages([
+        { ...mount, container: "ingest", projected: true, readOnly: true },
+        { ...mount, container: "web", projected: true, readOnly: true },
+      ])
+    ).toEqual(["projected into /etc/app, read-only"]);
+  });
+
+  it("keeps two mounts of one path apart where they differ", () => {
+    /** An init container that writes what the app container only reads is
+     *  two mounts, not one: grouping keys on what the line says, so the
+     *  read-only flag splits them and the containers say which is which. */
+    expect(
+      describeUsages([
+        { ...mount, container: "seed" },
+        { ...mount, readOnly: true },
+      ])
+    ).toEqual([
+      "seed · mounted at /etc/app",
+      "app · mounted at /etc/app, read-only",
     ]);
   });
 
