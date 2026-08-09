@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { SettingRow, SettingsGroup } from "./settings-row";
-import { useToast } from "@/components/ui/use-toast";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { open } from "@tauri-apps/plugin-dialog";
+import { FolderOpen, RefreshCw } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useToast } from "@/components/ui/use-toast";
+import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
-import { FolderOpen, RefreshCw } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
-import type { CliAvailability } from "@/generated/types";
+import { SettingRow } from "../settings-row";
 
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
@@ -37,7 +38,18 @@ function availabilityHint(
     : `${label} is not on PATH. Set the path below.`;
 }
 
-export function CliSettings() {
+/**
+ * Overriding where a binary lives, which almost nobody does.
+ *
+ * These were three full-width fields taking a third of the Clusters pane
+ * to say "leave me empty". The fact worth reading — which version, from
+ * where — is on the pane itself now; this is the rare correction, and a
+ * rare correction is a link.
+ *
+ * A path here applies when you leave the field, and the re-check is the
+ * feedback: the badge either turns green with a version or does not.
+ */
+export function ToolPathsPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const {
@@ -47,87 +59,51 @@ export function CliSettings() {
     checkKubectlAvailability,
     isChecking,
   } = useDependenciesStore();
-  const [helmPath, setHelmPath] = useState<string>("");
-  const [kubectlPath, setKubectlPath] = useState<string>("");
+  // Null means "showing what is saved". The field only takes over once it
+  // has been edited, so a re-check that changes the stored path is
+  // reflected instead of being pinned to whatever was on screen.
+  const [typed, setTyped] = useState<Record<string, string | undefined>>({});
 
-  useEffect(() => {
-    if (helm === null && !isChecking) {
-      checkHelmAvailability();
-    }
-    if (kubectl === null && !isChecking) {
-      checkKubectlAvailability();
-    }
-  }, [
-    helm,
-    kubectl,
-    isChecking,
-    checkHelmAvailability,
-    checkKubectlAvailability,
-  ]);
-
-  const { data: cliPaths, isLoading } = useQuery({
+  const { data: cliPaths } = useQuery({
     queryKey: ["cli-paths"],
-    queryFn: async () => {
-      const result = await commands.getCliPaths();
-      setHelmPath(result.helmPath ?? "");
-      setKubectlPath(result.kubectlPath ?? "");
-      return result;
-    },
+    queryFn: commands.getCliPaths,
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      await commands.saveCliPaths({
-        helmPath: helmPath || undefined,
-        kubectlPath: kubectlPath || undefined,
-      });
-    },
+  const helmPath = typed.helm ?? cliPaths?.helmPath ?? "";
+  const kubectlPath = typed.kubectl ?? cliPaths?.kubectlPath ?? "";
+  const setHelmPath = (value: string) =>
+    setTyped((prev) => ({ ...prev, helm: value }));
+  const setKubectlPath = (value: string) =>
+    setTyped((prev) => ({ ...prev, kubectl: value }));
+
+  const save = useMutation({
+    mutationFn: (paths: { helmPath: string; kubectlPath: string }) =>
+      commands.saveCliPaths({
+        helmPath: paths.helmPath || undefined,
+        kubectlPath: paths.kubectlPath || undefined,
+      }),
     onSuccess: async () => {
-      toast({
-        title: "CLI paths saved",
-        description: "Re-checking availability…",
-      });
       queryClient.invalidateQueries({ queryKey: ["cli-paths"] });
       await Promise.all([checkHelmAvailability(), checkKubectlAvailability()]);
     },
-    onError: (error) => {
+    onError: (error) =>
       toast({
-        title: "Error",
+        title: "Could not save the tool paths",
         description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
-      });
-    },
+      }),
   });
 
   const browseFor = async (title: string, setter: (value: string) => void) => {
-    try {
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title,
-      });
-      if (selected) {
-        setter(selected);
-      }
-    } catch {
-      // User cancelled
-    }
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title,
+    }).catch(() => null);
+    if (typeof selected === "string") setter(selected);
   };
 
-  const hasChanges =
-    helmPath !== (cliPaths?.helmPath ?? "") ||
-    kubectlPath !== (cliPaths?.kubectlPath ?? "");
-
   const tools = [
-    {
-      id: "helm",
-      label: "Helm",
-      state: helm,
-      recheck: checkHelmAvailability,
-      path: helmPath,
-      setPath: setHelmPath,
-      note: null,
-    },
     {
       id: "kubectl",
       label: "kubectl",
@@ -135,12 +111,41 @@ export function CliSettings() {
       recheck: checkKubectlAvailability,
       path: kubectlPath,
       setPath: setKubectlPath,
-      note: "Required for OIDC and other exec-based authentication.",
+      note: "Its directory is added to PATH when the app runs a credential plugin, which is how kubectl plugins like oidc-login are found.",
+    },
+    {
+      id: "helm",
+      label: "Helm",
+      state: helm,
+      recheck: checkHelmAvailability,
+      path: helmPath,
+      setPath: setHelmPath,
+      note: "Only the Helm page uses it. Nothing about reaching a cluster does.",
     },
   ] as const;
 
+  /** Leaving a field is the commit; the re-check that follows is the answer. */
+  const applyOn = (id: string) => (value: string) => {
+    const next = {
+      helmPath: id === "helm" ? value.trim() : helmPath,
+      kubectlPath: id === "kubectl" ? value.trim() : kubectlPath,
+    };
+    if (
+      next.helmPath === (cliPaths?.helmPath ?? "") &&
+      next.kubectlPath === (cliPaths?.kubectlPath ?? "")
+    ) {
+      return;
+    }
+    setTyped({});
+    save.mutate(next);
+  };
+
   return (
-    <SettingsGroup title="CLI tools">
+    <div className="mt-3 border-t border-hair pt-2">
+      <p className="pb-1 text-[11px] text-fg-mut">
+        Where these binaries live, when they are somewhere the app does not
+        look. Leave a field empty to search PATH again.
+      </p>
       {tools.map((tool) => {
         const pending = isChecking || tool.state === null;
         return (
@@ -182,7 +187,11 @@ export function CliSettings() {
                 id={`${tool.id}-path`}
                 placeholder={`/path/to/${tool.id} — leave empty to auto-detect`}
                 value={tool.path}
-                onChange={(e) => tool.setPath(e.target.value)}
+                onChange={(event) => tool.setPath(event.target.value)}
+                onBlur={(event) => applyOn(tool.id)(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
                 className="font-mono"
               />
               <Button
@@ -190,27 +199,19 @@ export function CliSettings() {
                 size="icon"
                 aria-label={`Browse for the ${tool.label} binary`}
                 onClick={() =>
-                  browseFor(`Select ${tool.label} binary`, tool.setPath)
+                  browseFor(`Select ${tool.label} binary`, (value) => {
+                    tool.setPath(value);
+                    applyOn(tool.id)(value);
+                  })
                 }
               >
                 <FolderOpen className="h-3.5 w-3.5" />
               </Button>
             </div>
-            {tool.note && (
-              <p className="mt-1 text-[11px] text-fg-mut">{tool.note}</p>
-            )}
+            <p className="mt-1 text-[11px] text-fg-mut">{tool.note}</p>
           </SettingRow>
         );
       })}
-      <div className="flex justify-end pt-2">
-        <Button
-          size="sm"
-          onClick={() => saveMutation.mutate()}
-          disabled={!hasChanges || saveMutation.isPending || isLoading}
-        >
-          {saveMutation.isPending ? "Saving…" : "Save paths"}
-        </Button>
-      </div>
-    </SettingsGroup>
+    </div>
   );
 }

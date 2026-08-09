@@ -1,26 +1,165 @@
-import { CliSettings } from "./CliSettings";
-import { CloudProfiles } from "./CloudProfiles";
-import { KubeconfigSettings } from "./KubeconfigSettings";
+import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
+import { BindingDialog } from "./clusters/BindingDialog";
+import { CloudProfilesPanel } from "./clusters/CloudProfilesPanel";
+import { ContextRow } from "./clusters/ContextRow";
+import { SourceLine } from "./clusters/SourceLine";
+import { ToolPathsPanel } from "./clusters/ToolPathsPanel";
+import { ToolsFoot } from "./clusters/ToolsFoot";
+import { execBinary } from "./clusters/context-reading";
+import { useSettingSearchMatch } from "./settings-search";
 
 /**
- * The three groups that are one story, in the order the reader meets them.
+ * The contexts are the screen.
  *
- * Kubeconfig first: nothing has a name until that file is read, so every
- * other decision here is downstream of it. Cloud profiles second: a
- * context that exists but will not connect is an identity problem, and
- * this is where the identity is chosen. CLI tools last, because helm and
- * an exec-based kubectl only matter once the first two have produced a
- * cluster to point them at.
+ * The section promises "how the app reaches a cluster" and used to show
+ * three blocks of configuration — a kubeconfig path, cloud profiles, CLI
+ * paths — while never saying whether it could reach one. Those three are
+ * not three topics. They are three reasons a context connects or does not,
+ * so they are answers on the list rather than forms above it: the file is
+ * one line, the profile is an adjective on the row that uses it, and the
+ * binaries are a footnote with what depends on them.
  *
- * That is also the order things fail in, which is the order somebody
- * arriving with a broken connection reads them.
+ * Everything here is read from disk and from PATH. No API server is
+ * contacted, which is why "cannot connect" is always a statement about a
+ * missing binary — reaching five clusters because somebody opened Settings
+ * would be a surprise, and a slow one.
  */
 export function ClustersSettings() {
+  const [binding, setBinding] = React.useState<string | null>(null);
+  const [toolPaths, setToolPaths] = React.useState(false);
+  const [profiles, setProfiles] = React.useState(false);
+
+  const currentContext = useClusterStore((state) => state.currentContext);
+  const isConnected = useClusterStore((state) => state.isConnected);
+
+  const { data: contexts, isLoading } = useQuery({
+    queryKey: ["contexts"],
+    queryFn: commands.listContexts,
+  });
+  const { data: bindings } = useQuery({
+    queryKey: ["contextBindings"],
+    queryFn: commands.listContextBindings,
+  });
+
+  // One lookup for the whole list: thirty contexts naming three distinct
+  // plugins is three stat calls, not thirty.
+  const wanted = React.useMemo(() => {
+    const names = new Set<string>();
+    for (const context of contexts ?? []) {
+      const binary = execBinary(context.exec_command);
+      if (context.auth.kind === "exec" && binary) names.add(binary);
+    }
+    return [...names].sort();
+  }, [contexts]);
+
+  const { data: located } = useQuery({
+    queryKey: ["located-binaries", wanted],
+    queryFn: () => commands.locateBinaries(wanted),
+    enabled: wanted.length > 0,
+  });
+
+  const binaries = React.useMemo(
+    () => new Map((located ?? []).map((one) => [one.name, one.path])),
+    [located]
+  );
+  const bindingByContext = React.useMemo(
+    () => new Map((bindings ?? []).map((one) => [one.contextName, one])),
+    [bindings]
+  );
+
+  // The current context first, then the file's own order. Somebody
+  // arriving to check "the one I am on" should not scroll past twenty-nine
+  // others to find it, and any cleverer sort would move rows under a
+  // reader who had learned where they were.
+  const ordered = React.useMemo(() => {
+    const list = [...(contexts ?? [])];
+    list.sort(
+      (a, b) =>
+        Number(b.name === currentContext) - Number(a.name === currentContext)
+    );
+    return list;
+  }, [contexts, currentContext]);
+
   return (
-    <div className="flex flex-col gap-5">
-      <KubeconfigSettings />
-      <CloudProfiles />
-      <CliSettings />
+    <div>
+      <SourceLine />
+
+      {isLoading ? (
+        <p className="py-6 text-[11px] text-fg-fnt">Reading the file…</p>
+      ) : ordered.length === 0 ? (
+        <NoContexts />
+      ) : (
+        <>
+          <ListCaption count={ordered.length} />
+          {ordered.map((context) => (
+            <ContextRow
+              key={context.name}
+              context={context}
+              binding={bindingByContext.get(context.name)}
+              binaries={binaries}
+              connected={isConnected && context.name === currentContext}
+              onBind={setBinding}
+            />
+          ))}
+        </>
+      )}
+
+      <ToolsFoot
+        toolPathsOpen={toolPaths}
+        profilesOpen={profiles}
+        onManagePaths={() => setToolPaths((open) => !open)}
+        onManageProfiles={() => setProfiles((open) => !open)}
+      />
+      {toolPaths && <ToolPathsPanel />}
+      {profiles && <CloudProfilesPanel />}
+
+      <BindingDialog
+        context={binding}
+        onOpenChange={(open) => !open && setBinding(null)}
+      />
+    </div>
+  );
+}
+
+/**
+ * A long list needs a way through it, and the settings search is already
+ * that way — every row indexes its name, its server, its plugin and its
+ * profile. A second search field beside the first one would be two boxes
+ * that do the same thing, so the caption points at the one that exists.
+ */
+function ListCaption({ count }: { count: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 pb-1 pt-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+        Contexts
+      </h3>
+      {count > 8 && (
+        <span className="text-[11px] text-fg-fnt">
+          {count} — search filters this list
+        </span>
+      )}
+    </div>
+  );
+}
+
+function NoContexts() {
+  const visible = useSettingSearchMatch(
+    "no contexts kubeconfig empty clusters"
+  );
+  return (
+    <div className={visible ? "max-w-[64ch] py-8" : "hidden"} hidden={!visible}>
+      <h3 className="text-xs font-medium text-fg">
+        This file names no contexts
+      </h3>
+      <p className="mt-1.5 text-xs text-fg-mut">
+        The file above parsed, and it has nothing to connect to. Either it is
+        not the kubeconfig you meant or its contexts were never written — point
+        the app at another file to check.
+      </p>
     </div>
   );
 }

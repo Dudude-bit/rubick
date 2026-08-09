@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -50,13 +51,47 @@ export function useKubeconfigPath() {
       variant: "destructive",
     });
 
+  /**
+   * Put back whatever was in force before. Both surfaces apply a path
+   * without asking for confirmation, so both owe the reader a way back
+   * that does not require having memorised the old value.
+   */
+  const restore = async (previous: string | null) => {
+    try {
+      if (previous) await commands.setKubeconfigPath(previous);
+      else await commands.clearKubeconfigPath();
+      await reload();
+      toast({
+        title: "Kubeconfig restored",
+        description: previous ?? "Back to the default lookup.",
+      });
+    } catch (error) {
+      failed("Failed to restore the previous kubeconfig")(error);
+    }
+  };
+
+  const undo = (previous: string | null) => (
+    <ToastAction
+      altText="Undo the kubeconfig change"
+      onClick={() => void restore(previous)}
+    >
+      Undo
+    </ToastAction>
+  );
+
   const setPath = useMutation({
     mutationFn: (path: string) => commands.setKubeconfigPath(path),
-    onSuccess: async () => {
+    // Captured before the write, because the query it comes from is
+    // invalidated by `reload` before the toast is built.
+    onMutate: () => ({ previous: override.data ?? null }),
+    onSuccess: async (_result, _path, context) => {
       await reload();
       toast({
         title: "Kubeconfig updated",
-        description: "Using custom kubeconfig path.",
+        description: context.previous
+          ? `Was ${context.previous}.`
+          : "Was the default lookup.",
+        action: undo(context.previous),
       });
     },
     onError: failed("Failed to set kubeconfig path"),
@@ -64,11 +99,13 @@ export function useKubeconfigPath() {
 
   const clearPath = useMutation({
     mutationFn: () => commands.clearKubeconfigPath(),
-    onSuccess: async () => {
+    onMutate: () => ({ previous: override.data ?? null }),
+    onSuccess: async (_result, _vars, context) => {
       await reload();
       toast({
         title: "Kubeconfig updated",
-        description: "Reverted to default kubeconfig lookup.",
+        description: "Reverted to the default lookup.",
+        action: context.previous ? undo(context.previous) : undefined,
       });
     },
     onError: failed("Failed to clear kubeconfig override"),
