@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import yaml from "js-yaml";
 
+import { fluxHelmReleasePath } from "@/integrations";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
@@ -198,9 +199,7 @@ export function HelmDetail() {
             label="Open the HelmRelease"
             icon={ExternalLink}
             onClick={() =>
-              navigate(
-                `/crds/helm.toolkit.fluxcd.io/helmreleases/${namespace}/${name}`
-              )
+              navigate(fluxHelmReleasePath(namespace ?? "", name ?? ""))
             }
           />
         </div>

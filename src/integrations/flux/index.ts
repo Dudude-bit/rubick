@@ -14,3 +14,14 @@ export default defineVendor({
   name: "Flux",
   crd,
 });
+
+/**
+ * Where a Flux-managed release's real object is.
+ *
+ * The Helm pages need it because a release Flux owns is not theirs to
+ * reconcile, and the two of them had the group and plural spelled out in a
+ * template literal each — the smallest possible version of the drift this
+ * tree exists to stop.
+ */
+export const helmReleasePath = (namespace: string, name: string) =>
+  `/crds/helm.toolkit.fluxcd.io/helmreleases/${namespace}/${name}`;

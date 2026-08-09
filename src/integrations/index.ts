@@ -44,7 +44,7 @@ import { commands } from "@/lib/commands";
 import aws from "./aws";
 import azure from "./azure";
 import certManager from "./cert-manager";
-import flux from "./flux";
+import flux, { helmReleasePath } from "./flux";
 import googleCloud from "./google-cloud";
 import istio from "./istio";
 import k3s from "./k3s";
@@ -238,3 +238,13 @@ export function flavourOfContext(context: string): Flavour | null {
 export function flavourOf(provider: ClusterProvider): Flavour | null {
   return FLAVOURS.find((flavour) => flavour.id === provider) ?? null;
 }
+
+/**
+ * Where a Flux-managed Helm release's real object lives.
+ *
+ * The one facet that names its vendor out loud, because the surface that
+ * uses it already does: the Helm page says "Managed by Flux" before it
+ * offers the link. Naming a vendor in *copy* was never the problem; naming
+ * one in an `import` is.
+ */
+export { helmReleasePath as fluxHelmReleasePath };

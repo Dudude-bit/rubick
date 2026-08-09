@@ -86,15 +86,22 @@ export default [
         {
           // The same guard, pointed at a different drift.
           //
-          // An extension contributes capabilities, and a surface asks for
-          // the capability rather than for the extension. The moment one
-          // page imports `@/integrations/cert-manager` directly the seam
-          // stops being a boundary and becomes a folder, and every
-          // consuming surface quietly acquires an opinion about which
-          // extensions exist.
+          // A vendor contributes facets, and a surface asks for the facet
+          // rather than for the vendor. The moment one page imports
+          // `@/integrations/cert-manager` directly the seam stops being a
+          // boundary and becomes a folder, and every consuming surface
+          // quietly acquires an opinion about which vendors exist.
+          //
+          // This is what stops the drift that made the tree necessary:
+          // cert-manager had landed twice, in two systems, because nothing
+          // refused the second one. It covers every folder in the tree the
+          // moment it is created — the tier-one vendors that carry only a
+          // node label or a mark are behind the same door as the ones that
+          // supply a capability, because "where does GKE's spelling live"
+          // must have exactly one answer.
           //
           // `@/integrations` is the door and stays open; only reaching past
-          // it into a named extension is refused. Files inside the folder
+          // it into a named vendor is refused. Files inside the folder
           // reach each other by relative path, which is how they are
           // exempt without needing a second config object.
           selector: [
@@ -106,7 +113,7 @@ export default [
             .map((node) => `${node} > Literal[value=/(^|\\/)integrations\\/./]`)
             .join(", "),
           message:
-            "Ask for a capability, not for an extension: import { useCapability } from '@/integrations'. Nothing outside src/integrations/ names an extension.",
+            "Ask for a facet, not for a vendor: import { useCapability, useCrdView, flavourOf, ... } from '@/integrations'. Nothing outside src/integrations/ names a vendor.",
         },
       ],
     },

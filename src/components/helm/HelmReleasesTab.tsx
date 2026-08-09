@@ -13,6 +13,7 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 
+import { fluxHelmReleasePath } from "@/integrations";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -233,7 +234,7 @@ export function HelmReleasesTab({
                   <DropdownMenuItem
                     onClick={() =>
                       navigate(
-                        `/crds/helm.toolkit.fluxcd.io/helmreleases/${release.namespace}/${release.name}`
+                        fluxHelmReleasePath(release.namespace, release.name)
                       )
                     }
                   >
