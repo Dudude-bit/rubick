@@ -1076,6 +1076,7 @@ export interface NodeInfo {
   taints: TaintInfo[];
   capacity: ResourceQuantities;
   allocatable: ResourceQuantities;
+  providerId: string | null;
   createdAt: string | null;
 }
 

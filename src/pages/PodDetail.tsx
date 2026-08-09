@@ -56,6 +56,8 @@ import { usePodPortForward } from "@/components/pod/usePodPortForward";
 import { usePodReplacementSearch } from "@/components/pod/usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useNodePlacement } from "@/hooks/useNodePlacement";
+import { SpotMark } from "@/components/resources/spot-mark";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -287,6 +289,7 @@ export function PodDetail() {
   });
 
   const connections = useConnections(ResourceType.Pod, name, namespace);
+  const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
 
   const {
     savedLabels,
@@ -450,16 +453,32 @@ export function PodDetail() {
     {
       label: "Node",
       value: pod?.nodeName ? (
-        <ResourceRef
-          kind={ResourceType.Node}
-          name={pod.nodeName}
-          showKind={false}
-        />
+        <span className="inline-flex items-baseline gap-2">
+          <ResourceRef
+            kind={ResourceType.Node}
+            name={pod.nodeName}
+            showKind={false}
+          />
+          {nodeIsSpot && <SpotMark says="spot" />}
+        </span>
       ) : (
         "unscheduled"
       ),
       tone: pod?.nodeName ? undefined : "warn",
     },
+    // Said in words as well as in the mark, because the mark alone would read
+    // as a warning about this pod. "It will be evicted at some point and that
+    // is fine" is a different fact from "it keeps dying", and the row that
+    // carries it sits beside Restarts, which is the fact it is mistaken for.
+    ...(nodeIsSpot
+      ? [
+          {
+            label: "Spot node",
+            value:
+              "The cloud can reclaim this node at any time. An eviction here is the arrangement, not a fault.",
+          },
+        ]
+      : []),
     {
       label: "Pod IP",
       value: <CopyableAddress value={pod?.podIp} label="Pod IP" />,

@@ -17,12 +17,38 @@ import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
 import { createNameColumn } from "@/components/resources/columns";
+import { SpotMark } from "@/components/resources/spot-mark";
+import type { RowGrouping } from "@/components/ui/row-grouping";
+import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
 import type { NodeInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+
+/**
+ * Nodes, grouped by the pool the cloud says made them.
+ *
+ * On a managed cluster this is the difference between forty flat rows and
+ * three pools of known machines in known places, half of them disposable. On
+ * every other cluster `poolOf` returns null for every node, no group reaches
+ * the minimum, and the page is exactly the flat list it always was.
+ */
+const poolGrouping: RowGrouping<NodeInfo> = {
+  keyOf: poolOf,
+  caption: (pool, nodes) => {
+    const facts = poolFacts(nodes);
+    const spot = spotMark(facts);
+    return (
+      <span className="inline-flex items-baseline gap-2">
+        <span className="font-mono text-fg-mid">{pool}</span>
+        <span>{describePool(facts)}</span>
+        {spot && <SpotMark says={spot} />}
+      </span>
+    );
+  },
+};
 
 export function NodeList() {
   const { isConnected } = useClusterStore();
@@ -258,6 +284,7 @@ export function NodeList() {
       queryFn={() => commands.listNodes(null)}
       columns={columns}
       quickActions={quickActions}
+      grouping={poolGrouping}
       emptyStateLabel={toPlural(ResourceType.Node)}
       staleTime={STALE_TIMES.resourceList}
       refetchInterval={watchFailed ? undefined : false}

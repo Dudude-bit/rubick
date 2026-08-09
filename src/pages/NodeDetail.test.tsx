@@ -81,6 +81,7 @@ function buildNode(overrides: Partial<NodeInfo> = {}): NodeInfo {
       pods: "110",
       ephemeralStorage: "90Gi",
     },
+    providerId: null,
     createdAt: "2026-04-25T00:00:00Z",
     ...overrides,
   };

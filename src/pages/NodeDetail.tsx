@@ -21,6 +21,8 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { SpotMark } from "@/components/resources/spot-mark";
+import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { useResourceDetail } from "@/hooks";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
@@ -141,6 +143,50 @@ export function NodeDetail() {
     },
   ];
 
+  // What a managed cluster already states about the machine under this node.
+  // Every row is dropped rather than stubbed when the cluster is silent, so a
+  // k3d node keeps the page it had before any of this existed.
+  const placement = node ? nodePlacement(node) : null;
+  const machine: KeyValue[] = placement
+    ? [
+        ...(placement.pool
+          ? [{ label: "Pool", value: placement.pool, mono: true }]
+          : []),
+        ...(placement.machine
+          ? [{ label: "Instance type", value: placement.machine, mono: true }]
+          : []),
+        ...(placement.zone
+          ? [{ label: "Zone", value: placement.zone, mono: true }]
+          : []),
+        ...(placement.region
+          ? [{ label: "Region", value: placement.region, mono: true }]
+          : []),
+        ...(placement.spot
+          ? [
+              {
+                label: "Spot",
+                value:
+                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+              },
+            ]
+          : []),
+        // Named from the providerID's scheme and from nothing else. A pool
+        // label can be typed by anyone; this is the cloud signing its work.
+        ...(placement.cloud
+          ? [{ label: "Cloud", value: placement.cloud }]
+          : []),
+        ...(placement.providerId
+          ? [
+              {
+                label: "Provider ID",
+                value: placement.providerId,
+                mono: true,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
   const allocatable: KeyValue[] = [
     { label: "CPU", value: node?.allocatable.cpu ?? "-", mono: true },
     {
@@ -170,6 +216,13 @@ export function NodeDetail() {
               count="what the scheduler may hand out"
               items={allocatable}
             />
+            {placement && statesPlacement(placement) && (
+              <KeyValueSection
+                title="Placement"
+                count="what the cloud says this node is and where"
+                items={machine}
+              />
+            )}
           </div>
           {node && node.taints.length > 0 && (
             <KeyValueSection
@@ -235,11 +288,14 @@ export function NodeDetail() {
           <StatusBadge status={node.status.ready ? "Ready" : "NotReady"} />
         )
       }
-      badges={node?.roles.map((role) => (
-        <span key={role} className="text-[11px] text-fg-fnt">
-          {role}
-        </span>
-      ))}
+      badges={[
+        ...(node?.roles.map((role) => (
+          <span key={role} className="text-[11px] text-fg-fnt">
+            {role}
+          </span>
+        )) ?? []),
+        ...(placement?.spot ? [<SpotMark key="spot" says="spot" />] : []),
+      ]}
       onBack={goBack}
       tabs={tabs}
       activeTab={activeTab}
