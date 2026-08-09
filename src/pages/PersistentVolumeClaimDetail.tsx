@@ -13,7 +13,9 @@ import {
   KeyValueSection,
   type KeyValue,
 } from "@/components/resources/detail-kv";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
@@ -42,6 +44,12 @@ export function PersistentVolumeClaimDetail() {
       commands.deletePersistentVolumeClaim(name, ns),
     defaultTab: "events",
   });
+
+  const connections = useConnections(
+    ResourceType.PersistentVolumeClaim,
+    name,
+    namespace
+  );
 
   // A claim with no volume behind it is a pod that will never start, and the
   // provisioner says why in the events rather than on the object.
@@ -109,6 +117,7 @@ export function PersistentVolumeClaimDetail() {
   ];
 
   const tabs = [
+    connectionsTab(connections),
     {
       id: "events",
       label: "Events",

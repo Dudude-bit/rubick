@@ -6,6 +6,8 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
@@ -29,6 +31,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -53,6 +56,8 @@ export function StatefulSetDetail() {
     deleteResource: (name, ns) => commands.deleteStatefulset(name, ns),
     defaultTab: "overview",
   });
+
+  const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
   const { data: pods = [] } = useQuery({
     queryKey: ["statefulset-pods", namespace, name],
@@ -110,6 +115,7 @@ export function StatefulSetDetail() {
           </>
         ),
       },
+      connectionsTab(connections),
       {
         id: "container-template",
         label: "Template",
@@ -150,7 +156,7 @@ export function StatefulSetDetail() {
         namespace: statefulSet?.namespace || namespace,
       }),
     ],
-    [statefulSet, pods, yaml, copyYaml, namespace, name]
+    [statefulSet, pods, yaml, copyYaml, namespace, name, connections]
   );
 
   if (!statefulSet && !isLoading && !error) {
@@ -259,6 +265,8 @@ export function StatefulSetDetail() {
         </Section>
         <KeyValueSection title="StatefulSet" items={facts} />
       </div>
+
+      <TrafficChain query={connections} />
 
       {statefulSet && (
         <RelatedResources

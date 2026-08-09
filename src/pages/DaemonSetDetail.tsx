@@ -6,6 +6,8 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
@@ -28,6 +30,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -52,6 +55,8 @@ export function DaemonSetDetail() {
     deleteResource: (name, ns) => commands.deleteDaemonset(name, ns),
     defaultTab: "overview",
   });
+
+  const connections = useConnections(ResourceType.DaemonSet, name, namespace);
 
   // The DaemonSet publishes its own selector; the previous `app=<name>` guess
   // returned nothing for every chart that labels its pods any other way.
@@ -114,6 +119,7 @@ export function DaemonSetDetail() {
           </>
         ),
       },
+      connectionsTab(connections),
       {
         id: "container-template",
         label: "Template",
@@ -154,7 +160,7 @@ export function DaemonSetDetail() {
         namespace: daemonSet?.namespace || namespace,
       }),
     ],
-    [daemonSet, pods, yaml, copyYaml, namespace, name]
+    [daemonSet, pods, yaml, copyYaml, namespace, name, connections]
   );
 
   if (!daemonSet && !isLoading && !error) {
@@ -257,6 +263,8 @@ export function DaemonSetDetail() {
         </Section>
         <KeyValueSection title="DaemonSet" items={facts} />
       </div>
+
+      <TrafficChain query={connections} />
 
       {daemonSet && (
         <RelatedResources

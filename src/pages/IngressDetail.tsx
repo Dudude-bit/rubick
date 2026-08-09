@@ -27,8 +27,11 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
@@ -153,6 +156,8 @@ export function IngressDetail() {
   const accessUrls = generateAccessUrls(rules, tlsHosts, hasCatchAllTls);
   const hasTls = tlsHosts.length > 0 || tlsConfigs.length > 0;
   const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
+
+  const connections = useConnections(ResourceType.Ingress, name, namespace);
 
   const {
     data: events = [],
@@ -288,6 +293,7 @@ export function IngressDetail() {
         </Section>
       ),
     },
+    connectionsTab(connections),
     {
       id: "rules",
       label: "Rules",
@@ -502,6 +508,8 @@ export function IngressDetail() {
       tabs={tabs}
     >
       <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
+
+      <TrafficChain query={connections} />
     </ResourceDetailLayout>
   );
 }

@@ -25,7 +25,10 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { ServiceAccessInfo, MatchingPods } from "@/components/network";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
@@ -48,6 +51,8 @@ export function ServiceDetail() {
     deleteResource: (name, ns) => commands.deleteService(name, ns),
     defaultTab: "access",
   });
+
+  const connections = useConnections(ResourceType.Service, name, namespace);
 
   if (!service && !isLoading && !error) {
     return null;
@@ -104,6 +109,7 @@ export function ServiceDetail() {
       glyph: viewGlyph(ExternalLink),
       content: service ? <ServiceAccessInfo service={service} /> : null,
     },
+    connectionsTab(connections),
     {
       id: "ports",
       label: "Ports",
@@ -226,6 +232,8 @@ export function ServiceDetail() {
       onTabChange={setActiveTab}
     >
       <KeyValueSection title="Service" items={facts} className="max-w-lg" />
+
+      <TrafficChain query={connections} />
     </ResourceDetailLayout>
   );
 }

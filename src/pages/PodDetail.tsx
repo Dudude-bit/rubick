@@ -24,6 +24,8 @@ import { LogViewer } from "@/components/logs/LogViewer";
 import { PodShell } from "@/components/terminal/PodShell";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
   conditionsMark,
@@ -53,6 +55,7 @@ import { PodPortForwardDialog } from "@/components/pod/PodPortForwardDialog";
 import { usePodPortForward } from "@/components/pod/usePodPortForward";
 import { usePodReplacementSearch } from "@/components/pod/usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -282,6 +285,8 @@ export function PodDetail() {
     // Overview with a terminal running somewhere off screen.
     defaultTab: requestedShell ? "shell" : undefined,
   });
+
+  const connections = useConnections(ResourceType.Pod, name, namespace);
 
   const {
     savedLabels,
@@ -610,6 +615,7 @@ export function PodDetail() {
             </>
           ),
         },
+        connectionsTab(connections),
         {
           id: "containers",
           label: "Containers",
@@ -738,6 +744,8 @@ export function PodDetail() {
           </div>
         </Section>
       </div>
+
+      <TrafficChain query={connections} />
 
       {pod && (
         <RelatedResources

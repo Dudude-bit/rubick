@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link2, Table2, Tag, Trash2 } from "lucide-react";
+import { Table2, Tag, Trash2 } from "lucide-react";
 
 import { yamlTab } from "@/components/resources/yaml-tab";
-import { ReferencedBy } from "@/components/resources/ReferencedBy";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { DataSection } from "@/components/resources/data-rows";
@@ -10,6 +10,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
@@ -33,6 +34,8 @@ export function ConfigMapDetail() {
     deleteResource: (name, ns) => commands.deleteConfigmap(name, ns),
     defaultTab: "data",
   });
+
+  const connections = useConnections(ResourceType.ConfigMap, name, namespace);
 
   const { data: configMapData = {}, isLoading: isDataLoading } = useQuery({
     queryKey: ["configmap-data", name, namespace],
@@ -68,19 +71,7 @@ export function ConfigMapDetail() {
         />
       ),
     },
-    {
-      id: "references",
-      label: "Referenced by",
-      glyph: viewGlyph(Link2),
-      content:
-        name && namespace ? (
-          <ReferencedBy
-            resourceType="ConfigMap"
-            name={name}
-            namespace={namespace}
-          />
-        ) : null,
-    },
+    connectionsTab(connections),
     {
       id: "metadata",
       label: "Metadata",

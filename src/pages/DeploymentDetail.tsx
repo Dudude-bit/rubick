@@ -33,6 +33,8 @@ import { LogViewer } from "@/components/logs/LogViewer";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { PodListCard } from "@/components/resources/PodListCard";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
@@ -60,6 +62,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
@@ -114,6 +117,8 @@ export function DeploymentDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
     refetchOnWindowFocus: false,
   });
+
+  const connections = useConnections(ResourceType.Deployment, name, namespace);
 
   const { data: revisions = [] } = useQuery({
     queryKey: ["deployment-replicasets", namespace, name],
@@ -370,6 +375,7 @@ export function DeploymentDetail() {
         </>
       ),
     },
+    connectionsTab(connections),
     {
       id: "container-template",
       label: "Template",
@@ -568,6 +574,8 @@ export function DeploymentDetail() {
           </div>
         </Section>
       </div>
+
+      <TrafficChain query={connections} />
 
       {deployment && (
         <RelatedResources
