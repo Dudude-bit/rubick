@@ -282,6 +282,32 @@ export interface RegistryConfigInfo {
   token?: string;
 }
 
+export interface ResourceConnections {
+  subject: ObjectRef;
+  edges: ConnectionEdge[];
+  stops: ChainStop[];
+  notLookedAt: UnexploredKind[];
+}
+
+export interface UnexploredKind {
+  kind: string;
+  why: string;
+}
+
+export interface ConnectionEdge {
+  from: ObjectRef;
+  to: ObjectRef;
+  relation: Relation;
+}
+
+export interface ObjectRef {
+  kind: string;
+  name: string;
+  namespace: string | null;
+  existence: Existence;
+  facts: ObjectFacts | null;
+}
+
 export interface ManifestResult {
   success: boolean;
   stdout: string;
@@ -1280,6 +1306,65 @@ export interface ResourceFilters {
   fieldSelector: string | null;
   limit: number | null;
 }
+
+export type ChainStop =
+  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | { reason: "selectsNothing"; service: ObjectRef; selector: string }
+  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number };
+
+export type Relation =
+  | { verb: "owns"; controller: boolean }
+  | { verb: "selects"; selector: string }
+  | { verb: "uses"; usages: Usage[] }
+  | {
+      verb: "routes";
+      host: string | null;
+      path: string;
+      pathType: string;
+      port: string | null;
+      tls: boolean;
+    }
+  | { verb: "runsOn" }
+  | { verb: "binds" };
+
+export type Usage =
+  | {
+      how: "mount";
+      container: string;
+      path: string;
+      readOnly: boolean;
+      subPath: string | null;
+      volume: string;
+      projected: boolean;
+    }
+  | { how: "unmounted"; volume: string; projected: boolean }
+  | { how: "env"; container: string; name: string; key: string }
+  | { how: "envFrom"; container: string }
+  | { how: "imagePullSecret" }
+  | { how: "identity" }
+  | { how: "ingressTls"; hosts: string[] };
+
+export type ObjectFacts =
+  | {
+      kind: "service";
+      type: string;
+      clusterIp: string | null;
+      externalName: string | null;
+      selector: string | null;
+      ports: ServicePortInfo[];
+    }
+  | { kind: "ingress"; className: string | null }
+  | { kind: "pod"; phase: string; display: string; ready: boolean }
+  | {
+      kind: "workload";
+      replicas: number;
+      readyReplicas: number;
+      revision: string | null;
+      current: boolean | null;
+    }
+  | { kind: "claim"; phase: string; capacity: string; storageClass: string };
+
+export type Existence = "present" | "missing" | "notChecked";
 
 export type SearchFailureKind =
   | "not-connected"

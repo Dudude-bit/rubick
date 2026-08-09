@@ -146,6 +146,7 @@ fn main() {
             commands::config_resources::delete_secret,
             // Resource references command
             commands::config_resources::get_resource_references,
+            commands::connections::get_resource_connections,
             // Node commands
             commands::nodes::list_nodes,
             commands::nodes::get_node,

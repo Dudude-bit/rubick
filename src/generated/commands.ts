@@ -71,6 +71,7 @@ import type {
   RegistryImportEntry,
   RegistrySearchRequest,
   ReplicaSetInfo,
+  ResourceConnections,
   ResourceFilters,
   ResourceListItem,
   ResourceQuery,
@@ -747,6 +748,18 @@ export async function getManifest(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("get_manifest", { kind, apiVersion, name, namespace });
+}
+
+export async function getResourceConnections(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ResourceConnections> {
+  return invoke<ResourceConnections>("get_resource_connections", {
+    kind,
+    name,
+    namespace,
+  });
 }
 
 export async function listRegistryConfigs(): Promise<RegistryConfigInfo[]> {
