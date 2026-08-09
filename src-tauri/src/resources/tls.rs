@@ -187,10 +187,10 @@ const PRIVATE_KEY_NAMES: &[&str] = &[
 /// nothing downstream has to remember not to render it.
 #[must_use]
 pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<String> {
-    if let Some(label) = pem_private_key_label(value) {
-        return Some(format!("a {label} — the app never shows one"));
-    }
-    if decodes_as_private_key(value) {
+    // The PEM label says which flavour it is — RSA, EC, encrypted — and
+    // none of that changes what the reader can do, so the row does not
+    // carry it. One sentence, whichever net caught the value.
+    if has_pem_private_key_label(value) || decodes_as_private_key(value) {
         return Some("a private key — the app never shows one".to_string());
     }
     if key_declared_private(secret_type, key) {
@@ -206,26 +206,19 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Str
     None
 }
 
-/// The PEM label of the first private-key block, in the value's own words.
+/// Whether the value carries a PEM block whose own label says private key.
 ///
 /// Read off the raw text rather than through a decoder: an encrypted or
 /// unfamiliar key type is one no parser here handles and exactly the one
 /// worth withholding.
-fn pem_private_key_label(value: &[u8]) -> Option<String> {
+fn has_pem_private_key_label(value: &[u8]) -> bool {
     let text = String::from_utf8_lossy(value);
-    for line in text.lines() {
-        let line = line.trim();
-        let Some(label) = line
+    text.lines().any(|line| {
+        line.trim()
             .strip_prefix("-----BEGIN ")
             .and_then(|rest| rest.strip_suffix("-----"))
-        else {
-            continue;
-        };
-        if label.to_ascii_uppercase().contains("PRIVATE KEY") {
-            return Some(label.to_ascii_lowercase());
-        }
-    }
-    None
+            .is_some_and(|label| label.to_ascii_uppercase().contains("PRIVATE KEY"))
+    })
 }
 
 fn decodes_as_private_key(value: &[u8]) -> bool {

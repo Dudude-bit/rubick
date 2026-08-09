@@ -16,6 +16,7 @@ import { PortForwardManager } from "@/components/port-forward/PortForwardManager
 import { RegistrySettings } from "@/components/registry/RegistrySettings";
 import { CloudProfiles } from "@/components/settings/CloudProfiles";
 import { CliSettings } from "@/components/settings/CliSettings";
+import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
 import { KubeconfigSettings } from "@/components/settings/KubeconfigSettings";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
 import {
@@ -136,6 +137,7 @@ export function Settings() {
       <KubeconfigSettings />
       <CloudProfiles />
       <CliSettings />
+      <IntegrationsSettings />
       <RegistrySettings />
       <PortForwardManager />
 

@@ -31,6 +31,7 @@ import type {
   DebugResult,
   DebugStatus,
   DeploymentInfo,
+  DetectedExtension,
   EndpointsInfo,
   EventFilters,
   EventInfo,
@@ -45,6 +46,7 @@ import type {
   HelmRevision,
   InfrastructureBuilderStateDto,
   IngressInfo,
+  IssuanceStory,
   JobDetailInfo,
   JobInfo,
   KubeconfigSource,
@@ -1271,6 +1273,22 @@ export async function deleteService(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_service", { name, namespace });
+}
+
+export async function detectInClusterExtensions(): Promise<
+  DetectedExtension[]
+> {
+  return invoke<DetectedExtension[]>("detect_in_cluster_extensions");
+}
+
+export async function getCertificateIssuance(
+  namespace: string,
+  secretName: string
+): Promise<IssuanceStory | null> {
+  return invoke<IssuanceStory | null>("get_certificate_issuance", {
+    namespace,
+    secretName,
+  });
 }
 
 export async function subscribeConfigmapWatch(

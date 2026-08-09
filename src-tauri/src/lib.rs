@@ -13,6 +13,7 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod integrations;
 pub mod logs;
 pub mod metrics;
 pub mod plugins;

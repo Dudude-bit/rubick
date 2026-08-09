@@ -20,7 +20,9 @@ import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
 import { chainSilence, trafficChains, type ChainHop } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { Issuance } from "@/hooks/useCertificateIssuance";
 import { CertificateLine } from "./CertificateFacts";
+import { RenewalNote } from "./IssuanceChain";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import type { ObjectRef, TlsCertificate } from "@/generated/types";
@@ -91,7 +93,15 @@ function toneOf(hop: ChainHop): HopTone {
   return "on";
 }
 
-function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
+function Hop({
+  hop,
+  next,
+  issuance,
+}: {
+  hop: ChainHop;
+  next: ChainHop | undefined;
+  issuance: Issuance | undefined;
+}) {
   const last = next === undefined;
   return (
     <div className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5">
@@ -134,10 +144,17 @@ function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
           </span>
         )}
         {hop.at === "certificate" && (
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <HopName object={hop.secret} />
-            <CertificateLine read={hop.read} hosts={hop.hosts} />
-          </span>
+          <>
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              <HopName object={hop.secret} />
+              <CertificateLine read={hop.read} hosts={hop.hosts} />
+            </span>
+            {/* Core above, extension below, in that order and never the
+                other way round: the hop reads whole with nothing installed. */}
+            {issuance && (
+              <RenewalNote issuance={issuance} secretName={hop.secret.name} />
+            )}
+          </>
         )}
         {hop.at === "stop" && (
           <>
@@ -153,6 +170,7 @@ function Hop({ hop, next }: { hop: ChainHop; next: ChainHop | undefined }) {
 export function TrafficChain({
   query,
   certificates,
+  issuance,
 }: {
   query: ConnectionsQuery;
   /**
@@ -161,6 +179,8 @@ export function TrafficChain({
    * certificate hop is an addition and never a precondition.
    */
   certificates?: Map<string, TlsCertificate>;
+  /** Why those certificates look the way they do, where anything can say. */
+  issuance?: Issuance;
 }) {
   const { data, isPending, error } = query;
 
@@ -195,7 +215,12 @@ export function TrafficChain({
         {paths.map((path) => (
           <div key={path.key} className="flex flex-col">
             {path.hops.map((hop, index) => (
-              <Hop key={index} hop={hop} next={path.hops[index + 1]} />
+              <Hop
+                key={index}
+                hop={hop}
+                next={path.hops[index + 1]}
+                issuance={issuance}
+              />
             ))}
           </div>
         ))}

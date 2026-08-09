@@ -6,7 +6,7 @@
 )]
 
 use k8s_gui_common::init_tracing;
-use k8s_gui_lib::{commands, shell, state::AppState};
+use k8s_gui_lib::{commands, integrations, shell, state::AppState};
 use tauri::{Emitter, Manager};
 
 fn main() {
@@ -146,6 +146,9 @@ fn main() {
             commands::config_resources::delete_secret,
             // TLS certificates — core, and readable without cert-manager
             commands::certificates::get_tls_certificates,
+            // In-cluster extensions: detected, never configured
+            integrations::detect_in_cluster_extensions,
+            integrations::cert_manager::get_certificate_issuance,
             // Resource references command
             commands::config_resources::get_resource_references,
             commands::connections::get_resource_connections,

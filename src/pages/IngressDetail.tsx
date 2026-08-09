@@ -31,11 +31,13 @@ import {
   TONE_CLASS,
 } from "@/components/resources/key-values";
 import { CertificateLine } from "@/components/resources/CertificateFacts";
+import { IssuanceSection } from "@/components/resources/IssuanceChain";
 import { TrafficChain } from "@/components/resources/TrafficChain";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { expiryOf } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
@@ -164,11 +166,16 @@ export function IngressDetail() {
   const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
 
   const connections = useConnections(ResourceType.Ingress, name, namespace);
+  const tlsSecretNames = tlsConfigs.flatMap((config) =>
+    config.secretName ? [config.secretName] : []
+  );
   const certificates = useTlsCertificates(
     ingress?.namespace ?? namespace,
-    tlsConfigs.flatMap((config) =>
-      config.secretName ? [config.secretName] : []
-    )
+    tlsSecretNames
+  );
+  const issuance = useCertificateIssuance(
+    ingress?.namespace ?? namespace,
+    tlsSecretNames
   );
 
   // The soonest expiry across every certificate this Ingress serves: one
@@ -457,6 +464,19 @@ export function IngressDetail() {
               }))}
             />
           )}
+          {/* The four objects and the sentence that says what failed. Below
+              the certificate facts, because those are core and read the
+              same on a cluster with nothing installed on it. */}
+          {tlsConfigs.map(
+            (config) =>
+              config.secretName && (
+                <IssuanceSection
+                  key={config.secretName}
+                  issuance={issuance}
+                  secretName={config.secretName}
+                />
+              )
+          )}
         </Section>
       ),
     },
@@ -559,7 +579,11 @@ export function IngressDetail() {
     >
       <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
 
-      <TrafficChain query={connections} certificates={certificates.data} />
+      <TrafficChain
+        query={connections}
+        certificates={certificates.data}
+        issuance={issuance}
+      />
     </ResourceDetailLayout>
   );
 }

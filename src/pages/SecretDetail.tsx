@@ -8,11 +8,13 @@ import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayou
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { CertificateSection } from "@/components/resources/CertificateFacts";
 import { DataSection } from "@/components/resources/data-rows";
+import { IssuanceSection } from "@/components/resources/IssuanceChain";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
@@ -47,10 +49,9 @@ export function SecretDetail() {
   });
 
   const isTls = secret?.type === "kubernetes.io/tls";
-  const certificates = useTlsCertificates(
-    namespace,
-    isTls && name ? [name] : []
-  );
+  const tlsSecretName = isTls && name ? [name] : [];
+  const certificates = useTlsCertificates(namespace, tlsSecretName);
+  const issuance = useCertificateIssuance(namespace, tlsSecretName);
 
   if (!secret && !isLoading && !error) {
     return null;
@@ -150,7 +151,11 @@ export function SecretDetail() {
       {/* Above the tabs, because on a TLS Secret the certificate is what
           the page is about and the keys under it are how it is stored. */}
       {isTls && name && (
-        <CertificateSection read={certificates.data?.get(name)} />
+        <>
+          <CertificateSection read={certificates.data?.get(name)} />
+          {/* Core first and whole; the extension adds why, or nothing. */}
+          <IssuanceSection issuance={issuance} secretName={name} />
+        </>
       )}
     </ResourceDetailLayout>
   );
