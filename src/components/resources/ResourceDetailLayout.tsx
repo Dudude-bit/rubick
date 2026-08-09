@@ -235,6 +235,8 @@ interface ResourceDetailLayoutProps {
   /** The object's name. */
   title: string;
   namespace?: string;
+  /** `null` where narrowing to the namespace has no list to open under it. */
+  namespaceUrl?: string | null;
   createdAt?: string | null;
   statusBadge?: ReactNode;
   /** Qualifiers shown beside the name. */
@@ -274,6 +276,7 @@ export function ResourceDetailLayout({
   listLabel,
   title,
   namespace,
+  namespaceUrl,
   createdAt,
   statusBadge,
   badges,
@@ -331,6 +334,7 @@ export function ResourceDetailLayout({
           listUrl={listUrl}
           listLabel={listLabel}
           namespace={namespace}
+          namespaceUrl={namespaceUrl}
           createdAt={createdAt}
           status={statusBadge}
           meta={badges}

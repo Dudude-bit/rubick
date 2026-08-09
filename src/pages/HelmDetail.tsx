@@ -435,6 +435,10 @@ export function HelmDetail() {
         resourceKind="Helm release"
         listUrl="/helm"
         listLabel="Helm"
+        // The Helm list filters by a namespace of its own that this scope does
+        // not drive, so sending the reader there would narrow the tab and show
+        // them every namespace anyway. The scope alone is the honest half.
+        namespaceUrl={null}
         title={release?.name || name || ""}
         namespace={release?.namespace || namespace}
         createdAt={release?.firstDeployed}

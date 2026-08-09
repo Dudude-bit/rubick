@@ -1,15 +1,17 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
 import { ResourceName } from "@/components/resources/ResourceName";
+import { useLinkGesture } from "@/hooks/useLinkGesture";
 import {
   getResourceListUrl,
   toPlural,
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
+import { useClusterStore } from "@/stores/clusterStore";
 
 export interface ResourceDetailHeaderProps {
   /** The object's own name — an identifier, so it reads as mono. */
@@ -29,6 +31,16 @@ export interface ResourceDetailHeaderProps {
   /** The word in that segment, when the registry's plural is not it. */
   listLabel?: string;
   namespace?: string;
+  /**
+   * The list the namespace segment narrows. Defaults to wherever the kind
+   * segment points, which is that list for every kind whose parent is one.
+   *
+   * `null` for the kinds where it is not: a ReplicaSet's parent is a
+   * Deployment, and Helm's list carries a namespace filter of its own that
+   * this scope does not drive. Narrowing the tab is then all the segment can
+   * honestly offer, so it does that and stays where it is.
+   */
+  namespaceUrl?: string | null;
   /** The one badge that says whether this object is healthy. */
   status?: ReactNode;
   /** Facts that qualify the name: node roles, an ingress class, a count. */
@@ -37,6 +49,96 @@ export interface ResourceDetailHeaderProps {
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
+}
+
+/** Both segments of the trail, so the reader's eye reads one path. */
+const SEGMENT =
+  "rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg";
+
+/**
+ * The namespace in the trail, and the scope it stands for.
+ *
+ * `pods / k8s-gui-test / burst-demo` reads as a path, so the middle of it has
+ * to behave like one. It means "that list, in this namespace": the tab is
+ * narrowed to the namespace and the list opens under it. Narrowing is a side
+ * effect past navigation — the scope pill in the tab strip changes with it —
+ * so the segment says so instead of only naming itself, and says it only
+ * while it is true.
+ *
+ * With no list to narrow the scope is all there is to offer, and the segment
+ * hands it over without leaving the page: a detail page stays valid under its
+ * own object's namespace, so nothing the reader is looking at goes away.
+ * Once the tab already holds that scope there is nothing left to do at all,
+ * and the segment is text rather than a control that answers a click with
+ * nothing — which is the bug it exists to fix.
+ */
+function NamespaceSegment({
+  namespace,
+  to,
+  label,
+}: {
+  namespace: string;
+  to: string | null;
+  label: string;
+}) {
+  const navigate = useNavigate();
+  const scope = useClusterStore((state) => state.currentNamespace);
+  const switchNamespace = useClusterStore((state) => state.switchNamespace);
+  const gesture = useLinkGesture();
+
+  const narrows = scope !== namespace;
+  const narrow = () => {
+    if (narrows) void switchNamespace(namespace);
+  };
+
+  if (to) {
+    const says = narrows
+      ? `Show ${label} in ${namespace} — narrows this tab to that namespace`
+      : `Show ${label} in ${namespace}`;
+    const handle = (event: MouseEvent<HTMLAnchorElement>) =>
+      gesture(
+        event,
+        to,
+        () => {
+          narrow();
+          navigate(to);
+        },
+        namespace
+      );
+    return (
+      <Link
+        to={to}
+        title={says}
+        aria-label={says}
+        onClick={handle}
+        onAuxClick={handle}
+        className={`${SEGMENT} truncate font-mono`}
+      >
+        {namespace}
+      </Link>
+    );
+  }
+
+  if (!narrows)
+    return <span className="truncate px-1 py-0.5 font-mono">{namespace}</span>;
+
+  const says = `Scope this tab to ${namespace}`;
+  // The new tab a modified gesture opens has no list to land on either, so it
+  // starts where a new tab always starts — the overview, under this scope.
+  const handle = (event: MouseEvent<HTMLButtonElement>) =>
+    gesture(event, "/", narrow, namespace);
+  return (
+    <button
+      type="button"
+      title={says}
+      aria-label={says}
+      onClick={handle}
+      onAuxClick={handle}
+      className={`${SEGMENT} truncate font-mono`}
+    >
+      {namespace}
+    </button>
+  );
 }
 
 /**
@@ -62,6 +164,7 @@ export function ResourceDetailHeader({
   listUrl,
   listLabel,
   namespace,
+  namespaceUrl,
   status,
   meta,
   createdAt,
@@ -84,10 +187,7 @@ export function ResourceDetailHeader({
         <ArrowLeft className="h-3.5 w-3.5" />
       </button>
       {segment.to ? (
-        <Link
-          to={segment.to}
-          className="flex-none rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-fg"
-        >
+        <Link to={segment.to} className={`${SEGMENT} flex-none`}>
           {segment.label}
         </Link>
       ) : (
@@ -96,7 +196,11 @@ export function ResourceDetailHeader({
       {namespace && (
         <>
           <span aria-hidden="true">/</span>
-          <span className="truncate font-mono">{namespace}</span>
+          <NamespaceSegment
+            namespace={namespace}
+            to={namespaceUrl === undefined ? segment.to : namespaceUrl}
+            label={segment.label}
+          />
         </>
       )}
     </>

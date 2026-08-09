@@ -1,10 +1,13 @@
 import { useEffect } from "react";
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { Info } from "lucide-react";
 
 import { SectionHeader } from "@/components/ui/section";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { ResourceDetailLayout } from "./ResourceDetailLayout";
 import {
   countMark,
@@ -16,6 +19,12 @@ import {
 } from "./detail-tab";
 
 const wrap = (ui: React.ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+/** Where a click landed, read out of the router rather than guessed at. */
+function LocationProbe() {
+  const { pathname } = useLocation();
+  return <span data-testid="location">{pathname}</span>;
+}
 
 const base = {
   // A loaded object: the layout renders its "not found" state instead when
@@ -537,5 +546,137 @@ describe("the breadcrumb's kind segment", () => {
     );
     expect(screen.getByText("replicasets")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "replicasets" })).toBeNull();
+  });
+});
+
+/**
+ * `pods / k8s-gui-test / burst-demo` reads as a path, and for as long as the
+ * middle of it was a `<span>` only two thirds of it behaved like one. The
+ * segment stands for a scope, so it hands the tab that scope on the way to
+ * the list — and a modified gesture that opened a tab *without* it would put
+ * the reader's second view of `k8s-gui-test` on a tab scoped to everything.
+ */
+describe("the breadcrumb's namespace segment", () => {
+  const pod = {
+    ...base,
+    resource: { name: "burst-demo" },
+    title: "burst-demo",
+    resourceKind: "Pod",
+    namespace: "k8s-gui-test",
+  };
+  const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: null,
+    },
+  ];
+
+  function place(ui: React.ReactNode) {
+    return render(
+      <MemoryRouter initialEntries={["/pods/k8s-gui-test/burst-demo"]}>
+        {ui}
+        <LocationProbe />
+      </MemoryRouter>
+    );
+  }
+
+  const where = () => screen.getByTestId("location").textContent;
+  const segment = () => screen.getByTitle(/k8s-gui-test/);
+
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: null, currentNamespace: "" });
+    useScopeTabStore.setState({
+      tabs: [
+        {
+          id: "trail",
+          context: null,
+          namespace: "",
+          href: "/pods/k8s-gui-test/burst-demo",
+          missing: false,
+        },
+      ],
+      activeId: "trail",
+      pendingHref: null,
+    });
+  });
+
+  it("narrows this tab and opens the list on a plain click", async () => {
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    await userEvent.click(segment());
+    expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
+    expect(where()).toBe("/workloads/pods");
+  });
+
+  it("carries the namespace into the tab a middle click opens", () => {
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    // Testing Library has no `auxClick` helper; React binds `onAuxClick`
+    // to the native `auxclick` event, so dispatch that one.
+    fireEvent(
+      segment(),
+      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })
+    );
+    const { tabs: open, activeId } = useScopeTabStore.getState();
+    expect(open).toHaveLength(2);
+    expect(open[1]).toMatchObject({
+      namespace: "k8s-gui-test",
+      href: "/workloads/pods",
+    });
+    // Behind, like the browser: the reader is still reading the pod.
+    expect(activeId).toBe("trail");
+    expect(useClusterStore.getState().currentNamespace).toBe("");
+  });
+
+  it("says it narrows the tab only while that is true", () => {
+    const { unmount } = place(
+      <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
+    );
+    expect(segment()).toHaveAccessibleName(
+      "Show pods in k8s-gui-test — narrows this tab to that namespace"
+    );
+    unmount();
+
+    useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    expect(segment()).toHaveAccessibleName("Show pods in k8s-gui-test");
+  });
+
+  /**
+   * A ReplicaSet's parent is a Deployment and Helm's list keeps a namespace
+   * filter this scope does not drive, so there is no list to narrow. The
+   * scope is still the segment's to give, and giving it must not throw the
+   * reader off the page they are reading to do it.
+   */
+  it("hands over the scope in place when there is no list to narrow", async () => {
+    place(
+      <ResourceDetailLayout
+        {...pod}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        namespaceUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    await userEvent.click(segment());
+    expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
+    expect(where()).toBe("/pods/k8s-gui-test/burst-demo");
+  });
+
+  it("is plain text once that scope is the one the tab already holds", () => {
+    useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
+    place(
+      <ResourceDetailLayout
+        {...pod}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        namespaceUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    expect(screen.getByText("k8s-gui-test")).toBeInTheDocument();
+    expect(screen.queryByTitle(/k8s-gui-test/)).toBeNull();
   });
 });

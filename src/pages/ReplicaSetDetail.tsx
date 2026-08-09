@@ -258,6 +258,9 @@ export function ReplicaSetDetail() {
           : null
       }
       listLabel={owner?.name}
+      // And no list of them to narrow either: the namespace segment hands the
+      // tab that scope and leaves the reader on the revision they opened.
+      namespaceUrl={null}
       title={replicaSet?.name || name || ""}
       namespace={replicaSet?.namespace || namespace}
       createdAt={replicaSet?.createdAt}

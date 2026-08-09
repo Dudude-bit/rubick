@@ -25,7 +25,10 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import {
+  isRoutableKind,
+  ResourceRef,
+} from "@/components/resources/ResourceRef";
 import {
   MIN_SEARCH_LENGTH,
   useResourceSearch,
@@ -42,7 +45,12 @@ import {
   type ContextMatch,
 } from "@/lib/cluster-search";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import {
+  isResourceType,
+  ResourceType,
+  toKind,
+  toPlural,
+} from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import {
   aliasOf,
@@ -173,7 +181,8 @@ type Entry =
       cluster: ClusterSearchState;
       action: GroupAction;
     }
-  | { id: string; kind: "hit"; hit: SearchHit; path: string }
+  /** `path` is null for a hit that is a scope rather than a page: a Namespace. */
+  | { id: string; kind: "hit"; hit: SearchHit; path: string | null }
   | { id: string; kind: "more"; context: string; rest: number }
   | { id: string; kind: "link"; path: string; label: string; icon: IconType }
   | {
@@ -189,6 +198,13 @@ type IconType = React.ComponentType<{ className?: string }>;
 
 /** What Enter does on a cluster's own row, when it does anything. */
 type GroupAction = "none" | "search-it" | "retry";
+
+/** A hit that names a scope instead of an object the router can open. */
+function isNamespaceHit(hit: SearchHit): boolean {
+  return (
+    isResourceType(hit.kind) && toKind(hit.kind) === ResourceType.Namespace
+  );
+}
 
 function isSelectable(entry: Entry): boolean {
   if (entry.kind === "caption" || entry.kind === "hint") return false;
@@ -221,6 +237,7 @@ export function CommandPalette() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const isConnected = useClusterStore((s) => s.isConnected);
+  const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const marks = useClusterIdentityStore((s) => s.marks);
   const openTab = useScopeTabStore((s) => s.openTab);
 
@@ -426,11 +443,21 @@ export function CommandPalette() {
       const found = [...(hitsByContext.get(cluster.context)?.values() ?? [])];
       const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
       for (const hit of found.slice(0, cap)) {
+        // The search can list kinds the router serves no detail page for, and
+        // `getResourceDetailUrl` builds a URL for any of them: an unrouted
+        // path inside the layout route matches no branch and blanks the shell.
+        // A Namespace is not a page in this app — it is the scope a page is
+        // read under — so that is what its row offers. Anything else with no
+        // detail route is not offered at all.
+        const routable = isRoutableKind(hit.kind, hit.namespace);
+        if (!routable && !isNamespaceHit(hit)) continue;
         out.push({
           id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
           kind: "hit",
           hit,
-          path: getResourceDetailUrl(hit.kind, hit.name, hit.namespace),
+          path: routable
+            ? getResourceDetailUrl(hit.kind, hit.name, hit.namespace)
+            : null,
         });
       }
       if (found.length > cap) {
@@ -443,7 +470,10 @@ export function CommandPalette() {
       }
     }
 
-    if (hits.length === 0) {
+    // Rows, not hits: a cluster whose every match was a kind with nowhere to
+    // go has shown the reader nothing, and an empty list with no line under
+    // it is the same silence the counts exist to break.
+    if (!out.some((entry) => entry.kind === "hit")) {
       // "No results" while a cluster is still working is a lie, and so is
       // "no results" for a cluster nobody has connected to. The count is
       // the one thing a reader needs before believing an empty list.
@@ -470,7 +500,6 @@ export function CommandPalette() {
     currentContext,
     error,
     hasQuery,
-    hits.length,
     hitsByContext,
     isConnected,
     marks,
@@ -568,6 +597,22 @@ export function CommandPalette() {
           return;
         case "hit": {
           const { hit } = entry;
+          // A namespace is a scope, so picking one points this window at it —
+          // the same verb the namespaces list offers — and leaves the reader
+          // on the page they were reading, now under that scope.
+          if (entry.path === null) {
+            if (newTab || hit.context !== currentContext) {
+              openTab({
+                context: hit.context,
+                namespace: hit.name,
+                background: newTab,
+              });
+            } else {
+              void switchNamespace(hit.name);
+            }
+            close();
+            return;
+          }
           // Crossing a cluster boundary costs a tab: switching this one
           // would pull the ground out from under the page being read.
           if (newTab || hit.context !== currentContext) {
@@ -611,7 +656,15 @@ export function CommandPalette() {
           return;
       }
     },
-    [close, currentContext, go, openTab, pickScope, wakeCluster]
+    [
+      close,
+      currentContext,
+      go,
+      openTab,
+      pickScope,
+      switchNamespace,
+      wakeCluster,
+    ]
   );
 
   const move = useCallback(
@@ -981,6 +1034,11 @@ function EntryRow({
           </span>
           {entry.hit.namespace && (
             <span className="truncate text-fg-fnt">{entry.hit.namespace}</span>
+          )}
+          {/* Where the namespace would be, because for this row the name
+              already is one and what the reader gets is the scope. */}
+          {entry.path === null && (
+            <span className="truncate text-fg-fnt">scope to it</span>
           )}
           <span className="ml-auto flex-none text-[11px] text-fg-fnt">
             {entry.hit.kind}

@@ -50,19 +50,29 @@ export function readLinkIntent(
  * Handle a gesture on something with an `href`. `activate` is what a plain
  * click means for that surface — a peek for a reference, a navigation for a
  * list row — and everything modified is the same for both.
+ *
+ * `namespace` is for a destination that carries a scope as well as a route:
+ * a new tab otherwise inherits the scope the reader is standing in, which
+ * would open the breadcrumb's namespace segment on a tab that is not scoped
+ * to that namespace — the one thing the segment promises.
  */
 export function useLinkGesture() {
   const openTab = useScopeTabStore((state) => state.openTab);
 
   return useCallback(
-    (event: GestureEvent, href: string, activate: () => void) => {
+    (
+      event: GestureEvent,
+      href: string,
+      activate: () => void,
+      namespace?: string
+    ) => {
       const intent = readLinkIntent(event);
       if (intent === "none") return;
       // The webview has no second window to hand this to, so the tab the
       // browser would have opened is a scope tab — the same promise, kept.
       event.preventDefault();
       if (intent === "activate") activate();
-      else openTab({ href, background: intent === "tab-behind" });
+      else openTab({ href, namespace, background: intent === "tab-behind" });
     },
     [openTab]
   );
