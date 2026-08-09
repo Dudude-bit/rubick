@@ -138,3 +138,20 @@ export function podsMark(pods: readonly PodInfo[]): DetailTabMark {
       )
     : countMark(pods.length);
 }
+
+/**
+ * Whether the open tab is a surface, which is what decides who owns the
+ * page's height — the tab strip's own layout, and whether the page's blocks
+ * above it are hidden.
+ *
+ * Only while another tab still shows those blocks: a page whose every tab is
+ * a surface would hide them for good, which is how PersistentVolume once lost
+ * its capacity, binding and reclaim policy entirely.
+ */
+export function surfaceIsOpen(tabs: DetailTab[], activeTab: string): boolean {
+  const hasSectionsTab = tabs.some((tab) => tab.kind !== "surface");
+  return (
+    hasSectionsTab &&
+    tabs.find((tab) => tab.id === activeTab)?.kind === "surface"
+  );
+}
