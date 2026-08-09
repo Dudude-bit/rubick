@@ -9,7 +9,11 @@
  * places, half of them reclaimable at an hour's notice.
  *
  * Three vendors spelling four facts differently is a table, not an
- * architecture — hence a handful of arrays and no provider interface.
+ * architecture — hence a handful of arrays and no provider interface. Those
+ * arrays are not here: which label GKE writes is knowledge about GKE, and it
+ * lives with the rest of what the app knows about Google Cloud. What is here
+ * is the part that would read the same for a vendor nobody has heard of —
+ * how the labels are looked up, and how a pool's facts are said out loud.
  *
  * The hard rule is that **absence is not a claim**. No recognised label means
  * "not a managed cluster we recognise", which is not "not managed" and is
@@ -21,53 +25,18 @@
  */
 
 import type { NodeInfo } from "@/generated/types";
+import {
+  cloudOfProviderScheme,
+  NODE_POOL_LABELS,
+  NODE_SPOT_LABELS,
+} from "@/integrations";
 
 /**
- * The pool a node belongs to. First hit wins; a node carries at most one of
- * these in practice, and a Karpenter node on EKS carries the Karpenter one
- * rather than the managed-node-group one because it is not in a node group.
- */
-const POOL_KEYS = [
-  "cloud.google.com/gke-nodepool",
-  "eks.amazonaws.com/nodegroup",
-  "karpenter.sh/nodepool",
-  // Karpenter's pre-v1beta1 spelling, still worn by a cluster on v1alpha5.
-  "karpenter.sh/provisioner-name",
-  "kubernetes.azure.com/agentpool",
-] as const;
-// AKS's deprecated unprefixed `agentpool` is deliberately not in that list:
-// every AKS node also carries the prefixed one, so it would add nothing here
-// while making any cluster where somebody typed `agentpool` by hand look
-// managed.
-
-/**
- * Label, and the value of it that means "the cloud may take this back".
+ * These four are upstream Kubernetes and so are not vendor knowledge: a
+ * cluster run by nobody writes them the same way.
  *
- * Values are compared case-insensitively because the vendors disagree with
- * each other about case for the same word — EKS writes `SPOT`, Karpenter and
- * AKS write `spot` — and a comparison that gets that wrong silently reports
- * a spot pool as an ordinary one.
- *
- * Only "yes" is listed. `capacityType=ON_DEMAND`, `capacity-type=reserved` and
- * `priority=regular` all exist and none of them is read, because nothing in
- * the app ever states that a node is *not* spot and so nothing needs them.
+ * The beta spellings are what a cluster older than 1.17 still writes.
  */
-const SPOT_LABELS: ReadonlyArray<readonly [key: string, value: string]> = [
-  ["cloud.google.com/gke-spot", "true"],
-  // Preemptible predates Spot on GKE and is still what an older pool wears.
-  ["cloud.google.com/gke-preemptible", "true"],
-  // The label that replaced both of the above from GKE 1.25.5-gke.2500.
-  ["cloud.google.com/gke-provisioning", "spot"],
-  ["cloud.google.com/gke-provisioning", "preemptible"],
-  ["eks.amazonaws.com/capacityType", "spot"],
-  // Not an EKS label, and the common case on an EKS cluster all the same.
-  ["karpenter.sh/capacity-type", "spot"],
-  ["kubernetes.azure.com/priority", "spot"],
-  // AKS deprecated this one in favour of `priority`; older nodes wear it.
-  ["kubernetes.azure.com/scalesetpriority", "spot"],
-];
-
-/** The beta spellings are what a cluster older than 1.17 still writes. */
 const MACHINE_KEYS = [
   "node.kubernetes.io/instance-type",
   "beta.kubernetes.io/instance-type",
@@ -82,21 +51,6 @@ const REGION_KEYS = [
   "topology.kubernetes.io/region",
   "failure-domain.beta.kubernetes.io/region",
 ] as const;
-
-/**
- * `spec.providerID`'s scheme, and the cloud that writes it. This is the only
- * unambiguous statement of which cloud a node is on: a pool label is weaker
- * evidence, because anyone may apply one by hand.
- *
- * A scheme that is not in here is left unnamed rather than guessed at — and
- * plenty of clusters have one, k3s and RKE2 included, which is exactly why an
- * unrecognised `providerID` is not on its own enough to open a section.
- */
-const CLOUD_BY_SCHEME: Readonly<Record<string, string>> = {
-  gce: "Google Cloud",
-  aws: "AWS",
-  azure: "Azure",
-};
 
 function firstLabel(
   labels: Record<string, string>,
@@ -132,14 +86,18 @@ export function nodePlacement(node: NodeInfo): NodePlacement {
   const scheme = providerId?.split("://")[0]?.toLowerCase() ?? null;
 
   return {
-    pool: firstLabel(labels, POOL_KEYS),
+    pool: firstLabel(labels, NODE_POOL_LABELS),
     machine: firstLabel(labels, MACHINE_KEYS),
     zone: firstLabel(labels, ZONE_KEYS),
     region: firstLabel(labels, REGION_KEYS),
-    spot: SPOT_LABELS.some(
+    // Case-insensitively, because the vendors disagree with each other about
+    // case for the same word — EKS writes `SPOT`, Karpenter and AKS write
+    // `spot` — and a comparison that gets that wrong silently reports a spot
+    // pool as an ordinary one.
+    spot: NODE_SPOT_LABELS.some(
       ([key, value]) => labels[key]?.toLowerCase() === value
     ),
-    cloud: scheme ? (CLOUD_BY_SCHEME[scheme] ?? null) : null,
+    cloud: scheme ? cloudOfProviderScheme(scheme) : null,
     providerId,
   };
 }
@@ -169,7 +127,7 @@ export function statesPlacement(placement: NodePlacement): boolean {
 
 /** The pool a node's row is grouped under, or null when nothing says. */
 export function poolOf(node: NodeInfo): string | null {
-  return firstLabel(node.labels ?? {}, POOL_KEYS);
+  return firstLabel(node.labels ?? {}, NODE_POOL_LABELS);
 }
 
 export interface PoolFacts {

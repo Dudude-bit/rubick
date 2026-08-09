@@ -14,7 +14,13 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-const { useCapability, useCrdView } = await import("./index");
+const {
+  useCapability,
+  useCrdView,
+  NODE_POOL_LABELS,
+  NODE_SPOT_LABELS,
+  cloudOfProviderScheme,
+} = await import("./index");
 
 function wrapper() {
   const client = new QueryClient({
@@ -118,4 +124,56 @@ describe("useCrdView", () => {
     });
     return waitFor(() => expect(result.current).toBeTypeOf("function"));
   });
+});
+
+describe("node label tables", () => {
+  /**
+   * Would break if a vendor's spelling were lost or reordered by the move
+   * out of `lib/node-pool.ts`. The list is asserted whole rather than by
+   * membership: order is the tie-break when two vendors could claim a node,
+   * and a silent reordering is exactly the kind of change that shows up as
+   * a wrong pool name on somebody's cluster and nowhere in a test.
+   */
+  it("spells the pool label the way each vendor writes it, in registry order", () => {
+    expect([...NODE_POOL_LABELS]).toEqual([
+      "cloud.google.com/gke-nodepool",
+      "eks.amazonaws.com/nodegroup",
+      "karpenter.sh/nodepool",
+      "karpenter.sh/provisioner-name",
+      "kubernetes.azure.com/agentpool",
+    ]);
+  });
+
+  it("keeps every spelling of spot the four vendors use", () => {
+    expect(NODE_SPOT_LABELS.map(([key, value]) => `${key}=${value}`)).toEqual([
+      "cloud.google.com/gke-spot=true",
+      "cloud.google.com/gke-preemptible=true",
+      "cloud.google.com/gke-provisioning=spot",
+      "cloud.google.com/gke-provisioning=preemptible",
+      "eks.amazonaws.com/capacityType=spot",
+      "karpenter.sh/capacity-type=spot",
+      "kubernetes.azure.com/priority=spot",
+      "kubernetes.azure.com/scalesetpriority=spot",
+    ]);
+  });
+
+  /**
+   * Would break if an unrecognised scheme started being guessed at. k3s
+   * writes `k3s://<node-name>` on every node in the world, so a wrong
+   * answer here would name a cloud on every k3d cluster.
+   */
+  it.each([
+    ["gce", "Google Cloud"],
+    ["aws", "AWS"],
+    ["azure", "Azure"],
+  ])("names the cloud behind providerID scheme %s", (scheme, cloud) => {
+    expect(cloudOfProviderScheme(scheme)).toBe(cloud);
+  });
+
+  it.each(["k3s", "openstack", "hcloud", ""])(
+    "names no cloud for scheme %s",
+    (scheme) => {
+      expect(cloudOfProviderScheme(scheme)).toBeNull();
+    }
+  );
 });

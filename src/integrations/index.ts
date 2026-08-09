@@ -41,9 +41,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
+import aws from "./aws";
+import azure from "./azure";
 import certManager from "./cert-manager";
 import flux from "./flux";
+import googleCloud from "./google-cloud";
 import istio from "./istio";
+import karpenter from "./karpenter";
 import traefik from "./traefik";
 import type { CapabilityKey, Capabilities, CrdView, Vendor } from "./registry";
 
@@ -58,7 +62,16 @@ export type { CapabilityKey, Capabilities, CrdView, Vendor };
  * same node label or the same context name, the earlier one wins, so the
  * more specific vendor goes first.
  */
-const VENDORS: Vendor[] = [certManager, traefik, flux, istio];
+const VENDORS: Vendor[] = [
+  certManager,
+  traefik,
+  flux,
+  istio,
+  googleCloud,
+  aws,
+  karpenter,
+  azure,
+];
 
 /**
  * What is installed in the connected cluster.
@@ -148,4 +161,40 @@ function crdViewFor(group: string, kind: string): CrdView | null {
   return (
     VENDORS.find((vendor) => vendor.crd?.matches(group, kind))?.crd ?? null
   );
+}
+
+/**
+ * Every label a vendor uses to name the pool a node was made by, in
+ * registry order, so the first hit is the more specific vendor's.
+ *
+ * Flattened once at module load rather than per node: a forty-node list
+ * asks this question forty times and the answer cannot change.
+ */
+export const NODE_POOL_LABELS: readonly string[] = VENDORS.flatMap(
+  (vendor) => vendor.nodeLabels?.pool ?? []
+);
+
+/**
+ * Every label that means "the cloud may take this node back", with the
+ * value that means yes.
+ *
+ * Only "yes" is listed. `capacityType=ON_DEMAND` and `priority=regular`
+ * exist and are not read, because nothing in the app ever states that a
+ * node is *not* spot.
+ */
+export const NODE_SPOT_LABELS: ReadonlyArray<
+  readonly [key: string, value: string]
+> = VENDORS.flatMap((vendor) => vendor.nodeLabels?.spot ?? []);
+
+/**
+ * The cloud that writes a given `spec.providerID` scheme, or `null`.
+ *
+ * A scheme no vendor here claims is left unnamed rather than guessed at —
+ * and plenty of clusters have one, k3s and RKE2 included.
+ */
+export function cloudOfProviderScheme(scheme: string): string | null {
+  const match = VENDORS.find(
+    (vendor) => vendor.nodeLabels?.providerScheme?.[0] === scheme
+  );
+  return match?.nodeLabels?.providerScheme?.[1] ?? null;
 }
