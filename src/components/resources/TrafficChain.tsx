@@ -118,7 +118,7 @@ function Controller({ binding }: { binding: IngressClassBinding }) {
           Nothing has picked this Ingress up, so it has no address and never
           will until a controller for that class exists.
           {binding.available.length > 0
-            ? ` This cluster has ${binding.available.join(", ")}.`
+            ? ` This cluster has ${binding.available.map((c) => c.name).join(", ")}.`
             : " This cluster has no IngressClass at all."}
         </p>
       </>

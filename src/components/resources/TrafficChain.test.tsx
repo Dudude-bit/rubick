@@ -246,7 +246,13 @@ describe("TrafficChain", () => {
           resolved: null,
           controller: null,
           viaDefault: false,
-          available: ["traefik"],
+          available: [
+            {
+              name: "traefik",
+              controller: "traefik.io/ingress-controller",
+              isDefault: false,
+            },
+          ],
         }}
       />
     );

@@ -1292,7 +1292,13 @@ export interface IngressClassBinding {
   resolved: string | null;
   controller: string | null;
   viaDefault: boolean;
-  available: string[];
+  available: IngressClassSummary[];
+}
+
+export interface IngressClassSummary {
+  name: string;
+  controller: string | null;
+  isDefault: boolean;
 }
 
 export interface EndpointsInfo {

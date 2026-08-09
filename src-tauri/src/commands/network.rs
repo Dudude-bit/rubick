@@ -62,8 +62,24 @@ pub struct IngressClassBinding {
     /// rather than by name.
     pub via_default: bool,
     /// Every class this cluster has. Named so an unmatched request can say
-    /// what it could have asked for instead.
-    pub available: Vec<String>,
+    /// what it could have asked for instead — and carrying each class's own
+    /// controller, so a caller asking "which classes does *this* controller
+    /// claim" gets its answer from this list rather than from one further
+    /// call per class, each of which would list the same collection again.
+    pub available: Vec<IngressClassSummary>,
+}
+
+/// One IngressClass, and the controller that answers for it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngressClassSummary {
+    pub name: String,
+    /// `spec.controller`. Optional because the field is, though a class
+    /// without one is claimed by nothing.
+    pub controller: Option<String>,
+    /// Carries the default-class annotation, so an Ingress that names no
+    /// class lands here.
+    pub is_default: bool,
 }
 
 const DEFAULT_CLASS_ANNOTATION: &str = "ingressclass.kubernetes.io/is-default-class";
@@ -80,22 +96,29 @@ pub async fn resolve_ingress_class(
     >(state, None, None, None)
     .await?;
 
-    let available: Vec<String> = classes.items.iter().map(ResourceExt::name_any).collect();
+    let is_default = |c: &k8s_openapi::api::networking::v1::IngressClass| {
+        c.annotations()
+            .get(DEFAULT_CLASS_ANNOTATION)
+            .map(String::as_str)
+            == Some("true")
+    };
+
+    let available: Vec<IngressClassSummary> = classes
+        .items
+        .iter()
+        .map(|c| IngressClassSummary {
+            name: c.name_any(),
+            controller: c.spec.as_ref().and_then(|s| s.controller.clone()),
+            is_default: is_default(c),
+        })
+        .collect();
 
     let (matched, via_default) = match &class_name {
         Some(wanted) => (
             classes.items.iter().find(|c| c.name_any() == *wanted),
             false,
         ),
-        None => (
-            classes.items.iter().find(|c| {
-                c.annotations()
-                    .get(DEFAULT_CLASS_ANNOTATION)
-                    .map(String::as_str)
-                    == Some("true")
-            }),
-            true,
-        ),
+        None => (classes.items.iter().find(|c| is_default(c)), true),
     };
 
     Ok(IngressClassBinding {
