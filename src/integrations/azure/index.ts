@@ -1,4 +1,5 @@
 import { defineVendor } from "../registry";
+import { mark } from "./mark";
 
 /**
  * Azure — AKS.
@@ -10,6 +11,9 @@ import { defineVendor } from "../registry";
 export default defineVendor({
   id: "azure",
   name: "Azure",
+  flavours: [
+    { id: "aks", claims: (_, hasWord) => hasWord("aks"), label: "AKS", mark },
+  ],
   nodeLabels: {
     pool: ["kubernetes.azure.com/agentpool"],
     spot: [

@@ -20,6 +20,8 @@ const {
   NODE_POOL_LABELS,
   NODE_SPOT_LABELS,
   cloudOfProviderScheme,
+  flavourOf,
+  flavourOfContext,
 } = await import("./index");
 
 function wrapper() {
@@ -133,11 +135,17 @@ describe("node label tables", () => {
    * membership: order is the tie-break when two vendors could claim a node,
    * and a silent reordering is exactly the kind of change that shows up as
    * a wrong pool name on somebody's cluster and nowhere in a test.
+   *
+   * The one pair whose order the move did change is EKS and GKE, and it
+   * cannot matter: a node is in one cloud, so no node carries both labels.
+   * The pair that does matter is Karpenter before AKS — an AKS node made by
+   * node auto-provisioning carries both, and the pool Karpenter named is
+   * the one that explains the node.
    */
   it("spells the pool label the way each vendor writes it, in registry order", () => {
     expect([...NODE_POOL_LABELS]).toEqual([
-      "cloud.google.com/gke-nodepool",
       "eks.amazonaws.com/nodegroup",
+      "cloud.google.com/gke-nodepool",
       "karpenter.sh/nodepool",
       "karpenter.sh/provisioner-name",
       "kubernetes.azure.com/agentpool",
@@ -145,11 +153,13 @@ describe("node label tables", () => {
   });
 
   it("keeps every spelling of spot the four vendors use", () => {
-    expect(NODE_SPOT_LABELS.map(([key, value]) => `${key}=${value}`)).toEqual([
-      "cloud.google.com/gke-spot=true",
+    expect(
+      [...NODE_SPOT_LABELS].map(([key, value]) => `${key}=${value}`).sort()
+    ).toEqual([
       "cloud.google.com/gke-preemptible=true",
-      "cloud.google.com/gke-provisioning=spot",
       "cloud.google.com/gke-provisioning=preemptible",
+      "cloud.google.com/gke-provisioning=spot",
+      "cloud.google.com/gke-spot=true",
       "eks.amazonaws.com/capacityType=spot",
       "karpenter.sh/capacity-type=spot",
       "kubernetes.azure.com/priority=spot",
@@ -176,4 +186,40 @@ describe("node label tables", () => {
       expect(cloudOfProviderScheme(scheme)).toBeNull();
     }
   );
+});
+
+describe("cluster flavours", () => {
+  /**
+   * Would break if the vendors were reordered in the registry. A context
+   * name can carry more than one vendor's marker, and the first vendor to
+   * claim it wins — so a k3d cluster named after the cloud it stands in for
+   * has to keep reading as local, and an EKS ARN must not be read as
+   * something looser that happens to appear later in the same string.
+   */
+  it("is tested most specific vendor first", () => {
+    expect(flavourOfContext("k3d-prod-eks-replica")?.id).toBe("k3d");
+    expect(
+      flavourOfContext("arn:aws:eks:eu-west-1:1:cluster/gke-lift")?.id
+    ).toBe("eks");
+  });
+
+  /**
+   * Would break if a vendor stopped carrying its own mark. `null` is the
+   * generic answer and draws the Kubernetes heptagon, which is also what
+   * k3d and k3s get by declaring no mark of their own.
+   */
+  it.each([
+    ["eks", true],
+    ["gke", true],
+    ["aks", true],
+    ["minikube", true],
+    ["k3d", false],
+    ["k3s", false],
+  ] as const)("gives %s a mark: %s", (provider, hasMark) => {
+    expect(flavourOf(provider)?.mark != null).toBe(hasMark);
+  });
+
+  it("knows no flavour called generic", () => {
+    expect(flavourOf("generic")).toBeNull();
+  });
 });

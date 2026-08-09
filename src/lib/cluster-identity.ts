@@ -7,59 +7,35 @@
  * window edge strip, the tab dot and the provider mark). It has to be
  * decided before anyone configures anything, which is why both the
  * provider and the colour are derived from the context name alone.
+ *
+ * The colours are the app's and are here. Which context names belong to
+ * which vendor, and what each vendor's mark looks like, are not: they are
+ * knowledge about a specific product and live in `src/integrations/`.
  */
 
-export type ClusterProvider =
-  | "k3d"
-  | "k3s"
-  | "eks"
-  | "gke"
-  | "aks"
-  | "minikube"
-  | "generic";
+import {
+  flavourOf,
+  flavourOfContext,
+  type ClusterProvider,
+} from "@/integrations";
+
+export type { ClusterProvider };
 
 /**
  * Detect the provider from the context name.
  *
- * Order matters: an EKS context is an ARN (`arn:aws:eks:eu-west-1:...`)
- * that also contains a region and account digits, and a GKE context is
- * `gke_project_zone_cluster`, so the most specific markers are tested
- * first and the loose substrings last.
+ * Which names belong to which vendor is that vendor's knowledge and lives
+ * with the rest of it; the order they are tested in is registry order, most
+ * specific vendor first. `generic` is not a vendor and is what is left when
+ * none of them claims the name.
  */
 export function detectProvider(context: string): ClusterProvider {
-  const name = context.toLowerCase();
-  // "aks" inside "peaks-cluster" is not Azure, so markers are matched as
-  // whole segments of a name that separates words with -, _, . or :.
-  const hasWord = (word: string) =>
-    new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`).test(name);
-
-  if (name.startsWith("k3d-")) return "k3d";
-  if (hasWord("k3s")) return "k3s";
-  if (name.startsWith("arn:aws") || hasWord("eks")) return "eks";
-  if (name.startsWith("gke_") || hasWord("gke")) return "gke";
-  if (hasWord("aks")) return "aks";
-  if (name.includes("minikube")) return "minikube";
-  return "generic";
+  return flavourOfContext(context)?.id ?? "generic";
 }
 
 /** Right-aligned label in the context list. Local clusters read "LOCAL". */
 export function providerLabel(provider: ClusterProvider): string {
-  switch (provider) {
-    case "k3d":
-      return "K3D";
-    case "k3s":
-      return "K3S";
-    case "eks":
-      return "EKS";
-    case "gke":
-      return "GKE";
-    case "aks":
-      return "AKS";
-    case "minikube":
-      return "LOCAL";
-    case "generic":
-      return "K8S";
-  }
+  return flavourOf(provider)?.label ?? "K8S";
 }
 
 /**
@@ -78,8 +54,7 @@ export function clusterNameParts(context: string): {
   prefix: string;
   label: string;
 } {
-  const provider = detectProvider(context);
-  const separator = provider === "eks" ? "/" : provider === "gke" ? "_" : null;
+  const separator = flavourOfContext(context)?.nameSeparator;
   const cut = separator ? context.lastIndexOf(separator) : -1;
   // A separator at the very end leaves nothing to read, so the whole name
   // stays at full contrast rather than dimming into a blank row.

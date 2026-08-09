@@ -165,8 +165,12 @@ export interface Flavour {
    * One simplified geometric shape on a 24-box, legible at 13px beside the
    * context name. It answers "which kind of cluster am I talking to"; the
    * colour beside it answers "which one".
+   *
+   * Absent where the vendor has no mark a reader would recognise at that
+   * size — k3s and k3d wear the Kubernetes heptagon, and inventing
+   * something for them would state what the app does not know.
    */
-  mark: ReactNode;
+  mark?: ReactNode;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { defineVendor } from "../registry";
+import { mark } from "./mark";
 
 /**
  * Google Cloud — GKE.
@@ -11,6 +12,15 @@ import { defineVendor } from "../registry";
 export default defineVendor({
   id: "google-cloud",
   name: "Google Cloud",
+  flavours: [
+    {
+      id: "gke",
+      claims: (name, hasWord) => name.startsWith("gke_") || hasWord("gke"),
+      label: "GKE",
+      nameSeparator: "_",
+      mark,
+    },
+  ],
   nodeLabels: {
     pool: ["cloud.google.com/gke-nodepool"],
     spot: [

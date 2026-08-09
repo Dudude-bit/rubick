@@ -47,11 +47,20 @@ import certManager from "./cert-manager";
 import flux from "./flux";
 import googleCloud from "./google-cloud";
 import istio from "./istio";
+import k3s from "./k3s";
 import karpenter from "./karpenter";
+import minikube from "./minikube";
 import traefik from "./traefik";
-import type { CapabilityKey, Capabilities, CrdView, Vendor } from "./registry";
+import type {
+  CapabilityKey,
+  Capabilities,
+  ClusterProvider,
+  CrdView,
+  Flavour,
+  Vendor,
+} from "./registry";
 
-export type { CapabilityKey, Capabilities, CrdView, Vendor };
+export type { CapabilityKey, Capabilities, ClusterProvider, CrdView, Vendor };
 
 /**
  * Every vendor that ships in the binary.
@@ -67,10 +76,12 @@ const VENDORS: Vendor[] = [
   traefik,
   flux,
   istio,
-  googleCloud,
+  k3s,
   aws,
+  googleCloud,
   karpenter,
   azure,
+  minikube,
 ];
 
 /**
@@ -197,4 +208,33 @@ export function cloudOfProviderScheme(scheme: string): string | null {
     (vendor) => vendor.nodeLabels?.providerScheme?.[0] === scheme
   );
   return match?.nodeLabels?.providerScheme?.[1] ?? null;
+}
+
+/**
+ * Every flavour a kubeconfig context can be recognised as, in registry
+ * order — which is the order they are tested in, most specific vendor
+ * first. Deliberately not exported: nothing outside needs the list, only
+ * the two answers below.
+ */
+const FLAVOURS: readonly Flavour[] = VENDORS.flatMap(
+  (vendor) => vendor.flavours ?? []
+);
+
+/**
+ * The flavour whose vendor claims this context name, or `null` for the
+ * generic case — a cluster run by somebody this app has never heard of,
+ * which is a perfectly ordinary thing for a cluster to be.
+ */
+export function flavourOfContext(context: string): Flavour | null {
+  const name = context.toLowerCase();
+  // "aks" inside "peaks-cluster" is not Azure, so markers are matched as
+  // whole segments of a name that separates words with -, _, . or :.
+  const hasWord = (word: string) =>
+    new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`).test(name);
+  return FLAVOURS.find((flavour) => flavour.claims(name, hasWord)) ?? null;
+}
+
+/** The flavour a provider id names, for the surfaces that hold one already. */
+export function flavourOf(provider: ClusterProvider): Flavour | null {
+  return FLAVOURS.find((flavour) => flavour.id === provider) ?? null;
 }
