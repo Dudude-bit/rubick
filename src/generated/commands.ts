@@ -7,6 +7,7 @@ import type {
   AzureProfile,
   AzureProfileInfo,
   BatchLogResult,
+  BinaryLocation,
   CliAvailability,
   CliPathsConfig,
   ClusterInfo,
@@ -1040,6 +1041,12 @@ export async function restartPod(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("restart_pod", { name, namespace });
+}
+
+export async function locateBinaries(
+  names: string[]
+): Promise<BinaryLocation[]> {
+  return invoke<BinaryLocation[]>("locate_binaries", { names });
 }
 
 export async function cancelAuthSession(sessionId: string): Promise<void> {

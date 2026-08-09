@@ -174,6 +174,7 @@ describe("the kubeconfig", () => {
             is_current: true,
             server: null,
             exec_command: null,
+            auth: { kind: "unrecognised" },
           },
         ],
       });

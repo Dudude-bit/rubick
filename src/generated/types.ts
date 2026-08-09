@@ -190,6 +190,11 @@ export interface PortForwardRequest {
   autoReconnect: boolean;
 }
 
+export interface BinaryLocation {
+  name: string;
+  path: string | null;
+}
+
 export type PodFilters = {
   statusFilter: string | null;
   selector: Record<string, string> | null;
@@ -513,6 +518,7 @@ export interface ContextInfo {
   is_current: boolean;
   server: string | null;
   exec_command: string | null;
+  auth: ContextAuth;
 }
 
 export interface NamespaceInfo {
@@ -1446,6 +1452,14 @@ export type SearchContextStatus =
   | "done"
   | "failed"
   | "skipped";
+
+export type ContextAuth =
+  | { kind: "exec" }
+  | { kind: "clientCertificate"; source: string | null }
+  | { kind: "token"; source: string | null }
+  | { kind: "basic"; username: string | null }
+  | { kind: "authProvider"; name: string }
+  | { kind: "unrecognised" };
 
 export type EnvVarSourceType =
   | "configMapKeyRef"

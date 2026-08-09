@@ -6,6 +6,7 @@ pub mod filters;
 pub mod helpers;
 
 pub mod auth;
+pub mod binaries;
 pub mod certificates;
 pub mod cluster;
 pub mod config_resources;
@@ -41,6 +42,7 @@ pub mod workloads;
 // Re-export all commands for easy registration.
 // These re-exports provide a convenient public API for command registration in main.rs.
 pub use auth::*;
+pub use binaries::*;
 pub use certificates::*;
 pub use cluster::*;
 pub use config_resources::*;
