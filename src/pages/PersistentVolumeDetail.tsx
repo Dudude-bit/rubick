@@ -3,7 +3,6 @@ import { Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -12,6 +11,9 @@ import {
 import { ClaimRef } from "@/components/resources/storage-refs";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
 
@@ -71,6 +73,9 @@ export function PersistentVolumeDetail() {
       : []),
   ];
 
+  const deliveryQuery = deliveryOfKind(ResourceType.PersistentVolume, pv);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = [
     yamlTab({
       title: "PersistentVolume YAML",
@@ -85,6 +90,7 @@ export function PersistentVolumeDetail() {
   return (
     <ResourceDetailLayout
       resource={pv}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.PersistentVolume}
@@ -110,7 +116,8 @@ export function PersistentVolumeDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

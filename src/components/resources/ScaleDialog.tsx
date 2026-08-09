@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DeliveryInterceptBody } from "./delivery-intercept";
+import type { DeliveryIntercept } from "@/lib/delivery";
 
 export interface ScaleDialogProps {
   open: boolean;
@@ -20,6 +22,11 @@ export interface ScaleDialogProps {
   current: number;
   busy: boolean;
   onSubmit: (replicas: number) => void;
+  /**
+   * What delivery will do to this number, where anything will. The dialog
+   * still scales — the warning changes the confirm word, not the outcome.
+   */
+  intercept?: DeliveryIntercept | null;
 }
 
 /** Set a workload's replica count. Shared by the detail page and the peek. */
@@ -30,6 +37,7 @@ export function ScaleDialog({
   current,
   busy,
   onSubmit,
+  intercept,
 }: ScaleDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -39,9 +47,11 @@ export function ScaleDialog({
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
+        {intercept && <DeliveryInterceptBody intercept={intercept} />}
         <ScaleForm
           current={current}
           busy={busy}
+          confirmLabel={intercept ? intercept.confirmLabel : "Scale"}
           onCancel={() => onOpenChange(false)}
           onSubmit={onSubmit}
         />
@@ -53,11 +63,13 @@ export function ScaleDialog({
 function ScaleForm({
   current,
   busy,
+  confirmLabel,
   onCancel,
   onSubmit,
 }: {
   current: number;
   busy: boolean;
+  confirmLabel: string;
   onCancel: () => void;
   onSubmit: (replicas: number) => void;
 }) {
@@ -82,7 +94,7 @@ function ScaleForm({
           Cancel
         </Button>
         <Button onClick={() => onSubmit(replicas)} disabled={busy}>
-          Scale
+          {confirmLabel}
         </Button>
       </DialogFooter>
     </>

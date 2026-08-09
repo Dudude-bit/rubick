@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -9,9 +9,33 @@ import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { useResource } from "@/hooks/useResource";
+import { useDeliveries } from "@/hooks/useDelivery";
 import { useClusterStore } from "@/stores/clusterStore";
+import {
+  deliveryOf,
+  matchesDeliveryFilter,
+  type DeliveryFilter,
+} from "@/lib/delivery";
 import { STALE_TIMES } from "@/lib/refresh";
+import {
+  DeliveryColumnCell,
+  DeliveryFilterControl,
+  DeliveryRowsProvider,
+} from "@/components/resources/delivery-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
+
+/**
+ * The column, built here because it is not a component and every list that
+ * has one gets exactly this one.
+ */
+function deliveryColumn<T>(): ColumnDef<T> {
+  return {
+    id: "delivery",
+    header: "Delivery",
+    enableSorting: false,
+    cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
+  };
+}
 
 export interface ResourceDeleteConfig<T> {
   /** Function to delete a resource */
@@ -81,6 +105,20 @@ export interface ResourceListProps<
    * kind carries.
    */
   grouping?: RowGrouping<T> | null;
+  /**
+   * The kind these rows are, for the `Delivery` column and its filter.
+   *
+   * Set on the lists whose rows are objects somebody *writes* — a Deployment,
+   * a Service, a ConfigMap. Deliberately unset on the lists the cluster itself
+   * fills: a Pod is made by its controller and a ReplicaSet by its Deployment,
+   * so `not delivered` would be true of every row and would therefore say
+   * nothing at all.
+   *
+   * Costs one read of the delivery owners for the whole page and none at all
+   * when the cluster has no delivery controller, or when no row carries a
+   * delivery label.
+   */
+  delivery?: { group: string; kind: string } | null;
 }
 
 export function ResourceList<
@@ -109,6 +147,7 @@ export function ResourceList<
   quickActions,
   getRowId,
   grouping,
+  delivery,
 }: ResourceListProps<T>) {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
@@ -126,9 +165,40 @@ export function ResourceList<
     }
   );
 
-  const resources = data ?? queryResult.data ?? [];
+  const resources = useMemo(
+    () => data ?? queryResult.data ?? [],
+    [data, queryResult.data]
+  );
   const loading = isLoading ?? queryResult.isLoading;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
+
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
+  const queries = useMemo(
+    () =>
+      delivery
+        ? resources.flatMap((row) => {
+            const query = deliveryOf(delivery.group, delivery.kind, row);
+            return query ? [query] : [];
+          })
+        : [],
+    [delivery, resources]
+  );
+  const deliveries = useDeliveries(queries);
+  const deliveriesOf = (row: unknown) =>
+    delivery
+      ? deliveries.of({
+          group: delivery.group,
+          kind: delivery.kind,
+          namespace: (row as T).namespace ?? null,
+          name: (row as T).name,
+        })
+      : [];
+  const showDelivery = !!delivery && deliveries.available;
+  const rows = showDelivery
+    ? resources.filter((row) =>
+        matchesDeliveryFilter(deliveryFilter, deliveriesOf(row))
+      )
+    : resources;
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -160,10 +230,19 @@ export function ResourceList<
   });
 
   // Resolve columns - can be a function that receives setDeleteTarget
-  const resolvedColumns =
+  const baseColumns =
     typeof columns === "function"
       ? columns(setDeleteTarget as (item: T) => void)
       : columns;
+  // Second from the end, so it lands where the other qualifiers already sit
+  // and never displaces Age from the right edge of the table.
+  const resolvedColumns = showDelivery
+    ? [
+        ...baseColumns.slice(0, -1),
+        deliveryColumn<T>(),
+        ...baseColumns.slice(-1),
+      ]
+    : baseColumns;
 
   // Resolve quick actions - can be a function that receives setDeleteTarget
   const resolvedQuickActions =
@@ -192,9 +271,16 @@ export function ResourceList<
         />
       )}
       {headerContent}
+      {showDelivery && (
+        <DeliveryFilterControl
+          value={deliveryFilter}
+          onChange={setDeliveryFilter}
+          deliveries={resources.map(deliveriesOf)}
+        />
+      )}
       <DataTable
         columns={resolvedColumns}
-        data={resources}
+        data={rows}
         isLoading={showSkeleton}
         searchKey={searchKey}
         searchPlaceholder={searchPlaceholder}
@@ -232,11 +318,17 @@ export function ResourceList<
     </>
   );
 
+  const wrapped = showDelivery ? (
+    <DeliveryRowsProvider of={deliveriesOf}>{content}</DeliveryRowsProvider>
+  ) : (
+    content
+  );
+
   if (embedded) {
-    return content;
+    return wrapped;
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">{content}</div>
+    <div className="space-y-4 animate-in fade-in duration-200">{wrapped}</div>
   );
 }

@@ -18,10 +18,12 @@ import {
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   Composition,
   ConditionRows,
-  DetailAction,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -92,6 +94,9 @@ export function StatefulSetDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
+  const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = useMemo(
     () => [
       {
@@ -115,7 +120,7 @@ export function StatefulSetDetail() {
           </>
         ),
       },
-      connectionsTab(connections),
+      connectionsTab(connections, deliveryQuery),
       {
         id: "container-template",
         label: "Template",
@@ -156,7 +161,16 @@ export function StatefulSetDetail() {
         namespace: statefulSet?.namespace || namespace,
       }),
     ],
-    [statefulSet, pods, yaml, copyYaml, namespace, name, connections]
+    [
+      statefulSet,
+      pods,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      connections,
+      deliveryQuery,
+    ]
   );
 
   if (!statefulSet && !isLoading && !error) {
@@ -205,6 +219,7 @@ export function StatefulSetDetail() {
   return (
     <ResourceDetailLayout
       resource={statefulSet}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.StatefulSet}
@@ -220,7 +235,8 @@ export function StatefulSetDetail() {
       }
       onBack={goBack}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

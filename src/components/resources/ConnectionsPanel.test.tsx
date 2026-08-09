@@ -1,13 +1,27 @@
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+/**
+ * A client, because the frame now asks a capability where this object came
+ * from. With nothing installed it answers "nothing" — which is the state this
+ * whole file's cluster is in and exactly what it must draw.
+ */
+const client = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+const wrap = (ui: ReactNode) =>
+  render(
+    <QueryClientProvider client={client()}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  );
 
 const subject: ObjectRef = {
   kind: "Deployment",

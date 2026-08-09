@@ -22,6 +22,10 @@ import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { PeekActions } from "./PeekActions";
+import { DeliveryMarks } from "./delivery";
+import { useDelivery } from "@/hooks/useDelivery";
+import { deliveryOfKind } from "@/lib/delivery";
+import { toKind } from "@/lib/resource-registry";
 import { resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -103,6 +107,21 @@ function PeekContent({
   );
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
+  // "Where do I change this" is the same question in a preview as on the page,
+  // and the answer is the same size — one small element beside the status.
+  const { deliveries } = useDelivery(
+    deliveryOfKind(
+      toKind(target.kind) ?? target.kind,
+      data as
+        | {
+            name: string;
+            namespace?: string | null;
+            labels?: Record<string, string>;
+            annotations?: Record<string, string>;
+          }
+        | undefined
+    )
+  );
   const routable = isRoutableKind(target.kind, namespace);
   const openFullPage = () =>
     navigate(getResourceDetailUrl(target.kind, target.name, namespace));
@@ -171,6 +190,7 @@ function PeekContent({
               <span>{summary.createdAt ? `${age} old` : summary.age}</span>
             </>
           )}
+          <DeliveryMarks deliveries={deliveries} />
         </div>
         <PeekActions
           target={target}

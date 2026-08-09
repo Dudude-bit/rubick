@@ -14,6 +14,8 @@
  */
 
 import { groupMounts } from "./mounts";
+import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
+import { delivered } from "./delivery";
 import type {
   ChainStop,
   ConnectionEdge,
@@ -548,11 +550,32 @@ export function chainSilence(conns: ResourceConnections): string | null {
 
 // --- the tab -----------------------------------------------------------
 
+/**
+ * A far end that is not in the cluster at all.
+ *
+ * The one edge in this model whose other side is a commit. Every other verb
+ * joins two objects an API server can be asked about; `delivers` joins an
+ * object to the repository that made it, and the reason it belongs in the
+ * same list rather than in a box of its own is that it answers the same
+ * question the ownership walk answers — *what made this* — and gives a truer
+ * answer than the ReplicaSet does.
+ */
+export interface OutsideEnd {
+  /** The controller's object, and where it is in this app. */
+  name: string;
+  to: string;
+  /** What it applied, and a page to read it on where the remote resolves. */
+  revision: string | null;
+  link: GitLink | null;
+}
+
 export interface ConnRow {
   key: string;
   /** Left column. Empty continues the row above, as a table of facts does. */
   label: string;
   object: ObjectRef | null;
+  /** Set instead of `object` for the one edge that leaves the cluster. */
+  outside?: OutsideEnd;
   /** What the far end knows about itself, beside the name. */
   detail: string;
   /** Every way the subject draws on it — one line each past two. */
@@ -792,7 +815,19 @@ function bindings(conns: ResourceConnections): ConnRow[] {
  * them, and a tab that repeated them would be a second answer to a question
  * already answered one scroll up.
  */
-export function connectionGroups(conns: ResourceConnections): ConnGroup[] {
+export function connectionGroups(
+  conns: ResourceConnections,
+  /**
+   * What delivered the subject, where anything did.
+   *
+   * Passed in rather than fetched here for the reason the whole module is
+   * pure: the edges come from one backend call and the provenance from a
+   * capability that may not be installed, and the grouping must not learn
+   * how either of them is fetched.
+   */
+  delivery: Delivery[] = []
+): ConnGroup[] {
+  const deliveredBy = deliveredRows(delivery);
   const groups: (ConnGroup | null)[] = [
     {
       key: "needs",
@@ -819,12 +854,19 @@ export function connectionGroups(conns: ResourceConnections): ConnGroup[] {
     // Only for the kinds that take part in ownership at all. "Controlled by:
     // nothing" is a real answer on a Deployment and a non-sequitur on a
     // ConfigMap, which no controller was ever going to have made.
-    OWNABLE.has(conns.subject.kind)
+    // Drawn for a delivered object whatever its kind: a ConfigMap has no
+    // controller and "Controlled by: nothing" would be a non-sequitur, but a
+    // ConfigMap applied from a repository was still *made* by something, and
+    // that is exactly what this group is called.
+    OWNABLE.has(conns.subject.kind) || deliveredBy.length > 0
       ? {
           key: "owners",
           title: "Made by, and makes",
           caption: null,
-          rows: madeByAndMakes(conns),
+          rows: [
+            ...deliveredBy,
+            ...(OWNABLE.has(conns.subject.kind) ? madeByAndMakes(conns) : []),
+          ],
         }
       : null,
   ];
@@ -851,6 +893,39 @@ export function connectionGroups(conns: ResourceConnections): ConnGroup[] {
   }
 
   return drawn;
+}
+
+/**
+ * The `delivers` edge, whose far end is out of the cluster.
+ *
+ * Only a *confirmed* delivery earns a structural edge. A label nothing
+ * honours is a claim about provenance and is said as one, on the Overview —
+ * drawing it here would put a line in the connection graph for a relationship
+ * that does not exist.
+ */
+function deliveredRows(delivery: Delivery[]): ConnRow[] {
+  return labelled(
+    delivered(delivery).map((source) => ({
+      key: `delivered:${source.vendorId}:${source.owner.namespace}/${source.owner.name}`,
+      label: "Delivered by",
+      object: null,
+      outside: {
+        name: source.owner.name,
+        to: source.owner.to,
+        revision: source.revision,
+        link: source.repoUrl
+          ? gitRevisionLink(source.repoUrl, source.revision)
+          : null,
+      },
+      detail: [
+        `${source.vendor} ${source.owner.kind}`,
+        source.path ? `from ${source.path}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      ways: [],
+    }))
+  );
 }
 
 /** How many distinct objects the tab draws — what its count mark stands for. */

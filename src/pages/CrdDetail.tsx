@@ -26,10 +26,7 @@ import {
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
-import {
-  ConditionRows,
-  DetailAction,
-} from "@/components/resources/detail-blocks";
+import { ConditionRows } from "@/components/resources/detail-blocks";
 import {
   KeyValueSection,
   type KeyValue,
@@ -37,6 +34,9 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
@@ -159,6 +159,12 @@ export function CrdDetail() {
       mono: !!crd?.categories.length,
     },
   ];
+
+  const deliveryQuery = deliveryOfKind(
+    ResourceType.CustomResourceDefinition,
+    crd
+  );
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   const tabs: DetailTab[] = [
     {
@@ -329,6 +335,7 @@ export function CrdDetail() {
     <>
       <ResourceDetailLayout
         resource={crd}
+        delivery={deliveryQuery}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.CustomResourceDefinition}
@@ -354,7 +361,8 @@ export function CrdDetail() {
         }
         onBack={goBack}
         actions={
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Delete")}
             label="Delete"
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}

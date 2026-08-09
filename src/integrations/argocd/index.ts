@@ -4,6 +4,7 @@ import { defineVendor } from "../registry";
 import { crd } from "./crd";
 import { countApplications } from "./data";
 import { facts } from "./facts";
+import { ownerOf } from "./owner";
 
 /**
  * Argo CD.
@@ -18,13 +19,17 @@ import { facts } from "./facts";
  * be running" is not a property of a Deployment; the Deployment does not know
  * it is managed at all.
  *
- * The reverse direction — the "managed by" line on the managed object — is
- * `owner.ts`, which resolves the claim rather than trusting the label. It is
- * not in `provides` yet because no surface consumes it.
+ * The reverse direction — "this object is delivered by Argo" — is `owner.ts`,
+ * behind `delivery.source`. It resolves the claim against the Application's own
+ * `status.resources` rather than trusting the label, which is what lets the
+ * consuming surfaces say "labelled and not listed" instead of asserting.
  */
 export default defineVendor({
   id: "argocd",
   name: "Argo CD",
+  provides: {
+    "delivery.source": (objects) => ownerOf(objects),
+  },
   extension: {
     gives:
       "every Application with what it is failing to apply, and which objects differ from git",
@@ -37,5 +42,3 @@ export default defineVendor({
   },
   crd,
 });
-
-export { ownerOf as argoOwnerOf } from "./owner";

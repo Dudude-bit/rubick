@@ -48,6 +48,8 @@ import {
 } from "./peek-actions";
 import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
 import { ScaleDialog } from "./ScaleDialog";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { deliveryOfKind } from "@/lib/delivery";
 
 /**
  * The peek panel's action row, and every dialog it opens.
@@ -71,6 +73,22 @@ export interface PeekActionsProps {
   onClose: () => void;
 }
 
+/**
+ * The confirmation's own sentence, and what delivery adds to it.
+ *
+ * Prepended rather than replacing: "this deletes the object" is still true,
+ * and "and the controller puts it straight back" is the part that changes what
+ * you would do.
+ */
+function warned(
+  description: string,
+  intercept: { lead: string; description: string } | null
+): string {
+  return intercept
+    ? `${intercept.lead} ${intercept.description} ${description}`
+    : description;
+}
+
 export function PeekActions({
   target,
   detail,
@@ -88,6 +106,24 @@ export function PeekActions({
   const pod = kind === "Pod" ? (detail as PodInfo | undefined) : undefined;
   const service =
     kind === "Service" ? (detail as ServiceInfo | undefined) : undefined;
+
+  // The peek carries the same four controls the detail page does, so it owes
+  // the same warning. A dialog that told you an edit would be reverted on one
+  // surface and not the other would teach the reader that the silence means
+  // "safe" — which is the belief this whole feature exists to prevent.
+  const intercept = useDeliveryIntercept(
+    deliveryOfKind(
+      kind,
+      detail as
+        | {
+            name: string;
+            namespace?: string | null;
+            labels?: Record<string, string>;
+            annotations?: Record<string, string>;
+          }
+        | undefined
+    )
+  );
 
   const [dialog, setDialog] = useState<
     "debug" | "portForward" | "scale" | null
@@ -298,6 +334,7 @@ export function PeekActions({
             (detail as DeploymentInfo | undefined)?.replicas.desired ?? 0
           }
           busy={scale.isPending}
+          intercept={intercept("Scale")}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}
@@ -306,7 +343,7 @@ export function PeekActions({
         open={confirming === "delete"}
         onOpenChange={(open) => setConfirming(open ? "delete" : null)}
         title={deletion.title}
-        description={deletion.description}
+        description={warned(deletion.description, intercept("Delete"))}
         confirmationText={target.name}
         confirmLabel="Delete"
         isLoading={remove.isPending}
@@ -317,7 +354,7 @@ export function PeekActions({
         open={confirming === "restart"}
         onOpenChange={(open) => setConfirming(open ? "restart" : null)}
         title={bareRestart.title}
-        description={bareRestart.description}
+        description={warned(bareRestart.description, intercept("Restart"))}
         confirmationText={target.name}
         confirmLabel="Restart"
         isLoading={restart.isPending}

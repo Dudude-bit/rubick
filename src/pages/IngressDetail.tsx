@@ -40,6 +40,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { expiryOf } from "@/lib/certificates";
+import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
@@ -268,6 +269,8 @@ export function IngressDetail() {
     },
   ];
 
+  const deliveryQuery = deliveryOfKind(ResourceType.Ingress, ingress);
+
   const tabs = [
     {
       id: "access",
@@ -347,7 +350,7 @@ export function IngressDetail() {
         </Section>
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "rules",
       label: "Rules",
@@ -560,6 +563,7 @@ export function IngressDetail() {
   return (
     <ResourceDetailLayout
       resource={ingress}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Ingress}

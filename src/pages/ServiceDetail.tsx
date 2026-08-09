@@ -30,6 +30,7 @@ import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { ResourceType } from "@/lib/resource-registry";
+import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -102,6 +103,8 @@ export function ServiceDetail() {
     { label: "Session affinity", value: service?.sessionAffinity || "None" },
   ];
 
+  const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
+
   const tabs = [
     {
       id: "access",
@@ -109,7 +112,7 @@ export function ServiceDetail() {
       glyph: viewGlyph(ExternalLink),
       content: service ? <ServiceAccessInfo service={service} /> : null,
     },
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "ports",
       label: "Ports",
@@ -215,6 +218,7 @@ export function ServiceDetail() {
   return (
     <ResourceDetailLayout
       resource={service}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Service}

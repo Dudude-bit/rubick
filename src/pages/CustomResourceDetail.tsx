@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -19,6 +18,9 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { deliveryOf } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -276,6 +278,10 @@ export function CustomResourceDetail() {
     ),
   }));
 
+  const deliveryQuery = crdInfo
+    ? deliveryOf(crdInfo.group, crdInfo.kind, resource)
+    : null;
+
   const tabs: DetailTab[] = [
     {
       id: "spec",
@@ -351,12 +357,18 @@ export function CustomResourceDetail() {
     }),
   ];
 
+  // The group comes off the CRD rather than a lookup table, which is the whole
+  // reason a custom resource can be asked at all: an `Application` is itself
+  // delivered on an app-of-apps cluster, and nothing here has heard of one.
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   return (
     <>
       <ResourceDetailLayout
         resource={resource}
         isLoading={isLoading}
         error={error}
+        delivery={deliveryQuery}
         resourceKind={crdInfo?.kind || "Resource"}
         listUrl={`/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(
           decodedCrdName
@@ -375,7 +387,8 @@ export function CustomResourceDetail() {
         }
         onBack={goBack}
         actions={
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Delete")}
             label="Delete"
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}

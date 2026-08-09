@@ -95,6 +95,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 import type { IssuanceStory } from "@/generated/types";
+import type { Delivery, DeliveryQuery } from "./gitops";
 import type { CrdColumn, CrdStatus } from "./kit";
 
 /**
@@ -115,6 +116,27 @@ export interface Capabilities {
     namespace: string;
     secretName: string;
   }) => Promise<IssuanceStory | null>;
+  /**
+   * Who applied these objects, and whether a hand edit here survives.
+   *
+   * **Takes a list and answers positionally**, and that is the contract, not
+   * an optimisation: the claim is a label the object already carries, so a
+   * five-hundred-row page can be answered by one read of the owners. A
+   * per-object signature would have been honest-looking and would have made
+   * the list column impossible.
+   *
+   * `null` at a position means that object carries no claim at all — the
+   * ordinary answer on the ordinary cluster, and the whole reason nothing is
+   * marked for it. An object that is *labelled* and not confirmed is a third
+   * answer with its own words; see {@link Delivery}.
+   *
+   * Absent means neither delivery controller is installed, which is the state
+   * most clusters are in: every surface draws exactly what it drew before this
+   * capability existed, with no column, no mark and no gap where one would go.
+   */
+  "delivery.source": (
+    objects: DeliveryQuery[]
+  ) => Promise<Array<Delivery | null>>;
 }
 
 export type CapabilityKey = keyof Capabilities;

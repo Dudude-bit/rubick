@@ -27,6 +27,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
 import { declaredContainers } from "@/lib/container-sequence";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
@@ -242,6 +243,7 @@ export function ReplicaSetDetail() {
   return (
     <ResourceDetailLayout
       resource={replicaSet}
+      delivery={deliveryOfKind(ResourceType.ReplicaSet, replicaSet)}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.ReplicaSet}

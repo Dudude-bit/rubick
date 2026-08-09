@@ -10,14 +10,22 @@
  * The traffic edges are not repeated: the chain on the Overview draws them.
  */
 
+import { Link } from "react-router-dom";
+import { ExternalLink } from "lucide-react";
+
 import { Section } from "@/components/ui/section";
+import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
 import {
   connectionGroups,
   describeExistence,
   type ConnRow,
+  type OutsideEnd,
 } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
+import { useDelivery } from "@/hooks/useDelivery";
+import { openExternal } from "@/lib/open-external";
+import type { DeliveryQuery } from "@/integrations";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
@@ -43,6 +51,45 @@ function Name({ object }: { object: ObjectRef }) {
   );
 }
 
+/**
+ * The far end of the one edge that leaves the cluster.
+ *
+ * Two halves, and the split is the point: the controller's object is in this
+ * app and is a route, the commit is not and is a link out. Drawing them as one
+ * thing would either send the reader to the browser for something the app has,
+ * or promise a page for a revision this app cannot show.
+ */
+function Outside({ end }: { end: OutsideEnd }) {
+  return (
+    <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+      <Link
+        to={end.to}
+        className="font-mono text-xs text-fg-mid hover:underline"
+      >
+        {end.name}
+      </Link>
+      {end.revision &&
+        (end.link ? (
+          <button
+            type="button"
+            onClick={() => openExternal(end.link!.url, end.link!.site)}
+            className="inline-flex items-baseline gap-0.5 font-mono text-[11px] text-info hover:underline"
+          >
+            {shortRevision(end.revision)}
+            <ExternalLink
+              className="h-2.5 w-2.5 self-center"
+              aria-hidden="true"
+            />
+          </button>
+        ) : (
+          <span className="font-mono text-[11px] text-fg-fnt">
+            {shortRevision(end.revision)}
+          </span>
+        ))}
+    </span>
+  );
+}
+
 function Row({ row }: { row: ConnRow }) {
   const existence = row.object
     ? describeExistence(row.object, row.verifiable ?? false)
@@ -59,11 +106,12 @@ function Row({ row }: { row: ConnRow }) {
       <div className="min-w-0">
         <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
           {row.object && <Name object={row.object} />}
+          {row.outside && <Outside end={row.outside} />}
           {(inline || row.detail) && (
             <span
               className={cn(
                 "min-w-0 text-[11px]",
-                row.object ? "text-fg-fnt" : "text-fg-mut"
+                row.object || row.outside ? "text-fg-fnt" : "text-fg-mut"
               )}
             >
               {[inline, row.detail].filter(Boolean).join(" · ")}
@@ -115,8 +163,15 @@ function Nothing({ subject }: { subject: ResourceConnections["subject"] }) {
   );
 }
 
-export function ConnectionsPanel({ query }: { query: ConnectionsQuery }) {
+export function ConnectionsPanel({
+  query,
+  delivery,
+}: {
+  query: ConnectionsQuery;
+  delivery?: DeliveryQuery | null;
+}) {
   const { data, isPending, error } = query;
+  const { deliveries } = useDelivery(delivery ?? null);
 
   if (isPending) {
     return (
@@ -138,7 +193,7 @@ export function ConnectionsPanel({ query }: { query: ConnectionsQuery }) {
     );
   }
 
-  const groups = connectionGroups(data);
+  const groups = connectionGroups(data, deliveries);
   if (groups.length === 0) return <Nothing subject={data.subject} />;
 
   return (

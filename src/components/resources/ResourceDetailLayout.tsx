@@ -16,7 +16,10 @@ import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailTabs } from "./DetailTabs";
 import { DetailAction } from "./detail-blocks";
+import { DeliveryBanner, DeliveryMarks } from "./delivery";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
+import { useDelivery } from "@/hooks/useDelivery";
+import type { DeliveryQuery } from "@/integrations";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
 export type { DetailTab } from "./detail-tab";
@@ -100,6 +103,21 @@ interface ResourceDetailLayoutProps {
   /** Qualifiers shown beside the name. */
   badges?: ReactNode;
   /**
+   * The object, for the one question every detail page in the app is asked:
+   * *where do I change this, and will my change stick.*
+   *
+   * Answered here rather than page by page, and that is the whole reason it is
+   * a prop on the frame: provenance is not a property of workloads. A ConfigMap
+   * is delivered from git exactly as much as a Deployment is, and a fact that
+   * appeared on eleven detail pages and was missing on the twelfth would teach
+   * the reader that its absence means "not delivered" — which on the twelfth
+   * page would be a lie. A page passes the object and gets the mark, the earned
+   * line and nothing else to think about.
+   *
+   * Omitted only where the page's subject is not an applied manifest at all.
+   */
+  delivery?: DeliveryQuery | null;
+  /**
    * What this page lets you do to the object, as `DetailAction`s.
    *
    * Rendered at the right end of the tab strip rather than in the header.
@@ -138,6 +156,7 @@ export function ResourceDetailLayout({
   createdAt,
   statusBadge,
   badges,
+  delivery,
   actions,
   onBack,
   onFindReplacement,
@@ -147,6 +166,8 @@ export function ResourceDetailLayout({
   onTabChange,
   children,
 }: ResourceDetailLayoutProps) {
+  const { deliveries } = useDelivery(delivery ?? null);
+
   if (isLoading) {
     return <DetailSkeleton />;
   }
@@ -186,9 +207,18 @@ export function ResourceDetailLayout({
           namespaceUrl={namespaceUrl}
           createdAt={createdAt}
           status={statusBadge}
-          meta={badges}
+          meta={
+            <>
+              {badges}
+              <DeliveryMarks deliveries={deliveries} />
+            </>
+          }
           onBack={onBack}
         />
+
+        {/* Above the page's own blocks, and usually not there at all: the line
+            is earned per object, never per managed object. */}
+        {!surface && <DeliveryBanner deliveries={deliveries} />}
 
         {/* `contents` so the page's own blocks keep sitting in this column at
             its own rhythm; `hidden` takes all of them off a surface tab at

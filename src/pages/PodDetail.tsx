@@ -59,6 +59,9 @@ import { useConnections } from "@/hooks/useConnections";
 import { useNodePlacement } from "@/hooks/useNodePlacement";
 import { SpotMark } from "@/components/resources/spot-mark";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
@@ -538,9 +541,13 @@ export function PodDetail() {
     )
   );
 
+  const deliveryQuery = deliveryOfKind(ResourceType.Pod, pod);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   return (
     <ResourceDetailLayout
       resource={pod}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Pod}
@@ -592,14 +599,16 @@ export function PodDetail() {
             onClick={openPortForwardDialog}
             disabled={!currentContext || !pod}
           />
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Restart")}
             label="Restart"
             icon={RefreshCw}
             onClick={() => restartMutation.mutate()}
             disabled={!pod}
             busy={restartMutation.isPending}
           />
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Delete")}
             label="Delete"
             icon={Trash2}
             onClick={() => deleteMutation?.mutate()}
@@ -640,7 +649,7 @@ export function PodDetail() {
             </>
           ),
         },
-        connectionsTab(connections),
+        connectionsTab(connections, deliveryQuery),
         {
           id: "containers",
           label: "Containers",

@@ -209,6 +209,8 @@ export interface StorageClassInfo {
   allowVolumeExpansion: boolean;
   isDefault: boolean;
   parameters: Record<string, string>;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
   age: string;
 }
 
@@ -220,6 +222,8 @@ export interface PersistentVolumeClaimInfo {
   capacity: string;
   accessModes: string[];
   storageClass: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
   age: string;
 }
 
@@ -232,6 +236,8 @@ export interface PersistentVolumeInfo {
   claim: string | null;
   storageClass: string;
   reason: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
   age: string;
 }
 

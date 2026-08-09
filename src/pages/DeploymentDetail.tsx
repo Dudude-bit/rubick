@@ -50,6 +50,9 @@ import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   ConditionRows,
   DetailAction,
@@ -293,6 +296,9 @@ export function DeploymentDetail() {
     setImageDialogOpen(true);
   };
 
+  const deliveryQuery = deliveryOfKind(ResourceType.Deployment, deployment);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   if (!deployment && !isLoading && !error) {
     return null;
   }
@@ -375,7 +381,7 @@ export function DeploymentDetail() {
         </>
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "container-template",
       label: "Template",
@@ -491,6 +497,7 @@ export function DeploymentDetail() {
   return (
     <ResourceDetailLayout
       resource={deployment}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Deployment}
@@ -513,13 +520,15 @@ export function DeploymentDetail() {
       actions={
         <>
           <DetailAction label="Scale" icon={Scale} onClick={openScaleDialog} />
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Restart")}
             label="Restart"
             icon={RefreshCw}
             onClick={() => restartMutation.mutate()}
             busy={restartMutation.isPending}
           />
-          <DetailAction
+          <InterceptedAction
+            intercept={intercept("Delete")}
             label="Delete"
             icon={Trash2}
             onClick={() => deleteMutation?.mutate()}
@@ -585,6 +594,7 @@ export function DeploymentDetail() {
       )}
 
       <ScaleDialog
+        intercept={intercept("Scale")}
         open={scaleDialogOpen}
         onOpenChange={setScaleDialogOpen}
         kind={ResourceType.Deployment}

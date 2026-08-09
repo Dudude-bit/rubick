@@ -5,6 +5,7 @@ import { defineVendor } from "../registry";
 import { crd } from "./crd";
 import { countReconcilers, HELM_RELEASES_CRD } from "./data";
 import { facts } from "./facts";
+import { ownerOf } from "./owner";
 
 /**
  * Flux CD.
@@ -19,14 +20,18 @@ import { facts } from "./facts";
  * Argo's — a source fetches, a reconciler applies, and several appliers share
  * one source — which is why there are two pages and not one "GitOps" page.
  *
- * The reverse direction — the "managed by" line on the object Flux applied —
- * is `owner.ts`, which resolves the claim against the owner's own inventory
- * rather than trusting a label. It is not in `provides` yet because no surface
- * consumes it.
+ * The reverse direction — "this object is delivered by Flux" — is `owner.ts`,
+ * behind `delivery.source`. It resolves the claim against the reconciler's own
+ * `status.inventory`, and it is where the one asymmetry with Argo is stated
+ * rather than papered over: Flux publishes no per-object drift, because it
+ * corrects silently and never records that anything differed.
  */
 export default defineVendor({
   id: "flux",
   name: "Flux",
+  provides: {
+    "delivery.source": (objects) => ownerOf(objects),
+  },
   extension: {
     gives:
       "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
@@ -50,5 +55,3 @@ export default defineVendor({
  */
 export const helmReleasePath = (namespace: string, name: string) =>
   crdObjectPath(HELM_RELEASES_CRD, namespace, name);
-
-export { ownerOf as fluxOwnerOf } from "./owner";

@@ -6,12 +6,14 @@ import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { DataSection } from "@/components/resources/data-rows";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
 
@@ -46,6 +48,9 @@ export function ConfigMapDetail() {
     enabled: !!name && !!namespace,
   });
 
+  const deliveryQuery = deliveryOfKind(ResourceType.ConfigMap, configMap);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   if (!configMap && !isLoading && !error) {
     return null;
   }
@@ -71,7 +76,7 @@ export function ConfigMapDetail() {
         />
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "metadata",
       label: "Metadata",
@@ -106,6 +111,7 @@ export function ConfigMapDetail() {
   return (
     <ResourceDetailLayout
       resource={configMap}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.ConfigMap}
@@ -119,7 +125,8 @@ export function ConfigMapDetail() {
       }
       onBack={goBack}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

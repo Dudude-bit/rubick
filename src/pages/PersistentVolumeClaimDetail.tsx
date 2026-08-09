@@ -17,6 +17,9 @@ import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
@@ -116,8 +119,11 @@ export function PersistentVolumeClaimDetail() {
     },
   ];
 
+  const deliveryQuery = deliveryOfKind(ResourceType.PersistentVolumeClaim, pvc);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = [
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "events",
       label: "Events",
@@ -169,6 +175,7 @@ export function PersistentVolumeClaimDetail() {
   return (
     <ResourceDetailLayout
       resource={pvc}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.PersistentVolumeClaim}
@@ -197,7 +204,8 @@ export function PersistentVolumeClaimDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

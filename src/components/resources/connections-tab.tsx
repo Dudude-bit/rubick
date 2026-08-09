@@ -1,6 +1,7 @@
 import { Link2 } from "lucide-react";
 
 import { connectionCount } from "@/lib/connections";
+import type { DeliveryQuery } from "@/integrations";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import { countMark, viewGlyph, type DetailTab } from "./detail-tab";
 import { ConnectionsPanel } from "./ConnectionsPanel";
@@ -18,12 +19,18 @@ import { ConnectionsPanel } from "./ConnectionsPanel";
  * count answers is the question a collection's mark is for: whether this is
  * worth opening at all.
  */
-export function connectionsTab(query: ConnectionsQuery): DetailTab {
+export function connectionsTab(
+  query: ConnectionsQuery,
+  /** The subject, so its off-cluster maker can be one of the edges. */
+  delivery?: DeliveryQuery | null
+): DetailTab {
   return {
     id: "connections",
     label: "Connections",
     glyph: viewGlyph(Link2),
+    // Deliberately not counting the delivery edge: the mark stands for how
+    // many objects are behind the tab, and a commit is not one of them.
     mark: query.data ? countMark(connectionCount(query.data)) : undefined,
-    content: <ConnectionsPanel query={query} />,
+    content: <ConnectionsPanel query={query} delivery={delivery ?? null} />,
   };
 }

@@ -1515,3 +1515,67 @@ spec:
   targetNamespace: flux-helm
   install:
     createNamespace: true
+---
+# --- The two provenance states no controller produces on its own ------------
+#
+# The "managed by" mark resolves a label against the owner rather than
+# trusting it, and these are the two cases that proves. Neither can be reached
+# by installing Argo or Flux correctly, which is exactly why they are declared.
+#
+# One: a label nothing honours. `apps` is a real Kustomization and its
+# `status.inventory` does not contain this Deployment — the shape left behind
+# by a Kustomization deleted with `prune: false`, or by a manifest committed
+# with somebody else's reconciler labels still in it. The app must say
+# "labelled as delivered by apps, which does not list it" and must not state a
+# revision or a revert behaviour for it.
+#
+# Flux and not Argo, and that is the finding rather than a preference: a live
+# Argo controller **adopts** anything carrying its tracking annotation and adds
+# it to `status.resources` as out of sync, so with Argo running this state
+# lasts one reconcile. Flux's inventory only ever contains what Flux applied,
+# so the disowned object stays disowned — which is what makes it demonstrable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: left-behind
+  namespace: k8s-gui-test
+  labels:
+    kustomize.toolkit.fluxcd.io/name: apps
+    kustomize.toolkit.fluxcd.io/namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: left-behind
+  template:
+    metadata:
+      labels:
+        app: left-behind
+    spec:
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+---
+# Two: an object both controllers really do apply. Argo is pointed at the same
+# manifests, in the namespace Flux's `apps` Kustomization already reconciles
+# into, so each one lists the Deployment in its own inventory and each undoes
+# the other on its next pass. Both claims confirm, which is the one state a
+# first-provider capability lookup could never have found.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: overlap
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flux-apps
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

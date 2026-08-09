@@ -38,6 +38,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
+import { deliveryScopeOf } from "@/lib/delivery";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
@@ -201,6 +202,7 @@ export function createResourceListPage<T extends ListableResource>(
               }
             : undefined
         }
+        delivery={deliveryScopeOf(config.resourceType)}
         staleTime={STALE_TIMES.resourceList}
         refetchInterval={watchFactory && !watchFailed ? false : undefined}
         live={!!watchFactory && !watchFailed}

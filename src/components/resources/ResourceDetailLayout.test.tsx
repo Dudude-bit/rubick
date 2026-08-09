@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { Info } from "lucide-react";
 
@@ -9,6 +10,14 @@ import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { ResourceDetailLayout } from "./ResourceDetailLayout";
+
+/**
+ * A client, because the frame now asks a capability where this object came
+ * from. With nothing installed it answers "nothing" — which is the state this
+ * whole file's cluster is in and exactly what it must draw.
+ */
+const client = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
 import {
   countMark,
   kindGlyph,
@@ -18,7 +27,12 @@ import {
   type DetailTab,
 } from "./detail-tab";
 
-const wrap = (ui: React.ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const wrap = (ui: React.ReactNode) =>
+  render(
+    <QueryClientProvider client={client()}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  );
 
 /** Where a click landed, read out of the router rather than guessed at. */
 function LocationProbe() {
@@ -178,18 +192,22 @@ describe("ResourceDetailLayout surface tabs and what lives in them", () => {
     expect(mounted).toHaveBeenCalledTimes(1);
 
     rerender(
-      <MemoryRouter>
-        <ResourceDetailLayout {...withShell("overview")} />
-      </MemoryRouter>
+      <QueryClientProvider client={client()}>
+        <MemoryRouter>
+          <ResourceDetailLayout {...withShell("overview")} />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     // Still in the DOM, merely off the screen: `hidden` is what a reader loses
     // when they click away, and the session is not theirs to lose with it.
     expect(screen.getByText("attached to app")).toBeInTheDocument();
 
     rerender(
-      <MemoryRouter>
-        <ResourceDetailLayout {...withShell("shell")} />
-      </MemoryRouter>
+      <QueryClientProvider client={client()}>
+        <MemoryRouter>
+          <ResourceDetailLayout {...withShell("shell")} />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     // The number that matters: a second mount would be a second `openPodShell`
     // and a dead prompt where the reader left a live one.
@@ -575,10 +593,12 @@ describe("the breadcrumb's namespace segment", () => {
 
   function place(ui: React.ReactNode) {
     return render(
-      <MemoryRouter initialEntries={["/pods/k8s-gui-test/burst-demo"]}>
-        {ui}
-        <LocationProbe />
-      </MemoryRouter>
+      <QueryClientProvider client={client()}>
+        <MemoryRouter initialEntries={["/pods/k8s-gui-test/burst-demo"]}>
+          {ui}
+          <LocationProbe />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
   }
 

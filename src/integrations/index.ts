@@ -87,6 +87,29 @@ export type {
 };
 
 /**
+ * The delivery vocabulary, through the door rather than from the file.
+ *
+ * `gitops.ts` is not a vendor folder — it is the handful of facts Argo and Flux
+ * genuinely share — but the guard covers the whole tree by path and should:
+ * "where is the git-remote parser" wants exactly one answer, and a surface
+ * reaching for `@/integrations/gitops` is one import away from reaching for
+ * `@/integrations/argocd`.
+ */
+export {
+  deliveryKey,
+  gitRepoLink,
+  gitRevisionLink,
+  shortRevision,
+} from "./gitops";
+export type {
+  Delivery,
+  DeliveryOwner,
+  DeliveryQuery,
+  DeliverySource,
+  GitLink,
+} from "./gitops";
+
+/**
  * Every vendor that ships in the binary.
  *
  * A list, not a plugin API: third parties loading code into the app is a
@@ -134,16 +157,50 @@ function useDetected() {
 export function useCapability<K extends CapabilityKey>(
   key: K
 ): Capabilities[K] | null {
+  return useCapabilities(key)[0] ?? null;
+}
+
+/**
+ * Every installed vendor that supplies a capability, in registry order.
+ *
+ * {@link useCapability} answers with the first, which is right where the
+ * question has one answer: one thing issues the certificate in a given Secret,
+ * and asking a second vendor about it would be asking it to guess.
+ *
+ * Delivery is not that question. Argo CD and Flux are routinely installed side
+ * by side — one team's namespace under each — and on such a cluster the *first*
+ * provider is the wrong answer for half the objects and would silently return
+ * `null` for them. Worse, an object both controllers really do apply is a fact
+ * worth shouting, and a lookup that stopped at the first hit could never find
+ * it. So the surfaces that need it ask everybody and reconcile the answers
+ * themselves.
+ */
+export function useCapabilities<K extends CapabilityKey>(
+  key: K
+): Array<Capabilities[K]> {
   const { data } = useDetected();
-  if (!data) return null;
   const installed = new Set(
-    data.filter((entry) => entry.installed).map((entry) => entry.id)
+    (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
   );
-  const found = VENDORS.find(
-    (vendor) =>
-      installed.has(vendor.id) && vendor.provides && key in vendor.provides
+  return VENDORS.flatMap((vendor) => {
+    const found = installed.has(vendor.id) ? vendor.provides?.[key] : undefined;
+    return found ? [found as Capabilities[K]] : [];
+  });
+}
+
+/**
+ * A vendor's own glyph, by the id a capability answered with.
+ *
+ * The seam's rule is that a surface never learns *which* vendor answered, and
+ * this does not break it: the surface is handed an opaque id and gets back a
+ * mark, exactly as it is handed a `vendor` string and prints it. What it must
+ * not do is branch on the id, and there is nothing here to branch on — an id
+ * this registry does not know draws no glyph rather than a wrong one.
+ */
+export function vendorIcon(vendorId: string): LucideIcon | null {
+  return (
+    VENDORS.find((vendor) => vendor.id === vendorId)?.extension?.icon ?? null
   );
-  return (found?.provides?.[key] as Capabilities[K] | undefined) ?? null;
 }
 
 /**

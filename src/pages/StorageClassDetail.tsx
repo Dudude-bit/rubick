@@ -3,7 +3,6 @@ import { SlidersHorizontal, Trash2 } from "lucide-react";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import {
   KeyValueSection,
   type KeyValue,
@@ -11,6 +10,9 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 
@@ -56,6 +58,9 @@ export function StorageClassDetail() {
     },
   ];
 
+  const deliveryQuery = deliveryOfKind(ResourceType.StorageClass, sc);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = [
     {
       id: "parameters",
@@ -84,6 +89,7 @@ export function StorageClassDetail() {
   return (
     <ResourceDetailLayout
       resource={sc}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.StorageClass}
@@ -107,7 +113,8 @@ export function StorageClassDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

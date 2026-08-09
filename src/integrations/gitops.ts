@@ -17,8 +17,35 @@
  * which the whole app already has.
  */
 
+/** The object that delivers something, and where it is in this app. */
+export interface DeliveryOwner {
+  kind: string;
+  name: string;
+  namespace: string;
+  to: string;
+}
+
 /**
- * Who deployed an object, from which commit, and whether a hand edit here
+ * One object, in as much detail as deciding its provenance takes.
+ *
+ * Labels and annotations and nothing else, because that is the whole cost
+ * story: both vendors stamp their claim onto the object itself, so every list
+ * this app already draws is holding the answer before anybody asks. A query
+ * shape that needed a live read per object would make this a detail-page
+ * feature and quietly kill the column.
+ */
+export interface DeliveryQuery {
+  /** The API group, or `""` for core — Flux spells its inventory ids with it. */
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+/**
+ * Who applied an object, from which commit, and whether a hand edit here
  * survives.
  *
  * The answer to the question that stops people mid-task — *can I touch this,
@@ -26,21 +53,23 @@
  * produce, which is why it is here rather than twice in two folders. Argo
  * reaches it through an `Application`, Flux through a `Kustomization` or a
  * `HelmRelease`, and the reader asking does not care which.
- *
- * Nothing consumes this yet. It is the shape the eventual `delivery.source`
- * capability takes, and each vendor's `owner.ts` already returns it; wiring it
- * to a surface is a separate piece of work with its own design, and inventing
- * a capability key for zero consumers would put an unanswerable absence on
- * every object page in the app.
  */
 export interface DeliverySource {
   /** Named out loud, because the surface that uses this says it out loud. */
   vendor: string;
-  /** The object that owns it, and where it is in this app. */
-  owner: { kind: string; name: string; namespace: string; to: string };
+  /**
+   * The registry id, so a surface can find the vendor's own glyph without
+   * naming the vendor. Argo's mark and Flux's are different shapes because
+   * they are different products, and handing a component across the seam
+   * instead would let a vendor decide how the mark is drawn.
+   */
+  vendorId: string;
+  owner: DeliveryOwner;
   /** What is running here, as the owner reports it. */
   revision: string | null;
   repoUrl: string | null;
+  /** The directory in the repository the manifests were read from. */
+  path: string | null;
   /**
    * What happens to an edit made here.
    *
@@ -51,8 +80,80 @@ export interface DeliverySource {
    * moment somebody fixes it.
    */
   drift: "reverted" | "kept" | "unmanaged";
-  /** Why, where the answer is not obvious from `drift` alone. */
+  /**
+   * Whether *this object* differs from what the owner applied.
+   *
+   * `null` is not a quiet way of saying `synced`, and no surface may draw it
+   * as one. Argo compares every object it owns and publishes the verdict in
+   * `Application.status.resources`; **Flux publishes no per-object drift at
+   * all** — it re-applies its own fields on a timer and corrects silently, so
+   * there is no moment at which it records that something differed. `null` is
+   * "nobody here knows", and the honest thing to render for it is nothing,
+   * with the reason available rather than an implied tick.
+   */
+  sync: "synced" | "drifted" | null;
+  /**
+   * When the owner last successfully applied — the nearest thing either
+   * vendor publishes to "and it has differed since".
+   *
+   * Not a drift timestamp, and never to be worded as one: Argo records when
+   * it last synced, not when the cluster first stopped matching.
+   */
+  lastAppliedAt: string | null;
+  /**
+   * The owner's own trouble, in one word, for the mark that sits beside the
+   * name. Argo's is `out of sync`; Flux's is `not reconciling`, because those
+   * are different failures and the vendors have different vocabularies for
+   * them. `null` where the delivery is doing exactly what it says.
+   */
+  warning: string | null;
+  /** Why, where the answer is not obvious from {@link drift} alone. */
   note: string | null;
+}
+
+/**
+ * What the app is willing to say about where an object came from.
+ *
+ * The union exists because **the label is a claim and anybody can write one.**
+ * A manifest committed with `argocd.argoproj.io/instance` already in it, a
+ * copy-pasted YAML, an Application deleted while its objects were left behind,
+ * a Kustomization pruned with `prune: false` — every one of those produces an
+ * object that says it is delivered and is not. Collapsing that into `null`
+ * would throw away a fact worth having (somebody meant this to be managed and
+ * it is not), and collapsing it into {@link DeliverySource} would assert a
+ * revision and a revert behaviour that nothing is actually enforcing.
+ *
+ * So there are three answers, and `null` — no claim at all — is the fourth.
+ */
+export type Delivery =
+  /** The owner names the object back in its own inventory. */
+  | { state: "delivered"; source: DeliverySource }
+  /**
+   * The object carries the label and the owner it names does not list it —
+   * or does not exist. `owner` is `null` for the second case, which is a
+   * different sentence: a name nobody answers to, rather than an owner that
+   * disowns it.
+   */
+  | {
+      state: "claimed";
+      vendor: string;
+      vendorId: string;
+      /** The owner's name as the object itself spells it. */
+      claim: string;
+      ownerKind: string;
+      owner: DeliveryOwner | null;
+    };
+
+/** The key both the batch call and its callers index an object by. */
+export function deliveryKey(object: {
+  group: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}): string {
+  return [object.group, object.kind, object.namespace ?? "", object.name].join(
+    "/"
+  );
 }
 
 /** Where a repository or a commit can be read on the web. */

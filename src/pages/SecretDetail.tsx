@@ -9,7 +9,6 @@ import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { CertificateSection } from "@/components/resources/CertificateFacts";
 import { DataSection } from "@/components/resources/data-rows";
 import { IssuanceSection } from "@/components/resources/IssuanceChain";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
@@ -17,6 +16,9 @@ import { useConnections } from "@/hooks/useConnections";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { SecretInfo } from "@/generated/types";
 
@@ -53,6 +55,9 @@ export function SecretDetail() {
   const certificates = useTlsCertificates(namespace, tlsSecretName);
   const issuance = useCertificateIssuance(namespace, tlsSecretName);
 
+  const deliveryQuery = deliveryOfKind(ResourceType.Secret, secret);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   if (!secret && !isLoading && !error) {
     return null;
   }
@@ -81,7 +86,7 @@ export function SecretDetail() {
         />
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, deliveryQuery),
     {
       id: "metadata",
       label: "Metadata",
@@ -116,6 +121,7 @@ export function SecretDetail() {
   return (
     <ResourceDetailLayout
       resource={secret}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Secret}
@@ -136,7 +142,8 @@ export function SecretDetail() {
       }
       onBack={goBack}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}

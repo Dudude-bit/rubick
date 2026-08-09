@@ -18,10 +18,12 @@ import {
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   Composition,
   ConditionRows,
-  DetailAction,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
@@ -90,6 +92,9 @@ export function DaemonSetDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
+  const deliveryQuery = deliveryOfKind(ResourceType.DaemonSet, daemonSet);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = useMemo(
     () => [
       {
@@ -119,7 +124,7 @@ export function DaemonSetDetail() {
           </>
         ),
       },
-      connectionsTab(connections),
+      connectionsTab(connections, deliveryQuery),
       {
         id: "container-template",
         label: "Template",
@@ -160,7 +165,16 @@ export function DaemonSetDetail() {
         namespace: daemonSet?.namespace || namespace,
       }),
     ],
-    [daemonSet, pods, yaml, copyYaml, namespace, name, connections]
+    [
+      daemonSet,
+      pods,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      connections,
+      deliveryQuery,
+    ]
   );
 
   if (!daemonSet && !isLoading && !error) {
@@ -191,6 +205,7 @@ export function DaemonSetDetail() {
   return (
     <ResourceDetailLayout
       resource={daemonSet}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.DaemonSet}
@@ -211,7 +226,8 @@ export function DaemonSetDetail() {
       }
       onBack={goBack}
       actions={
-        <DetailAction
+        <InterceptedAction
+          intercept={intercept("Delete")}
           label="Delete"
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
