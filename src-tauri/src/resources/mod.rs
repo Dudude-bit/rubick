@@ -34,6 +34,7 @@ impl OptionTimeExt for Option<&Time> {
     }
 }
 
+mod connections;
 mod network;
 mod resource_types;
 mod serialization;
@@ -41,6 +42,7 @@ mod storage;
 mod types;
 mod workloads;
 
+pub use connections::*;
 pub use network::*;
 pub use resource_types::ResourceType;
 pub use serialization::*;

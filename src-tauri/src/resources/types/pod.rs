@@ -109,7 +109,7 @@ pub struct VolumeMountInfo {
 /// names several objects, and it is also the one on every pod in the cluster
 /// — the `kube-api-access-*` volume the API server injects projects the
 /// `kube-root-ca.crt` ConfigMap, which is a real object worth reaching.
-fn volume_source(volume: &Volume) -> (String, Vec<VolumeObjectRef>) {
+pub fn volume_source(volume: &Volume) -> (String, Vec<VolumeObjectRef>) {
     let object = |kind: &str, name: &str| VolumeObjectRef {
         kind: kind.to_string(),
         name: name.to_string(),
@@ -169,7 +169,7 @@ fn volume_source(volume: &Volume) -> (String, Vec<VolumeObjectRef>) {
 ///
 /// Both lists are walked: a ConfigMap read only by an init container is
 /// exactly the mount whose absence explains a pod stuck in `Init:Error`.
-fn mounts_of(spec: &PodSpec, volume_name: &str) -> Vec<VolumeMountInfo> {
+pub fn mounts_of(spec: &PodSpec, volume_name: &str) -> Vec<VolumeMountInfo> {
     let init = spec.init_containers.as_deref().unwrap_or_default();
     let each = |container: &Container| {
         let name = container.name.clone();

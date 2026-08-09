@@ -44,7 +44,12 @@ fn is_terminal(phase: &str) -> bool {
     phase == "Succeeded" || phase == "Failed"
 }
 
-fn condition_is_true(status: Option<&PodStatus>, type_: &str) -> bool {
+/// Whether a pod condition is asserted true.
+///
+/// `Ready` is the one that decides whether a Service puts the pod in its
+/// endpoints, which makes it the last hop of every traffic path.
+#[must_use]
+pub fn condition_is_true(status: Option<&PodStatus>, type_: &str) -> bool {
     status.and_then(|s| s.conditions.as_ref()).is_some_and(|c| {
         c.iter()
             .any(|cond| cond.type_ == type_ && cond.status == "True")

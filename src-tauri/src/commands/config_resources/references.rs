@@ -1,13 +1,20 @@
-//! "Find references" — given a ConfigMap or Secret, scan workloads
-//! and ingresses for env vars / envFrom / volumes / imagePullSecrets
-//! / TLS that target it.
+//! "Find references" — given a ConfigMap, a Secret or a claim, scan
+//! workloads and ingresses for env vars / envFrom / volumes /
+//! imagePullSecrets / TLS that target it.
+//!
+//! The matching itself is `usages_in_pod_spec`, shared with the connections
+//! command. It reads volumes through the same `volume_source` the pod detail
+//! page uses, which is what gives this a claim case at all: the hand-rolled
+//! scan it replaced looked only at `volume.configMap` and `volume.secret`, so
+//! a claim in use reported that nothing used it.
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
+use crate::resources::{usages_in_pod_spec, Usage};
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::{EnvFromSource, EnvVar, Pod, PodSpec, VolumeMount};
+use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use serde::Serialize;
@@ -66,7 +73,8 @@ pub async fn get_resource_references(
         .namespace
         .clone()
         .unwrap_or_else(|| "default".to_string());
-    let is_secret = resource_type.to_lowercase() == "secret";
+    let target_kind = target_kind(&resource_type);
+    let is_secret = target_kind == "Secret";
     let target_name = name.clone();
 
     // Create all APIs
@@ -103,8 +111,8 @@ pub async fn get_resource_references(
                     "Pod",
                     &pod_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -121,8 +129,8 @@ pub async fn get_resource_references(
                     "Deployment",
                     &deploy_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -139,8 +147,8 @@ pub async fn get_resource_references(
                     "StatefulSet",
                     &sts_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -157,8 +165,8 @@ pub async fn get_resource_references(
                     "DaemonSet",
                     &ds_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -175,8 +183,8 @@ pub async fn get_resource_references(
                     "Job",
                     &job_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -198,8 +206,8 @@ pub async fn get_resource_references(
                     "CronJob",
                     &cj_name,
                     &ns,
+                    target_kind,
                     &target_name,
-                    is_secret,
                     &mut refs,
                 );
             }
@@ -230,192 +238,118 @@ pub async fn get_resource_references(
     Ok(refs)
 }
 
+/// Which kind the caller means. A claim used to fall through to the
+/// ConfigMap branch and match nothing, which is how a claim in use reported
+/// that nothing used it.
+fn target_kind(resource_type: &str) -> &'static str {
+    match resource_type.to_lowercase().as_str() {
+        "secret" => "Secret",
+        "persistentvolumeclaim" | "pvc" => "PersistentVolumeClaim",
+        _ => "ConfigMap",
+    }
+}
+
+/// Fold every use of one object into the shapes this command's callers
+/// already render. `Unmounted`, `Identity` and `IngressTls` have no slot
+/// here — the first two are new facts nothing asked for, and TLS is
+/// collected from the Ingress list above.
 fn check_pod_spec(
     spec: &PodSpec,
     kind: &str,
     resource_name: &str,
     resource_ns: &str,
+    target_kind: &str,
     target_name: &str,
-    is_secret: bool,
     refs: &mut ResourceReferences,
 ) {
-    // Helper to check a container's env vars and envFrom
-    let check_container_env = |container_name: &str,
-                               env: Option<&Vec<EnvVar>>,
-                               env_from: Option<&Vec<EnvFromSource>>,
-                               refs: &mut ResourceReferences| {
-        // Check env vars
-        if let Some(env) = env {
-            for e in env {
-                if let Some(value_from) = &e.value_from {
-                    let matches = if is_secret {
-                        value_from
-                            .secret_key_ref
-                            .as_ref()
-                            .map(|r| r.name == target_name)
-                            .unwrap_or(false)
-                    } else {
-                        value_from
-                            .config_map_key_ref
-                            .as_ref()
-                            .map(|r| r.name == target_name)
-                            .unwrap_or(false)
-                    };
-                    if matches {
-                        let key = if is_secret {
-                            value_from.secret_key_ref.as_ref().map(|r| r.key.clone())
-                        } else {
-                            value_from
-                                .config_map_key_ref
-                                .as_ref()
-                                .map(|r| r.key.clone())
-                        };
-                        refs.env_vars.push(ResourceReference {
-                            kind: kind.to_string(),
-                            name: resource_name.to_string(),
-                            namespace: resource_ns.to_string(),
-                            container_name: Some(container_name.to_string()),
-                            key,
-                        });
-                    }
-                }
-            }
-        }
-
-        // Check envFrom
-        if let Some(env_from) = env_from {
-            for ef in env_from {
-                let matches = if is_secret {
-                    ef.secret_ref
-                        .as_ref()
-                        .map(|r| r.name == target_name)
-                        .unwrap_or(false)
-                } else {
-                    ef.config_map_ref
-                        .as_ref()
-                        .map(|r| r.name == target_name)
-                        .unwrap_or(false)
-                };
-                if matches {
-                    refs.env_from.push(ResourceReference {
-                        kind: kind.to_string(),
-                        name: resource_name.to_string(),
-                        namespace: resource_ns.to_string(),
-                        container_name: Some(container_name.to_string()),
-                        key: None,
-                    });
-                }
-            }
-        }
+    let reference = |container_name: Option<String>, key: Option<String>| ResourceReference {
+        kind: kind.to_string(),
+        name: resource_name.to_string(),
+        namespace: resource_ns.to_string(),
+        container_name,
+        key,
     };
 
-    // Check regular containers
-    for container in spec.containers.iter() {
-        check_container_env(
-            &container.name,
-            container.env.as_ref(),
-            container.env_from.as_ref(),
-            refs,
+    for usage in usages_in_pod_spec(spec, target_kind, target_name) {
+        match usage {
+            Usage::Mount {
+                container,
+                path,
+                sub_path,
+                ..
+            } => refs.volumes.push(VolumeReference {
+                kind: kind.to_string(),
+                name: resource_name.to_string(),
+                namespace: resource_ns.to_string(),
+                container_name: Some(container),
+                mount_path: path,
+                sub_path,
+            }),
+            Usage::Env {
+                container,
+                name: _,
+                key,
+            } => refs.env_vars.push(reference(Some(container), Some(key))),
+            Usage::EnvFrom { container } => refs.env_from.push(reference(Some(container), None)),
+            Usage::ImagePullSecret => refs.image_pull_secrets.push(reference(None, None)),
+            Usage::Unmounted { .. } | Usage::Identity | Usage::IngressTls { .. } => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_claim_is_its_own_kind_and_not_a_configmap() {
+        assert_eq!(
+            target_kind("PersistentVolumeClaim"),
+            "PersistentVolumeClaim"
         );
+        assert_eq!(target_kind("pvc"), "PersistentVolumeClaim");
+        assert_eq!(target_kind("Secret"), "Secret");
+        assert_eq!(target_kind("ConfigMap"), "ConfigMap");
     }
 
-    // Check init containers
-    if let Some(init_containers) = &spec.init_containers {
-        for container in init_containers.iter() {
-            check_container_env(
-                &container.name,
-                container.env.as_ref(),
-                container.env_from.as_ref(),
-                refs,
-            );
-        }
-    }
+    #[test]
+    fn a_claim_volume_reaches_the_reference_list() {
+        let spec = PodSpec {
+            volumes: Some(vec![k8s_openapi::api::core::v1::Volume {
+                name: "data".to_string(),
+                persistent_volume_claim: Some(
+                    k8s_openapi::api::core::v1::PersistentVolumeClaimVolumeSource {
+                        claim_name: "pvc-demo".to_string(),
+                        read_only: None,
+                    },
+                ),
+                ..Default::default()
+            }]),
+            containers: vec![k8s_openapi::api::core::v1::Container {
+                name: "app".to_string(),
+                volume_mounts: Some(vec![k8s_openapi::api::core::v1::VolumeMount {
+                    name: "data".to_string(),
+                    mount_path: "/var/lib/data".to_string(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
 
-    // Check ephemeral containers
-    if let Some(ephemeral_containers) = &spec.ephemeral_containers {
-        for container in ephemeral_containers.iter() {
-            check_container_env(
-                &container.name,
-                container.env.as_ref(),
-                container.env_from.as_ref(),
-                refs,
-            );
-        }
-    }
+        let mut refs = ResourceReferences::default();
+        check_pod_spec(
+            &spec,
+            "Deployment",
+            "mounts-demo",
+            "k8s-gui-test",
+            target_kind("pvc"),
+            "pvc-demo",
+            &mut refs,
+        );
 
-    // Check volumes
-    if let Some(volumes) = &spec.volumes {
-        for vol in volumes {
-            let matches = if is_secret {
-                vol.secret
-                    .as_ref()
-                    .and_then(|s| s.secret_name.as_ref())
-                    .map(|n| n == target_name)
-                    .unwrap_or(false)
-            } else {
-                vol.config_map
-                    .as_ref()
-                    .map(|c| c.name == target_name)
-                    .unwrap_or(false)
-            };
-            if matches {
-                // Helper to find mount paths in a container
-                let find_mounts =
-                    |container_name: &str,
-                     volume_mounts: Option<&Vec<VolumeMount>>,
-                     refs: &mut ResourceReferences| {
-                        if let Some(mounts) = volume_mounts {
-                            for mount in mounts {
-                                if mount.name == vol.name {
-                                    refs.volumes.push(VolumeReference {
-                                        kind: kind.to_string(),
-                                        name: resource_name.to_string(),
-                                        namespace: resource_ns.to_string(),
-                                        container_name: Some(container_name.to_string()),
-                                        mount_path: mount.mount_path.clone(),
-                                        sub_path: mount.sub_path.clone(),
-                                    });
-                                }
-                            }
-                        }
-                    };
-
-                // Check regular containers
-                for container in spec.containers.iter() {
-                    find_mounts(&container.name, container.volume_mounts.as_ref(), refs);
-                }
-
-                // Check init containers
-                if let Some(init_containers) = &spec.init_containers {
-                    for container in init_containers.iter() {
-                        find_mounts(&container.name, container.volume_mounts.as_ref(), refs);
-                    }
-                }
-
-                // Check ephemeral containers
-                if let Some(ephemeral_containers) = &spec.ephemeral_containers {
-                    for container in ephemeral_containers.iter() {
-                        find_mounts(&container.name, container.volume_mounts.as_ref(), refs);
-                    }
-                }
-            }
-        }
-    }
-
-    // Check imagePullSecrets (only for secrets)
-    if is_secret {
-        if let Some(pull_secrets) = &spec.image_pull_secrets {
-            for ps in pull_secrets {
-                if ps.name == target_name {
-                    refs.image_pull_secrets.push(ResourceReference {
-                        kind: kind.to_string(),
-                        name: resource_name.to_string(),
-                        namespace: resource_ns.to_string(),
-                        container_name: None,
-                        key: None,
-                    });
-                }
-            }
-        }
+        assert_eq!(refs.volumes.len(), 1);
+        assert_eq!(refs.volumes[0].name, "mounts-demo");
+        assert_eq!(refs.volumes[0].mount_path, "/var/lib/data");
     }
 }
