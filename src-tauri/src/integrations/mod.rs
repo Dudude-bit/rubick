@@ -38,6 +38,40 @@ pub struct DetectedExtension {
     pub version: Option<String>,
 }
 
+/// The extensions whose whole Rust-side knowledge is a marker CRD.
+///
+/// cert-manager has a folder because it has a command behind it. These
+/// three have nothing but the name of the object whose existence *is* the
+/// install, and three files holding one constant each would be ceremony
+/// standing in for structure. The first marker present wins, so a vendor
+/// that renamed its API group lists the current spelling first.
+const MARKERS: &[(&str, &[&str])] = &[
+    (
+        "traefik",
+        &[
+            "ingressroutes.traefik.io",
+            "ingressroutes.traefik.containo.us",
+        ],
+    ),
+    ("flux", &["kustomizations.kustomize.toolkit.fluxcd.io"]),
+    ("istio", &["virtualservices.networking.istio.io"]),
+];
+
+fn detect_by_marker(
+    crds: &[CustomResourceDefinition],
+    id: &str,
+    markers: &[&str],
+) -> DetectedExtension {
+    let found = markers
+        .iter()
+        .find(|marker| crds.iter().any(|crd| crd.name_any() == **marker));
+    DetectedExtension {
+        id: id.to_string(),
+        installed: found.is_some(),
+        version: found.and_then(|marker| version_from(crds, marker)),
+    }
+}
+
 /// What is installed in this cluster, in one request.
 #[tauri::command]
 pub async fn detect_in_cluster_extensions(
@@ -47,7 +81,13 @@ pub async fn detect_in_cluster_extensions(
         state, None, None, None,
     )
     .await?;
-    Ok(vec![cert_manager::detect(&crds.items)])
+    let mut detected = vec![cert_manager::detect(&crds.items)];
+    detected.extend(
+        MARKERS
+            .iter()
+            .map(|(id, markers)| detect_by_marker(&crds.items, id, markers)),
+    );
+    Ok(detected)
 }
 
 /// The `app.kubernetes.io/version` an extension stamps on its own CRDs.
@@ -61,4 +101,46 @@ fn version_from(crds: &[CustomResourceDefinition], name: &str) -> Option<String>
         .labels()
         .get("app.kubernetes.io/version")
         .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinitionSpec;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+
+    fn crd(name: &str) -> CustomResourceDefinition {
+        CustomResourceDefinition {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            spec: CustomResourceDefinitionSpec::default(),
+            status: None,
+        }
+    }
+
+    /// Would break if a Traefik that never went through the v3 migration
+    /// stopped being detected — `traefik.containo.us` is the whole of what a
+    /// v2 cluster serves, and reporting it absent would tell the reader the
+    /// proxy in front of their cluster is not there.
+    #[test]
+    fn a_renamed_api_group_is_still_the_same_vendor() {
+        let v2 = vec![crd("ingressroutes.traefik.containo.us")];
+        assert!(detect_by_marker(&v2, "traefik", MARKERS[0].1).installed);
+
+        let v3 = vec![crd("ingressroutes.traefik.io")];
+        assert!(detect_by_marker(&v3, "traefik", MARKERS[0].1).installed);
+    }
+
+    /// Would break if detection started reporting every vendor as present,
+    /// or if the marker list went empty for one of them.
+    #[test]
+    fn a_cluster_with_none_of_them_says_so() {
+        let other = vec![crd("widgets.demo.k8s-gui.io")];
+        for (id, markers) in MARKERS {
+            assert!(!markers.is_empty(), "{id} has no marker to detect it by");
+            assert!(!detect_by_marker(&other, id, markers).installed);
+        }
+    }
 }
