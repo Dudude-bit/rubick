@@ -202,6 +202,61 @@ describe("TrafficChain", () => {
     expect(bare.container.textContent).toContain("demo");
   });
 
+  it("says when no controller claims an Ingress", () => {
+    /** The failure that looks like nothing at all: correct YAML, no events,
+     *  no error, and never served. The classes that do exist are named,
+     *  because that turns "it does not work" into a one-word fix. */
+    const conns: ResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "ghost-demo",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "nginx" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "ghost-demo",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: service,
+          relation: {
+            verb: "routes",
+            host: "ghost-demo.local",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: false,
+          },
+        },
+      ],
+      stops: [],
+      notLookedAt: [],
+    };
+
+    wrap(
+      <TrafficChain
+        query={query(conns)}
+        controller={{
+          requested: "nginx",
+          resolved: null,
+          controller: null,
+          viaDefault: false,
+          available: ["traefik"],
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText("No IngressClass named nginx in this cluster")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/This cluster has traefik\./)).toBeInTheDocument();
+  });
+
   it("does not draw a chain it has not read yet", () => {
     /** Loading is its own screen. A blank space where the chain will be
      *  reads as "nothing routes here", which is the one wrong answer. */

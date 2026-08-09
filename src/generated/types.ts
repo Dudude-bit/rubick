@@ -1287,6 +1287,14 @@ export interface StreamLogConfig {
   intake: QueryTerm[];
 }
 
+export interface IngressClassBinding {
+  requested: string | null;
+  resolved: string | null;
+  controller: string | null;
+  viaDefault: boolean;
+  available: string[];
+}
+
 export interface EndpointsInfo {
   name: string;
   namespace: string;

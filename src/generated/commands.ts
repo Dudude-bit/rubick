@@ -45,6 +45,7 @@ import type {
   HelmRepository,
   HelmRevision,
   InfrastructureBuilderStateDto,
+  IngressClassBinding,
   IngressInfo,
   IssuanceStory,
   JobDetailInfo,
@@ -113,6 +114,12 @@ export async function getIngress(
   namespace: string | null
 ): Promise<IngressInfo> {
   return invoke<IngressInfo>("get_ingress", { name, namespace });
+}
+
+export async function resolveIngressClass(
+  className: string | null
+): Promise<IngressClassBinding> {
+  return invoke<IngressClassBinding>("resolve_ingress_class", { className });
 }
 
 export async function deleteIngress(

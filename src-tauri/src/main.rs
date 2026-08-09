@@ -280,6 +280,7 @@ fn main() {
             // Network commands
             commands::network::list_ingresses,
             commands::network::get_ingress,
+            commands::network::resolve_ingress_class,
             commands::network::delete_ingress,
             commands::network::list_endpoints,
             commands::network::get_endpoints,

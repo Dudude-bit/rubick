@@ -178,6 +178,14 @@ export function IngressDetail() {
     tlsSecretNames
   );
 
+  // Which controller claims this Ingress. Core: IngressClass is a built-in
+  // kind, and "none does" is the failure that is silent everywhere else.
+  const { data: controller } = useQuery({
+    queryKey: ["ingress-class", ingress?.className ?? null],
+    queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
+    enabled: !!ingress,
+  });
+
   // The soonest expiry across every certificate this Ingress serves: one
   // Ingress with four hosts has four certificates, and the badge can only
   // carry the one that runs out first.
@@ -215,9 +223,16 @@ export function IngressDetail() {
 
   const facts: KeyValue[] = [
     {
+      // The class is a request; the controller is who answers it. Naming
+      // only the request is how an Ingress nothing serves reads as fine.
       label: "Class",
-      value: ingress?.className || "cluster default",
+      value: controller
+        ? controller.resolved
+          ? `${controller.resolved}${controller.controller ? ` · ${controller.controller}` : ""}`
+          : `${ingress?.className ?? "no class"} — nothing serves it`
+        : ingress?.className || "cluster default",
       mono: !!ingress?.className,
+      tone: controller && !controller.resolved ? ("err" as const) : undefined,
     },
     {
       label: "Load balancer",
@@ -583,6 +598,7 @@ export function IngressDetail() {
         query={connections}
         certificates={certificates.data}
         issuance={issuance}
+        controller={controller}
       />
     </ResourceDetailLayout>
   );

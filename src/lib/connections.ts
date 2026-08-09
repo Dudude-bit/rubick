@@ -20,6 +20,7 @@ import type {
   ObjectFacts,
   ObjectRef,
   Relation,
+  IngressClassBinding,
   ResourceConnections,
   TlsCertificate,
   Usage,
@@ -279,11 +280,25 @@ export interface ChainHopCertificate {
   read: TlsCertificate | undefined;
 }
 
+/**
+ * Which controller picks this Ingress up, including "none does".
+ *
+ * An Ingress object is a request, not a fact. One asking for a class no
+ * controller claims looks perfectly configured — correct YAML, no events,
+ * no error — and is never served, which is the failure that looks like
+ * nothing at all. `IngressClass` is a built-in kind, so this is core.
+ */
+export interface ChainHopController {
+  at: "controller";
+  binding: IngressClassBinding;
+}
+
 export type ChainHop =
   | ChainHopObject
   | ChainHopPods
   | ChainHopStop
-  | ChainHopCertificate;
+  | ChainHopCertificate
+  | ChainHopController;
 
 export interface ChainPath {
   key: string;
@@ -391,7 +406,15 @@ function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
  */
 export function trafficChains(
   conns: ResourceConnections,
-  certificates?: Map<string, TlsCertificate>
+  /**
+   * What the page has read beyond the edges. Every field is optional and
+   * the chain is whole without any of them — the hops they add extend the
+   * path, they never replace part of it.
+   */
+  extra: {
+    certificates?: Map<string, TlsCertificate>;
+    controller?: IngressClassBinding;
+  } = {}
 ): ChainPath[] {
   const subject = conns.subject;
   const routes = verb(conns.edges, "routes");
@@ -436,8 +459,11 @@ export function trafficChains(
             at: "certificate",
             secret: entry.secret,
             hosts: entry.hosts,
-            read: certificates?.get(entry.secret.name),
+            read: extra.certificates?.get(entry.secret.name),
           });
+        }
+        if (extra.controller) {
+          hops.push({ at: "controller", binding: extra.controller });
         }
         hops.push({ ...routeHop(mine, subject), self: true });
         hops.push(
