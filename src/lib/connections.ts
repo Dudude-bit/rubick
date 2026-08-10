@@ -938,14 +938,21 @@ function governedBy(conns: ResourceConnections): ConnRow[] {
   const rows = verb(conns.edges, "governs").map((edge) => ({
     ...rowFor(GOVERNOR_LABEL[edge.from.kind] ?? edge.from.kind, edge.from),
     key: `governs:${refKey(edge.from)}:${refKey(edge.to)}`,
-    // Named where the far end is not the page's own subject — on a pod, an
-    // autoscaler scales the Deployment above it, and saying "scales this"
-    // there would be wrong about which object the number belongs to.
-    ways: sameObject(edge.to, conns.subject)
-      ? []
-      : [
-          `${GOVERNS_VERB[edge.from.kind] ?? "acts on"} ${edge.to.kind} ${edge.to.name}`,
-        ],
+    ways: [
+      // Named where the far end is not the page's own subject — on a pod, an
+      // autoscaler scales the Deployment above it, and saying "scales this"
+      // there would be wrong about which object the number belongs to.
+      ...(sameObject(edge.to, conns.subject)
+        ? []
+        : [
+            `${GOVERNS_VERB[edge.from.kind] ?? "acts on"} ${edge.to.kind} ${edge.to.name}`,
+          ]),
+      // And which query reached it. A budget names no workload — it matched
+      // labels — so "why does this apply to me" is otherwise unanswerable
+      // from the page it applies to. An autoscaler states its target
+      // outright and carries no selector to print.
+      ...(edge.relation.selector ? [`matched ${edge.relation.selector}`] : []),
+    ],
   }));
   return labelled(rows);
 }

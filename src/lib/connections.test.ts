@@ -435,6 +435,72 @@ describe("the groups", () => {
   });
 });
 
+describe("a governing edge says which query reached it", () => {
+  const budget = (): ObjectRef =>
+    ref("PodDisruptionBudget", "expr-demo", {
+      kind: "budget",
+      minAvailable: "1",
+      maxUnavailable: null,
+      disruptionsAllowed: 1,
+      currentHealthy: 2,
+      desiredHealthy: 1,
+      expectedPods: 2,
+      conditions: [],
+    });
+
+  it("prints the set-based form rather than the half of it that fits a map", () => {
+    /** A budget names no workload. The selector is the only statement of why
+     *  it applies here, and a `matchExpressions` one printed as `app=` — or
+     *  as nothing — is a partial truth about which pods it will refuse to
+     *  let go. */
+    const subject = ref("Deployment", "expr-demo");
+    const groups = connectionGroups(
+      connections(subject, [
+        {
+          from: budget(),
+          to: subject,
+          relation: {
+            verb: "governs",
+            selector: "app in (expr-demo),track notin (canary)",
+          },
+        },
+      ])
+    );
+
+    const row = groups.find((group) => group.key === "governs")?.rows[0];
+    expect(row?.label).toBe("Disruption budget");
+    expect(row?.ways).toEqual([
+      "matched app in (expr-demo),track notin (canary)",
+    ]);
+  });
+
+  it("keeps naming the far end where it is not the subject", () => {
+    /** On a node, one budget covers one pod, and which pod is the whole
+     *  question a drain asks. The selector joins that line, it does not
+     *  replace it. */
+    const node: ObjectRef = {
+      kind: "Node",
+      name: "server-0",
+      namespace: null,
+      existence: "present",
+      facts: null,
+    };
+    const groups = connectionGroups(
+      connections(node, [
+        {
+          from: budget(),
+          to: pod("expr-demo-a", true),
+          relation: { verb: "governs", selector: "app in (expr-demo)" },
+        },
+      ])
+    );
+
+    expect(
+      groups.find((group) => group.key === "governs")?.rows[0].ways
+    ).toEqual(["protects Pod expr-demo-a", "matched app in (expr-demo)"]);
+  });
+});
+
 describe("a node, which is the same edge read from the other end", () => {
   const node = (podCapacity: number | null = 110): ObjectRef => ({
     kind: "Node",
