@@ -1,9 +1,14 @@
 # Loki + Promtail for the dev cluster — what the `logs.history` capability
 # reads from.
 #
-# Single binary, filesystem storage, an emptyDir with a 3Gi cap and 72h
+# Single binary, filesystem storage on a 3Gi `local-path` claim, 72h
 # retention: this is a demo store beside the demo Prometheus in `monitoring`,
 # not a thing to copy into a cluster anybody depends on.
+#
+# The claim is the one part of it that is not a shortcut. `logs.history` sells
+# itself as the logs that outlive the pod, so a store that died with the pod
+# would make the app's own demo disprove the feature — verify it by deleting
+# the pod and reading back a range from before the restart.
 #
 # Promtail's labels are the part that matters to the app. `namespace`, `pod`
 # and `container` below are what `src/integrations/loki/queries.ts` builds its
@@ -78,6 +83,25 @@ data:
         local:
           directory: /loki/rules
 ---
+# The store outliving the pod is the whole claim this integration makes, so
+# it cannot sit on an emptyDir: a restart would wipe exactly the history the
+# reader came here for, and the feature would be a worse liar than having no
+# Loki at all. `local-path` is this cluster's default StorageClass; 3Gi is
+# the cap the emptyDir carried, kept so the retention arithmetic is unchanged.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: monitoring
+  labels:
+    app: loki
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 3Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -90,6 +114,12 @@ spec:
   selector:
     matchLabels:
       app: loki
+  # Recreate, not RollingUpdate: the filesystem store takes one writer, and a
+  # rollout that briefly ran two Lokis over the same directory is how an index
+  # gets corrupted. It also keeps the new pod from deadlocking on a
+  # ReadWriteOnce claim the outgoing one still holds.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
@@ -128,8 +158,8 @@ spec:
           configMap:
             name: loki-config
         - name: data
-          emptyDir:
-            sizeLimit: 3Gi
+          persistentVolumeClaim:
+            claimName: loki-data
 ---
 apiVersion: v1
 kind: Service
