@@ -18,22 +18,24 @@ use k8s_openapi::api::autoscaling::v2::{
     HorizontalPodAutoscaler, MetricSpec, MetricStatus, MetricTarget, MetricValueStatus,
 };
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::{Endpoints, PersistentVolumeClaim, Pod, PodSpec, Service};
+use k8s_openapi::api::core::v1::{
+    Endpoints, Node, PersistentVolume, PersistentVolumeClaim, Pod, PodSpec, Service,
+};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress};
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::{Api, ListParams};
 use kube::ResourceExt;
 use tauri::State;
 
-use crate::commands::helpers::{build_label_selector, ResourceContext};
+use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::resources::{
-    condition_is_true, published, selector_matches, usages_in_pod_spec, AutoscalerMetric,
-    ChainStop, ConditionInfo, ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation,
-    ResourceConnections, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
+    condition_is_true, published, usages_in_pod_spec, AutoscalerMetric, ChainStop, ConditionInfo,
+    ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation, ResourceConnections, Selector,
+    ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 
@@ -41,7 +43,8 @@ use crate::state::AppState;
 ///
 /// `kind` is the Kubernetes kind, in any casing: `Pod`, `Deployment`,
 /// `StatefulSet`, `DaemonSet`, `ReplicaSet`, `Job`, `CronJob`, `Service`,
-/// `Ingress`, `PersistentVolumeClaim`, `ConfigMap`, `Secret` or `Node`.
+/// `Ingress`, `PersistentVolumeClaim`, `ConfigMap`, `Secret`, `Node` or
+/// `PersistentVolume`.
 #[tauri::command]
 pub async fn get_resource_connections(
     kind: String,
@@ -50,8 +53,23 @@ pub async fn get_resource_connections(
     state: State<'_, AppState>,
 ) -> Result<ResourceConnections> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let ctx = ResourceContext::for_command(&state, namespace)?;
+    // The subject's own scope decides, never the page the reader came from.
+    // `for_command` defaults an absent namespace to `default`, and a
+    // cluster-scoped subject read under that default answers with whatever
+    // happens to live in `default` and draws it as the whole answer — which
+    // is the reason a Node was never given this tab.
+    let ctx = if cluster_scoped(normalized(&kind)) {
+        ResourceContext::for_list(&state, None)?
+    } else {
+        ResourceContext::for_command(&state, namespace)?
+    };
     connections_of(&ctx, &kind, &name).await
+}
+
+/// The kinds whose neighbourhood spans every namespace there is: the pods a
+/// Node carries, and the claim a PersistentVolume is bound to.
+fn cluster_scoped(kind: &str) -> bool {
+    matches!(kind, "Node" | "PersistentVolume")
 }
 
 /// The same answer, for callers that already hold a client — the live
@@ -61,11 +79,13 @@ pub async fn connections_of(
     kind: &str,
     name: &str,
 ) -> Result<ResourceConnections> {
+    let canonical = normalized(kind);
+    // Read once, for the namespaced arms only. The two cluster-scoped ones
+    // below take no namespace at all, which is what makes them correct.
     let ns = ctx
         .namespace
         .clone()
         .unwrap_or_else(|| "default".to_string());
-    let canonical = normalized(kind);
 
     let mut out = Neighbourhood::new();
     match canonical {
@@ -80,6 +100,7 @@ pub async fn connections_of(
             config_connections(ctx, &ns, canonical, name, &mut out).await?;
         }
         "Node" => node_connections(ctx, name, &mut out).await?,
+        "PersistentVolume" => volume_connections(ctx, name, &mut out).await?,
         _ => {
             return Err(Error::InvalidInput(format!(
                 "connections are not read for kind {kind}"
@@ -104,6 +125,7 @@ fn normalized(kind: &str) -> &'static str {
         "service" => "Service",
         "ingress" => "Ingress",
         "persistentvolumeclaim" | "pvc" => "PersistentVolumeClaim",
+        "persistentvolume" | "pv" => "PersistentVolume",
         "configmap" => "ConfigMap",
         "secret" => "Secret",
         "node" => "Node",
@@ -166,7 +188,7 @@ fn service_ref(svc: &Service, ns: &str) -> ObjectRef {
             .unwrap_or_else(|| "ClusterIP".to_string()),
         cluster_ip: spec.and_then(|s| s.cluster_ip.clone()),
         external_name: spec.and_then(|s| s.external_name.clone()),
-        selector: (!selector.is_empty()).then(|| build_label_selector(&selector)),
+        selector: Selector::Equality(&selector).query_text(),
         ports: crate::resources::ServiceInfo::from(svc).ports,
     })
 }
@@ -210,16 +232,17 @@ fn traffic_into(
 ) {
     for svc in &snapshot.services {
         let selector = service_selector(svc);
-        if !selector_matches(&selector, labels) {
+        let Some(text) = Selector::Equality(&selector).says() else {
+            continue;
+        };
+        if !Selector::Equality(&selector).matches(labels) {
             continue;
         }
         let svc_ref = service_ref(svc, ns);
         out.edge(
             svc_ref.clone(),
             target.clone(),
-            Relation::Selects {
-                selector: build_label_selector(&selector),
-            },
+            Relation::Selects { selector: text },
         );
         note_reach(svc, &svc_ref, snapshot, out, false);
         routes_into(ns, &svc_ref, snapshot, out);
@@ -269,15 +292,12 @@ fn note_reach(
     }
 
     let selector = service_selector(svc);
-    let selected: Vec<&Pod> = if selector.is_empty() {
-        Vec::new()
-    } else {
-        snapshot
-            .pods
-            .iter()
-            .filter(|pod| selector_matches(&selector, pod.labels()))
-            .collect()
-    };
+    let query = Selector::Equality(&selector);
+    let selected: Vec<&Pod> = snapshot
+        .pods
+        .iter()
+        .filter(|pod| query.matches(pod.labels()))
+        .collect();
 
     let published = snapshot.published_of(svc, svc_ref.clone(), &selected);
     let serving = published.serving();
@@ -288,10 +308,9 @@ fn note_reach(
         published.summary()
     });
 
-    if selector.is_empty() {
+    let Some(text) = query.says() else {
         return;
-    }
-    let text = build_label_selector(&selector);
+    };
 
     if selected.is_empty() {
         out.stops.push(ChainStop::SelectsNothing {
@@ -831,20 +850,18 @@ fn budgets_over(
         if pdb.namespace().as_deref() != Some(ns) {
             continue;
         }
-        let selector = pdb
-            .spec
-            .as_ref()
-            .and_then(|s| s.selector.as_ref())
-            .and_then(|s| s.match_labels.clone())
-            .unwrap_or_default();
-        if !selector_matches(&selector, labels) {
+        // `policy/v1`, and it is the reverse of a Service's rule: a null
+        // selector matches no pods, an empty `{}` one covers every pod in
+        // the namespace.
+        let selector = Selector::Query(pdb.spec.as_ref().and_then(|s| s.selector.as_ref()));
+        if !selector.matches(labels) {
             continue;
         }
         out.edge(
             budget_ref(pdb, ns),
             target.clone(),
             Relation::Governs {
-                selector: Some(build_label_selector(&selector)),
+                selector: selector.says(),
             },
         );
     }
@@ -1113,7 +1130,11 @@ async fn pod_connections(
 /// claims its pods.
 struct Template {
     labels: BTreeMap<String, String>,
-    selector: BTreeMap<String, String>,
+    /// The whole `metav1.LabelSelector`, not its `matchLabels`: a workload
+    /// selecting its pods by a set-based requirement claims exactly the pods
+    /// the controller claims, and reading half of it drew a workload with no
+    /// pods at all.
+    selector: Option<LabelSelector>,
     spec: Option<PodSpec>,
     owners: Vec<OwnerReference>,
     replicas: i32,
@@ -1152,10 +1173,7 @@ async fn fetch_template(
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.labels.clone())
                 .unwrap_or_default(),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.selector.match_labels.clone())
-                .unwrap_or_default(),
+            obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status.as_ref().and_then(|s| s.replicas).unwrap_or(0),
             obj.status
@@ -1171,10 +1189,7 @@ async fn fetch_template(
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.labels.clone())
                 .unwrap_or_default(),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.selector.match_labels.clone())
-                .unwrap_or_default(),
+            obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status.as_ref().map_or(0, |s| s.replicas),
             obj.status
@@ -1190,10 +1205,7 @@ async fn fetch_template(
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.labels.clone())
                 .unwrap_or_default(),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.selector.match_labels.clone())
-                .unwrap_or_default(),
+            obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status
                 .as_ref()
@@ -1209,10 +1221,7 @@ async fn fetch_template(
                 .and_then(|t| t.metadata.as_ref())
                 .and_then(|m| m.labels.clone())
                 .unwrap_or_default(),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.selector.match_labels.clone())
-                .unwrap_or_default(),
+            obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec
                 .as_ref()
                 .and_then(|s| s.template.as_ref())
@@ -1231,11 +1240,7 @@ async fn fetch_template(
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.labels.clone())
                 .unwrap_or_default(),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.selector.as_ref())
-                .and_then(|s| s.match_labels.clone())
-                .unwrap_or_default(),
+            obj.spec.as_ref().and_then(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status.as_ref().and_then(|s| s.active).unwrap_or(0),
             obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0)
@@ -1244,7 +1249,7 @@ async fn fetch_template(
             CronJob,
             obj,
             BTreeMap::new(),
-            BTreeMap::new(),
+            None,
             obj.spec
                 .as_ref()
                 .and_then(|s| s.job_template.spec.as_ref())
@@ -1281,12 +1286,13 @@ async fn workload_connections(
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
     }
 
+    let selector = Selector::Query(template.selector.as_ref());
     let mine: Vec<&Pod> = snapshot
         .pods
         .iter()
-        .filter(|pod| selector_matches(&template.selector, pod.labels()))
+        .filter(|pod| selector.matches(pod.labels()))
         .collect();
-    let selector_text = build_label_selector(&template.selector);
+    let selector_text = selector.says().unwrap_or_default();
     let mut nodes = HashSet::new();
     for pod in &mine {
         let this = pod_ref(pod, ns);
@@ -1322,7 +1328,15 @@ async fn workload_connections(
     .await;
 
     if kind == "Deployment" {
-        revisions_of(ctx, ns, &subject, uid.as_deref(), &template.selector, out).await?;
+        revisions_of(
+            ctx,
+            ns,
+            &subject,
+            uid.as_deref(),
+            template.selector.as_ref(),
+            out,
+        )
+        .await?;
     }
 
     // The template's labels again, and for the same reason a Service is
@@ -1351,14 +1365,14 @@ async fn revisions_of(
     ns: &str,
     subject: &ObjectRef,
     uid: Option<&str>,
-    selector: &BTreeMap<String, String>,
+    selector: Option<&LabelSelector>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let Some(uid) = uid else { return Ok(()) };
-    if selector.is_empty() {
+    let Some(text) = Selector::Query(selector).query_text() else {
         return Ok(());
-    }
-    let params = ListParams::default().labels(&build_label_selector(selector));
+    };
+    let params = ListParams::default().labels(&text);
     let sets = ctx.namespaced_api::<ReplicaSet>().list(&params).await?;
 
     let owned: Vec<&ReplicaSet> = sets
@@ -1446,14 +1460,12 @@ async fn workloads_behind(
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
 ) {
-    if selector.is_empty() {
-        return;
-    }
+    let query = Selector::Equality(selector);
     let mut walked = HashSet::new();
     for pod in snapshot
         .pods
         .iter()
-        .filter(|pod| selector_matches(selector, pod.labels()))
+        .filter(|pod| query.matches(pod.labels()))
     {
         let owners = pod.owner_references().to_vec();
         owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await;
@@ -1587,29 +1599,40 @@ async fn config_connections(
     users_of(ctx, ns, &subject, out).await
 }
 
-/// A node: what is running on it, and what would refuse to move.
+/// A node: what is running on it, what would refuse to move, and what the
+/// scheduler will still hand out.
 ///
 /// Both lists are cluster-wide rather than scoped to the caller's namespace,
 /// and that is a correctness point rather than a widening: a Node is
 /// cluster-scoped, and the pods a drain has to evict are in every namespace
 /// there is. Answering with one namespace's worth would name a subset and
 /// draw it as the whole.
+///
+/// The node itself is read too, so the subject is a fact rather than a name
+/// this call took on trust — and so the pod list has a denominator.
 async fn node_connections(
     ctx: &ResourceContext,
     name: &str,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let subject = ObjectRef::new("Node", name, None, Existence::NotChecked);
-    out.subject = Some(subject.clone());
-
     let params = ListParams::default().fields(&format!("spec.nodeName={name}"));
+    let nodes_api: Api<Node> = Api::all(ctx.client.clone());
     let pods_api: Api<Pod> = Api::all(ctx.client.clone());
     let budgets_api: Api<PodDisruptionBudget> = Api::all(ctx.client.clone());
     let every = ListParams::default();
-    let (pods, budgets) = tokio::join!(pods_api.list(&params), budgets_api.list(&every));
+    let (node, pods, budgets) = tokio::join!(
+        nodes_api.get(name),
+        pods_api.list(&params),
+        budgets_api.list(&every)
+    );
+    let node = node?;
+    let pods = pods?.items;
     let budgets = read(budgets);
 
-    for pod in &pods?.items {
+    let subject = node_ref(&node);
+    out.subject = Some(subject.clone());
+
+    for pod in &pods {
         let ns = pod.namespace().unwrap_or_default();
         let this = pod_ref(pod, &ns);
         out.edge(this.clone(), subject.clone(), Relation::RunsOn);
@@ -1619,8 +1642,77 @@ async fn node_connections(
         budgets_over(&ns, &this, pod.labels(), &budgets, out);
     }
 
-    out.not_looked_at =
-        UnexploredKind::governance(None, budgets.as_ref().err().map(|why| why.as_str()));
+    out.not_looked_at = UnexploredKind::on_a_node(budgets.as_ref().err().map(|why| why.as_str()));
+    Ok(())
+}
+
+/// The node, in the terms the pods placed on it are read against.
+///
+/// Allocatable rather than capacity, and the difference is the one the
+/// scheduler uses: capacity is what the machine has, allocatable is what is
+/// left once the kubelet has reserved its own, and a pod is placed against
+/// the second.
+fn node_ref(node: &Node) -> ObjectRef {
+    let info = crate::resources::NodeInfo::from(node);
+    ObjectRef::new("Node", &node.name_any(), None, Existence::Present).with_facts(
+        ObjectFacts::Node {
+            schedulable: !node
+                .spec
+                .as_ref()
+                .and_then(|s| s.unschedulable)
+                .unwrap_or(false),
+            pod_capacity: info.allocatable.pods.and_then(|pods| pods.parse().ok()),
+            cpu: info.allocatable.cpu,
+            memory: info.allocatable.memory,
+        },
+    )
+}
+
+/// A PersistentVolume: the claim it is bound to, and the class that made it.
+///
+/// The claim is the cluster-scoped case in miniature. `spec.claimRef` names
+/// its namespace outright, and that namespace is neither the page the reader
+/// came from nor `default` — reading it under either is how a bound volume
+/// reports its claim missing.
+async fn volume_connections(
+    ctx: &ResourceContext,
+    name: &str,
+    out: &mut Neighbourhood,
+) -> Result<()> {
+    let volumes: Api<PersistentVolume> = Api::all(ctx.client.clone());
+    let volume = volumes.get(name).await?;
+    let subject = ObjectRef::new("PersistentVolume", name, None, Existence::Present);
+    out.subject = Some(subject.clone());
+
+    let spec = volume.spec.as_ref();
+    if let Some(claim) = spec.and_then(|s| s.claim_ref.as_ref()) {
+        if let (Some(ns), Some(claim_name)) = (claim.namespace.clone(), claim.name.clone()) {
+            let api: Api<PersistentVolumeClaim> = Api::namespaced(ctx.client.clone(), &ns);
+            let to = match api.get(&claim_name).await {
+                Ok(found) => claim_ref(&found, &ns),
+                // A claim the API server does not have is a released volume
+                // holding a reference to something deleted. Any other failure
+                // is the app not having looked, and says so.
+                Err(kube::Error::Api(err)) if err.code == 404 => ObjectRef::new(
+                    "PersistentVolumeClaim",
+                    &claim_name,
+                    Some(ns),
+                    Existence::Missing,
+                ),
+                Err(_) => ObjectRef::unchecked("PersistentVolumeClaim", &claim_name, Some(ns)),
+            };
+            out.edge(subject.clone(), to, Relation::Binds);
+        }
+    }
+    if let Some(class) = spec.and_then(|s| s.storage_class_name.clone()) {
+        out.edge(
+            subject.clone(),
+            ObjectRef::unchecked("StorageClass", &class, None),
+            Relation::Binds,
+        );
+    }
+
+    out.not_looked_at = UnexploredKind::on_a_volume();
     Ok(())
 }
 

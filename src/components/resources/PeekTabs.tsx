@@ -347,17 +347,13 @@ function fetchOwnedPods(
         namespace,
         labelSelector: `job-name=${target.name}`,
       });
-    case "DaemonSet": {
-      const selector = (detail as DaemonSetDetailInfo | undefined)?.selector;
-      const labelSelector = Object.entries(selector ?? {})
-        .map(([key, value]) => `${key}=${value}`)
-        .join(",");
+    case "DaemonSet":
       return commands.listPods({
         ...NO_POD_FILTERS,
         namespace,
-        labelSelector: labelSelector || null,
+        labelSelector:
+          (detail as DaemonSetDetailInfo | undefined)?.selector || null,
       });
-    }
     default:
       // StatefulSet: the API does not expose its match labels, but it does
       // guarantee the pod names — `<set>-0`, `<set>-1`, and so on.

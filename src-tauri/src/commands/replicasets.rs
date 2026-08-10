@@ -6,9 +6,9 @@
 //! have" — and the last one lives here rather than beside
 //! `get_deployment_pods` because of what it returns.
 
-use crate::commands::helpers::{build_label_selector, ResourceContext};
+use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
-use crate::resources::{PodInfo, ReplicaSetInfo, REVISION_ANNOTATION};
+use crate::resources::{PodInfo, ReplicaSetInfo, Selector, REVISION_ANNOTATION};
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet};
 use k8s_openapi::api::core::v1::Pod;
@@ -43,12 +43,11 @@ pub async fn get_replicaset_pods(
     let ctx = ResourceContext::for_command(&state, namespace)?;
 
     let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
-    let selector = rs
-        .spec
-        .and_then(|s| s.selector.match_labels)
+    let selector = Selector::Query(rs.spec.as_ref().map(|s| &s.selector))
+        .query_text()
         .ok_or_else(|| Error::InvalidInput("ReplicaSet has no selector".to_string()))?;
 
-    let params = kube::api::ListParams::default().labels(&build_label_selector(&selector));
+    let params = kube::api::ListParams::default().labels(&selector);
     let pods = ctx.namespaced_api::<Pod>().list(&params).await?;
 
     Ok(pods.items.iter().map(PodInfo::from).collect())
@@ -72,13 +71,11 @@ pub async fn get_deployment_replicasets(
     let uid = deployment.uid().unwrap_or_default();
     let current = deployment.annotations().get(REVISION_ANNOTATION).cloned();
 
-    let selector = deployment
-        .spec
-        .as_ref()
-        .and_then(|s| s.selector.match_labels.as_ref())
+    let selector = Selector::Query(deployment.spec.as_ref().map(|s| &s.selector))
+        .query_text()
         .ok_or_else(|| Error::InvalidInput("Deployment has no selector".to_string()))?;
 
-    let params = kube::api::ListParams::default().labels(&build_label_selector(selector));
+    let params = kube::api::ListParams::default().labels(&selector);
     let list = ctx.namespaced_api::<ReplicaSet>().list(&params).await?;
 
     let mut revisions: Vec<ReplicaSetInfo> = list

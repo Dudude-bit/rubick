@@ -15,6 +15,11 @@
 //!   * `unready-demo` — Service whose pods exist and none is ready.
 //!   * `mounts-demo`  — a ConfigMap, a Secret and a claim, mounted and read.
 //!   * `pvc-demo`     — the claim, asked who mounts it.
+//!   * `expr-demo`    — a workload and a budget selecting by `matchExpressions`,
+//!     with a Service in front: the chain that was reported broken while it
+//!     worked.
+//!   * the node itself — cluster-scoped, and carrying pods in more than one
+//!     namespace.
 
 use k8s_gui_lib::commands::connections::connections_of;
 use k8s_gui_lib::commands::helpers::ResourceContext;
@@ -74,6 +79,7 @@ fn verb(relation: &Relation) -> &'static str {
         Relation::Routes { .. } => "routes",
         Relation::RunsOn => "runsOn",
         Relation::Binds => "binds",
+        Relation::Governs { .. } => "governs",
     }
 }
 
@@ -139,7 +145,15 @@ async fn log_demo_reaches_its_pods_end_to_end() {
     let ingress = answer
         .edges
         .iter()
-        .find(|e| e.from.kind == "Ingress" && e.to.name == "log-demo" && e.to.kind == "Service")
+        // By name, not by "the first Ingress that routes here": several
+        // specimens point at this Service and which one comes back first is
+        // list order, not a fact about the chain.
+        .find(|e| {
+            e.from.kind == "Ingress"
+                && e.from.name == "log-demo"
+                && e.to.name == "log-demo"
+                && e.to.kind == "Service"
+        })
         .expect("the Ingress that routes to the Service");
     match &ingress.relation {
         Relation::Routes {
@@ -179,11 +193,15 @@ async fn log_demo_reaches_its_pods_end_to_end() {
         answer.stops
     );
 
-    let nodes = edges_from(&answer, "Pod")
+    // One edge per distinct node, not one per pod: a workload's answer
+    // deduplicates them, so how many there are is the scheduler's business
+    // and not something to assert a number for.
+    let nodes: std::collections::BTreeSet<_> = edges_from(&answer, "Pod")
         .into_iter()
         .filter(|e| matches!(e.relation, Relation::RunsOn))
-        .count();
-    assert_eq!(nodes, 2, "each pod names the node it was placed on");
+        .map(|e| e.to.name.clone())
+        .collect();
+    assert!(!nodes.is_empty(), "the pods name where they were placed");
 
     let revisions: Vec<_> = answer
         .edges
@@ -202,12 +220,155 @@ async fn log_demo_reaches_its_pods_end_to_end() {
         "one revision is the current one"
     );
 
+    // Both governing kinds are read now, so neither may be named as unread —
+    // a row saying "the app does not read HorizontalPodAutoscalers" beside an
+    // edge drawn from one is worse than the gap it replaced.
     assert!(
+        answer.not_looked_at.is_empty(),
+        "every kind a workload's neighbourhood needs is read: {:?}",
         answer
             .not_looked_at
             .iter()
-            .any(|gap| gap.kind == "HorizontalPodAutoscaler"),
-        "a kind the app never read is named, not implied absent"
+            .map(|gap| &gap.kind)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        answer
+            .edges
+            .iter()
+            .any(|e| e.from.kind == "HorizontalPodAutoscaler"
+                && matches!(e.relation, Relation::Governs { .. })),
+        "hpa-blind scales log-demo, and it is an edge rather than an absence"
+    );
+}
+
+/// A selector that is not a list of equalities, from both ends.
+///
+/// `expr-demo` selects its pods with all four set operators and no
+/// `matchLabels` at all. Read as match labels it was an empty selector, and
+/// an empty selector matched nothing: no pods, no revisions, and a traffic
+/// chain that would have reported `selectsNothing` over a Service serving
+/// traffic.
+#[tokio::test]
+#[ignore = "needs a real kubeconfig and the connections specimens"]
+async fn a_set_based_selector_claims_the_pods_the_controller_claims() {
+    let ns = namespace();
+    let ctx = context(&ns).await;
+
+    let answer = connections_of(&ctx, "Deployment", "expr-demo")
+        .await
+        .expect("connections");
+    describe("expr-demo Deployment", &answer);
+
+    let mine: Vec<_> = answer
+        .edges
+        .iter()
+        .filter(|e| {
+            e.from.kind == "Deployment"
+                && e.to.kind == "Pod"
+                && matches!(e.relation, Relation::Selects { .. })
+        })
+        .collect();
+    assert_eq!(mine.len(), 2, "expr-demo runs two pods and claims both");
+
+    // The text is the query: what the page prints is what the API server
+    // takes, set-based requirements and all.
+    match &mine[0].relation {
+        Relation::Selects { selector } => assert_eq!(
+            selector,
+            "app in (expr-demo,expr-demo-old),!retired,tier,track notin (canary)"
+        ),
+        other => panic!("expected a selector, got {other:?}"),
+    }
+
+    assert!(
+        answer.edges.iter().any(|e| e.to.kind == "ReplicaSet"),
+        "the revisions are listed with the same selector, so they arrive too"
+    );
+
+    // A Service in front of it, and nothing broken behind it. The Service's
+    // own selector is equality — `spec.selector` on a Service is a plain map
+    // and there is no such thing as a Service with matchExpressions.
+    let service = answer
+        .edges
+        .iter()
+        .find(|e| e.from.kind == "Service" && e.from.name == "expr-demo")
+        .expect("the Service that fronts these pods");
+    match &service.relation {
+        Relation::Selects { selector } => assert_eq!(selector, "app=expr-demo"),
+        other => panic!("expected a selector, got {other:?}"),
+    }
+    assert!(
+        answer.stops.is_empty(),
+        "a working Service in front of an expression-selected workload states no stop: {:?}",
+        answer.stops
+    );
+    let published = answer
+        .published
+        .iter()
+        .find(|entry| entry.service.name == "expr-demo")
+        .expect("what the Service publishes");
+    assert!(
+        published.ready > 0,
+        "the Service publishes at least one ready address"
+    );
+
+    // And the budget, whose selector is set-based too.
+    let budget = answer
+        .edges
+        .iter()
+        .find(|e| e.from.kind == "PodDisruptionBudget")
+        .expect("the budget that protects these pods");
+    match &budget.relation {
+        Relation::Governs { selector } => assert_eq!(
+            selector.as_deref(),
+            Some("app in (expr-demo),track notin (canary)")
+        ),
+        other => panic!("expected a governing edge, got {other:?}"),
+    }
+}
+
+/// A Node, which is cluster-scoped, and whose pods are not in one namespace.
+///
+/// The command used to default a missing namespace to `default`, so a Node
+/// came back with whatever happened to live there. Every pod on the node has
+/// to be here, in whichever namespace it is in.
+#[tokio::test]
+#[ignore = "needs a real kubeconfig and the connections specimens"]
+async fn a_node_answers_with_every_namespace_it_carries() {
+    let ctx = context(&namespace()).await;
+    let node =
+        std::env::var("K8S_GUI_NODE").unwrap_or_else(|_| "k3d-k8s-gui-dev-server-0".to_string());
+
+    let answer = connections_of(&ctx, "Node", &node).await.expect("node");
+    describe("the node", &answer);
+
+    assert_eq!(answer.subject.namespace, None, "a Node has no namespace");
+    assert_eq!(answer.subject.existence, Existence::Present);
+    let Some(ObjectFacts::Node { pod_capacity, .. }) = &answer.subject.facts else {
+        panic!("the node states what the scheduler may hand out")
+    };
+    assert!(
+        pod_capacity.is_some(),
+        "the node states an allocatable pods"
+    );
+
+    let placed: Vec<_> = answer
+        .edges
+        .iter()
+        .filter(|e| matches!(e.relation, Relation::RunsOn))
+        .collect();
+    let namespaces: std::collections::BTreeSet<_> = placed
+        .iter()
+        .filter_map(|e| e.from.namespace.as_deref())
+        .collect();
+    assert!(
+        namespaces.len() > 1,
+        "a real node carries kube-system's pods as well as the reader's: {namespaces:?}"
+    );
+    assert!(
+        namespaces.contains("kube-system"),
+        "the namespace the old, defaulted answer could never have named"
     );
 }
 

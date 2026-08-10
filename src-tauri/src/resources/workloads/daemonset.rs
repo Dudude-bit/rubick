@@ -59,7 +59,11 @@ pub struct DaemonSetDetailInfo {
     pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
-    pub selector: BTreeMap<String, String>,
+    /// `spec.selector` in the API's own text form — `app=demo`, and
+    /// `tier in (web,api)` where the DaemonSet claims its pods by a set-based
+    /// requirement. A map of match labels could not carry the second, and the
+    /// page reading it listed no pods at all.
+    pub selector: String,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
     pub created_at: Option<String>,
@@ -77,8 +81,8 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             .map(|conds| conds.iter().map(ConditionInfo::from).collect())
             .unwrap_or_default();
 
-        let selector = spec
-            .and_then(|s| s.selector.match_labels.clone())
+        let selector = crate::resources::Selector::Query(spec.map(|s| &s.selector))
+            .query_text()
             .unwrap_or_default();
 
         Self {

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { BadgeCheck, Bug, Info, Tag } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -9,6 +8,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugNodeDialog } from "@/components/debug";
 import { yamlTab } from "@/components/resources/yaml-tab";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { conditionsMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
@@ -25,6 +25,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { SpotMark } from "@/components/resources/spot-mark";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import {
@@ -32,6 +33,7 @@ import {
   parseCPU,
   parseMemory,
 } from "@/lib/k8s-quantity";
+import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
@@ -67,24 +69,10 @@ export function NodeDetail() {
     defaultTab: "info",
   });
 
-  const { data: podCount } = useQuery({
-    queryKey: ["node-pods", name],
-    queryFn: async () => {
-      if (!name) return 0;
-      const pods = await commands.listPods({
-        nodeName: name,
-        namespace: null,
-        selector: null,
-        statusFilter: null,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-      });
-      return pods.length;
-    },
-    enabled: !!name,
-    placeholderData: keepPreviousData,
-  });
+  // A Node is cluster-scoped, so its neighbourhood is read with no namespace
+  // at all — the same query the drain dialog opens, and the same answer.
+  const connections = useConnections(ResourceType.Node, name, null);
+  const podCount = podsOnNode(connections.data);
 
   const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
@@ -266,6 +254,7 @@ export function NodeDetail() {
         />
       ),
     },
+    connectionsTab(connections),
     yamlTab({
       title: "Node YAML",
       yaml: nodeYaml,

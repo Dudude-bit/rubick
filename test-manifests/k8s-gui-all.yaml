@@ -2025,3 +2025,100 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+# --- A selector that is not a list of equalities -----------------------------
+#
+# `matchExpressions` is half of what `metav1.LabelSelector` can say, and every
+# selector test in this app used to read `matchLabels` and stop. A workload
+# selecting its pods by a set-based requirement came back with no pods at all,
+# and the traffic chain — which promises to say *where the path stops* — would
+# have printed "no pod carries this selector" over a Deployment serving
+# traffic. Cleanup:
+#
+#   kubectl delete -n k8s-gui-test deploy/expr-demo svc/expr-demo \
+#     pdb/expr-demo
+#
+# One thing this cannot demonstrate, and it is worth writing down: a Service's
+# `spec.selector` is a plain `map[string]string`, not a `LabelSelector`. There
+# is no such thing as a Service with `matchExpressions`; the API server prunes
+# it. The Service here selects the same pods by equality, which is what makes
+# it the control — the chain in front of an expression-selected workload has to
+# be as healthy as the chain in front of any other.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+  labels:
+    app: expr-demo
+spec:
+  replicas: 2
+  # All four operators in one selector, and no `matchLabels` at all: read by
+  # the old code this selector was empty, which the same code then read as
+  # "matches nothing".
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [expr-demo, expr-demo-old]
+      - key: tier
+        operator: Exists
+      - key: track
+        operator: NotIn
+        values: [canary]
+      - key: retired
+        operator: DoesNotExist
+  template:
+    metadata:
+      labels:
+        app: expr-demo
+        tier: web
+        track: stable
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: expr-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# A budget whose selector is set-based. `policy/v1` reads an absent selector as
+# "no pods" and an empty `{}` one as "every pod in the namespace" — the reverse
+# of a Service's rule — so the two shapes cannot share one emptiness test.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [expr-demo]
+      - key: track
+        operator: NotIn
+        values: [canary]

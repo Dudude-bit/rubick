@@ -61,13 +61,10 @@ export function DaemonSetDetail() {
 
   const connections = useConnections(ResourceType.DaemonSet, name, namespace);
 
-  // The DaemonSet publishes its own selector; the previous `app=<name>` guess
-  // returned nothing for every chart that labels its pods any other way.
-  const selector = daemonSet?.selector ?? {};
-  const labelSelector =
-    Object.entries(selector)
-      .map(([key, value]) => `${key}=${value}`)
-      .join(",") || null;
+  // The DaemonSet publishes its own selector, in the API's own text form —
+  // so a set-based one reaches the API server as written, where rebuilding
+  // it from match labels dropped it and listed nothing.
+  const labelSelector = daemonSet?.selector || null;
 
   const { data: pods = [] } = useQuery({
     queryKey: ["daemonset-pods", namespace, name, labelSelector],
@@ -106,8 +103,17 @@ export function DaemonSetDetail() {
           <>
             <KeyValueSection
               title="Selector"
-              count={Object.keys(daemonSet?.selector ?? {}).length}
-              items={recordToKeyValues(daemonSet?.selector ?? {})}
+              items={
+                daemonSet?.selector
+                  ? [
+                      {
+                        label: "Pods",
+                        value: daemonSet.selector,
+                        mono: true,
+                      },
+                    ]
+                  : []
+              }
               emptyMessage="No selector — this DaemonSet matches nothing"
             />
             <KeyValueSection

@@ -680,7 +680,7 @@ export interface DaemonSetDetailInfo {
   serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  selector: Record<string, string>;
+  selector: string;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
   createdAt: string | null;
@@ -1498,6 +1498,13 @@ export type ObjectFacts =
       current: boolean | null;
     }
   | { kind: "claim"; phase: string; capacity: string; storageClass: string }
+  | {
+      kind: "node";
+      schedulable: boolean;
+      podCapacity: number | null;
+      cpu: string | null;
+      memory: string | null;
+    }
   | {
       kind: "autoscaler";
       minReplicas: number;

@@ -13,8 +13,6 @@
 //! explicit rename there, so the wire format and the bindings only agree
 //! when it is spelled out.
 
-use std::collections::BTreeMap;
-
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::PodSpec;
 use serde::{Deserialize, Serialize};
@@ -127,6 +125,25 @@ pub enum ObjectFacts {
         capacity: String,
         #[serde(rename = "storageClass")]
         storage_class: String,
+    },
+    /// A Node, in the terms the pods on it are read against.
+    ///
+    /// What the scheduler may hand out rather than what is installed:
+    /// `status.allocatable` is the number a pod is placed against, and
+    /// `capacity` is the machine's own claim with the kubelet's reservations
+    /// still in it.
+    Node {
+        /// `spec.unschedulable` inverted — a cordoned node is where a drain
+        /// leaves one, and it is why nothing new arrives here.
+        schedulable: bool,
+        /// `status.allocatable.pods`. `None` where the node states none,
+        /// which is not the same as a limit of zero.
+        #[serde(rename = "podCapacity")]
+        pod_capacity: Option<i32>,
+        cpu: Option<String>,
+        /// As the node writes it — `16305236Ki` — and formatted where it is
+        /// read, the same as every other quantity in this app.
+        memory: Option<String>,
     },
     /// A HorizontalPodAutoscaler, in the terms the workload it scales needs.
     ///
@@ -407,20 +424,40 @@ impl UnexploredKind {
         .flatten()
         .collect()
     }
-}
 
-/// A selector matches when every label it names is on the object with that
-/// value.
-///
-/// An empty selector matches nothing. That is the API server's own rule for
-/// a Service — an ExternalName selects no pods, it does not select all of
-/// them — and the opposite of what a plain subset test would answer.
-#[must_use]
-pub fn selector_matches(
-    selector: &BTreeMap<String, String>,
-    labels: &BTreeMap<String, String>,
-) -> bool {
-    !selector.is_empty() && selector.iter().all(|(k, v)| labels.get(k) == Some(v))
+    /// What a Node's neighbourhood still cannot say, once its pods and every
+    /// namespace's budgets have been read.
+    ///
+    /// The claims are the gap a drain feels. A ReadWriteOnce volume has to
+    /// detach from this node before the replacement pod starts anywhere else,
+    /// and that detach is where a drain spends its time — but the claims of
+    /// the pods here are one list per namespace with a pod on this node, and
+    /// the app does not make it. A "Bound to" group that is simply absent
+    /// would read as "these pods hold no volumes".
+    #[must_use]
+    pub fn on_a_node(budgets: Option<&str>) -> Vec<Self> {
+        let mut unread = Self::governance(None, budgets);
+        unread.push(Self::new(
+            "PersistentVolumeClaim",
+            "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
+        ));
+        unread
+    }
+
+    /// The same, for a PersistentVolume: its claim is read, and what mounts
+    /// that claim is not.
+    ///
+    /// "Is anything still writing to this volume" is the question asked
+    /// before a volume is released, and the answer is one list in the claim's
+    /// namespace — which is the claim's own page, one click away, rather than
+    /// a read made here on every open.
+    #[must_use]
+    pub fn on_a_volume() -> Vec<Self> {
+        vec![Self::new(
+            "Pod",
+            "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+        )]
+    }
 }
 
 /// Every way a pod spec draws on one named object.
@@ -538,32 +575,6 @@ mod tests {
         ConfigMapKeySelector, ConfigMapVolumeSource, Container, EnvVar, EnvVarSource,
         PersistentVolumeClaimVolumeSource, Volume, VolumeMount,
     };
-
-    fn labels(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs
-            .iter()
-            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-            .collect()
-    }
-
-    #[test]
-    fn an_empty_selector_matches_nothing() {
-        assert!(!selector_matches(
-            &BTreeMap::new(),
-            &labels(&[("app", "log-demo")])
-        ));
-    }
-
-    #[test]
-    fn a_selector_matches_only_when_every_label_agrees() {
-        let pod = labels(&[("app", "log-demo"), ("pod-template-hash", "abc")]);
-        assert!(selector_matches(&labels(&[("app", "log-demo")]), &pod));
-        assert!(!selector_matches(&labels(&[("app", "other")]), &pod));
-        assert!(!selector_matches(
-            &labels(&[("app", "log-demo"), ("tier", "web")]),
-            &pod
-        ));
-    }
 
     fn spec_with_claim() -> PodSpec {
         PodSpec {

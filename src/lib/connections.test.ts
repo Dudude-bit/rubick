@@ -435,6 +435,90 @@ describe("the groups", () => {
   });
 });
 
+describe("a node, which is the same edge read from the other end", () => {
+  const node = (podCapacity: number | null = 110): ObjectRef => ({
+    kind: "Node",
+    name: "server-0",
+    namespace: null,
+    existence: "present",
+    facts: {
+      kind: "node",
+      schedulable: true,
+      podCapacity,
+      cpu: "4",
+      memory: "8Gi",
+    },
+  });
+
+  const placed = (name: string, namespace: string): ConnectionEdge => ({
+    from: { ...pod(name, true), namespace },
+    to: node(),
+    relation: { verb: "runsOn" },
+  });
+
+  it("lists the pods on it, in every namespace, labelled by the one they are in", () => {
+    /** The defect this closes: the command defaulted a missing namespace to
+     *  `default`, so a Node answered with one namespace's pods and would
+     *  have drawn that as the whole answer. */
+    const groups = connectionGroups(
+      connections(node(), [
+        placed("log-demo-a", "k8s-gui-test"),
+        placed("coredns-x", "kube-system"),
+        placed("log-demo-b", "k8s-gui-test"),
+      ])
+    );
+
+    const here = groups.find((group) => group.key === "placed");
+    expect(here?.title).toBe("What runs here");
+    // Sorted by namespace, and the label written once per namespace.
+    expect(here?.rows.map((row) => [row.label, row.object?.name])).toEqual([
+      ["k8s-gui-test", "log-demo-a"],
+      ["", "log-demo-b"],
+      ["kube-system", "coredns-x"],
+    ]);
+    expect(here?.caption).toBe(
+      "— 3 pods across 2 namespaces, of the 110 this node will take · 4 CPU · 8.0 GB"
+    );
+  });
+
+  it("says cordoned rather than drawing the room as available", () => {
+    const cordoned: ObjectRef = {
+      ...node(),
+      facts: {
+        kind: "node",
+        schedulable: false,
+        podCapacity: 110,
+        cpu: "4",
+        memory: "8Gi",
+      },
+    };
+    const groups = connectionGroups(
+      connections(cordoned, [placed("log-demo-a", "k8s-gui-test")])
+    );
+    expect(groups.find((group) => group.key === "placed")?.caption).toContain(
+      "cordoned"
+    );
+  });
+
+  it("still reads a pod's own page outwards", () => {
+    /** One verb, two directions, and the pod page must not start listing
+     *  itself under "What runs here". */
+    const groups = connectionGroups(
+      connections(ref("Pod", "log-demo-a"), [
+        {
+          from: ref("Pod", "log-demo-a"),
+          to: node(),
+          relation: { verb: "runsOn" },
+        },
+      ])
+    );
+    const placement = groups.find((group) => group.key === "placement");
+    expect(placement?.title).toBe("Runs on");
+    expect(placement?.rows[0].object?.name).toBe("server-0");
+    expect(placement?.rows[0].detail).toBe("4 CPU · 8.0 GB");
+  });
+});
+
 describe("what the Service publishes", () => {
   /**
    * The defect this replaced. A pod draining is `serving: true, ready: false`

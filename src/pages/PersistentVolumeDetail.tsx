@@ -2,6 +2,7 @@ import { Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { ClaimRef } from "@/components/resources/storage-refs";
 import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
@@ -75,8 +77,13 @@ export function PersistentVolumeDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.PersistentVolume, pv);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  // Cluster-scoped, and the claim it names is in a namespace of its own. The
+  // block above links to that claim; this says whether it is still there and
+  // what it says about itself, which a link cannot.
+  const connections = useConnections(ResourceType.PersistentVolume, name, null);
 
   const tabs = [
+    connectionsTab(connections, deliveryQuery),
     yamlTab({
       title: "PersistentVolume YAML",
       yaml: pvYaml,

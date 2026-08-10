@@ -155,15 +155,14 @@ pub async fn get_deployment_pods(
     let deploy_api: kube::Api<Deployment> = ctx.namespaced_api();
     let deployment = deploy_api.get(&name).await?;
 
-    let selector = deployment
-        .spec
-        .and_then(|s| s.selector.match_labels)
-        .ok_or_else(|| {
-            crate::error::Error::InvalidInput("Deployment has no selector".to_string())
-        })?;
-
-    // Build label selector string
-    let label_selector = super::helpers::build_label_selector(&selector);
+    // The whole selector, so a Deployment claiming its pods by a set-based
+    // requirement returns the pods the controller returns rather than none.
+    let label_selector =
+        crate::resources::Selector::Query(deployment.spec.as_ref().map(|s| &s.selector))
+            .query_text()
+            .ok_or_else(|| {
+                crate::error::Error::InvalidInput("Deployment has no selector".to_string())
+            })?;
 
     // Get pods matching the selector
     let pod_api: kube::Api<Pod> = ctx.namespaced_api();

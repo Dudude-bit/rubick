@@ -13,6 +13,7 @@
  * into a sentence.
  */
 
+import { formatKubernetesBytes } from "./k8s-quantity";
 import { groupMounts } from "./mounts";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
@@ -184,7 +185,25 @@ function describeFacts(facts: ObjectFacts | null): string | null {
       return join(autoscalerRange(facts), autoscalerReplicas(facts));
     case "budget":
       return join(budgetRule(facts), budgetRoom(facts));
+    case "node":
+      return nodeCapacity(facts);
   }
+}
+
+/**
+ * What the scheduler may still hand out here, and whether it is allowed to.
+ *
+ * Allocatable, not capacity: capacity is what the machine has and allocatable
+ * is what is left once the kubelet has reserved its own, and a pod is placed
+ * against the second. Cordoned is last because it is the one that changes what
+ * the rest of the line means — the room is there and nothing may take it.
+ */
+function nodeCapacity(facts: Extract<ObjectFacts, { kind: "node" }>): string {
+  return join(
+    facts.cpu && `${facts.cpu} CPU`,
+    facts.memory && formatKubernetesBytes(facts.memory),
+    !facts.schedulable && "cordoned"
+  );
 }
 
 function serviceVia(facts: Extract<ObjectFacts, { kind: "service" }>): string {
@@ -836,17 +855,18 @@ function revisionOf(object: ObjectRef): number {
 }
 
 /**
- * Where the scheduler put it.
+ * Where the scheduler put it — the same edge, read from whichever end the
+ * page is standing on.
  *
- * Only ever read outwards, from a pod to its node. The mirror — a Node's own
- * page listing the pods on it — is not offered: `get_resource_connections`
- * resolves a missing namespace to `default`, so a cluster-scoped subject
- * would come back with whatever happens to live there and draw that as the
- * whole answer.
+ * The mirror used to be withheld. `get_resource_connections` resolved a
+ * missing namespace to `default`, so a Node came back with whatever happened
+ * to live there and would have drawn that as the whole answer; the subject's
+ * own scope decides now, and a Node's pods are read across every namespace.
  */
 function placement(conns: ResourceConnections): ConnGroup | null {
   const edges = verb(conns.edges, "runsOn");
   if (edges.length === 0) return null;
+  if (conns.subject.kind === "Node") return runsHere(conns, edges);
   return {
     key: "placement",
     title: "Runs on",
@@ -855,6 +875,46 @@ function placement(conns: ResourceConnections): ConnGroup | null {
       unique(edges.map((edge) => edge.to)).map((object) =>
         rowFor("Nodes", object)
       )
+    ),
+  };
+}
+
+/**
+ * The pods a node is carrying, labelled by the namespace they are in.
+ *
+ * The namespace is the label rather than a suffix on the name because it is
+ * the thing that repeats: a node in a real cluster carries kube-system's
+ * pods, an ingress controller's and the reader's own, and the grouping is
+ * what turns a flat list of forty names into three answers. It is also the
+ * fact the old, namespace-scoped answer could not have stated at all.
+ *
+ * The count reads against what the scheduler will allow, because a list of
+ * pods with no denominator does not answer "is this node full".
+ */
+function runsHere(
+  conns: ResourceConnections,
+  edges: ConnectionEdge[]
+): ConnGroup {
+  const pods = unique(edges.map((edge) => edge.from)).sort(
+    (a, b) =>
+      (a.namespace ?? "").localeCompare(b.namespace ?? "") ||
+      a.name.localeCompare(b.name)
+  );
+  const namespaces = new Set(pods.map((pod) => pod.namespace ?? "")).size;
+  const facts = conns.subject.facts;
+  const capacity =
+    facts?.kind === "node" && facts.podCapacity !== null
+      ? `, of the ${facts.podCapacity} this node will take`
+      : "";
+  const tally = `${pods.length === 1 ? "1 pod" : `${pods.length} pods`}${
+    namespaces > 1 ? ` across ${namespaces} namespaces` : ""
+  }${capacity}`;
+  return {
+    key: "placed",
+    title: "What runs here",
+    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts) : null)}`,
+    rows: labelled(
+      pods.map((pod) => rowFor(pod.namespace ?? "no namespace", pod))
     ),
   };
 }
@@ -1036,6 +1096,20 @@ function deliveredRows(delivery: Delivery[]): ConnRow[] {
       ways: [],
     }))
   );
+}
+
+/**
+ * How many pods a node is carrying.
+ *
+ * The `runsOn` edges, counted. The node page used to ask for the same list a
+ * second time to fill the Pods row of its Headroom block; both reads are
+ * `spec.nodeName=<node>` across every namespace, and one of them is enough.
+ */
+export function podsOnNode(
+  conns: ResourceConnections | undefined
+): number | undefined {
+  if (!conns || conns.subject.kind !== "Node") return undefined;
+  return unique(verb(conns.edges, "runsOn").map((edge) => edge.from)).length;
 }
 
 /** How many distinct objects the tab draws — what its count mark stands for. */
