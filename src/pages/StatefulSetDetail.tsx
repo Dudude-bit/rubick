@@ -26,6 +26,7 @@ import {
   ConditionRows,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   KeyValueSection,
@@ -281,6 +282,19 @@ export function StatefulSetDetail() {
           />
         </Section>
         <KeyValueSection title="StatefulSet" items={facts} />
+        <WorkloadUsage
+          kind={ResourceType.StatefulSet}
+          uid={statefulSet?.uid}
+          namespace={statefulSet?.namespace || namespace}
+          template={statefulSet}
+          pods={pods}
+          idle={
+            desired === 0
+              ? "This StatefulSet is scaled to zero."
+              : "None of this StatefulSet's pods is running."
+          }
+          connections={connections.data}
+        />
         <Governance query={connections} />
       </div>
 

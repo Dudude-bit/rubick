@@ -24,6 +24,7 @@ import {
   ConditionRows,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
 import {
   KeyValueSection,
   type KeyValue,
@@ -273,6 +274,20 @@ export function JobDetail() {
           />
         </Section>
         <KeyValueSection title="Timing" items={timing} />
+        <WorkloadUsage
+          kind={ResourceType.Job}
+          uid={job?.uid}
+          namespace={job?.namespace || namespace}
+          template={job}
+          pods={pods}
+          idle={
+            job?.completionTime
+              ? "This Job has finished."
+              : failed > 0
+                ? "No pod of this Job is running, and the last one failed."
+                : "No pod of this Job is running."
+          }
+        />
       </div>
 
       {job && (

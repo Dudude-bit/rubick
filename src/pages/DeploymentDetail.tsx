@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   AlignLeft,
@@ -59,7 +59,7 @@ import {
   ConditionRows,
   DetailAction,
 } from "@/components/resources/detail-blocks";
-import { UsageBlock } from "@/components/resources/usage-block";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
@@ -72,11 +72,6 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
-import {
-  parseCPU as parseKubernetesCPU,
-  parseMemory as parseKubernetesMemory,
-} from "@/lib/k8s-quantity";
-import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
@@ -134,20 +129,14 @@ export function DeploymentDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
-  const { podMetrics, podStatus, podSampledAt } = useMetrics({
+  // For the banner only. The Usage block reads the same query through the
+  // same key, so this costs one fetch between them.
+  const { podStatus } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     includeCluster: false,
     enabled: !!deployment,
   });
-
-  const podsWithMetrics = useMemo(() => {
-    return mergePodsWithMetrics(pods, podMetrics);
-  }, [pods, podMetrics]);
-
-  const aggregatedMetrics = useMemo(() => {
-    return aggregatePodMetrics(podsWithMetrics);
-  }, [podsWithMetrics]);
 
   // Auto-select first pod for logs when pods load. Genuine
   // sync-async-data-into-local-state — could be derived as
@@ -162,57 +151,6 @@ export function DeploymentDetail() {
   }, [pods, selectedLogPod]);
 
   const logPod = pods.find((p) => p.name === selectedLogPod);
-
-  // The template declares per-replica amounts; the usage measured below is
-  // the sum over every replica, so the ceiling has to be scaled to match.
-  const totalResources = useMemo(() => {
-    if (!deployment?.containers)
-      return {
-        cpuLimit: null,
-        cpuRequest: null,
-        memoryLimit: null,
-        memoryRequest: null,
-      };
-
-    const replicas = deployment.replicas.desired || 1;
-    let totalCpuLimits = 0;
-    let totalCpuRequests = 0;
-    let totalMemoryLimits = 0;
-    let totalMemoryRequests = 0;
-
-    // Sidecars, not just app containers: a native sidecar runs for the
-    // life of the pod, so the scheduler adds its request to the app
-    // containers' and the ceiling this chart draws has to match. An
-    // ordinary init container has exited before any of this is measured.
-    const sustained = declaredContainers(deployment).filter(
-      (c) => c.phase !== "init"
-    );
-
-    sustained.forEach((c) => {
-      if (c.resources?.limits?.cpu) {
-        totalCpuLimits += parseKubernetesCPU(c.resources.limits.cpu);
-      }
-      if (c.resources?.requests?.cpu) {
-        totalCpuRequests += parseKubernetesCPU(c.resources.requests.cpu);
-      }
-      if (c.resources?.limits?.memory) {
-        totalMemoryLimits += parseKubernetesMemory(c.resources.limits.memory);
-      }
-      if (c.resources?.requests?.memory) {
-        totalMemoryRequests += parseKubernetesMemory(
-          c.resources.requests.memory
-        );
-      }
-    });
-
-    return {
-      cpuLimit: totalCpuLimits > 0 ? totalCpuLimits * replicas : null,
-      cpuRequest: totalCpuRequests > 0 ? totalCpuRequests * replicas : null,
-      memoryLimit: totalMemoryLimits > 0 ? totalMemoryLimits * replicas : null,
-      memoryRequest:
-        totalMemoryRequests > 0 ? totalMemoryRequests * replicas : null,
-    };
-  }, [deployment]);
 
   const { data: rolloutStatus } = useQuery({
     queryKey: ["rollout-status", namespace, name],
@@ -562,23 +500,17 @@ export function DeploymentDetail() {
 
       <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
         <KeyValueSection title="Rollout" items={facts} />
-        <UsageBlock
+        <WorkloadUsage
           kind={ResourceType.Deployment}
           uid={deployment?.uid}
-          scope={`summed over ${podsWithMetrics.length} pod${
-            podsWithMetrics.length === 1 ? "" : "s"
-          }`}
-          cpu={aggregatedMetrics.cpuMillicores}
-          memory={aggregatedMetrics.memoryBytes}
-          cpuLimit={totalResources.cpuLimit}
-          memoryLimit={totalResources.memoryLimit}
-          noLimitNote="No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take."
-          restarts={podsWithMetrics.reduce(
-            (total, pod) => total + pod.restartCount,
-            0
-          )}
-          sampledAt={podSampledAt}
-          status={podStatus}
+          namespace={deployment?.namespace || namespace}
+          template={deployment}
+          pods={pods}
+          idle={
+            replicas?.desired === 0
+              ? "This Deployment is scaled to zero."
+              : "None of this Deployment's pods is running."
+          }
           connections={connections.data}
         />
         <Governance query={connections} />

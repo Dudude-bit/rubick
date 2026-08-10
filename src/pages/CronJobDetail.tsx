@@ -24,6 +24,7 @@ import {
 } from "@/components/resources/cron-schedule";
 import { Composition, Headline } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
 import {
   KeyValueSection,
   type KeyValue,
@@ -32,6 +33,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
 import { commands } from "@/lib/commands";
+import { matchCronJobPods } from "@/lib/metrics";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
@@ -146,6 +148,37 @@ export function CronJobDetail() {
       }
     },
     enabled: !!namespace && !!name,
+    placeholderData: keepPreviousData,
+    staleTime: STALE_TIMES.resourceList,
+    refetchInterval: REFRESH_INTERVALS.resourceList,
+  });
+
+  // A CronJob's pods are two hops away — its runs own them — so they are
+  // asked for only while the controller says a run is in flight. Between
+  // runs there is nothing to list, and listing a namespace to find that out
+  // is a fetch that answers a question already answered.
+  const inFlight = (cronJob?.active ?? 0) > 0;
+
+  const { data: pods = [] } = useQuery({
+    queryKey: ["cronjob-pods", namespace, name],
+    queryFn: async () => {
+      if (!name || !namespace) return [];
+      try {
+        const all = await commands.listPods({
+          namespace,
+          labelSelector: null,
+          fieldSelector: null,
+          limit: null,
+          statusFilter: null,
+          selector: null,
+          nodeName: null,
+        });
+        return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refetchInterval: REFRESH_INTERVALS.resourceList,
@@ -310,6 +343,18 @@ export function CronJobDetail() {
           />
         </Section>
         <KeyValueSection title="Policy" items={policy} />
+        <WorkloadUsage
+          kind={ResourceType.CronJob}
+          uid={cronJob?.uid}
+          namespace={cronJob?.namespace || namespace}
+          template={cronJob}
+          pods={pods}
+          idle={
+            cronJob?.suspend
+              ? "This CronJob is suspended, so no run will start."
+              : "No run of this CronJob is in flight."
+          }
+        />
       </div>
 
       {cronJob && (

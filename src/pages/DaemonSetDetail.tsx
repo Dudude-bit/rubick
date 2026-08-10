@@ -26,6 +26,7 @@ import {
   ConditionRows,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
 import {
   KeyValueSection,
   type KeyValue,
@@ -285,6 +286,19 @@ export function DaemonSetDetail() {
           </div>
         </Section>
         <KeyValueSection title="DaemonSet" items={facts} />
+        <WorkloadUsage
+          kind={ResourceType.DaemonSet}
+          uid={daemonSet?.uid}
+          namespace={daemonSet?.namespace || namespace}
+          template={daemonSet}
+          pods={pods}
+          idle={
+            desired === 0
+              ? "No node matches this DaemonSet, so it has placed no pods."
+              : "None of this DaemonSet's pods is running."
+          }
+          connections={connections.data}
+        />
         <Governance query={connections} />
       </div>
 
