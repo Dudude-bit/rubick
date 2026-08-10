@@ -87,7 +87,10 @@ export const viewGlyph = (icon: LucideIcon): DetailTabGlyph => ({
   icon,
 });
 
-export const countMark = (of: number): DetailTabMark => ({
+/** Narrower than its siblings, so a strip that only allows counts can say so. */
+export const countMark = (
+  of: number
+): Extract<DetailTabMark, { shows: "count" }> => ({
   shows: "count",
   of,
 });

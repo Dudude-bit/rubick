@@ -29,6 +29,7 @@ import { toKind } from "@/lib/resource-registry";
 import { resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
+import { TabGlyph, TabMark } from "./tab-marks";
 import { usePeekWidth } from "./peek-width";
 
 /**
@@ -89,8 +90,6 @@ function PeekContent({
   const { width, min, max, preview, commit } = usePeekWidth();
 
   const source = useMemo(() => resolveSource(target.kind), [target.kind]);
-  const tabs = useMemo(() => peekTabsFor(target.kind), [target.kind]);
-  const activeTab = resolvePeekTab(requestedTab, tabs);
 
   const { data, error, isLoading } = useQuery({
     queryKey: ["peek", target.kind, namespace, target.name],
@@ -100,6 +99,14 @@ function PeekContent({
     refetchOnWindowFocus: false,
     retry: false,
   });
+
+  // The Overview fetch is also what a tab is marked from, so the strip is
+  // built after it rather than beside it.
+  const tabs = useMemo(
+    () => peekTabsFor(target.kind, data),
+    [target.kind, data]
+  );
+  const activeTab = resolvePeekTab(requestedTab, tabs);
 
   const summary = useMemo(
     () => (data === undefined ? null : source.summarise(data, target)),
@@ -205,10 +212,22 @@ function PeekContent({
         onValueChange={(value) => onTabChange(value as PeekTabId)}
         className="flex min-h-0 flex-1 flex-col"
       >
+        {/* Pills, still: this strip sits inside a panel over a page that has
+            its own tab strip, and two underlines a hand apart would read as
+            one control. The glyph rule composes with either shape. */}
         <TabsList className="flex h-8 w-full flex-none items-center justify-start gap-0.5 border-b border-hair px-2">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {tab.label}
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="group min-w-0"
+              title={tab.mark ? `${tab.label} — ${tab.mark.of}` : undefined}
+            >
+              <TabGlyph glyph={tab.glyph} isActive={tab.id === activeTab} />
+              <span className="truncate">{tab.label}</span>
+              {tab.mark && (
+                <TabMark mark={tab.mark} isActive={tab.id === activeTab} />
+              )}
             </TabsTrigger>
           ))}
         </TabsList>

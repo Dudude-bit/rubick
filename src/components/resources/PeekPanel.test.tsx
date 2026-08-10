@@ -152,7 +152,11 @@ function PeekOpener({ target, label }: { target: PeekTarget; label: string }) {
   );
 }
 
-const tabNames = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
+/** The words on the strip, without the glyph or the count beside them. */
+const tabNames = () =>
+  screen
+    .getAllByRole("tab")
+    .map((tab) => tab.querySelector("span")?.textContent);
 
 const openTab = (name: string) =>
   userEvent.click(screen.getByRole("tab", { name }));
@@ -295,6 +299,37 @@ describe("PeekPanel", () => {
 });
 
 const CONFIGMAP_PEEK = "/events?peek=configmaps/k8s-gui-test/app-config";
+
+describe("PeekPanel tab strip", () => {
+  beforeEach(mockCluster);
+
+  // The same rule the detail pages are drawn by: a strip where some tabs
+  // carry a glyph and others do not is worse than a strip with none.
+  it("gives every tab one glyph, and exactly one, on both kinds", async () => {
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    }
+
+    cleanup();
+    wrap(CONFIGMAP_PEEK);
+    await screen.findByRole("tab", { name: /Data/ });
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    }
+  });
+
+  it("counts what it is already holding, and fetches nothing to do it", async () => {
+    wrap(CONFIGMAP_PEEK);
+    const data = await screen.findByRole("tab", { name: /Data/ });
+    await waitFor(() => expect(data).toHaveTextContent("Data1"));
+    expect(data).toHaveAttribute("title", "Data — 1");
+    // The keys came with the summary; the values did not, and are still
+    // unread until the tab is opened.
+    expect(commands.getConfigmapData).not.toHaveBeenCalled();
+  });
+});
 
 describe("PeekPanel tabs", () => {
   beforeEach(mockCluster);
@@ -482,7 +517,8 @@ describe("PeekPanel tab persistence", () => {
     await openTab("Logs");
 
     await userEvent.click(screen.getByText("peek configmap"));
-    await screen.findByRole("tab", { name: "Data" });
+    // Its count rides in the accessible name once the summary lands.
+    await screen.findByRole("tab", { name: /^Data/ });
     await userEvent.click(screen.getByText("peek other pod"));
 
     await waitFor(() =>

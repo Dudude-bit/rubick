@@ -12,77 +12,13 @@
  */
 
 import { useState } from "react";
-import { CircleDashed } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CaptionScope } from "@/components/ui/section";
-import { kindHue } from "@/lib/resource-identity";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "@/lib/resource-registry";
-import { cn } from "@/lib/utils";
-import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
-import {
-  surfaceIsOpen,
-  type DetailTab,
-  type DetailTabGlyph,
-  type DetailTabMark,
-} from "./detail-tab";
+import { TabGlyph, TabMark } from "./tab-marks";
+import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 
-/** 5px, which is the smallest disc that still reads as round rather than as dirt. */
-const DOT = "h-[5px] w-[5px] flex-none rounded-full";
-
-/**
- * A mark, and the words it stands for.
- *
- * Colour never carries it alone. The dot sits beside a label that changed,
- * and `says` reaches the accessible name — "Containers — 1 of 4 failing" —
- * because a red disc is nothing at all to a reader who cannot see red.
- */
-function TabMark({
-  mark,
-  isActive,
-}: {
-  mark: DetailTabMark;
-  isActive: boolean;
-}) {
-  if (mark.shows === "count") {
-    return (
-      <span
-        className={cn(
-          "flex-none text-[11px] tabular-nums",
-          isActive ? "text-fg-mut" : "text-fg-fnt"
-        )}
-      >
-        {mark.of}
-      </span>
-    );
-  }
-  if (mark.shows === "severity") {
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(DOT, mark.tone === "err" ? "bg-err" : "bg-warn")}
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(DOT, "animate-tab-live bg-ok motion-reduce:animate-none")}
-    />
-  );
-}
-
-/**
- * One tab, drawn by the two rules rather than by its label.
- *
- * The hue is read from the same `kindHue` the sidebar and every reference
- * use, and honours the colouring setting for the same reason they do: a
- * reader who turned identity colour off did not ask for one strip to keep it.
- */
+/** One tab, drawn by the two rules rather than by its label. */
 function DetailTabTrigger({
   tab,
   isActive,
@@ -90,8 +26,6 @@ function DetailTabTrigger({
   tab: DetailTab;
   isActive: boolean;
 }) {
-  const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
-  const { Icon, hue } = resolveGlyph(tab.glyph, colouring !== "off");
   const says =
     tab.mark && tab.mark.shows !== "count"
       ? `${tab.label} — ${tab.mark.says}`
@@ -112,34 +46,11 @@ function DetailTabTrigger({
       {/* `flex-none` on both the glyph and the mark, `truncate` only on the
           label: a tab that gave up its glyph to fit would lose the half of
           itself that can be read without reading. */}
-      <Icon
-        aria-hidden="true"
-        className={cn(
-          "h-3.5 w-3.5 flex-none",
-          hue === null &&
-            (isActive ? "text-fg" : "text-fg-fnt group-hover:text-fg-mut")
-        )}
-        style={
-          hue === null
-            ? undefined
-            : { color: `hsl(${hue} var(--kind-s) var(--kind-l))` }
-        }
-      />
+      <TabGlyph glyph={tab.glyph} isActive={isActive} />
       <span className="truncate">{tab.label}</span>
       {tab.mark && <TabMark mark={tab.mark} isActive={isActive} />}
     </TabsTrigger>
   );
-}
-
-function resolveGlyph(glyph: DetailTabGlyph, tinted: boolean) {
-  if (glyph.names === "view") return { Icon: glyph.icon, hue: null };
-  const resolved = isResourceType(glyph.kind) ? toKind(glyph.kind) : null;
-  return {
-    // A kind the registry does not carry — a CRD's own kind, on its Instances
-    // tab — gets the same dashed circle it gets in every list of them.
-    Icon: resolved ? getResourceDefinition(resolved).icon : CircleDashed,
-    hue: tinted ? kindHue(glyph.kind) : null,
-  };
 }
 
 /**
