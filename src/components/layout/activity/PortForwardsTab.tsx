@@ -26,6 +26,8 @@ import { useClusterStore } from "@/stores/clusterStore";
 import {
   usePortForwardStore,
   type PortForwardConfig,
+  type PortForwardSession,
+  type PortForwardStatus,
 } from "@/stores/portForwardStore";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +49,79 @@ const forwardKey = (item: {
 
 /** `undefined` is closed, `null` is the new-config form. */
 type Editing = PortForwardConfig | null | undefined;
+
+/**
+ * One running forward.
+ *
+ * `namesCluster` follows the scope-tab rule: the cluster's name is spent
+ * only where it discriminates. Inside the current context every row shares
+ * it and the panel header has just said it; in the elsewhere group it is the
+ * whole point of the row. The pod stops being a link there too — the route
+ * would resolve against the cluster the reader is in, which is a different
+ * pod with the same name, or none.
+ */
+function SessionRow({
+  session,
+  status,
+  isBusy,
+  onStop,
+  namesCluster = false,
+}: {
+  session: PortForwardSession;
+  status: PortForwardStatus | undefined;
+  isBusy: boolean;
+  onStop: () => void;
+  namesCluster?: boolean;
+}) {
+  const isError = status?.status === "error";
+  const isReconnecting =
+    status?.status === "reconnecting" || status?.status === "reconnected";
+
+  return (
+    <div className={ACTIVITY_ROW}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "h-1.5 w-1.5 flex-none rounded-full",
+          isError ? "bg-err" : isReconnecting ? "bg-warn" : "bg-ok"
+        )}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">
+          {/* The panel's whole job is telling you what is running and against
+              what; the target was the one thing in it you could not get to. */}
+          {namesCluster ? (
+            session.pod
+          ) : (
+            <ResourceRef
+              kind={ResourceType.Pod}
+              name={session.pod}
+              namespace={session.namespace}
+              showKind={false}
+            />
+          )}
+        </span>
+        <span className="block truncate font-mono text-[11px] text-fg-fnt">
+          {namesCluster && `${session.context} · `}
+          {session.namespace} · :{session.localPort} → :{session.remotePort}
+          {isError && " · failed"}
+          {isReconnecting && " · reconnecting"}
+        </span>
+      </span>
+      <ActivityAction
+        aria-label={`Stop forwarding ${session.pod}`}
+        onClick={onStop}
+        disabled={isBusy}
+      >
+        {isBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Square className="h-3.5 w-3.5" />
+        )}
+      </ActivityAction>
+    </div>
+  );
+}
 
 /**
  * Everything about a port forward, in the panel that owns running things.
@@ -90,6 +165,19 @@ export function PortForwardsTab() {
   const sessionByKey = useMemo(
     () => new Map(sessions.map((session) => [forwardKey(session), session])),
     [sessions]
+  );
+
+  // A forward is a process, and one started against another cluster is still
+  // running and still holding a local port — deleting it from the list would
+  // be the panel lying about what is on the machine. So it is separated
+  // rather than dropped, the way the scope tabs name a cluster only where
+  // the name is what tells two rows apart.
+  const [contextSessions, otherSessions] = useMemo(
+    () => [
+      sessions.filter((session) => session.context === currentContext),
+      sessions.filter((session) => session.context !== currentContext),
+    ],
+    [sessions, currentContext]
   );
 
   const idleCount = useMemo(
@@ -190,58 +278,32 @@ export function PortForwardsTab() {
 
   return (
     <div className="pb-3">
-      {sessions.length > 0 && (
-        <ActivityGroup title="Running" count={sessions.length}>
-          {sessions.map((session) => {
-            const status = statusBySession[session.id];
-            const isBusy = busyIds.has(session.id);
-            const isError = status?.status === "error";
-            const isReconnecting =
-              status?.status === "reconnecting" ||
-              status?.status === "reconnected";
+      {contextSessions.length > 0 && (
+        <ActivityGroup title="Running" count={contextSessions.length}>
+          {contextSessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              status={statusBySession[session.id]}
+              isBusy={busyIds.has(session.id)}
+              onStop={() => handleStop(session.id)}
+            />
+          ))}
+        </ActivityGroup>
+      )}
 
-            return (
-              <div key={session.id} className={ACTIVITY_ROW}>
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "h-1.5 w-1.5 flex-none rounded-full",
-                    isError ? "bg-err" : isReconnecting ? "bg-warn" : "bg-ok"
-                  )}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">
-                    {/* The panel's whole job is telling you what is running
-                        and against what; the target was the one thing in it
-                        you could not get to. */}
-                    <ResourceRef
-                      kind={ResourceType.Pod}
-                      name={session.pod}
-                      namespace={session.namespace}
-                      showKind={false}
-                    />
-                  </span>
-                  <span className="block truncate font-mono text-[11px] text-fg-fnt">
-                    {session.namespace} · :{session.localPort} → :
-                    {session.remotePort}
-                    {isError && " · failed"}
-                    {isReconnecting && " · reconnecting"}
-                  </span>
-                </span>
-                <ActivityAction
-                  aria-label={`Stop forwarding ${session.pod}`}
-                  onClick={() => handleStop(session.id)}
-                  disabled={isBusy}
-                >
-                  {isBusy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5" />
-                  )}
-                </ActivityAction>
-              </div>
-            );
-          })}
+      {otherSessions.length > 0 && (
+        <ActivityGroup title="Running elsewhere" count={otherSessions.length}>
+          {otherSessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              status={statusBySession[session.id]}
+              isBusy={busyIds.has(session.id)}
+              onStop={() => handleStop(session.id)}
+              namesCluster
+            />
+          ))}
         </ActivityGroup>
       )}
 
@@ -264,10 +326,19 @@ export function PortForwardsTab() {
         }
       >
         {contextConfigs.length === 0 ? (
+          // Saved configs are filtered to the current context, so a forward
+          // saved against another cluster is not gone — it is just not here,
+          // and "none saved" said otherwise. The New button is a foot away
+          // in this group's own header, so the hint spends its words on the
+          // scope instead of naming it again.
           <ActivityEmpty
             icon={Network}
-            title="No port forwards saved"
-            hint="Save one here, or from a pod's ports"
+            title={`No port forwards saved for ${currentContext}`}
+            hint={
+              configs.length > 0
+                ? `${configs.length} saved against other clusters, reachable by switching to them.`
+                : "A forward saved here can be started again without retyping the pod and ports."
+            }
           />
         ) : (
           contextConfigs.map((config) => {

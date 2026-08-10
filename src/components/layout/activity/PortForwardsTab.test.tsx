@@ -152,4 +152,64 @@ describe("PortForwardsTab", () => {
       "New port forward"
     );
   });
+
+  describe("a forward belonging to another cluster", () => {
+    const ELSEWHERE = {
+      ...SESSION,
+      id: "sess-2",
+      context: "staging",
+      pod: "billing-4c1",
+    };
+
+    /**
+     * Would break if Running went back to listing every context at once —
+     * the reader reads it as "running against the cluster I am looking at",
+     * and a forward from another one silently made that false.
+     */
+    it("is kept out of Running", () => {
+      usePortForwardStore.setState({ sessions: [SESSION, ELSEWHERE] });
+      mount();
+
+      const running = screen.getByText("Running").closest("section");
+      expect(running).toHaveTextContent("api-7f9");
+      expect(running).not.toHaveTextContent("billing-4c1");
+    });
+
+    /**
+     * ...and not deleted either. It is a live process holding a local port;
+     * a panel that omitted it would be lying about what is on the machine.
+     */
+    it("is listed under a group that says where it is", () => {
+      usePortForwardStore.setState({ sessions: [SESSION, ELSEWHERE] });
+      mount();
+
+      expect(screen.getByText("Running elsewhere")).toBeInTheDocument();
+      expect(screen.getByText("billing-4c1")).toBeInTheDocument();
+      // The cluster's name is spent where it discriminates, and only there.
+      expect(screen.getByText(/staging ·/)).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Stop forwarding billing-4c1/ })
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * The pod route would resolve against the cluster the reader is in —
+     * a different pod with the same name, or none at all.
+     */
+    it("does not offer its pod as a link into the current cluster", () => {
+      usePortForwardStore.setState({ sessions: [ELSEWHERE] });
+      mount();
+
+      expect(screen.getByText("billing-4c1")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /billing-4c1/ })).toBeNull();
+    });
+
+    it("shows no Running group at all when every forward is elsewhere", () => {
+      usePortForwardStore.setState({ sessions: [ELSEWHERE] });
+      mount();
+
+      expect(screen.queryByText("Running")).not.toBeInTheDocument();
+      expect(screen.getByText("Running elsewhere")).toBeInTheDocument();
+    });
+  });
 });
