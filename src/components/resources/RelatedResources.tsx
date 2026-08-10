@@ -18,7 +18,8 @@ import { ChevronRight } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
-import { toKind, isResourceType } from "@/lib/resource-registry";
+import { REPLICAS_SET_HERE } from "@/lib/connections";
+import { isScalable, toKind, isResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "./ResourceRef";
 import { KeyValueRow } from "./detail-kv";
 import type { OwnerReference } from "@/generated/types";
@@ -144,6 +145,15 @@ export function RelatedResources({
                   <OwnerName hop={hop} namespace={namespace} />
                 </span>
               ))}
+              {/* Which of the two names to open. A pod has no replica count
+                  of its own and the revision in between is replaced on the
+                  next rollout; the top of the chain is where the number is,
+                  and it is only said for a kind the app can scale there. */}
+              {isScalable(hops[hops.length - 1].kind) && (
+                <span className="text-[11px] text-fg-fnt">
+                  {REPLICAS_SET_HERE}
+                </span>
+              )}
             </span>
           </KeyValueRow>
         )}

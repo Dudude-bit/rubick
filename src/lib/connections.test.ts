@@ -699,3 +699,57 @@ describe("what the Service publishes", () => {
     expect(unasked?.rows[0].label).toBe("EndpointSlice");
   });
 });
+
+/**
+ * The route from a pod to the object whose replica count it is one of.
+ *
+ * A pod is not scalable and gets no Scale control anywhere. What it gets is
+ * a chain that says which of its two owners is worth opening, and that is
+ * the only place in the app where the answer to "where do I set the count"
+ * is a link rather than a control.
+ */
+describe("where a pod's replica count is really set", () => {
+  const owns = (from: ObjectRef, to: ObjectRef): ConnectionEdge => ({
+    from,
+    to,
+    relation: { verb: "owns", controller: true },
+  });
+
+  const ownerRows = (subject: ObjectRef, edges: ConnectionEdge[]) =>
+    connectionGroups(connections(subject, edges)).find(
+      (group) => group.key === "owners"
+    )?.rows ?? [];
+
+  it("marks the top of the chain, not the revision under it", () => {
+    const pod = ref("Pod", "crash-demo-c688f57cf-abcde");
+    const rs = ref("ReplicaSet", "crash-demo-c688f57cf");
+    const deployment = ref("Deployment", "crash-demo");
+    const rows = ownerRows(pod, [owns(rs, pod), owns(deployment, rs)]);
+
+    expect(rows[0].object?.name).toBe("crash-demo-c688f57cf");
+    expect(rows[0].detail ?? "").not.toContain("replica count");
+    expect(rows[1].object?.name).toBe("crash-demo");
+    expect(rows[1].detail).toContain("the replica count is set here");
+  });
+
+  it("says it of a StatefulSet's pod too — one hop is the whole chain", () => {
+    const pod = ref("Pod", "stateful-demo-0");
+    const set = ref("StatefulSet", "stateful-demo");
+    const rows = ownerRows(pod, [owns(set, pod)]);
+
+    expect(rows[0].detail).toContain("the replica count is set here");
+  });
+
+  /**
+   * A DaemonSet has no replica count to set, and a Job's parallelism is not
+   * one either. Pointing at them would send the reader to a page with no
+   * control on it.
+   */
+  it("stays quiet where the top of the chain cannot be scaled", () => {
+    const pod = ref("Pod", "node-agent-xk29f");
+    const ds = ref("DaemonSet", "node-agent");
+    const rows = ownerRows(pod, [owns(ds, pod)]);
+
+    expect(rows[0].detail ?? "").not.toContain("replica count");
+  });
+});

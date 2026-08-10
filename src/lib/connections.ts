@@ -14,6 +14,7 @@
  */
 
 import { formatKubernetesBytes } from "./k8s-quantity";
+import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
@@ -694,6 +695,12 @@ const NEED_LABEL: Record<string, string> = {
 
 const NEED_ORDER = ["Configuration", "TLS certificate", "Storage", "Identity"];
 
+/**
+ * What the top of an ownership chain is worth opening for. Shared with the
+ * overview's own chain so the two never say it differently.
+ */
+export const REPLICAS_SET_HERE = "the replica count is set here";
+
 const OWNABLE = new Set([
   "Pod",
   "Deployment",
@@ -797,6 +804,17 @@ function answersHere(conns: ResourceConnections): ConnRow[] {
  * Walked rather than read one hop: a pod's owner is a hash nobody named, and
  * the object somebody actually deploys is one further up. The backend already
  * sent every hop of the chain, so this costs a loop rather than a request.
+ *
+ * ## Why the top of the chain says where the replica count is set
+ *
+ * A pod is not scalable and must not pretend to be — a Scale control here
+ * would write a number to an object that has no such field. But a reader
+ * standing on a crash-looping pod asking where to set the count is two hops
+ * from the answer, and nothing on the row says which of the two names is the
+ * one to open: `crash-demo-c688f57cf` is a revision that will be replaced,
+ * `crash-demo` is where the number lives. The name is already a link; the
+ * clause is what makes it worth following, and it is only ever put on a kind
+ * this app can actually scale, so it never points somewhere with no control.
  */
 function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
   const owns = verb(conns.edges, "owns");
@@ -822,6 +840,14 @@ function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
     if (seen.has(refKey(next.from))) break;
     seen.add(refKey(next.from));
     child = next.from;
+  }
+
+  const top = rows.findIndex((row) => row.key === `owner:${refKey(child)}`);
+  if (top !== -1 && isScalable(child.kind)) {
+    rows[top] = {
+      ...rows[top],
+      detail: join(REPLICAS_SET_HERE, rows[top].detail),
+    };
   }
 
   if (rows.length === 0) {
