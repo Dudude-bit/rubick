@@ -48,7 +48,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     label: "Integrations",
     icon: Plug,
     description:
-      "What this cluster has that the app can use. Nothing here is configured — an extension is detected by whether its CRDs exist.",
+      "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
     keywords:
       "integrations extensions cert-manager traefik prometheus argo flux istio crd",
     clusterScoped: true,

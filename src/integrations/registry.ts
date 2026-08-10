@@ -43,15 +43,26 @@
  *   objects in it is never rendered — while {@link Vendor.provides} is
  *   gated on the backend's CRD scan.
  * - **Tier 3 — configured.** Needs its own address and usually a credential
- *   the kubeconfig does not carry. Nothing is tier 3 yet; Prometheus and the
- *   cloud APIs are the first candidates. {@link Extension} already carries
- *   the shape one would need — a row is a name, a power, and a list of
- *   facts, and "connected · answered 2s ago · Edit" is a fact with a route
- *   on it — so the first tier-3 vendor adds a producer of that state, not a
- *   second kind of row. What is deliberately *not* here is a config schema,
- *   a probe or a credential store: an abstraction for zero implementations
- *   is a costume, and inventing one would also put a configured integration
- *   on screen that nobody configured.
+ *   the kubeconfig does not carry, so "is it there" is a probe rather than a
+ *   lookup — and the answer has three values, not two. {@link Connect} is
+ *   that shape, and Prometheus is the first vendor to declare one. It stayed
+ *   out of this file until there was an implementation on purpose: an
+ *   abstraction for zero implementations is a costume, and a config schema
+ *   with nothing behind it would have put a configured integration on screen
+ *   that nobody configured. The row it produces is still the row
+ *   {@link Extension} already described — a name, a power, and facts —
+ *   because "connected · answered 2s ago" is a fact.
+ *
+ * ## Configured is three states, and the surface owes all three
+ *
+ * A detected vendor is present or absent, and absence has one answer. A
+ * configured one adds a third: **configured and not answering**, which is
+ * the state that quietly ruins a feature. Falling back silently makes a
+ * broken Prometheus look identical to one nobody ever set up, and the reader
+ * concludes the app is broken rather than their monitoring. So
+ * {@link CapabilityState} hands the surface the difference and the reason,
+ * and a surface that consumes a capability must draw all three — see
+ * {@link Capabilities} for what each key's absence is allowed to mean.
  *
  * ## Why facts are a field and not a capability
  *
@@ -95,8 +106,71 @@ import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 import type { IssuanceStory } from "@/generated/types";
+import type { UsageSample } from "@/lib/usage-history";
 import type { Delivery, DeliveryQuery } from "./gitops";
 import type { CrdColumn, CrdStatus } from "./kit";
+
+/**
+ * The windows a history capability can be asked for.
+ *
+ * Owned here rather than by whichever vendor answers, because the picker is
+ * drawn by the surface: a chart offering ranges only the current supplier
+ * happens to implement would change shape when the supplier did.
+ */
+export const USAGE_RANGES = ["15m", "1h", "6h", "24h"] as const;
+
+export type UsageRange = (typeof USAGE_RANGES)[number];
+
+/**
+ * What a chart is asking about, in terms every monitoring system can
+ * express: a pod by name, a workload by what controls it, or a node.
+ *
+ * A workload names its controller rather than its current pods on purpose —
+ * the pods it had an hour ago are gone from every list the API server will
+ * answer, and a supplier that matched only the live ones would draw a chart
+ * that goes blank at the last rollout.
+ */
+export type UsageScope =
+  | { kind: "pod"; namespace: string; pod: string }
+  | { kind: "workload"; namespace: string; owner: string; ownerKind: string }
+  | { kind: "node"; node: string };
+
+/**
+ * A range of readings, and the two things the chart must say about them.
+ *
+ * `resolution` is not decoration. A supplier answering a 24h window is
+ * summarising eighty-six thousand seconds into a hundred-odd points, and a
+ * reader deciding whether a spike is real needs to know how wide a bucket
+ * is and whether it holds the peak or an average. The app's own watched
+ * window takes the max of its buckets and says so; anything answering this
+ * capability owes the same sentence.
+ */
+export interface UsageWindow {
+  samples: readonly UsageSample[];
+  /** "30s buckets, max over a 15s resolution". */
+  resolution: string;
+}
+
+/** Bytes in and out, over the same window and buckets as {@link UsageWindow}. */
+export interface TrafficWindow {
+  points: ReadonlyArray<{ t: number; rx: number | null; tx: number | null }>;
+  resolution: string;
+}
+
+/**
+ * How full one volume is, as two numbers rather than a percentage.
+ *
+ * `capacityBytes` is what the kubelet says the filesystem behind the volume
+ * holds, which for a provisioner that enforces no quota is the node's disk
+ * and not the claim's declared size. Both numbers are handed over so the
+ * surface can say which is which instead of printing a share of something
+ * unnamed.
+ */
+export interface VolumeFullness {
+  claim: string;
+  usedBytes: number;
+  capacityBytes: number;
+}
 
 /**
  * Every capability the app knows how to consume, and its contract.
@@ -137,9 +211,142 @@ export interface Capabilities {
   "delivery.source": (
     objects: DeliveryQuery[]
   ) => Promise<Array<Delivery | null>>;
+  /**
+   * Usage over a window longer than this app has been open.
+   *
+   * Absent means the chart draws the window it watched itself, which is a
+   * good answer and the one every cluster gets — `metrics.k8s.io` serves the
+   * last thirty seconds and has no concept of yesterday, so the only history
+   * that can exist without this capability is the buffer the app fills while
+   * a page is open. The ranges dim; nothing else changes.
+   */
+  "usage.history": (input: {
+    scope: UsageScope;
+    range: UsageRange;
+  }) => Promise<UsageWindow>;
+  /**
+   * How full a namespace's volumes actually are.
+   *
+   * Absent means the storage summary says what it says today — the declared
+   * size, and a sentence stating plainly that it is not fullness. Present,
+   * the row gains used and capacity. A claim missing from the answer keeps
+   * the fallback sentence rather than drawing an empty bar: no kubelet
+   * scraping and an unprovisioned volume look the same from here, and an
+   * empty bar would read as "0% full" for both.
+   */
+  "volume.fullness": (input: {
+    namespace: string;
+    claims: string[];
+  }) => Promise<VolumeFullness[]>;
+  /**
+   * Bytes in and out of a workload's pods.
+   *
+   * The one capability here whose absence has **no** core answer, and the
+   * consequence is spelled out rather than worked around: with no supplier
+   * the row is simply not drawn. It gets no placeholder and no invitation —
+   * a "connect a Prometheus" nag on every page would be an advert repeated
+   * once per surface, and the single quiet line under Usage already carries
+   * the offer for the whole app.
+   */
+  "network.traffic": (input: {
+    scope: UsageScope;
+    range: UsageRange;
+  }) => Promise<TrafficWindow>;
 }
 
 export type CapabilityKey = keyof Capabilities;
+
+/**
+ * What a surface gets when it asks for a capability.
+ *
+ * Three answers rather than an implementation or `null`, because a
+ * configured vendor can fail in a way a detected one cannot, and the
+ * difference is the whole reason this state exists. `absent` and
+ * `unreachable` both mean "draw the core answer"; only one of them owes the
+ * reader a sentence about why the extra is missing.
+ *
+ * `vendor` is the supplier's own name and `endpoint` its address, both for
+ * *copy* — "from prometheus.monitoring:9090" is what makes a chart's numbers
+ * attributable. Naming a vendor in a sentence was never the thing the seam
+ * forbids; naming one in an `import` is. A surface must not branch on either.
+ */
+export type CapabilityState<K extends CapabilityKey> =
+  | { state: "absent" }
+  | { state: "unreachable"; vendor: string; endpoint: string; reason: string }
+  | {
+      state: "ready";
+      vendor: string;
+      endpoint: string;
+      use: Capabilities[K];
+    };
+
+/**
+ * A vendor the reader gives an address to.
+ *
+ * Declaring this is what makes a vendor tier 3: it is never detected, its
+ * powers are gated on {@link probe} rather than on a CRD scan, and the
+ * Integrations row grows a Connect button instead of the word "detected".
+ *
+ * Every function takes no context argument — the backend reads the current
+ * kubeconfig context itself and stores per cluster, because a Prometheus is
+ * per cluster and threading the context through the UI would make it
+ * possible to save one cluster's address against another.
+ */
+export interface Connect {
+  /** Shown in the empty address field, so the expected shape is visible. */
+  urlPlaceholder: string;
+  /** What this cluster has saved, or `null` where nobody configured one. */
+  read: () => Promise<SavedConnection | null>;
+  save: (draft: ConnectionDraft) => Promise<void>;
+  forget: () => Promise<void>;
+  /**
+   * The Test button's answer, and the same check that decides whether the
+   * powers are offered at all. Given a draft it answers the form on screen;
+   * given nothing it answers what is saved.
+   */
+  probe: (draft?: ConnectionDraft) => Promise<ProbeResult>;
+  /**
+   * The row's facts for a connection that answered — the endpoint, when it
+   * last did, and what that buys. Pure, because the probe already did the
+   * asking.
+   */
+  facts: (saved: SavedConnection, probe: ProbeResult) => VendorFact[];
+}
+
+/**
+ * A saved connection as the webview is allowed to see it.
+ *
+ * There is no token field and that is structural rather than an omission:
+ * a credential that never crosses the boundary cannot be logged by the
+ * renderer, read out of a devtools session, or persisted into some store
+ * nobody audited. `hasToken` is all the form needs — it draws a filled
+ * field it will not read back, and an empty submission means "leave it".
+ */
+export interface SavedConnection {
+  url: string;
+  authType: "none" | "bearer";
+  hasToken: boolean;
+  insecureTls: boolean;
+}
+
+/** What the form sends. An empty `token` keeps whatever is already stored. */
+export interface ConnectionDraft {
+  url: string;
+  authType: "none" | "bearer";
+  token: string;
+  insecureTls: boolean;
+}
+
+/**
+ * Whether it answered, and — when it did not — its own words about why.
+ *
+ * The reason is never paraphrased. "no route to host" and "401 Unauthorized"
+ * send the reader to two completely different places, and a single "could
+ * not connect" sends them nowhere.
+ */
+export type ProbeResult =
+  | { ok: true; at: number; latencyMs: number; version: string | null }
+  | { ok: false; at: number; reason: string };
 
 /**
  * One thing an extension is currently doing for this cluster.
@@ -336,6 +543,12 @@ export interface Vendor {
   extension?: Extension;
   /** Also the URL segment: `/integrations/<id>`. */
   page?: VendorPage;
+  /**
+   * Tier 3. Declaring this replaces detection with a probe: the vendor is
+   * never looked for in the cluster, and {@link Vendor.provides} is offered
+   * only while that probe is answering.
+   */
+  connect?: Connect;
   provides?: Partial<Capabilities>;
   crd?: CrdView;
   nodeLabels?: NodeLabels;

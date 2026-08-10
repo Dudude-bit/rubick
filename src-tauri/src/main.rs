@@ -150,6 +150,14 @@ fn main() {
             // In-cluster extensions: detected, never configured
             integrations::detect_in_cluster_extensions,
             integrations::cert_manager::get_certificate_issuance,
+            // Configured extensions: an address per cluster, and the
+            // credential stays on this side of the boundary
+            integrations::prometheus::get_prometheus_connection,
+            integrations::prometheus::save_prometheus_connection,
+            integrations::prometheus::forget_prometheus_connection,
+            integrations::prometheus::probe_prometheus,
+            integrations::prometheus::prometheus_query,
+            integrations::prometheus::prometheus_query_range,
             // Resource references command
             commands::config_resources::get_resource_references,
             commands::connections::get_resource_connections,

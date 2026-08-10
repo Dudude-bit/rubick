@@ -40,7 +40,12 @@
  * too, because that union is what keeps the mark table exhaustive.
  */
 
-import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   lazy,
   useMemo,
@@ -50,6 +55,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { integrationPagePath } from "./paths";
 import argocd from "./argocd";
 import aws from "./aws";
@@ -61,29 +67,51 @@ import istio from "./istio";
 import k3s from "./k3s";
 import karpenter from "./karpenter";
 import minikube from "./minikube";
+import prometheus from "./prometheus";
 import traefik from "./traefik";
 import { normalizeTauriError } from "@/lib/error-utils";
 import type {
   CapabilityKey,
+  CapabilityState,
   Capabilities,
   ClusterProvider,
+  Connect,
+  ConnectionDraft,
   CrdView,
   Extension,
   Flavour,
+  ProbeResult,
+  SavedConnection,
+  TrafficWindow,
+  UsageRange,
+  UsageScope,
+  UsageWindow,
   Vendor,
   VendorFact,
   VendorPage,
+  VolumeFullness,
 } from "./registry";
 
+export { USAGE_RANGES } from "./registry";
 export type {
   CapabilityKey,
+  CapabilityState,
   Capabilities,
   ClusterProvider,
+  Connect,
+  ConnectionDraft,
   CrdView,
   Extension,
+  ProbeResult,
+  SavedConnection,
+  TrafficWindow,
+  UsageRange,
+  UsageScope,
+  UsageWindow,
   Vendor,
   VendorFact,
   VendorPage,
+  VolumeFullness,
 };
 
 /**
@@ -124,6 +152,7 @@ const VENDORS: Vendor[] = [
   argocd,
   flux,
   istio,
+  prometheus,
   k3s,
   aws,
   googleCloud,
@@ -147,17 +176,188 @@ function useDetected() {
   });
 }
 
+/** Every vendor the reader gives an address to, in registry order. */
+const CONNECTED: ReadonlyArray<Vendor & { connect: Connect }> = VENDORS.filter(
+  (vendor): vendor is Vendor & { connect: Connect } =>
+    vendor.connect !== undefined
+);
+
+/**
+ * What a configured vendor is doing for this cluster.
+ *
+ * Three states because there are three, and the middle one is the whole
+ * reason this exists: a vendor that was configured and is not answering must
+ * never look like one nobody set up.
+ */
+export type ConnectionState =
+  | { state: "reading" }
+  | { state: "notConfigured" }
+  | { state: "connected"; saved: SavedConnection; probe: ProbeResult }
+  | { state: "unreachable"; saved: SavedConnection; reason: string };
+
+/**
+ * The saved address and the probe, for every tier-3 vendor.
+ *
+ * One read plus one probe per configured vendor, on the same cadence the
+ * detection scan uses — an address is a deliberate act and does not change
+ * while the app is open often enough to poll for. A cluster with none of
+ * them configured makes no requests at all: `read` answers `null` from the
+ * config file and the probe never runs.
+ *
+ * Keyed on the context, so switching clusters asks again rather than
+ * offering the staging Prometheus's answers for production.
+ */
+function useConnections(): Map<string, ConnectionState> {
+  const context = useClusterStore((state) => state.currentContext);
+
+  const saved = useQueries({
+    queries: CONNECTED.map((vendor) => ({
+      queryKey: ["integration-connection", vendor.id, context],
+      queryFn: () => vendor.connect.read(),
+      enabled: context !== null,
+      staleTime: CONNECTION_STALE_TIME,
+    })),
+  });
+
+  const probes = useQueries({
+    queries: CONNECTED.map((vendor, index) => ({
+      queryKey: ["integration-probe", vendor.id, context],
+      queryFn: () => vendor.connect.probe(),
+      enabled: context !== null && Boolean(saved[index]?.data),
+      staleTime: CONNECTION_STALE_TIME,
+      // A Prometheus that has gone away should stop being retried behind the
+      // reader's back; the row and the chart both say so, and there is a
+      // Test button for asking again on purpose.
+      retry: false,
+    })),
+  });
+
+  return new Map(
+    CONNECTED.map((vendor, index): [string, ConnectionState] => {
+      // No cluster is no question: an address is stored against a context,
+      // so without one there is nothing to have configured. `isLoading`
+      // rather than `isPending` for the same reason — a disabled query is
+      // pending forever, and a row stuck on "asking…" would be a lie.
+      if (context === null) return [vendor.id, { state: "notConfigured" }];
+      const connection = saved[index];
+      const probe = probes[index];
+      if (connection?.isLoading) return [vendor.id, { state: "reading" }];
+      if (!connection?.data) return [vendor.id, { state: "notConfigured" }];
+      if (probe?.isLoading) return [vendor.id, { state: "reading" }];
+      if (probe?.error) {
+        return [
+          vendor.id,
+          {
+            state: "unreachable",
+            saved: connection.data,
+            reason: normalizeTauriError(probe.error),
+          },
+        ];
+      }
+      if (!probe?.data?.ok) {
+        return [
+          vendor.id,
+          {
+            state: "unreachable",
+            saved: connection.data,
+            reason: probe?.data?.ok === false ? probe.data.reason : "no answer",
+          },
+        ];
+      }
+      return [
+        vendor.id,
+        { state: "connected", saved: connection.data, probe: probe.data },
+      ];
+    })
+  );
+}
+
+/**
+ * How long a connection's answer stands. Longer than the facts, because a
+ * probe is a network round trip to somebody else's server and the Test
+ * button exists for the reader who wants one now.
+ */
+const CONNECTION_STALE_TIME = 5 * 60_000;
+
 /**
  * The implementation of a capability, or `null`.
  *
  * `null` is not an error state and the caller must not draw it as one: it
  * is the answer for the majority of clusters, and every surface that asks
  * owes a whole page without it.
+ *
+ * Fine for a tier-1 or tier-2 capability, where absent is the only way to
+ * not have one. A surface consuming a *configured* vendor's capability wants
+ * {@link useCapabilityState} instead — this hook collapses "nobody
+ * configured one" and "the one you configured is down" into the same `null`,
+ * and those are two different sentences the reader is owed.
  */
 export function useCapability<K extends CapabilityKey>(
   key: K
 ): Capabilities[K] | null {
   return useCapabilities(key)[0] ?? null;
+}
+
+/**
+ * A capability, its absence, or its breakage — with the words for each.
+ *
+ * The surface gets `vendor` and `endpoint` as strings to print and must not
+ * branch on them: "from prometheus.monitoring:9090" is what makes a chart's
+ * numbers attributable, and a chart whose provenance is unstated is a chart
+ * nobody can check.
+ */
+export function useCapabilityState<K extends CapabilityKey>(
+  key: K
+): CapabilityState<K> {
+  const { data } = useDetected();
+  const connections = useConnections();
+
+  const installed = new Set(
+    (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
+  );
+
+  for (const vendor of VENDORS) {
+    const implementation = vendor.provides?.[key];
+    if (!implementation) continue;
+
+    if (!vendor.connect) {
+      // Tier 1 and 2: present or not, and not-present has one answer.
+      if (installed.has(vendor.id)) {
+        return {
+          state: "ready",
+          vendor: vendor.name,
+          endpoint: "",
+          use: implementation as Capabilities[K],
+        };
+      }
+      continue;
+    }
+
+    const connection = connections.get(vendor.id);
+    if (!connection || connection.state === "notConfigured") continue;
+    if (connection.state === "reading") continue;
+    if (connection.state === "unreachable") {
+      return {
+        state: "unreachable",
+        vendor: vendor.name,
+        endpoint: endpointOf(connection.saved.url),
+        reason: connection.reason,
+      };
+    }
+    return {
+      state: "ready",
+      vendor: vendor.name,
+      endpoint: endpointOf(connection.saved.url),
+      use: implementation as Capabilities[K],
+    };
+  }
+
+  return { state: "absent" };
+}
+
+/** The address as a chart label wants it — no scheme, no trailing slash. */
+function endpointOf(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
 }
 
 /**
@@ -220,9 +420,18 @@ export interface IntegrationStatus {
   vendor: Vendor;
   /** Narrowed off the vendor, because only vendors with one are listed. */
   extension: Extension;
+  /**
+   * Present and usable. For a detected vendor that is "its CRDs are here";
+   * for a configured one it is "it has an address and the address answered",
+   * which is what keeps the row's promise honest — a row saying "detected"
+   * over a Prometheus that is refusing every query would be the silent
+   * fallback this whole seam exists to prevent.
+   */
   installed: boolean;
   version: string | null;
   facts: FactsState;
+  /** `null` for a vendor nobody gives an address to. */
+  connection: ConnectionState | null;
 }
 
 /**
@@ -243,10 +452,17 @@ const EXTENSIONS: ReadonlyArray<Vendor & { extension: Extension }> =
       vendor.extension !== undefined
   );
 
-/** The names the Integrations pane says it looked for when it found none. */
-export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.map(
-  (vendor) => vendor.name
-);
+/**
+ * The names the Integrations pane says it looked for when it found none.
+ *
+ * Detected ones only. A configured integration was never *looked* for — it
+ * is absent because nobody gave it an address, not because the API server
+ * was asked and said no — and listing it under "looked for by asking the API
+ * server for their CRDs" would state a method that was never used.
+ */
+export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
+  (vendor) => vendor.connect === undefined
+).map((vendor) => vendor.name);
 
 /**
  * Every extension this cluster could have, whether it has it, and what the
@@ -261,6 +477,10 @@ export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.map(
  * asked about, because the objects it would count cannot exist; and nothing
  * is fetched at all unless the reader is standing on the pane, so mounting
  * this to answer a search query costs no requests.
+ *
+ * A configured vendor never appears in the detection scan and must not: it
+ * is present because somebody gave it an address, and its facts come from
+ * the probe rather than from a query it would have to make twice.
  */
 export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
@@ -268,13 +488,26 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   error: Error | null;
 } {
   const { data, isPending, error } = useDetected();
+  const connections = useConnections();
 
   const detected = EXTENSIONS.map((vendor) => {
+    const connection = vendor.connect
+      ? (connections.get(vendor.id) ?? { state: "reading" as const })
+      : null;
     const entry = data?.find((candidate) => candidate.id === vendor.id);
     return {
       vendor,
-      installed: entry?.installed ?? false,
-      version: entry?.version ?? null,
+      connection,
+      installed: connection
+        ? connection.state === "connected"
+        : (entry?.installed ?? false),
+      version: connection
+        ? connection.state === "connected"
+          ? connection.probe.ok
+            ? connection.probe.version
+            : null
+          : null
+        : (entry?.version ?? null),
     };
   });
 
@@ -292,18 +525,120 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   });
 
   return {
-    statuses: detected.map(({ vendor, installed, version }) => {
+    statuses: detected.map(({ vendor, installed, version, connection }) => {
       const index = asking.findIndex((entry) => entry.vendor.id === vendor.id);
       return {
         vendor,
         extension: vendor.extension,
         installed,
         version,
-        facts: factsStateOf(index === -1 ? undefined : results[index]),
+        connection,
+        facts: connection
+          ? connectionFacts(vendor, connection)
+          : factsStateOf(index === -1 ? undefined : results[index]),
       };
     }),
     isPending,
     error,
+  };
+}
+
+/**
+ * A configured vendor's facts, taken from the probe it already ran.
+ *
+ * A broken one says so *here*, once, instead of leaving the reader to infer
+ * it from a chart that quietly went shorter — which is the reason this row
+ * is worth reading at all.
+ */
+function connectionFacts(
+  vendor: Vendor & { connect?: Connect },
+  connection: ConnectionState
+): FactsState {
+  if (!vendor.connect) return { state: "none" };
+  switch (connection.state) {
+    case "reading":
+      return { state: "loading" };
+    case "notConfigured":
+      return { state: "none" };
+    case "unreachable":
+      return {
+        state: "ready",
+        facts: vendor.connect.facts(connection.saved, {
+          ok: false,
+          at: Date.now(),
+          reason: connection.reason,
+        }),
+      };
+    case "connected":
+      return {
+        state: "ready",
+        facts: vendor.connect.facts(connection.saved, connection.probe),
+      };
+  }
+}
+
+/**
+ * Everything the Connect dialog needs, for one vendor, without naming it.
+ *
+ * The pane is handed the vendor from {@link useIntegrations} and passes its
+ * id back, so the one screen allowed to *say* "Prometheus" still never
+ * imports it.
+ */
+export function useConnectionEditor(vendorId: string): {
+  connect: Connect | null;
+  saved: SavedConnection | null;
+  save: (draft: ConnectionDraft) => Promise<void>;
+  forget: () => Promise<void>;
+  test: (draft: ConnectionDraft) => Promise<ProbeResult>;
+  isSaving: boolean;
+} {
+  const context = useClusterStore((state) => state.currentContext);
+  const client = useQueryClient();
+  const vendor = CONNECTED.find((candidate) => candidate.id === vendorId);
+
+  // Both keys, because saving an address changes what is stored *and*
+  // whether it answers, and a row still reading "not configured" after a
+  // successful save would be the app disagreeing with itself.
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({
+        queryKey: ["integration-connection", vendorId, context],
+      }),
+      client.invalidateQueries({
+        queryKey: ["integration-probe", vendorId, context],
+      }),
+    ]).then(() => undefined);
+
+  const saving = useMutation({
+    mutationFn: async (draft: ConnectionDraft | null) => {
+      if (!vendor) return;
+      if (draft === null) await vendor.connect.forget();
+      else await vendor.connect.save(draft);
+      await refresh();
+    },
+  });
+
+  const { data: saved = null } = useQuery({
+    queryKey: ["integration-connection", vendorId, context],
+    queryFn: () => vendor!.connect.read(),
+    enabled: vendor !== undefined && context !== null,
+    staleTime: CONNECTION_STALE_TIME,
+  });
+
+  return {
+    connect: vendor?.connect ?? null,
+    saved,
+    save: (draft) => saving.mutateAsync(draft).then(() => undefined),
+    forget: () => saving.mutateAsync(null).then(() => undefined),
+    test: (draft) =>
+      vendor
+        ? vendor.connect.probe(draft)
+        : Promise.resolve({
+            ok: false as const,
+            at: Date.now(),
+            reason: "no such integration",
+          }),
+    isSaving: saving.isPending,
   };
 }
 

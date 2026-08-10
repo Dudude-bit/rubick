@@ -1,7 +1,10 @@
+import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { ConnectIntegration } from "@/components/settings/ConnectIntegration";
 import { SettingsGroup } from "@/components/settings/settings-row";
 import { useSettingSearchMatch } from "@/components/settings/settings-search";
+import { Button } from "@/components/ui/button";
 import {
   EXTENSION_NAMES,
   useIntegrations,
@@ -18,16 +21,23 @@ import { cn } from "@/lib/utils";
  * and the answer is a list of names with what each one is currently doing
  * underneath it.
  *
- * No Connect button and no fields, because there is nothing to connect or
- * fill in: an in-cluster extension is detected, not configured. Its CRDs
- * exist in this cluster's API server or they do not. And no install
- * button on the absent ones either — the app does not put things into
- * anybody's cluster, so a dimmed row saying what it *would* give is the
- * whole of what absence is allowed to say.
+ * **Two kinds of row, and the difference is real.** A *detected* extension
+ * has no Connect button and no fields, because there is nothing to connect
+ * or fill in: its CRDs exist in this cluster's API server or they do not.
+ * A *configured* one is the opposite — it is only here because somebody
+ * gave it an address, so its row carries that address, when it last
+ * answered, and a way to change it. Neither kind gets an install button:
+ * the app does not put things into anybody's cluster, so a dimmed row
+ * saying what it *would* give is the whole of what absence is allowed to
+ * say for a detected extension, and a Connect button is the whole of what
+ * it is allowed to say for a configured one.
+ *
+ * And a broken one says so *here*, once, instead of leaving the reader to
+ * infer it from a chart somewhere else that quietly went shorter.
  *
  * A status list, not a dashboard. No charts, no per-object tables, no
- * editing: every fact ends in a link to the objects that own it, and the
- * reader continues in the part of the app built for them.
+ * editing beyond the address: every fact ends in a link to the objects that
+ * own it, and the reader continues in the part of the app built for them.
  */
 export function IntegrationsSettings({ active = true }: { active?: boolean }) {
   const { statuses, isPending, error } = useIntegrations({ facts: active });
@@ -48,21 +58,40 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
     );
   }
 
-  const installed = statuses.filter((status) => status.installed);
-  if (!isPending && installed.length === 0) {
-    return <NothingInstalled />;
-  }
+  // Two groups, because the two kinds answer to different rules and a
+  // reader scanning this screen is asking two different questions: what does
+  // this cluster already have, and what could I plug in.
+  const configured = statuses.filter((status) => status.connection !== null);
+  const detected = statuses.filter((status) => status.connection === null);
+  const anyDetected = detected.some((status) => status.installed);
 
   return (
-    <SettingsGroup>
-      {statuses.map((status) => (
-        <ExtensionRow
-          key={status.vendor.id}
-          status={status}
-          isPending={isPending}
-        />
-      ))}
-    </SettingsGroup>
+    <div className="flex flex-col gap-6">
+      {configured.length > 0 && (
+        <SettingsGroup title="Configured — an address per cluster">
+          {configured.map((status) => (
+            <ExtensionRow
+              key={status.vendor.id}
+              status={status}
+              isPending={isPending}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+      {!isPending && !anyDetected ? (
+        <NothingInstalled />
+      ) : (
+        <SettingsGroup title="Detected in this cluster">
+          {detected.map((status) => (
+            <ExtensionRow
+              key={status.vendor.id}
+              status={status}
+              isPending={isPending}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+    </div>
   );
 }
 
@@ -109,9 +138,19 @@ function ExtensionRow({
   status: IntegrationStatus;
   isPending: boolean;
 }) {
-  const { vendor, extension, installed, version, facts } = status;
+  const { vendor, extension, installed, version, facts, connection } = status;
   const Icon = extension.icon;
   const visible = useSettingSearchMatch(vendor.name, extension.gives);
+  const [editing, setEditing] = React.useState(false);
+
+  // A configured vendor is never "looking…": nothing is being detected, and
+  // its own state says whether the address has been read yet.
+  const configured =
+    connection !== null && connection.state !== "notConfigured";
+  const pending = connection ? connection.state === "reading" : isPending;
+  // The facts belong under a configured row even when it is not answering —
+  // that is where its address and its refusal are printed.
+  const showFacts = connection ? configured : installed;
 
   return (
     <div
@@ -119,7 +158,7 @@ function ExtensionRow({
         "grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hair py-2.5",
         // Dimmed rather than hidden: the absent ones are the list of what
         // this cluster could gain, and that is worth reading once.
-        !installed && !isPending && "opacity-55",
+        !installed && !configured && !pending && "opacity-55",
         !visible && "hidden"
       )}
       hidden={!visible}
@@ -135,22 +174,74 @@ function ExtensionRow({
           )}
         </div>
         <div className="mt-0.5 text-[11px] text-fg-fnt">
-          {installed ? "Gives " : "Would give "}
+          {installed || configured ? "Gives " : "Would give "}
           <span className="text-fg-mut">{extension.gives}</span>
         </div>
-        {installed && <Facts facts={facts} />}
+        {showFacts && <Facts facts={facts} />}
       </div>
-      <span
-        className={cn(
-          "whitespace-nowrap text-[11px]",
-          isPending ? "text-fg-fnt" : installed ? "text-ok" : "text-fg-fnt"
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            "whitespace-nowrap text-[11px]",
+            pending
+              ? "text-fg-fnt"
+              : connection
+                ? connection.state === "connected"
+                  ? "text-ok"
+                  : connection.state === "unreachable"
+                    ? "text-err"
+                    : "text-fg-fnt"
+                : installed
+                  ? "text-ok"
+                  : "text-fg-fnt"
+          )}
+        >
+          {pending
+            ? connection
+              ? "asking…"
+              : "looking…"
+            : connection
+              ? CONNECTION_WORD[connection.state]
+              : installed
+                ? "detected"
+                : "not installed"}
+        </span>
+        {connection && !pending && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => setEditing(true)}
+            >
+              {configured ? "Edit" : "Connect"}
+            </Button>
+            <ConnectIntegration
+              vendorId={vendor.id}
+              vendorName={vendor.name}
+              gives={extension.gives}
+              open={editing}
+              onOpenChange={setEditing}
+            />
+          </>
         )}
-      >
-        {isPending ? "looking…" : installed ? "detected" : "not installed"}
-      </span>
+      </div>
     </div>
   );
 }
+
+/**
+ * The word for each state, and there are four because there are four.
+ *
+ * "not configured" is not "not installed": the app has no idea whether the
+ * thing exists, only that nobody has given it an address.
+ */
+const CONNECTION_WORD: Record<string, string> = {
+  reading: "asking…",
+  notConfigured: "not configured",
+  connected: "connected",
+  unreachable: "no answer",
+};
 
 /**
  * What it is doing for you, as the second half of the sentence "gives"

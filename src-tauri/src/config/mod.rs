@@ -9,6 +9,7 @@
 //! - `cloud`      — GCP / Azure profiles, kubeconfig context bindings, CLI paths
 //! - `connection` — port-forward and registry persisted state
 //! - `editor`     — YAML editor history, infra builder canvas, Recent Items
+//! - `integrations` — addresses and credentials for configured integrations
 //!
 //! Two singleton domains live here in `mod.rs` because they're each
 //! a single struct used directly by `AppConfig`: `UpdaterConfig` and
@@ -18,6 +19,7 @@ mod app;
 mod cloud;
 mod connection;
 mod editor;
+mod integrations;
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,7 @@ pub use editor::{
     InfrastructureBuilderConfig, InfrastructureBuilderState, RecentItem, RecentItemsConfig,
     YamlEditorConfig, YamlHistoryEntry,
 };
+pub use integrations::{IntegrationsConfig, PrometheusEntry};
 
 /// Application configuration
 ///
@@ -60,9 +63,12 @@ pub struct AppConfig {
     /// CLI tools paths
     #[serde(default)]
     pub cli_paths: CliPathsConfig,
-    /// Registry configurations (connection settings, not credentials)
+    /// Registry configurations, credentials included
     #[serde(default)]
     pub registries: RegistriesConfig,
+    /// Integrations the reader configures, per kubeconfig context
+    #[serde(default)]
+    pub integrations: IntegrationsConfig,
     /// YAML editor history
     #[serde(default)]
     pub yaml_editor: YamlEditorConfig,

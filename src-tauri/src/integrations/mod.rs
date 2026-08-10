@@ -1,21 +1,29 @@
-//! In-cluster extensions: detected, never configured.
+//! Extensions, in two kinds that must not be confused for each other.
 //!
-//! The rule that decides what belongs here is sharp enough to test. Core is
-//! what the API server answers for on any cluster. An in-cluster extension
-//! is something whose whole state is CRDs on that same API server — so
-//! "is it there" has a yes or a no, with no address to fill in, no
-//! credential to hold and nothing guessed. Anything that needs its own URL
-//! is neither, and is not in this tree.
+//! **Detected.** Core is what the API server answers for on any cluster. An
+//! in-cluster extension is something whose whole state is CRDs on that same
+//! API server — so "is it there" has a yes or a no, with no address to fill
+//! in, no credential to hold and nothing guessed. Detection being a fact
+//! rather than a heuristic is the only reason it is allowed at all:
+//! `certificates.cert-manager.io` exists as a CRD or it does not; the app is
+//! not sniffing a port or matching a name. [`detect_in_cluster_extensions`]
+//! answers for all of them in one request.
 //!
-//! Detection being a fact rather than a heuristic is the only reason it is
-//! allowed at all. `certificates.cert-manager.io` exists as a CRD or it does
-//! not; the app is not sniffing a port or matching a name.
+//! **Configured.** Anything that needs its own URL, and usually a credential
+//! the kubeconfig does not carry, cannot be detected without guessing — and
+//! guessing at `monitoring`, at a Service named `prometheus`, at a port is
+//! wrong often enough to be worse than asking. So it is an address the
+//! reader gives us, per cluster, and its "is it there" is a probe rather
+//! than a CRD lookup. [`prometheus`] is the first, and it holds the network
+//! half of itself here because a bearer token has no business in the webview
+//! and CORS has no business in this.
 //!
 //! One folder per extension. Nothing outside this module imports one by
 //! name — the frontend asks for a capability and gets an implementation or
 //! nothing, and a lint rule keeps that true.
 
 pub mod cert_manager;
+pub mod prometheus;
 
 use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
 use kube::ResourceExt;
