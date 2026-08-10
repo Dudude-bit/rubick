@@ -269,6 +269,29 @@ export function toKind(resourceType: string): ResourceKind | null {
   return RESOURCE_BY_PLURAL.get(lower)?.kind ?? null;
 }
 
+/**
+ * The kinds whose replica count a reader can set by hand, everywhere.
+ *
+ * One list, because the trap is a control that exists on the detail page and
+ * not in the peek, or a chain that points at an owner with no way to change
+ * the number when you get there. The Scale command table is keyed by this
+ * type, so adding a kind here does not compile until its command exists.
+ *
+ * DaemonSet is absent because it has no replica count — one pod per matching
+ * node is the whole model. ReplicaSet is absent on purpose: see the note on
+ * `SCALE_COMMANDS`.
+ */
+export const SCALABLE_KINDS = ["Deployment", "StatefulSet"] as const;
+export type ScalableKind = (typeof SCALABLE_KINDS)[number];
+
+export function isScalable(kind: string): kind is ScalableKind {
+  const resolved = toKind(kind);
+  return (
+    resolved !== null &&
+    (SCALABLE_KINDS as readonly string[]).includes(resolved)
+  );
+}
+
 export function isResourceType(value: string): value is ResourceKind {
   return (
     RESOURCE_BY_KIND.has(value as ResourceKind) ||

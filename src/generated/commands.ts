@@ -521,6 +521,14 @@ export async function getStatefulsetYaml(
   return invoke<string>("get_statefulset_yaml", { name, namespace });
 }
 
+export async function scaleStatefulset(
+  name: string,
+  replicas: number,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("scale_statefulset", { name, replicas, namespace });
+}
+
 export async function deleteStatefulset(
   name: string,
   namespace: string | null

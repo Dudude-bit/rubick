@@ -311,6 +311,7 @@ fn main() {
             commands::workloads::list_statefulsets,
             commands::workloads::get_statefulset,
             commands::workloads::get_statefulset_yaml,
+            commands::workloads::scale_statefulset,
             commands::workloads::delete_statefulset,
             commands::workloads::list_daemonsets,
             commands::workloads::get_daemonset,

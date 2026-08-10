@@ -49,20 +49,8 @@ pub async fn scale_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    let ctx = ResourceContext::for_command(&state, namespace)?;
-
-    let api: kube::Api<Deployment> = ctx.namespaced_api();
-
-    let patch = serde_json::json!({
-        "spec": {
-            "replicas": replicas
-        }
-    });
-
-    api.patch(&name, &PatchParams::default(), &Patch::Merge(&patch))
-        .await?;
-
-    Ok(())
+    crate::validation::validate_dns_label(&name)?;
+    crate::commands::helpers::scale_resource::<Deployment>(name, replicas, namespace, state).await
 }
 
 /// Restart a deployment (rolling restart)

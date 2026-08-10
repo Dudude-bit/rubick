@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
+import { BadgeCheck, Info, Layers2, Scale, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -24,7 +24,10 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   Composition,
   ConditionRows,
+  DetailAction,
 } from "@/components/resources/detail-blocks";
+import { ScaleDialog } from "@/components/resources/ScaleDialog";
+import { scaleWarnings } from "@/lib/governance";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { WorkloadUsage } from "@/components/resources/workload-usage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -33,7 +36,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { useResourceDetail } from "@/hooks";
+import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { Governance } from "@/components/resources/governance";
 import { commands } from "@/lib/commands";
@@ -98,6 +101,26 @@ export function StatefulSetDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
   const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const [scaleOpen, setScaleOpen] = useState(false);
+
+  const scaleMutation = useResourceMutation(
+    async (replicas: number) => {
+      if (!name) return;
+      await commands.scaleStatefulset(name, replicas, namespace || null);
+    },
+    {
+      toast: {
+        successTitle: "StatefulSet scaled",
+        successDescription: (_data, replicas) =>
+          `StatefulSet ${name} scaled to ${replicas} replicas.`,
+        errorPrefix: "Failed to scale StatefulSet",
+      },
+      invalidateQueryKeys:
+        namespace && name ? [["statefulset", namespace, name]] : [],
+      onSuccess: () => setScaleOpen(false),
+    }
+  );
 
   const tabs = useMemo(
     () => [
@@ -237,14 +260,24 @@ export function StatefulSetDetail() {
       }
       onBack={goBack}
       actions={
-        <InterceptedAction
-          intercept={intercept("Delete")}
-          label="Delete"
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
-        />
+        <>
+          {/* Plain, not intercepted: the Scale dialog carries the delivery
+              warning itself, stacked with the autoscaler's. A second dialog in
+              front of it would ask the same question twice. */}
+          <DetailAction
+            label="Scale"
+            icon={Scale}
+            onClick={() => statefulSet && setScaleOpen(true)}
+          />
+          <InterceptedAction
+            intercept={intercept("Delete")}
+            label="Delete"
+            icon={Trash2}
+            onClick={() => deleteMutation?.mutate()}
+            busy={deleteMutation?.isPending}
+            danger
+          />
+        </>
       }
       tabs={tabs}
       activeTab={activeTab}
@@ -307,6 +340,16 @@ export function StatefulSetDetail() {
           namespace={statefulSet.namespace}
         />
       )}
+
+      <ScaleDialog
+        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        open={scaleOpen}
+        onOpenChange={setScaleOpen}
+        kind={ResourceType.StatefulSet}
+        current={desired}
+        busy={scaleMutation.isPending}
+        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
+      />
     </ResourceDetailLayout>
   );
 }

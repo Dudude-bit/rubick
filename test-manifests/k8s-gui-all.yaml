@@ -272,6 +272,21 @@ spec:
           image: nginx:1.27-alpine
           ports:
             - containerPort: 80
+          # A CPU request, and only a request: an HPA computes utilisation
+          # against it, so without one `hpa-stateful` below would report
+          # `FailedGetResourceMetric` and demo the blind autoscaler a second
+          # time instead of the working one. No limit, because the usage rows
+          # on this page are the specimen for a workload that declares none.
+          #
+          # 100m and not 10m, which is what nginx idling would need: something
+          # in this namespace is usually curling this Service in a loop, and
+          # against a 10m request that traffic is enough to cross 80% and make
+          # the autoscaler genuinely add a pod. A demo that oscillates leaves a
+          # PersistentVolumeClaim behind on every pass.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 16Mi
           volumeMounts:
             - name: data
               mountPath: /usr/share/nginx/html
@@ -1615,10 +1630,10 @@ spec:
 ---
 # --- What acts on a workload without the workload asking ---------------------
 #
-# Four objects, four states, and each one is a state the app must be able to
+# Five objects, five states, and each one is a state the app must be able to
 # tell from the others. Cleanup:
 #
-#   kubectl delete -n k8s-gui-test hpa/hpa-blind hpa/hpa-busy \
+#   kubectl delete -n k8s-gui-test hpa/hpa-blind hpa/hpa-busy hpa/hpa-stateful \
 #     pdb/pdb-log-demo pdb/pdb-stateful-demo deploy/busy-demo
 #
 # `hpa-busy` drives `busy-demo` to its maximum; deleting the HPA first and the
@@ -1739,6 +1754,33 @@ spec:
   selector:
     matchLabels:
       app: stateful-demo
+---
+# Five: an autoscaler on a kind that is not a Deployment. `scaleTargetRef`
+# takes anything with a scale subresource, and a StatefulSet is the one people
+# actually point one at — so it is the specimen for the Scale dialog's warning
+# reaching a page other than a Deployment's. Served nginx against the 100m
+# request above sits far below the 80% target, so this holds at `minReplicas`
+# and stays still: what is being demonstrated is that the app names the
+# autoscaler before you set a number by hand, not that the number moves.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-stateful
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: stateful-demo
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
 ---
 # --- EndpointSlices: four shapes a pod-readiness deduction cannot tell apart
 #

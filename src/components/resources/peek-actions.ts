@@ -14,7 +14,13 @@ import {
   podPorts,
   shellTargets,
 } from "@/lib/container-sequence";
-import { toKind, toPlural, type ResourceKind } from "@/lib/resource-registry";
+import {
+  isScalable,
+  toKind,
+  toPlural,
+  type ResourceKind,
+  type ScalableKind,
+} from "@/lib/resource-registry";
 import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
 
 /**
@@ -105,7 +111,7 @@ function actionsFor(
       return podActions(detail as PodInfo | undefined);
     case "Deployment":
       return [
-        { id: "scale", label: "Scale", icon: Scale },
+        ...scaleAction(kind),
         { id: "restart", label: "Restart", icon: RefreshCw },
         ...deleteAction(kind),
       ];
@@ -120,8 +126,48 @@ function actionsFor(
         ...deleteAction(kind),
       ];
     default:
-      return deleteAction(kind);
+      return [...scaleAction(kind), ...deleteAction(kind)];
   }
+}
+
+/* ---------- Scale ---------- */
+
+type ScaleCommand = (
+  name: string,
+  replicas: number,
+  namespace: string | null
+) => Promise<unknown>;
+
+/**
+ * The kinds whose replica count this app sets, and the only list that says so.
+ *
+ * Both surfaces read it — the peek's action row and its dialog — so a kind
+ * cannot end up with a button on one and nothing on the other.
+ *
+ * **ReplicaSet is deliberately absent.** It is scalable through the API, and
+ * setting the count on one under a Deployment is undone by the Deployment
+ * controller on the same watch event, not in fifteen seconds — there is no
+ * honest version of the dialog's "this lasts until the next pass" for a number
+ * that never lands at all. An orphaned ReplicaSet would keep the count, but
+ * offering the control only for the rare unowned one would mean a Scale that
+ * appears and disappears between two revisions of the same Deployment. The
+ * page instead links the Deployment that owns it, which is where the count is
+ * really set.
+ */
+const SCALE_COMMANDS: Record<ScalableKind, ScaleCommand> = {
+  Deployment: (name, replicas, namespace) =>
+    commands.scaleDeployment(name, replicas, namespace),
+  StatefulSet: (name, replicas, namespace) =>
+    commands.scaleStatefulset(name, replicas, namespace),
+};
+
+export function scaleCommandFor(kind: string): ScaleCommand | null {
+  return isScalable(kind) ? SCALE_COMMANDS[kind] : null;
+}
+
+function scaleAction(kind: ResourceKind): PeekAction[] {
+  if (!isScalable(kind)) return [];
+  return [{ id: "scale", label: "Scale", icon: Scale }];
 }
 
 /* ---------- Pod ---------- */

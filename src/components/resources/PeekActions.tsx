@@ -33,6 +33,7 @@ import type {
   DeploymentInfo,
   PodInfo,
   ServiceInfo,
+  StatefulSetDetailInfo,
 } from "@/generated/types";
 import { DetailAction } from "./detail-blocks";
 import {
@@ -42,6 +43,7 @@ import {
   peekMutationKeys,
   planPeekActions,
   reachableContainer,
+  scaleCommandFor,
   type ForwardBackend,
   type PeekAction,
   type PeekActionId,
@@ -64,6 +66,9 @@ import { deliveryOfKind } from "@/lib/delivery";
  * one leaves for the pod's page, where the terminal is full width and the
  * session shows up in the activity panel like every other one.
  */
+
+/** Whatever the panel fetched, seen only as the count the dialog seeds from. */
+type ScalableInfo = DeploymentInfo | StatefulSetDetailInfo;
 
 export interface PeekActionsProps {
   target: PeekTarget;
@@ -200,9 +205,13 @@ export function PeekActions({
     onError: failed("delete"),
   });
 
+  const scaleCommand = scaleCommandFor(kind);
+
   const scale = useMutation({
-    mutationFn: (replicas: number) =>
-      commands.scaleDeployment(target.name, replicas, namespace),
+    mutationFn: (replicas: number) => {
+      if (!scaleCommand) throw new Error(`No scale command for ${kind}`);
+      return scaleCommand(target.name, replicas, namespace);
+    },
     onSuccess: () => {
       invalidate();
       setDialog(null);
@@ -340,14 +349,12 @@ export function PeekActions({
         />
       )}
 
-      {kind === "Deployment" && (
+      {scaleCommand && (
         <ScaleDialog
           open={dialog === "scale"}
           onOpenChange={(open) => setDialog(open ? "scale" : null)}
           kind={kind}
-          current={
-            (detail as DeploymentInfo | undefined)?.replicas.desired ?? 0
-          }
+          current={(detail as ScalableInfo | undefined)?.replicas.desired ?? 0}
           busy={scale.isPending}
           warnings={scaleWarnings(governance.data, intercept("Scale"))}
           onSubmit={(replicas) => scale.mutate(replicas)}

@@ -9,8 +9,10 @@ import {
   describeDeletion,
   peekMutationKeys,
   planPeekActions,
+  scaleCommandFor,
   type PeekAction,
 } from "./peek-actions";
+import { SCALABLE_KINDS } from "@/lib/resource-registry";
 
 function container(
   name: string,
@@ -99,7 +101,23 @@ describe("planPeekActions", () => {
 
   it("offers a plain Delete for a kind with nothing else to do", () => {
     expect(labels(all("ConfigMap"))).toEqual(["Delete"]);
-    expect(labels(all("StatefulSet"))).toEqual(["Delete"]);
+    expect(labels(all("DaemonSet"))).toEqual(["Delete"]);
+  });
+
+  // The trap this guards is a control on one surface and not the other: a
+  // kind the detail page can scale and the peek cannot, or the reverse. Both
+  // read `SCALABLE_KINDS`, so the list itself is what is asserted here.
+  it("offers Scale for every kind this app can scale, and no other", () => {
+    expect([...SCALABLE_KINDS]).toEqual(["Deployment", "StatefulSet"]);
+    for (const kind of SCALABLE_KINDS) {
+      expect(find(all(kind), "scale")).toBeDefined();
+      expect(scaleCommandFor(kind)).toBeTypeOf("function");
+    }
+    // A ReplicaSet is scalable through the API and deliberately is not here:
+    // the Deployment above it puts the number back on the same watch event.
+    expect(find(all("ReplicaSet"), "scale")).toBeUndefined();
+    expect(scaleCommandFor("ReplicaSet")).toBeNull();
+    expect(find(all("DaemonSet"), "scale")).toBeUndefined();
   });
 
   // No delete command exists for a node, and inventing one from the peek is
