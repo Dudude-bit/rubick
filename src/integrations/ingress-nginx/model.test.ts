@@ -240,6 +240,31 @@ describe("a canary reads as one weighted host", () => {
   });
 });
 
+describe("a backend that is not a Service", () => {
+  /**
+   * Would break if an Ingress naming an API object were reported as a
+   * missing Service — which is the page inventing an outage out of a
+   * working configuration. `backend.resource` has no endpoints by design.
+   */
+  it("claims nothing about a path routing to an API object", () => {
+    const withResource = ingress("assets", "assets.test");
+    withResource.rules[0].paths[0] = {
+      path: "/assets",
+      pathType: "Prefix",
+      backendService: "",
+      backendPort: "",
+      resourceBackend: "StorageBucket/assets",
+    };
+
+    const groups = hostGroups(sources([withResource]));
+    expect(groups[0].routes[0].service).toBeNull();
+    expect(groups[0].routes[0].resourceBackend).toBe("StorageBucket/assets");
+    expect(
+      groups[0].findings.filter((finding) => finding.kind === "stop")
+    ).toHaveLength(0);
+  });
+});
+
 describe("the findings", () => {
   /** Would break if two objects silently claiming one path stayed silent. */
   it("names the object nginx actually serves when two claim one path", () => {

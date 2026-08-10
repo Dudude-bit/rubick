@@ -77,7 +77,15 @@ export interface NginxRoute {
   path: string;
   /** The `pathType` verbatim: nginx's reading of it is nginx's. */
   pathType: string | null;
+  /**
+   * `null` where the backend is not a Service at all. An Ingress may name an
+   * API object instead — `backend.resource` — which has no endpoints by
+   * design, and reporting it as a missing Service would be the page
+   * inventing an outage out of a working configuration.
+   */
   service: { name: string; namespace: string; port: string } | null;
+  /** `Kind/name` where this path routes to an API object rather than a Service. */
+  resourceBackend: string | null;
   tlsSecret: string | null;
   annotations: AnnotationReading[];
   /** Set only on an Ingress that declares itself one. */
@@ -194,11 +202,14 @@ function routesFrom(ingress: IngressInfo, index: number): NginxRoute[] {
         host,
         path: path.path || "/",
         pathType: path.pathType,
-        service: {
-          name: path.backendService,
-          namespace: ingress.namespace,
-          port: path.backendPort,
-        },
+        service: path.backendService
+          ? {
+              name: path.backendService,
+              namespace: ingress.namespace,
+              port: path.backendPort,
+            }
+          : null,
+        resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
         annotations,
         canary,

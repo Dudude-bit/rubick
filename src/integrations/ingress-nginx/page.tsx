@@ -461,6 +461,8 @@ function PathRow({
               <span className="text-fg-fnt">:{route.service.port}</span>
             )}
           </>
+        ) : route.resourceBackend ? (
+          <span className="font-mono text-fg-mid">{route.resourceBackend}</span>
         ) : (
           <span className="text-err">no service</span>
         )}
@@ -475,13 +477,15 @@ function PathRow({
         </span>
       </span>
       <span className="text-[11px] text-fg-fnt">
-        {backing && !backing.known
-          ? "…"
-          : backing?.stop
-            ? "—"
-            : backing
-              ? `${backing.ready} ready`
-              : ""}
+        {route.service === null
+          ? "not a Service"
+          : backing && !backing.known
+            ? "…"
+            : backing?.stop
+              ? "—"
+              : backing
+                ? `${backing.ready} ready`
+                : ""}
       </span>
     </div>
   );
@@ -601,12 +605,20 @@ function Chain({
             >
               {route.service.name}
             </Cell>
+          ) : route.resourceBackend ? (
+            // An API object, not a Service. It has no endpoints by design
+            // and the app cannot see inside it, so nothing is claimed.
+            <Cell under="an API object, not a Service">
+              {route.resourceBackend}
+            </Cell>
           ) : (
             <Cell bad>none</Cell>
           )}
         </Column>
         <Column label="Published">
-          {!backing.known ? (
+          {route.service === null ? (
+            <Cell under="not a Service">—</Cell>
+          ) : !backing.known ? (
             <Cell under="reading endpoints">—</Cell>
           ) : backing.stop ? (
             <Cell bad under={STOP_UNDER[backing.stop.reason]}>

@@ -2425,6 +2425,7 @@ spec:
         - shop.mesh.k8s-gui.test
         - split.mesh.k8s-gui.test
         - raw.mesh.k8s-gui.test
+        - skewed.mesh.k8s-gui.test
     - port:
         number: 443
         name: https
