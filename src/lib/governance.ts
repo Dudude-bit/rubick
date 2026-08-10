@@ -29,6 +29,8 @@
  * the target it is actually compared against.
  */
 
+import { load } from "js-yaml";
+
 import type {
   ConditionInfo,
   ObjectFacts,
@@ -365,7 +367,7 @@ export function drainBlockers(
  * needs to say *what* is doing it before it says what will happen, or the two
  * paragraphs read as one long complaint.
  */
-export interface ScaleWarning {
+export interface ActionWarning {
   key: string;
   subject: string;
   /** The clause that has to be read, in six words. */
@@ -392,7 +394,7 @@ export interface ScaleWarning {
  */
 export function autoscalerScaleWarnings(
   conns: ResourceConnections | undefined
-): ScaleWarning[] {
+): ActionWarning[] {
   if (!conns) return [];
   const found = autoscalers(conns);
   if (found.length === 0) return [];
@@ -457,17 +459,97 @@ export function autoscalerScaleWarnings(
 export function scaleWarnings(
   conns: ResourceConnections | undefined,
   intercept: DeliveryIntercept | null
-): ScaleWarning[] {
-  const delivery: ScaleWarning[] = intercept
-    ? [
-        {
-          key: "delivery",
-          subject: intercept.subject,
-          lead: intercept.lead,
-          description: intercept.description,
-          to: intercept.where?.to ?? null,
-        },
-      ]
-    : [];
-  return [...autoscalerScaleWarnings(conns), ...delivery];
+): ActionWarning[] {
+  return [...autoscalerScaleWarnings(conns), ...deliveryWarning(intercept)];
+}
+
+/** A delivery intercept as one of the stacked warnings, or none. */
+export function deliveryWarning(
+  intercept: DeliveryIntercept | null
+): ActionWarning[] {
+  if (!intercept) return [];
+  return [
+    {
+      key: "delivery",
+      subject: intercept.subject,
+      lead: intercept.lead,
+      description: intercept.description,
+      to: intercept.where?.to ?? null,
+    },
+  ];
+}
+
+/**
+ * Everything that will undo the manifest you are about to apply.
+ *
+ * ## Why the autoscaler is here only when the replica count moves
+ *
+ * The two causes are not the same size, and treating them as one would make
+ * the dialog lie. A delivery controller re-applies the **whole object**, so
+ * every field in the document is at risk and the warning is true whatever was
+ * edited. An HPA owns exactly one field — `spec.replicas` — and says nothing
+ * at all about an image tag, a resource limit or an env var. Warning about it
+ * on every save would therefore be wrong on almost every save, and a dialog
+ * that is wrong most of the time is a dialog people learn to dismiss without
+ * reading; the next time it is right, it will be dismissed too.
+ *
+ * Never is the other wrong answer: a replica count typed into the YAML editor
+ * is undone by the autoscaler exactly as fast as one typed into the Scale
+ * dialog, and the app already warns there. The reader would learn that the
+ * same edit is dangerous through one control and safe through another.
+ *
+ * So the rule is the diff: `changesReplicaCount` compares what the API server
+ * had when the editor opened against what is about to be sent, and the
+ * autoscaler is named when — and only when — that field is what moved.
+ */
+export function applyWarnings(
+  conns: ResourceConnections | undefined,
+  intercept: DeliveryIntercept | null,
+  replicasMoved: boolean
+): ActionWarning[] {
+  return [
+    ...(replicasMoved ? autoscalerScaleWarnings(conns) : []),
+    ...deliveryWarning(intercept),
+  ];
+}
+
+/**
+ * Whether applying `edited` would set a different replica count from the one
+ * `original` carried.
+ *
+ * `original` is what the API server had when the editor opened, so this is
+ * true both when the reader typed a new number and when the document they are
+ * about to send is stale — an autoscaler that moved the count under them
+ * leaves a buffer whose `spec.replicas` will scale the workload back on apply,
+ * which is a surprise worth the same sentence.
+ *
+ * A document that will not parse is not a replica change: the apply is about
+ * to fail on its own and the API server's message is a better one than
+ * anything guessed from here.
+ */
+export function changesReplicaCount(original: string, edited: string): boolean {
+  const before = replicaCountIn(original);
+  const after = replicaCountIn(edited);
+  if (before === UNREADABLE || after === UNREADABLE) return false;
+  return before !== after;
+}
+
+/** Distinguishes "the document has no replica count" from "cannot tell". */
+const UNREADABLE = Symbol("unreadable");
+
+function replicaCountIn(text: string): number | null | typeof UNREADABLE {
+  let doc: unknown;
+  try {
+    doc = load(text);
+  } catch {
+    return UNREADABLE;
+  }
+  if (!isRecord(doc)) return UNREADABLE;
+  const spec = doc.spec;
+  if (!isRecord(spec)) return null;
+  return typeof spec.replicas === "number" ? spec.replicas : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { Delivery, DeliverySource } from "@/integrations";
 import {
+  deliveryApplyIntercept,
   deliveryCell,
   deliveryIntercept,
   deliveryLine,
   deliveryMarks,
+  deliveryOfManifest,
   deliveryScopeOf,
   matchesDeliveryFilter,
 } from "./delivery";
@@ -217,6 +219,106 @@ describe("the interception tells rather than blocks", () => {
     expect(intercept?.confirmLabel).toBe("Scale anyway");
     expect(intercept?.title).toContain("Argo CD will undo this");
     expect(intercept?.description).toContain("manifests/shop");
+  });
+});
+
+describe("applying an edited manifest", () => {
+  /**
+   * The rule the whole interception is paid for by. An object nothing
+   * delivers must reach the API server through exactly the confirmation it
+   * always had — a warning that appeared on ordinary saves would be dismissed
+   * unread within a day, and the one save it was written for would go with it.
+   */
+  it("says nothing about an object nothing delivers", () => {
+    expect(deliveryApplyIntercept([])).toBe(null);
+    expect(deliveryApplyIntercept([delivered({ drift: "kept" })])).toBe(null);
+    expect(deliveryApplyIntercept([delivered({ drift: "unmanaged" })])).toBe(
+      null
+    );
+  });
+
+  it("names who will undo it and where the change belongs", () => {
+    const intercept = deliveryApplyIntercept([
+      delivered({ drift: "reverted" }),
+    ]);
+    expect(intercept?.confirmLabel).toBe("Apply anyway");
+    expect(intercept?.title).toContain("Argo CD will undo this");
+    expect(intercept?.description).toContain("manifests/shop");
+    expect(intercept?.where?.to).toContain("shop");
+  });
+
+  /**
+   * A stale claim is not a revert, and must never be worded as one: the edit
+   * genuinely stands. What it corrects is the label the reader can see in the
+   * buffer, which is the app's own evidence for "change it in git" and is
+   * wrong here.
+   */
+  it("corrects an unconfirmed label instead of promising a revert", () => {
+    const intercept = deliveryApplyIntercept([claimed()]);
+    expect(intercept?.confirmLabel).toBe("Apply");
+    expect(intercept?.description).toContain("does not list it");
+    expect(intercept?.description).toContain("stands");
+    expect(intercept?.description).not.toContain("will undo");
+    // No route: "open what delivers it" would point at an owner that does not.
+    expect(intercept?.where).toBe(null);
+  });
+
+  it("says so differently when nothing answers to the name at all", () => {
+    const intercept = deliveryApplyIntercept([claimed({ owner: null })]);
+    expect(intercept?.description).toContain("no Application by that name");
+  });
+
+  /** A confirmed delivery outranks a second vendor's stale claim. */
+  it("prefers the controller that really applies it over a bare claim", () => {
+    const intercept = deliveryApplyIntercept([
+      claimed(),
+      delivered({ drift: "reverted" }),
+    ]);
+    expect(intercept?.confirmLabel).toBe("Apply anyway");
+  });
+});
+
+describe("the delivery question read out of the document itself", () => {
+  it("takes the group from apiVersion, which no table has to know", () => {
+    expect(
+      deliveryOfManifest(
+        "apiVersion: argoproj.io/v1alpha1\nkind: Application\nmetadata:\n  name: shop\n  namespace: argocd\n"
+      )
+    ).toMatchObject({ group: "argoproj.io", kind: "Application" });
+    expect(
+      deliveryOfManifest(
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n"
+      )
+    ).toMatchObject({ group: "", namespace: null });
+  });
+
+  it("carries the labels and annotations the claim is written in", () => {
+    const query = deliveryOfManifest(
+      [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: api",
+        "  namespace: shop",
+        "  labels:",
+        "    argocd.argoproj.io/instance: shop",
+        "    replicas: 3",
+        "  annotations:",
+        "    note: hand-applied",
+        "",
+      ].join("\n")
+    );
+    expect(query?.labels).toEqual({ "argocd.argoproj.io/instance": "shop" });
+    expect(query?.annotations).toEqual({ note: "hand-applied" });
+  });
+
+  it("asks nothing of a document it cannot read", () => {
+    expect(deliveryOfManifest("")).toBe(null);
+    expect(deliveryOfManifest("kind: Deployment\n")).toBe(null);
+    expect(
+      deliveryOfManifest("apiVersion: v1\nkind: Pod\nmetadata: {}\n")
+    ).toBe(null);
+    expect(deliveryOfManifest("this: [is: not: yaml\n")).toBe(null);
   });
 });
 

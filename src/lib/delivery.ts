@@ -29,6 +29,8 @@
  *   a problem earns a mark and inventory does not.
  */
 
+import { load } from "js-yaml";
+
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
 import { formatAge } from "./utils";
 
@@ -115,6 +117,61 @@ export function deliveryScopeOf(
   const group = apiGroupOf(kind);
   if (group === null || MADE_BY_THE_CLUSTER.has(kind)) return null;
   return { group, kind };
+}
+
+/**
+ * The same question, asked of a manifest rather than of a list row.
+ *
+ * The YAML editor has no typed object behind it — it has the document, which
+ * states its own `apiVersion`, `kind` and `metadata`. Reading the query out of
+ * the text is therefore both free and *better* than {@link API_GROUPS}: a
+ * custom resource's group is in the document and will never be in that table,
+ * so an Argo `Application` edited by hand gets the same answer a Deployment
+ * does.
+ *
+ * Always the text the API server gave, never the buffer. Deleting the tracking
+ * label from the editor does not change who owns the object, and asking the
+ * question of the edited copy would let a reader talk the warning away by
+ * typing.
+ */
+export function deliveryOfManifest(text: string): DeliveryQuery | null {
+  let doc: unknown;
+  try {
+    doc = load(text);
+  } catch {
+    return null;
+  }
+  if (!isRecord(doc)) return null;
+  const { apiVersion, kind } = doc;
+  if (typeof apiVersion !== "string" || typeof kind !== "string") return null;
+  const metadata = isRecord(doc.metadata) ? doc.metadata : {};
+  const name = metadata.name;
+  if (typeof name !== "string" || name === "") return null;
+
+  const slash = apiVersion.indexOf("/");
+  return {
+    group: slash === -1 ? "" : apiVersion.slice(0, slash),
+    kind,
+    name,
+    namespace:
+      typeof metadata.namespace === "string" ? metadata.namespace : null,
+    labels: stringsOf(metadata.labels),
+    annotations: stringsOf(metadata.annotations),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Only the string-valued entries: a label with a number in it is not one. */
+function stringsOf(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") out[key] = entry;
+  }
+  return out;
 }
 
 /** {@link deliveryOf} for a kind whose group {@link API_GROUPS} names. */
@@ -401,5 +458,56 @@ export function deliveryIntercept(
       repoUrl: source.repoUrl,
       to: source.owner.to,
     },
+  };
+}
+
+/**
+ * What to say at the moment somebody applies an edited manifest.
+ *
+ * The most powerful write in the app, and until now the only one that said
+ * nothing — which, once every other control warns, reads as a claim that this
+ * one is safe. It is {@link deliveryIntercept} with one case added, and the
+ * added case is the reason it is a function of its own.
+ *
+ * ## Why a stale claim earns a sentence here and not on Scale
+ *
+ * A disowned label changes nothing about what *happens* — the edit stands
+ * either way — so Scale and Delete rightly stay quiet about it. What it
+ * changes is what the reader is looking at: the document open in front of
+ * them carries a delivery label, and a label is the app's own evidence for
+ * "the permanent change belongs in git". Here that evidence is in the buffer,
+ * a line above the field being edited, and it is wrong. So the sentence is not
+ * a warning about a revert that will not come — promising one would be a lie
+ * the reader can check — it is a correction: this stands, and it is not in
+ * that repository.
+ *
+ * Which is also why it confirms with a plain "Apply". "Apply anyway" is the
+ * word for overriding a consequence, and there is no consequence to override.
+ */
+export function deliveryApplyIntercept(
+  deliveries: Delivery[]
+): DeliveryIntercept | null {
+  const reverting = deliveryIntercept(deliveries, "Apply");
+  if (reverting) return reverting;
+
+  const claim = claimedOnly(deliveries)[0];
+  if (!claim || delivered(deliveries).length > 0) return null;
+
+  const disowned = claim.owner !== null;
+  return {
+    title: `Apply — this object's delivery label is not honoured`,
+    subject: claim.vendor,
+    lead: `Nothing is applying this object, whatever its label says.`,
+    // The vendor's name is data, so the sentence is built to need no article
+    // in front of it — "a Argo CD label" is the shape that comes out otherwise.
+    description: disowned
+      ? `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and that ${claim.ownerKind}'s inventory does not list it. So this apply stands and nothing will put it back — but the permanent change does not belong in ${claim.claim}'s repository either, because ${claim.claim} is not applying this.`
+      : `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and no ${claim.ownerKind} by that name exists. So this apply stands and nothing will put it back — and there is no repository behind the label to make the change in.`,
+    confirmLabel: "Apply",
+    // No link, deliberately. "Open what delivers it" would send the reader to
+    // an owner that does not deliver this, which is the misunderstanding the
+    // paragraph exists to correct; the header mark beside the title still
+    // routes there for anyone who wants to see the disowning for themselves.
+    where: null,
   };
 }

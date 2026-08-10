@@ -2,6 +2,7 @@ import { ClusterList } from "@/components/cluster/ClusterList";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useClusterStore } from "@/stores/clusterStore";
+import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type { KubeconfigSource } from "@/generated/types";
 
@@ -406,17 +407,6 @@ function Failed({
  */
 function readFile(source: KubeconfigSource | undefined) {
   return source?.candidates.find((candidate) => candidate.exists)?.path ?? null;
-}
-
-/**
- * The server's own words, with our framing taken off the front.
- *
- * `wrapCommand` prefixes every rejected invoke with the name of the Tauri
- * command it came from, which is our sentence about the error, not the
- * error — and this line's whole claim is that it is verbatim.
- */
-function verbatim(message: string) {
-  return message.replace(/^Tauri command '[^']*' failed: /, "");
 }
 
 function count(n: number, noun: string) {

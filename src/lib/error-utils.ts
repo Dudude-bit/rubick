@@ -214,3 +214,22 @@ export function normalizeTauriError(error: unknown): string {
   // Fallback
   return String(error);
 }
+
+/**
+ * The failure as the server stated it, with our own framing taken off.
+ *
+ * `wrapCommand` prefixes every rejected invoke with the name of the Tauri
+ * command it came from. That is a fact about our call stack, not about what
+ * went wrong, and it is worth keeping on the thrown `Error` — it is what makes
+ * a console trace legible. It is worth nothing to a reader looking at a toast
+ * that should read "deployments.apps 'api' is forbidden", so it comes off at
+ * the last moment, where the message is shown rather than where it is made.
+ */
+export function verbatim(message: string): string {
+  return message.replace(/^Tauri command '[^']*' failed: /, "");
+}
+
+/** {@link normalizeTauriError} for something about to be put on screen. */
+export function errorToShow(error: unknown): string {
+  return verbatim(normalizeTauriError(error));
+}

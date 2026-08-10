@@ -15,7 +15,6 @@
  */
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +25,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { DeliveryIntercept } from "@/lib/delivery";
+import { deliveryWarning } from "@/lib/governance";
+import { ActionWarnings } from "./action-warnings";
 import { DetailAction, type DetailActionProps } from "./detail-blocks";
 
 /**
@@ -105,19 +106,5 @@ export function DeliveryInterceptBody({
 }: {
   intercept: DeliveryIntercept;
 }) {
-  return (
-    <p className="text-xs text-fg-mut">
-      <span className="font-medium text-warn">{intercept.lead}</span>{" "}
-      {intercept.description}
-      {intercept.where && (
-        <>
-          {" "}
-          <Link to={intercept.where.to} className="text-info hover:underline">
-            Open what delivers it
-          </Link>
-          .
-        </>
-      )}
-    </p>
-  );
+  return <ActionWarnings warnings={deliveryWarning(intercept)} />;
 }

@@ -1,4 +1,24 @@
-import { useCallback, useState } from "react";
+/**
+ * The editor, and the one interception the app was still missing.
+ *
+ * Applying an edited manifest is the most powerful write here — it replaces
+ * the whole object, not one field — and it was the last control that stayed
+ * silent when a delivery controller was going to undo it. That silence stopped
+ * being neutral the moment Scale, Restart and Delete started speaking: a
+ * reader who has been told twice that the app warns about this reasonably
+ * reads the third dialog's quiet as "and this one is safe".
+ *
+ * Three rules, taken from the controls that already do it:
+ *
+ * - **It does not block, it tells.** Applying over a delivered object during
+ *   an incident is legitimate; doing it believing it will stick is not.
+ * - **The ordinary case is untouched.** An object nothing delivers gets the
+ *   confirmation it has always had, with the same word on the button.
+ * - **No new dialog.** The warning lands inside the confirmation that was
+ *   already there, in the same component every other warning is drawn with.
+ */
+
+import { useCallback, useMemo, useState } from "react";
 import { commands } from "@/lib/commands";
 import {
   Dialog,
@@ -15,11 +35,17 @@ import { TextSkeleton } from "@/components/ui/skeleton";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { Spinner } from "@/components/ui/spinner";
+import { ActionWarnings } from "@/components/resources/action-warnings";
+import { DeliveryMarks } from "@/components/resources/delivery";
 import { DetailAction } from "@/components/resources/detail-blocks";
+import { useConnections } from "@/hooks/useConnections";
+import { useDelivery } from "@/hooks/useDelivery";
+import { deliveryApplyIntercept, deliveryOfManifest } from "@/lib/delivery";
+import { applyWarnings, changesReplicaCount } from "@/lib/governance";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
 import { AlertTriangle, Play, FileCheck, FileJson } from "lucide-react";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 
 import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
@@ -35,63 +61,47 @@ interface YamlEditorActionProps {
   readOnly?: boolean;
 }
 
-// Button-based action for use in headers/toolbars
-export function YamlEditorAction({
+/** Open it, and say why if it will not open. Shared by both affordances. */
+function useOpenEditor({
   title,
   resourceKey,
   fetchYaml,
-  menuLabel,
   readOnly = false,
 }: YamlEditorActionProps) {
   const { toast } = useToast();
   const openEditor = useYamlEditorStore((state) => state.openEditor);
 
-  const handleOpen = async () => {
+  return async () => {
     try {
       await openEditor({ title, resourceKey, fetchYaml, readOnly });
     } catch (error) {
       toast({
-        title: "Error",
-        description: `Failed to load YAML: ${error}`,
+        title: "Could not read the manifest",
+        description: errorToShow(error),
         variant: "destructive",
       });
     }
   };
+}
 
-  const label = menuLabel ?? (readOnly ? "View YAML" : "Edit YAML");
+const editorLabel = ({ menuLabel, readOnly }: YamlEditorActionProps) =>
+  menuLabel ?? (readOnly ? "View YAML" : "Edit YAML");
 
-  return <DetailAction label={label} icon={FileJson} onClick={handleOpen} />;
+// Button-based action for use in headers/toolbars
+export function YamlEditorAction(props: YamlEditorActionProps) {
+  const open = useOpenEditor(props);
+  return (
+    <DetailAction label={editorLabel(props)} icon={FileJson} onClick={open} />
+  );
 }
 
 // DropdownMenuItem-based action for use in action menus
-export function YamlEditorMenuAction({
-  title,
-  resourceKey,
-  fetchYaml,
-  menuLabel,
-  readOnly = false,
-}: YamlEditorActionProps) {
-  const { toast } = useToast();
-  const openEditor = useYamlEditorStore((state) => state.openEditor);
-
-  const handleOpen = async () => {
-    try {
-      await openEditor({ title, resourceKey, fetchYaml, readOnly });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: `Failed to load YAML: ${error}`,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const label = menuLabel ?? (readOnly ? "View YAML" : "Edit YAML");
-
+export function YamlEditorMenuAction(props: YamlEditorActionProps) {
+  const open = useOpenEditor(props);
   return (
-    <DropdownMenuItem onClick={handleOpen}>
+    <DropdownMenuItem onClick={open}>
       <FileJson className="mr-2 h-4 w-4" />
-      {label}
+      {editorLabel(props)}
     </DropdownMenuItem>
   );
 }
@@ -133,6 +143,36 @@ export function YamlEditorDialog() {
   const history = getResourceHistory();
   const hasChanges = originalContent !== editedContent;
 
+  // Asked of the document the server gave, not of the buffer: who owns this
+  // object is not something the reader can change by deleting a label from
+  // the text. Nothing is fetched at all until a manifest is loaded, and
+  // nothing on a cluster with no delivery controller ever.
+  const delivery = useMemo(
+    () => deliveryOfManifest(originalContent),
+    [originalContent]
+  );
+  const { deliveries } = useDelivery(delivery);
+  const intercept = deliveryApplyIntercept(deliveries);
+
+  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
+  // about only when that field is what moved — see `applyWarnings`. Asked
+  // while the editor is open rather than when the confirmation appears, so
+  // the sentence is already there when the reader gets to it; the query key
+  // is the detail page's, so a page that has read its connections pays
+  // nothing.
+  const replicasMoved =
+    !readOnly &&
+    hasChanges &&
+    changesReplicaCount(originalContent, editedContent);
+  const governance = useConnections(
+    resourceKey?.kind ?? "",
+    resourceKey?.name,
+    resourceKey?.namespace ?? null,
+    open && replicasMoved
+  );
+
+  const warnings = applyWarnings(governance.data, intercept, replicasMoved);
+
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
     toast({
@@ -162,7 +202,7 @@ export function YamlEditorDialog() {
       setValidationResult({
         success: false,
         stdout: "",
-        stderr: normalizeTauriError(error),
+        stderr: errorToShow(error),
         exit_code: 1,
       });
     } finally {
@@ -204,7 +244,7 @@ export function YamlEditorDialog() {
         });
       }
     } catch (error) {
-      const errorMessage = normalizeTauriError(error);
+      const errorMessage = errorToShow(error);
       const errorResult = {
         success: false,
         stdout: "",
@@ -263,10 +303,17 @@ export function YamlEditorDialog() {
                 </Badge>
               )}
             </DialogTitle>
-            <DialogDescription>
-              {readOnly
-                ? "View the YAML manifest"
-                : "Edit the YAML manifest and apply changes to the cluster"}
+            <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                {readOnly
+                  ? "View the YAML manifest"
+                  : "Edit the YAML manifest and apply changes to the cluster"}
+              </span>
+              {/* The same quiet mark the page header carries, because the
+                  editor is a modal that covers that header: "where does this
+                  come from" is asked while editing, and answering it here is
+                  what lets the confirmation say only what happens next. */}
+              <DeliveryMarks deliveries={deliveries} />
             </DialogDescription>
           </DialogHeader>
 
@@ -366,17 +413,32 @@ export function YamlEditorDialog() {
       <Dialog open={showApplyConfirm} onOpenChange={setShowApplyConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Apply Changes?</DialogTitle>
+            <DialogTitle>{intercept?.title ?? "Apply Changes?"}</DialogTitle>
             <DialogDescription>
               This will apply the manifest to your Kubernetes cluster. Make sure
               you have reviewed the changes.
             </DialogDescription>
           </DialogHeader>
 
+          {/* The consequence, in full, and never the provenance again. The
+              mark beside the editor's title already said who applies this,
+              and this dialog is a modal over that modal — so at the instant
+              of the decision the mark is behind a scrim and unreadable, and
+              the only thing safe to leave out is the second naming of the
+              owner, which the lead sentence carries anyway. */}
+          <ActionWarnings
+            warnings={warnings}
+            headingFor={(count) => `${count} things will undo this apply.`}
+          />
+
           {hasChanges && (
-            <div className="py-4">
+            // The diff is arbitrarily wide and this dialog is a grid, whose
+            // items default to `min-width: auto` — without this the longest
+            // line of the manifest sets the column width and everything above
+            // it, warning included, is dragged off the right of the screen.
+            <div className="min-w-0 py-4">
               <p className="mb-2 text-xs text-fg-mut">Changes to be applied:</p>
-              <ScrollArea className="h-[200px] rounded-md border">
+              <ScrollArea className="h-[200px] w-full overflow-hidden rounded-md border">
                 <YamlDiffViewer
                   original={originalContent}
                   modified={editedContent}
@@ -395,7 +457,12 @@ export function YamlEditorDialog() {
             </Button>
             <Button onClick={handleApply}>
               <Play className="mr-2 h-4 w-4" />
-              Apply
+              {/* The intercept decides its own word where it has one — a
+                  disowned label confirms with a plain "Apply", because there
+                  is no consequence to override. Otherwise the rule is the
+                  Scale dialog's: a warning changes the word, not the outcome. */}
+              {intercept?.confirmLabel ??
+                (warnings.length > 0 ? "Apply anyway" : "Apply")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyWarnings,
   autoscalerFinding,
   autoscalerReplicas,
   autoscalers,
   budgetFinding,
   budgets,
+  changesReplicaCount,
   drainBlockers,
   metricReadings,
   scaleWarnings,
@@ -377,5 +379,84 @@ describe("what the Scale dialog reads", () => {
 
   it("is silent on a workload nothing governs and nothing delivers", () => {
     expect(scaleWarnings(conns([]), null)).toEqual([]);
+  });
+});
+
+describe("what the YAML editor's apply reads", () => {
+  const delivery: DeliveryIntercept = {
+    title: "Apply — Argo CD will undo this",
+    subject: "Argo CD",
+    lead: "Argo CD will undo this.",
+    description: "shop re-applies this object every three minutes.",
+    confirmLabel: "Apply anyway",
+    where: { path: "kustomize", revision: null, repoUrl: null, to: "/argo" },
+  };
+
+  const doc = (replicas: number | null) =>
+    [
+      "apiVersion: apps/v1",
+      "kind: Deployment",
+      "metadata:",
+      "  name: api",
+      "spec:",
+      ...(replicas === null ? [] : [`  replicas: ${replicas}`]),
+      "  template:",
+      "    spec: {}",
+      "",
+    ].join("\n");
+
+  /**
+   * The judgement this whole gate exists for. An autoscaler owns
+   * `spec.replicas` and nothing else, so naming it on a save that changed an
+   * image tag would be a warning about something that will not happen — and a
+   * dialog that is wrong on most saves is one people learn to dismiss unread.
+   */
+  it("stays quiet about the autoscaler when the save does not touch replicas", () => {
+    const governed = conns([governs(hpa("hpa-busy"))]);
+    const before = doc(3);
+    const after = before.replace("kind: Deployment", "kind: Deployment");
+    expect(
+      applyWarnings(governed, null, changesReplicaCount(before, after))
+    ).toEqual([]);
+    expect(changesReplicaCount(doc(3), doc(3) + "# a comment\n")).toBe(false);
+  });
+
+  it("names the autoscaler when the replica count is what moved", () => {
+    const warnings = applyWarnings(
+      conns([governs(hpa("hpa-busy"))]),
+      null,
+      changesReplicaCount(doc(3), doc(5))
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].lead).toContain("hpa-busy");
+  });
+
+  /**
+   * A delivery controller re-applies the whole object, so it is true whatever
+   * was edited — the gate above must never be allowed to swallow it.
+   */
+  it("warns about delivery on any save, replicas or not", () => {
+    const warnings = applyWarnings(conns([]), delivery, false);
+    expect(warnings.map((w) => w.subject)).toEqual(["Argo CD"]);
+  });
+
+  it("stacks the two, soonest first, when the save moves replicas too", () => {
+    const warnings = applyWarnings(
+      conns([governs(hpa("hpa-busy"))]),
+      delivery,
+      true
+    );
+    expect(warnings.map((w) => w.subject)).toEqual([
+      "The autoscaler hpa-busy",
+      "Argo CD",
+    ]);
+  });
+
+  it("reads a replica count out of either document, or neither", () => {
+    expect(changesReplicaCount(doc(3), doc(null))).toBe(true);
+    expect(changesReplicaCount(doc(null), doc(null))).toBe(false);
+    // A document that will not parse is about to fail on the API server, and
+    // its message is better than anything guessed here.
+    expect(changesReplicaCount(doc(3), "spec: [broken\n")).toBe(false);
   });
 });
