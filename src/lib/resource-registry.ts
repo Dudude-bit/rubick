@@ -18,6 +18,7 @@ import {
   Puzzle,
   Gauge,
   ShieldCheck,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 
@@ -171,7 +172,9 @@ export const RESOURCE_REGISTRY = [
     kind: "Endpoints",
     plural: "endpoints",
     displayPlural: "Endpoints",
-    icon: Network,
+    // Not Service's mark, which it shared until both were in the nav at
+    // once: two rows drawn with one glyph stop being two things.
+    icon: Waypoints,
     apiVersion: "v1",
     scope: "namespaced",
     category: "network",

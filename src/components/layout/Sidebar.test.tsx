@@ -135,6 +135,20 @@ describe("the update dot", () => {
   });
 });
 
+describe("the Network group", () => {
+  /**
+   * Endpoints was collateral of a nav rebuild and spent months reachable
+   * only by typing the URL. Services name the endpoints behind one Service;
+   * this list is the only answer to "what is behind everything at once".
+   */
+  it("offers Endpoints its own row", async () => {
+    wrap(<Sidebar />);
+    expect(
+      await screen.findByRole("link", { name: "Endpoints" })
+    ).toHaveAttribute("href", "/network/endpoints");
+  });
+});
+
 describe("the Integrations category", () => {
   /**
    * The rule this group exists to keep. Would break if the category ever

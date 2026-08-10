@@ -91,6 +91,11 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     caption: "Network",
     items: [
       resource(ResourceType.Service, "services"),
+      // Services name the endpoints behind each one; this is the only place
+      // that answers "what is behind everything at once" — which is the
+      // question asked when it is not yet known which Service is wrong.
+      // No count: `ResourceCounts` has no endpoints field to read.
+      resource(ResourceType.Endpoints),
       resource(ResourceType.Ingress, "ingresses"),
     ],
   },
