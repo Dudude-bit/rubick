@@ -268,6 +268,37 @@ export interface VolumeFullness {
 }
 
 /**
+ * What some other object says about how traffic reaches one Service.
+ *
+ * The three managed clouds each have an object that configures the load
+ * balancer in front of a Service — GKE's `BackendConfig`, named by an
+ * annotation on the Service; AWS's `TargetGroupBinding`, which names the
+ * Service itself. They are where a managed Ingress is actually configured,
+ * and today they render as anonymous custom resources nothing connects to
+ * anything.
+ *
+ * **`summary` is configuration and never a verdict.** "health check
+ * HTTP :8080/healthz" is the probe the cloud's load balancer will run; whether
+ * it is passing is not in the object and must not be implied by anything drawn
+ * from it. That distinction is not pedantry here — it is the whole difference
+ * between this tier and the one that needs a cloud credential.
+ */
+export interface EdgeConfig {
+  /** The object that states it, and where the reader continues. */
+  source: { kind: string; name: string; to: string };
+  /** What it configures, in the object's own terms. */
+  summary: string;
+  /**
+   * Stated only where the object itself states it — a status field a
+   * controller wrote, or a name that resolves to no object in the cluster.
+   * **Never** derived from a status that is absent: a `BackendConfig` has no
+   * status at all, and reading its silence as health would invent the most
+   * confident wrong claim in the app.
+   */
+  problem: { text: string; tone: "warn" | "err" } | null;
+}
+
+/**
  * Every capability the app knows how to consume, and its contract.
  *
  * Plain async functions rather than components or hooks: the surface owns
@@ -367,6 +398,24 @@ export interface Capabilities {
     scope: UsageScope;
     range: UsageRange;
   }) => Promise<TrafficWindow>;
+  /**
+   * What a cloud's own object configures about the way into this Service.
+   *
+   * A list rather than one answer, because a Service may genuinely have
+   * several — a `BackendConfig` per port, or two `TargetGroupBinding`s for
+   * two listeners — and picking one would hide the other. Empty is the
+   * ordinary answer even on a cluster that has the CRDs.
+   *
+   * Absent means the traffic chain draws exactly the Service hop it draws
+   * today. This capability only ever *adds* a line under a hop that already
+   * reads whole, which is the rule for every extension in this tree and is
+   * load-bearing here: the chain must say the same thing about a Service on
+   * a cluster nobody has ever pointed at a cloud.
+   */
+  "service.edge": (input: {
+    namespace: string;
+    name: string;
+  }) => Promise<EdgeConfig[]>;
 }
 
 export type CapabilityKey = keyof Capabilities;

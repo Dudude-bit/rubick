@@ -1,17 +1,39 @@
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { TrafficChain } from "./TrafficChain";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ServiceEdges } from "@/hooks/useServiceEdge";
 import type {
   ChainStop,
   ObjectRef,
   ResourceConnections,
 } from "@/generated/types";
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+// The hop notes are an extension's, so the chain asks a capability for them.
+// Nothing is detected here, which is the state of nearly every cluster and
+// the one every assertion below is written against: the chain must read
+// exactly the same with no cloud controller installed anywhere.
+const detectInClusterExtensions = vi.fn().mockResolvedValue([]);
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    detectInClusterExtensions: () => detectInClusterExtensions(),
+  },
+}));
+
+const wrap = (ui: ReactNode) =>
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  );
 
 const service: ObjectRef = {
   kind: "Service",
@@ -272,5 +294,114 @@ describe("TrafficChain", () => {
      *  reads as "nothing routes here", which is the one wrong answer. */
     wrap(<TrafficChain query={query(undefined, true)} />);
     expect(screen.getByText("Following the path in…")).toBeInTheDocument();
+  });
+
+  describe("what a cloud says about the Service", () => {
+    const edges = (edge: Partial<ServiceEdges>): ServiceEdges => ({
+      available: true,
+      configs: new Map(),
+      error: null,
+      ...edge,
+    });
+
+    // Two hops, because a path of one is not a path and is collapsed to a
+    // single line: the Service and the stop below it.
+    const chain = answered([
+      { reason: "selectsNothing", service, selector: "app=demo" },
+    ]);
+
+    const drawWith = (edge: ServiceEdges) => {
+      vi.doMock("@/hooks/useServiceEdge", async (original) => ({
+        ...(await original<typeof import("@/hooks/useServiceEdge")>()),
+        useServiceEdge: () => edge,
+      }));
+      return import("./TrafficChain");
+    };
+
+    it("adds the cloud's configuration under the Service and never instead of it", async () => {
+      /** Would break if an extension were ever allowed to replace part of a
+       *  hop rather than extend it. The Service's own selector is core and
+       *  must still be drawn on a cluster that has every cloud controller
+       *  installed — the note is a line below it or nothing at all. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({
+          configs: new Map([
+            [
+              "k8s-gui-test/demo",
+              [
+                {
+                  source: {
+                    kind: "BackendConfig",
+                    name: "shop-backend",
+                    to: "",
+                  },
+                  summary: "every port · health check HTTP :8080/healthz",
+                  problem: null,
+                },
+              ],
+            ],
+          ]),
+        })
+      );
+      wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
+      expect(screen.getByText("shop-backend")).toBeInTheDocument();
+      expect(
+        screen.getByText(/health check HTTP :8080\/healthz/)
+      ).toBeInTheDocument();
+      vi.doUnmock("@/hooks/useServiceEdge");
+    });
+
+    it("states configuration plainly and colours only what an object said", async () => {
+      /** The line this whole tier turns on. A BackendConfig has no status —
+       *  it cannot report a failing health check — so the summary is never
+       *  toned. A name that resolves to no object is different in kind: it
+       *  was checked, it is missing, and it gets the colour. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({
+          configs: new Map([
+            [
+              "k8s-gui-test/demo",
+              [
+                {
+                  source: { kind: "BackendConfig", name: "ghost", to: "" },
+                  summary: "every port",
+                  problem: {
+                    text: "no BackendConfig named ghost in this namespace — nothing is applied",
+                    tone: "err",
+                  },
+                },
+              ],
+            ],
+          ]),
+        })
+      );
+      const view = wrap(<Chain query={query(chain)} />);
+
+      const problem = screen.getByText(/nothing is applied/);
+      expect(problem).toHaveClass("text-err");
+      expect(
+        view.container.querySelector(".text-err")?.textContent
+      ).not.toContain("every port");
+      vi.doUnmock("@/hooks/useServiceEdge");
+    });
+
+    it("says nothing at all where nothing answered", async () => {
+      /** The state every cluster without a cloud controller is in. An
+       *  absent capability must leave no gap, no placeholder and no
+       *  invitation — the hop is exactly what it was before this existed. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({ available: false })
+      );
+      const view = wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
+      expect(view.container.textContent).not.toContain("BackendConfig");
+      vi.doUnmock("@/hooks/useServiceEdge");
+    });
   });
 });

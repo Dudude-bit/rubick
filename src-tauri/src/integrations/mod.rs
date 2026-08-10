@@ -75,6 +75,43 @@ const MARKERS: &[(&str, &[&str])] = &[
     ("flux", &["kustomizations.kustomize.toolkit.fluxcd.io"]),
     ("istio", &["virtualservices.networking.istio.io"]),
     ("argocd", &["applications.argoproj.io"]),
+    // The three managed offerings' own controllers. What is detected is the
+    // controller, never the cloud: a cluster cannot fail to be on GKE, but
+    // it can perfectly well be on GKE with HTTP load balancing turned off,
+    // and "Google Cloud · not installed" would be nonsense where "GKE
+    // Ingress · not installed" is a fact.
+    //
+    // GKE's Ingress stack is two controllers that ship and are turned on
+    // together — ingress-gce owns the two config kinds, gke-managed-certs
+    // owns the certificate — so one row covers both. `BackendConfig` leads
+    // because it is the one every GKE cluster with an Ingress has.
+    (
+        "gke-ingress",
+        &[
+            "backendconfigs.cloud.google.com",
+            "frontendconfigs.networking.gke.io",
+            "managedcertificates.networking.gke.io",
+        ],
+    ),
+    (
+        "aws-load-balancer-controller",
+        &[
+            "targetgroupbindings.elbv2.k8s.aws",
+            "ingressclassparams.elbv2.k8s.aws",
+        ],
+    ),
+    // Two separate AKS add-ons under one row, because the reader turns them
+    // on in one place and neither is worth a row of its own. aad-pod-identity
+    // is deprecated in favour of Workload Identity and is still what a great
+    // many clusters run, which is exactly why it is worth reading.
+    (
+        "aks-addons",
+        &[
+            "azureidentitybindings.aadpodidentity.k8s.io",
+            "azureidentities.aadpodidentity.k8s.io",
+            "azureingressprohibitedtargets.appgw.ingress.k8s.io",
+        ],
+    ),
 ];
 
 fn detect_by_marker(
@@ -160,6 +197,43 @@ mod tests {
 
         let v3 = vec![crd("ingressroutes.traefik.io")];
         assert!(detect_by_marker(&v3, "traefik", MARKERS[0].1).installed);
+    }
+
+    /// Would break if a cloud's row started depending on the whole set of
+    /// its CRDs rather than on any one of them. A GKE cluster that has never
+    /// been given a Google-managed certificate has no
+    /// `managedcertificates.networking.gke.io` at all, and reporting the
+    /// Ingress stack absent there would hide the BackendConfigs it does have.
+    #[test]
+    fn any_one_of_a_clouds_crds_is_the_install() {
+        let by_id = |id: &str| MARKERS.iter().find(|(name, _)| *name == id).unwrap().1;
+        for id in ["gke-ingress", "aws-load-balancer-controller", "aks-addons"] {
+            for marker in by_id(id) {
+                let alone = vec![crd(marker)];
+                assert!(
+                    detect_by_marker(&alone, id, by_id(id)).installed,
+                    "{id} was not detected by {marker} on its own"
+                );
+            }
+        }
+    }
+
+    /// Would break if the clouds' markers started overlapping each other —
+    /// an `elbv2.k8s.aws` CRD reported as GKE would put a row on a cluster
+    /// that has nothing of the sort.
+    #[test]
+    fn one_clouds_crds_never_detect_another() {
+        let clouds = ["gke-ingress", "aws-load-balancer-controller", "aks-addons"];
+        for (id, markers) in MARKERS.iter().filter(|(id, _)| clouds.contains(id)) {
+            let installed: Vec<_> = markers.iter().map(|marker| crd(marker)).collect();
+            for other in clouds.iter().filter(|other| *other != id) {
+                let other_markers = MARKERS.iter().find(|(n, _)| n == other).unwrap().1;
+                assert!(
+                    !detect_by_marker(&installed, other, other_markers).installed,
+                    "{id}'s CRDs were read as {other}"
+                );
+            }
+        }
     }
 
     /// Would break if detection started reporting every vendor as present,

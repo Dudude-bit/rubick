@@ -15,12 +15,19 @@
  * Deployment with no Service in front of it must not cost a diagram to say so.
  */
 
+import { Link } from "react-router-dom";
+
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
 import { chainSilence, trafficChains, type ChainHop } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
+import {
+  edgeKey,
+  useServiceEdge,
+  type ServiceEdges,
+} from "@/hooks/useServiceEdge";
 import { CertificateLine } from "./CertificateFacts";
 import { RenewalNote } from "./IssuanceChain";
 import { ResourceRef } from "./ResourceRef";
@@ -149,14 +156,76 @@ function Controller({ binding }: { binding: IngressClassBinding }) {
   );
 }
 
+/**
+ * What a cloud's own object configures about the way into this Service.
+ *
+ * Under the Service hop and never instead of it, the same order the renewal
+ * note follows: the Service's own ports and selector are drawn first and stay
+ * drawn, and this is a line added below them or nothing at all.
+ *
+ * The summary is stated as configuration, because that is what these objects
+ * are. "health check HTTP :8080/healthz" is the probe the cloud will run —
+ * not a claim that it passes, which no object in this cluster knows. Only
+ * `problem` is allowed a colour, and only a supplier that read a real status
+ * or a real missing object may set it.
+ */
+function EdgeNote({
+  edge,
+  object,
+}: {
+  edge: ServiceEdges | undefined;
+  object: ObjectRef;
+}) {
+  if (!edge?.available || edge.error) return null;
+  const configs = edge.configs.get(
+    edgeKey(object.namespace ?? "", object.name)
+  );
+  if (!configs || configs.length === 0) return null;
+
+  return (
+    <>
+      {configs.map((config) => (
+        <p
+          key={`${config.source.kind}/${config.source.name}`}
+          className="text-[11px] text-fg-fnt"
+        >
+          {config.source.to ? (
+            <Link
+              to={config.source.to}
+              className="font-mono text-info hover:underline"
+            >
+              {config.source.name}
+            </Link>
+          ) : (
+            <span className="font-mono">{config.source.name}</span>
+          )}{" "}
+          {config.summary}
+          {config.problem && (
+            <span
+              className={
+                config.problem.tone === "err" ? "text-err" : "text-warn"
+              }
+            >
+              {" — "}
+              {config.problem.text}
+            </span>
+          )}
+        </p>
+      ))}
+    </>
+  );
+}
+
 function Hop({
   hop,
   next,
   issuance,
+  edge,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
   issuance: Issuance | undefined;
+  edge: ServiceEdges | undefined;
 }) {
   const last = next === undefined;
   return (
@@ -191,6 +260,9 @@ function Hop({
               )}
             </span>
             {hop.via && <p className="text-[11px] text-fg-fnt">{hop.via}</p>}
+            {hop.object.kind === "Service" && (
+              <EdgeNote edge={edge} object={hop.object} />
+            )}
           </>
         )}
         {hop.at === "published" && (
@@ -259,6 +331,21 @@ export function TrafficChain({
 }) {
   const { data, isPending, error } = query;
 
+  // Built before the early returns rather than after them, because the hop
+  // notes below are fetched with a hook and a hook may not sit behind a
+  // condition. `trafficChains` is pure and answers an empty list for no data,
+  // which is exactly what the hook should be asked about in that case.
+  const paths = data ? trafficChains(data, { certificates, controller }) : [];
+  const edge = useServiceEdge(
+    paths.flatMap((path) =>
+      path.hops.flatMap((hop) =>
+        hop.at === "object" && hop.object.kind === "Service"
+          ? [{ namespace: hop.object.namespace ?? "", name: hop.object.name }]
+          : []
+      )
+    )
+  );
+
   if (isPending) {
     return <p className="text-xs text-fg-fnt">Following the path in…</p>;
   }
@@ -270,7 +357,6 @@ export function TrafficChain({
     );
   }
 
-  const paths = trafficChains(data, { certificates, controller });
   if (paths.length === 0) {
     const silence = chainSilence(data);
     // A quiet single line, and no heading over it: a heading plus one
@@ -295,6 +381,7 @@ export function TrafficChain({
                 hop={hop}
                 next={path.hops[index + 1]}
                 issuance={issuance}
+                edge={edge}
               />
             ))}
           </div>

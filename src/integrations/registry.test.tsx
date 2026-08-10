@@ -83,6 +83,13 @@ describe("useCrdView", () => {
     ["helm.toolkit.fluxcd.io", "HelmRelease", "Chart"],
     ["argoproj.io", "Application", "Sync"],
     ["networking.istio.io", "VirtualService", "Gateways"],
+    ["cloud.google.com", "BackendConfig", "Health check"],
+    ["networking.gke.io", "FrontendConfig", "Applies"],
+    ["networking.gke.io", "ManagedCertificate", "Not provisioned"],
+    ["elbv2.k8s.aws", "TargetGroupBinding", "Target group"],
+    ["elbv2.k8s.aws", "IngressClassParams", "Applies"],
+    ["aadpodidentity.k8s.io", "AzureIdentityBinding", "To pods labelled"],
+    ["appgw.ingress.k8s.io", "AzureIngressProhibitedTarget", "Leaves alone"],
   ])("draws %s/%s with the vendor's own columns", (group, kind, header) => {
     const columns = view(group, kind)?.columnsFor(kind);
     expect(columns?.map((c) => c.header)).toContain(header);
@@ -100,6 +107,15 @@ describe("useCrdView", () => {
     ["argoproj.io", "Workflow"],
     ["argoproj.io", "Rollout"],
     ["source.toolkit.fluxcd.io", "GitRepository"],
+    // `networking.gke.io` is GKE's whole networking group and holds a good
+    // deal this app has never read — `ServiceNetworkEndpointGroup`, the
+    // multi-cluster kinds. Claiming the group would draw a certificate's
+    // columns over every one of them.
+    ["networking.gke.io", "ServiceNetworkEndpointGroup"],
+    // AGIC owns several kinds in `appgw.ingress.k8s.io` and only the
+    // prohibited target is read here.
+    ["appgw.ingress.k8s.io", "AzureApplicationGatewayRewrite"],
+    ["cloud.google.com", "ServiceAttachment"],
     ["", "Widget"],
   ])("claims nothing for %s/%s", (group, kind) => {
     expect(view(group, kind)).toBeNull();

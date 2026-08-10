@@ -58,11 +58,11 @@ import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { integrationPagePath } from "./paths";
 import argocd from "./argocd";
-import aws from "./aws";
-import azure from "./azure";
+import aws, { awsLoadBalancerController } from "./aws";
+import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
 import flux, { helmReleasePath } from "./flux";
-import googleCloud from "./google-cloud";
+import googleCloud, { gkeIngress } from "./google-cloud";
 import ingressNginx from "./ingress-nginx";
 import istio from "./istio";
 import k3s from "./k3s";
@@ -80,6 +80,7 @@ import type {
   Connect,
   ConnectionDraft,
   CrdView,
+  EdgeConfig,
   Extension,
   Flavour,
   HistoryLine,
@@ -107,6 +108,7 @@ export type {
   Connect,
   ConnectionDraft,
   CrdView,
+  EdgeConfig,
   Extension,
   HistoryLine,
   LogHistory,
@@ -166,9 +168,17 @@ const VENDORS: Vendor[] = [
   prometheus,
   loki,
   k3s,
+  // Each cloud's controllers sit immediately before the cloud itself. The
+  // order between the two carries nothing — a tier-two record declares no
+  // node label, no flavour and no provider scheme, so it can win no tie-break
+  // — and keeping the pair adjacent is what stops the tier-one ordering,
+  // which *is* load-bearing, from being read as arbitrary.
+  awsLoadBalancerController,
   aws,
+  gkeIngress,
   googleCloud,
   karpenter,
+  aksAddons,
   azure,
   minikube,
 ];

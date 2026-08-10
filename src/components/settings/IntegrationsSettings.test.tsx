@@ -52,6 +52,28 @@ function certificate(
   };
 }
 
+/** A custom resource from one of the clouds' controllers. */
+function cloudResource(
+  kind: string,
+  name: string,
+  spec: unknown,
+  status: unknown = null
+): CustomResourceInfo {
+  return {
+    name,
+    namespace: "shop",
+    uid: `${kind}/${name}`,
+    apiVersion: "cloud.google.com/v1",
+    kind,
+    spec,
+    status,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+  };
+}
+
 const READY = { conditions: [{ type: "Ready", status: "True" }] };
 const NOT_READY = { conditions: [{ type: "Ready", status: "False" }] };
 
@@ -151,6 +173,111 @@ describe("the empty state", () => {
 
     await screen.findByText(/Nothing installed/);
     expect(listCustomResources).not.toHaveBeenCalled();
+  });
+});
+
+describe("the clouds' own controllers", () => {
+  /**
+   * Would break if a cloud's row ever named the cloud. A cluster cannot fail
+   * to be on GKE, so "Google Cloud · not installed" is nonsense — what can be
+   * absent is the controllers, and that is what the row is allowed to say it
+   * looked for.
+   */
+  it("names the controller rather than the cloud", async () => {
+    detectInClusterExtensions.mockResolvedValue([]);
+
+    wrap(<IntegrationsSettings />);
+
+    expect(await screen.findByText("GKE Ingress")).toBeVisible();
+    expect(screen.getByText("AWS Load Balancer Controller")).toBeVisible();
+    expect(screen.getByText("AKS add-ons")).toBeVisible();
+    expect(screen.queryByText("Google Cloud")).toBeNull();
+    expect(screen.queryByText("AWS")).toBeNull();
+    expect(screen.queryByText("Azure")).toBeNull();
+  });
+
+  /**
+   * Would break if the counts that carry no verdict started carrying one, or
+   * if a certificate the controller has not written to were sorted into a
+   * state. A BackendConfig reports nothing about itself — its upstream type
+   * is declared with no status at all — so its count must stay quiet, and
+   * only the certificate is allowed the colour.
+   */
+  it("counts what has no status and colours only what said something", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "gke-ingress", installed: true, version: null },
+    ]);
+    listCustomResources.mockImplementation(async (crdName: string) => {
+      if (crdName === "backendconfigs.cloud.google.com") {
+        return [cloudResource("BackendConfig", "shop-backend", {})];
+      }
+      if (crdName === "managedcertificates.networking.gke.io") {
+        return [
+          cloudResource(
+            "ManagedCertificate",
+            "shop",
+            {},
+            {
+              certificateStatus: "FailedNotVisible",
+              domainStatus: [
+                { domain: "shop.example.com", status: "FailedNotVisible" },
+              ],
+            }
+          ),
+          // Never written to by the controller: not failed, not provisioning,
+          // and not counted as either.
+          cloudResource("ManagedCertificate", "quiet", {}, null),
+        ];
+      }
+      return [];
+    });
+
+    wrap(<IntegrationsSettings />);
+
+    expect(
+      await screen.findByText(
+        "1 BackendConfig · 0 FrontendConfigs · 2 ManagedCertificates"
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByText("FailedNotVisible on shop.example.com")
+    ).toBeVisible();
+    expect(screen.queryByText(/not serving yet/)).toBeNull();
+  });
+
+  /**
+   * Would break if the AWS row started reporting target health. Whether the
+   * targets in a group are passing their checks lives in the ELB API and not
+   * in this cluster, and a binding with no conditions is the normal, healthy
+   * case — reading that silence as anything is the mistake this whole tier
+   * is written to avoid.
+   */
+  it("says nothing about a binding the controller never complained about", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "aws-load-balancer-controller", installed: true, version: null },
+    ]);
+    listCustomResources.mockImplementation(async (crdName: string) => {
+      if (crdName === "targetgroupbindings.elbv2.k8s.aws") {
+        return [
+          cloudResource("TargetGroupBinding", "shop-web", {
+            serviceRef: { name: "shop-web", port: 80 },
+            targetGroupARN:
+              "arn:aws:elasticloadbalancing:eu-west-1:1:targetgroup/tg/1",
+          }),
+        ];
+      }
+      return [];
+    });
+
+    const view = wrap(<IntegrationsSettings />);
+
+    expect(
+      await screen.findByText("1 TargetGroupBinding · 0 IngressClassParams")
+    ).toBeVisible();
+    // The colour is the assertion: the row has exactly one signal to spend,
+    // and a binding nothing complained about must not spend it.
+    expect(view.container.querySelector(".text-err")).toBeNull();
+    expect(view.container.querySelector(".text-warn")).toBeNull();
   });
 });
 

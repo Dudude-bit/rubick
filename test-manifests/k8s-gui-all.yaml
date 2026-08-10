@@ -211,7 +211,14 @@ spec:
       containers:
         - name: job
           image: busybox:1.36
-          command: ["sh", "-c", "echo job-start && sleep 10 && echo job-done"]
+          # Fifteen minutes, not the ten seconds this used to be. A finished
+          # Job is the case a history supplier is best at — "what did it use
+          # when it ran" is the only question left to ask about it — and a pod
+          # that lives for less than one 15s scrape leaves nothing for any
+          # Prometheus to have measured. Fifteen because the app's 6h range
+          # buckets at three minutes: shorter than five buckets and the answer
+          # to that question is a dot rather than a line.
+          command: ["sh", "-c", "echo job-start && sleep 900 && echo job-done"]
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -730,6 +737,32 @@ spec:
   ingressClassName: nginx
   rules:
     - host: resource-demo.local
+      http:
+        paths:
+          - path: /assets
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: k8s.example.com
+                kind: StorageBucket
+                name: assets
+---
+# The same unfollowable backend, claimed by Traefik instead.
+#
+# Two specimens rather than one because a routing page only draws the
+# Ingresses its own controller claims, and `resource-demo` above names
+# `nginx`: on a k3d cluster, where Traefik is the only IngressClass, that one
+# is invisible on Traefik's page and the blind spot it exists to catch would
+# go on being untested there.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resource-demo-traefik
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: resource-demo-traefik.local
       http:
         paths:
           - path: /assets
@@ -2590,3 +2623,284 @@ spec:
             host: log-demo
             port:
               number: 80
+---
+# --- the managed clouds' own controllers -----------------------------------
+# Everything below needs the three clouds' CRDs, which no dev cluster has and
+# which are fetched from the vendors rather than written here. ingress-gce
+# builds its two in Go at controller start and publishes no YAML at all, so
+# the definitions come out of upstream's own code:
+#
+#   kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/gke-managed-certs/master/deploy/managedcertificates-crd.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/helm/aws-load-balancer-controller/crds/crds.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/Azure/application-gateway-kubernetes-ingress/master/crds/AzureIngressProhibitedTarget-v1-CRD-v1.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/Azure/aad-pod-identity/master/charts/aad-pod-identity/crds/crd.yaml
+#   # BackendConfig and FrontendConfig: no upstream YAML exists. See the
+#   # note in `test-manifests/README.md`.
+#
+# **No controller acts on any of this.** The statuses below were written by
+# hand to produce the states the app has to draw; on a real cluster they are
+# written by ingress-gce, gke-managed-certs and the AWS Load Balancer
+# Controller, and nothing here has been tested against those. What *is* real
+# is the schema: every object below is validated by the vendor's own CRD.
+#
+# TargetGroupBinding keeps its status behind a subresource, so `apply` drops
+# it and it has to be patched separately:
+#
+#   kubectl -n k8s-gui-test patch targetgroupbinding checkout-web \
+#     --subresource=status --type=merge -p '{"status":{"conditions":[{"type":"Ready","status":"False","reason":"FailedCleanup","message":"TargetGroup not found: k8s-shop-checkout-9f8e7d","lastTransitionTime":"2026-01-01T00:00:00Z"}]}}'
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete \
+#     backendconfig/shop-backend frontendconfig/shop-frontend \
+#     managedcertificate/shop-cert managedcertificate/checkout-cert \
+#     managedcertificate/unwritten-cert \
+#     targetgroupbinding/shop-web targetgroupbinding/checkout-web \
+#     azureidentity/shop-identity azureidentitybinding/shop-binding \
+#     azureidentitybinding/typo-binding \
+#     azureingressprohibitedtarget/legacy-paths \
+#     deploy/cloud-demo svc/cloud-demo svc/cloud-ghost
+#   kubectl delete ingressclassparams/shop-alb
+
+# The Service the traffic chain draws the hop note on: annotated with a
+# BackendConfig that exists, and backed by pods that are actually ready, so
+# the note sits under a hop that reads whole without it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-demo
+  namespace: k8s-gui-test
+  annotations:
+    cloud.google.com/backend-config: '{"default":"shop-backend"}'
+spec:
+  selector:
+    app: cloud-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# The other half of the same test: a Service naming a BackendConfig that does
+# not exist. GKE applies nothing at all in this case and says so only in an
+# event on the Ingress, so the backend silently keeps the defaults the reader
+# thought they had overridden. It is the one problem a BackendConfig can
+# produce, because the object itself reports no status of any kind.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-ghost
+  namespace: k8s-gui-test
+  annotations:
+    cloud.google.com/backend-config: '{"default":"ghost-backend"}'
+spec:
+  selector:
+    app: cloud-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-demo
+  namespace: k8s-gui-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloud-demo
+  template:
+    metadata:
+      labels:
+        app: cloud-demo
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/e2e-test-images/agnhost:2.47
+          args: ["netexec", "--http-port=8080"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+# What a GKE Ingress is actually configured by, and the object the chain hop
+# names. Note what is *not* here: any statement about whether that health
+# check passes. BackendConfig is declared upstream with no status at all, so
+# the only honest reading of it is as configuration.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: shop-backend
+  namespace: k8s-gui-test
+spec:
+  timeoutSec: 30
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    type: HTTP
+    port: 8080
+    requestPath: /healthz
+    checkIntervalSec: 10
+  cdn:
+    enabled: true
+    cacheMode: CACHE_ALL_STATIC
+  logging:
+    enable: true
+    sampleRate: 1
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: shop-frontend
+  namespace: k8s-gui-test
+spec:
+  sslPolicy: gke-ingress-ssl-policy
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# Provisioned and serving.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: shop-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - shop.k8s-gui.test
+status:
+  certificateStatus: Active
+  certificateName: mcrt-0a1b2c3d
+  expireTime: "2027-01-01T00:00:00Z"
+  domainStatus:
+    - domain: shop.k8s-gui.test
+      status: Active
+---
+# The state this whole row exists for. The top-level status says only
+# "Provisioning" and will keep saying it forever, because one of the two
+# domains has no DNS record pointing at the load balancer — which is a fact
+# one level down, in a field nothing in the app read before.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: checkout-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - checkout.k8s-gui.test
+    - www.checkout.k8s-gui.test
+status:
+  certificateStatus: FailedNotVisible
+  domainStatus:
+    - domain: checkout.k8s-gui.test
+      status: Active
+    - domain: www.checkout.k8s-gui.test
+      status: FailedNotVisible
+---
+# A certificate the controller has never written to — which is every
+# certificate on a cluster where that controller is not running. It must be
+# counted and must not be sorted into any state: an absent status is not a
+# verdict, and this object is here to keep anything from treating it as one.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: unwritten-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - quiet.k8s-gui.test
+---
+# The link from a Service to a real ALB target group, which is a fact the app
+# could not state at all before: an ALB-fronted Service shows a ClusterIP and
+# nothing else, and the ARN was on the same API server the whole time.
+#
+# No conditions, deliberately. The AWS controller writes one only when
+# something failed, so this is what a working binding looks like — and it is
+# indistinguishable from a binding on a cluster whose controller is not
+# running, which is why neither is read as health.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: shop-web
+  namespace: k8s-gui-test
+spec:
+  serviceRef:
+    name: cloud-demo
+    port: 80
+  targetType: ip
+  ipAddressType: ipv4
+  targetGroupARN: arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/k8s-shop-web-9f8e7d/0a1b2c3d4e5f6789
+---
+# The failing half. Its status is behind a subresource and has to be patched
+# after apply — see the command in the section header above.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: checkout-web
+  namespace: k8s-gui-test
+spec:
+  serviceRef:
+    name: cloud-ghost
+    port: 80
+  targetType: ip
+  targetGroupARN: arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/k8s-shop-checkout-9f8e7d/1b2c3d4e5f678901
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: IngressClassParams
+metadata:
+  name: shop-alb
+spec:
+  group:
+    name: shop
+  scheme: internet-facing
+  ipAddressType: dualstack
+---
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentity
+metadata:
+  name: shop-identity
+  namespace: k8s-gui-test
+spec:
+  type: 0
+  resourceID: /subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shop-api
+  clientID: 11111111-2222-3333-4444-555555555555
+---
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentityBinding
+metadata:
+  name: shop-binding
+  namespace: k8s-gui-test
+spec:
+  azureIdentity: shop-identity
+  selector: shop
+---
+# A reference nothing validates, and the quietest failure in this whole file:
+# the binding is accepted, no AzureAssignedIdentity is ever created, the pods
+# run perfectly, and every call they make to Azure comes back 403 with no
+# Kubernetes-side symptom at all. Found by looking for the object, not by
+# reading a status — these kinds report none.
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentityBinding
+metadata:
+  name: typo-binding
+  namespace: k8s-gui-test
+spec:
+  azureIdentity: shop-identiy
+  selector: checkout
+---
+# Why an Ingress somebody wrote is being ignored: AGIC is told to leave this
+# hostname's paths alone, and nothing else in the app could say so.
+apiVersion: appgw.ingress.k8s.io/v1
+kind: AzureIngressProhibitedTarget
+metadata:
+  name: legacy-paths
+  namespace: k8s-gui-test
+spec:
+  hostname: shop.k8s-gui.test
+  paths:
+    - /legacy/*
