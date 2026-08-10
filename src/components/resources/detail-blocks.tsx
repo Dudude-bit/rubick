@@ -5,8 +5,7 @@ import { UnitValue } from "@/components/ui/metric-value";
 import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import type { MessageSubject } from "@/lib/message-refs";
-import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
-import { usageRole } from "@/lib/metric-format";
+import { formatQuantity, usageRole } from "@/lib/metric-format";
 import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -294,17 +293,6 @@ export interface UsageRowProps {
   type: "cpu" | "memory" | "count";
   /** Unit suffix for `count`, e.g. " pods". */
   unit?: string;
-}
-
-function formatQuantity(
-  value: number,
-  type: UsageRowProps["type"],
-  unit?: string
-): string {
-  if (type === "cpu") return formatCPU(value);
-  if (type === "memory")
-    return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
-  return `${Math.round(value)}${unit ?? ""}`;
 }
 
 const BAR_ROLE = { ok: "bg-info", warn: "bg-warn", err: "bg-err" } as const;

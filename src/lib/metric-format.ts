@@ -1,3 +1,5 @@
+import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
+
 /**
  * Pure helpers behind the table's quantity cells.
  *
@@ -19,6 +21,28 @@ export function splitUnit(formatted: string): { value: string; unit: string } {
   const match = /^(-?[\d.]+)\s*([^\d\s]*)$/.exec(formatted.trim());
   if (!match) return { value: formatted, unit: "" };
   return { value: match[1], unit: match[2] };
+}
+
+/** What a usage number is measured in. `count` is a plain tally of things. */
+export type QuantityKind = "cpu" | "memory" | "count";
+
+/**
+ * A usage number at the scale its unit deserves.
+ *
+ * Shared by the bar rows and the charts so a pod cannot read "96Mi" in one
+ * block and "96.0Mi" in the one below it. The trailing `.0` is stripped
+ * rather than never produced because `formatMemory` needs the precision to
+ * pick the unit.
+ */
+export function formatQuantity(
+  value: number,
+  kind: QuantityKind,
+  unit?: string
+): string {
+  if (kind === "cpu") return formatCPU(value);
+  if (kind === "memory")
+    return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
+  return `${Math.round(value)}${unit ?? ""}`;
 }
 
 export type UsageRole = "ok" | "warn" | "err";

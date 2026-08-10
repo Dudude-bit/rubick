@@ -82,6 +82,11 @@ export function useMetrics(options?: UseMetricsOptions) {
     podStatus: podMetricsQuery.data?.status ?? null,
     nodeMetrics: nodeMetricsQuery.data?.data ?? [],
     nodeStatus: nodeMetricsQuery.data?.status ?? null,
+    // When the cluster last answered. The usage history stamps its samples
+    // with this rather than with `Date.now()`, so one poll reaching several
+    // readers is recognised as one reading instead of several.
+    podSampledAt: podMetricsQuery.dataUpdatedAt,
+    nodeSampledAt: nodeMetricsQuery.dataUpdatedAt,
     clusterMetrics: clusterMetricsQuery.data?.data ?? null,
     clusterStatus: clusterMetricsQuery.data?.status ?? null,
     podMetricsQuery,

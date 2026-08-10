@@ -16,6 +16,7 @@ import {
   DetailAction,
   UsageRow,
 } from "@/components/resources/detail-blocks";
+import { UsageBlock } from "@/components/resources/usage-block";
 import {
   KeyValueSection,
   type KeyValue,
@@ -85,7 +86,7 @@ export function NodeDetail() {
     placeholderData: keepPreviousData,
   });
 
-  const { nodeMetrics, nodeStatus } = useMetrics({
+  const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
     includeCluster: false,
     enabled: !!node,
@@ -313,34 +314,30 @@ export function NodeDetail() {
         <MetricsStatusBanner status={nodeStatus} />
       )}
 
-      <Section>
-        <SectionHeader
-          title="Headroom"
-          count="live usage against capacity · pods against allocatable"
+      <UsageBlock
+        title="Headroom"
+        kind={ResourceType.Node}
+        uid={node?.uid}
+        cpu={nodeWithMetrics?.cpuMillicores}
+        memory={nodeWithMetrics?.memoryBytes}
+        cpuLimit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
+        memoryLimit={
+          node?.capacity.memory ? parseMemory(node.capacity.memory) : null
+        }
+        limitNoun="capacity"
+        sampledAt={nodeSampledAt}
+        status={nodeStatus}
+      >
+        {/* A tally of scheduled pods, not a reading from metrics-server:
+         *  it comes from the pod list, it moves in steps of one, and a line
+         *  through it would imply a resolution it does not have. */}
+        <UsageRow
+          label="Pods"
+          used={podCount}
+          total={Number.isFinite(podCapacity) ? podCapacity : null}
+          type="count"
         />
-        <div>
-          <UsageRow
-            label="CPU"
-            used={nodeWithMetrics?.cpuMillicores}
-            total={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
-            type="cpu"
-          />
-          <UsageRow
-            label="Memory"
-            used={nodeWithMetrics?.memoryBytes}
-            total={
-              node?.capacity.memory ? parseMemory(node.capacity.memory) : null
-            }
-            type="memory"
-          />
-          <UsageRow
-            label="Pods"
-            used={podCount}
-            total={Number.isFinite(podCapacity) ? podCapacity : null}
-            type="count"
-          />
-        </div>
-      </Section>
+      </UsageBlock>
 
       {node && (
         <DebugNodeDialog

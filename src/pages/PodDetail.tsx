@@ -40,8 +40,8 @@ import {
   ConditionRows,
   DetailAction,
   ProblemSummary,
-  UsageRow,
 } from "@/components/resources/detail-blocks";
+import { UsageBlock } from "@/components/resources/usage-block";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -313,7 +313,7 @@ export function PodDetail() {
     portForwardStatusBySession,
   } = usePodPortForward(pod);
 
-  const { podMetrics, podStatus } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     includeCluster: false,
@@ -757,26 +757,18 @@ export function PodDetail() {
 
       <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
         <KeyValueSection title="Placement" items={placement} />
-        <Section>
-          <SectionHeader
-            title="Usage"
-            count="live usage against this pod's limits"
-          />
-          <div>
-            <UsageRow
-              label="CPU"
-              used={podWithMetrics?.cpuMillicores}
-              total={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
-              type="cpu"
-            />
-            <UsageRow
-              label="Memory"
-              used={podWithMetrics?.memoryBytes}
-              total={pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null}
-              type="memory"
-            />
-          </div>
-        </Section>
+        <UsageBlock
+          kind={ResourceType.Pod}
+          uid={pod?.uid}
+          cpu={podWithMetrics?.cpuMillicores}
+          memory={podWithMetrics?.memoryBytes}
+          cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
+          memoryLimit={pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null}
+          restarts={pod?.restartCount ?? null}
+          sampledAt={podSampledAt}
+          status={podStatus}
+          connections={connections.data}
+        />
       </div>
 
       <TrafficChain query={connections} />

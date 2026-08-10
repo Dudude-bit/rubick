@@ -58,8 +58,8 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   ConditionRows,
   DetailAction,
-  UsageRow,
 } from "@/components/resources/detail-blocks";
+import { UsageBlock } from "@/components/resources/usage-block";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import {
   KeyValueSection,
@@ -134,7 +134,7 @@ export function DeploymentDetail() {
     refetchInterval: REFRESH_INTERVALS.resourceList,
   });
 
-  const { podMetrics, podStatus } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     includeCluster: false,
@@ -562,28 +562,25 @@ export function DeploymentDetail() {
 
       <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
         <KeyValueSection title="Rollout" items={facts} />
-        <Section>
-          <SectionHeader
-            title="Usage"
-            count={`summed over ${podsWithMetrics.length} pod${
-              podsWithMetrics.length === 1 ? "" : "s"
-            } · against declared limits`}
-          />
-          <div>
-            <UsageRow
-              label="CPU"
-              used={aggregatedMetrics.cpuMillicores}
-              total={totalResources.cpuLimit}
-              type="cpu"
-            />
-            <UsageRow
-              label="Memory"
-              used={aggregatedMetrics.memoryBytes}
-              total={totalResources.memoryLimit}
-              type="memory"
-            />
-          </div>
-        </Section>
+        <UsageBlock
+          kind={ResourceType.Deployment}
+          uid={deployment?.uid}
+          scope={`summed over ${podsWithMetrics.length} pod${
+            podsWithMetrics.length === 1 ? "" : "s"
+          }`}
+          cpu={aggregatedMetrics.cpuMillicores}
+          memory={aggregatedMetrics.memoryBytes}
+          cpuLimit={totalResources.cpuLimit}
+          memoryLimit={totalResources.memoryLimit}
+          noLimitNote="No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take."
+          restarts={podsWithMetrics.reduce(
+            (total, pod) => total + pod.restartCount,
+            0
+          )}
+          sampledAt={podSampledAt}
+          status={podStatus}
+          connections={connections.data}
+        />
         <Governance query={connections} />
       </div>
 
