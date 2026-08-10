@@ -280,3 +280,23 @@ describe("UsageBlock degraded, on a workload that declares no limits", () => {
     expect(screen.getByText(/no limits declared/i)).toBeInTheDocument();
   });
 });
+
+describe("UsageBlock in its first seconds", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  it("says the window starts now, once for the pair rather than once per band", () => {
+    render(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-9"
+        cpu={48}
+        memory={96}
+        cpuLimit={200}
+        memoryLimit={128}
+        sampledAt={1_700_000_000_000}
+        status={{ status: "available", message: null }}
+      />
+    );
+    expect(screen.getAllByText(/Watching from now/i)).toHaveLength(1);
+  });
+});

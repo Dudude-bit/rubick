@@ -43,6 +43,10 @@ const LINE_ROLE = {
   err: "text-err",
 } as const;
 
+/** What a band says before it has two readings to join. */
+export const WATCHING_NOTE =
+  "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.";
+
 /** What a band says when nothing declares a ceiling for it. */
 export const NO_LIMIT_NOTE =
   "No limit set — the scale is what it has used, and nothing stops it taking the node's.";
@@ -63,6 +67,8 @@ export interface UsageChartProps {
   noLimitNote?: string | null;
   /** Live value, used before the buffer has anything to draw. */
   current: number | null;
+  /** Set when the block is saying the same thing once for both bands. */
+  suppressNote?: boolean;
 }
 
 /**
@@ -77,6 +83,7 @@ export function UsageChart({
   limitNoun = "limit",
   noLimitNote = NO_LIMIT_NOTE,
   current,
+  suppressNote = false,
 }: UsageChartProps) {
   const channel = type === "cpu" ? "cpuMillicores" : "memoryBytes";
   const points = React.useMemo(
@@ -141,10 +148,10 @@ export function UsageChart({
         </span>
       </div>
       <Note>
-        {drawn === 0 && value === null
+        {suppressNote || (drawn === 0 && value === null)
           ? null
           : drawn <= 1
-            ? "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right."
+            ? WATCHING_NOTE
             : limit === null || limit <= 0
               ? noLimitNote
               : null}
@@ -307,7 +314,7 @@ function Band({
             point.v === null ? null : (
               <circle
                 key="seed"
-                cx={xOf(index, points.length, VIEW_W)}
+                cx={Math.min(xOf(index, points.length, VIEW_W), VIEW_W - 3)}
                 cy={yOf(point.v, max, GEOMETRY)}
                 r="2.5"
                 fill="currentColor"

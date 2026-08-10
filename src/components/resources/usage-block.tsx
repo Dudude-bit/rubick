@@ -8,7 +8,11 @@
 import * as React from "react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageRow } from "@/components/resources/detail-blocks";
-import { NO_LIMIT_NOTE, UsageChart } from "@/components/resources/usage-chart";
+import {
+  NO_LIMIT_NOTE,
+  UsageChart,
+  WATCHING_NOTE,
+} from "@/components/resources/usage-chart";
 import { useUsageHistory } from "@/hooks/useUsageHistory";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
@@ -86,6 +90,16 @@ export function UsageBlock({
   // keep counting up while the metrics query is failing.
   const watched = samples.length > 0 ? watchedFor(samples) : null;
 
+  // Both bands read the same buffer, so "watching from now" and "no limit
+  // set" are facts about the workload rather than about CPU and then again
+  // about memory. Said once, under the pair.
+  const shared =
+    available && samples.length > 0 && samples.length < 2
+      ? WATCHING_NOTE
+      : available && samples.length >= 2 && neither
+        ? noLimitNote
+        : null;
+
   const caption = !available
     ? // The block cannot promise a comparison the workload does not
       // declare — that pairing is what made an empty track read as 0%.
@@ -119,6 +133,7 @@ export function UsageBlock({
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
               current={cpu ?? null}
+              suppressNote={shared !== null}
             />
             <UsageChart
               label="Memory"
@@ -128,13 +143,11 @@ export function UsageBlock({
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
               current={memory ?? null}
+              suppressNote={shared !== null}
             />
-            {/* One sentence, not the same sentence twice: when neither
-             *  measure has a ceiling it is a fact about the workload
-             *  rather than about CPU and then again about memory. */}
-            {neither && (
+            {shared && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
-                {noLimitNote}
+                {shared}
               </p>
             )}
           </>
