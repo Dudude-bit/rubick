@@ -17,17 +17,15 @@
  */
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import yaml from "js-yaml";
 
 import { commands } from "@/lib/commands";
 import type {
   CustomResourceInfo,
-  ServicePublished,
   IngressClassSummary,
   IngressInfo,
-  ServiceInfo,
   TlsCertificate,
 } from "@/generated/types";
+import { useBackingLists, workloadArgs, type BackingLists } from "../ingress";
 import {
   allRoutes,
   readEntryPoints,
@@ -106,7 +104,6 @@ export interface RouteSources {
 }
 
 const ROUTE_SOURCES = ["traefik", "route-sources"];
-const BACKING = ["traefik", "backing"];
 const CONTROLLER = ["traefik", "controller"];
 
 /** A minute: routing changes with a deploy, not by the second. */
@@ -151,27 +148,14 @@ export function useRouteSources() {
   });
 }
 
-export interface Backing {
-  services: ServiceInfo[];
-  /** What each Service publishes, from its own EndpointSlices. The same
-   *  answer the traffic chain is built on, so a route that reads as broken
-   *  here reads as broken there in the same words. */
-  published: ServicePublished[];
-}
+/**
+ * What each Service publishes, from its own EndpointSlices. The same answer
+ * the traffic chain is built on — and the same query key every other
+ * routing page uses, because the lists do not differ by who asked.
+ */
+export const useBacking = useBackingLists;
 
-export function useBacking() {
-  return useQuery({
-    queryKey: BACKING,
-    queryFn: async (): Promise<Backing> => {
-      const [services, published] = await Promise.all([
-        commands.listServices(null),
-        commands.listServiceEndpoints(null),
-      ]);
-      return { services, published };
-    },
-    staleTime: STALE,
-  });
-}
+export type Backing = BackingLists;
 
 export interface ControllerInfo {
   workload: {
@@ -251,7 +235,7 @@ async function fetchController(): Promise<ControllerInfo> {
       workload.name,
       workload.namespace
     );
-    args = argsOf(manifest);
+    args = workloadArgs(manifest);
   } catch (error) {
     return {
       workload,
@@ -272,22 +256,6 @@ async function fetchController(): Promise<ControllerInfo> {
         ? "It was started with no arguments, so its entry points come from a configuration file this app cannot see."
         : null,
   };
-}
-
-interface WorkloadManifest {
-  spec?: {
-    template?: {
-      spec?: { containers?: Array<{ args?: unknown[]; command?: unknown[] }> };
-    };
-  };
-}
-
-function argsOf(manifest: string): string[] {
-  const parsed = yaml.load(manifest) as WorkloadManifest | undefined;
-  const containers = parsed?.spec?.template?.spec?.containers ?? [];
-  return containers.flatMap((container) =>
-    [...(container.command ?? []), ...(container.args ?? [])].map(String)
-  );
 }
 
 export function useController() {

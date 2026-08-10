@@ -1,13 +1,20 @@
 //! Extensions, in two kinds that must not be confused for each other.
 //!
 //! **Detected.** Core is what the API server answers for on any cluster. An
-//! in-cluster extension is something whose whole state is CRDs on that same
-//! API server — so "is it there" has a yes or a no, with no address to fill
-//! in, no credential to hold and nothing guessed. Detection being a fact
-//! rather than a heuristic is the only reason it is allowed at all:
+//! in-cluster extension is something whose whole state is objects on that
+//! same API server — so "is it there" has a yes or a no, with no address to
+//! fill in, no credential to hold and nothing guessed. Detection being a
+//! **fact rather than a heuristic** is the only reason it is allowed at all:
 //! `certificates.cert-manager.io` exists as a CRD or it does not; the app is
-//! not sniffing a port or matching a name. [`detect_in_cluster_extensions`]
-//! answers for all of them in one request.
+//! not sniffing a port or matching a name.
+//!
+//! For most of them that fact is a marker CRD. For ingress-nginx there is no
+//! CRD to be marked by — it installs none — and the fact is a *declared
+//! field* instead: `IngressClass.spec.controller` is the implementation
+//! naming itself, which is the same kind of statement and is read the same
+//! way. The rule is not "a CRD"; it is "the cluster says so in a field
+//! somebody had to write". [`detect_in_cluster_extensions`] answers for all
+//! of them.
 //!
 //! **Configured.** Anything that needs its own URL, and usually a credential
 //! the kubeconfig does not carry, cannot be detected without guessing — and
@@ -23,6 +30,7 @@
 //! nothing, and a lint rule keeps that true.
 
 pub mod cert_manager;
+pub mod ingress_nginx;
 pub mod prometheus;
 
 use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
@@ -81,13 +89,21 @@ fn detect_by_marker(
     }
 }
 
-/// What is installed in this cluster, in one request.
+/// What is installed in this cluster.
+///
+/// One request for all of the CRD-marked ones, and one more for the vendor
+/// that has no CRDs to be marked by — see [`ingress_nginx`], which is
+/// detected by the controller string an `IngressClass` declares rather than
+/// by an object whose existence is the install.
 #[tauri::command]
 pub async fn detect_in_cluster_extensions(
     state: State<'_, AppState>,
 ) -> Result<Vec<DetectedExtension>> {
     let crds = crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
-        state, None, None, None,
+        state.clone(),
+        None,
+        None,
+        None,
     )
     .await?;
     let mut detected = vec![cert_manager::detect(&crds.items)];
@@ -96,6 +112,7 @@ pub async fn detect_in_cluster_extensions(
             .iter()
             .map(|(id, markers)| detect_by_marker(&crds.items, id, markers)),
     );
+    detected.push(ingress_nginx::detect(state).await?);
     Ok(detected)
 }
 

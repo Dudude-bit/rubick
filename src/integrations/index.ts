@@ -63,6 +63,7 @@ import azure from "./azure";
 import certManager from "./cert-manager";
 import flux, { helmReleasePath } from "./flux";
 import googleCloud from "./google-cloud";
+import ingressNginx from "./ingress-nginx";
 import istio from "./istio";
 import k3s from "./k3s";
 import karpenter from "./karpenter";
@@ -149,6 +150,7 @@ export type {
 const VENDORS: Vendor[] = [
   certManager,
   traefik,
+  ingressNginx,
   argocd,
   flux,
   istio,

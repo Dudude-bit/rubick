@@ -2122,3 +2122,262 @@ spec:
       - key: track
         operator: NotIn
         values: [canary]
+
+---
+# --- ingress-nginx routing page ------------------------------------------
+#
+# ingress-nginx is not in this file: it has no CRDs and installs as a
+# controller Deployment plus an IngressClass, from its own static manifest.
+# Install it first, as NodePort so it does not fight k3d's Traefik for the
+# load balancer — this page reads objects, not traffic, so that is enough:
+#
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/baremetal/deploy.yaml
+#
+# Then let the snippets below through, which the shipped ConfigMap forbids
+# by default, and set two global settings the page has something to say
+# about:
+#
+#   kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
+#     --type merge -p '{"data":{"allow-snippet-annotations":"true",
+#     "annotations-risk-level":"Critical","proxy-body-size":"8m",
+#     "use-forwarded-headers":"true","server-tokens":"false",
+#     "ssl-protocols":"TLSv1.2 TLSv1.3",
+#     "log-format-upstream":"$remote_addr - $status $request_time"}}'
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete ingress \
+#     shop-nginx promo-nginx promo-nginx-canary snippet-nginx \
+#     ghost-nginx plain-nginx dupe-nginx-old dupe-nginx-new lonely-canary
+#   kubectl delete -f <the ingress-nginx manifest above>
+
+---
+# Twelve annotations, which is the case the page exists for: a plain Ingress
+# carrying a program. Ten of them decode; `mirror-target` is not in the
+# app's table and `proxy-body-size: enormous` is a value it will not read, so
+# both are printed as written and said to be.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/whitelist-source-range: 10.0.0.0/8,192.168.0.0/16
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: demo-secret
+    nginx.ingress.kubernetes.io/auth-realm: Staging only
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/mirror-target: https://mirror.k8s-gui.test/$request_uri
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - shop.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: shop.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# The canary pair. Two Ingresses, one host, and the page must draw it as one
+# host divided 80/20 rather than as two hosts each taking everything.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo-nginx
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - promo.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: promo.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo-nginx-canary
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "20"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: promo.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: topology-demo
+                port:
+                  number: 80
+---
+# A canary with no host to shadow. nginx merges a canary into the server
+# block of a host another Ingress already serves; there is no such block
+# here, so this is correct YAML that is never served.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lonely-canary
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: X-Preview
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: lonely.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# The rule the whole annotation feature is built on. Raw nginx config, shown
+# as written and flagged as raw — never paraphrased at any confidence.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: snippet-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Env: staging";
+      if ($request_uri ~* "^/internal") {
+        return 403;
+      }
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /healthz { return 200 'ok'; }
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - snippet.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: snippet.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# A backend that was never created.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ghost-nginx
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ghost.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: never-created
+                port:
+                  number: 80
+---
+# Served in the clear, and carrying the annotation that looks like it fixes
+# that. `ssl-redirect` does nothing on a host with no certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plain-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: internal.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Two objects, one host, one path. nginx serves the older one and logs a
+# warning nothing else in this cluster surfaces.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dupe-nginx-old
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: legacy.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dupe-nginx-new
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: legacy.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: topology-demo
+                port:
+                  number: 80

@@ -17,6 +17,10 @@
  * none of them honestly.
  */
 
+import { useQuery } from "@tanstack/react-query";
+import yaml from "js-yaml";
+
+import { commands } from "@/lib/commands";
 import { expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   ChainStop,
@@ -234,6 +238,100 @@ function namedTargetPorts(service: ServiceInfo): string[] {
   return service.ports
     .map((port) => port.targetPort)
     .filter((target) => target !== "" && !/^\d+$/.test(target));
+}
+
+/** The two lists every routing page needs to say what is behind a route. */
+export interface BackingLists {
+  services: ServiceInfo[];
+  published: ServicePublished[];
+}
+
+/** A minute: routing changes with a deploy, not by the second. */
+export const ROUTING_STALE = 60_000;
+
+/**
+ * Every Service in the cluster and what each publishes.
+ *
+ * One query key for every routing page there will ever be, deliberately.
+ * The lists are identical whoever asked for them, and a reader who looks at
+ * Traefik's page and then at nginx's should not pay for the same two
+ * cluster-wide reads twice.
+ */
+export function useBackingLists() {
+  return useQuery({
+    queryKey: ["routing", "backing"],
+    queryFn: async (): Promise<BackingLists> => {
+      const [services, published] = await Promise.all([
+        commands.listServices(null),
+        commands.listServiceEndpoints(null),
+      ]);
+      return { services, published };
+    },
+    staleTime: ROUTING_STALE,
+  });
+}
+
+interface WorkloadManifest {
+  spec?: {
+    template?: {
+      spec?: {
+        containers?: Array<{
+          args?: unknown[];
+          command?: unknown[];
+          env?: Array<{ name?: string; value?: string }>;
+        }>;
+      };
+    };
+  };
+}
+
+/**
+ * The flags a controller's process was started with.
+ *
+ * Both ingress controllers keep something in here that exists nowhere in the
+ * API server — Traefik's entry points, nginx's `--configmap` — so both read
+ * the workload's own manifest, and neither should have its own idea of where
+ * a container's arguments live.
+ */
+export function workloadArgs(manifest: string): string[] {
+  const parsed = yaml.load(manifest) as WorkloadManifest | undefined;
+  const containers = parsed?.spec?.template?.spec?.containers ?? [];
+  return containers.flatMap((container) =>
+    [...(container.command ?? []), ...(container.args ?? [])].map(String)
+  );
+}
+
+/**
+ * The container environment those arguments are expanded against.
+ *
+ * `--configmap=$(POD_NAMESPACE)/ingress-nginx-controller` is what the static
+ * manifest actually says, and the kubelet substitutes it at start. Reading
+ * the flag without doing the same substitution names a ConfigMap in a
+ * namespace called `$(POD_NAMESPACE)`, which does not exist.
+ */
+export function workloadEnv(manifest: string): Record<string, string> {
+  const parsed = yaml.load(manifest) as WorkloadManifest | undefined;
+  const containers = parsed?.spec?.template?.spec?.containers ?? [];
+  const env: Record<string, string> = {};
+  for (const container of containers) {
+    for (const entry of container.env ?? []) {
+      if (entry.name && entry.value !== undefined)
+        env[entry.name] = entry.value;
+    }
+  }
+  return env;
+}
+
+/** `$(NAME)` replaced where the environment says what it is. */
+export function expandEnv(
+  value: string,
+  env: Record<string, string>,
+  fallbacks: Record<string, string> = {}
+): string {
+  return value.replace(/\$\(([A-Za-z_][A-Za-z0-9_]*)\)/g, (whole, name) => {
+    const replacement = env[name] ?? fallbacks[name];
+    return replacement ?? whole;
+  });
 }
 
 // --- certificates -------------------------------------------------------
