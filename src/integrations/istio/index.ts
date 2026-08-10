@@ -2,14 +2,27 @@ import { Waypoints } from "lucide-react";
 
 import { defineVendor } from "../registry";
 import { crd } from "./crd";
+import { countHosts } from "./data";
+import { facts } from "./facts";
 
 /**
- * Istio. Tier two, and the vendor with a row and no facts.
+ * Istio.
  *
- * That combination has to keep working. `facts` is optional per vendor
- * precisely so a folder can declare one facet and stop — the tree is cheap
- * to add to only for as long as a half-written vendor still draws a whole
- * row, saying what it gives and nothing it does not know.
+ * Tier two. It used to be the vendor with a row and no facts, which was the
+ * proof that a folder may declare one facet and stop; it now has all three,
+ * and the proof moved on to whoever is written next.
+ *
+ * It earns a page on the same grounds Traefik does, with one more link in
+ * the chain: Gateway → VirtualService → DestinationRule → Service → pods is
+ * the same fixed order, and the same drawing serves it. What makes the page
+ * worth more than the CRD list is that every link is a reference *by string*
+ * that nothing validates — a gateway name, a hostname, a subset label — and
+ * a broken one has no status, no event and no condition. It is simply never
+ * served.
+ *
+ * The `crd` view stays beside it and is not made redundant: somebody who
+ * reached `virtualservices.networking.istio.io` from the CRD list still
+ * wants columns rather than raw YAML.
  */
 export default defineVendor({
   id: "istio",
@@ -18,6 +31,11 @@ export default defineVendor({
     gives:
       "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
     icon: Waypoints,
+    facts,
+  },
+  page: {
+    count: countHosts,
+    load: () => import("./page"),
   },
   crd,
 });

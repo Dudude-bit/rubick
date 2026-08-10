@@ -2381,3 +2381,211 @@ spec:
                 name: topology-demo
                 port:
                   number: 80
+
+---
+# --- Istio routing page ---------------------------------------------------
+#
+# Istio is not in this file either: its CRDs and istiod come from its own
+# installer. Install it first — the minimal profile is enough, because this
+# page reads objects rather than traffic and needs no sidecars and no
+# ingress gateway pod:
+#
+#   istioctl install --set profile=minimal -y
+#
+# The Gateway below selects `istio: ingressgateway`, which the minimal
+# profile does not deploy. That is deliberate and does not weaken anything:
+# every finding here is a reference between objects, and none of them needs
+# a running proxy to be true.
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete \
+#     gateway/mesh-edge virtualservice/shop-mesh \
+#     virtualservice/orphan-mesh virtualservice/typo-mesh \
+#     virtualservice/skewed-mesh virtualservice/raw-match-mesh \
+#     destinationrule/log-demo-versions
+#   istioctl uninstall --purge -y && kubectl delete namespace istio-system
+
+---
+# The edge listener the healthy host comes in through.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: mesh-edge
+  namespace: k8s-gui-test
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - shop.mesh.k8s-gui.test
+        - split.mesh.k8s-gui.test
+        - raw.mesh.k8s-gui.test
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: shop-tls
+      hosts:
+        - shop.mesh.k8s-gui.test
+---
+# The subsets the healthy route names. Both labels exist on log-demo's pods
+# only in the sense that a subset is a selector — v2 selects nothing, which
+# the chain's last column says rather than the mesh.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: log-demo-versions
+  namespace: k8s-gui-test
+spec:
+  host: log-demo
+  subsets:
+    - name: v1
+      labels:
+        app: log-demo
+    - name: v2
+      labels:
+        app: log-demo
+---
+# The healthy chain end to end: Gateway -> VirtualService -> DestinationRule
+# -> Service -> pods, with a match this app reads in full and a split that
+# adds up.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: shop-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - shop.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - name: api
+      match:
+        - uri:
+            prefix: /api
+          headers:
+            x-env:
+              exact: staging
+      route:
+        - destination:
+            host: log-demo
+            subset: v1
+            port:
+              number: 80
+          weight: 80
+        - destination:
+            host: log-demo
+            subset: v2
+            port:
+              number: 80
+          weight: 20
+    - name: everything-else
+      route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
+---
+# Finding one: a host no Gateway serves. `mesh-edge` exists and covers three
+# hostnames, none of them this one, and `north-gateway` does not exist at
+# all. Istio accepts both references without a status, an event or a
+# condition anywhere — the VirtualService simply never receives a request.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: orphan-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - orphan.mesh.k8s-gui.test
+  gateways:
+    - north-gateway
+  http:
+    - route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
+---
+# Finding two: a route to a subset no DestinationRule defines. `v3` is a
+# label selector that exists nowhere, and every request on this route is
+# answered with a 503.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: typo-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - split.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - match:
+        - uri:
+            prefix: /v3
+      route:
+        - destination:
+            host: log-demo
+            subset: v3
+            port:
+              number: 80
+---
+# Finding three: weights that do not add up to a hundred. Sixty and thirty
+# leaves a tenth of the requests matching this rule covered by nothing.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: skewed-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - skewed.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - route:
+        - destination:
+            host: log-demo
+            subset: v1
+          weight: 60
+        - destination:
+            host: log-demo
+            subset: v2
+          weight: 30
+---
+# A match this app refuses to paraphrase: a regular expression, a query
+# parameter and a source label, none of which it will describe. The whole
+# entry is printed as written, which is the rule the routing pages share.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: raw-match-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - raw.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - match:
+        - uri:
+            regex: ^/v[12]/(items|carts)/.*$
+          queryParams:
+            debug:
+              exact: "1"
+          sourceLabels:
+            app: checkout
+      route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
