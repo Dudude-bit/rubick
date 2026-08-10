@@ -360,7 +360,10 @@ export function IngressDetail() {
         <Section>
           <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
           {rules.length === 0 ? (
-            <p className="text-xs text-fg-fnt">No rules defined</p>
+            <p className="text-xs text-fg-fnt">
+              No rules, so this ingress routes nothing — every request reaching
+              the controller falls through to its default backend.
+            </p>
           ) : (
             <Table>
               <TableHeader>

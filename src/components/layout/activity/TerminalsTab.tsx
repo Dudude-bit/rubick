@@ -39,11 +39,18 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
   }
 
   if (contextSessions.length === 0) {
+    // The scope belongs in the copy: this list is filtered to the current
+    // context, so a shell left open on another cluster is not gone — it is
+    // just not here, and "no terminal sessions" said otherwise.
     return (
       <ActivityEmpty
         icon={Terminal}
-        title="No terminal sessions"
-        hint="Open a terminal from any pod's detail page"
+        title={`No terminal sessions open on ${currentContext}`}
+        hint={
+          sessions.length > 0
+            ? `${sessions.length} open on other clusters. Open one here from any pod's detail page.`
+            : "Open one from any pod's detail page."
+        }
       />
     );
   }

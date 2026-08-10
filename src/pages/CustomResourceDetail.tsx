@@ -290,10 +290,16 @@ export function CustomResourceDetail() {
       content: (
         <Section>
           <SectionHeader title="Spec" />
+          {/* The guard is on the object, not on `spec` — this is "the read
+              has not landed", which on a CRD the reader has never seen
+              before is indistinguishable from "this kind has no spec". */}
           {resource ? (
             <JsonTree data={resource.spec} />
           ) : (
-            <p className="text-xs text-fg-fnt">No spec</p>
+            <p className="text-xs text-fg-fnt">
+              This custom resource has not been read yet — its spec is
+              whatever the CRD defines, and nothing here has seen it.
+            </p>
           )}
         </Section>
       ),

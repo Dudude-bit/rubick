@@ -250,7 +250,10 @@ export function NodeDetail() {
           title="Labels"
           count={Object.keys(node?.labels ?? {}).length}
           items={recordToKeyValues(node?.labels ?? {})}
-          emptyMessage="No labels"
+          // A whole tab, not a row beside Annotations — and every node kubelet
+          // registers carries `kubernetes.io/*`, so an empty one is the read
+          // failing rather than a node with nothing to say about itself.
+          emptyMessage="No labels on this node — not even the kubernetes.io/* set kubelet registers, which usually means the object was not read."
         />
       ),
     },
@@ -316,6 +319,7 @@ export function NodeDetail() {
         limitNoun="capacity"
         sampledAt={nodeSampledAt}
         status={nodeStatus}
+        history={node?.name ? { kind: "node", node: node.name } : undefined}
       >
         {/* A tally of scheduled pods, not a reading from metrics-server:
          *  it comes from the pod list, it moves in steps of one, and a line

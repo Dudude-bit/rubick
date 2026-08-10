@@ -124,7 +124,10 @@ export function ServiceDetail() {
         <Section>
           <SectionHeader title="Ports" count={ports.length} />
           {ports.length === 0 ? (
-            <p className="text-xs text-fg-fnt">No ports defined</p>
+            <p className="text-xs text-fg-fnt">
+              No ports declared, so this Service accepts no traffic — nothing
+              reaches the pods its selector matches.
+            </p>
           ) : (
             <Table>
               <TableHeader>

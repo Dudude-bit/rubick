@@ -162,7 +162,15 @@ export function ContainerRows(props: ContainerRowsProps) {
       : [];
 
   if (groups.length === 0) {
-    return <p className="text-xs text-fg-fnt">No containers</p>;
+    // A pod without a container is not a thing Kubernetes will admit, so
+    // this is the template failing to arrive rather than a fact about the
+    // workload — and the reader has to be able to tell the two apart.
+    return (
+      <p className="text-xs text-fg-fnt">
+        No containers in this spec — nothing to inspect, and nothing an image
+        or a probe could be read from.
+      </p>
+    );
   }
 
   // One group is the whole pod, and the tab strip has already said

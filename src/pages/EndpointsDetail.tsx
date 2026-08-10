@@ -219,7 +219,10 @@ export function EndpointsDetail() {
         <Section>
           <SectionHeader title="Ports" count={allPorts.length} />
           {allPorts.length === 0 ? (
-            <p className="text-xs text-fg-fnt">No ports defined</p>
+            <p className="text-xs text-fg-fnt">
+              No ports across any subset — the backends above, if there are
+              any, are reachable on nothing.
+            </p>
           ) : (
             <Table>
               <TableHeader>
