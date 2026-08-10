@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
@@ -29,7 +29,18 @@ type NavItem = {
   icon: LucideIcon;
   /** Which of the backend's counts belongs at the end of this row. */
   count?: keyof ResourceCounts;
+  /**
+   * The route prefix this row owns, where that is wider than where it goes.
+   * Settings has five panes and one row; whichever pane the row happens to
+   * open, all five must light it.
+   */
+  section?: string;
+  /** Whether a waiting update puts its dot on this row. */
+  updateBadge?: boolean;
 };
+
+/** Where a waiting update actually is. `/settings` opens on Appearance. */
+const UPDATES_PATH = "/settings/about";
 
 /** A row whose label, route and icon all come from the resource registry. */
 function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
@@ -106,12 +117,26 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
  * on every screen the app has ever drawn.
  */
 const TAIL: NavItem[] = [
-  { label: "Settings", path: "/settings", icon: Settings },
+  {
+    label: "Settings",
+    path: "/settings",
+    icon: Settings,
+    section: "/settings",
+    updateBadge: true,
+  },
 ];
 
 export function Sidebar() {
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
-  const { data: overview } = useClusterOverview(currentNamespace);
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const { data } = useClusterOverview(currentNamespace);
+
+  // The overview query keeps its last answer as placeholder data across the
+  // key change a disconnect causes, which is right while switching clusters
+  // and wrong once there is no cluster: the rail went on printing the counts
+  // of the cluster the reader had just left. The status bar has always said
+  // "not connected" here; the rail now agrees rather than inventing numbers.
+  const overview = isConnected ? data : undefined;
 
   return (
     <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
@@ -258,17 +283,28 @@ function NavRow({
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
 }) {
+  const { pathname } = useLocation();
   const updateAvailable = useUpdaterStore((state) => state.available);
-  const badge = item.path === "/settings" && updateAvailable;
+  const badge = item.updateBadge === true && updateAvailable;
+
+  // The dot is a deep link, not a decoration. It says an update is waiting,
+  // so it goes where the update is; `/settings` redirects to Appearance,
+  // which is the one pane that says nothing about updates.
+  const to = badge ? UPDATES_PATH : item.path;
+
+  // ...and pointing at one pane must not stop the other four lighting the
+  // row, which is what the href alone would now decide.
+  const ownsRoute =
+    item.section !== undefined && pathname.startsWith(item.section);
 
   return (
     <NavLink
-      to={item.path}
+      to={to}
       end={item.path === "/"}
       className={({ isActive }) =>
         cn(
           "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
-          isActive && "bg-sel font-medium text-fg"
+          (isActive || ownsRoute) && "bg-sel font-medium text-fg"
         )
       }
     >
@@ -281,7 +317,7 @@ function NavRow({
                 // recognition without competing with it. Only the active row
                 // lifts it, which is what marks the row rather than the fill.
                 "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut",
-                isActive && "text-info group-hover:text-info"
+                (isActive || ownsRoute) && "text-info group-hover:text-info"
               )}
             />
             {badge && (

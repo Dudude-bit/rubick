@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import type { DetectedExtension } from "@/generated/types";
+import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 
 const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
 const listIngresses = vi.fn().mockResolvedValue([]);
@@ -27,19 +27,30 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+/** Only the three fields the rail reads; the rest of the overview is noise here. */
+type OverviewStub = Pick<
+  ClusterOverview,
+  "counts" | "problems" | "problemsTruncated"
+>;
+let overview: OverviewStub | undefined;
 vi.mock("@/hooks/useClusterOverview", () => ({
-  useClusterOverview: () => ({ data: undefined }),
+  // Deliberately ignores `enabled`, the way React Query's own
+  // `keepPreviousData` does: the hook goes on handing back the last cluster's
+  // answer after a disconnect, which is the condition the rail must survive.
+  useClusterOverview: () => ({ data: overview }),
 }));
 
 const { Sidebar } = await import("./Sidebar");
+const { useClusterStore } = await import("@/stores/clusterStore");
+const { useUpdaterStore } = await import("@/stores/updaterStore");
 
-function wrap(node: ReactNode) {
+function wrap(node: ReactNode, route: string[] = ["/"]) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{node}</MemoryRouter>
+      <MemoryRouter initialEntries={route}>{node}</MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -48,6 +59,80 @@ beforeEach(() => {
   vi.clearAllMocks();
   listIngresses.mockResolvedValue([]);
   listCustomResources.mockResolvedValue([]);
+  detectInClusterExtensions.mockResolvedValue([]);
+  overview = undefined;
+  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  useUpdaterStore.setState({ available: false });
+});
+
+/** An overview carrying one recognisable number and nothing else. */
+function overviewWithPods(pods: number): OverviewStub {
+  return {
+    counts: { pods } as ClusterOverview["counts"],
+    problems: [],
+    problemsTruncated: 0,
+  };
+}
+
+describe("the counts at the end of each row", () => {
+  it("prints the cluster's numbers while there is a cluster", async () => {
+    overview = overviewWithPods(41);
+    wrap(<Sidebar />);
+    expect(await screen.findByText("41")).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if the rail went on printing the counts of the cluster the
+   * reader just left. The overview query keeps its last answer as
+   * placeholder data across the key change a disconnect causes, so
+   * "is there data" is not the question — "is there a cluster" is. The
+   * status bar has always answered it this way.
+   */
+  it("prints none of them once there is no cluster", async () => {
+    overview = overviewWithPods(41);
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+
+    wrap(<Sidebar />);
+
+    expect(await screen.findByText("Pods")).toBeInTheDocument();
+    expect(screen.queryByText("41")).not.toBeInTheDocument();
+  });
+});
+
+describe("the update dot", () => {
+  /**
+   * Would break if the dot went back to `/settings`, which redirects to
+   * Appearance — the one pane that says nothing about updates. The dot is a
+   * deep link; it has to land where the update is.
+   */
+  it("sends the Settings row to About while an update is waiting", async () => {
+    useUpdaterStore.setState({ available: true });
+    wrap(<Sidebar />);
+
+    expect(
+      await screen.findByRole("link", { name: "Settings" })
+    ).toHaveAttribute("href", "/settings/about");
+  });
+
+  it("leaves the row alone when no update is waiting", async () => {
+    wrap(<Sidebar />);
+    expect(
+      await screen.findByRole("link", { name: "Settings" })
+    ).toHaveAttribute("href", "/settings");
+  });
+
+  /**
+   * The row points at one pane and owns five. Would break if the four panes
+   * it no longer names stopped marking it, leaving Settings open with no
+   * row in the rail lit.
+   */
+  it("still marks the row from a pane it does not point at", async () => {
+    useUpdaterStore.setState({ available: true });
+    wrap(<Sidebar />, ["/settings/registries"]);
+
+    const link = await screen.findByRole("link", { name: "Settings" });
+    expect(link.className).toContain("bg-sel");
+  });
 });
 
 describe("the Integrations category", () => {
