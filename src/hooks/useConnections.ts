@@ -18,13 +18,22 @@ export type ConnectionsQuery = ReturnType<typeof useConnections>;
 export function useConnections(
   kind: string,
   name: string | undefined,
-  namespace: string | null | undefined
+  namespace: string | null | undefined,
+  /**
+   * Held back until the answer is wanted.
+   *
+   * The peek needs the governing edges only once somebody presses Scale, and
+   * a neighbourhood read on every row a reader arrows past would be six lists
+   * per keystroke. The query key is unchanged, so a page that has already
+   * asked answers the peek from the cache.
+   */
+  enabled = true
 ) {
   return useQuery<ResourceConnections>({
     queryKey: ["connections", kind, namespace ?? null, name],
     queryFn: () =>
       commands.getResourceConnections(kind, name!, namespace ?? null),
-    enabled: !!name,
+    enabled: enabled && !!name,
     // A pod going ready is the fact this view exists to show, so it follows
     // the list pages rather than sitting on a stale answer.
     placeholderData: keepPreviousData,

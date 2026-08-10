@@ -370,6 +370,21 @@ export interface ObjectRef {
   facts: ObjectFacts | null;
 }
 
+export interface ConditionInfo {
+  type: string;
+  status: string;
+  reason: string | null;
+  message: string | null;
+  lastTransitionTime: string | null;
+}
+
+export interface AutoscalerMetric {
+  name: string;
+  source: string;
+  target: string;
+  current: string | null;
+}
+
 export interface ManifestResult {
   success: boolean;
   stdout: string;
@@ -636,14 +651,6 @@ export interface JobDetailInfo {
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
   createdAt: string | null;
-}
-
-export interface ConditionInfo {
-  type: string;
-  status: string;
-  reason: string | null;
-  message: string | null;
-  lastTransitionTime: string | null;
 }
 
 export interface JobInfo {
@@ -1403,7 +1410,8 @@ export type Relation =
       tls: boolean;
     }
   | { verb: "runsOn" }
-  | { verb: "binds" };
+  | { verb: "binds" }
+  | { verb: "governs"; selector: string | null };
 
 export type Usage =
   | {
@@ -1440,7 +1448,27 @@ export type ObjectFacts =
       revision: string | null;
       current: boolean | null;
     }
-  | { kind: "claim"; phase: string; capacity: string; storageClass: string };
+  | { kind: "claim"; phase: string; capacity: string; storageClass: string }
+  | {
+      kind: "autoscaler";
+      minReplicas: number;
+      maxReplicas: number;
+      currentReplicas: number;
+      desiredReplicas: number;
+      metrics: AutoscalerMetric[];
+      conditions: ConditionInfo[];
+      lastScaleTime: string | null;
+    }
+  | {
+      kind: "budget";
+      minAvailable: string | null;
+      maxUnavailable: string | null;
+      disruptionsAllowed: number;
+      currentHealthy: number;
+      desiredHealthy: number;
+      expectedPods: number;
+      conditions: ConditionInfo[];
+    };
 
 export type Existence = "present" | "missing" | "notChecked";
 

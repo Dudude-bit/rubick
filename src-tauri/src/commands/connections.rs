@@ -14,20 +14,25 @@
 use std::collections::{BTreeMap, HashSet};
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
+use k8s_openapi::api::autoscaling::v2::{
+    HorizontalPodAutoscaler, MetricSpec, MetricStatus, MetricTarget, MetricValueStatus,
+};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{PersistentVolumeClaim, Pod, PodSpec, Service};
 use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress};
+use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::ListParams;
+use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+use kube::api::{Api, ListParams};
 use kube::ResourceExt;
 use tauri::State;
 
 use crate::commands::helpers::{build_label_selector, ResourceContext};
 use crate::error::{Error, Result};
 use crate::resources::{
-    condition_is_true, selector_matches, usages_in_pod_spec, ChainStop, ConnectionEdge, Existence,
-    ObjectFacts, ObjectRef, Relation, ResourceConnections, UnexploredKind, Usage,
-    REVISION_ANNOTATION,
+    condition_is_true, selector_matches, usages_in_pod_spec, AutoscalerMetric, ChainStop,
+    ConditionInfo, ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation,
+    ResourceConnections, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 
@@ -475,6 +480,314 @@ fn claim_ref(claim: &PersistentVolumeClaim, ns: &str) -> ObjectRef {
     })
 }
 
+// --- what acts on it without being asked --------------------------------
+
+/// The autoscaler as the workload it scales needs to read it.
+fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
+    let spec = hpa.spec.as_ref();
+    let status = hpa.status.as_ref();
+    let readings: Vec<&MetricStatus> = status
+        .and_then(|s| s.current_metrics.as_ref())
+        .map(|m| m.iter().collect())
+        .unwrap_or_default();
+
+    ObjectRef::new(
+        "HorizontalPodAutoscaler",
+        &hpa.name_any(),
+        Some(ns.to_string()),
+        Existence::Present,
+    )
+    .with_facts(ObjectFacts::Autoscaler {
+        // The API server defaults an absent `minReplicas` to 1, and the
+        // reader is looking at a range: leaving it null would draw "— to 5".
+        min_replicas: spec.and_then(|s| s.min_replicas).unwrap_or(1),
+        max_replicas: spec.map_or(0, |s| s.max_replicas),
+        current_replicas: status.and_then(|s| s.current_replicas).unwrap_or(0),
+        desired_replicas: status.map_or(0, |s| s.desired_replicas),
+        metrics: spec
+            .and_then(|s| s.metrics.as_ref())
+            .map(|metrics| {
+                metrics
+                    .iter()
+                    .map(|metric| autoscaler_metric(metric, &readings))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        conditions: status
+            .and_then(|s| s.conditions.as_ref())
+            .map(|conditions| {
+                conditions
+                    .iter()
+                    .map(|c| ConditionInfo {
+                        type_: c.type_.clone(),
+                        status: c.status.clone(),
+                        reason: c.reason.clone(),
+                        message: c.message.clone(),
+                        last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        last_scale_time: status.and_then(|s| s.last_scale_time.as_ref()).map(|t| t.0),
+    })
+}
+
+/// The name a metric spec is known by, which is also how its reading is found.
+fn metric_name(metric: &MetricSpec) -> (String, String) {
+    if let Some(resource) = &metric.resource {
+        return (resource.name.clone(), "resource".to_string());
+    }
+    if let Some(container) = &metric.container_resource {
+        return (
+            format!("{} in {}", container.name, container.container),
+            "containerResource".to_string(),
+        );
+    }
+    if let Some(pods) = &metric.pods {
+        return (pods.metric.name.clone(), "pods".to_string());
+    }
+    if let Some(object) = &metric.object {
+        return (object.metric.name.clone(), "object".to_string());
+    }
+    if let Some(external) = &metric.external {
+        return (external.metric.name.clone(), "external".to_string());
+    }
+    (metric.type_.clone(), metric.type_.to_lowercase())
+}
+
+/// The reading published for one spec'd metric, matched by name and shape.
+///
+/// `None` rather than zero where nothing matched: an HPA that cannot reach
+/// its metrics publishes no `currentMetrics` at all, and a zero there would
+/// be a reading it never took.
+fn reading_for(metric: &MetricSpec, readings: &[&MetricStatus]) -> Option<MetricValueStatus> {
+    readings.iter().find_map(|status| {
+        match (&metric.resource, &status.resource) {
+            (Some(spec), Some(got)) if spec.name == got.name => {
+                return Some(got.current.clone());
+            }
+            _ => {}
+        }
+        match (&metric.container_resource, &status.container_resource) {
+            (Some(spec), Some(got)) if spec.name == got.name && spec.container == got.container => {
+                return Some(got.current.clone());
+            }
+            _ => {}
+        }
+        match (&metric.pods, &status.pods) {
+            (Some(spec), Some(got)) if spec.metric.name == got.metric.name => {
+                return Some(got.current.clone());
+            }
+            _ => {}
+        }
+        match (&metric.object, &status.object) {
+            (Some(spec), Some(got)) if spec.metric.name == got.metric.name => {
+                return Some(got.current.clone());
+            }
+            _ => {}
+        }
+        match (&metric.external, &status.external) {
+            (Some(spec), Some(got)) if spec.metric.name == got.metric.name => {
+                Some(got.current.clone())
+            }
+            _ => None,
+        }
+    })
+}
+
+fn autoscaler_metric(metric: &MetricSpec, readings: &[&MetricStatus]) -> AutoscalerMetric {
+    let (name, source) = metric_name(metric);
+    let target = metric
+        .resource
+        .as_ref()
+        .map(|m| &m.target)
+        .or_else(|| metric.container_resource.as_ref().map(|m| &m.target))
+        .or_else(|| metric.pods.as_ref().map(|m| &m.target))
+        .or_else(|| metric.object.as_ref().map(|m| &m.target))
+        .or_else(|| metric.external.as_ref().map(|m| &m.target));
+
+    AutoscalerMetric {
+        name,
+        source,
+        target: target.map(target_text).unwrap_or_default(),
+        current: reading_for(metric, readings).as_ref().map(reading_text),
+    }
+}
+
+/// A target in the unit the reader compares against — a percentage for a
+/// utilisation target, the bare quantity for the other two.
+fn target_text(target: &MetricTarget) -> String {
+    if let Some(utilisation) = target.average_utilization {
+        return format!("{utilisation}%");
+    }
+    if let Some(average) = &target.average_value {
+        return average.0.clone();
+    }
+    target
+        .value
+        .as_ref()
+        .map(|v| v.0.clone())
+        .unwrap_or_default()
+}
+
+fn reading_text(reading: &MetricValueStatus) -> String {
+    if let Some(utilisation) = reading.average_utilization {
+        return format!("{utilisation}%");
+    }
+    if let Some(average) = &reading.average_value {
+        return average.0.clone();
+    }
+    reading
+        .value
+        .as_ref()
+        .map(|v| v.0.clone())
+        .unwrap_or_default()
+}
+
+fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
+    let spec = pdb.spec.as_ref();
+    let status = pdb.status.as_ref();
+    let text = |value: &IntOrString| match value {
+        IntOrString::Int(n) => n.to_string(),
+        IntOrString::String(s) => s.clone(),
+    };
+
+    ObjectRef::new(
+        "PodDisruptionBudget",
+        &pdb.name_any(),
+        Some(ns.to_string()),
+        Existence::Present,
+    )
+    .with_facts(ObjectFacts::Budget {
+        min_available: spec.and_then(|s| s.min_available.as_ref()).map(text),
+        max_unavailable: spec.and_then(|s| s.max_unavailable.as_ref()).map(text),
+        disruptions_allowed: status.map_or(0, |s| s.disruptions_allowed),
+        current_healthy: status.map_or(0, |s| s.current_healthy),
+        desired_healthy: status.map_or(0, |s| s.desired_healthy),
+        expected_pods: status.map_or(0, |s| s.expected_pods),
+        conditions: status
+            .and_then(|s| s.conditions.as_ref())
+            .map(|conditions| {
+                conditions
+                    .iter()
+                    .map(|c| ConditionInfo {
+                        type_: c.type_.clone(),
+                        status: c.status.clone(),
+                        reason: Some(c.reason.clone()).filter(|r| !r.is_empty()),
+                        message: Some(c.message.clone()).filter(|m| !m.is_empty()),
+                        last_transition_time: Some(c.last_transition_time.0),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    })
+}
+
+/// Whether an autoscaler's `scaleTargetRef` names this object.
+///
+/// Group, kind and name — not the version. The API server resolves the
+/// reference through the scale subresource, which is addressed by
+/// group-resource, so an `apps/v1` and an `apps/v1beta2` reference to the
+/// same Deployment are the same reference. The group is not optional
+/// though: a `Deployment` in some other group is a different object, and
+/// matching on the bare kind would draw an edge Kubernetes does not make.
+fn scale_target_matches(hpa: &HorizontalPodAutoscaler, target: &ObjectRef) -> bool {
+    let Some(reference) = hpa.spec.as_ref().map(|s| &s.scale_target_ref) else {
+        return false;
+    };
+    if reference.kind != target.kind || reference.name != target.name {
+        return false;
+    }
+    let Some(group) = target_group(&target.kind) else {
+        return true;
+    };
+    match &reference.api_version {
+        // `apiVersion` is optional in the type and required by validation;
+        // an object that somehow has none states no group to disagree with.
+        None => true,
+        Some(version) => version.split_once('/').map_or("", |(g, _)| g) == group,
+    }
+}
+
+/// The API group of a kind an autoscaler can plausibly point at.
+fn target_group(kind: &str) -> Option<&'static str> {
+    match kind {
+        "Deployment" | "StatefulSet" | "ReplicaSet" | "DaemonSet" => Some("apps"),
+        "ReplicationController" => Some(""),
+        _ => None,
+    }
+}
+
+/// The autoscalers that name any of `scalable`, and the budgets that match
+/// `labels`.
+///
+/// Both lists were taken once with the rest of the namespace, so this is a
+/// pass over memory whatever the answer is — the same contract the Services
+/// and the Ingresses are read under.
+fn governed_by(
+    ns: &str,
+    scalable: &[ObjectRef],
+    target: &ObjectRef,
+    labels: &BTreeMap<String, String>,
+    snapshot: &Snapshot,
+    out: &mut Neighbourhood,
+) {
+    for hpa in snapshot.autoscalers.as_deref().unwrap_or_default() {
+        for object in scalable {
+            if scale_target_matches(hpa, object) {
+                out.edge(
+                    autoscaler_ref(hpa, ns),
+                    object.clone(),
+                    Relation::Governs { selector: None },
+                );
+            }
+        }
+    }
+    budgets_over(ns, target, labels, &snapshot.budgets, out);
+}
+
+/// The PodDisruptionBudgets whose selector matches these pod labels.
+fn budgets_over(
+    ns: &str,
+    target: &ObjectRef,
+    labels: &BTreeMap<String, String>,
+    budgets: &Read<PodDisruptionBudget>,
+    out: &mut Neighbourhood,
+) {
+    for pdb in budgets.as_deref().unwrap_or_default() {
+        // A budget only ever covers pods in its own namespace. The check is
+        // free where the list was namespace-scoped and load-bearing where it
+        // was not — a node's is taken across the whole cluster.
+        if pdb.namespace().as_deref() != Some(ns) {
+            continue;
+        }
+        let selector = pdb
+            .spec
+            .as_ref()
+            .and_then(|s| s.selector.as_ref())
+            .and_then(|s| s.match_labels.clone())
+            .unwrap_or_default();
+        if !selector_matches(&selector, labels) {
+            continue;
+        }
+        out.edge(
+            budget_ref(pdb, ns),
+            target.clone(),
+            Relation::Governs {
+                selector: Some(build_label_selector(&selector)),
+            },
+        );
+    }
+}
+
+/// What the reads that failed leave the answer unable to say.
+fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
+    UnexploredKind::governance(
+        snapshot.autoscalers.as_ref().err().map(|why| why.as_str()),
+        snapshot.budgets.as_ref().err().map(|why| why.as_str()),
+    )
+}
+
 // --- ownership ---------------------------------------------------------
 
 fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
@@ -569,11 +882,24 @@ struct Snapshot {
     services: Vec<Service>,
     ingresses: Vec<Ingress>,
     claims: Vec<PersistentVolumeClaim>,
+    /// `Err` carries why the read failed, and is not the same answer as an
+    /// empty list: `autoscaling/v2` is not served by every cluster this app
+    /// connects to, and "nothing scales this" is not what a 404 means.
+    autoscalers: Read<HorizontalPodAutoscaler>,
+    budgets: Read<PodDisruptionBudget>,
+}
+
+/// A list whose failure is part of the answer rather than the end of it, and
+/// so is carried alongside the items instead of aborting the whole call.
+type Read<K> = std::result::Result<Vec<K>, String>;
+
+fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Read<K> {
+    list.map(|list| list.items).map_err(|err| err.to_string())
 }
 
 impl Snapshot {
-    /// The namespace's pods, Services, Ingresses and claims, in four
-    /// concurrent lists.
+    /// The namespace's pods, Services, Ingresses, claims, autoscalers and
+    /// disruption budgets, in six concurrent lists.
     ///
     /// The pods are listed unscoped on purpose. A Service's readiness is a
     /// fact about every pod it selects, and a selector-scoped list would only
@@ -585,17 +911,23 @@ impl Snapshot {
         let services_api = ctx.namespaced_api::<Service>();
         let ingresses_api = ctx.namespaced_api::<Ingress>();
         let claims_api = ctx.namespaced_api::<PersistentVolumeClaim>();
-        let (pods, services, ingresses, claims) = tokio::join!(
+        let autoscalers_api = ctx.namespaced_api::<HorizontalPodAutoscaler>();
+        let budgets_api = ctx.namespaced_api::<PodDisruptionBudget>();
+        let (pods, services, ingresses, claims, autoscalers, budgets) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
             ingresses_api.list(&params),
             claims_api.list(&params),
+            autoscalers_api.list(&params),
+            budgets_api.list(&params),
         );
         Ok(Self {
             pods: pods?.items,
             services: services?.items,
             ingresses: ingresses?.items,
             claims: claims.map(|list| list.items).unwrap_or_default(),
+            autoscalers: read(autoscalers),
+            budgets: read(budgets),
         })
     }
 }
@@ -637,14 +969,26 @@ async fn pod_connections(
     owner_chain(
         ctx,
         ns,
-        subject,
+        subject.clone(),
         pod.owner_references().to_vec(),
         &mut HashSet::new(),
         out,
     )
     .await;
 
-    out.not_looked_at = UnexploredKind::for_workload();
+    // An autoscaler never names a pod; it names the workload above it, and
+    // the chain that was just walked is where that workload's name is. A
+    // reader on a pod page asking "why did this come back" is asking about
+    // the same HPA, so the edge is drawn to the object it really scales.
+    let scalable: Vec<ObjectRef> = out
+        .edges
+        .iter()
+        .filter(|edge| matches!(edge.relation, Relation::Owns { .. }))
+        .map(|edge| edge.from.clone())
+        .collect();
+    governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
+
+    out.not_looked_at = unanswered(&snapshot);
     out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
@@ -865,7 +1209,19 @@ async fn workload_connections(
         revisions_of(ctx, ns, &subject, uid.as_deref(), &template.selector, out).await?;
     }
 
-    out.not_looked_at = UnexploredKind::for_workload();
+    // The template's labels again, and for the same reason a Service is
+    // tested against them: a budget protects the pods, and the workload is
+    // covered exactly when the pods it makes are.
+    governed_by(
+        ns,
+        std::slice::from_ref(&subject),
+        &subject,
+        &template.labels,
+        &snapshot,
+        out,
+    );
+
+    out.not_looked_at = unanswered(&snapshot);
     out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
@@ -1120,6 +1476,13 @@ async fn config_connections(
     users_of(ctx, ns, &subject, out).await
 }
 
+/// A node: what is running on it, and what would refuse to move.
+///
+/// Both lists are cluster-wide rather than scoped to the caller's namespace,
+/// and that is a correctness point rather than a widening: a Node is
+/// cluster-scoped, and the pods a drain has to evict are in every namespace
+/// there is. Answering with one namespace's worth would name a subset and
+/// draw it as the whole.
 async fn node_connections(
     ctx: &ResourceContext,
     name: &str,
@@ -1129,11 +1492,24 @@ async fn node_connections(
     out.subject = Some(subject.clone());
 
     let params = ListParams::default().fields(&format!("spec.nodeName={name}"));
-    let pods = ctx.namespaced_or_cluster_api::<Pod>().list(&params).await?;
-    for pod in &pods.items {
+    let pods_api: Api<Pod> = Api::all(ctx.client.clone());
+    let budgets_api: Api<PodDisruptionBudget> = Api::all(ctx.client.clone());
+    let every = ListParams::default();
+    let (pods, budgets) = tokio::join!(pods_api.list(&params), budgets_api.list(&every));
+    let budgets = read(budgets);
+
+    for pod in &pods?.items {
         let ns = pod.namespace().unwrap_or_default();
-        out.edge(pod_ref(pod, &ns), subject.clone(), Relation::RunsOn);
+        let this = pod_ref(pod, &ns);
+        out.edge(this.clone(), subject.clone(), Relation::RunsOn);
+        // Per pod and not per node: a budget only ever covers pods in its
+        // own namespace, and which of them sit on this node is the whole
+        // question a drain asks.
+        budgets_over(&ns, &this, pod.labels(), &budgets, out);
     }
+
+    out.not_looked_at =
+        UnexploredKind::governance(None, budgets.as_ref().err().map(|why| why.as_str()));
     Ok(())
 }
 

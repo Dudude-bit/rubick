@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { DrainDialog } from "@/components/resources/drain-dialog";
 
 /**
  * Nodes, grouped by the pool the cloud says made them.
@@ -156,6 +157,8 @@ export function NodeList() {
     },
   });
 
+  const [draining, setDraining] = useState<string | null>(null);
+
   const columns: ColumnDef<NodeInfo>[] = useMemo(
     () => [
       createNameColumn<NodeInfo>(ResourceType.Node),
@@ -269,32 +272,46 @@ export function NodeList() {
       {
         icon: AlertTriangle,
         label: "Drain",
-        onClick: (item) => drainMutation.mutate(item.name),
+        // Straight to the dialog rather than to the mutation: a drain is the
+        // one action here that can be refused by something the reader cannot
+        // see from this row.
+        onClick: (item) => setDraining(item.name),
         variant: "destructive",
       },
     ],
-    [navigate, cordonMutation, uncordonMutation, drainMutation]
+    [navigate, cordonMutation, uncordonMutation]
   );
 
   return (
-    <ResourceList<NodeInfo>
-      title="Nodes"
-      queryKey={queryKeys.resources(ResourceType.Node, null)}
-      getRowId={getResourceRowId}
-      queryFn={() => commands.listNodes(null)}
-      columns={columns}
-      quickActions={quickActions}
-      grouping={poolGrouping}
-      emptyStateLabel={toPlural(ResourceType.Node)}
-      staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? undefined : false}
-      live={!watchFailed}
-      headerContent={
-        nodeStatus?.status !== "available" ? (
-          <MetricsStatusBanner status={nodeStatus} />
-        ) : null
-      }
-      getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
-    />
+    <>
+      <ResourceList<NodeInfo>
+        title="Nodes"
+        queryKey={queryKeys.resources(ResourceType.Node, null)}
+        getRowId={getResourceRowId}
+        queryFn={() => commands.listNodes(null)}
+        columns={columns}
+        quickActions={quickActions}
+        grouping={poolGrouping}
+        emptyStateLabel={toPlural(ResourceType.Node)}
+        staleTime={STALE_TIMES.resourceList}
+        refetchInterval={watchFailed ? undefined : false}
+        live={!watchFailed}
+        headerContent={
+          nodeStatus?.status !== "available" ? (
+            <MetricsStatusBanner status={nodeStatus} />
+          ) : null
+        }
+        getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
+      />
+      <DrainDialog
+        node={draining}
+        onOpenChange={(open) => !open && setDraining(null)}
+        busy={drainMutation.isPending}
+        onConfirm={(node) => {
+          setDraining(null);
+          drainMutation.mutate(node);
+        }}
+      />
+    </>
   );
 }

@@ -15,10 +15,11 @@
 
 use std::collections::BTreeMap;
 
+use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::PodSpec;
 use serde::{Deserialize, Serialize};
 
-use super::types::{mounts_of, volume_source, ServicePortInfo};
+use super::types::{mounts_of, volume_source, ConditionInfo, ServicePortInfo};
 
 /// Whether the app looked, told apart from what it found.
 ///
@@ -126,6 +127,70 @@ pub enum ObjectFacts {
         #[serde(rename = "storageClass")]
         storage_class: String,
     },
+    /// A HorizontalPodAutoscaler, in the terms the workload it scales needs.
+    ///
+    /// The whole status travels, conditions included, because the finding
+    /// worth the read is a condition rather than a number:
+    /// `ScalingLimited=True` says the autoscaler wants more replicas than
+    /// `maxReplicas` allows, and both replica counts read as the healthy
+    /// steady state while it does.
+    Autoscaler {
+        /// `spec.minReplicas` defaults to 1 when it is left out.
+        #[serde(rename = "minReplicas")]
+        min_replicas: i32,
+        #[serde(rename = "maxReplicas")]
+        max_replicas: i32,
+        #[serde(rename = "currentReplicas")]
+        current_replicas: i32,
+        #[serde(rename = "desiredReplicas")]
+        desired_replicas: i32,
+        metrics: Vec<AutoscalerMetric>,
+        conditions: Vec<ConditionInfo>,
+        #[serde(rename = "lastScaleTime")]
+        last_scale_time: Option<DateTime<Utc>>,
+    },
+    /// A PodDisruptionBudget, and how much room it is leaving right now.
+    Budget {
+        /// As written, `Some("1")` or `Some("50%")`. Exactly one of the two
+        /// is set on any budget the API server accepted.
+        #[serde(rename = "minAvailable")]
+        min_available: Option<String>,
+        #[serde(rename = "maxUnavailable")]
+        max_unavailable: Option<String>,
+        /// How many pods may be evicted right now. Zero blocks a drain.
+        #[serde(rename = "disruptionsAllowed")]
+        disruptions_allowed: i32,
+        #[serde(rename = "currentHealthy")]
+        current_healthy: i32,
+        #[serde(rename = "desiredHealthy")]
+        desired_healthy: i32,
+        #[serde(rename = "expectedPods")]
+        expected_pods: i32,
+        conditions: Vec<ConditionInfo>,
+    },
+}
+
+/// One thing an autoscaler watches, with the reading against the target.
+///
+/// Spec and status are paired here rather than shipped as two lists: the
+/// pairing is what makes the pair readable — "cpu 210% of 50%" — and an
+/// unpaired `current` is exactly the state that has to be drawn as an
+/// absence rather than as a zero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoscalerMetric {
+    /// `cpu`, `memory`, or the custom metric's own name.
+    pub name: String,
+    /// Which of the five metric shapes it is: `resource`,
+    /// `containerResource`, `pods`, `object` or `external`.
+    pub source: String,
+    /// The target as the spec states it — `50%` for a utilisation target,
+    /// a bare quantity otherwise.
+    pub target: String,
+    /// The reading, or `None` where the autoscaler has published none. An
+    /// HPA that cannot reach its metrics publishes nothing at all, and a
+    /// zero there would be a reading it never took.
+    pub current: Option<String>,
 }
 
 /// How a pod spec draws on a ConfigMap, a Secret, a claim or an identity.
@@ -194,6 +259,24 @@ pub enum Relation {
     RunsOn,
     /// A claim's `spec.volumeName` or `spec.storageClassName`.
     Binds,
+    /// `from` acts on `to` of its own accord — an autoscaler whose
+    /// `scaleTargetRef` names it, a PodDisruptionBudget whose selector
+    /// matches its pods.
+    ///
+    /// A verb of its own rather than `Selects` or `Uses`, and the direction
+    /// of consent is why. Every other verb here is stated by the object that
+    /// wants something: a pod spec names the ConfigMap it needs, a claim
+    /// names its class. These two are stated *about* an object, by a third
+    /// one, and nothing on the governed side records that it happened — a
+    /// Deployment's YAML says nothing about the HPA that overwrites its
+    /// `spec.replicas` fifteen seconds after you set it. Filing that under
+    /// `Selects` would put a PodDisruptionBudget in the same group as the
+    /// Service that routes traffic, which answers a different question.
+    Governs {
+        /// The selector that matched, where the edge came from one. `None`
+        /// where the governor names its target outright, as an HPA does.
+        selector: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,20 +347,39 @@ impl UnexploredKind {
         }
     }
 
-    /// The kinds a workload's neighbourhood would gain, and that the backend
-    /// does not read.
+    /// A kind this call did ask for and got no answer to.
+    ///
+    /// Different from a kind nobody ever queried, and drawn in the same
+    /// group for the same reason: an autoscaler list that 404s on a cluster
+    /// serving only `autoscaling/v2beta2`, or that RBAC refuses, must not
+    /// come back as "nothing scales this". The app asked; it has no answer.
     #[must_use]
-    pub fn for_workload() -> Vec<Self> {
-        vec![
-            Self::new(
-                "HorizontalPodAutoscaler",
-                "the app does not read HorizontalPodAutoscalers, so it cannot say whether one scales this",
+    pub fn unanswered(kind: &str, version: &str, why: &str) -> Self {
+        Self::new(
+            kind,
+            &format!(
+                "the app asked for {version} and the cluster did not answer ({why}), so it cannot say whether one applies here"
             ),
-            Self::new(
-                "PodDisruptionBudget",
-                "the app does not read PodDisruptionBudgets, so it cannot say what protects this during a drain",
-            ),
+        )
+    }
+
+    /// What a workload's neighbourhood still cannot answer once the two
+    /// governing kinds have been read, given the reason each read failed.
+    ///
+    /// Empty for both `None`, and that is the point of the function: the app
+    /// reads both kinds now, and a row still saying "the app does not read
+    /// HorizontalPodAutoscalers" would be a worse lie than the gap it
+    /// replaced.
+    #[must_use]
+    pub fn governance(autoscalers: Option<&str>, budgets: Option<&str>) -> Vec<Self> {
+        [
+            autoscalers
+                .map(|why| Self::unanswered("HorizontalPodAutoscaler", "autoscaling/v2", why)),
+            budgets.map(|why| Self::unanswered("PodDisruptionBudget", "policy/v1", why)),
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     /// The kind that would replace pod-by-pod readiness with the endpoints
@@ -555,6 +657,45 @@ mod tests {
                 }
             ]
         );
+    }
+
+    /// The gap this feature closed. Both kinds are read, so neither may be
+    /// named as unread — a page that says "the app does not read
+    /// HorizontalPodAutoscalers" beside a block drawn from one is worse than
+    /// the honest gap it replaced.
+    #[test]
+    fn a_kind_the_app_now_reads_is_not_listed_as_unread() {
+        let unread = UnexploredKind::governance(None, None);
+        assert!(
+            unread.is_empty(),
+            "both governing kinds are read, so nothing is left unasked: {:?}",
+            unread.iter().map(|k| &k.kind).collect::<Vec<_>>()
+        );
+    }
+
+    /// The other half: a read that failed is not silence. A cluster serving
+    /// only `autoscaling/v2beta2` answers the v2 list with a 404, and "no
+    /// autoscaler scales this" is not what that means.
+    #[test]
+    fn a_read_that_failed_says_so_rather_than_claiming_there_is_none() {
+        let unread = UnexploredKind::governance(Some("404 Not Found"), None);
+        assert_eq!(unread.len(), 1);
+        assert_eq!(unread[0].kind, "HorizontalPodAutoscaler");
+        assert!(unread[0].why.contains("autoscaling/v2"));
+        assert!(unread[0].why.contains("404 Not Found"));
+    }
+
+    #[test]
+    fn a_governing_edge_states_which_selector_matched() {
+        let json = serde_json::to_value(Relation::Governs {
+            selector: Some("app=log-demo".to_string()),
+        })
+        .expect("serialize");
+        assert_eq!(json["verb"], "governs");
+        assert_eq!(json["selector"], "app=log-demo");
+
+        let named = serde_json::to_value(Relation::Governs { selector: None }).expect("serialize");
+        assert_eq!(named["selector"], serde_json::Value::Null);
     }
 
     #[test]

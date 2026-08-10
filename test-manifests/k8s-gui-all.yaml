@@ -1579,3 +1579,130 @@ spec:
     automated:
       prune: false
       selfHeal: true
+---
+# --- What acts on a workload without the workload asking ---------------------
+#
+# Four objects, four states, and each one is a state the app must be able to
+# tell from the others. Cleanup:
+#
+#   kubectl delete -n k8s-gui-test hpa/hpa-blind hpa/hpa-busy \
+#     pdb/pdb-log-demo pdb/pdb-stateful-demo deploy/busy-demo
+#
+# `hpa-busy` drives `busy-demo` to its maximum; deleting the HPA first and the
+# Deployment second leaves nothing behind.
+
+# One: an autoscaler that cannot read its metric, which is the failure that
+# announces itself nowhere. `log-demo` has five containers and only one of them
+# declares a CPU request, so the HPA cannot compute a utilisation for the pod
+# at all and reports `ScalingActive=False · FailedGetResourceMetric` forever.
+# Its replica count, its conditions and its events are indistinguishable from a
+# healthy workload's; the autoscaler simply never moves the number. This is
+# also the state a cluster with no metrics-server puts *every* CPU autoscaler
+# in, which is why it is worth a demo of its own.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-blind
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: log-demo
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Two: a workload that is genuinely, permanently over its target, so its
+# autoscaler sits pinned at `maxReplicas` with `ScalingLimited=True`. A shell
+# spin loop capped at 20m of CPU burns its whole limit, which is 200% of its
+# request, so the autoscaler wants ten replicas and is allowed two.
+#
+# This deliberately does not reuse an existing workload: the finding needs the
+# *desired* count to exceed the maximum, and an idle pod reporting 0m or 1m
+# lands on either side of that depending on the second you look. A workload
+# whose usage is decided by its own limit is the only way the state holds
+# still long enough to be a demo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busy-demo
+  namespace: k8s-gui-test
+  labels:
+    app: busy-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: busy-demo
+  template:
+    metadata:
+      labels:
+        app: busy-demo
+    spec:
+      containers:
+        - name: spin
+          image: busybox:1.36
+          command: ["sh", "-c", "while :; do :; done"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 20m
+              memory: 32Mi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-busy
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: busy-demo
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+---
+# Three: a budget with room. Two ready replicas and a floor of one, so one pod
+# may be evicted and a drain of either node goes through.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-log-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: log-demo
+---
+# Four: a budget with none, and the reason the app's tone here matters. A
+# single-replica StatefulSet with `minAvailable: 1` reports
+# `DisruptionAllowed=False` and `disruptionsAllowed: 0` every second of its
+# healthy life — it is the budget working, not a fault, and it is exactly what
+# blocks a node drain. The app states the fact and spends no colour on it.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-stateful-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: stateful-demo

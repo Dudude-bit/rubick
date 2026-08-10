@@ -340,6 +340,14 @@ export function matchesDeliveryFilter(
 export interface DeliveryIntercept {
   title: string;
   /**
+   * Who is doing it, in two words — "Argo CD".
+   *
+   * Only read where a dialog carries more than one warning: with two, the
+   * reader has to be told *what* is undoing the change before being told what
+   * happens, or the two paragraphs run together into one long complaint.
+   */
+  subject: string;
+  /**
    * The clause that has to be read, in six words. The dialog it lands in
    * already has a title of its own — "Scale Deployment" — and burying the
    * consequence in the middle of a paragraph is how a warning becomes
@@ -379,6 +387,7 @@ export function deliveryIntercept(
 
   return {
     title: `${verb} — ${source.vendor} will undo this`,
+    subject: source.vendor,
     lead: `${source.vendor} will undo this.`,
     description: `${source.note ?? ""} ${
       source.path

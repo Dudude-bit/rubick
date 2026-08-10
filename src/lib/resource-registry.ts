@@ -16,6 +16,8 @@ import {
   Activity,
   FolderOpen,
   Puzzle,
+  Gauge,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -199,6 +201,30 @@ export const RESOURCE_REGISTRY = [
     icon: FolderOpen,
     apiVersion: "v1",
     scope: "cluster",
+    category: null,
+  },
+  {
+    // Registered for the glyph and for nothing else. Neither of the two
+    // governing kinds gets a nav row or a page: an autoscaler is a property
+    // of the thing it scales and a budget a property of the pods it
+    // protects, so both are read where that thing is. What they do need is a
+    // mark, because they appear by name in Connections and on the workload,
+    // and `CircleDashed` is the app saying "I do not know this kind".
+    kind: "HorizontalPodAutoscaler",
+    plural: "horizontalpodautoscalers",
+    displayPlural: "HorizontalPodAutoscalers",
+    icon: Gauge,
+    apiVersion: "autoscaling/v2",
+    scope: "namespaced",
+    category: null,
+  },
+  {
+    kind: "PodDisruptionBudget",
+    plural: "poddisruptionbudgets",
+    displayPlural: "PodDisruptionBudgets",
+    icon: ShieldCheck,
+    apiVersion: "policy/v1",
+    scope: "namespaced",
     category: null,
   },
   {

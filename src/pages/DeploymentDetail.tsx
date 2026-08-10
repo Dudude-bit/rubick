@@ -51,6 +51,8 @@ import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
 import { declaredContainers } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
+import { scaleWarnings } from "@/lib/governance";
+import { Governance } from "@/components/resources/governance";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
@@ -582,6 +584,7 @@ export function DeploymentDetail() {
             />
           </div>
         </Section>
+        <Governance query={connections} />
       </div>
 
       <TrafficChain query={connections} />
@@ -594,7 +597,7 @@ export function DeploymentDetail() {
       )}
 
       <ScaleDialog
-        intercept={intercept("Scale")}
+        warnings={scaleWarnings(connections.data, intercept("Scale"))}
         open={scaleDialogOpen}
         onOpenChange={setScaleDialogOpen}
         kind={ResourceType.Deployment}

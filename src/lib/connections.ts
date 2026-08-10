@@ -16,6 +16,12 @@
 import { groupMounts } from "./mounts";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
+import {
+  autoscalerRange,
+  autoscalerReplicas,
+  budgetRoom,
+  budgetRule,
+} from "./governance";
 import type {
   ChainStop,
   ConnectionEdge,
@@ -167,6 +173,10 @@ function describeFacts(facts: ObjectFacts | null): string | null {
       return serviceVia(facts);
     case "ingress":
       return facts.className;
+    case "autoscaler":
+      return join(autoscalerRange(facts), autoscalerReplicas(facts));
+    case "budget":
+      return join(budgetRule(facts), budgetRoom(facts));
   }
 }
 
@@ -797,6 +807,47 @@ function placement(conns: ResourceConnections): ConnGroup | null {
   };
 }
 
+/**
+ * What acts on this object without it having asked, and without it knowing.
+ *
+ * Its own group rather than a couple of rows in "Made by, and makes", and the
+ * difference is the tense: that group answers *what made this*, which is a
+ * fact about the past and is settled. These two are about what is going to
+ * happen next — a replica count that moves back in fifteen seconds, an
+ * eviction that gets refused — and the reader looking for either is not
+ * looking at provenance.
+ *
+ * Nor does it merge with "Needs to run": that group's claim is "if one of
+ * these is missing the pod does not start", and an autoscaler is the exact
+ * opposite kind of thing. The workload runs perfectly well without it, and
+ * has no say in it either way.
+ */
+function governedBy(conns: ResourceConnections): ConnRow[] {
+  const rows = verb(conns.edges, "governs").map((edge) => ({
+    ...rowFor(GOVERNOR_LABEL[edge.from.kind] ?? edge.from.kind, edge.from),
+    key: `governs:${refKey(edge.from)}:${refKey(edge.to)}`,
+    // Named where the far end is not the page's own subject — on a pod, an
+    // autoscaler scales the Deployment above it, and saying "scales this"
+    // there would be wrong about which object the number belongs to.
+    ways: sameObject(edge.to, conns.subject)
+      ? []
+      : [
+          `${GOVERNS_VERB[edge.from.kind] ?? "acts on"} ${edge.to.kind} ${edge.to.name}`,
+        ],
+  }));
+  return labelled(rows);
+}
+
+const GOVERNOR_LABEL: Record<string, string> = {
+  HorizontalPodAutoscaler: "Autoscaling",
+  PodDisruptionBudget: "Disruption budget",
+};
+
+const GOVERNS_VERB: Record<string, string> = {
+  HorizontalPodAutoscaler: "scales",
+  PodDisruptionBudget: "protects",
+};
+
 function bindings(conns: ResourceConnections): ConnRow[] {
   return labelled(
     verb(conns.edges, "binds").map((edge) =>
@@ -851,6 +902,13 @@ export function connectionGroups(
       : null,
     placement(conns),
     { key: "binds", title: "Bound to", caption: null, rows: bindings(conns) },
+    {
+      key: "governs",
+      title: "Governed by",
+      caption:
+        "— acts on this on its own schedule, and nothing here asked for it",
+      rows: governedBy(conns),
+    },
     // Only for the kinds that take part in ownership at all. "Controlled by:
     // nothing" is a real answer on a Deployment and a non-sequitur on a
     // ConfigMap, which no controller was ever going to have made.

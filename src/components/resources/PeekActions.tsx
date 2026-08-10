@@ -48,6 +48,8 @@ import {
 } from "./peek-actions";
 import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
 import { ScaleDialog } from "./ScaleDialog";
+import { useConnections } from "@/hooks/useConnections";
+import { scaleWarnings } from "@/lib/governance";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 
@@ -130,6 +132,19 @@ export function PeekActions({
   >(null);
   const [confirming, setConfirming] = useState<"delete" | "restart" | null>(
     null
+  );
+
+  // The peek owes the same warning the detail page owes, for the reason the
+  // delivery intercept above gives: a control that warns on one surface and
+  // stays quiet on the other teaches the reader that silence means safe.
+  // Asked for only once the dialog is open — a neighbourhood read on every
+  // row somebody arrows past would be six lists per keystroke, and the query
+  // key is the page's, so an already-open Deployment answers from cache.
+  const governance = useConnections(
+    kind,
+    target.name,
+    namespace,
+    dialog === "scale"
   );
 
   // A Service does not answer a port-forward; the pod behind it does. Which
@@ -334,7 +349,7 @@ export function PeekActions({
             (detail as DeploymentInfo | undefined)?.replicas.desired ?? 0
           }
           busy={scale.isPending}
-          intercept={intercept("Scale")}
+          warnings={scaleWarnings(governance.data, intercept("Scale"))}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}

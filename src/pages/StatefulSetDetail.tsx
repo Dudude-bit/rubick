@@ -34,6 +34,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { Governance } from "@/components/resources/governance";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -280,6 +281,7 @@ export function StatefulSetDetail() {
           />
         </Section>
         <KeyValueSection title="StatefulSet" items={facts} />
+        <Governance query={connections} />
       </div>
 
       <TrafficChain query={connections} />
