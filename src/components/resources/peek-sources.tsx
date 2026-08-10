@@ -12,6 +12,7 @@ import {
   PHASE_LABEL,
   type ContainerLists,
 } from "@/lib/container-sequence";
+import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
 import {
@@ -24,7 +25,11 @@ import { ResourceRef } from "./ResourceRef";
 import { ClaimRef } from "./storage-refs";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue } from "./key-values";
-import type { ContainerPhase, OwnerReference } from "@/generated/types";
+import type {
+  ContainerPhase,
+  NodeInfo,
+  OwnerReference,
+} from "@/generated/types";
 
 /**
  * What each kind says about itself in the peek's Overview tab.
@@ -121,6 +126,60 @@ function images(
 
 const list = (values: string[], empty = "—") =>
   values.length ? values.join(" · ") : empty;
+
+/**
+ * What a managed cluster already says about the machine under a node: which
+ * pool made it, what it is, where it sits, and whether it can be taken back.
+ *
+ * The Nodes list groups by these and the Node page states them; a peek is
+ * where most readers meet a node first, so it says them too — through
+ * `node-pool`, which is where the vendors' spellings are reached from, rather
+ * than by reading a label key here.
+ *
+ * Absent when nothing states any of it. A k3d or bare-metal node is not "not
+ * spot" and has no pool of "none"; it is a cluster nobody here recognises,
+ * and the honest form of that is silence.
+ */
+function placement(node: NodeInfo): PeekGroup[] {
+  const facts = nodePlacement(node);
+  if (!statesPlacement(facts)) return [];
+
+  return [
+    {
+      title: "Placement",
+      items: [
+        ...(facts.pool
+          ? [{ label: "Pool", value: facts.pool, mono: true }]
+          : []),
+        ...(facts.machine
+          ? [{ label: "Instance type", value: facts.machine, mono: true }]
+          : []),
+        ...(facts.zone
+          ? [{ label: "Zone", value: facts.zone, mono: true }]
+          : []),
+        ...(facts.region
+          ? [{ label: "Region", value: facts.region, mono: true }]
+          : []),
+        // Only ever set by a label that says so, and worth the one warn
+        // colour on the panel: a node that can vanish on an hour's notice
+        // changes what every pod listed under it means.
+        ...(facts.spot
+          ? [
+              {
+                label: "Spot",
+                value:
+                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+                tone: "warn" as const,
+              },
+            ]
+          : []),
+        // From `providerID`'s scheme and nothing else — a pool label can be
+        // typed by anyone; this is the cloud signing its work.
+        ...(facts.cloud ? [{ label: "Cloud", value: facts.cloud }] : []),
+      ],
+    },
+  ];
+}
 
 const workloadStatus = (ready: number, desired: number) =>
   desired > 0 && ready >= desired ? "Ready" : "Progressing";
@@ -667,6 +726,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             },
           ],
         },
+        ...placement(node),
         {
           title: "Capacity",
           items: [
