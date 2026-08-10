@@ -22,7 +22,7 @@ import yaml from "js-yaml";
 import { commands } from "@/lib/commands";
 import type {
   CustomResourceInfo,
-  EndpointsInfo,
+  ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ServiceInfo,
@@ -136,7 +136,7 @@ export async function countHosts(): Promise<number> {
     allRoutes({
       ...sources,
       services: [],
-      endpoints: [],
+      published: [],
       entryPoints: [],
     }).map((route) => route.clause.host ?? "")
   );
@@ -153,18 +153,21 @@ export function useRouteSources() {
 
 export interface Backing {
   services: ServiceInfo[];
-  endpoints: EndpointsInfo[];
+  /** What each Service publishes, from its own EndpointSlices. The same
+   *  answer the traffic chain is built on, so a route that reads as broken
+   *  here reads as broken there in the same words. */
+  published: ServicePublished[];
 }
 
 export function useBacking() {
   return useQuery({
     queryKey: BACKING,
     queryFn: async (): Promise<Backing> => {
-      const [services, endpoints] = await Promise.all([
+      const [services, published] = await Promise.all([
         commands.listServices(null),
-        commands.listEndpoints(null),
+        commands.listServiceEndpoints(null),
       ]);
-      return { services, endpoints };
+      return { services, published };
     },
     staleTime: STALE,
   });
@@ -344,7 +347,7 @@ export function sourcesFrom(
   return {
     ...routeSources,
     services: backing?.services ?? [],
-    endpoints: backing?.endpoints ?? [],
+    published: backing?.published ?? [],
     backingKnown: backing !== undefined,
     entryPoints: controller?.entryPoints ?? [],
     certificates,

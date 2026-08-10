@@ -36,6 +36,7 @@ impl OptionTimeExt for Option<&Time> {
 
 mod connections;
 mod network;
+pub mod published;
 mod resource_types;
 mod serialization;
 mod storage;
@@ -45,6 +46,9 @@ mod workloads;
 
 pub use connections::*;
 pub use network::*;
+pub use published::{
+    EndpointSource, PublishedEndpoint, PublishedPort, ServicePublished, UnpublishedPod,
+};
 pub use resource_types::ResourceType;
 pub use serialization::*;
 pub use storage::*;

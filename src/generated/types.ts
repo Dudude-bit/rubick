@@ -348,6 +348,7 @@ export interface ResourceConnections {
   subject: ObjectRef;
   edges: ConnectionEdge[];
   stops: ChainStop[];
+  published: ServicePublished[];
   notLookedAt: UnexploredKind[];
 }
 
@@ -1320,11 +1321,51 @@ export interface IngressClassSummary {
   isDefault: boolean;
 }
 
+export interface ServicePublished {
+  service: ObjectRef;
+  source: EndpointSource;
+  slices: number;
+  ready: number;
+  draining: number;
+  notReady: number;
+  unrouted: number;
+  ports: PublishedPort[];
+  endpoints: PublishedEndpoint[];
+  whole: boolean;
+  unpublished: UnpublishedPod[];
+}
+
+export interface UnpublishedPod {
+  pod: ObjectRef;
+  unnamedPorts: string[];
+  inSlice: boolean;
+}
+
+export interface PublishedEndpoint {
+  address: string;
+  target: ObjectRef | null;
+  ready: boolean;
+  serving: boolean;
+  terminating: boolean;
+  nodeName: string | null;
+  zone: string | null;
+  hintZones: string[];
+  ports: number[];
+}
+
+export interface PublishedPort {
+  name: string | null;
+  port: number | null;
+  protocol: string;
+  exposed: boolean;
+}
+
 export interface EndpointsInfo {
   name: string;
   namespace: string;
   subsets: EndpointSubset[];
   createdAt: string | null;
+  overCapacity: boolean;
 }
 
 export interface EndpointSubset {
@@ -1395,7 +1436,15 @@ export interface ResourceFilters {
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
-  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number };
+  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
+  | {
+      reason: "publishesNothing";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      readyPods: number;
+      unnamedPorts: string[];
+    };
 
 export type Relation =
   | { verb: "owns"; controller: boolean }
@@ -1544,3 +1593,5 @@ export type QueryTerm =
 export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
+
+export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";

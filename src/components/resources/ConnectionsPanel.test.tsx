@@ -51,6 +51,7 @@ const answered = (
   subject,
   edges: [],
   stops: [],
+  published: [],
   notLookedAt: [],
   ...parts,
 });
@@ -148,6 +149,7 @@ describe("ConnectionsPanel", () => {
             },
             edges: [],
             stops: [],
+            published: [],
             notLookedAt: [],
           },
         })}

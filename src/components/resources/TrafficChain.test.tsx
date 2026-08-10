@@ -32,6 +32,7 @@ const answered = (stops: ChainStop[]): ResourceConnections => ({
   subject: service,
   edges: [],
   stops,
+  published: [],
   notLookedAt: [],
 });
 
@@ -97,6 +98,7 @@ describe("TrafficChain", () => {
           },
           edges: [],
           stops: [],
+          published: [],
           notLookedAt: [],
         })}
       />
@@ -163,6 +165,7 @@ describe("TrafficChain", () => {
         },
       ],
       stops: [],
+      published: [],
       notLookedAt: [],
     };
 
@@ -235,6 +238,7 @@ describe("TrafficChain", () => {
         },
       ],
       stops: [],
+      published: [],
       notLookedAt: [],
     };
 

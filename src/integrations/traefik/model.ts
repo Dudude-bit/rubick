@@ -30,7 +30,7 @@
 import { expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
-  EndpointsInfo,
+  ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ChainStop,
@@ -149,10 +149,10 @@ export interface TraefikSources {
   ingressRoutes: CustomResourceInfo[];
   classes: IngressClassSummary[];
   services: ServiceInfo[];
-  endpoints: EndpointsInfo[];
+  published: ServicePublished[];
   middlewares: CustomResourceInfo[];
   /**
-   * Whether {@link services} and {@link endpoints} have actually been read.
+   * Whether {@link services} and {@link published} have actually been read.
    *
    * They arrive in a second request, and an empty list means "not yet" as
    * readily as it means "none". Without this the page spends the second
@@ -431,11 +431,15 @@ export function boundEntryPoints(
 
 export interface Backing {
   service: ServiceInfo | undefined;
+  /** Addresses taking traffic — the ready ones and the draining ones. */
   ready: number;
+  /** `serving: true, ready: false`: a pod finishing its open connections.
+   *  Traffic still flows here, so it is never counted as an outage. */
+  draining: number;
   notReady: number;
   /** Set only where the path stops. */
   stop: ChainStop | null;
-  /** False while the Services and Endpoints are still being read. */
+  /** False while the Services and their slices are still being read. */
   known: boolean;
 }
 
@@ -451,12 +455,13 @@ function selectorOf(service: ServiceInfo): string {
 
 export function backingOf(
   route: TraefikRoute,
-  sources: Pick<TraefikSources, "services" | "endpoints" | "backingKnown">
+  sources: Pick<TraefikSources, "services" | "published" | "backingKnown">
 ): Backing {
   const known = sources.backingKnown !== false;
   const empty: Backing = {
     service: undefined,
     ready: 0,
+    draining: 0,
     notReady: 0,
     stop: null,
     known,
@@ -494,48 +499,74 @@ export function backingOf(
   // no endpoints and is not a stop. Saying it were would be the page calling
   // a working configuration broken.
   if (service.type === "ExternalName") {
-    return { service, ready: 0, notReady: 0, stop: null, known };
+    return { service, ready: 0, draining: 0, notReady: 0, stop: null, known };
   }
 
-  const endpoints = sources.endpoints.find(
+  // What the Service publishes, not what its pods look like. The same answer
+  // the traffic chain's last hop is built from, so a route reading as broken
+  // here reads as broken there, in the same words.
+  const published = sources.published.find(
     (candidate) =>
-      candidate.name === service.name &&
-      candidate.namespace === service.namespace
+      candidate.service.name === service.name &&
+      candidate.service.namespace === service.namespace
   );
-  const ready =
-    endpoints?.subsets.reduce((sum, set) => sum + set.addresses.length, 0) ?? 0;
-  const notReady =
-    endpoints?.subsets.reduce(
-      (sum, set) => sum + set.notReadyAddresses.length,
-      0
-    ) ?? 0;
+  const ready = published?.ready ?? 0;
+  const draining = published?.draining ?? 0;
+  const notReady = published?.notReady ?? 0;
+  const state = { service, ready, draining, notReady, known };
 
-  if (ready > 0) return { service, ready, notReady, stop: null, known };
+  // A draining address is still the one kube-proxy sends to when nothing
+  // ready is left, so a Service down to one is a restart rather than a 502.
+  if (ready + draining > 0) return { ...state, stop: null };
 
   const selector = selectorOf(service);
   // A Service with no selector has its endpoints managed by hand. Whether
   // that is broken is not something these objects say, so nothing is claimed.
-  if (selector === "") return { service, ready, notReady, stop: null, known };
+  if (selector === "") return { ...state, stop: null };
 
+  const at = ref("Service", service.name, service.namespace);
+  const unrouted = published?.unrouted ?? 0;
+  // Addresses the endpoint controller wrote into a slice carrying no port at
+  // all: it resolved none of the Service's named `targetPort`s, so it wrote
+  // the pods down and gave kube-proxy nothing to send to. The pods are Ready
+  // and this host answers every request with a 502.
+  if (unrouted > 0) {
+    return {
+      ...state,
+      stop: {
+        reason: "publishesNothing",
+        service: at,
+        selector,
+        pods: unrouted,
+        readyPods: unrouted,
+        unnamedPorts: namedTargetPorts(service),
+      },
+    };
+  }
+  if (notReady > 0) {
+    return {
+      ...state,
+      stop: { reason: "noneReady", service: at, selector, pods: notReady },
+    };
+  }
   return {
-    service,
-    ready,
-    notReady,
-    known,
-    stop:
-      notReady > 0
-        ? {
-            reason: "noneReady",
-            service: ref("Service", service.name, service.namespace),
-            selector,
-            pods: notReady,
-          }
-        : {
-            reason: "selectsNothing",
-            service: ref("Service", service.name, service.namespace),
-            selector,
-          },
+    ...state,
+    stop: { reason: "selectsNothing", service: at, selector },
   };
+}
+
+/**
+ * The `targetPort`s this Service asks for by name.
+ *
+ * Only reached where the controller already wrote a portless slice, which is
+ * it saying it resolved none of them — so naming them here reports what the
+ * cluster did rather than guessing at it. A numeric `targetPort` needs no
+ * container to declare anything and can never be the thing that is missing.
+ */
+function namedTargetPorts(service: ServiceInfo): string[] {
+  return service.ports
+    .map((port) => port.targetPort)
+    .filter((target) => target !== "" && !/^\d+$/.test(target));
 }
 
 // --- middlewares --------------------------------------------------------

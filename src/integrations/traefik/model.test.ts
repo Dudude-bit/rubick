@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   CustomResourceInfo,
-  EndpointsInfo,
+  ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ServiceInfo,
@@ -109,28 +109,31 @@ function service(name: string, selector: Record<string, string>): ServiceInfo {
   };
 }
 
-function endpoints(name: string, ready: number, notReady = 0): EndpointsInfo {
+function published(
+  name: string,
+  ready: number,
+  notReady = 0,
+  extra: Partial<ServicePublished> = {}
+): ServicePublished {
   return {
-    name,
-    namespace: "shop",
-    subsets: [
-      {
-        addresses: Array.from({ length: ready }, (_, index) => ({
-          ip: `10.1.0.${index}`,
-          hostname: null,
-          nodeName: null,
-          targetRef: null,
-        })),
-        notReadyAddresses: Array.from({ length: notReady }, (_, index) => ({
-          ip: `10.2.0.${index}`,
-          hostname: null,
-          nodeName: null,
-          targetRef: null,
-        })),
-        ports: [],
-      },
-    ],
-    createdAt: null,
+    service: {
+      kind: "Service",
+      name,
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    },
+    source: "slices",
+    slices: 1,
+    ready,
+    draining: 0,
+    notReady,
+    unrouted: 0,
+    ports: [],
+    endpoints: [],
+    whole: true,
+    unpublished: [],
+    ...extra,
   };
 }
 
@@ -140,7 +143,7 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
     ingressRoutes: [],
     classes: [TRAEFIK_CLASS, NGINX_CLASS],
     services: [],
-    endpoints: [],
+    published: [],
     middlewares: [],
     entryPoints: [],
     ...over,
@@ -231,7 +234,7 @@ describe("the findings", () => {
           ingress("promo", "promo.example.com", { service: "promo-web" }),
         ],
         services: [service("promo-web", { app: "promo" })],
-        endpoints: [endpoints("promo-web", 0, 2)],
+        published: [published("promo-web", 0, 2)],
       })
     );
 
@@ -301,7 +304,7 @@ describe("the findings", () => {
       sources({
         ingresses: [ingress("shop", "shop.example.com", { service: "web" })],
         services: [service("web", { app: "web" })],
-        endpoints: [endpoints("web", 3)],
+        published: [published("web", 3)],
       })
     );
 
@@ -351,7 +354,7 @@ describe("the findings", () => {
           }),
         ],
         services: [service("web", { app: "web" })],
-        endpoints: [endpoints("web", 1)],
+        published: [published("web", 1)],
         entryPoints: [
           {
             name: "web",
@@ -377,7 +380,7 @@ describe("the findings", () => {
       sources({
         ingresses: [ingress("internal", "internal.example.com")],
         services: [service("web", { app: "web" })],
-        endpoints: [endpoints("web", 1)],
+        published: [published("web", 1)],
         entryPoints: [],
       })
     );
@@ -504,7 +507,7 @@ describe("ordering and middlewares", () => {
           ingress("zzz", "zzz.example.com", { service: "broken" }),
         ],
         services: [service("web", { app: "web" })],
-        endpoints: [endpoints("web", 2)],
+        published: [published("web", 2)],
       })
     );
 

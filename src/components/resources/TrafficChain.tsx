@@ -87,6 +87,7 @@ function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
 
 function toneOf(hop: ChainHop): HopTone {
   if (hop.at === "stop") return "bad";
+  if (hop.at === "published") return hop.tone;
   if (hop.at === "controller") return hop.binding.resolved ? "on" : "bad";
   if (hop.at === "certificate") {
     // Not read back yet is not a finding; read back and unreadable is.
@@ -114,7 +115,7 @@ function Controller({ binding }: { binding: IngressClassBinding }) {
             ? `No IngressClass named ${binding.requested} in this cluster`
             : "This Ingress names no class, and this cluster has no default one"}
         </p>
-        <p className="text-[11px] text-err/85">
+        <p className="max-w-[92ch] text-[11px] text-err/85">
           Nothing has picked this Ingress up, so it has no address and never
           will until a controller for that class exists.
           {binding.available.length > 0
@@ -192,10 +193,23 @@ function Hop({
             {hop.via && <p className="text-[11px] text-fg-fnt">{hop.via}</p>}
           </>
         )}
-        {hop.at === "pods" && (
+        {hop.at === "published" && (
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <HopName object={hop.pods[0]} />
-            <span className="text-[11px] text-fg-fnt">{hop.summary}</span>
+            {hop.first ? (
+              <HopName object={hop.first} />
+            ) : (
+              <span className="font-mono text-xs text-fg-mid">
+                {hop.address}
+              </span>
+            )}
+            <span
+              className={cn(
+                "text-[11px]",
+                hop.tone === "warn" ? "text-warn" : "text-fg-fnt"
+              )}
+            >
+              {hop.summary}
+            </span>
           </span>
         )}
         {hop.at === "certificate" && (
@@ -215,7 +229,9 @@ function Hop({
         {hop.at === "stop" && (
           <>
             <p className="text-xs text-err">{hop.title}</p>
-            <p className="text-[11px] text-err/85">{hop.note}</p>
+            {/* A repair is a paragraph, and a paragraph set to the width of a
+                1600px window is one nobody finishes reading. */}
+            <p className="max-w-[92ch] text-[11px] text-err/85">{hop.note}</p>
           </>
         )}
       </div>

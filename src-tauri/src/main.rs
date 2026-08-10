@@ -284,6 +284,7 @@ fn main() {
             commands::network::resolve_ingress_class,
             commands::network::delete_ingress,
             commands::network::list_endpoints,
+            commands::network::list_service_endpoints,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Stats commands

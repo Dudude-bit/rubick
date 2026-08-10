@@ -19,8 +19,10 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { useResourceDetail } from "@/hooks";
+import { useQuery } from "@tanstack/react-query";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
+import { legacyNote, publishedSummary } from "@/lib/published";
 import type { EndpointAddress, EndpointsInfo } from "@/generated/types";
 
 /** Every address in the object, flattened, carrying its readiness. */
@@ -49,6 +51,19 @@ export function EndpointsDetail() {
     deleteResource: (name, ns) => commands.deleteEndpoints(name, ns),
     defaultTab: "addresses",
   });
+
+  // What the Service really publishes. This object is the compatibility copy
+  // — it truncates at 1000 and cannot say `serving` — so the page reads the
+  // slices for the count and says where the number came from.
+  const slices = useQuery({
+    queryKey: ["service-endpoints", endpoints?.namespace ?? namespace],
+    queryFn: () =>
+      commands.listServiceEndpoints(endpoints?.namespace ?? namespace ?? null),
+    enabled: Boolean(endpoints),
+  });
+  const published = slices.data?.find(
+    (entry) => entry.service.name === (endpoints?.name ?? name)
+  );
 
   const subsets = endpoints?.subsets ?? [];
   const backends: Backend[] = subsets.flatMap((subset, index) => [
@@ -90,6 +105,18 @@ export function EndpointsDetail() {
       tone: totalNotReady > 0 ? "warn" : undefined,
     },
     { label: "Ports", value: allPorts.length, mono: true },
+    ...(published
+      ? [
+          {
+            label: "Published",
+            value: publishedSummary(published),
+            tone:
+              published.draining > 0 || published.unrouted > 0
+                ? ("warn" as const)
+                : undefined,
+          },
+        ]
+      : []),
   ];
 
   const tabs = [
@@ -106,6 +133,15 @@ export function EndpointsDetail() {
               totalNotReady > 0
                 ? `${totalReady} ready · ${totalNotReady} not ready`
                 : `${totalReady} ready`
+            }
+            description={
+              slices.isPending
+                ? undefined
+                : legacyNote(
+                    backends.length,
+                    endpoints?.overCapacity ?? false,
+                    published
+                  )
             }
           />
           {backends.length === 0 ? (

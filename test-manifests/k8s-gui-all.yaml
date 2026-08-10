@@ -1706,3 +1706,322 @@ spec:
   selector:
     matchLabels:
       app: stateful-demo
+---
+# --- EndpointSlices: four shapes a pod-readiness deduction cannot tell apart
+#
+# Cleanup:
+#   kubectl delete -n k8s-gui-test deploy/named-port-demo deploy/draining-demo \
+#     deploy/mixed-port-ok deploy/mixed-port-bad deploy/topology-demo
+#   kubectl delete -n k8s-gui-test svc/named-port-demo svc/draining-demo \
+#     svc/headless-demo svc/manual-demo svc/mixed-port-demo svc/topology-demo
+#   kubectl delete -n k8s-gui-test endpoints/manual-demo
+#   kubectl label node k3d-k8s-gui-dev-server-0 topology.kubernetes.io/zone-
+#   kubectl label node k3d-k8s-gui-dev-agent-0 topology.kubernetes.io/zone-
+#
+# topology-demo needs the nodes to carry `topology.kubernetes.io/zone`; k3d
+# nodes have none, so label them before applying and remove the labels after:
+#   kubectl label node k3d-k8s-gui-dev-server-0 topology.kubernetes.io/zone=west1-b
+#   kubectl label node k3d-k8s-gui-dev-agent-0  topology.kubernetes.io/zone=west1-c
+#
+# draining-demo shows `serving: true, ready: false` only while a pod is
+# terminating. `kubectl scale deploy/draining-demo -n k8s-gui-test --replicas=0`
+# opens a fifteen-minute window; scale back to 1 to close it.
+#
+# The 1000-address truncation of the legacy Endpoints object is impractical to
+# stand up and is covered by unit tests instead — `legacy_over_capacity` in
+# src-tauri/src/resources/published.rs and `legacyNote` in src/lib/published.ts.
+
+# 1. Healthy selector, Ready pods, and nothing published: the Service asks for
+#    a port name no container declares, so the endpoint controller writes the
+#    pods into a slice with no port at all and kube-proxy gets nothing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+  labels:
+    app: named-port-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: named-port-demo
+  template:
+    metadata:
+      labels:
+        app: named-port-demo
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            # Named `web`; the Service below asks for `http`.
+            - name: web
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: named-port-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The same Service behind a hostname, so the routing page reports the stop in
+# the traffic chain's own words rather than inventing a second vocabulary.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: named-port.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: named-port-demo
+                port:
+                  number: 80
+---
+# 2. The same mistake on half the pods: one Deployment names the port and the
+#    other does not, so the Service publishes one address and the second list
+#    on its page has the other.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-port-ok
+  namespace: k8s-gui-test
+  labels:
+    app: mixed-port-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mixed-port-demo
+      role: ok
+  template:
+    metadata:
+      labels:
+        app: mixed-port-demo
+        role: ok
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-port-bad
+  namespace: k8s-gui-test
+  labels:
+    app: mixed-port-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mixed-port-demo
+      role: bad
+  template:
+    metadata:
+      labels:
+        app: mixed-port-demo
+        role: bad
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: web
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mixed-port-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: mixed-port-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# 3. A pod that keeps taking traffic while it terminates. The grace period and
+#    the preStop sleep are wide enough to read `serving: true, ready: false`
+#    on screen; the legacy Endpoints object drops it entirely.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: draining-demo
+  namespace: k8s-gui-test
+  labels:
+    app: draining-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: draining-demo
+  template:
+    metadata:
+      labels:
+        app: draining-demo
+    spec:
+      terminationGracePeriodSeconds: 900
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 900"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: draining-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: draining-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# 4. Headless: no cluster IP by design, and a slice all the same.
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-demo
+  namespace: k8s-gui-test
+spec:
+  clusterIP: None
+  selector:
+    app: log-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+# 5. No selector at all, and endpoints written by hand. The mirroring
+#    controller turns the legacy object into a slice, which is what the app
+#    reads back — and no finding is raised, because nothing here is broken.
+apiVersion: v1
+kind: Service
+metadata:
+  name: manual-demo
+  namespace: k8s-gui-test
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: manual-demo
+  namespace: k8s-gui-test
+subsets:
+  - addresses:
+      - ip: 10.42.9.11
+      - ip: 10.42.9.12
+    ports:
+      - name: http
+        port: 8080
+        protocol: TCP
+---
+# 6. Topology-aware routing: one pod per zone, and hints that keep a client's
+#    traffic in its own. Needs the node labels named at the top of this block.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: topology-demo
+  namespace: k8s-gui-test
+  labels:
+    app: topology-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: topology-demo
+  template:
+    metadata:
+      labels:
+        app: topology-demo
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: topology-demo
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: topology-demo
+  namespace: k8s-gui-test
+spec:
+  trafficDistribution: PreferClose
+  selector:
+    app: topology-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

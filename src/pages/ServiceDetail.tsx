@@ -12,25 +12,23 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
-import { ExternalLink, Filter, Plug, Tag } from "lucide-react";
+import { ExternalLink, Filter, Plug, Tag, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import {
-  countMark,
-  kindGlyph,
-  viewGlyph,
-} from "@/components/resources/detail-tab";
+import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
   KeyValueSection,
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { ServiceAccessInfo, MatchingPods } from "@/components/network";
+import { ServiceAccessInfo } from "@/components/network";
 import { TrafficChain } from "@/components/resources/TrafficChain";
+import { PublishedEndpoints } from "@/components/resources/PublishedEndpoints";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { ResourceType } from "@/lib/resource-registry";
 import { deliveryOfKind } from "@/lib/delivery";
+import { publishedFor } from "@/lib/published";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -54,6 +52,10 @@ export function ServiceDetail() {
   });
 
   const connections = useConnections(ResourceType.Service, name, namespace);
+  const subject = connections.data?.subject ?? null;
+  const published = connections.data
+    ? publishedFor(connections.data, connections.data.subject)
+    : undefined;
 
   if (!service && !isLoading && !error) {
     return null;
@@ -173,15 +175,16 @@ export function ServiceDetail() {
         />
       ),
     },
+    // Not a Pods tab. The pods the selector matches is what the Selector tab
+    // states as a rule, and it is not the question — what the cluster hands
+    // to kube-proxy is, and the two come apart.
     {
-      id: "pods",
-      label: "Pods",
-      glyph: kindGlyph(ResourceType.Pod),
-      content: service ? (
-        <MatchingPods
-          namespace={service.namespace}
-          selector={service.selector}
-        />
+      id: "endpoints",
+      label: "Endpoints",
+      glyph: viewGlyph(Waypoints),
+      mark: countMark(published ? published.ready + published.draining : 0),
+      content: subject ? (
+        <PublishedEndpoints query={connections} service={subject} />
       ) : null,
     },
     {

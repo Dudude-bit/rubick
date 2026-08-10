@@ -210,16 +210,22 @@ export function OutLink({
 export function Cell({
   children,
   bad,
+  warn,
   under,
 }: {
   children: ReactNode;
   bad?: boolean;
+  /** A state that is neither healthy nor a failure — a draining endpoint is
+   *  the case this exists for, and colouring it red would be the page
+   *  calling a rolling restart an outage. */
+  warn?: boolean;
   under?: ReactNode;
 }) {
   return (
     <div
       className={cn(
         "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid",
+        warn && "border-warn/50 text-warn",
         bad && "border-err/50 text-err"
       )}
     >

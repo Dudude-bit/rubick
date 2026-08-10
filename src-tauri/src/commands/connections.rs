@@ -18,7 +18,8 @@ use k8s_openapi::api::autoscaling::v2::{
     HorizontalPodAutoscaler, MetricSpec, MetricStatus, MetricTarget, MetricValueStatus,
 };
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::{PersistentVolumeClaim, Pod, PodSpec, Service};
+use k8s_openapi::api::core::v1::{Endpoints, PersistentVolumeClaim, Pod, PodSpec, Service};
+use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress};
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
@@ -30,9 +31,9 @@ use tauri::State;
 use crate::commands::helpers::{build_label_selector, ResourceContext};
 use crate::error::{Error, Result};
 use crate::resources::{
-    condition_is_true, selector_matches, usages_in_pod_spec, AutoscalerMetric, ChainStop,
-    ConditionInfo, ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation,
-    ResourceConnections, UnexploredKind, Usage, REVISION_ANNOTATION,
+    condition_is_true, published, selector_matches, usages_in_pod_spec, AutoscalerMetric,
+    ChainStop, ConditionInfo, ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation,
+    ResourceConnections, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 
@@ -115,6 +116,7 @@ struct Neighbourhood {
     subject: Option<ObjectRef>,
     edges: Vec<ConnectionEdge>,
     stops: Vec<ChainStop>,
+    published: Vec<ServicePublished>,
     not_looked_at: Vec<UnexploredKind>,
 }
 
@@ -124,6 +126,7 @@ impl Neighbourhood {
             subject: None,
             edges: Vec::new(),
             stops: Vec::new(),
+            published: Vec::new(),
             not_looked_at: Vec::new(),
         }
     }
@@ -140,6 +143,7 @@ impl Neighbourhood {
             subject,
             edges: self.edges,
             stops: self.stops,
+            published: self.published,
             not_looked_at: self.not_looked_at,
         })
     }
@@ -191,13 +195,12 @@ fn service_selector(svc: &Service) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-/// Every Service in the namespace whose selector matches `labels`, the pods
-/// each of those Services actually reaches, and the Ingresses that route to
-/// them.
+/// Every Service in the namespace whose selector matches `labels`, what each
+/// of those Services publishes, and the Ingresses that route to them.
 ///
-/// Readiness is judged over every pod the Service selects, not only the
-/// subject's — a Service is reachable when any pod behind it is ready, and
-/// that pod need not belong to the workload being looked at.
+/// Reachability is judged over what the Service publishes, not only over the
+/// subject's own pods — a Service takes traffic when any address behind it
+/// does, and that address need not belong to the workload being looked at.
 fn traffic_into(
     ns: &str,
     target: &ObjectRef,
@@ -211,19 +214,14 @@ fn traffic_into(
             continue;
         }
         let svc_ref = service_ref(svc, ns);
-        // A Pod target is already one of the pods `note_reach` enumerates.
-        // A workload is not: the selector matches its *template*, and that
-        // match is the stated fact that this Service fronts this workload.
-        if target.kind != "Pod" {
-            out.edge(
-                svc_ref.clone(),
-                target.clone(),
-                Relation::Selects {
-                    selector: build_label_selector(&selector),
-                },
-            );
-        }
-        note_reach(ns, &svc_ref, &selector, snapshot, out);
+        out.edge(
+            svc_ref.clone(),
+            target.clone(),
+            Relation::Selects {
+                selector: build_label_selector(&selector),
+            },
+        );
+        note_reach(svc, &svc_ref, snapshot, out, false);
         routes_into(ns, &svc_ref, snapshot, out);
     }
 }
@@ -240,26 +238,60 @@ fn routes_into(ns: &str, svc_ref: &ObjectRef, snapshot: &Snapshot, out: &mut Nei
     }
 }
 
-/// Where the path stops behind this Service, if it does.
+/// What this Service publishes, and where the path stops if it does.
+///
+/// The last hop used to be one `Selects` edge per selected pod and a count of
+/// their `Ready` conditions — 300 pod refs on a 300-pod Service, and a
+/// deduction at the end of it. It is the Service's own slices now: three
+/// objects, the cluster's own answer, and the two disagree in exactly the
+/// cases nobody can see.
 ///
 /// A Service with no selector is not a stop: an ExternalName resolves
-/// elsewhere and a hand-managed one has endpoints this app never wrote.
+/// elsewhere and a hand-managed one has endpoints this app never wrote — but
+/// what it publishes is still read and still drawn, because a slice is a
+/// slice however it got written.
+/// `detail` is whether the reader is on this Service's own page, where the
+/// endpoint rows and the pods it does not publish are the point rather than a
+/// payload every other page would carry for nothing.
 fn note_reach(
-    ns: &str,
+    svc: &Service,
     svc_ref: &ObjectRef,
-    selector: &BTreeMap<String, String>,
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
+    detail: bool,
 ) {
+    if out
+        .published
+        .iter()
+        .any(|entry| entry.service.same_object(svc_ref))
+    {
+        return;
+    }
+
+    let selector = service_selector(svc);
+    let selected: Vec<&Pod> = if selector.is_empty() {
+        Vec::new()
+    } else {
+        snapshot
+            .pods
+            .iter()
+            .filter(|pod| selector_matches(&selector, pod.labels()))
+            .collect()
+    };
+
+    let published = snapshot.published_of(svc, svc_ref.clone(), &selected);
+    let serving = published.serving();
+    let not_ready = published.not_ready;
+    out.published.push(if detail {
+        published
+    } else {
+        published.summary()
+    });
+
     if selector.is_empty() {
         return;
     }
-    let text = build_label_selector(selector);
-    let selected: Vec<&Pod> = snapshot
-        .pods
-        .iter()
-        .filter(|pod| selector_matches(selector, pod.labels()))
-        .collect();
+    let text = build_label_selector(&selector);
 
     if selected.is_empty() {
         out.stops.push(ChainStop::SelectsNothing {
@@ -268,27 +300,65 @@ fn note_reach(
         });
         return;
     }
-
-    for pod in &selected {
-        out.edge(
-            svc_ref.clone(),
-            pod_ref(pod, ns),
-            Relation::Selects {
-                selector: text.clone(),
-            },
-        );
+    // A draining address counts here. `serving: true, ready: false` is a pod
+    // finishing its open connections, and kube-proxy falls back to exactly
+    // those when no ready endpoint is left — announcing an outage through a
+    // rolling restart is the defect this replaces.
+    if serving > 0 {
+        return;
     }
 
-    if !selected
+    let ready_pods = selected
         .iter()
-        .any(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
-    {
+        .filter(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
+        .count();
+    let count = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
+
+    // Pods that are in the answer and not passing their probes are the old
+    // stop, and it is still the right repair. Pods that are Ready and in no
+    // published address are the new one.
+    if not_ready > 0 || ready_pods == 0 {
         out.stops.push(ChainStop::NoneReady {
             service: svc_ref.clone(),
             selector: text,
-            pods: i32::try_from(selected.len()).unwrap_or(i32::MAX),
+            pods: count(selected.len()),
         });
+        return;
     }
+
+    out.stops.push(ChainStop::PublishesNothing {
+        service: svc_ref.clone(),
+        selector: text,
+        pods: count(selected.len()),
+        ready_pods: count(ready_pods),
+        unnamed_ports: unresolved_target_ports(svc, &selected),
+    });
+}
+
+/// The `targetPort` names not one selected container declares.
+///
+/// The whole of the app's inference about *why* a Service publishes nothing,
+/// and it is derived from two things the call already holds: the names the
+/// Service asks for, and the names the containers have. A pod missing for any
+/// other reason gets no explanation, because none is written down.
+fn unresolved_target_ports(svc: &Service, selected: &[&Pod]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for pod in selected {
+        for name in published::unnamed_ports_of(svc, pod) {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    // Only the names that resolve on no pod at all. One pod out of six
+    // missing a port name is a different finding from a Service asking for a
+    // name that exists nowhere.
+    names.retain(|name| {
+        selected
+            .iter()
+            .all(|pod| published::unnamed_ports_of(svc, pod).contains(name))
+    });
+    names
 }
 
 fn ingress_ref(ing: &Ingress, ns: &str) -> ObjectRef {
@@ -887,6 +957,14 @@ struct Snapshot {
     /// connects to, and "nothing scales this" is not what a 404 means.
     autoscalers: Read<HorizontalPodAutoscaler>,
     budgets: Read<PodDisruptionBudget>,
+    /// What every Service in the namespace publishes, in one list keyed by
+    /// the `kubernetes.io/service-name` label — the same shape the Services
+    /// and the Ingresses are read under.
+    slices: Read<EndpointSlice>,
+    /// Only read where the slice list did not answer. A cluster below 1.21
+    /// serves no `discovery.k8s.io/v1` at all, and a confident empty there
+    /// would be the app inventing an outage out of its own API version.
+    legacy: Read<Endpoints>,
 }
 
 /// A list whose failure is part of the answer rather than the end of it, and
@@ -913,14 +991,25 @@ impl Snapshot {
         let claims_api = ctx.namespaced_api::<PersistentVolumeClaim>();
         let autoscalers_api = ctx.namespaced_api::<HorizontalPodAutoscaler>();
         let budgets_api = ctx.namespaced_api::<PodDisruptionBudget>();
-        let (pods, services, ingresses, claims, autoscalers, budgets) = tokio::join!(
+        let slices_api = ctx.namespaced_api::<EndpointSlice>();
+        let (pods, services, ingresses, claims, autoscalers, budgets, slices) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
             ingresses_api.list(&params),
             claims_api.list(&params),
             autoscalers_api.list(&params),
             budgets_api.list(&params),
+            slices_api.list(&params),
         );
+        let slices = read(slices);
+        // The one read that is not in the join, and deliberately: it is the
+        // fallback for a cluster that serves no slices, and paying a round
+        // trip for it on every call to every other cluster would be the cost
+        // this feature is supposed to bring down.
+        let legacy = match slices {
+            Ok(_) => Err("the slices answered".to_string()),
+            Err(_) => read(ctx.namespaced_api::<Endpoints>().list(&params).await),
+        };
         Ok(Self {
             pods: pods?.items,
             services: services?.items,
@@ -928,7 +1017,35 @@ impl Snapshot {
             claims: claims.map(|list| list.items).unwrap_or_default(),
             autoscalers: read(autoscalers),
             budgets: read(budgets),
+            slices,
+            legacy,
         })
+    }
+
+    /// What one Service publishes, from whichever object answered.
+    ///
+    /// The three sources produce one shape, so nothing downstream branches on
+    /// which one spoke — it only says so.
+    fn published_of(
+        &self,
+        svc: &Service,
+        svc_ref: ObjectRef,
+        selected: &[&Pod],
+    ) -> ServicePublished {
+        match (&self.slices, &self.legacy) {
+            (Ok(slices), _) => published::from_slices(
+                svc,
+                svc_ref,
+                &published::slices_of(slices, &svc.name_any()),
+                selected,
+            ),
+            (Err(_), Ok(legacy)) => published::from_legacy(
+                svc,
+                svc_ref,
+                legacy.iter().find(|ep| ep.name_any() == svc.name_any()),
+            ),
+            (Err(_), Err(_)) => published::from_pod_readiness(svc, svc_ref, selected),
+        }
     }
 }
 
@@ -989,7 +1106,6 @@ async fn pod_connections(
     governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
 
     out.not_looked_at = unanswered(&snapshot);
-    out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
 
@@ -1222,7 +1338,6 @@ async fn workload_connections(
     );
 
     out.not_looked_at = unanswered(&snapshot);
-    out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
 
@@ -1312,12 +1427,10 @@ async fn service_connections(
     let subject = service_ref(svc, ns);
     out.subject = Some(subject.clone());
 
-    let selector = service_selector(svc);
-    note_reach(ns, &subject, &selector, &snapshot, out);
+    note_reach(svc, &subject, &snapshot, out, true);
     routes_into(ns, &subject, &snapshot, out);
-    workloads_behind(ctx, ns, &selector, &snapshot, out).await;
+    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
 
-    out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
 
@@ -1393,9 +1506,8 @@ async fn ingress_connections(
                         if !reached.insert(service.clone()) {
                             continue;
                         }
-                        let selector = service_selector(svc);
-                        note_reach(ns, &svc_ref, &selector, &snapshot, out);
-                        workloads_behind(ctx, ns, &selector, &snapshot, out).await;
+                        note_reach(svc, &svc_ref, &snapshot, out, false);
+                        workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
                     }
                     None => {
                         let missing = ObjectRef::new(
@@ -1427,7 +1539,6 @@ async fn ingress_connections(
         }
     }
 
-    out.not_looked_at.push(UnexploredKind::endpoint_slice());
     Ok(())
 }
 

@@ -100,7 +100,13 @@ const conns = (
   edges: ConnectionEdge[],
   subject: ObjectRef = workload,
   notLookedAt: ResourceConnections["notLookedAt"] = []
-): ResourceConnections => ({ subject, edges, stops: [], notLookedAt });
+): ResourceConnections => ({
+  subject,
+  edges,
+  stops: [],
+  published: [],
+  notLookedAt,
+});
 
 describe("reading the two governing kinds", () => {
   it("pulls an autoscaler and a budget off the same edge list", () => {

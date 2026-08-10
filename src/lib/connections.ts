@@ -22,6 +22,12 @@ import {
   budgetRoom,
   budgetRule,
 } from "./governance";
+import {
+  endpointAddress,
+  endpointCount,
+  publishedFor,
+  sourceMark,
+} from "./published";
 import type {
   ChainStop,
   ConnectionEdge,
@@ -30,6 +36,7 @@ import type {
   Relation,
   IngressClassBinding,
   ResourceConnections,
+  ServicePublished,
   TlsCertificate,
   Usage,
 } from "@/generated/types";
@@ -223,14 +230,37 @@ export function describeExistence(
 // --- where the path stops ----------------------------------------------
 
 /**
- * The three ways a path stops, each a different repair.
+ * The four ways a path stops, each a different repair.
  *
- * `noneReady` is the one this view was built for: a Service whose pods are
- * running and none of which passes its readiness probe looks healthy on every
- * list page in the app, and refuses every connection.
+ * `publishesNothing` is the sharpest: a healthy selector, healthy pods, a
+ * green everything and no traffic at all, because the Service asks for a port
+ * name no container declares. It is invisible to every deduction — including
+ * the one this chain used to make — since the pods really are Ready and it is
+ * the endpoint controller that skipped them.
  */
 export function describeStop(stop: ChainStop): { title: string; note: string } {
   switch (stop.reason) {
+    case "publishesNothing": {
+      const matched =
+        stop.pods === 1
+          ? "1 pod matches its selector and it is Ready"
+          : stop.readyPods === stop.pods
+            ? `${stop.pods} pods match its selector and all of them are Ready`
+            : `${stop.pods} pods match its selector and ${stop.readyPods} of them are Ready`;
+      if (stop.unnamedPorts.length === 0) {
+        return {
+          title: "This Service publishes no endpoint",
+          note: `${matched}, and not one of them is in anything this Service publishes. Why is not something these objects state — a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.`,
+        };
+      }
+      const asked = stop.unnamedPorts
+        .map((name) => `targetPort: ${name}`)
+        .join(", ");
+      return {
+        title: "This Service publishes no endpoint",
+        note: `${matched}, but it asks for ${asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.`,
+      };
+    }
     case "backendMissing":
       return {
         title: `No Service named ${stop.service.name} in this namespace`,
@@ -247,7 +277,7 @@ export function describeStop(stop: ChainStop): { title: string; note: string } {
           stop.pods === 1
             ? `1 pod carries ${stop.selector}, and it is not ready`
             : `${stop.pods} pods carry ${stop.selector}, and none of them is ready`,
-        note: "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy.",
+        note: "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
       };
   }
 }
@@ -265,10 +295,25 @@ export interface ChainHopObject {
   via: string | null;
 }
 
-export interface ChainHopPods {
-  at: "pods";
-  pods: ObjectRef[];
+/**
+ * The last hop, and it is the cluster's own answer rather than ours.
+ *
+ * It used to be a list of the pods the selector matched with their `Ready`
+ * conditions counted — a deduction, one edge per pod, and wrong in both the
+ * directions that matter: a draining pod reads as dead while it is still
+ * taking traffic, and a Service that publishes nothing at all reads as green.
+ */
+export interface ChainHopPublished {
+  at: "published";
+  published: ServicePublished;
+  /** The pod behind the first address, so the hop has a name and not only a
+   * number. Null where the endpoints name no pod, which a hand-written slice
+   * does not. */
+  first: ObjectRef | null;
+  /** The first address itself, for a slice that names no pod. */
+  address: string | null;
   summary: string;
+  tone: "on" | "warn";
 }
 
 export interface ChainHopStop {
@@ -307,7 +352,7 @@ export interface ChainHopController {
 
 export type ChainHop =
   | ChainHopObject
-  | ChainHopPods
+  | ChainHopPublished
   | ChainHopStop
   | ChainHopCertificate
   | ChainHopController;
@@ -356,22 +401,32 @@ function serviceHop(object: ObjectRef, self: boolean): ChainHopObject {
   };
 }
 
-function podsHop(pods: ObjectRef[]): ChainHopPods {
-  const ready = pods.filter(
-    (pod) => pod.facts?.kind === "pod" && pod.facts.ready
-  ).length;
-  const serving =
-    ready === pods.length
-      ? pods.length === 1
-        ? "serving"
-        : pods.length === 2
-          ? "both serving"
-          : `all ${pods.length} serving`
-      : `${ready} of ${pods.length} serving`;
+/**
+ * What the Service hands to kube-proxy, counted.
+ *
+ * A draining address is counted as taking traffic, and that is the fix rather
+ * than a nicety: kube-proxy falls back to the terminating endpoints when no
+ * ready one is left, so a Service down to one draining pod is a restart in
+ * progress and the app used to call it an outage.
+ */
+function publishedHop(published: ServicePublished): ChainHopPublished {
+  const first = published.endpoints[0];
+  const rest = endpointCount(published) - 1;
+  const summary = join(
+    rest > 0 && `and ${rest} more`,
+    published.ready > 0 && `${published.ready} published`,
+    published.draining > 0 &&
+      `${published.draining} draining${published.ready === 0 ? ", still taking traffic" : ""}`,
+    published.notReady > 0 && `${published.notReady} not ready`,
+    sourceMark(published)
+  );
   return {
-    at: "pods",
-    pods,
-    summary: join(pods.length > 1 && `and ${pods.length - 1} more`, serving),
+    at: "published",
+    published,
+    first: first?.target ?? null,
+    address: first ? endpointAddress(first) : null,
+    summary,
+    tone: published.ready === 0 && published.draining > 0 ? "warn" : "on",
   };
 }
 
@@ -452,13 +507,7 @@ export function trafficChains(
       const stop = conns.stops.find((entry) =>
         sameObject(entry.service, service)
       );
-      const pods = unique(
-        selects
-          .filter(
-            (edge) => sameObject(edge.from, service) && edge.to.kind === "Pod"
-          )
-          .map((edge) => edge.to)
-      );
+      const published = publishedFor(conns, service);
 
       const hops: ChainHop[] = [];
       if (subject.kind === "Ingress") {
@@ -522,8 +571,12 @@ export function trafficChains(
       }
 
       if (stop) hops.push({ at: "stop", ...describeStop(stop) });
-      else if (subject.kind !== "Pod" && pods.length > 0)
-        hops.push(podsHop(pods));
+      else if (
+        subject.kind !== "Pod" &&
+        published &&
+        endpointCount(published) > 0
+      )
+        hops.push(publishedHop(published));
 
       return { key: refKey(service), hops, broken: !!stop };
     })
@@ -545,7 +598,7 @@ export function chainSilence(conns: ResourceConnections): string | null {
       return `This Service has no selector: it resolves to ${facts.externalName} rather than to anything in this cluster.`;
     }
     if (facts?.kind === "service" && facts.selector === null) {
-      return "This Service has no selector, so whatever answers here was registered by hand — the app cannot say what it is.";
+      return "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.";
     }
     return null;
   }
@@ -635,7 +688,6 @@ const OWNABLE = new Set([
 const UNASKED_LABEL: Record<string, string> = {
   HorizontalPodAutoscaler: "Autoscaling",
   PodDisruptionBudget: "Disruption budget",
-  EndpointSlice: "Endpoints",
 };
 
 /** A label is written once and left blank on the rows that repeat it. */

@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::PodSpec;
 use serde::{Deserialize, Serialize};
 
+use super::published::ServicePublished;
 use super::types::{mounts_of, volume_source, ConditionInfo, ServicePortInfo};
 
 /// Whether the app looked, told apart from what it found.
@@ -289,8 +290,8 @@ pub struct ConnectionEdge {
 
 /// Where a path into the subject stops, named.
 ///
-/// The three are different repairs, and the third is the one every list page
-/// in the app draws as healthy.
+/// The four are different repairs, and the last two are the ones every list
+/// page in the app draws as healthy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "camelCase")]
 pub enum ChainStop {
@@ -304,12 +305,32 @@ pub enum ChainStop {
         service: ObjectRef,
         selector: String,
     },
-    /// The Service's pods exist and not one of them is ready, so it has no
-    /// endpoints and the address refuses connections.
+    /// The Service's pods exist and not one of them is ready, so nothing it
+    /// publishes takes traffic and the address refuses connections.
+    ///
+    /// Judged on what the slices publish rather than on each pod's own
+    /// condition, which is the difference between a restart and an outage: a
+    /// pod draining with `serving: true, ready: false` is not ready and is
+    /// still the address kube-proxy sends to.
     NoneReady {
         service: ObjectRef,
         selector: String,
         pods: i32,
+    },
+    /// Ready pods match the selector and the Service publishes not one
+    /// address:port pair — the case with a healthy selector, healthy pods, a
+    /// green everything and no traffic at all.
+    PublishesNothing {
+        service: ObjectRef,
+        selector: String,
+        /// Pods the selector matches, and how many of them are Ready.
+        pods: i32,
+        #[serde(rename = "readyPods")]
+        ready_pods: i32,
+        /// The `targetPort` names no matching container declares. Empty where
+        /// the app cannot say why, and it then says only that it cannot.
+        #[serde(rename = "unnamedPorts")]
+        unnamed_ports: Vec<String>,
     },
 }
 
@@ -323,8 +344,13 @@ pub struct ResourceConnections {
     pub subject: ObjectRef,
     pub edges: Vec<ConnectionEdge>,
     /// Where a path into the subject stops. Empty means every path this call
-    /// followed reaches a ready pod.
+    /// followed reaches something the Service publishes.
     pub stops: Vec<ChainStop>,
+    /// What each Service in this answer publishes, as its own EndpointSlices
+    /// state it. One entry per Service the call touched; the endpoint rows
+    /// and the second list are filled only for a Service the reader opened,
+    /// because a chain hop elsewhere needs a count and one name.
+    pub published: Vec<ServicePublished>,
     pub not_looked_at: Vec<UnexploredKind>,
 }
 
@@ -380,16 +406,6 @@ impl UnexploredKind {
         .into_iter()
         .flatten()
         .collect()
-    }
-
-    /// The kind that would replace pod-by-pod readiness with the endpoints
-    /// the Service actually publishes.
-    #[must_use]
-    pub fn endpoint_slice() -> Self {
-        Self::new(
-            "EndpointSlice",
-            "readiness here is each pod's own Ready condition; the app does not read EndpointSlices, which is what the Service publishes",
-        )
     }
 }
 
@@ -670,6 +686,21 @@ mod tests {
             unread.is_empty(),
             "both governing kinds are read, so nothing is left unasked: {:?}",
             unread.iter().map(|k| &k.kind).collect::<Vec<_>>()
+        );
+    }
+
+    /// The same rule, for the kind this feature turned from a to-do into a
+    /// read one. Nothing may name `EndpointSlice` as unread now that the
+    /// Service's own bookkeeping is what the chain's last hop is built from.
+    #[test]
+    fn the_kind_that_became_read_is_never_named_as_unread() {
+        let named: Vec<String> = UnexploredKind::governance(Some("404"), Some("403"))
+            .into_iter()
+            .map(|kind| kind.kind)
+            .collect();
+        assert!(
+            !named.iter().any(|kind| kind == "EndpointSlice"),
+            "EndpointSlices are read; naming them unread is worse than the gap: {named:?}"
         );
     }
 

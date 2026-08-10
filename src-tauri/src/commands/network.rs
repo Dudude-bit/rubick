@@ -2,15 +2,22 @@
 //!
 //! Commands for managing Ingresses and Endpoints.
 
+use std::collections::HashMap;
+
 use crate::error::Result;
-use crate::resources::{EndpointsInfo, IngressInfo};
+use crate::resources::{
+    published, EndpointsInfo, Existence, IngressInfo, ObjectRef, ServicePublished,
+};
 use crate::state::AppState;
-use k8s_openapi::api::core::v1::Endpoints;
+use k8s_openapi::api::core::v1::{Endpoints, Service};
+use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::Ingress;
+use kube::api::ListParams;
+use kube::ResourceExt;
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
 
 /// List Ingresses
 #[tauri::command]
@@ -28,6 +35,83 @@ pub async fn list_endpoints(
     state: State<'_, AppState>,
 ) -> Result<Vec<EndpointsInfo>> {
     list_resource_infos::<Endpoints, EndpointsInfo>(filters, state).await
+}
+
+/// What every Service in scope publishes, read off its own EndpointSlices.
+///
+/// One list of slices per scope, grouped by the `kubernetes.io/service-name`
+/// label the controllers write — the answer for two hundred Services is two
+/// lists and a pass over memory, not two hundred requests. Counts and the
+/// source only: the endpoint rows are the Service page's business, and every
+/// other caller here wants to know whether an address takes traffic.
+#[tauri::command]
+pub async fn list_service_endpoints(
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ServicePublished>> {
+    let ctx = ResourceContext::for_list(&state, namespace)?;
+    let params = ListParams::default();
+    let services_api = ctx.namespaced_or_cluster_api::<Service>();
+    let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
+    let (services, slices) = tokio::join!(services_api.list(&params), slices_api.list(&params));
+    let services = services?.items;
+
+    // A cluster below 1.21 serves no `discovery.k8s.io/v1` at all, so the
+    // legacy object answers and the reader is told which one did.
+    let Ok(slices) = slices else {
+        let legacy = ctx
+            .namespaced_or_cluster_api::<Endpoints>()
+            .list(&params)
+            .await?
+            .items;
+        return Ok(services
+            .iter()
+            .map(|svc| {
+                published::from_legacy(
+                    svc,
+                    service_ref(svc),
+                    legacy.iter().find(|ep| {
+                        ep.name_any() == svc.name_any() && ep.namespace() == svc.namespace()
+                    }),
+                )
+                .summary()
+            })
+            .collect());
+    };
+
+    let mut by_service: HashMap<(String, String), Vec<&EndpointSlice>> = HashMap::new();
+    for slice in &slices.items {
+        let Some(name) = slice.labels().get(published::SERVICE_NAME_LABEL) else {
+            continue;
+        };
+        by_service
+            .entry((slice.namespace().unwrap_or_default(), name.clone()))
+            .or_default()
+            .push(slice);
+    }
+
+    Ok(services
+        .iter()
+        .map(|svc| {
+            let key = (svc.namespace().unwrap_or_default(), svc.name_any());
+            published::from_slices(
+                svc,
+                service_ref(svc),
+                by_service.get(&key).map_or(&[][..], Vec::as_slice),
+                &[],
+            )
+            .summary()
+        })
+        .collect())
+}
+
+fn service_ref(svc: &Service) -> ObjectRef {
+    ObjectRef::new(
+        "Service",
+        &svc.name_any(),
+        svc.namespace(),
+        Existence::Present,
+    )
 }
 
 /// Get a single Ingress by name

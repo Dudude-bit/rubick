@@ -9,6 +9,8 @@ import {
 } from "./connections";
 import type {
   ChainStop,
+  PublishedEndpoint,
+  ServicePublished,
   ConnectionEdge,
   ObjectFacts,
   ObjectRef,
@@ -59,8 +61,63 @@ const connections = (
   subject: ObjectRef,
   edges: ConnectionEdge[],
   stops: ChainStop[] = [],
-  notLookedAt: ResourceConnections["notLookedAt"] = []
-): ResourceConnections => ({ subject, edges, stops, notLookedAt });
+  notLookedAt: ResourceConnections["notLookedAt"] = [],
+  published: ServicePublished[] = []
+): ResourceConnections => ({
+  subject,
+  edges,
+  stops,
+  published,
+  notLookedAt,
+});
+
+/** What a Service publishes, as its slices state it. */
+const publishes = (
+  name: string,
+  counts: Partial<
+    Pick<ServicePublished, "ready" | "draining" | "notReady" | "unrouted">
+  >,
+  extra: Partial<ServicePublished> = {}
+): ServicePublished => ({
+  service: {
+    kind: "Service",
+    name,
+    namespace: "k8s-gui-test",
+    existence: "present",
+    facts: null,
+  },
+  source: "slices",
+  slices: 1,
+  ready: 0,
+  draining: 0,
+  notReady: 0,
+  unrouted: 0,
+  ports: [],
+  endpoints: [],
+  whole: true,
+  unpublished: [],
+  ...counts,
+  ...extra,
+});
+
+const endpointOf = (pod: string, state: Partial<PublishedEndpoint> = {}) => ({
+  address: "10.42.1.51",
+  target: {
+    kind: "Pod",
+    name: pod,
+    namespace: "k8s-gui-test",
+    existence: "present" as const,
+    facts: null,
+  },
+  ready: true,
+  serving: true,
+  terminating: false,
+  nodeName: "server-0",
+  zone: null,
+  hintZones: [],
+  ports: [8080],
+  ...state,
+});
 
 describe("the traffic chain", () => {
   it("draws a Service in front of a workload as a hop, and the pods behind it", () => {
@@ -70,38 +127,40 @@ describe("the traffic chain", () => {
     const deployment = ref("Deployment", "log-demo");
     const svc = service("log-demo", "app=log-demo");
     const path = trafficChains(
-      connections(deployment, [
-        {
-          from: svc,
-          to: deployment,
-          relation: { verb: "selects", selector: "app=log-demo" },
-        },
-        {
-          from: svc,
-          to: pod("log-demo-a", true),
-          relation: { verb: "selects", selector: "app=log-demo" },
-        },
-        {
-          from: svc,
-          to: pod("log-demo-b", true),
-          relation: { verb: "selects", selector: "app=log-demo" },
-        },
-      ])
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=log-demo" },
+          },
+        ],
+        [],
+        [],
+        [
+          publishes(
+            "log-demo",
+            { ready: 2 },
+            { endpoints: [endpointOf("log-demo-a"), endpointOf("log-demo-b")] }
+          ),
+        ]
+      )
     )[0];
 
     expect(path.hops.map((hop) => hop.at)).toEqual([
       "object",
       "object",
-      "pods",
+      "published",
     ]);
     expect(path.broken).toBe(false);
     const svcHop = path.hops[0];
     if (svcHop.at !== "object") throw new Error("expected the Service hop");
     expect(svcHop.detail).toBe(":80 → 8080");
     expect(svcHop.via).toContain("selects app=log-demo");
-    const pods = path.hops[2];
-    if (pods.at !== "pods") throw new Error("expected the pods hop");
-    expect(pods.summary).toBe("and 1 more · both serving");
+    const last = path.hops[2];
+    if (last.at !== "published") throw new Error("expected the published hop");
+    expect(last.summary).toBe("and 1 more · 2 published");
   });
 
   it("puts an Ingress above the Service that routes to it", () => {
@@ -373,5 +432,120 @@ describe("the groups", () => {
     expect(unasked?.rows).toHaveLength(1);
     expect(unasked?.rows[0].label).toBe("Autoscaling");
     expect(unasked?.rows[0].unasked).toBe(true);
+  });
+});
+
+describe("what the Service publishes", () => {
+  /**
+   * The defect this replaced. A pod draining is `serving: true, ready: false`
+   * and is exactly the address kube-proxy falls back to when nothing ready is
+   * left — so a Service down to one of them is a rolling restart, not an
+   * outage. Would break the moment the last hop goes back to counting `Ready`.
+   */
+  it("reads a draining endpoint as draining rather than as an outage", () => {
+    const deployment = ref("Deployment", "draining-demo");
+    const svc = service("draining-demo", "app=draining-demo");
+    const path = trafficChains(
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=draining-demo" },
+          },
+        ],
+        [],
+        [],
+        [
+          publishes(
+            "draining-demo",
+            { ready: 0, draining: 1 },
+            {
+              endpoints: [
+                endpointOf("draining-demo-a", {
+                  ready: false,
+                  serving: true,
+                  terminating: true,
+                }),
+              ],
+            }
+          ),
+        ]
+      )
+    )[0];
+
+    expect(path.broken).toBe(false);
+    const last = path.hops[path.hops.length - 1];
+    if (last.at !== "published") throw new Error("expected the published hop");
+    expect(last.tone).toBe("warn");
+    expect(last.summary).toContain("1 draining");
+    expect(last.summary).toContain("still taking traffic");
+    expect(last.summary).not.toContain("not ready");
+  });
+
+  /**
+   * The case worth building the whole thing for: a healthy selector, healthy
+   * pods, a green everything, and no traffic. The reason is derived from two
+   * things the app already holds — the `targetPort` the Service asks for and
+   * the port names the containers declare — so it is named rather than left
+   * as "it does not work".
+   */
+  it("names the port a Service asks for that no container declares", () => {
+    const said = describeStop({
+      reason: "publishesNothing",
+      service: service("named-port-demo", "app=named-port-demo"),
+      selector: "app=named-port-demo",
+      pods: 2,
+      readyPods: 2,
+      unnamedPorts: ["http"],
+    });
+
+    expect(said.title).toBe("This Service publishes no endpoint");
+    expect(said.note).toContain("2 pods match its selector");
+    expect(said.note).toContain("all of them are Ready");
+    expect(said.note).toContain("targetPort: http");
+    expect(said.note).toContain("Name the port in the container");
+  });
+
+  /** And it declines to explain what it cannot see. A pod missing from every
+   *  slice for a reason nothing states gets no invented cause. */
+  it("says only what it holds when the reason is not derivable", () => {
+    const said = describeStop({
+      reason: "publishesNothing",
+      service: service("mystery", "app=mystery"),
+      selector: "app=mystery",
+      pods: 1,
+      readyPods: 1,
+      unnamedPorts: [],
+    });
+
+    expect(said.note).toContain("not something these objects state");
+    expect(said.note).not.toContain("targetPort");
+  });
+
+  /**
+   * The app reads EndpointSlices now, so nothing may name them as unread. A
+   * page saying "the app does not look at this" beside a list drawn from it
+   * is worse than the gap it replaced.
+   */
+  it("never names EndpointSlice as a kind it did not look at", () => {
+    const groups = connectionGroups(
+      connections(
+        ref("Service", "log-demo"),
+        [],
+        [],
+        [
+          {
+            kind: "EndpointSlice",
+            why: "readiness here is each pod's own Ready condition",
+          },
+        ]
+      )
+    );
+
+    const unasked = groups.find((group) => group.key === "unasked");
+    expect(unasked?.rows.map((row) => row.label)).not.toContain("Endpoints");
+    expect(unasked?.rows[0].label).toBe("EndpointSlice");
   });
 });

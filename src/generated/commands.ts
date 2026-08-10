@@ -88,6 +88,7 @@ import type {
   SecretInfo,
   ServiceFilters,
   ServiceInfo,
+  ServicePublished,
   StatefulSetDetailInfo,
   StatefulSetInfo,
   StorageClassInfo,
@@ -108,6 +109,12 @@ export async function listEndpoints(
   filters: ResourceFilters | null
 ): Promise<EndpointsInfo[]> {
   return invoke<EndpointsInfo[]>("list_endpoints", { filters });
+}
+
+export async function listServiceEndpoints(
+  namespace: string | null
+): Promise<ServicePublished[]> {
+  return invoke<ServicePublished[]>("list_service_endpoints", { namespace });
 }
 
 export async function getIngress(

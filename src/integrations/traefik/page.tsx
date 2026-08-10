@@ -48,6 +48,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
+import type { ChainStop } from "@/generated/types";
 import { crdObjectPath, plural } from "../kit";
 import {
   Cell,
@@ -98,7 +99,7 @@ export default function TraefikPage() {
         ? allRoutes({
             ...routeSources.data,
             services: [],
-            endpoints: [],
+            published: [],
             entryPoints: [],
           })
         : [],
@@ -631,33 +632,29 @@ function Chain({
             <Cell bad>none</Cell>
           )}
         </Column>
-        <Column label="Pods">
+        <Column label="Published">
           {!route.service?.kubernetes ? (
             <Cell under="inside the proxy">not pods</Cell>
           ) : !backing.known ? (
             <Cell under="reading endpoints">—</Cell>
           ) : backing.stop ? (
-            <Cell
-              bad
-              under={
-                backing.stop.reason === "backendMissing"
-                  ? "no service to send to"
-                  : backing.stop.reason === "selectsNothing"
-                    ? "selector matches nothing"
-                    : "running, none ready"
-              }
-            >
-              0 ready
+            <Cell bad under={STOP_UNDER[backing.stop.reason]}>
+              0 published
             </Cell>
           ) : (
             <Cell
+              // A draining address is still the one traffic goes to, so the
+              // column says so instead of counting it as an outage.
+              warn={backing.ready === 0 && backing.draining > 0}
               under={
-                backing.notReady > 0
-                  ? `${backing.notReady} not ready`
-                  : `of ${backing.ready}`
+                backing.draining > 0
+                  ? `${backing.draining} draining`
+                  : backing.notReady > 0
+                    ? `${backing.notReady} not ready`
+                    : `of ${backing.ready}`
               }
             >
-              {backing.ready} ready
+              {backing.ready + backing.draining} published
             </Cell>
           )}
         </Column>
@@ -778,6 +775,14 @@ function FindingLine({
     </FindingBlock>
   );
 }
+
+/** What a stopped path says in the column, in four words or fewer. */
+const STOP_UNDER: Record<ChainStop["reason"], string> = {
+  backendMissing: "no service to send to",
+  selectsNothing: "selector matches nothing",
+  noneReady: "running, none ready",
+  publishesNothing: "no port to send to",
+};
 
 function describeFinding(finding: Finding): { title: string; note: string } {
   switch (finding.kind) {
