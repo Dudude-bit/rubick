@@ -761,14 +761,14 @@ export function LogViewer({
    * a range that pushed live lines out of a `Keep 5 000` buffer would have
    * made the viewer worse for having a Loki.
    */
-  const logs = useMemo(() => {
-    if (history.lines.length === 0) return live;
+  const { logs, historyHeld } = useMemo(() => {
+    if (history.lines.length === 0) return { logs: live, historyHeld: 0 };
     const room = Math.max(0, limit - live.length);
     const kept =
       room >= history.lines.length
         ? history.lines
         : history.lines.slice(history.lines.length - room);
-    return [...kept, ...live];
+    return { logs: [...kept, ...live], historyHeld: kept.length };
   }, [history.lines, live, limit]);
 
   // Everything the pane is holding, history included — the status bar's fill
@@ -1266,6 +1266,8 @@ export function LogViewer({
         history={history.state}
         stranded={stranded}
         ranged={workload !== undefined && workload !== null}
+        held={historyHeld}
+        keep={limit}
         selected={historyRange}
         isPaging={history.isPaging}
         onRead={handleReadHistory}

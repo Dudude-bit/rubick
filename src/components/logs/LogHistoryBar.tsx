@@ -38,6 +38,8 @@ export function LogHistoryBar({
   stranded,
   /** Set on a workload tab, where a range is the whole point. */
   ranged,
+  held,
+  keep,
   selected,
   isPaging,
   onRead,
@@ -53,6 +55,18 @@ export function LogHistoryBar({
    */
   stranded: string | null;
   ranged: boolean;
+  /**
+   * How many of the lines that came back the pane is actually holding.
+   *
+   * Not the same number as what was fetched, and the difference is the point:
+   * history yields to the live stream when `Keep N` is full, so a reader who
+   * asks for six hours over a busy workload can be handed a thousand lines
+   * and hold none of them. A row that printed the fetched count there would
+   * be describing a pane that does not exist.
+   */
+  held: number;
+  /** The buffer's own cap, named in the sentence that says what did not fit. */
+  keep: number;
   selected: UsageRange | null;
   isPaging: boolean;
   onRead: (range: UsageRange) => void;
@@ -142,6 +156,7 @@ export function LogHistoryBar({
   }
 
   const { loaded } = history;
+  const dropped = loaded.count - held;
 
   // Not one stream matched — which is a different fact from a quiet pod, and
   // the only one of the two the reader can do anything about. The label
@@ -168,11 +183,18 @@ export function LogHistoryBar({
         {/* "History" first, because the single most dangerous thing this
             pane could do is let a reader take an hour-old line for a live
             one while they are watching a rollout. */}
-        <span className="text-info">History</span> · {formatCount(loaded.count)}{" "}
-        {loaded.count === 1 ? "line" : "lines"} from {from}, the last{" "}
-        {loaded.range}. Not live — these lines do not grow and Follow does not
-        reach them.
+        <span className="text-info">History</span> · {formatCount(held)}{" "}
+        {held === 1 ? "line" : "lines"} from {from}, the last {loaded.range}.
+        Not live — these lines do not grow and Follow does not reach them.
       </p>
+      {dropped > 0 && (
+        <p className="text-warn" data-testid="log-history-crowded">
+          {formatCount(dropped)} more came back and{" "}
+          {dropped === 1 ? "is" : "are"} not held — the live stream already
+          fills Keep {formatCount(keep)}. Raise it, or clear the pane, and ask
+          again.
+        </p>
+      )}
       {loaded.truncated && (
         <p className="text-warn" data-testid="log-history-truncated">
           Showing the newest {formatCount(loaded.limit)} lines of this range —
