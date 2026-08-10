@@ -8,7 +8,7 @@ import {
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
-import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 
@@ -79,7 +79,7 @@ export function ResourceRef({
   onClick,
   className,
 }: ResourceRefProps) {
-  const openTab = useScopeTabStore((state) => state.openTab);
+  const gesture = useLinkGesture();
   const { open } = usePeek();
 
   const body = <ResourceName kind={kind} name={name} showKind={showKind} />;
@@ -95,41 +95,24 @@ export function ResourceRef({
 
   const to = getResourceDetailUrl(kind, name, namespace);
 
-  const openInTab = (
-    event: MouseEvent<HTMLAnchorElement>,
-    background: boolean
-  ) => {
-    // The webview has no second window to hand this to, so the modified
-    // click that used to fall through to the browser opens a scope tab
-    // instead — which is the same promise, kept.
-    event.preventDefault();
-    openTab({ href: to, background });
-  };
-
-  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+  // This component wrote the gesture rules and then kept its own copy of
+  // them; `useLinkGesture` is where they live for every other surface, so
+  // ctrl-click can only mean one thing once they are read from one place.
+  const handle = (event: MouseEvent<HTMLAnchorElement>) => {
+    // `onClick` is documented to run before the peek or before a tab. A
+    // right-click opens a context menu and alt-click belongs to the
+    // platform; neither is one of those, so neither wakes the callback.
+    if (readLinkIntent(event) === "none") return;
     onClick?.(event);
     if (event.defaultPrevented) return;
-    // Ctrl and cmd open behind, shift opens in front: the browser rule.
-    if (event.metaKey || event.ctrlKey) return openInTab(event, true);
-    if (event.shiftKey) return openInTab(event, false);
-    // Alt-click is the browser's save gesture; leave it alone.
-    if (event.button !== 0 || event.altKey) return;
-    event.preventDefault();
-    open({ kind, name, namespace });
-  };
-
-  const handleAuxClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.button !== 1) return;
-    onClick?.(event);
-    if (event.defaultPrevented) return;
-    openInTab(event, true);
+    gesture(event, to, () => open({ kind, name, namespace }));
   };
 
   return (
     <Link
       to={to}
-      onClick={handleClick}
-      onAuxClick={handleAuxClick}
+      onClick={handle}
+      onAuxClick={handle}
       // The name is split across spans so the tail can carry its own hue, and
       // the accessible-name algorithm joins those spans with a space — which
       // announces "k3d-agent -0" for a pod that is called neither. Naming the
