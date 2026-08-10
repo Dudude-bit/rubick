@@ -66,14 +66,24 @@ export function useDeliveries(objects: DeliveryQuery[]): Deliveries {
   const providers = useCapabilities("delivery.source");
 
   // The array identity churns on every render of every caller that builds it
-  // inline, and a query key that churned with it would refetch for ever. The
-  // digest is over the objects' identities, which is what actually decides the
-  // answer; a label edited underneath us is picked up by `staleTime` like every
-  // other change to the cluster.
-  const { keys, digest } = useMemo(() => {
-    const keys = objects.map((object) => deliveryKey(object));
-    return { keys, digest: digestOf(keys) };
-  }, [objects]);
+  // inline, and a query key that churned with it would refetch for ever.
+  //
+  // The digest covers the claim as well as the identity, and it has to. A
+  // delivery answer is computed from an object's labels and annotations, and
+  // the app has two surfaces that hold the *same* object with different
+  // metadata: a list row typed from `StatefulSetInfo`, which carries no labels
+  // at all, and the peek over that row, which fetched the full object and has
+  // them. Keyed by identity alone the second one reads the first one's cached
+  // "nothing delivers this" and a peek's Scale dialog goes quiet about the
+  // Argo CD that will undo the number — while the detail page, one route away,
+  // says it. That silence is the exact belief this feature exists to prevent.
+  const { keys, digest } = useMemo(
+    () => ({
+      keys: objects.map((object) => deliveryKey(object)),
+      digest: deliveryDigest(objects),
+    }),
+    [objects]
+  );
 
   const results = useQueries({
     queries: providers.map((ask, index) => ({
@@ -119,6 +129,31 @@ export function useDelivery(object: DeliveryQuery | null): {
     isPending,
     error,
   };
+}
+
+/** What two reads of the same objects have to agree on to share an answer. */
+export function deliveryDigest(objects: DeliveryQuery[]): string {
+  return digestOf([
+    ...objects.map((object) => deliveryKey(object)),
+    ...objects.map(claimOf),
+  ]);
+}
+
+/**
+ * The metadata a delivery answer is actually computed from.
+ *
+ * Every vendor's claim is a label or an annotation, so the whole of both is
+ * what changes the answer. Sorted, because a record's key order is the order
+ * the API server happened to serialise it in and two orderings of the same
+ * labels are the same object.
+ */
+function claimOf(object: DeliveryQuery): string {
+  const pairs = (record: Record<string, string> | undefined) =>
+    Object.entries(record ?? {})
+      .map(([key, value]) => `${key}=${value}`)
+      .sort()
+      .join(",");
+  return `${pairs(object.labels)};${pairs(object.annotations)}`;
 }
 
 /** FNV-1a, because the alternative is a twenty-kilobyte query key. */
