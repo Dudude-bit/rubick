@@ -275,6 +275,32 @@ describe("the findings", () => {
   });
 
   /**
+   * The same blind spot on the other kind of object. An Ingress may name an
+   * API object instead of a Service — `backend.resource` — and the field the
+   * page reads for a Service name is empty on one, so a route that works
+   * read as "no Service named `` in this namespace": a 503 drawn out of a
+   * working configuration, with a blank where the name goes.
+   */
+  it("claims nothing about an Ingress backend that is an API object", () => {
+    const assets = ingress("assets", "assets.example.com");
+    assets.rules[0].paths[0] = {
+      path: "/assets",
+      pathType: "Prefix",
+      backendService: "",
+      backendPort: "",
+      resourceBackend: "StorageBucket/assets",
+    };
+
+    const [group] = hostGroups(sources({ ingresses: [assets] }));
+
+    expect(group.routes[0].service).toBeNull();
+    expect(group.routes[0].resourceBackend).toBe("StorageBucket/assets");
+    expect(group.findings.filter((finding) => finding.kind === "stop")).toEqual(
+      []
+    );
+  });
+
+  /**
    * Would break if the same broken backend were reported once per route that
    * names it. Three paths onto one missing Service is one repair, and three
    * copies of the sentence spend the reader's attention on nothing.

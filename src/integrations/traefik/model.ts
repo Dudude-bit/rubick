@@ -100,6 +100,13 @@ export interface TraefikRoute {
   entryPoints: string[] | null;
   middlewares: MiddlewareRef[];
   service: RouteService | null;
+  /**
+   * `Kind/name` where an Ingress path routes to an API object rather than a
+   * Service — `backend.resource`. A different thing from {@link service}
+   * being null on a Traefik internal: that one lives inside the proxy, this
+   * one is a Kubernetes object the app simply cannot see inside.
+   */
+  resourceBackend: string | null;
   tlsSecret: string | null;
   /** An Ingress's `pathType` verbatim: Traefik's reading of it is Traefik's. */
   pathType: string | null;
@@ -271,12 +278,19 @@ function routesFromIngress(
         clause,
         entryPoints,
         middlewares,
-        service: {
-          name: path.backendService,
-          namespace: ingress.namespace,
-          port: path.backendPort,
-          kubernetes: true,
-        },
+        // An Ingress may name an API object instead of a Service —
+        // `backend.resource` — and then the Service name is empty. Reading it
+        // through would report "no Service named  in this namespace" about a
+        // configuration that works, with a blank where the name goes.
+        service: path.backendService
+          ? {
+              name: path.backendService,
+              namespace: ingress.namespace,
+              port: path.backendPort,
+              kubernetes: true,
+            }
+          : null,
+        resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
         pathType: path.pathType,
         priority: null,
@@ -339,6 +353,8 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
               service.kind !== "TraefikService" && !service.name.includes("@"),
           }
         : null,
+      // Only an Ingress can name one; an IngressRoute has no such field.
+      resourceBackend: null,
       tlsSecret,
       pathType: null,
       priority: route.priority ?? null,

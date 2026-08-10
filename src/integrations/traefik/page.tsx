@@ -261,7 +261,9 @@ function RoutesTab({
           (route) =>
             route.source.name.toLowerCase().includes(needle) ||
             route.source.namespace.toLowerCase().includes(needle) ||
-            (route.service?.name ?? "").toLowerCase().includes(needle)
+            (route.service?.name ?? route.resourceBackend ?? "")
+              .toLowerCase()
+              .includes(needle)
         )
     );
   }, [groups, filter]);
@@ -479,21 +481,25 @@ function PathRow({
               <span className="text-fg-fnt">:{route.service.port}</span>
             )}
           </>
+        ) : route.resourceBackend ? (
+          <span className="font-mono text-fg-mid">{route.resourceBackend}</span>
         ) : (
           <span className="text-err">no service</span>
         )}
         <SourceRef route={route} />
       </span>
       <span className="text-[11px] text-fg-fnt">
-        {!route.service?.kubernetes
-          ? "inside the proxy"
-          : backing && !backing.known
-            ? "…"
-            : backing?.stop
-              ? "—"
-              : backing
-                ? `${backing.ready} ready`
-                : ""}
+        {route.resourceBackend
+          ? "an API object"
+          : !route.service?.kubernetes
+            ? "inside the proxy"
+            : backing && !backing.known
+              ? "…"
+              : backing?.stop
+                ? "—"
+                : backing
+                  ? `${backing.ready} ready`
+                  : ""}
       </span>
     </div>
   );
@@ -628,12 +634,20 @@ function Chain({
             >
               {route.service.name}
             </Cell>
+          ) : route.resourceBackend ? (
+            // An API object, not a Service. It has no endpoints by design
+            // and the app cannot see inside it, so nothing is claimed.
+            <Cell under="an API object, not a Service">
+              {route.resourceBackend}
+            </Cell>
           ) : (
             <Cell bad>none</Cell>
           )}
         </Column>
         <Column label="Published">
-          {!route.service?.kubernetes ? (
+          {route.resourceBackend ? (
+            <Cell under="not a Service">—</Cell>
+          ) : !route.service?.kubernetes ? (
             <Cell under="inside the proxy">not pods</Cell>
           ) : !backing.known ? (
             <Cell under="reading endpoints">—</Cell>
