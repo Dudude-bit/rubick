@@ -55,6 +55,35 @@ export interface PrometheusConnection {
   insecureTls: boolean;
 }
 
+export interface LokiPage {
+  lines: LokiLine[];
+  streams: number;
+  truncated: boolean;
+  limit: number;
+}
+
+export interface LokiLine {
+  ts: string;
+  line: LogLine;
+}
+
+export interface LokiProbe {
+  ok: boolean;
+  at: number;
+  latencyMs: number;
+  reason?: string;
+  version?: string;
+  retention?: string;
+  labels: string[];
+}
+
+export interface LokiConnection {
+  url: string;
+  authType: string;
+  hasToken: boolean;
+  insecureTls: boolean;
+}
+
 export interface ServiceInfo {
   name: string;
   namespace: string;

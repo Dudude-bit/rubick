@@ -36,7 +36,7 @@ pub use editor::{
     InfrastructureBuilderConfig, InfrastructureBuilderState, RecentItem, RecentItemsConfig,
     YamlEditorConfig, YamlHistoryEntry,
 };
-pub use integrations::{IntegrationsConfig, PrometheusEntry};
+pub use integrations::{ConnectionEntry, IntegrationsConfig, LokiEntry, PrometheusEntry};
 
 /// Application configuration
 ///

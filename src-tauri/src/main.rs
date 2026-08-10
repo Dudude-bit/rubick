@@ -158,6 +158,11 @@ fn main() {
             integrations::prometheus::probe_prometheus,
             integrations::prometheus::prometheus_query,
             integrations::prometheus::prometheus_query_range,
+            integrations::loki::get_loki_connection,
+            integrations::loki::save_loki_connection,
+            integrations::loki::forget_loki_connection,
+            integrations::loki::probe_loki,
+            integrations::loki::loki_query_range,
             // Resource references command
             commands::config_resources::get_resource_references,
             commands::connections::get_resource_connections,

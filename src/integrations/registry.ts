@@ -105,7 +105,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import type { IssuanceStory } from "@/generated/types";
+import type { IssuanceStory, LogFormat, LogLevel } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type { Delivery, DeliveryQuery } from "./gitops";
 import type { CrdColumn, CrdStatus } from "./kit";
@@ -116,10 +116,24 @@ import type { CrdColumn, CrdStatus } from "./kit";
  * Owned here rather than by whichever vendor answers, because the picker is
  * drawn by the surface: a chart offering ranges only the current supplier
  * happens to implement would change shape when the supplier did.
+ *
+ * One vocabulary across every history capability, and that is worth stating:
+ * the log viewer's range picker offers the same four words the usage chart
+ * does, so "the last six hours" means one thing in this app rather than one
+ * thing per pane.
  */
 export const USAGE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 
 export type UsageRange = (typeof USAGE_RANGES)[number];
+
+/** How far back each range reaches. The only fact about a range that every
+ *  supplier needs, whatever it is being asked for. */
+export const RANGE_WINDOW_MS: Readonly<Record<UsageRange, number>> = {
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "6h": 6 * 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+};
 
 /**
  * What a chart is asking about, in terms every monitoring system can
@@ -149,6 +163,87 @@ export interface UsageWindow {
   samples: readonly UsageSample[];
   /** "30s buckets, max over a 15s resolution". */
   resolution: string;
+}
+
+/**
+ * What a log question is about, in terms a log store can express.
+ *
+ * The same two shapes {@link UsageScope} has and for the same reason — a
+ * workload names its controller rather than its current pods, because the
+ * pods it had an hour ago are gone from every list the API server will
+ * answer and they are exactly the ones worth reading.
+ *
+ * No node scope: a node's logs are the kubelet's and the container runtime's,
+ * which is a different question with a different answer, and pretending it is
+ * this one would put every pod on the node into a pane labelled with the
+ * node's name.
+ */
+export type LogScope =
+  | { kind: "pod"; namespace: string; pod: string }
+  | { kind: "workload"; namespace: string; owner: string; ownerKind: string };
+
+/** One line a log store kept, in the shape the viewer already draws. */
+export interface HistoryLine {
+  /** The store's own clock, in epoch ms. Never arrival order. */
+  epoch: number;
+  /**
+   * Opaque cursor for {@link LogHistory.before}. A string because the store's
+   * precision is finer than a JavaScript number holds, and rounding it would
+   * make "older than this" either repeat lines or step over them.
+   */
+  cursor: string;
+  message: string;
+  raw: string;
+  pod: string;
+  container: string;
+  namespace: string;
+  level: LogLevel | null;
+  format: LogFormat;
+  fields: Record<string, string> | null;
+}
+
+/**
+ * One page of history, and everything that must be said about it.
+ *
+ * The three extra fields are the whole difference between an integration
+ * that helps and one that misleads. A log pane is the surface where a
+ * partial answer is most dangerous: it has no axis and no total, so a page
+ * that stopped at a limit looks exactly like a workload that went quiet.
+ */
+export interface LogHistoryPage {
+  /** Oldest first. */
+  lines: readonly HistoryLine[];
+  /**
+   * The limit was reached: these are the **newest** lines of the range asked
+   * for, and there is more inside it. A surface must say so.
+   */
+  truncated: boolean;
+  /** The limit that was actually applied, for the sentence that says it. */
+  limit: number;
+  /**
+   * How many distinct streams answered.
+   *
+   * Zero with a pod that plainly existed is the label-mismatch case, and it
+   * is the single most likely way this capability is quietly wrong: the
+   * default shipper labels are `namespace`, `pod` and `container`, and an
+   * install that relabels them answers every query with nothing. A surface
+   * owes that sentence rather than an empty pane, which reads as "this pod
+   * never logged".
+   */
+  streams: number;
+  /** The label names the query used, so the sentence can name them. */
+  labelsTried: readonly string[];
+}
+
+/** What to ask a log store for. */
+export interface LogHistory {
+  scope: LogScope;
+  range: UsageRange;
+  /**
+   * Page backwards: only lines older than this cursor. Absent for the first
+   * page, which is the only one anything fetches on its own.
+   */
+  before?: string;
 }
 
 /** Bytes in and out, over the same window and buckets as {@link UsageWindow}. */
@@ -224,6 +319,26 @@ export interface Capabilities {
     scope: UsageScope;
     range: UsageRange;
   }) => Promise<UsageWindow>;
+  /**
+   * The lines a pod wrote before it stopped existing.
+   *
+   * The biggest hole in this app's log viewer, and the one no amount of
+   * client-side buffering closes: `--previous` reaches one run back and only
+   * while the pod object is still there, so a crashed pod that its
+   * ReplicaSet has already replaced takes its log with it. A store that was
+   * shipped to has them.
+   *
+   * Absent means the viewer is exactly what it is today: the live stream, the
+   * previous run where the kubelet still holds one, and a pod that is gone
+   * says so and stops. Nothing is removed, nothing is dimmed, and no pane
+   * that reads fine today starts nagging — the offer appears only where the
+   * reader has just been told there is nothing to read.
+   *
+   * **Never live.** This answers a closed range and returns a page; it is not
+   * a second subscription and must not be drawn as one. A pane holding
+   * history says so, and Follow has nothing to follow.
+   */
+  "logs.history": (input: LogHistory) => Promise<LogHistoryPage>;
   /**
    * How full a namespace's volumes actually are.
    *
@@ -345,7 +460,23 @@ export interface ConnectionDraft {
  * not connect" sends them nowhere.
  */
 export type ProbeResult =
-  | { ok: true; at: number; latencyMs: number; version: string | null }
+  | {
+      ok: true;
+      at: number;
+      latencyMs: number;
+      version: string | null;
+      /**
+       * How far back this supplier says it can answer, in its own words —
+       * and **only where it said so**. `null` is not "unlimited", it is "it
+       * did not tell us", and a row printing a guessed retention would be
+       * the most misleading fact on that screen: a reader told "3 days" who
+       * then finds nothing from yesterday concludes the app is broken.
+       *
+       * Optional because a supplier that has no such concept has nothing to
+       * report, not because it is nice to have.
+       */
+      retention?: string | null;
+    }
   | { ok: false; at: number; reason: string };
 
 /**

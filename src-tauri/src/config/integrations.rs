@@ -21,14 +21,23 @@ use std::collections::HashMap;
 pub struct IntegrationsConfig {
     /// Key is the kubeconfig context name.
     #[serde(default)]
-    pub prometheus: HashMap<String, PrometheusEntry>,
+    pub prometheus: HashMap<String, ConnectionEntry>,
+    /// Same shape, same rules, and beside the Prometheus on purpose — a
+    /// reader looking for where their tokens went finds both in one place.
+    #[serde(default)]
+    pub loki: HashMap<String, ConnectionEntry>,
 }
 
-/// One cluster's Prometheus.
+/// One cluster's address for one configured integration.
+///
+/// One struct rather than one per vendor: a tier-3 connection is a URL, an
+/// auth mode, a credential and a TLS decision, and a second copy of those
+/// four fields per vendor would be four chances for them to drift apart
+/// while claiming to be the same form on screen.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct PrometheusEntry {
-    /// Base URL, without the `/api/v1` — `http://prometheus.monitoring:9090`.
+pub struct ConnectionEntry {
+    /// Base URL, without the API path — `http://prometheus.monitoring:9090`.
     pub url: String,
     /// `none` or `bearer`. A string rather than an enum to match the registry
     /// entry beside it, and so an unknown value in a hand-edited file reads
@@ -38,16 +47,21 @@ pub struct PrometheusEntry {
     /// Plaintext. Never returned to the webview.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    /// For the self-signed certificate an in-cluster Prometheus usually has.
+    /// For the self-signed certificate an in-cluster endpoint usually has.
     #[serde(default)]
     pub insecure_tls: bool,
 }
+
+/// The name the Prometheus module has always called it.
+pub type PrometheusEntry = ConnectionEntry;
+/// The same shape, under the name its own module reads it by.
+pub type LokiEntry = ConnectionEntry;
 
 fn no_auth() -> String {
     "none".to_string()
 }
 
-impl PrometheusEntry {
+impl ConnectionEntry {
     /// The bearer token, only where the reader asked for bearer auth.
     ///
     /// Reading `token` directly would send a stale credential from a config

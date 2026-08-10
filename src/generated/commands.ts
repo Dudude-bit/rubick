@@ -54,6 +54,9 @@ import type {
   JobInfo,
   KubeconfigSource,
   LogLine,
+  LokiConnection,
+  LokiPage,
+  LokiProbe,
   ManifestResult,
   NamespaceInfo,
   NodeFilters,
@@ -1294,6 +1297,53 @@ export async function deleteService(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_service", { name, namespace });
+}
+
+export async function getLokiConnection(): Promise<LokiConnection | null> {
+  return invoke<LokiConnection | null>("get_loki_connection");
+}
+
+export async function saveLokiConnection(
+  url: string,
+  authType: string,
+  token: string | null,
+  insecureTls: boolean
+): Promise<void> {
+  return invoke<void>("save_loki_connection", {
+    url,
+    authType,
+    token,
+    insecureTls,
+  });
+}
+
+export async function forgetLokiConnection(): Promise<void> {
+  return invoke<void>("forget_loki_connection");
+}
+
+export async function probeLoki(
+  url: string | null,
+  authType: string | null,
+  token: string | null,
+  insecureTls: boolean | null
+): Promise<LokiProbe> {
+  return invoke<LokiProbe>("probe_loki", { url, authType, token, insecureTls });
+}
+
+export async function lokiQueryRange(
+  selector: string,
+  startMs: number,
+  endMs: number,
+  limit: number,
+  before: string | null
+): Promise<LokiPage> {
+  return invoke<LokiPage>("loki_query_range", {
+    selector,
+    startMs,
+    endMs,
+    limit,
+    before,
+  });
 }
 
 export async function getPrometheusConnection(): Promise<PrometheusConnection | null> {

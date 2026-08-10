@@ -67,6 +67,7 @@ import ingressNginx from "./ingress-nginx";
 import istio from "./istio";
 import k3s from "./k3s";
 import karpenter from "./karpenter";
+import loki from "./loki";
 import minikube from "./minikube";
 import prometheus from "./prometheus";
 import traefik from "./traefik";
@@ -81,6 +82,10 @@ import type {
   CrdView,
   Extension,
   Flavour,
+  HistoryLine,
+  LogHistory,
+  LogHistoryPage,
+  LogScope,
   ProbeResult,
   SavedConnection,
   TrafficWindow,
@@ -93,7 +98,7 @@ import type {
   VolumeFullness,
 } from "./registry";
 
-export { USAGE_RANGES } from "./registry";
+export { RANGE_WINDOW_MS, USAGE_RANGES } from "./registry";
 export type {
   CapabilityKey,
   CapabilityState,
@@ -103,6 +108,10 @@ export type {
   ConnectionDraft,
   CrdView,
   Extension,
+  HistoryLine,
+  LogHistory,
+  LogHistoryPage,
+  LogScope,
   ProbeResult,
   SavedConnection,
   TrafficWindow,
@@ -155,6 +164,7 @@ const VENDORS: Vendor[] = [
   flux,
   istio,
   prometheus,
+  loki,
   k3s,
   aws,
   googleCloud,

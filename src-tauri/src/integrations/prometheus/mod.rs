@@ -18,20 +18,17 @@
 //! is a credentialed HTTP client with a Prometheus-shaped response parser.
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::config::{AppConfig, PrometheusEntry};
 use crate::error::{Error, Result};
+use crate::integrations::wire::{get_text, now_ms};
 use crate::state::AppState;
 
 pub const ID: &str = "prometheus";
-
-/// Long enough for a 24h range over a busy cluster, short enough that an
-/// address pointing at nothing fails while the reader is still looking at it.
-const TIMEOUT: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------------------
 // What the webview is allowed to know
@@ -182,79 +179,14 @@ pub fn forget_prometheus_connection(state: State<'_, AppState>) -> Result<()> {
 // The wire
 // ---------------------------------------------------------------------------
 
-fn client(insecure_tls: bool) -> Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .danger_accept_invalid_certs(insecure_tls)
-        .build()
-        .map_err(|e| Error::Connection(format!("Could not build an HTTP client: {e}")))
-}
-
-fn now_ms() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as f64)
-        .unwrap_or(0.0)
-}
-
-/// The shortest sentence that names what went wrong.
-///
-/// `reqwest`'s own `Display` is a nest of "error sending request for url
-/// (...): error trying to connect: tcp connect error: ..." — four layers of
-/// which only the last one is the answer. The innermost source is that
-/// answer, and it is the one the row prints.
-fn why(error: &reqwest::Error) -> String {
-    let mut source: &dyn std::error::Error = error;
-    while let Some(inner) = source.source() {
-        source = inner;
-    }
-    let innermost = source.to_string();
-    if error.is_timeout() {
-        return format!("timed out after {}s", TIMEOUT.as_secs());
-    }
-    if innermost.is_empty() {
-        error.to_string()
-    } else {
-        innermost
-    }
-}
-
 async fn get_json(
     entry: &PrometheusEntry,
     path: &str,
     query: &[(&str, String)],
 ) -> std::result::Result<serde_json::Value, String> {
-    let url = format!("{}{}", entry.url.trim_end_matches('/'), path);
-    let mut request = client(entry.insecure_tls)
-        .map_err(|e| e.to_string())?
-        .get(&url)
-        .query(query);
-    if let Some(token) = entry.bearer() {
-        request = request.bearer_auth(token);
-    }
-
-    let response = request.send().await.map_err(|e| why(&e))?;
-    let status = response.status();
-    if !status.is_success() {
-        // Prometheus states its own refusals in the body; a bare status code
-        // for a malformed query would send the reader looking at the network.
-        let body = response.text().await.unwrap_or_default();
-        let detail = serde_json::from_str::<serde_json::Value>(&body)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("error")
-                    .and_then(|e| e.as_str())
-                    .map(str::to_string)
-            })
-            .unwrap_or_else(|| status.canonical_reason().unwrap_or("refused").to_string());
-        return Err(format!("{} {}", status.as_u16(), detail));
-    }
-
-    response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| why(&e))
+    let body = get_text(entry, path, query).await?;
+    serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|e| format!("Prometheus answered with something that is not JSON: {e}"))
 }
 
 /// Is it there, and does it answer?

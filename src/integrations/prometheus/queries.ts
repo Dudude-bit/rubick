@@ -26,7 +26,11 @@
  * talking to itself.
  */
 
+import { escapeRegex, podPattern } from "../pod-names";
+import { RANGE_WINDOW_MS } from "../registry";
 import type { UsageRange, UsageScope } from "../registry";
+
+export { escapeRegex, podPattern };
 
 /**
  * How a range is drawn, and what that costs in fidelity.
@@ -45,7 +49,8 @@ import type { UsageRange, UsageScope } from "../registry";
  */
 export interface RangeSpec {
   id: UsageRange;
-  /** How far back the window reaches, in milliseconds. */
+  /** How far back the window reaches, in milliseconds — the registry's
+   *  number, so a range means the same span here as it does in a log. */
   windowMs: number;
   /** Seconds between drawn points. ~120 of them, which is the bucket count
    *  the watched-window chart already draws at. */
@@ -65,7 +70,7 @@ export interface RangeSpec {
 export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
   "15m": {
     id: "15m",
-    windowMs: 15 * 60_000,
+    windowMs: RANGE_WINDOW_MS["15m"],
     stepSeconds: 15,
     rateWindow: "1m",
     inner: null,
@@ -73,7 +78,7 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
   },
   "1h": {
     id: "1h",
-    windowMs: 60 * 60_000,
+    windowMs: RANGE_WINDOW_MS["1h"],
     stepSeconds: 30,
     rateWindow: "1m",
     inner: "15s",
@@ -81,7 +86,7 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
   },
   "6h": {
     id: "6h",
-    windowMs: 6 * 60 * 60_000,
+    windowMs: RANGE_WINDOW_MS["6h"],
     stepSeconds: 180,
     rateWindow: "2m",
     inner: "30s",
@@ -89,7 +94,7 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
   },
   "24h": {
     id: "24h",
-    windowMs: 24 * 60 * 60_000,
+    windowMs: RANGE_WINDOW_MS["24h"],
     stepSeconds: 720,
     rateWindow: "5m",
     inner: "2m",
@@ -100,57 +105,6 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
 /** A label value, with the two characters that would end it early escaped. */
 export function escapeLabel(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-/**
- * A literal inside a `=~` matcher.
- *
- * Kubernetes names are DNS-1123 and so contain only lower-case letters,
- * digits, `-` and `.` — of which `.` is the one that means something to a
- * regular expression. Left unescaped, a Deployment called `a.b` would also
- * claim the pods of one called `axb`.
- */
-export function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * The pods a workload has had, by the shape its controller names them.
- *
- * **This is the rollout decision, and it is deliberate.** A Deployment's pods
- * are `<name>-<replicaset hash>-<suffix>`, and the hash changes on every
- * rollout — so matching the *current* ReplicaSet's prefix would draw a chart
- * that goes blank at the last deploy, which is precisely the moment the
- * reader came to look at. Matching the workload's own name with the two
- * remaining segments left open spans every generation it has ever had.
- *
- * What a rollout boundary looks like on the chart, therefore: **a bump, not
- * a gap.** Both generations are briefly running and both are summed, so the
- * line rises for the length of the rollout and settles back. That is an
- * honest picture of what the cluster was actually doing, and the caption
- * says the sum is over the pods the workload had in the window so the bump
- * is readable rather than mysterious.
- *
- * The segments are `[^-]+` rather than `.+` so a Deployment `foo` cannot
- * claim the pods of a Deployment `foo-bar`: `foo-bar-<hash>-<suffix>` has
- * three segments after `foo-`, and the pattern admits exactly two. A bare
- * Pod that a human named `foo-a-b` would still match, which is the one
- * collision left and is not worth a second API call to rule out.
- */
-export function podPattern(ownerKind: string, name: string): string {
-  const stem = escapeRegex(name);
-  switch (ownerKind) {
-    // The ordinal is stable across rollouts — a StatefulSet's whole promise.
-    case "StatefulSet":
-      return `^${stem}-[0-9]+$`;
-    // One indirection: the Deployment's ReplicaSet, or the CronJob's Job.
-    case "Deployment":
-    case "CronJob":
-      return `^${stem}-[^-]+-[^-]+$`;
-    // Named directly by their controller.
-    default:
-      return `^${stem}-[^-]+$`;
-  }
 }
 
 /** The label matchers that select a scope's containers. */
