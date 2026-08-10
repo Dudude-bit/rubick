@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useCapabilityState } from "@/integrations";
+import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
 import {
   describeTermination,
@@ -27,7 +29,9 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
+import { LogHistoryBar } from "./LogHistoryBar";
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend } from "./LogLegend";
 import { LogList } from "./LogList";
@@ -574,6 +578,17 @@ interface LogViewerProps {
    * different log, not a filter change.
    */
   soloContainer?: string | null;
+  /**
+   * The controller this pane's pod belongs to, where the caller is looking at
+   * one — a workload's Logs tab rather than a pod's.
+   *
+   * It changes one thing and nothing else: a range read from a log store is
+   * asked about the *workload* instead of about the pod on screen, so it
+   * spans the pods the workload has had rather than the one that happens to
+   * be selected. The live half of the pane is unaffected — it is still one
+   * pod's streams, because that is the only thing the API server will follow.
+   */
+  workload?: { owner: string; ownerKind: string } | null;
 }
 
 export function LogViewer({
@@ -581,6 +596,7 @@ export function LogViewer({
   namespace,
   containers: containerInfos,
   soloContainer,
+  workload,
 }: LogViewerProps) {
   const { toast } = useToast();
   const containers = useMemo(
@@ -668,8 +684,7 @@ export function LogViewer({
   const intake = useIntake(intakeTerms);
 
   const {
-    logs,
-    retained,
+    logs: live,
     fields,
     dropped,
     isStreaming,
@@ -692,6 +707,74 @@ export function LogViewer({
   });
 
   const colors = useMemo(() => buildContainerColors(containers), [containers]);
+
+  // A pod's own lines outlive the pod only if somebody shipped them
+  // somewhere. Asked for by facet, so this pane never learns which store
+  // answered — it prints the name it is handed and branches on nothing.
+  const historyCapability = useCapabilityState("logs.history");
+  const history = useLogHistory(
+    historyCapability.state === "ready" ? historyCapability.use : null
+  );
+  const [historyRange, setHistoryRange] = useState<UsageRange | null>(null);
+
+  /**
+   * What a range is asked about: the workload where there is one, the pod
+   * otherwise.
+   *
+   * The workload scope is the reason this is worth having on a Logs tab at
+   * all — its pods from an hour ago are gone from every list the API server
+   * will answer, and they are exactly the ones somebody debugging a rollout
+   * came to read.
+   */
+  const historyScope = useMemo<LogScope>(
+    () =>
+      workload
+        ? {
+            kind: "workload",
+            namespace,
+            owner: workload.owner,
+            ownerKind: workload.ownerKind,
+          }
+        : { kind: "pod", namespace, pod: podName },
+    [workload, namespace, podName]
+  );
+
+  const handleReadHistory = useCallback(
+    (range: UsageRange) => {
+      setHistoryRange(range);
+      history.read(historyScope, range);
+    },
+    [history, historyScope]
+  );
+
+  const handleClearHistory = useCallback(() => {
+    setHistoryRange(null);
+    history.clear();
+  }, [history]);
+
+  /**
+   * History in front of the live buffer, and **the first thing to go when
+   * the buffer is full**.
+   *
+   * That order is the contract, not an implementation detail: the live
+   * stream is the answer this pane owed before any integration existed, and
+   * a range that pushed live lines out of a `Keep 5 000` buffer would have
+   * made the viewer worse for having a Loki.
+   */
+  const logs = useMemo(() => {
+    if (history.lines.length === 0) return live;
+    const room = Math.max(0, limit - live.length);
+    const kept =
+      room >= history.lines.length
+        ? history.lines
+        : history.lines.slice(history.lines.length - room);
+    return [...kept, ...live];
+  }, [history.lines, live, limit]);
+
+  // Everything the pane is holding, history included — the status bar's fill
+  // and the "N lines received" sentences are about the buffer on screen and
+  // not about which half of it arrived over a socket.
+  const retained = logs.length;
 
   // Counted over the whole buffer rather than the view, so hiding a
   // container does not zero the number that says how loud it is. The
@@ -1029,6 +1112,33 @@ export function LogViewer({
     return !(failure.kind === "gone" && info?.state.type === "terminated");
   });
 
+  /**
+   * What the API server has run out of answers for, named.
+   *
+   * Exactly the two dead ends the pane already states in words above the
+   * output — a stream that ended because the container is gone, and a
+   * container that has never started — reused rather than re-derived, so the
+   * offer cannot appear beside a notice that is not there or go missing
+   * beside one that is. Everywhere else this is `null` and no offer is drawn.
+   */
+  const stranded = useMemo(() => {
+    const gone = bannered
+      .filter((failure) => failure.kind === "gone")
+      .map((failure) => failure.container);
+    if (gone.length > 0) return `${podName}/${gone.join(", ")}`;
+    const unstarted = containerInfos.filter(
+      (info) =>
+        !hidden.has(info.name) &&
+        info.state.type === "waiting" &&
+        info.lastTerminated === null &&
+        info.restartCount === 0
+    );
+    if (unstarted.length > 0) {
+      return `${podName}/${unstarted.map((info) => info.name).join(", ")}`;
+    }
+    return null;
+  }, [bannered, containerInfos, hidden, podName]);
+
   return (
     <div ref={rootRef} className="flex h-full flex-col">
       {/* Above the toolbar because it is the first question, not the
@@ -1148,6 +1258,20 @@ export function LogViewer({
           onShowCurrentRun={handleShowCurrentRun}
         />
       ))}
+
+      {/* Under the sentence that said there is nothing left to read, which
+          is the only place an offer to read it elsewhere makes sense. */}
+      <LogHistoryBar
+        capability={historyCapability}
+        history={history.state}
+        stranded={stranded}
+        ranged={workload !== undefined && workload !== null}
+        selected={historyRange}
+        isPaging={history.isPaging}
+        onRead={handleReadHistory}
+        onReadOlder={history.readOlder}
+        onClear={handleClearHistory}
+      />
 
       {/* Only while the stream is up and nothing else is explaining the
           silence: a failed stream has its own notice above, and two

@@ -31,8 +31,18 @@ vi.mock("@/lib/commands", () => ({
     stopLogStream: vi.fn(async () => undefined),
     logStreamSubscribed: vi.fn(async () => undefined),
     getPodLogs: vi.fn(async () => []),
+    // The viewer asks the registry for `logs.history`, which reads what is
+    // detected and what is configured. A cluster with neither is the
+    // majority case and the one every test here but the history ones runs
+    // on: the pane must be exactly what it was before the seam existed.
+    detectInClusterExtensions: vi.fn(async () => []),
+    getPrometheusConnection: vi.fn(async () => null),
+    getLokiConnection: vi.fn(async () => null),
   },
 }));
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
@@ -44,6 +54,24 @@ import type {
 import type { StreamFailureKind } from "@/lib/stream-failure";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { LogViewer } from "./LogViewer";
+
+/**
+ * What the app supplies at its root: a query client for the registry's
+ * lookups, a router for the one link an absent integration offers, and the
+ * tooltip context the status bar reaches for as soon as there is a line.
+ */
+function Providers({ children }: { children: React.ReactNode }) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <TooltipProvider>{children}</TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
 
 function container(
   name: string,
@@ -85,9 +113,9 @@ async function renderStreaming() {
   // The status bar reaches for a Tooltip the moment there is a line to
   // describe the format of, which the app supplies at the root.
   render(
-    <TooltipProvider>
+    <Providers>
       <LogViewer {...props} />
-    </TooltipProvider>
+    </Providers>
   );
   await waitFor(() => {
     expect(listeners["stream-failed"]).toBeDefined();
@@ -168,7 +196,7 @@ describe("LogViewer when a live stream dies", () => {
       finishedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
     };
     render(
-      <TooltipProvider>
+      <Providers>
         <LogViewer
           {...props}
           containers={[
@@ -180,7 +208,7 @@ describe("LogViewer when a live stream dies", () => {
             }),
           ]}
         />
-      </TooltipProvider>
+      </Providers>
     );
     await waitFor(() => {
       expect(listeners["stream-failed"]).toBeDefined();
@@ -508,7 +536,7 @@ describe("what the pane shows on open", () => {
 
   it("hides no container", async () => {
     render(
-      <TooltipProvider>
+      <Providers>
         <LogViewer
           {...props}
           containers={[
@@ -517,7 +545,7 @@ describe("what the pane shows on open", () => {
             container("proxy"),
           ]}
         />
-      </TooltipProvider>
+      </Providers>
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
@@ -602,9 +630,9 @@ describe("LogViewer on a pod held in init", () => {
 
   async function renderStuck() {
     render(
-      <TooltipProvider>
+      <Providers>
         <LogViewer {...props} containers={stuck} />
-      </TooltipProvider>
+      </Providers>
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
@@ -808,9 +836,9 @@ describe("soloing a container", () => {
 
   async function renderMany() {
     render(
-      <TooltipProvider>
+      <Providers>
         <LogViewer {...props} containers={many} />
-      </TooltipProvider>
+      </Providers>
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
@@ -875,7 +903,7 @@ describe("reading a container whose run is over", () => {
 
   it("holds finished init lines out of a running pod and offers them", async () => {
     render(
-      <TooltipProvider>
+      <Providers>
         <LogViewer
           {...props}
           containers={[
@@ -899,7 +927,7 @@ describe("reading a container whose run is over", () => {
             container("app"),
           ]}
         />
-      </TooltipProvider>
+      </Providers>
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-focus-notice")).toBeInTheDocument();

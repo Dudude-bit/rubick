@@ -394,6 +394,14 @@ export function DeploymentDetail() {
                 podName={logPod.name}
                 namespace={logPod.namespace}
                 containers={podContainers(logPod)}
+                // The live half still reads one pod, because that is all the
+                // API server will follow. The workload is what a *range* is
+                // asked about — the pods this Deployment had an hour ago are
+                // gone from this very selector, and they are the ones
+                // somebody reading a rollout came for.
+                workload={
+                  name ? { owner: name, ownerKind: "Deployment" } : null
+                }
               />
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">
