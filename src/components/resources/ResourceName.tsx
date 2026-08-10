@@ -23,6 +23,42 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
  * Returns a fragment: the caller owns the box, because a table cell, a
  * command-palette row and a page title need different ones.
  */
+/**
+ * How large a reference draws itself.
+ *
+ * A reference takes its size from nothing. It used to take it from whichever
+ * ancestor happened to set one, and the same component came out at 16px in a
+ * Connections row, 13px in a page title, 12px in a table cell, 11.5px on an
+ * integration page and 10px under a route — five sizes for one thing, none of
+ * them chosen. These two are chosen, and a caller names the one it wants.
+ */
+export type ResourceNameSize = "row" | "title";
+
+/**
+ * `row` is the app's reading size for a line of content — what tables,
+ * key/value values, event rows and child rows already set for themselves. The
+ * 11px clauses that sit beside a name are qualifiers; the name is the subject
+ * of the line, and one step above its qualifiers is all the hierarchy it needs.
+ *
+ * `title` is a heading: a detail page's own `<h1>`, and the peek's header.
+ *
+ * There is no third size, and no per-call-site override. Mono is not stepped
+ * down against the sans either: measured in the app's own engine, JetBrains
+ * Mono and Inter have an identical cap-height ratio (0.7344) and x-heights
+ * within 2.9% (0.5625 vs 0.5469), so at these sizes they rasterise to the
+ * same cap and x-height to the pixel. What makes a monospaced name look large
+ * is its fixed advance — 22% more width for the same string — and shrinking
+ * the type to buy that width back would drop the name below the baseline
+ * rhythm it currently shares with the sans beside it.
+ */
+// Splitting the scale into its own module is how it and the component that
+// applies it drift apart — which is the failure being fixed here.
+// eslint-disable-next-line react-refresh/only-export-components
+export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
+  row: "text-xs",
+  title: "text-[13px]",
+};
+
 export interface ResourceNameProps {
   kind: string;
   name: string;
@@ -30,6 +66,7 @@ export interface ResourceNameProps {
   showKind?: boolean;
   /** Sized up where the name is a heading rather than a row. */
   iconClassName?: string;
+  size?: ResourceNameSize;
 }
 
 /** The box the parts expect: baseline-aligned, shrinkable, one gap. */
@@ -41,6 +78,7 @@ export function ResourceName({
   name,
   showKind = true,
   iconClassName,
+  size = "row",
 }: ResourceNameProps) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
   const { stem, tail } = splitName(name);
@@ -99,7 +137,10 @@ export function ResourceName({
         aria-hidden="true"
         data-testid="resource-ref-icon"
       />
-      <span className="truncate font-mono">
+      <span
+        className={cn("truncate font-mono", RESOURCE_NAME_SIZE[size])}
+        data-testid="resource-ref-name"
+      >
         {/* The kind reaches a screen reader either way — when it is shown as
             an icon only, the text still has to name it. */}
         {showKind ? (

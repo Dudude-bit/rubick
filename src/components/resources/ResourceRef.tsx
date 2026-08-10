@@ -10,7 +10,11 @@ import {
 } from "@/lib/resource-registry";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
-import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
+import {
+  ResourceName,
+  RESOURCE_NAME_SHELL,
+  type ResourceNameSize,
+} from "./ResourceName";
 
 export interface ResourceRefProps {
   kind: string;
@@ -25,6 +29,7 @@ export interface ResourceRefProps {
    */
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   className?: string;
+  size?: ResourceNameSize;
 }
 
 /**
@@ -78,11 +83,14 @@ export function ResourceRef({
   showKind = true,
   onClick,
   className,
+  size,
 }: ResourceRefProps) {
   const gesture = useLinkGesture();
   const { open } = usePeek();
 
-  const body = <ResourceName kind={kind} name={name} showKind={showKind} />;
+  const body = (
+    <ResourceName kind={kind} name={name} showKind={showKind} size={size} />
+  );
 
   // No `max-w-full`: inside an inline parent that percentage resolves against
   // a width computed without the icon, which clips two characters off every

@@ -212,11 +212,12 @@ export function ResourceDetailHeader({
   // you are on is a promise the app cannot keep. The breadcrumb above already
   // names the kind, so only the glyph carries it.
   const title = (
-    <h1 className="flex min-w-0 items-baseline gap-1.5 text-[13px] font-semibold tracking-tight text-fg">
+    <h1 className="flex min-w-0 items-baseline gap-1.5 font-semibold tracking-tight text-fg">
       <ResourceName
         kind={kind}
         name={name}
         showKind={false}
+        size="title"
         iconClassName="h-3 w-3"
       />
     </h1>

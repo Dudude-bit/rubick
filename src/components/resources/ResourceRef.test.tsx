@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { ResourceRef, isRoutableKind } from "./ResourceRef";
+import { ResourceName, RESOURCE_NAME_SIZE } from "./ResourceName";
 import {
   useDisplaySettingsStore,
   type ResourceColouring,
@@ -396,5 +397,47 @@ describe("names whose tail is too thin to carry identity", () => {
     wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
     expect(styleOf("resource-ref-stem")).not.toContain("hsl");
     expect(styleOf("resource-ref-tail")).not.toContain("hsl");
+  });
+});
+
+// The bug this guards: `ResourceName` set no font-size, so the name took
+// whichever one an ancestor happened to specify — 16px in a Connections row,
+// 12px in a table cell, 10px under a route. Five sizes for one component. A
+// reference must carry its own size, and there must be exactly two to pick.
+describe("size", () => {
+  const nameClass = () => screen.getByTestId("resource-ref-name").className;
+
+  it("offers only sizes that name a real font-size class", () => {
+    const sizes = Object.entries(RESOURCE_NAME_SIZE);
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const [size, className] of sizes) {
+      expect(className, `size "${size}" names no font-size`).toMatch(
+        /^text-(xs|sm|base|\[\d+(\.\d+)?px\])$/
+      );
+    }
+  });
+
+  it("sets its own size rather than inheriting the box it lands in", () => {
+    render(
+      <MemoryRouter>
+        <div className="text-[32px]">
+          <ResourceRef kind="Pod" name="crash-demo-c688f57cf" namespace="ns" />
+        </div>
+      </MemoryRouter>
+    );
+    expect(
+      nameClass().split(/\s+/),
+      "the name inherits its size — that is the bug this test exists for"
+    ).toContain(RESOURCE_NAME_SIZE.row);
+  });
+
+  it("draws a title a step above a row, and both from the same scale", () => {
+    const { unmount } = wrap(<ResourceName kind="Pod" name="crash-demo" />);
+    const row = nameClass();
+    unmount();
+    wrap(<ResourceName kind="Pod" name="crash-demo" size="title" />);
+    expect(row).toContain(RESOURCE_NAME_SIZE.row);
+    expect(nameClass()).toContain(RESOURCE_NAME_SIZE.title);
+    expect(nameClass()).not.toBe(row);
   });
 });

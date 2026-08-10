@@ -641,7 +641,7 @@ function Chain({
         </Column>
       </div>
       {route.tlsSecret && (
-        <span className="text-[10px] text-fg-fnt">
+        <span className="text-[11px] text-fg-fnt">
           served under{" "}
           <ResourceRef
             kind="Secret"

@@ -179,7 +179,8 @@ function PeekContent({
             name={target.name}
             namespace={namespace}
             showKind={false}
-            className="text-[13px] font-semibold"
+            size="title"
+            className="font-semibold"
           />
         </SheetTitle>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">

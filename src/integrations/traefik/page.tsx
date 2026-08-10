@@ -674,7 +674,7 @@ function Chain({
         </Column>
       </div>
       {tls && (
-        <span className="text-[10px] text-fg-fnt">
+        <span className="text-[11px] text-fg-fnt">
           served under{" "}
           <ResourceRef
             kind="Secret"
