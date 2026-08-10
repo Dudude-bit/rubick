@@ -27,18 +27,30 @@
  * Deployment or from a hostname.
  */
 
-import { expiryOf, type Expiry } from "@/lib/certificates";
+import type { Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
   ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ChainStop,
-  ObjectRef,
   ServiceInfo,
   TlsCertificate,
 } from "@/generated/types";
+import {
+  backingOf as backingOfBackend,
+  certificateProblems,
+  claimsIngress as classClaims,
+  classesOf,
+  SEVERITY_RANK as RANK,
+  tlsSecretFor,
+  worstOf,
+  type Backing,
+  type SecretRef,
+} from "../ingress";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
+
+export type { Backing } from "../ingress";
 
 /** Every version of Traefik writes this into an IngressClass's `spec.controller`. */
 export const CONTROLLER = "traefik.io/ingress-controller";
@@ -172,19 +184,14 @@ export interface TraefikSources {
 export function traefikClasses(
   classes: IngressClassSummary[]
 ): IngressClassSummary[] {
-  return classes.filter((entry) => entry.controller === CONTROLLER);
+  return classesOf(classes, CONTROLLER);
 }
 
 export function claimsIngress(
   ingress: IngressInfo,
   classes: IngressClassSummary[]
 ): boolean {
-  const mine = traefikClasses(classes);
-  if (ingress.className) {
-    return mine.some((entry) => entry.name === ingress.className);
-  }
-  // No class named: the cluster's default one serves it, if it has one.
-  return mine.some((entry) => entry.isDefault);
+  return classClaims(ingress, classes, CONTROLLER);
 }
 
 // --- reading the two kinds of object ------------------------------------
@@ -276,18 +283,6 @@ function routesFromIngress(
       };
     })
   );
-}
-
-function tlsSecretFor(
-  ingress: IngressInfo,
-  host: string | null
-): string | null {
-  for (const config of ingress.tlsConfigs) {
-    if (config.isCatchAll || (host !== null && config.hosts.includes(host))) {
-      return config.secretName;
-    }
-  }
-  return null;
 }
 
 interface IngressRouteSpec {
@@ -429,144 +424,17 @@ export function boundEntryPoints(
 
 // --- what is behind a route ---------------------------------------------
 
-export interface Backing {
-  service: ServiceInfo | undefined;
-  /** Addresses taking traffic — the ready ones and the draining ones. */
-  ready: number;
-  /** `serving: true, ready: false`: a pod finishing its open connections.
-   *  Traffic still flows here, so it is never counted as an outage. */
-  draining: number;
-  notReady: number;
-  /** Set only where the path stops. */
-  stop: ChainStop | null;
-  /** False while the Services and their slices are still being read. */
-  known: boolean;
-}
-
-function ref(kind: string, name: string, namespace: string): ObjectRef {
-  return { kind, name, namespace, existence: "present", facts: null };
-}
-
-function selectorOf(service: ServiceInfo): string {
-  return Object.entries(service.selector)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(",");
-}
-
 export function backingOf(
   route: TraefikRoute,
   sources: Pick<TraefikSources, "services" | "published" | "backingKnown">
 ): Backing {
-  const known = sources.backingKnown !== false;
-  const empty: Backing = {
-    service: undefined,
-    ready: 0,
-    draining: 0,
-    notReady: 0,
-    stop: null,
-    known,
-  };
   // Nothing is claimed about a backend that is not a Kubernetes object: it
   // has no endpoints by design, and the app cannot see inside it.
-  if (!route.service || !route.service.kubernetes) return empty;
-  if (!known) return empty;
-
-  const service = sources.services.find(
-    (candidate) =>
-      candidate.name === route.service!.name &&
-      candidate.namespace === route.service!.namespace
-  );
-
-  if (!service) {
-    return {
-      ...empty,
-      stop: {
-        reason: "backendMissing",
-        ingress: ref(
-          route.source.kind,
-          route.source.name,
-          route.source.namespace
-        ),
-        service: {
-          ...ref("Service", route.service.name, route.service.namespace),
-          existence: "missing",
-        },
-      },
-    };
-  }
-
-  // An ExternalName Service is a DNS alias with no pods by design, so it has
-  // no endpoints and is not a stop. Saying it were would be the page calling
-  // a working configuration broken.
-  if (service.type === "ExternalName") {
-    return { service, ready: 0, draining: 0, notReady: 0, stop: null, known };
-  }
-
-  // What the Service publishes, not what its pods look like. The same answer
-  // the traffic chain's last hop is built from, so a route reading as broken
-  // here reads as broken there, in the same words.
-  const published = sources.published.find(
-    (candidate) =>
-      candidate.service.name === service.name &&
-      candidate.service.namespace === service.namespace
-  );
-  const ready = published?.ready ?? 0;
-  const draining = published?.draining ?? 0;
-  const notReady = published?.notReady ?? 0;
-  const state = { service, ready, draining, notReady, known };
-
-  // A draining address is still the one kube-proxy sends to when nothing
-  // ready is left, so a Service down to one is a restart rather than a 502.
-  if (ready + draining > 0) return { ...state, stop: null };
-
-  const selector = selectorOf(service);
-  // A Service with no selector has its endpoints managed by hand. Whether
-  // that is broken is not something these objects say, so nothing is claimed.
-  if (selector === "") return { ...state, stop: null };
-
-  const at = ref("Service", service.name, service.namespace);
-  const unrouted = published?.unrouted ?? 0;
-  // Addresses the endpoint controller wrote into a slice carrying no port at
-  // all: it resolved none of the Service's named `targetPort`s, so it wrote
-  // the pods down and gave kube-proxy nothing to send to. The pods are Ready
-  // and this host answers every request with a 502.
-  if (unrouted > 0) {
-    return {
-      ...state,
-      stop: {
-        reason: "publishesNothing",
-        service: at,
-        selector,
-        pods: unrouted,
-        readyPods: unrouted,
-        unnamedPorts: namedTargetPorts(service),
-      },
-    };
-  }
-  if (notReady > 0) {
-    return {
-      ...state,
-      stop: { reason: "noneReady", service: at, selector, pods: notReady },
-    };
-  }
-  return {
-    ...state,
-    stop: { reason: "selectsNothing", service: at, selector },
-  };
-}
-
-/**
- * The `targetPort`s this Service asks for by name.
- *
- * Only reached where the controller already wrote a portless slice, which is
- * it saying it resolved none of them — so naming them here reports what the
- * cluster did rather than guessing at it. A numeric `targetPort` needs no
- * container to declare anything and can never be the thing that is missing.
- */
-function namedTargetPorts(service: ServiceInfo): string[] {
-  return service.ports
-    .map((port) => port.targetPort)
-    .filter((target) => target !== "" && !/^\d+$/.test(target));
+  const backend =
+    route.service && route.service.kubernetes
+      ? { name: route.service.name, namespace: route.service.namespace }
+      : null;
+  return backingOfBackend(backend, route.source, sources);
 }
 
 // --- middlewares --------------------------------------------------------
@@ -620,8 +488,6 @@ export function middlewareUses(
 
 // --- the hosts ----------------------------------------------------------
 
-const RANK = { err: 2, warn: 1 } as const;
-
 /**
  * How far up the page a finding pulls its host, within one severity.
  *
@@ -642,16 +508,6 @@ function urgencyOf(findings: Finding[]): number {
       Math.max(worst, RANK[finding.severity] * 10 + URGENCY[finding.kind]),
     0
   );
-}
-
-function worstOf(findings: Finding[]): "err" | "warn" | null {
-  let worst: "err" | "warn" | null = null;
-  for (const finding of findings) {
-    if (worst === null || RANK[finding.severity] > RANK[worst]) {
-      worst = finding.severity;
-    }
-  }
-  return worst;
 }
 
 /** Every route this Traefik serves, from both kinds of object. */
@@ -780,43 +636,13 @@ function clearFinding(
 }
 
 function certificateFindings(
-  secrets: Array<{ namespace: string; secretName: string }>,
+  secrets: SecretRef[],
   certificates: Map<string, TlsCertificate> | undefined
 ): Finding[] {
-  if (!certificates) return [];
-  return secrets.flatMap((secret): Finding[] => {
-    const read = certificates.get(`${secret.namespace}/${secret.secretName}`);
-    if (!read) return [];
-
-    if (!read.certificate) {
-      return [
-        {
-          kind: "certificate",
-          severity: "warn",
-          namespace: secret.namespace,
-          secretName: secret.secretName,
-          read,
-          expiry: null,
-        },
-      ];
-    }
-
-    // The same two thresholds the certificate facts already use: above
-    // fourteen days there is no news, and colouring it would teach the
-    // reader to stop looking at the one that says four.
-    const expiry = expiryOf(read.certificate);
-    if (expiry.tone === null) return [];
-    return [
-      {
-        kind: "certificate",
-        severity: expiry.tone === "err" ? "err" : "warn",
-        namespace: secret.namespace,
-        secretName: secret.secretName,
-        read,
-        expiry,
-      },
-    ];
-  });
+  return certificateProblems(secrets, certificates).map((problem) => ({
+    kind: "certificate",
+    ...problem,
+  }));
 }
 
 /**
