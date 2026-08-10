@@ -5,9 +5,7 @@ import {
   chartMax,
   latestValue,
   limitInView,
-  linePath,
   restartIndices,
-  yOf,
   watchedFor,
   type UsageSample,
 } from "@/lib/usage-history";
@@ -141,11 +139,9 @@ describe("chartMax", () => {
       [sample(0, 0.3), sample(1000, 0.4)],
       "cpuMillicores"
     );
-    const max = chartMax(points, 100);
-    expect(max).toBe(100);
-    expect(
-      yOf(0.4, max, { width: 600, height: 42, topPad: 4 })
-    ).toBeGreaterThan(40);
+    // The limit is the scale, so the reading sits at 0.4% of the band's
+    // height rather than at its top.
+    expect(chartMax(points, 100)).toBe(100);
   });
 
   it("scales to what was used when nothing declares a limit", () => {
@@ -154,20 +150,6 @@ describe("chartMax", () => {
       "cpuMillicores"
     );
     expect(chartMax(points, null)).toBeCloseTo(112.5, 1);
-  });
-});
-
-describe("linePath", () => {
-  it("breaks the line at a gap instead of bridging it", () => {
-    // A straight segment across missing data claims nothing happened there,
-    // and nobody knows that.
-    const points = [
-      { t: 0, v: 10, restart: false },
-      { t: 1, v: null, restart: false },
-      { t: 2, v: 20, restart: false },
-    ];
-    const path = linePath(points, 100, { width: 600, height: 42, topPad: 4 });
-    expect(path.match(/M/g)).toHaveLength(2);
   });
 });
 

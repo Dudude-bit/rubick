@@ -231,7 +231,12 @@ describe("UsageBlock with no limits at all", () => {
       memoryLimit: null,
     });
     expect(container.textContent).not.toMatch(/\d\s*%/);
-    expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
+    // Nothing on either row is sized as a fraction of a ceiling. The chart's
+    // own surface fills its band by construction and is not one.
+    const shares = [
+      ...container.querySelectorAll<HTMLElement>('[style*="width"]'),
+    ].filter((element) => !element.closest(".recharts-wrapper"));
+    expect(shares).toHaveLength(0);
   });
 
   it("still attaches the sentence to the one measure that lacks a ceiling", () => {

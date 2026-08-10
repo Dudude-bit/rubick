@@ -1,18 +1,25 @@
 /**
  * One measure, over the window this app has watched.
  *
- * Drawn by hand rather than with `recharts`: the whole mark is a 42px band
- * holding one path, one dashed rule and a crosshair, and a charting library
- * would bring a responsive container, a cartesian grid and a legend engine
- * to render a `<path>` this file computes in `usage-history.ts` anyway.
- * Hand-drawn is also the only way the marks wear role tokens — the palette
- * has to resolve per theme from `index.css`, and a library that takes
- * colours as props would have to be fed resolved values from JS.
+ * Drawn with `recharts`. The palette still comes from the role tokens and
+ * never from JS: the series inherits `currentColor` from a `text-*` class on
+ * the wrapper — gradient stops included — and the fixed roles are handed to
+ * recharts as the CSS-variable strings SVG presentation attributes accept
+ * (`hsl(var(--warn))`), which resolve per theme from `index.css` like every
+ * other mark in the app.
  *
  * CPU and memory stay two bands. One plot with two y-axes would put the
  * crossing point of the lines on screen, and that point means nothing.
  */
 import * as React from "react";
+import {
+  Area,
+  AreaChart,
+  ReferenceLine,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { cn } from "@/lib/utils";
 import { UnitValue } from "@/components/ui/metric-value";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
@@ -23,20 +30,31 @@ import {
   clockOf,
   latestValue,
   limitInView,
-  linePath,
   restartIndices,
-  xOf,
-  yOf,
-  type Geometry,
   type UsagePoint,
   type UsageSample,
 } from "@/lib/usage-history";
 
-/** The virtual width every path is computed in; the SVG scales it to fit. */
-const VIEW_W = 600;
-const BAND_H = 42;
-const GEOMETRY: Geometry = { width: VIEW_W, height: BAND_H, topPad: 4 };
+/**
+ * Tall enough to read a shape off. The 42px band this replaces turned every
+ * series into a flat rule: at that height a doubling of load is four pixels.
+ */
+const BAND_H = 56;
 
+/**
+ * Room above the plot for the limit label — it sits above its own rule, and
+ * the rule sits at the top of the scale whenever a limit exists — one pixel
+ * below so the baseline hairline is a line rather than the bottom row of the
+ * fill, and three at the right so the newest reading is a whole dot rather
+ * than the half of one the frame did not cut off.
+ */
+const MARGIN = { top: 13, right: 3, bottom: 1, left: 0 };
+
+/** Drawn at this width until the band has been measured — and in jsdom,
+ *  where nothing is laid out, for the whole life of the test. */
+const ASSUMED_W = 600;
+
+/** What the wrapper wears; the series and its fill read it as currentColor. */
 const LINE_ROLE = {
   ok: "text-info",
   warn: "text-warn",
@@ -99,10 +117,13 @@ export function UsageChart({
 
   return (
     <div>
-      <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
+      {/* The gutter has to clear the limit label, which sits in the band's
+       *  own top margin — any tighter and it reads as a caption on the band
+       *  above it. */}
+      <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2">
         <span className="text-[11px] text-fg-mut">{label}</span>
-        {/* No reading at all draws no band. A 42px box with nothing in it
-         *  is the empty plot this replaced, one size larger. */}
+        {/* No reading at all draws no band. A band with nothing in it is the
+         *  empty plot this replaced, one size larger. */}
         {value === null && drawn === 0 ? (
           <span />
         ) : (
@@ -180,6 +201,15 @@ interface BandProps {
   limitNoun: string;
 }
 
+interface Row {
+  /** Bucket ordinal. The x scale counts buckets, not clocks: an empty bucket
+   *  carries no timestamp, and plotting one would drag it to the far left. */
+  i: number;
+  t: number;
+  v: number | null;
+  restart: boolean;
+}
+
 function Band({
   points,
   drawn,
@@ -189,19 +219,18 @@ function Band({
   label,
   limitNoun,
 }: BandProps) {
-  const [hover, setHover] = React.useState<number | null>(null);
-  // The clock the tooltip counts back from is the newest reading's own
-  // timestamp, not the wall clock: it is the last moment the cluster is
-  // known to have answered, and reading it off the data keeps this pure.
-  const now = points.length > 0 ? points[points.length - 1].t : 0;
-
-  const line = React.useMemo(
-    () => linePath(points, max, GEOMETRY),
-    [points, max]
+  const gradient = React.useId();
+  const [band, width] = useBandWidth();
+  const rows: Row[] = React.useMemo(
+    () => points.map((point, i) => ({ i, ...point })),
+    [points]
   );
   const restarts = React.useMemo(() => restartIndices(points), [points]);
 
-  const limitY = limitInView(limit, max) ? yOf(limit!, max, GEOMETRY) : null;
+  // A lone reading pins to the right edge: it is the newest one, and the
+  // line grows leftward as more arrive.
+  const domain: [number, number] =
+    rows.length > 1 ? [0, rows.length - 1] : [-1, 0];
 
   // The line takes the tone the newest reading has earned. Below the warning
   // threshold it stays informational rather than green: a chart at 30% of
@@ -212,192 +241,220 @@ function Band({
       ? LINE_ROLE[usageRole(newest / limit)]
       : LINE_ROLE.ok;
 
-  const hovered = hover !== null ? points[hover] : undefined;
-
-  const move = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (points.length === 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width === 0) return;
-    const fraction = (event.clientX - rect.left) / rect.width;
-    const index = Math.round(fraction * (points.length - 1));
-    setHover(Math.min(points.length - 1, Math.max(0, index)));
-  };
-
-  const key = (event: React.KeyboardEvent<SVGSVGElement>) => {
-    if (points.length === 0) return;
-    const at = hover ?? points.length - 1;
-    const to =
-      event.key === "ArrowLeft"
-        ? at - 1
-        : event.key === "ArrowRight"
-          ? at + 1
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? points.length - 1
-              : null;
-    if (to === null) return;
-    event.preventDefault();
-    setHover(Math.min(points.length - 1, Math.max(0, to)));
-  };
-
-  const summary = describe(points, drawn, max, limit, type, label, limitNoun);
+  // The clock a tooltip counts back from is the newest reading's own
+  // timestamp, not the wall clock: it is the last moment the cluster is
+  // known to have answered, and reading it off the data keeps this pure.
+  const now = points.length > 0 ? points[points.length - 1].t : 0;
 
   return (
-    <div className="relative">
-      <svg
-        width="100%"
-        height={BAND_H}
-        viewBox={`0 0 ${VIEW_W} ${BAND_H}`}
-        preserveAspectRatio="none"
-        className={cn("block touch-none", tone)}
-        role="img"
-        aria-label={summary}
-        tabIndex={0}
-        onPointerMove={move}
-        onPointerLeave={() => setHover(null)}
-        onBlur={() => setHover(null)}
-        onKeyDown={key}
-      >
-        <line
-          x1="0"
-          y1={BAND_H - 0.5}
-          x2={VIEW_W}
-          y2={BAND_H - 0.5}
-          className="stroke-hair"
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />
+    <div
+      ref={band}
+      // The chart is taken out of flow so its pixel width can never feed back
+      // into the width being measured, which is the loop `ResponsiveContainer`
+      // exists to break — and which it breaks by asking the DOM for a size
+      // jsdom never gives it, leaving every test with an unrendered band.
+      className={cn("relative w-full", tone)}
+      style={{ height: BAND_H }}
+      role="img"
+      aria-label={describe(points, drawn, max, limit, type, label, limitNoun)}
+    >
+      <div className="absolute inset-0">
+        <AreaChart
+          data={rows}
+          width={width}
+          height={BAND_H}
+          margin={MARGIN}
+          accessibilityLayer
+        >
+          <defs>
+            {/* currentColor all the way down, so the fill is the same role
+             *  token as the stroke and needs no resolved value from JS.
+             *
+             *  Anchored to the band rather than to the shape's own box: with
+             *  the default the fade restarts under every line, and a series
+             *  idling along the floor gets the same solid slab as one pinned
+             *  against its limit. Here the ink is the height. */}
+            <linearGradient
+              id={gradient}
+              gradientUnits="userSpaceOnUse"
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={BAND_H}
+            >
+              <stop offset="0%" stopColor="currentColor" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="currentColor" stopOpacity={0.03} />
+            </linearGradient>
+          </defs>
 
-        {limitY !== null && (
-          <line
-            x1="0"
-            y1={limitY}
-            x2={VIEW_W}
-            y2={limitY}
-            className="stroke-warn opacity-80"
-            strokeWidth="1"
-            strokeDasharray="3 3"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
+          <XAxis hide type="number" dataKey="i" domain={domain} />
+          <YAxis hide type="number" domain={[0, max]} />
 
-        {restarts.map((index) => (
-          <line
-            key={`restart-${index}`}
-            x1={xOf(index, points.length, VIEW_W)}
-            y1="0"
-            x2={xOf(index, points.length, VIEW_W)}
-            y2={BAND_H}
-            className="stroke-err opacity-60"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
+          <ReferenceLine y={0} stroke="hsl(var(--hair))" strokeWidth={1} />
 
-        {line && (
-          <path
-            d={line}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
+          {restarts.map((index) => (
+            <ReferenceLine
+              key={`restart-${index}`}
+              x={index}
+              stroke="hsl(var(--err))"
+              strokeOpacity={0.6}
+              strokeWidth={1}
+            />
+          ))}
 
-        {/* One reading is a point, not a line: two pixels of stroke joining
-         *  nothing would read as a flat trend nobody has measured yet. */}
-        {drawn === 1 &&
-          points.map((point, index) =>
-            point.v === null ? null : (
-              <circle
-                key="seed"
-                cx={Math.min(xOf(index, points.length, VIEW_W), VIEW_W - 3)}
-                cy={yOf(point.v, max, GEOMETRY)}
-                r="2.5"
-                fill="currentColor"
-                vectorEffect="non-scaling-stroke"
-              />
-            )
+          {limitInView(limit, max) && (
+            <ReferenceLine
+              y={limit!}
+              stroke="hsl(var(--warn))"
+              strokeOpacity={0.8}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              label={<LimitLabel text={formatQuantity(limit!, type)} />}
+            />
           )}
 
-        {hovered?.v != null && (
-          <>
-            <line
-              x1={xOf(hover!, points.length, VIEW_W)}
-              y1="0"
-              x2={xOf(hover!, points.length, VIEW_W)}
-              y2={BAND_H}
-              className="stroke-fg-fnt"
-              strokeWidth="1"
-              strokeDasharray="2 2"
-              vectorEffect="non-scaling-stroke"
-            />
-            <circle
-              cx={xOf(hover!, points.length, VIEW_W)}
-              cy={yOf(hovered.v, max, GEOMETRY)}
-              r="3"
-              fill="currentColor"
-              className="stroke-canvas"
-              strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-            />
-          </>
-        )}
-      </svg>
+          <Area
+            type="linear"
+            dataKey="v"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill={`url(#${gradient})`}
+            // recharts dims an area to 0.6 by default; the stops carry the
+            // whole fade, so anything else here is a second opacity.
+            fillOpacity={1}
+            // A straight segment across a bucket nothing was sampled in is a
+            // claim that nothing happened there, and nobody knows that.
+            connectNulls={false}
+            // One reading is a point, not a line: a stroke joining nothing
+            // would read as a flat trend nobody has measured yet.
+            dot={
+              drawn === 1
+                ? { r: 2.5, fill: "currentColor", strokeWidth: 0 }
+                : false
+            }
+            activeDot={{
+              r: 3,
+              fill: "currentColor",
+              stroke: "hsl(var(--canvas))",
+              strokeWidth: 2,
+            }}
+            // The poll is every few seconds and the reader may have asked for
+            // less motion; a band that redraws itself on every tick is noise.
+            isAnimationActive={false}
+          />
 
-      {hovered?.v != null && (
-        <Tooltip
-          fraction={points.length <= 1 ? 1 : hover! / (points.length - 1)}
-          point={hovered}
-          value={hovered.v}
-          type={type}
-          limit={limit}
-          limitNoun={limitNoun}
-          now={now}
-        />
-      )}
+          <Tooltip
+            isAnimationActive={false}
+            cursor={{
+              stroke: "hsl(var(--fg-fnt))",
+              strokeWidth: 1,
+              strokeDasharray: "2 2",
+            }}
+            wrapperStyle={{ outline: "none", zIndex: 20 }}
+            // A band is shorter than its own tooltip, so the tooltip goes
+            // above the point rather than on top of the line it explains.
+            allowEscapeViewBox={{ x: false, y: true }}
+            reverseDirection={{ x: false, y: true }}
+            offset={10}
+            content={
+              <UsageTooltip
+                type={type}
+                limit={limit}
+                limitNoun={limitNoun}
+                now={now}
+              />
+            }
+          />
+        </AreaChart>
+      </div>
     </div>
   );
 }
 
-interface TooltipProps {
-  fraction: number;
-  point: UsagePoint;
-  value: number;
+/** The band's own width in pixels, which is what recharts needs and CSS
+ *  will not tell it. */
+function useBandWidth(): [React.RefObject<HTMLDivElement | null>, number] {
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = React.useState(ASSUMED_W);
+  React.useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const measured = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (measured > 0) setWidth(measured);
+    });
+    observer.observe(node);
+    const initial = Math.round(node.getBoundingClientRect().width);
+    if (initial > 0) setWidth(initial);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
+/** The rule's own value, so "how close am I" is read rather than computed. */
+function LimitLabel({
+  text,
+  viewBox,
+}: {
+  text: string;
+  viewBox?: { x?: number; y?: number; width?: number; height?: number };
+}) {
+  if (!viewBox) return null;
+  const x = (viewBox.x ?? 0) + (viewBox.width ?? 0) - 2;
+  // Above its own rule, in the margin kept clear for it, rather than inside
+  // the fill — where a workload sitting at its limit swallows it whole.
+  const y = (viewBox.y ?? 0) - 4;
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="end"
+      className="fill-warn font-mono text-[9px] opacity-90"
+    >
+      limit {text}
+    </text>
+  );
+}
+
+interface TooltipPayload {
+  payload: Row;
+}
+
+interface UsageTooltipProps {
   type: "cpu" | "memory";
   limit: number | null;
   limitNoun: string;
   now: number;
+  /** Supplied by recharts. */
+  active?: boolean;
+  payload?: TooltipPayload[];
 }
 
 /** A chart you cannot read a number off is decoration. */
-function Tooltip({
-  fraction,
-  point,
-  value,
+function UsageTooltip({
   type,
   limit,
   limitNoun,
   now,
-}: TooltipProps) {
+  active,
+  payload,
+}: UsageTooltipProps) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point || point.v === null) return null;
   const share =
-    limit !== null && limit > 0 ? Math.round((value / limit) * 100) : null;
+    limit !== null && limit > 0 ? Math.round((point.v / limit) * 100) : null;
   return (
     <div
-      className="pointer-events-none absolute bottom-full z-20 mb-1 w-max -translate-x-1/2 rounded-md border border-hair bg-raise px-2 py-1.5 shadow-pop"
-      style={{
-        left: `${Math.min(88, Math.max(12, fraction * 100))}%`,
-      }}
+      className="pointer-events-none w-max rounded-md border border-hair bg-raise px-2 py-1.5 shadow-pop"
       role="status"
     >
       <div className="font-mono text-[10px] tabular-nums text-fg-fnt">
         {clockOf(point.t)} · {agoOf(point.t, now)}
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
-        {formatQuantity(value, type)}
+        {formatQuantity(point.v, type)}
         {share !== null && (
           <span className="text-fg-fnt">
             {" "}

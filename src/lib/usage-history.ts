@@ -5,7 +5,9 @@
  * running kubelet and has no concept of a range query, so there is no
  * "yesterday" to ask for — the only history that can exist is the one this
  * app accumulates while a page is open. Everything here is that buffer and
- * the arithmetic that turns it into a path.
+ * the arithmetic that turns it into a series. The pixels are recharts'
+ * business; what a bucket is worth, and where the top of the scale sits,
+ * are decisions this app has to own.
  *
  * Two rules the rest of the app depends on:
  *
@@ -164,59 +166,6 @@ export function chartMax(
  */
 export function limitInView(limit: number | null, max: number): boolean {
   return limit !== null && limit > 0 && limit <= max;
-}
-
-export interface Geometry {
-  width: number;
-  height: number;
-  /** Kept clear at the top so a peak is not a stroke sliced by the frame. */
-  topPad: number;
-}
-
-/** Where a value sits vertically. Clamped: a line may exceed its scale. */
-export function yOf(value: number, max: number, geometry: Geometry): number {
-  const { height, topPad } = geometry;
-  const usable = height - topPad - 1;
-  const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
-  return topPad + usable * (1 - ratio);
-}
-
-/** Where a bucket sits horizontally. A single point pins to the right edge:
- *  it is the newest reading, and the line grows leftward as more arrive. */
-export function xOf(index: number, count: number, width: number): number {
-  if (count <= 1) return width;
-  return (index / (count - 1)) * width;
-}
-
-/**
- * The line, as one or more `M…L…` runs.
- *
- * A gap (a bucket with no sample) breaks the run rather than being bridged:
- * a straight segment across missing data is a claim that nothing happened
- * there, and nobody knows that.
- */
-export function linePath(
-  points: readonly UsagePoint[],
-  max: number,
-  geometry: Geometry
-): string {
-  let path = "";
-  let open = false;
-  points.forEach((point, index) => {
-    if (point.v === null) {
-      open = false;
-      return;
-    }
-    const x = xOf(index, points.length, geometry.width);
-    const y = yOf(point.v, max, geometry);
-    path += `${open ? "L" : "M"}${round(x)},${round(y)}`;
-    open = true;
-  });
-  return path;
-}
-
-function round(value: number): number {
-  return Math.round(value * 10) / 10;
 }
 
 /** Indices carrying a restart, for the vertical marks. */
