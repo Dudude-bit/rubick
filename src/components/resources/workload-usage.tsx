@@ -15,6 +15,7 @@ import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageBlock } from "@/components/resources/usage-block";
+import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
 import {
   declaredContainers,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/container-sequence";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
+import type { UsageScope } from "@/integrations";
 import type {
   DeploymentContainerInfo,
   PodInfo,
@@ -120,13 +122,47 @@ export function WorkloadUsage({
   );
   const summed = useMemo(() => aggregatePodMetrics(withMetrics), [withMetrics]);
 
-  if (running.length === 0) return <IdleUsage says={idle} />;
-
   // Per replica in the template, so the ceiling is scaled to the same pods
   // the reading is summed over — a workload halfway through a rollout is
   // measured against what is actually there rather than against what was
   // asked for.
   const ceiling = templateCeiling(template);
+
+  const scope: UsageScope | undefined =
+    name && namespace
+      ? { kind: "workload", namespace, owner: name, ownerKind: kind }
+      : undefined;
+
+  // The one case metrics-server and a Prometheus disagree about. Both are
+  // right that nothing is running; only one of them still holds what ran.
+  const past = useCapabilityState("usage.history");
+
+  if (running.length === 0) {
+    if (past.state !== "ready" || scope === undefined) {
+      return <IdleUsage says={idle} />;
+    }
+    return (
+      <UsageBlock
+        kind={kind}
+        uid={uid}
+        scope="nothing running"
+        cpu={null}
+        memory={null}
+        // The template's ceiling for one replica, unmultiplied: there are no
+        // pods to scale it by, and scaling by zero would erase a limit the
+        // template does declare and print "no limits declared" under it.
+        cpuLimit={ceiling.cpu}
+        memoryLimit={ceiling.memory}
+        noLimitNote={noLimitNote}
+        sampledAt={null}
+        status={null}
+        connections={connections}
+        history={scope}
+        live={false}
+        idleNote={idle}
+      />
+    );
+  }
 
   return (
     <UsageBlock
@@ -144,11 +180,7 @@ export function WorkloadUsage({
       sampledAt={podSampledAt}
       status={podStatus}
       connections={connections}
-      history={
-        name && namespace
-          ? { kind: "workload", namespace, owner: name, ownerKind: kind }
-          : undefined
-      }
+      history={scope}
     />
   );
 }

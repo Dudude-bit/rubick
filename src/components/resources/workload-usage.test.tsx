@@ -6,7 +6,13 @@ vi.mock("@/lib/commands", () => ({
   commands: { getPodsMetrics: vi.fn() },
 }));
 
+vi.mock("@/integrations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations")>()),
+  useCapabilityState: vi.fn(() => ({ state: "absent" })),
+}));
+
 import { commands } from "@/lib/commands";
+import { useCapabilityState } from "@/integrations";
 import { useUsageHistoryStore } from "@/stores/usageHistoryStore";
 import { WorkloadUsage } from "./workload-usage";
 import type { DeploymentContainerInfo, PodInfo } from "@/generated/types";
@@ -98,6 +104,141 @@ describe("WorkloadUsage with nothing running", () => {
   it("asks metrics-server nothing about a workload with no live pod", () => {
     view({ pods: [pod("cron-demo-1-x", "Succeeded")] });
     expect(commands.getPodsMetrics).not.toHaveBeenCalled();
+  });
+});
+
+describe("WorkloadUsage with nothing running and a supplier that kept it", () => {
+  /** Two readings a minute apart, which is a line rather than a dot. */
+  const window = {
+    samples: [
+      { t: 1_700_000_000_000, cpuMillicores: 40, memoryBytes: 30e6 },
+      { t: 1_700_000_060_000, cpuMillicores: 90, memoryBytes: 52e6 },
+    ],
+    resolution: "1m steps",
+  };
+
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+    vi.mocked(useCapabilityState).mockImplementation((key) =>
+      key === "usage.history"
+        ? {
+            state: "ready",
+            vendor: "Prometheus",
+            endpoint: "prometheus.monitoring:9090",
+            use: vi.fn().mockResolvedValue(window),
+          }
+        : ({ state: "absent" } as never)
+    );
+  });
+
+  /**
+   * The case metrics-server is wrong about and Prometheus is best at. Would
+   * break if a finished Job went back to being told "there is no line" while
+   * a connected supplier held the hour it spent running — the one question
+   * the reader came to this page with.
+   */
+  it("charts what a finished Job used, from the supplier that kept it", async () => {
+    const { container: dom } = view({
+      kind: "Job",
+      name: "job-demo",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      idle: "This Job has finished.",
+    });
+
+    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    expect(screen.getByText(/from prometheus.monitoring:9090/i)).toBeVisible();
+    expect(screen.getByText(/This Job has finished/i)).toBeVisible();
+  });
+
+  /**
+   * Would break if the caption went on counting a window nobody is watching.
+   * There is no live line here, so a label promising one — or "0s so far" —
+   * is the block describing work it is not doing.
+   */
+  it("claims no live window when there is nothing to watch", async () => {
+    const { container: dom } = view({
+      kind: "Job",
+      name: "job-demo",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      idle: "This Job has finished.",
+    });
+
+    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    expect(screen.queryByText(/watching from now/i)).toBeNull();
+    expect(
+      screen.queryByText(/watched since you opened this page/i)
+    ).toBeNull();
+    expect(screen.queryByText(/so far/i)).toBeNull();
+  });
+
+  /**
+   * Would break if the last reading before it stopped were printed the way a
+   * current one is: `52 MB` beside a limit reads as what the workload is
+   * taking right now, and this one has taken nothing for hours.
+   */
+  it("reports the peak rather than a last reading that reads as now", async () => {
+    const { container: dom } = view({
+      kind: "Job",
+      name: "job-demo",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      idle: "This Job has finished.",
+    });
+
+    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    expect(screen.getAllByText(/^peak$/)).toHaveLength(2);
+  });
+
+  /**
+   * Caught on screen on a CronJob that has never fired. Would break if the
+   * page promised a past that was never recorded: a supplier answering with
+   * an empty window is not the same as one that kept the run, and "this is
+   * what Prometheus kept" printed over two empty rows sends the reader to
+   * debug a Prometheus that is working perfectly.
+   */
+  it("does not promise a past the supplier answered nothing for", async () => {
+    vi.mocked(useCapabilityState).mockImplementation((key) =>
+      key === "usage.history"
+        ? {
+            state: "ready",
+            vendor: "Prometheus",
+            endpoint: "prometheus.monitoring:9090",
+            use: vi.fn().mockResolvedValue({ samples: [], resolution: "3m" }),
+          }
+        : ({ state: "absent" } as never)
+    );
+
+    view({
+      kind: "CronJob",
+      name: "meshed-cron-demo",
+      pods: [],
+      idle: "This CronJob is suspended, so no run will start.",
+    });
+
+    expect(
+      await screen.findByText(/has nothing for it in this window either/i)
+    ).toBeVisible();
+    expect(screen.queryByText(/this is what Prometheus kept/i)).toBeNull();
+    // The ceiling sentence belongs to a series that can be read against it.
+    expect(screen.queryByText(/No limits declared/i)).toBeNull();
+  });
+
+  /**
+   * The other half of the deal, and the one a regression would be silent
+   * about. Without a supplier this page owes exactly what it owed before:
+   * the sentence, and no chart of a workload nothing measured.
+   */
+  it("is unchanged where no supplier is connected", () => {
+    vi.mocked(useCapabilityState).mockReturnValue({ state: "absent" } as never);
+    const { container: dom } = view({
+      kind: "Job",
+      name: "job-demo",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      idle: "This Job has finished.",
+    });
+
+    expect(dom.querySelector("svg")).toBeNull();
+    expect(screen.getByText(/metrics-server keeps nothing/i)).toBeVisible();
   });
 });
 

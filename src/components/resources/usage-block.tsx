@@ -64,6 +64,28 @@ export interface UsageBlockProps {
    * chart of somebody else's workload.
    */
   history?: UsageScope;
+  /**
+   * Whether anything is running behind this block.
+   *
+   * False on a finished Job, a suspended CronJob or a Deployment scaled to
+   * zero, and only ever set where a supplier can answer for the past —
+   * without one there is nothing to draw and the caller says so in words
+   * instead. What it turns off is every claim about *now*: no sample is
+   * recorded into the watched buffer, the caption drops the live-window
+   * label rather than counting up a window nobody is watching, and the
+   * bands report their peak instead of a last reading the reader would take
+   * for a current one.
+   */
+  live?: boolean;
+  /**
+   * Why there is nothing running, in the caller's own words.
+   *
+   * Only read when {@link live} is false, and finished here rather than by
+   * the caller because only this block knows whether the supplier came back
+   * with anything: "this is what Prometheus kept" under two empty rows is the
+   * page promising a past that was never recorded.
+   */
+  idleNote?: string;
 }
 
 export function UsageBlock({
@@ -83,6 +105,8 @@ export function UsageBlock({
   connections,
   children,
   history,
+  live = true,
+  idleNote,
 }: UsageBlockProps) {
   const available = status === null || status.status === "available";
   /** Nothing declares a ceiling for either measure. */
@@ -97,7 +121,7 @@ export function UsageBlock({
     memoryBytes: memory,
     restarts,
     sampledAt,
-    enabled: available,
+    enabled: available && live,
   });
 
   const storage = React.useMemo(
@@ -105,7 +129,7 @@ export function UsageBlock({
     [connections]
   );
 
-  const past = useRangedHistory(history, available);
+  const past = useRangedHistory(history, available, live);
 
   // The span between the first and last readings, so the caption cannot
   // keep counting up while the metrics query is failing.
@@ -114,8 +138,17 @@ export function UsageBlock({
   // Both bands read the same buffer, so "watching from now" and "no limit
   // set" are facts about the workload rather than about CPU and then again
   // about memory. Said once, under the pair.
-  const shared =
-    available && samples.length > 0 && samples.length < 2
+  // Null until the supplier has answered; false when it answered with an
+  // empty window, which is a different sentence from "not yet".
+  const kept = past.window === null ? null : past.window.samples.length > 0;
+
+  const shared = !live
+    ? // A ceiling is only worth naming beside a series that can be read
+      // against it. Under two "not reporting" rows it is noise.
+      neither && kept
+      ? noLimitNote
+      : null
+    : available && samples.length > 0 && samples.length < 2
       ? WATCHING_NOTE
       : available && samples.length >= 2 && neither
         ? noLimitNote
@@ -137,9 +170,16 @@ export function UsageBlock({
           .join(" · ")
       : [
           scope,
-          watched === null
-            ? "watching from now"
-            : `watched since you opened this page · ${watched} so far`,
+          // Nothing is running, so there is no window being watched and no
+          // honest way to say how long it has been watched for. The range
+          // picker beside it is the whole offer, and the caption is just the
+          // scope — "watched since you opened this page · 0s" would be the
+          // block counting up a thing it is not doing.
+          !live
+            ? null
+            : watched === null
+              ? "watching from now"
+              : `watched since you opened this page · ${watched} so far`,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -172,6 +212,7 @@ export function UsageBlock({
               noLimitNote={neither ? null : noLimitNote}
               current={cpu ?? null}
               suppressNote={shared !== null}
+              live={live}
             />
             <UsageChart
               label="Memory"
@@ -182,11 +223,22 @@ export function UsageBlock({
               noLimitNote={neither ? null : noLimitNote}
               current={memory ?? null}
               suppressNote={shared !== null}
+              live={live}
             />
             {past.traffic && <TrafficChart window={past.traffic} />}
             {shared && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
                 {shared}
+              </p>
+            )}
+            {!live && idleNote && (
+              <p className="px-1.5 pb-1 pt-1 text-[11px] leading-snug text-fg-fnt">
+                {idleNote}{" "}
+                {kept === null
+                  ? `Reading what ${past.vendor} kept from while it was running.`
+                  : kept
+                    ? `There is no live line to draw — this is what ${past.vendor} kept from while it was running.`
+                    : `${past.vendor} has nothing for it in this window either — try a longer one, or it ran before this one was watching.`}
               </p>
             )}
             <HistoryNote state={past} />
@@ -327,11 +379,20 @@ type TrafficLike = NonNullable<
  */
 function useRangedHistory(
   scope: UsageScope | undefined,
-  available: boolean
+  available: boolean,
+  live: boolean
 ): RangedHistory {
   const power = useCapabilityState("usage.history");
   const trafficPower = useCapabilityState("network.traffic");
-  const [range, setRange] = React.useState<UsageRange | null>(null);
+  // A block with nothing running opens on a range instead of on nothing.
+  // There is no live window for it to fall back to, so an unselected picker
+  // would draw an empty plot over a supplier that has the answer — and the
+  // reader would have to guess that the fix is a button they were given no
+  // reason to press. 6h rather than 15m because the workloads this happens
+  // to are the ones that stopped, often hours ago.
+  const [range, setRange] = React.useState<UsageRange | null>(
+    live ? null : "6h"
+  );
 
   const ready = power.state === "ready";
   const enabled = ready && scope !== undefined && available;
@@ -383,7 +444,10 @@ function useRangedHistory(
     // upgraded must not advertise an upgrade.
     offerable: scope !== undefined && available,
     range,
-    select: setRange,
+    // Deselecting means "back to the live window", and there is not one to
+    // go back to when nothing is running: it would empty the block rather
+    // than reveal anything.
+    select: live ? setRange : (next) => next !== null && setRange(next),
     loading: query.isFetching,
     window: range !== null && query.data ? query.data : null,
     traffic: range !== null ? (trafficQuery.data ?? null) : null,

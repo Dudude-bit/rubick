@@ -61,6 +61,21 @@ const LINE_ROLE = {
   err: "text-err",
 } as const;
 
+/**
+ * The highest reading in the window, or null where it holds none.
+ *
+ * What a stopped workload is summarised by. "What did it use when it ran" is
+ * a question about the worst moment, not the last one — and the last one is
+ * a value the reader would take for the current one.
+ */
+function peakOf(points: readonly UsagePoint[]): number | null {
+  let peak: number | null = null;
+  for (const point of points) {
+    if (point.v !== null && (peak === null || point.v > peak)) peak = point.v;
+  }
+  return peak;
+}
+
 /** What a band says before it has two readings to join. */
 export const WATCHING_NOTE =
   "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.";
@@ -87,6 +102,18 @@ export interface UsageChartProps {
   current: number | null;
   /** Set when the block is saying the same thing once for both bands. */
   suppressNote?: boolean;
+  /**
+   * Whether anything is running behind this window.
+   *
+   * False on a finished Job or a scaled-to-zero Deployment, where the whole
+   * series is a supplier's record of a workload that has since stopped. The
+   * last reading in it is then the last one there ever was, and printing it
+   * bare — `12Mi / 64Mi · 19%` — tells the reader the workload is using that
+   * much right now. So the number on the right becomes the window's peak and
+   * says which it is, and "watching from now" is never claimed about a
+   * window nobody is watching.
+   */
+  live?: boolean;
 }
 
 /**
@@ -102,6 +129,7 @@ export function UsageChart({
   noLimitNote = NO_LIMIT_NOTE,
   current,
   suppressNote = false,
+  live = true,
 }: UsageChartProps) {
   const channel = type === "cpu" ? "cpuMillicores" : "memoryBytes";
   const points = React.useMemo(
@@ -111,7 +139,7 @@ export function UsageChart({
 
   const drawn = points.filter((point) => point.v !== null).length;
   const max = chartMax(points, limit);
-  const value = latestValue(points) ?? current;
+  const value = live ? (latestValue(points) ?? current) : peakOf(points);
   const ratio =
     limit !== null && limit > 0 && value !== null ? value / limit : null;
 
@@ -135,6 +163,7 @@ export function UsageChart({
             type={type}
             label={label}
             limitNoun={limitNoun}
+            live={live}
           />
         )}
         <span className="text-right text-[11px] text-fg-mut">
@@ -150,6 +179,7 @@ export function UsageChart({
             </span>
           ) : (
             <>
+              {!live && <span className="text-fg-fnt">peak </span>}
               <UnitValue value={formatQuantity(value, type)} />
               {limit !== null && limit > 0 && (
                 <>
@@ -171,7 +201,7 @@ export function UsageChart({
       <Note>
         {suppressNote || (drawn === 0 && value === null)
           ? null
-          : drawn <= 1
+          : drawn <= 1 && live
             ? WATCHING_NOTE
             : limit === null || limit <= 0
               ? noLimitNote
@@ -199,6 +229,8 @@ interface BandProps {
   type: "cpu" | "memory";
   label: string;
   limitNoun: string;
+  /** See {@link UsageChartProps.live}. */
+  live: boolean;
 }
 
 interface Row {
@@ -210,15 +242,8 @@ interface Row {
   restart: boolean;
 }
 
-function Band({
-  points,
-  drawn,
-  max,
-  limit,
-  type,
-  label,
-  limitNoun,
-}: BandProps) {
+function Band(props: BandProps) {
+  const { points, drawn, max, limit, type, limitNoun } = props;
   const gradient = React.useId();
   const [band, width] = useBandWidth();
   const rows: Row[] = React.useMemo(
@@ -256,7 +281,7 @@ function Band({
       className={cn("relative w-full", tone)}
       style={{ height: BAND_H }}
       role="img"
-      aria-label={describe(points, drawn, max, limit, type, label, limitNoun)}
+      aria-label={describe(props)}
     >
       <div className="absolute inset-0">
         <AreaChart
@@ -472,25 +497,22 @@ function UsageTooltip({
  * only way to learn: the peak matters more than the current value here,
  * because the peak is what the buckets were kept for.
  */
-function describe(
-  points: readonly UsagePoint[],
-  drawn: number,
-  max: number,
-  limit: number | null,
-  type: "cpu" | "memory",
-  label: string,
-  limitNoun: string
-): string {
+function describe({
+  points,
+  drawn,
+  max,
+  limit,
+  type,
+  label,
+  limitNoun,
+  live,
+}: BandProps): string {
   if (drawn === 0) return `${label}: nothing recorded yet.`;
-  const newest = latestValue(points);
-  const peak = points.reduce(
-    (best, point) => (point.v !== null && point.v > best ? point.v : best),
-    0
-  );
+  const newest = live ? latestValue(points) : null;
   const parts = [
-    `${label}: ${drawn} reading${drawn === 1 ? "" : "s"} watched`,
+    `${label}: ${drawn} reading${drawn === 1 ? "" : "s"} ${live ? "watched" : "recorded, none since it stopped"}`,
     newest !== null ? `now ${formatQuantity(newest, type)}` : null,
-    `peak ${formatQuantity(peak, type)}`,
+    `peak ${formatQuantity(peakOf(points) ?? 0, type)}`,
     limit !== null && limit > 0
       ? `${limitNoun} ${formatQuantity(limit, type)}`
       : `no ${limitNoun} set, scaled to ${formatQuantity(max, type)} used`,
