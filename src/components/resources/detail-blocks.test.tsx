@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import { ConditionRows } from "./detail-blocks";
+import { ConditionRows, UsageRow } from "./detail-blocks";
 import type { ConditionInfo } from "@/generated/types";
 
 const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
@@ -124,5 +124,34 @@ describe("ConditionRows", () => {
       "href",
       "/replicasets/k8s-gui-test/crash-demo-56588f6b8c"
     );
+  });
+});
+
+describe("UsageRow without a denominator", () => {
+  it("draws no track for a workload that declares no limit", () => {
+    // An empty full-width track is read as a bar at zero, not as "nothing
+    // was measured" — which is how a pod with no limits came to look like
+    // a pod using none of one.
+    const { container } = render(
+      <UsageRow label="CPU" used={48} total={null} type="cpu" />
+    );
+    expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/\d\s*%/);
+  });
+
+  it("draws no track when the limit is known but nothing is reporting", () => {
+    const { container } = render(
+      <UsageRow label="CPU" used={null} total={200} type="cpu" />
+    );
+    expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
+  });
+
+  it("still draws the fill when both numbers are real", () => {
+    const { container } = render(
+      <UsageRow label="CPU" used={100} total={200} type="cpu" />
+    );
+    const fill = container.querySelector('[style*="width"]') as HTMLElement;
+    expect(fill).not.toBeNull();
+    expect(fill.style.width).toBe("50%");
   });
 });

@@ -311,8 +311,15 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
       <span className="text-[11px] text-fg-mut">{label}</span>
-      <span className="relative h-[5px] overflow-hidden rounded-[3px] bg-sel">
-        {ratio !== null && (
+      {/* No track without a ratio to fill it with. An empty full-width
+       *  track is not "nothing measured" to anyone looking at it — it is a
+       *  bar at zero, and it was being drawn both for workloads that
+       *  declare no limit and for clusters with no metrics-server, neither
+       *  of which is a reading of 0%. */}
+      {ratio === null ? (
+        <span />
+      ) : (
+        <span className="relative h-[5px] overflow-hidden rounded-[3px] bg-sel">
           <span
             className={cn(
               "absolute inset-y-0 left-0 rounded-[3px]",
@@ -320,8 +327,8 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
             )}
             style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%` }}
           />
-        )}
-      </span>
+        </span>
+      )}
       <span className="text-right text-[11px] text-fg-mut">
         {usedNum === null ? (
           // A blank number here is almost never "this object uses

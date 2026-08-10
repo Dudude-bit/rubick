@@ -245,3 +245,38 @@ describe("UsageBlock with no limits at all", () => {
     expect(container.textContent).toMatch(/\/128Mi/);
   });
 });
+
+describe("UsageBlock degraded, on a workload that declares no limits", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  const renderDegraded = () =>
+    render(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-8"
+        cpu={null}
+        memory={null}
+        cpuLimit={null}
+        memoryLimit={null}
+        sampledAt={null}
+        status={{ status: "error", message: "503" }}
+      />
+    );
+
+  it("draws no track, because there is neither a reading nor a denominator", () => {
+    // The screenshotted bug, in the one path that still fell back to bars:
+    // a full-width empty track under a caption promising a comparison
+    // against limits the workload does not declare.
+    const { container } = renderDegraded();
+    expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/\d\s*%/);
+  });
+
+  it("does not claim to be measuring against limits that do not exist", () => {
+    renderDegraded();
+    expect(
+      screen.queryByText(/against declared limits/i)
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/no limits declared/i)).toBeInTheDocument();
+  });
+});

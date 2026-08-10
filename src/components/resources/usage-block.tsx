@@ -87,7 +87,11 @@ export function UsageBlock({
   const watched = samples.length > 0 ? watchedFor(samples) : null;
 
   const caption = !available
-    ? `against declared ${limitNoun}s`
+    ? // The block cannot promise a comparison the workload does not
+      // declare — that pairing is what made an empty track read as 0%.
+      neither
+      ? `no ${limitNoun}s declared`
+      : `against declared ${limitNoun}s`
     : [
         scope,
         watched === null
