@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitUnit, usageRole } from "@/lib/metric-format";
+import { formatQuantity, splitUnit, usageRole } from "@/lib/metric-format";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 
 describe("splitUnit", () => {
@@ -65,5 +65,24 @@ describe("usageRole", () => {
   it("keeps overcommit red rather than wrapping around", () => {
     expect(usageRole(1)).toBe("err");
     expect(usageRole(4.2)).toBe("err");
+  });
+});
+
+describe("throughput", () => {
+  /**
+   * Would break if a rate came back as a raw float. `formatMemory` returns
+   * the number unchanged below 1Ki — correct for the integer byte counts it
+   * was written for, and unreadable for a rate: an idle pod read
+   * "10.523997160968209/s" on screen before this.
+   */
+  it("rounds a sub-kibibyte rate to whole bytes and names the unit", () => {
+    expect(formatQuantity(10.523997160968209, "throughput")).toBe("11B/s");
+    expect(formatQuantity(0, "throughput")).toBe("0B/s");
+  });
+
+  /** And the `/s` is never dropped, or traffic reads as resident memory. */
+  it("keeps the per-second, so traffic cannot be read as memory", () => {
+    expect(formatQuantity(2 * 1024 * 1024, "throughput")).toBe("2Mi/s");
+    expect(formatQuantity(2 * 1024 * 1024, "memory")).toBe("2Mi");
   });
 });

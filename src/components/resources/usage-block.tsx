@@ -6,14 +6,22 @@
  * and a bar on the Deployment page would be worse than bars on both.
  */
 import * as React from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageRow } from "@/components/resources/detail-blocks";
+import { TrafficChart } from "@/components/resources/traffic-chart";
 import {
   NO_LIMIT_NOTE,
   UsageChart,
   WATCHING_NOTE,
 } from "@/components/resources/usage-chart";
 import { useUsageHistory } from "@/hooks/useUsageHistory";
+import { useCapabilityState, USAGE_RANGES } from "@/integrations";
+import type { UsageRange, UsageScope, VolumeFullness } from "@/integrations";
+import { normalizeTauriError } from "@/lib/error-utils";
+import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
@@ -46,6 +54,16 @@ export interface UsageBlockProps {
   /** Extra rows below the charts — the node's pod tally, which is a count
    *  from the pod list rather than a reading from metrics-server. */
   children?: React.ReactNode;
+  /**
+   * What a history supplier would be asked about.
+   *
+   * Optional, and its absence is not a degraded state: a caller that has not
+   * said what it is looking at cannot be answered for, so the ranges stay
+   * dimmed exactly as they were before any of this existed. The block never
+   * guesses a scope from `kind` and `uid` — a wrong scope draws a confident
+   * chart of somebody else's workload.
+   */
+  history?: UsageScope;
 }
 
 export function UsageBlock({
@@ -64,6 +82,7 @@ export function UsageBlock({
   status,
   connections,
   children,
+  history,
 }: UsageBlockProps) {
   const available = status === null || status.status === "available";
   /** Nothing declares a ceiling for either measure. */
@@ -86,6 +105,8 @@ export function UsageBlock({
     [connections]
   );
 
+  const past = useRangedHistory(history, available);
+
   // The span between the first and last readings, so the caption cannot
   // keep counting up while the metrics query is failing.
   const watched = samples.length > 0 ? watchedFor(samples) : null;
@@ -100,27 +121,44 @@ export function UsageBlock({
         ? noLimitNote
         : null;
 
+  // The integration extends the core answer and never replaces it: until a
+  // range has actually arrived, this is the watched window, unchanged.
+  const drawing = past.window ?? { samples, resolution: null };
+
   const caption = !available
     ? // The block cannot promise a comparison the workload does not
       // declare — that pairing is what made an empty track read as 0%.
       neither
       ? `no ${limitNoun}s declared`
       : `against declared ${limitNoun}s`
-    : [
-        scope,
-        watched === null
-          ? "watching from now"
-          : `watched since you opened this page · ${watched} so far`,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+    : past.window !== null
+      ? [scope, `from ${past.endpoint}`, past.window.resolution]
+          .filter(Boolean)
+          .join(" · ")
+      : [
+          scope,
+          watched === null
+            ? "watching from now"
+            : `watched since you opened this page · ${watched} so far`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   return (
     <Section>
       <SectionHeader
         title={title}
         count={caption}
-        actions={available ? <RangePicker /> : undefined}
+        actions={
+          available ? (
+            <RangePicker
+              enabled={past.enabled}
+              selected={past.range}
+              onSelect={past.select}
+              loading={past.loading}
+            />
+          ) : undefined
+        }
       />
       <div>
         {available ? (
@@ -128,7 +166,7 @@ export function UsageBlock({
             <UsageChart
               label="CPU"
               type="cpu"
-              samples={samples}
+              samples={drawing.samples}
               limit={cpuLimit}
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
@@ -138,18 +176,20 @@ export function UsageBlock({
             <UsageChart
               label="Memory"
               type="memory"
-              samples={samples}
+              samples={drawing.samples}
               limit={memoryLimit}
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
               current={memory ?? null}
               suppressNote={shared !== null}
             />
+            {past.traffic && <TrafficChart window={past.traffic} />}
             {shared && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
                 {shared}
               </p>
             )}
+            <HistoryNote state={past} />
           </>
         ) : (
           <>
@@ -171,32 +211,229 @@ export function UsageBlock({
   );
 }
 
-const RANGES = ["1h", "6h", "24h"] as const;
+/**
+ * The offer, the loss, or nothing — the three states a configured
+ * integration owes the surface it upgrades.
+ *
+ * The middle one is the trap the whole seam exists to close. An integration
+ * that silently falls back looks identical to one that was never configured,
+ * and the reader concludes the feature is broken rather than that their
+ * Prometheus is. Saying which one it is costs a line.
+ */
+function HistoryNote({ state }: { state: RangedHistory }) {
+  if (state.status === "unreachable") {
+    return (
+      <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-warn">
+        {state.vendor} did not answer — {state.reason}. This is the window the
+        app watched itself; the longer ranges are gone until it is back.
+      </p>
+    );
+  }
+  if (state.status === "absent" && state.offerable) {
+    return (
+      <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+        Longer than this needs a Prometheus —{" "}
+        <Link to="/settings/integrations" className="text-info hover:underline">
+          connect one
+        </Link>
+        .
+      </p>
+    );
+  }
+  return null;
+}
 
 /**
- * Dimmed and inert, on purpose.
+ * Live where a supplier is answering, dimmed and inert where none is.
  *
- * These ranges are answerable only by something with a past, and
- * metrics.k8s.io has none. Drawing them disabled says "this needs
- * something you have not connected" in a way an absent control cannot,
- * and `disabled` rather than a styled span means assistive tech is told
- * the same thing the dimming says.
+ * `disabled` rather than a styled span, so assistive tech is told the same
+ * thing the dimming says — and the title names what is missing, because a
+ * control that is off for a reason the reader cannot discover is worse than
+ * no control.
  */
-function RangePicker() {
+function RangePicker({
+  enabled,
+  selected,
+  onSelect,
+  loading,
+}: {
+  enabled: boolean;
+  selected: UsageRange | null;
+  onSelect: (range: UsageRange | null) => void;
+  loading: boolean;
+}) {
   return (
-    <span className="flex gap-0.5">
-      {RANGES.map((range) => (
+    <span className="flex items-center gap-0.5">
+      {loading && (
+        <span className="mr-1 text-[10px] text-fg-fnt">reading…</span>
+      )}
+      {USAGE_RANGES.map((range) => (
         <button
           key={range}
           type="button"
-          disabled
-          title="Needs a Prometheus — metrics-server keeps no history to range over"
-          className="cursor-default rounded px-1.5 py-0.5 text-[11px] text-fg-mut opacity-40"
+          disabled={!enabled}
+          aria-pressed={selected === range}
+          onClick={() => onSelect(selected === range ? null : range)}
+          title={
+            enabled
+              ? `Ask for the last ${range}`
+              : "Needs a Prometheus — metrics-server keeps no history to range over"
+          }
+          className={
+            enabled
+              ? selected === range
+                ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
+                : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+              : "cursor-default rounded px-1.5 py-0.5 text-[11px] text-fg-mut opacity-40"
+          }
         >
           {range}
         </button>
       ))}
     </span>
+  );
+}
+
+interface RangedHistory {
+  /** Which of the three states the supplier is in. */
+  status: "absent" | "unreachable" | "ready";
+  /** True only where a range could actually be asked for and drawn. */
+  enabled: boolean;
+  /** Whether the quiet offer is worth making — see {@link HistoryNote}. */
+  offerable: boolean;
+  range: UsageRange | null;
+  select: (range: UsageRange | null) => void;
+  loading: boolean;
+  window: { samples: readonly UsageSampleLike[]; resolution: string } | null;
+  traffic: TrafficLike | null;
+  endpoint: string;
+  vendor: string;
+  reason: string;
+}
+
+type UsageSampleLike = Parameters<typeof watchedFor>[0][number];
+type TrafficLike = NonNullable<
+  React.ComponentProps<typeof TrafficChart>["window"]
+>;
+
+/**
+ * The past, where something can answer for it.
+ *
+ * Nothing here blocks the live chart. The block renders its watched window
+ * on the first frame and this fills in beside it — a page that waited on
+ * somebody else's Prometheus before drawing the numbers it already had would
+ * be worse with the integration than without one, which is the single thing
+ * the seam exists to prevent.
+ */
+function useRangedHistory(
+  scope: UsageScope | undefined,
+  available: boolean
+): RangedHistory {
+  const power = useCapabilityState("usage.history");
+  const trafficPower = useCapabilityState("network.traffic");
+  const [range, setRange] = React.useState<UsageRange | null>(null);
+
+  const ready = power.state === "ready";
+  const enabled = ready && scope !== undefined && available;
+
+  const query = useQuery({
+    queryKey: ["usage-history", scope, range],
+    queryFn: () =>
+      (power as Extract<typeof power, { state: "ready" }>).use({
+        scope: scope!,
+        range: range!,
+      }),
+    enabled: enabled && range !== null,
+    // A range query is expensive on somebody else's server and the window it
+    // describes barely moves; re-asking on every tab switch would be rude.
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const trafficQuery = useQuery({
+    queryKey: ["network-traffic", scope, range],
+    queryFn: () =>
+      (trafficPower as Extract<typeof trafficPower, { state: "ready" }>).use({
+        scope: scope!,
+        range: range!,
+      }),
+    enabled:
+      trafficPower.state === "ready" &&
+      scope !== undefined &&
+      available &&
+      range !== null,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  // A range that was asked for and refused is the unreachable state too —
+  // the probe may have passed minutes ago and the server gone since.
+  const broke = range !== null && query.error !== null;
+  const status: RangedHistory["status"] =
+    power.state === "unreachable" || broke
+      ? "unreachable"
+      : ready
+        ? "ready"
+        : "absent";
+
+  return {
+    status,
+    enabled,
+    // Offered only where a scope exists to ask about: a block that cannot be
+    // upgraded must not advertise an upgrade.
+    offerable: scope !== undefined && available,
+    range,
+    select: setRange,
+    loading: query.isFetching,
+    window: range !== null && query.data ? query.data : null,
+    traffic: range !== null ? (trafficQuery.data ?? null) : null,
+    endpoint: power.state === "absent" ? "" : power.endpoint,
+    vendor: power.state === "absent" ? "" : power.vendor,
+    reason:
+      power.state === "unreachable"
+        ? power.reason
+        : query.error
+          ? normalizeTauriError(query.error)
+          : "",
+  };
+}
+
+/**
+ * How full each volume is, where something can measure it.
+ *
+ * One instant query per namespace on the summary, and nothing at all where
+ * no supplier is connected — the fallback sentence below is the answer in
+ * that case and it costs no requests to say it.
+ */
+function useFullness(
+  summary: ReturnType<typeof storageSummary>
+): Map<string, VolumeFullness> {
+  const power = useCapabilityState("volume.fullness");
+  const namespace = summary?.claims[0]?.namespace ?? null;
+  const claims = React.useMemo(
+    () =>
+      (summary?.claims ?? [])
+        .filter((claim) => claim.namespace === namespace)
+        .map((claim) => claim.name)
+        .sort(),
+    [summary, namespace]
+  );
+
+  const { data } = useQuery({
+    queryKey: ["volume-fullness", namespace, claims],
+    queryFn: () =>
+      (power as Extract<typeof power, { state: "ready" }>).use({
+        namespace: namespace!,
+        claims,
+      }),
+    enabled: power.state === "ready" && namespace !== null && claims.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  return React.useMemo(
+    () => new Map((data ?? []).map((entry) => [entry.claim, entry])),
+    [data]
   );
 }
 
@@ -206,6 +443,11 @@ function StorageRow({
   summary: NonNullable<ReturnType<typeof storageSummary>>;
 }) {
   const { claims, declared, unbound } = summary;
+  const fullness = useFullness(summary);
+  // The fallback sentence is not replaced wholesale: a cluster where the
+  // kubelet reports some volumes and not others still owes the reader the
+  // reason the quiet ones are quiet.
+  const measured = claims.filter((claim) => fullness.has(claim.name)).length;
   return (
     <div className="mt-1 border-t border-hair pt-2">
       <div className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-3 px-1.5">
@@ -239,17 +481,48 @@ function StorageRow({
                 .filter(Boolean)
                 .map((part) => ` · ${part}`)
                 .join("")}
+              <Fullness measured={fullness.get(claim.name)} />
             </span>
           </li>
         ))}
       </ul>
-      {/* The half of the disk question this app cannot answer, said once
-       *  rather than implied by an empty bar nobody can fill. */}
-      <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-        Declared size, not how full. metrics-server reports CPU and memory only
-        — how much of a volume is in use comes from the kubelet Summary API,
-        which this app does not read.
-      </p>
+      {/* The half of the disk question this app cannot answer on its own,
+       *  said once rather than implied by an empty bar nobody can fill —
+       *  and still said for the volumes nothing measured, because "no
+       *  kubelet scraping" and "an unprovisioned volume" look identical
+       *  from here and an empty bar would read as 0% for both. */}
+      {measured < claims.length && (
+        <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
+          {measured === 0
+            ? "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot."
+            : `Declared size, not how full, for the ${claims.length - measured} of these the kubelet does not report on.`}
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * Used against capacity, in the kubelet's own two numbers.
+ *
+ * Never a bare percentage: the capacity a kubelet reports is the filesystem
+ * behind the volume, and for a provisioner that enforces no quota — a
+ * `local-path` or a `hostPath` — that filesystem is the node's disk rather
+ * than the claim's declared size. Printing both makes the difference from
+ * the declared size beside it visible instead of confusing.
+ */
+function Fullness({ measured }: { measured?: VolumeFullness }) {
+  if (!measured) return null;
+  const share = Math.round((measured.usedBytes / measured.capacityBytes) * 100);
+  const tone =
+    share > 90 ? "text-err" : share > 75 ? "text-warn" : "text-fg-mut";
+  return (
+    <>
+      {" · "}
+      <span className={tone}>
+        {formatQuantity(measured.usedBytes, "memory")} used of{" "}
+        {formatQuantity(measured.capacityBytes, "memory")} · {share}%
+      </span>
+    </>
   );
 }

@@ -346,6 +346,7 @@ export function CronJobDetail() {
         <WorkloadUsage
           kind={ResourceType.CronJob}
           uid={cronJob?.uid}
+          name={cronJob?.name || name}
           namespace={cronJob?.namespace || namespace}
           template={cronJob}
           pods={pods}

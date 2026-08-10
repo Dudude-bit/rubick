@@ -23,8 +23,12 @@ export function splitUnit(formatted: string): { value: string; unit: string } {
   return { value: match[1], unit: match[2] };
 }
 
-/** What a usage number is measured in. `count` is a plain tally of things. */
-export type QuantityKind = "cpu" | "memory" | "count";
+/**
+ * What a usage number is measured in. `count` is a plain tally of things;
+ * `throughput` is bytes per second, which is memory's formatter plus the
+ * `/s` that stops 12Mi of traffic reading as 12Mi of resident memory.
+ */
+export type QuantityKind = "cpu" | "memory" | "count" | "throughput";
 
 /**
  * A usage number at the scale its unit deserves.
@@ -42,6 +46,14 @@ export function formatQuantity(
   if (kind === "cpu") return formatCPU(value);
   if (kind === "memory")
     return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
+  if (kind === "throughput") {
+    // `formatMemory` hands back the raw number below 1Ki, which is right for
+    // the integer byte counts it was written for and wrong for a rate: an
+    // idle pod's 10.523997160968209 bytes a second is a reading nobody can
+    // take in. Under a kibibyte, this is whole bytes.
+    if (value < 1024) return `${Math.round(value)}B/s`;
+    return `${formatMemory(value, 1).replace(/\.0(?=\D|$)/, "")}/s`;
+  }
   return `${Math.round(value)}${unit ?? ""}`;
 }
 

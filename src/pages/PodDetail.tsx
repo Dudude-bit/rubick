@@ -768,6 +768,11 @@ export function PodDetail() {
           sampledAt={podSampledAt}
           status={podStatus}
           connections={connections.data}
+          history={
+            pod?.namespace && pod?.name
+              ? { kind: "pod", namespace: pod.namespace, pod: pod.name }
+              : undefined
+          }
         />
       </div>
 

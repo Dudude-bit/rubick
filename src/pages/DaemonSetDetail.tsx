@@ -289,6 +289,7 @@ export function DaemonSetDetail() {
         <WorkloadUsage
           kind={ResourceType.DaemonSet}
           uid={daemonSet?.uid}
+          name={daemonSet?.name || name}
           namespace={daemonSet?.namespace || namespace}
           template={daemonSet}
           pods={pods}

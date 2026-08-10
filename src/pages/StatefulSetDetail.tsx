@@ -285,6 +285,7 @@ export function StatefulSetDetail() {
         <WorkloadUsage
           kind={ResourceType.StatefulSet}
           uid={statefulSet?.uid}
+          name={statefulSet?.name || name}
           namespace={statefulSet?.namespace || namespace}
           template={statefulSet}
           pods={pods}

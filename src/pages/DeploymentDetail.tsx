@@ -503,6 +503,7 @@ export function DeploymentDetail() {
         <WorkloadUsage
           kind={ResourceType.Deployment}
           uid={deployment?.uid}
+          name={deployment?.name || name}
           namespace={deployment?.namespace || namespace}
           template={deployment}
           pods={pods}

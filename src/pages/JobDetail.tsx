@@ -277,6 +277,7 @@ export function JobDetail() {
         <WorkloadUsage
           kind={ResourceType.Job}
           uid={job?.uid}
+          name={job?.name || name}
           namespace={job?.namespace || namespace}
           template={job}
           pods={pods}

@@ -70,6 +70,15 @@ const NO_LIMITS_NOTE =
 export interface WorkloadUsageProps {
   kind: string;
   uid: string | null | undefined;
+  /**
+   * The controller's own name — what a history supplier is asked about.
+   *
+   * The controller and not its pods, deliberately: the pods it had an hour
+   * ago are gone from every list the API server will answer, and their
+   * ReplicaSet hash changed at the last rollout. Naming the controller is
+   * what lets a range span the generations it has had.
+   */
+  name?: string | null;
   namespace: string | null | undefined;
   /** The pod template, which is where a controller's limits are declared. */
   template: ContainerLists<DeploymentContainerInfo> | null | undefined;
@@ -88,6 +97,7 @@ export interface WorkloadUsageProps {
 export function WorkloadUsage({
   kind,
   uid,
+  name,
   namespace,
   template,
   pods,
@@ -134,6 +144,11 @@ export function WorkloadUsage({
       sampledAt={podSampledAt}
       status={podStatus}
       connections={connections}
+      history={
+        name && namespace
+          ? { kind: "workload", namespace, owner: name, ownerKind: kind }
+          : undefined
+      }
     />
   );
 }
