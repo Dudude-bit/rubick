@@ -54,11 +54,15 @@ impl From<&ConfigMap> for ConfigMapInfo {
             name: cm.name_any(),
             namespace: cm.namespace().unwrap_or_default(),
             uid: cm.uid().unwrap_or_default(),
+            // Both maps: a ConfigMap holding only `binaryData` is not an
+            // empty ConfigMap, and the key count on the page comes from here.
             data_keys: cm
                 .data
-                .as_ref()
-                .map(|d| d.keys().cloned().collect())
-                .unwrap_or_default(),
+                .iter()
+                .flatten()
+                .map(|(key, _)| key.clone())
+                .chain(cm.binary_data.iter().flatten().map(|(key, _)| key.clone()))
+                .collect(),
             labels: cm.labels().clone(),
             annotations: cm.annotations().clone(),
             created_at: cm.creation_timestamp().map(|t| t.0),

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
+import type { ConfigData } from "@/generated/types";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -145,6 +146,26 @@ interface EnvironmentVariablesProps {
 // Cache for ConfigMap and Secret data
 type DataCache = Record<string, Record<string, string>>;
 
+/**
+ * Resolved values by resource name — one entry per name that answered, empty
+ * for one that refused. A name still in flight is absent, which is how the
+ * rows tell "reading" from "not readable".
+ */
+function useDataCache(
+  names: string[],
+  queries: { data?: ConfigData; isError: boolean }[]
+): DataCache {
+  return useMemo(() => {
+    const cache: DataCache = {};
+    names.forEach((name, i) => {
+      const q = queries[i];
+      if (q?.data) cache[name] = q.data.values;
+      else if (q?.isError) cache[name] = {};
+    });
+    return cache;
+  }, [names, queries]);
+}
+
 // Filter options for source types
 type FilterOption =
   | "all"
@@ -281,28 +302,12 @@ export function EnvironmentVariables({
     })),
   });
 
-  const configMapCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    allConfigMapNames.forEach((name, i) => {
-      const q = configMapQueries[i];
-      if (q?.data) cache[name] = q.data;
-      else if (q?.isError) cache[name] = {};
-    });
-    return cache;
-  }, [allConfigMapNames, configMapQueries]);
-
-  const secretCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    allSecretNames.forEach((name, i) => {
-      const q = secretQueries[i];
-      // Only the values the backend was willing to hand over. A withheld
-      // key stays out of the cache, so an env var reading it is drawn as
-      // one whose value the app does not have rather than as an empty one.
-      if (q?.data) cache[name] = q.data.values;
-      else if (q?.isError) cache[name] = {};
-    });
-    return cache;
-  }, [allSecretNames, secretQueries]);
+  // Only the values the backend was willing to hand over, for both kinds. A
+  // withheld or binary key stays out of the cache, so an env var reading one
+  // is drawn as an env var whose value the app does not have rather than as
+  // an empty one — or, for binary, as mojibake.
+  const configMapCache = useDataCache(allConfigMapNames, configMapQueries);
+  const secretCache = useDataCache(allSecretNames, secretQueries);
 
   const loadingConfigMaps = configMapQueries.some((q) => q.isFetching);
   const loadingSecrets = secretQueries.some((q) => q.isFetching);

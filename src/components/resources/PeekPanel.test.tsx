@@ -193,7 +193,11 @@ function mockCluster() {
     .mockResolvedValue(buildConfigMap());
   vi.mocked(commands.getConfigmapData)
     .mockReset()
-    .mockResolvedValue({ "nginx.conf": "worker_processes 1;" });
+    .mockResolvedValue({
+      values: { "nginx.conf": "worker_processes 1;" },
+      withheld: {},
+      binary: {},
+    });
   vi.mocked(commands.streamPodLogs).mockReset().mockResolvedValue("stream-1");
   vi.mocked(commands.stopLogStream).mockReset().mockResolvedValue(undefined);
   vi.mocked(commands.logStreamSubscribed)

@@ -30,6 +30,31 @@ export interface DetectedExtension {
   version: string | null;
 }
 
+export interface PromSeries {
+  labels: Record<string, string>;
+  points: PromPoint[];
+}
+
+export interface PromPoint {
+  t: number;
+  v: number | null;
+}
+
+export interface PrometheusProbe {
+  ok: boolean;
+  at: number;
+  latencyMs: number;
+  reason?: string;
+  version?: string;
+}
+
+export interface PrometheusConnection {
+  url: string;
+  authType: string;
+  hasToken: boolean;
+  insecureTls: boolean;
+}
+
 export interface ServiceInfo {
   name: string;
   namespace: string;
@@ -116,9 +141,15 @@ export interface ResourceReference {
   key: string | null;
 }
 
-export interface SecretData {
+export interface ConfigData {
   values: Record<string, string>;
   withheld: Record<string, string>;
+  binary: Record<string, BinaryValue>;
+}
+
+export interface BinaryValue {
+  bytes: number;
+  base64: string;
 }
 
 export interface SecretInfo {

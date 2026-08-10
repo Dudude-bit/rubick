@@ -79,6 +79,7 @@ export function SecretDetail() {
         <DataSection
           data={secretData?.values ?? {}}
           withheld={secretData?.withheld}
+          binary={secretData?.binary}
           keys={dataKeys}
           sensitive
           isLoading={isDataLoading}

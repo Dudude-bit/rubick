@@ -250,7 +250,9 @@ pub const WITHHELD_MARKER: &str = "<withheld — the app never shows a private k
 ///
 /// Not gated on the kind. A `data` map holding a PEM private key is a leak
 /// whether the object calls itself a Secret or not, and `kind` is a field
-/// the app would have to trust the response to carry.
+/// the app would have to trust the response to carry. `binaryData` is walked
+/// for the same reason: it is a ConfigMap's base64 map, and a key put there
+/// is no less a key than one in `data`.
 ///
 /// Returns the keys it blanked, so the surface can say what is missing
 /// rather than leaving the reader to notice.
@@ -262,7 +264,7 @@ pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
         .to_string();
 
     let mut blanked = Vec::new();
-    for (field, base64_encoded) in [("data", true), ("stringData", false)] {
+    for (field, base64_encoded) in [("data", true), ("binaryData", true), ("stringData", false)] {
         let Some(map) = object
             .get_mut(field)
             .and_then(serde_json::Value::as_object_mut)
@@ -379,5 +381,26 @@ mod tests {
         assert!(base64::engine::general_purpose::STANDARD
             .decode(WITHHELD_MARKER)
             .is_err());
+    }
+
+    /// A ConfigMap is not a Secret, but people paste keys into them, and its
+    /// YAML tab goes through the same door. No `type` field to lean on, and
+    /// `binaryData` rather than `data` — both of which used to be a way past.
+    #[test]
+    fn a_configmap_never_carries_the_private_key_either() {
+        use base64::Engine;
+        let encode = |text: &str| base64::engine::general_purpose::STANDARD.encode(text);
+        let mut object = serde_json::json!({
+            "kind": "ConfigMap",
+            "data": { "server.key": KEY_PEM, "app.conf": "log_level = debug" },
+            "binaryData": { "bundle.p12": encode(KEY_PEM) },
+        });
+
+        let mut blanked = redact_private_keys(&mut object);
+        blanked.sort();
+        assert_eq!(blanked, vec!["bundle.p12", "server.key"]);
+        assert_eq!(object["data"]["server.key"], WITHHELD_MARKER);
+        assert_eq!(object["binaryData"]["bundle.p12"], WITHHELD_MARKER);
+        assert_eq!(object["data"]["app.conf"], "log_level = debug");
     }
 }

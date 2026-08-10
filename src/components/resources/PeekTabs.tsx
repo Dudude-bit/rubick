@@ -24,7 +24,7 @@ import type {
   DaemonSetDetailInfo,
   JobInfo,
   PodInfo,
-  SecretData,
+  ConfigData,
   SecretInfo,
 } from "@/generated/types";
 
@@ -275,18 +275,15 @@ function PeekDataTab({
     (detail as ConfigMapInfo | SecretInfo | undefined)?.dataKeys ?? [];
 
   const { data, error, isPending, isFetching, refetch } = useQuery({
-    // Normalised here so the peek panel draws a Secret and a ConfigMap the
-    // same way. A Secret's read comes back in two parts — the values, and
-    // the keys the backend refuses to hand over.
+    // Both kinds come back in the same three parts now — the values, the
+    // keys the backend refuses to hand over, and the ones that are not text
+    // — so the peek panel draws a Secret and a ConfigMap the same way
+    // without normalising anything on the way in.
     queryKey: ["peek-data", kind, namespace, target.name],
-    queryFn: async (): Promise<SecretData> => {
-      if (!namespace) return { values: {}, withheld: {} };
-      if (isSecret) return commands.getSecretData(target.name, namespace);
-      return {
-        values: await commands.getConfigmapData(target.name, namespace),
-        withheld: {},
-      };
-    },
+    queryFn: (): Promise<ConfigData> =>
+      isSecret
+        ? commands.getSecretData(target.name, namespace)
+        : commands.getConfigmapData(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
@@ -308,6 +305,7 @@ function PeekDataTab({
       <DataSection
         data={data?.values ?? {}}
         withheld={data?.withheld}
+        binary={data?.binary}
         keys={keys}
         sensitive={isSecret}
         isLoading={isPending || (isFetching && !data)}

@@ -1,13 +1,13 @@
 //! Secret commands — list / get / get-data (decoded) / get-yaml
 //! (with redaction option) / delete.
 
+use super::data::ConfigData;
 use crate::commands::filters::SecretFilters;
 use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
 use crate::error::{Error, Result};
 use crate::resources::SecretInfo;
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Secret;
-use std::collections::BTreeMap;
 use tauri::State;
 
 /// List Secrets
@@ -39,36 +39,23 @@ pub async fn get_secret(
     get_resource_info::<Secret, SecretInfo>(name, namespace, state).await
 }
 
-/// A Secret's values, and the ones the app refuses to hand over.
-///
-/// Two maps rather than one with holes in it: a key that is absent because
-/// the reader lacks access and a key that is absent because it is a private
-/// key are different facts, and the page says which.
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SecretData {
-    pub values: BTreeMap<String, String>,
-    /// Key to the reason it is withheld. Never overlaps `values`.
-    pub withheld: BTreeMap<String, String>,
-}
-
-/// Get decoded Secret data (base64 decoded to UTF-8 strings).
+/// Get decoded Secret data.
 ///
 /// A PEM private key is perfectly valid UTF-8, so decoding every value and
 /// offering it for reveal and copy put `tls.key` one click from the
-/// clipboard. Withholding happens here, at the one door the values come
-/// through, rather than in the component that draws them.
+/// clipboard. Withholding happens in `ConfigData::take`, at the one door the
+/// values come through, rather than in the component that draws them.
 #[tauri::command]
 pub async fn get_secret_data(
     name: String,
     namespace: Option<String>,
     state: State<'_, AppState>,
-) -> Result<SecretData> {
+) -> Result<ConfigData> {
     crate::validation::validate_dns_subdomain(&name)?;
     let secret: Secret = crate::commands::helpers::get_resource(name, namespace, state).await?;
     let secret_type = secret.type_.clone().unwrap_or_default();
 
-    let mut out = SecretData::default();
+    let mut out = ConfigData::default();
 
     if let Some(data) = secret.data {
         for (key, value) in data {
@@ -84,22 +71,6 @@ pub async fn get_secret_data(
     }
 
     Ok(out)
-}
-
-impl SecretData {
-    fn take(&mut self, secret_type: &str, key: String, value: &[u8]) {
-        match crate::resources::withhold_reason(secret_type, &key, value) {
-            Some(reason) => {
-                self.withheld.insert(key, reason);
-            }
-            None => {
-                // Lossy for non-UTF8 binary data, which is what the reveal
-                // control has always shown for it.
-                self.values
-                    .insert(key, String::from_utf8_lossy(value).to_string());
-            }
-        }
-    }
 }
 
 /// Get Secret YAML (with data redacted)

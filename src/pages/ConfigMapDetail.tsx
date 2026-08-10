@@ -39,12 +39,9 @@ export function ConfigMapDetail() {
 
   const connections = useConnections(ResourceType.ConfigMap, name, namespace);
 
-  const { data: configMapData = {}, isLoading: isDataLoading } = useQuery({
+  const { data: configMapData, isLoading: isDataLoading } = useQuery({
     queryKey: ["configmap-data", name, namespace],
-    queryFn: async () => {
-      if (!name || !namespace) return {};
-      return commands.getConfigmapData(name, namespace);
-    },
+    queryFn: () => commands.getConfigmapData(name!, namespace!),
     enabled: !!name && !!namespace,
   });
 
@@ -69,7 +66,9 @@ export function ConfigMapDetail() {
       // tab of its own rather than sharing the fold with them.
       content: (
         <DataSection
-          data={configMapData}
+          data={configMapData?.values ?? {}}
+          withheld={configMapData?.withheld}
+          binary={configMapData?.binary}
           keys={dataKeys}
           isLoading={isDataLoading}
           emptyMessage="This ConfigMap holds no keys"

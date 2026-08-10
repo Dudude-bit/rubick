@@ -15,6 +15,7 @@ import type {
   ClusterOverview,
   ClusterPreferences,
   ClusterStats,
+  ConfigData,
   ConfigMapInfo,
   ContextBinding,
   ContextBindingInfo,
@@ -67,6 +68,9 @@ import type {
   PortForwardConfigPayload,
   PortForwardRequest,
   PortForwardSessionInfo,
+  PromSeries,
+  PrometheusConnection,
+  PrometheusProbe,
   RecentItem,
   RegistryAuth,
   RegistryAuthStatus,
@@ -83,7 +87,6 @@ import type {
   RolloutStatus,
   SearchHandle,
   SearchRequest,
-  SecretData,
   SecretFilters,
   SecretInfo,
   ServiceFilters,
@@ -1205,8 +1208,8 @@ export async function getSecret(
 export async function getSecretData(
   name: string,
   namespace: string | null
-): Promise<SecretData> {
-  return invoke<SecretData>("get_secret_data", { name, namespace });
+): Promise<ConfigData> {
+  return invoke<ConfigData>("get_secret_data", { name, namespace });
 }
 
 export async function getSecretYaml(
@@ -1252,11 +1255,8 @@ export async function getConfigmap(
 export async function getConfigmapData(
   name: string,
   namespace: string | null
-): Promise<Record<string, string>> {
-  return invoke<Record<string, string>>("get_configmap_data", {
-    name,
-    namespace,
-  });
+): Promise<ConfigData> {
+  return invoke<ConfigData>("get_configmap_data", { name, namespace });
 }
 
 export async function deleteConfigmap(
@@ -1294,6 +1294,60 @@ export async function deleteService(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_service", { name, namespace });
+}
+
+export async function getPrometheusConnection(): Promise<PrometheusConnection | null> {
+  return invoke<PrometheusConnection | null>("get_prometheus_connection");
+}
+
+export async function savePrometheusConnection(
+  url: string,
+  authType: string,
+  token: string | null,
+  insecureTls: boolean
+): Promise<void> {
+  return invoke<void>("save_prometheus_connection", {
+    url,
+    authType,
+    token,
+    insecureTls,
+  });
+}
+
+export async function forgetPrometheusConnection(): Promise<void> {
+  return invoke<void>("forget_prometheus_connection");
+}
+
+export async function probePrometheus(
+  url: string | null,
+  authType: string | null,
+  token: string | null,
+  insecureTls: boolean | null
+): Promise<PrometheusProbe> {
+  return invoke<PrometheusProbe>("probe_prometheus", {
+    url,
+    authType,
+    token,
+    insecureTls,
+  });
+}
+
+export async function prometheusQuery(query: string): Promise<PromSeries[]> {
+  return invoke<PromSeries[]>("prometheus_query", { query });
+}
+
+export async function prometheusQueryRange(
+  query: string,
+  start: number,
+  end: number,
+  step: number
+): Promise<PromSeries[]> {
+  return invoke<PromSeries[]>("prometheus_query_range", {
+    query,
+    start,
+    end,
+    step,
+  });
 }
 
 export async function detectInClusterExtensions(): Promise<

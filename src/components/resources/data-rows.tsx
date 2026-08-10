@@ -3,8 +3,10 @@ import { Copy, Eye, EyeOff } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useCopyToClipboard } from "@/hooks";
+import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
+import type { BinaryValue } from "@/generated/types";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -33,6 +35,13 @@ export interface DataSectionProps {
    * readable with this access", which would be a different and untrue claim.
    */
   withheld?: Record<string, string>;
+  /**
+   * Keys whose bytes are not text. Described by size rather than rendered:
+   * a keystore run through a lossy decode is a screenful of replacement
+   * characters that reads exactly like a value someone typed. The base64 is
+   * offered for copying because `base64 -d` is what the reader wants next.
+   */
+  binary?: Record<string, BinaryValue>;
   isLoading?: boolean;
   emptyMessage?: string;
 }
@@ -43,6 +52,7 @@ export function DataSection({
   keys = [],
   sensitive = false,
   withheld = {},
+  binary = {},
   isLoading = false,
   emptyMessage = "No data keys",
 }: DataSectionProps) {
@@ -53,6 +63,7 @@ export function DataSection({
     const names = new Set([
       ...Object.keys(data),
       ...Object.keys(withheld),
+      ...Object.keys(binary),
       ...keys,
     ]);
     return [...names]
@@ -61,8 +72,9 @@ export function DataSection({
         key,
         value: data[key] as string | undefined,
         refusal: withheld[key] as string | undefined,
+        blob: binary[key] as BinaryValue | undefined,
       }));
-  }, [data, keys, withheld]);
+  }, [data, keys, withheld, binary]);
 
   const toggle = (key: string) =>
     setRevealed((prev) => {
@@ -72,8 +84,26 @@ export function DataSection({
     });
 
   const readable = entries.filter((entry) => entry.value !== undefined);
+  const blobCount = entries.filter((entry) => entry.blob !== undefined).length;
   const allRevealed =
     readable.length > 0 && readable.every((entry) => revealed.has(entry.key));
+
+  // Binary goes in as its base64, never as the lossy text it is not, and the
+  // toast says so — a silent substitution is the same lie in a new place.
+  const copyAll = () => {
+    const payload = {
+      ...data,
+      ...Object.fromEntries(
+        Object.entries(binary).map(([key, blob]) => [key, blob.base64])
+      ),
+    };
+    copyToClipboard(
+      JSON.stringify(payload, null, 2),
+      blobCount > 0
+        ? `${readable.length} values copied, ${blobCount} binary as base64.`
+        : `All ${readable.length} values copied.`
+    );
+  };
 
   if (entries.length === 0) {
     return (
@@ -99,9 +129,9 @@ export function DataSection({
           </>
         }
         actions={
-          readable.length > 0 && (
+          readable.length + blobCount > 0 && (
             <>
-              {sensitive && (
+              {sensitive && readable.length > 0 && (
                 <DetailAction
                   label={allRevealed ? "Hide all" : "Reveal all"}
                   icon={allRevealed ? EyeOff : Eye}
@@ -114,22 +144,13 @@ export function DataSection({
                   }
                 />
               )}
-              <DetailAction
-                label="Copy all"
-                icon={Copy}
-                onClick={() =>
-                  copyToClipboard(
-                    JSON.stringify(data, null, 2),
-                    `All ${entries.length} values copied.`
-                  )
-                }
-              />
+              <DetailAction label="Copy all" icon={Copy} onClick={copyAll} />
             </>
           )
         }
       />
       <div className="flex flex-col">
-        {entries.map(({ key, value, refusal }) => {
+        {entries.map(({ key, value, refusal, blob }) => {
           const isRevealed = !sensitive || revealed.has(key);
           return (
             <div
@@ -143,20 +164,22 @@ export function DataSection({
                 <span
                   className={cn(
                     "text-[11px]",
-                    refusal ? "text-fg-mut" : "text-fg-fnt"
+                    refusal || blob ? "text-fg-mut" : "text-fg-fnt"
                   )}
                 >
                   {refusal
                     ? refusal
-                    : value === undefined
-                      ? isLoading
-                        ? "reading…"
-                        : "not readable with this access"
-                      : `${value.length} chars`}
+                    : blob
+                      ? `binary, not text — ${formatBytes(blob.bytes, 0)}`
+                      : value === undefined
+                        ? isLoading
+                          ? "reading…"
+                          : "not readable with this access"
+                        : `${value.length} chars`}
                 </span>
-                {value !== undefined && (
+                {(value !== undefined || blob) && (
                   <div className="ml-auto flex items-center gap-1">
-                    {sensitive && (
+                    {sensitive && value !== undefined && (
                       // The word stays on the control: an eye glyph alone is
                       // the difference between "this is hidden" and "this is
                       // empty", and that guess is expensive on a Secret.
@@ -166,11 +189,22 @@ export function DataSection({
                         onClick={() => toggle(key)}
                       />
                     )}
+                    {/* Named, because a Copy that silently hands over base64
+                        where every other row hands over the value is a
+                        surprise the reader finds out about in a shell. */}
                     <DetailAction
-                      label="Copy"
+                      label={blob ? "Copy base64" : "Copy"}
                       icon={Copy}
                       onClick={() =>
-                        copyToClipboard(value, `Value of ${key} copied.`)
+                        blob
+                          ? copyToClipboard(
+                              blob.base64,
+                              `Base64 of ${key} copied — ${formatBytes(blob.bytes, 0)} of binary.`
+                            )
+                          : copyToClipboard(
+                              value as string,
+                              `Value of ${key} copied.`
+                            )
                       }
                     />
                   </div>

@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DataSection } from "./data-rows";
 
+const writeText = vi.fn().mockResolvedValue(undefined);
+Object.defineProperty(navigator, "clipboard", {
+  value: { writeText },
+  configurable: true,
+});
+
 describe("DataSection", () => {
+  beforeEach(() => writeText.mockClear());
   it("shows a ConfigMap's values straight away", () => {
     render(<DataSection data={{ "log.level": "debug" }} />);
     expect(screen.getByText("log.level")).toBeInTheDocument();
@@ -105,5 +112,62 @@ describe("DataSection", () => {
     expect(
       screen.queryByText("not readable with this access")
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * Would break if a keystore were run back through a lossy decode. The old
+   * behaviour put a screenful of replacement characters where the value goes
+   * — indistinguishable from a value someone had typed, and no more use.
+   */
+  it("describes a binary value instead of rendering it as text", () => {
+    render(
+      <DataSection
+        data={{ ok: "hello" }}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["ok", "blob"]}
+        sensitive
+      />
+    );
+
+    expect(screen.getByText("blob")).toBeInTheDocument();
+    expect(screen.getByText("binary, not text — 5 Bytes")).toBeInTheDocument();
+    // Neither the bytes nor a mangled stand-in appears anywhere.
+    expect(screen.queryByText(/�/)).not.toBeInTheDocument();
+    // Nothing to reveal, so no control claiming there is.
+    expect(screen.getAllByRole("button", { name: "Reveal" })).toHaveLength(1);
+  });
+
+  it("names the copy that hands over base64 rather than the value", async () => {
+    render(
+      <DataSection
+        data={{}}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["blob"]}
+      />
+    );
+
+    const copy = screen.getByRole("button", { name: "Copy base64" });
+    await userEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith("AAEC//4=");
+  });
+
+  /**
+   * Copy all used to serialise the values map alone. Once binary is out of
+   * that map, saying nothing would silently drop keys; emitting the lossy
+   * text would be the original lie in a second place.
+   */
+  it("copies binary as base64 and says how many", async () => {
+    render(
+      <DataSection
+        data={{ ok: "hello" }}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy all" }));
+    expect(JSON.parse(writeText.mock.calls[0][0])).toEqual({
+      ok: "hello",
+      blob: "AAEC//4=",
+    });
   });
 });
