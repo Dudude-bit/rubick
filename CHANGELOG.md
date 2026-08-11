@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-08-11
+
+### Fixed — macOS refused to open the downloaded app
+
+A Mac that downloaded 3.0.0 from the releases page reported
+**"«Rubick» is damaged and can't be opened"** and offered only to move it
+to the Trash. The download was not corrupt: the bundle carried nothing
+but the linker's ad-hoc signature (`Signature=adhoc`,
+`TeamIdentifier=not set`, `Sealed Resources=none`), and Gatekeeper
+answers a quarantined ad-hoc bundle with "damaged" rather than the
+familiar unidentified-developer prompt. Every release since the 2.0.0
+open-source launch had this; it was not new in 3.0.0 and not caused by
+the rename.
+
+macOS builds are now signed with a Developer ID Application certificate
+and notarised by Apple, so they open on a clean machine with no warning
+and no terminal incantation.
+
+Notarisation authenticates with an App Store Connect API key rather than
+an Apple ID and app-specific password: no interactive account, nothing to
+re-enter when 2FA rotates.
+
+The `TAURI_SIGNING_PRIVATE_KEY` this project already had is unrelated —
+it is the minisign key that proves an _update payload_ came from us, and
+Gatekeeper never sees it. Both signatures are needed, for different
+things.
+
+**Already have 3.0.0 installed?** The in-app updater was never affected;
+it verifies the minisign signature and installs normally. This release
+only changes what happens when a browser downloads the app for the first
+time.
+
 ## [3.0.0] - 2026-08-11
 
 One rule decided most of this release: **the app must not claim what it
