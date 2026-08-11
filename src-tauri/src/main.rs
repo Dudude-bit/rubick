@@ -1,4 +1,4 @@
-//! Main entry point for K8s GUI application
+//! Main entry point for the Rubick application
 
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
@@ -18,7 +18,7 @@ fn main() {
     // Initialize tracing
     init_tracing();
 
-    tracing::info!("Starting K8s GUI application");
+    tracing::info!("Starting Rubick application");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

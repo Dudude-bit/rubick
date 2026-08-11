@@ -1,13 +1,13 @@
 //! Error handling utilities
 //!
 //! This module provides common error handling traits and utilities
-//! used across all K8s GUI projects. It defines a unified interface
+//! used across all Rubick projects. It defines a unified interface
 //! for error types, ensuring consistent error handling patterns.
 
 /// Extension trait for error types
 ///
 /// This trait provides a unified interface for error handling across
-/// all K8s GUI projects. Implement this trait on your error types
+/// all Rubick projects. Implement this trait on your error types
 /// to enable consistent error code retrieval, detail extraction,
 /// and retry logic.
 ///

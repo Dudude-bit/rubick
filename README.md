@@ -1,112 +1,132 @@
-# K8s GUI
+<div align="center">
 
-[![CI](https://github.com/Dudude-bit/k8s-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/Dudude-bit/k8s-gui/actions/workflows/ci.yml)
-[![Build Artifacts](https://github.com/Dudude-bit/k8s-gui/actions/workflows/build.yml/badge.svg)](https://github.com/Dudude-bit/k8s-gui/actions/workflows/build.yml)
-[![License: MIT](https://img.shields.io/github/license/Dudude-bit/k8s-gui)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/Dudude-bit/k8s-gui)](https://github.com/Dudude-bit/k8s-gui/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Dudude-bit/k8s-gui/total)](https://github.com/Dudude-bit/k8s-gui/releases)
+# Rubick
 
-A modern, cross-platform Kubernetes GUI client built with Tauri and Rust.
+**A desktop Kubernetes client that tries not to lie to you.**
 
-## Features
+Like Lens, k9s or Headlamp, it reads your kubeconfig and shows your clusters.<br>
+Unlike them, it treats "I don't know" as an answer worth giving.
 
-### Cluster management
+[![Download](https://img.shields.io/badge/Download-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2563eb?style=for-the-badge)](https://github.com/Dudude-bit/rubick/releases/latest)
 
-- Multi-cluster support via kubeconfig
-- Cloud provider authentication: EKS (AWS), GKE (GCP), AKS (Azure), OIDC
-- Interactive browser-based auth flows
+[![CI](https://img.shields.io/github/actions/workflow/status/Dudude-bit/rubick/ci.yml?branch=main&label=CI)](https://github.com/Dudude-bit/rubick/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dudude-bit/rubick)](https://github.com/Dudude-bit/rubick/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Dudude-bit/rubick/total)](https://github.com/Dudude-bit/rubick/releases)
+[![License](https://img.shields.io/github/license/Dudude-bit/rubick)](LICENSE)
 
-### Workloads
+Free and MIT. No account, no telemetry.
 
-- Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs
-- Real-time status, metrics, and events
+</div>
 
-### Network
+![Rubick on a workload page](docs/images/hero-workload-detail.png)
 
-- Services, Ingresses, Endpoints
-- Port-forwarding manager with auto-restart
+## Why another one
 
-### Storage
+**It shows the failure, not the field.** A pod whose container is crash-looping reports `Running`, because that is what `.status.phase` holds. A Service with healthy pods and a mistyped port name publishes nothing and still draws green. Rubick derives status the way `kubectl` does and reads the endpoints the cluster actually publishes, so those two stop being invisible.
 
-- PersistentVolumes, PersistentVolumeClaims, StorageClasses
+**It says where the path stops.** Ingress → Service → pods is drawn on the workload's own page, and when nothing is behind an address it names the reason: a backend that does not exist, a selector matching nothing, or pods running but not ready.
 
-### Configuration
+**It warns before it obeys.** Scale, Restart, Delete and Edit YAML tell you who will undo the change and how fast — an autoscaler in seconds, Argo CD or Flux in minutes. Then it does what you asked, because a hand edit during an incident is legitimate.
 
-- ConfigMaps, Secrets (with base64 decode)
+![A path that stops, and why](docs/images/traffic-chain-stops.png)
 
-### Observability
+## What you get
 
-- Live log streaming with level filtering and search
-- CPU / memory metrics for pods and nodes
-- Event timeline
+| Area                 | What Rubick shows                                                                                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workloads**        | Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs — with init containers as an ordered sequence, sidecars told apart from them, and CPU/memory over time         |
+| **Logs**             | Virtualised, multi-container, server-side filtering, repeat collapsing — and they open **where the answer is**: on a pod stuck in init, that means the failing container's previous run |
+| **Shell**            | A real tab per pod whose session survives you looking elsewhere                                                                                                                         |
+| **Network**          | Services, Ingresses, Endpoints and EndpointSlices, with the traffic chain above                                                                                                         |
+| **Storage & config** | PVs, PVCs, StorageClasses, ConfigMaps, Secrets — binary values shown as binary, private keys never revealed                                                                             |
+| **Custom resources** | Every CRD, with YAML editing and validation                                                                                                                                             |
+| **Helm**             | Releases, revisions, rollback, uninstall                                                                                                                                                |
 
-### Custom resources
+![Logs open on the container that failed](docs/images/logs-failing-init-container.png)
 
-- Full CRD browsing with per-instance views
-- YAML editing with validation
+### Integrations
 
-### Helm
+Detected ones need nothing from you — their CRDs are in the cluster or they are not. Configured ones need an address, and Rubick never goes looking for one.
 
-- List releases and view release details
-- Upgrade dialog with values editing
+| Integration      | What it gives you                                                                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Routing**      | Traefik, ingress-nginx, Istio — hosts, rules and middleware read as routing. nginx annotations become sentences with the raw key beside each; a `configuration-snippet` is shown verbatim and never paraphrased |
+| **Certificates** | cert-manager — expiry wherever TLS is named, and the issuance chain when renewal fails                                                                                                                          |
+| **Delivery**     | Argo CD and Flux — every object says whether it is delivered, from which revision, and whether your edit will survive                                                                                           |
+| **Metrics**      | Prometheus — real history, disk fullness and network traffic, none of which `metrics.k8s.io` can answer                                                                                                         |
+| **Logs**         | Loki — so a crashed pod's logs outlive the pod                                                                                                                                                                  |
+| **Clouds**       | GKE, EKS, AKS node pools, machine types, zones and spot status, read from labels with no cloud account                                                                                                          |
 
-### Terminal
+Adding one costs a folder and a line — see [CONTRIBUTING](CONTRIBUTING.md).
 
-- Per-pod exec terminal
-- General-purpose in-app terminal with shell PATH detection
+![Integrations, with what each is doing](docs/images/integrations-settings.png)
 
-### UI/UX
+### Getting around
 
-- Light / dark / system theme
-- Resource tables with sorting and filtering
-- Integrated auto-updater
+Every name you can go to is a link, with the gestures you expect: click to peek, middle-click for a background tab, shift for a foreground one. Tabs carry a route **and** a scope, so several clusters stay open side by side. Search reaches across clusters — `!cluster-name` aims it. Light and dark, and identity colouring that still works in greyscale or with colour blindness.
 
-## Installation
+<details>
+<summary><b>More screenshots</b></summary>
+<br>
 
-Pre-built binaries: [Releases](https://github.com/Dudude-bit/k8s-gui/releases).
+<table>
+<tr>
+<td width="50%"><img src="docs/images/connections-tab.png" alt="Connections, grouped by question"><br><b>Connections</b> — grouped by the question you are asking</td>
+<td width="50%"><img src="docs/images/scale-interception.png" alt="Scaling something an autoscaler owns"><br><b>Before you act</b> — who will undo this, and how fast</td>
+</tr>
+<tr>
+<td><img src="docs/images/usage-history.png" alt="Usage with real history"><br><b>Usage</b> — the watched window, or real ranges with Prometheus</td>
+<td><img src="docs/images/command-palette.png" alt="Search, from anywhere"><br><b>Search</b> — across clusters, aimed with <code>!cluster-name</code></td>
+</tr>
+</table>
 
-Supported platforms:
+![The same page in the light theme](docs/images/light-theme.png)
 
-- macOS (arm64, x64)
-- Linux (x64, arm64)
-- Windows (x64)
+**Light theme** — the same page, the same tokens.
+
+</details>
+
+## What it deliberately does not do
+
+- **No cost estimates.** Committed use, sustained use, spot pricing and negotiated rates make them wrong more often than right, and a wrong number about money poisons the right ones.
+- **No whole-cluster topology graph.** Routing is a chain in fixed order, not a general graph; a force-directed blob looks like insight and answers nothing.
+- **No editing routes or renewing certificates.** Reading them well is a feature; writing them is a different one with a different blast radius — an ACME rate limit is five failures an hour.
+- **No guessing.** If a name in a log line might be an object, it stays text. If an integration was never asked, the app says _not looked at_ rather than leaving a gap that reads as _nothing there_.
+
+## Install
+
+Grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). There is no Homebrew or winget package yet.
+
+- **macOS** — the app is not signed or notarised yet, so Gatekeeper will refuse the first launch. Right-click the app → **Open**, or `xattr -dr com.apple.quarantine /Applications/Rubick.app`.
+- **Windows** — SmartScreen will warn for the same reason. **More info → Run anyway**.
+- **Linux** — AppImage and `.deb`.
+
+**What it talks to.** Your clusters, and GitHub for update checks. Nothing else: there is no analytics, no account and no crash reporting, and any integration you connect is an address you typed yourself.
+
+**Requirements.** Kubernetes 1.21+ (EndpointSlices). Cloud login (EKS, GKE, AKS, OIDC, exec plugins) uses the same credentials `kubectl` does; **Settings → Clusters** shows each context, how it authenticates, and what is missing if it cannot.
 
 ## Development
 
-### Prerequisites
-
-- Rust stable (`rustup default stable`)
-- Node.js 24 LTS (or newer)
-- Bun 1.3+ (<https://bun.sh> — the package manager for this repo)
-- Tauri platform dependencies: <https://v2.tauri.app/start/prerequisites/>
-
-### Setup
-
 ```bash
-git clone https://github.com/Dudude-bit/k8s-gui.git
-cd k8s-gui
 bun install
-bun run tauri dev
+bun run tauri dev      # run it
+bun run tauri build    # package it
 ```
 
-### Build
+Needs [Bun](https://bun.sh) 1.2+, Rust 1.91+, and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform.
 
 ```bash
-bun run tauri build
+bunx tsc --noEmit                                     # types
+bun run lint                                          # eslint, zero warnings
+bun run test                                          # frontend tests
+cargo test --manifest-path src-tauri/Cargo.toml --lib # Rust tests
 ```
 
-## Tech stack
+Three lint rules keep the codebase from drifting back, and each fails the commit: colours must be role tokens, nothing outside `src/integrations/` may name a vendor, and polling rates go through `useLiveQuery` rather than a hand-written interval. [CONTRIBUTING](CONTRIBUTING.md) says why each exists.
 
-- **Framework:** Tauri 2.1
-- **Backend:** Rust
-- **Frontend:** React 18 + TypeScript
-- **State:** Zustand + TanStack Query
-- **Styling:** Tailwind CSS
-- **UI primitives:** Radix UI
+Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minute — so leaving the window open does not tax the cluster. A query that has slowed down says so rather than showing a stale number under a live badge.
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+**Built with** Tauri 2, Rust and [kube-rs](https://kube.rs); React 19, TypeScript, TanStack Query, CodeMirror, xterm.js and Recharts.
 
 ## License
 

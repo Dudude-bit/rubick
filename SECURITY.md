@@ -2,14 +2,14 @@
 
 ## Reporting a Vulnerability
 
-If you've found a security issue in K8s GUI, please report it privately so we
+If you've found a security issue in Rubick, please report it privately so we
 can fix it before it's publicly disclosed.
 
 **Don't open a regular GitHub issue for security problems.** Instead, use one
 of:
 
 - GitHub's private vulnerability reporting: open
-  <https://github.com/Dudude-bit/k8s-gui/security/advisories/new>.
+  <https://github.com/Dudude-bit/rubick/security/advisories/new>.
 - Email the maintainer at the address listed on the GitHub profile of the
   repository owner.
 
@@ -17,7 +17,7 @@ Please include:
 
 - A description of the vulnerability and its impact.
 - Steps to reproduce (or a minimal proof-of-concept).
-- The version of K8s GUI you tested against (`Settings > About`).
+- The version of Rubick you tested against (`Settings > About`).
 - Your suggested mitigation, if you have one.
 
 You'll get an acknowledgement within **5 business days**. We aim to ship a fix

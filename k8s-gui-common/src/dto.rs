@@ -1,7 +1,7 @@
 //! Common Data Transfer Objects (DTOs)
 //!
 //! This module provides shared request/response structures used across
-//! all K8s GUI projects.
+//! all Rubick projects.
 
 use serde::{Deserialize, Serialize};
 

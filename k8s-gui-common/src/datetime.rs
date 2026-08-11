@@ -1,7 +1,7 @@
 //! DateTime utilities
 //!
 //! This module provides common date and time utilities used across
-//! all K8s GUI projects. It includes formatting functions for displaying
+//! all Rubick projects. It includes formatting functions for displaying
 //! human-readable time durations and ages.
 
 use chrono::{DateTime, Utc};

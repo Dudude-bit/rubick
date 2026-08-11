@@ -3,7 +3,7 @@ name = "k8s-gui-common"
 version = "2.1.0"
 edition = "2021"
 rust-version = "1.91"
-authors = ["K8s GUI Team"]
+authors = ["Rubick Team"]
 description = "Common utilities shared between k8s-gui projects"
 license = "MIT"
 

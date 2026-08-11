@@ -1,4 +1,4 @@
-//! Plugin system for K8s GUI
+//! Plugin system for Rubick
 //!
 //! Supports two types of plugins:
 //! - kubectl-compatible commands (executables with kubectl-* prefix)

@@ -1,9 +1,9 @@
 # =============================================================================
 # COMPREHENSIVE TEST MANIFEST FOR K8S-GUI
 # =============================================================================
-# Этот манифест создаёт все типы ресурсов для тестирования GUI
-# Применить: kubectl apply -f comprehensive-test.yaml
-# Удалить:   kubectl delete -f comprehensive-test.yaml
+# Creates one of every resource kind the GUI can display.
+# Apply:  kubectl apply -f comprehensive-test.yaml
+# Delete: kubectl delete -f comprehensive-test.yaml
 # =============================================================================
 
 ---
@@ -23,7 +23,7 @@ metadata:
 # CONFIGMAPS
 # =============================================================================
 
-# ConfigMap с простыми данными
+# ConfigMap with plain key-value data
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -40,7 +40,7 @@ data:
   DATABASE_PORT: "5432"
 
 ---
-# ConfigMap с многострочными данными
+# ConfigMap with multi-line values
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -80,9 +80,9 @@ data:
   index.html: |
     <!DOCTYPE html>
     <html>
-    <head><title>K8s GUI Test</title></head>
+    <head><title>Rubick Test</title></head>
     <body>
-      <h1>Welcome to K8s GUI Test</h1>
+      <h1>Welcome to Rubick Test</h1>
       <p>This is a test page for k8s-gui application.</p>
     </body>
     </html>
@@ -197,7 +197,7 @@ stringData:
 # PERSISTENT VOLUME & PERSISTENT VOLUME CLAIM
 # =============================================================================
 
-# PersistentVolume (hostPath для локального тестирования)
+# PersistentVolume (hostPath, for local testing)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -372,7 +372,7 @@ spec:
             periodSeconds: 5
 
 ---
-# Worker Deployment (с проблемным подом для тестирования)
+# Worker Deployment (carries a deliberately broken pod)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -611,7 +611,7 @@ spec:
 # SERVICES
 # =============================================================================
 
-# ClusterIP Service для frontend
+# ClusterIP Service for the frontend
 apiVersion: v1
 kind: Service
 metadata:
@@ -632,7 +632,7 @@ spec:
     component: frontend
 
 ---
-# ClusterIP Service для backend
+# ClusterIP Service for the backend
 apiVersion: v1
 kind: Service
 metadata:
@@ -700,7 +700,7 @@ spec:
     component: backend
 
 ---
-# Headless Service для StatefulSet
+# Headless Service for the StatefulSet
 apiVersion: v1
 kind: Service
 metadata:
@@ -777,7 +777,7 @@ spec:
                   number: 8080
 
 ---
-# Ingress без TLS
+# Ingress without TLS
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -803,7 +803,7 @@ spec:
 
 ---
 # =============================================================================
-# STANDALONE POD (для тестирования логов и exec)
+# STANDALONE POD (for testing logs and exec)
 # =============================================================================
 
 apiVersion: v1
@@ -856,7 +856,7 @@ spec:
           memory: "32Mi"
 
 ---
-# Pod с проблемами (для тестирования состояний)
+# A pod that fails on purpose, for the unhealthy states
 apiVersion: v1
 kind: Pod
 metadata:
@@ -889,7 +889,7 @@ spec:
           memory: "32Mi"
 
 ---
-# Pod с init контейнером
+# Pod with an init container
 apiVersion: v1
 kind: Pod
 metadata:
@@ -932,10 +932,10 @@ spec:
 
 ---
 # =============================================================================
-# ENDPOINTS (автоматически создаются, но вот пример manual)
+# ENDPOINTS (normally written by the control plane; this one is by hand)
 # =============================================================================
 
-# Manual Endpoints для external service
+# Hand-written Endpoints for an external service
 apiVersion: v1
 kind: Endpoints
 metadata:
@@ -953,7 +953,7 @@ subsets:
         protocol: TCP
 
 ---
-# Service для manual endpoints
+# Service in front of the hand-written Endpoints
 apiVersion: v1
 kind: Service
 metadata:

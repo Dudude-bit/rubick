@@ -95,8 +95,11 @@ mod tests {
     #[test]
     fn utf8_beyond_ascii_is_still_text() {
         let mut data = ConfigData::default();
-        data.take("Opaque", "greeting".into(), "привет · ✓".as_bytes());
-        assert_eq!(data.values.get("greeting").unwrap(), "привет · ✓");
+        // Two-, three- and four-byte sequences in one value: a decoder that
+        // gives up on any of them would fail this rather than only the
+        // easiest case.
+        data.take("Opaque", "greeting".into(), "café · 日本語 · 🎉".as_bytes());
+        assert_eq!(data.values.get("greeting").unwrap(), "café · 日本語 · 🎉");
         assert!(data.binary.is_empty());
     }
 

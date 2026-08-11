@@ -1,145 +1,145 @@
-# K8s GUI Test Manifests
+# Rubick Test Manifests
 
-Тестовые манифесты для проверки всех функций k8s-gui.
+Fixtures that put one of everything Rubick can display into a cluster, so a
+feature can be checked against a real object rather than a screenshot.
 
-## Быстрый старт
+## Quick start
 
 ```bash
-# Применить все ресурсы
+# Create everything
 kubectl apply -f comprehensive-test.yaml
 
-# Проверить статус
+# Check it came up
 kubectl get all -n k8s-gui-test
 
-# Удалить все ресурсы
+# Remove everything
 kubectl delete -f comprehensive-test.yaml
 kubectl delete pv k8s-gui-test-pv
 ```
 
-## Что создаётся
+## What it creates
 
 ### Namespace
 
-- `k8s-gui-test` — изолированный namespace для тестов
+- `k8s-gui-test` — everything below lives here, so cleanup is one delete
 
-### Configuration (Config & Storage → Configuration)
+### Configuration
 
-| Ресурс    | Имя                     | Описание                                      |
-| --------- | ----------------------- | --------------------------------------------- |
-| ConfigMap | `app-config`            | Простые key-value данные                      |
-| ConfigMap | `nginx-config`          | Многострочные данные (nginx.conf, index.html) |
-| Secret    | `app-secrets`           | Opaque secret с credentials                   |
-| Secret    | `docker-registry-creds` | kubernetes.io/dockerconfigjson                |
-| Secret    | `tls-secret`            | kubernetes.io/tls                             |
+| Resource  | Name                    | What it exercises                          |
+| --------- | ----------------------- | ------------------------------------------ |
+| ConfigMap | `app-config`            | Plain key-value data                       |
+| ConfigMap | `nginx-config`          | Multi-line values (nginx.conf, index.html) |
+| Secret    | `app-secrets`           | An Opaque secret holding credentials       |
+| Secret    | `docker-registry-creds` | kubernetes.io/dockerconfigjson             |
+| Secret    | `tls-secret`            | kubernetes.io/tls                          |
 
 ### Storage
 
-| Ресурс                | Имя               | Описание          |
+| Resource              | Name              | What it exercises |
 | --------------------- | ----------------- | ----------------- |
 | PersistentVolume      | `k8s-gui-test-pv` | hostPath PV (1Gi) |
-| PersistentVolumeClaim | `data-pvc`        | PVC (500Mi)       |
+| PersistentVolumeClaim | `data-pvc`        | A claim (500Mi)   |
 
 ### Workloads
 
-| Ресурс      | Имя             | Реплики | Описание                            |
-| ----------- | --------------- | ------- | ----------------------------------- |
-| Deployment  | `frontend`      | 2       | nginx с ConfigMap volume            |
-| Deployment  | `backend`       | 3       | http-echo с env из ConfigMap/Secret |
-| Deployment  | `worker`        | 2       | busybox с логами                    |
-| StatefulSet | `redis`         | 3       | Redis с volumeClaimTemplates        |
-| DaemonSet   | `log-collector` | \*      | На каждой ноде                      |
-| Job         | `db-migration`  | -       | Одноразовая задача                  |
-| CronJob     | `backup-job`    | -       | Каждые 5 минут                      |
+| Resource    | Name            | Replicas | What it exercises                              |
+| ----------- | --------------- | -------- | ---------------------------------------------- |
+| Deployment  | `frontend`      | 2        | nginx with a ConfigMap volume                  |
+| Deployment  | `backend`       | 3        | http-echo, env drawn from ConfigMap and Secret |
+| Deployment  | `worker`        | 2        | busybox writing a steady log                   |
+| StatefulSet | `redis`         | 3        | Ordered pods with volumeClaimTemplates         |
+| DaemonSet   | `log-collector` | \*       | One pod per node                               |
+| Job         | `db-migration`  | -        | Runs once and finishes                         |
+| CronJob     | `backup-job`    | -        | Every five minutes                             |
 
-### Pods (standalone)
+### Standalone pods
 
-| Имя           | Контейнеры                      | Описание                                   |
-| ------------- | ------------------------------- | ------------------------------------------ |
-| `debug-pod`   | main (nginx), sidecar (busybox) | Для тестирования логов, exec, port-forward |
-| `failing-pod` | failing                         | Падает каждые 10 секунд                    |
-| `init-pod`    | init-wait, main                 | Init container demo                        |
+| Name          | Containers                      | What it exercises                     |
+| ------------- | ------------------------------- | ------------------------------------- |
+| `debug-pod`   | main (nginx), sidecar (busybox) | Logs, exec and port-forward           |
+| `failing-pod` | failing                         | Crashes every ten seconds, on purpose |
+| `init-pod`    | init-wait, main                 | An init container                     |
 
 ### Network
 
-| Ресурс    | Имя                 | Тип                  | Описание              |
-| --------- | ------------------- | -------------------- | --------------------- |
-| Service   | `frontend`          | ClusterIP            | Frontend service      |
-| Service   | `backend`           | ClusterIP            | Backend service       |
-| Service   | `frontend-nodeport` | NodePort             | Port 30080            |
-| Service   | `backend-lb`        | LoadBalancer         | External access       |
-| Service   | `redis-headless`    | ClusterIP (headless) | Для StatefulSet       |
-| Service   | `external-api`      | ExternalName         | api.example.com       |
-| Service   | `external-db`       | ClusterIP            | Для manual endpoints  |
-| Ingress   | `main-ingress`      | -                    | С TLS, paths: /, /api |
-| Ingress   | `api-ingress`       | -                    | Без TLS, path rewrite |
-| Endpoints | `external-db`       | -                    | Manual endpoints      |
+| Resource  | Name                | Type                 | What it exercises                                |
+| --------- | ------------------- | -------------------- | ------------------------------------------------ |
+| Service   | `frontend`          | ClusterIP            | The ordinary case                                |
+| Service   | `backend`           | ClusterIP            | The ordinary case                                |
+| Service   | `frontend-nodeport` | NodePort             | Port 30080                                       |
+| Service   | `backend-lb`        | LoadBalancer         | External access                                  |
+| Service   | `redis-headless`    | ClusterIP (headless) | Backs the StatefulSet                            |
+| Service   | `external-api`      | ExternalName         | api.example.com                                  |
+| Service   | `external-db`       | ClusterIP            | Fronts hand-written endpoints                    |
+| Ingress   | `main-ingress`      | -                    | With TLS, paths / and /api                       |
+| Ingress   | `api-ingress`       | -                    | No TLS, with a path rewrite                      |
+| Endpoints | `external-db`       | -                    | Written by hand rather than by the control plane |
 
-## Что можно тестировать
+## What there is to check
 
-### List views
+### Lists
 
-- [ ] Pods — разные статусы (Running, CrashLoopBackOff, Init)
-- [ ] Deployments — разное количество реплик
+- [ ] Pods — several states at once (Running, CrashLoopBackOff, Init)
+- [ ] Deployments — different replica counts
 - [ ] StatefulSets — ordered pods (redis-0, redis-1, redis-2)
-- [ ] DaemonSets — pods на каждой ноде
-- [ ] Jobs — completed/running jobs
-- [ ] CronJobs — scheduled jobs
-- [ ] Services — все типы (ClusterIP, NodePort, LoadBalancer, ExternalName, Headless)
-- [ ] Ingresses — с TLS и без
-- [ ] ConfigMaps — простые и многострочные данные
-- [ ] Secrets — разные типы (Opaque, dockerconfigjson, tls)
+- [ ] DaemonSets — one pod per node
+- [ ] Jobs — completed and running
+- [ ] CronJobs — scheduled
+- [ ] Services — every type (ClusterIP, NodePort, LoadBalancer, ExternalName, headless)
+- [ ] Ingresses — with TLS and without
+- [ ] ConfigMaps — plain and multi-line
+- [ ] Secrets — every type (Opaque, dockerconfigjson, tls)
 - [ ] PersistentVolumes — cluster-scoped
-- [ ] PersistentVolumeClaims — bound/pending
-- [ ] Endpoints — auto-created и manual
+- [ ] PersistentVolumeClaims — bound and pending
+- [ ] Endpoints — control-plane written and hand-written
 
 ### Detail pages
 
-- [ ] Pod detail — containers, volumes, env vars
-- [ ] Deployment detail — replicas, strategy, conditions
-- [ ] Service detail — endpoints, selectors
-- [ ] Ingress detail — rules, TLS, backends
+- [ ] Pod — containers, volumes, environment
+- [ ] Deployment — replicas, strategy, conditions
+- [ ] Service — endpoints, selector
+- [ ] Ingress — rules, TLS, backends
 
 ### Actions
 
-- [ ] **Logs** — `debug-pod` (2 контейнера с логами)
-- [ ] **Exec/Terminal** — `debug-pod` (nginx + busybox)
-- [ ] **Port Forward** — `debug-pod:80`, `backend:8080`
-- [ ] **Scale** — `frontend`, `backend` deployments
-- [ ] **Restart** — любой deployment
-- [ ] **Delete** — любой ресурс
-- [ ] **View YAML** — все ресурсы
+- [ ] **Logs** — `debug-pod` has two containers writing
+- [ ] **Shell** — `debug-pod` (nginx and busybox)
+- [ ] **Port forward** — `debug-pod:80`, `backend:8080`
+- [ ] **Scale** — the `frontend` and `backend` deployments
+- [ ] **Restart** — any deployment
+- [ ] **Delete** — any object
+- [ ] **View YAML** — every kind
 - [ ] **Edit YAML** — ConfigMaps, Secrets, Deployments
-- [ ] **View Data** — Secrets (app-secrets)
-- [ ] **Copy Keys** — Secrets
+- [ ] **Reveal values** — `app-secrets`
+- [ ] **Copy keys** — Secrets
 
 ### Events
 
-- [ ] Pod events — создание, scheduling
-- [ ] Warning events — `failing-pod` crashes
+- [ ] Ordinary events — creation and scheduling
+- [ ] Warning events — `failing-pod` crashing
 
-### Filtering
+### Filters
 
-- [ ] Namespace filter — `k8s-gui-test`
+- [ ] Namespace — `k8s-gui-test`
 - [ ] Label selector — `app=k8s-gui-test`
-- [ ] Status filter — Running, Pending, Failed
-- [ ] Service type filter — ClusterIP, NodePort, LoadBalancer
-- [ ] Secret type filter — Opaque, tls, dockerconfigjson
+- [ ] Status — Running, Pending, Failed
+- [ ] Service type — ClusterIP, NodePort, LoadBalancer
+- [ ] Secret type — Opaque, tls, dockerconfigjson
 
 ---
 
-## Тестирование Helm
+## Helm
 
-### Установка тестовых Helm релизов
+### Install some releases
 
 ```bash
-# Запустить скрипт для установки тестовых релизов
+# The script does all of the below
 ./helm-test.sh
 
-# Или вручную:
+# Or by hand:
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 
-# Установить тестовые релизы
 helm install redis-test bitnami/redis -n helm-test --create-namespace \
     --set architecture=standalone --set auth.enabled=false \
     --set master.persistence.enabled=false
@@ -148,20 +148,18 @@ helm install nginx-test bitnami/nginx -n helm-test \
     --set replicaCount=2 --set service.type=ClusterIP
 ```
 
-### Проверка в k8s-gui
+### In Rubick
 
-1. Откройте приложение
-2. Перейдите в **Plugins → Helm**
-3. Убедитесь что релизы отображаются
-4. Проверьте:
-   - [ ] Список релизов с фильтром по namespace
-   - [ ] Статусы (deployed, pending-install, failed)
-   - [ ] Детальная страница (клик на релиз)
-   - [ ] История ревизий
-   - [ ] Rollback (если несколько ревизий)
-   - [ ] Uninstall с подтверждением
+Open **Helm** in the sidebar and check:
 
-### Удаление тестовых релизов
+- [ ] The release list, filtered by namespace
+- [ ] Statuses (deployed, pending-install, failed)
+- [ ] A release's own page
+- [ ] Revision history
+- [ ] Rollback, once there is more than one revision
+- [ ] Uninstall, with its confirmation
+
+### Clean up
 
 ```bash
 helm uninstall redis-test nginx-test -n helm-test
@@ -170,45 +168,42 @@ kubectl delete namespace helm-test
 
 ---
 
-## Тестирование CRDs (Traefik, Istio, Cert-Manager)
+## Custom resources (Traefik, Istio, cert-manager)
 
-### Установка CRD определений
+### Install the definitions
 
 ```bash
-# Применить CRD определения (без установки самих контроллеров)
+# The CRDs alone — no controllers, so nothing acts on these objects
 kubectl apply -f crds-traefik-istio.yaml
 ```
 
-### Создание тестовых ресурсов
+### Create some objects
 
 ```bash
-# Применить тестовые Custom Resources
 kubectl apply -f crd-resources-test.yaml
 ```
 
-### Что создаётся
+### What that creates
 
-| CRD Group               | Resources                                              |
+| CRD group               | Resources                                              |
 | ----------------------- | ------------------------------------------------------ |
 | **traefik.io**          | IngressRoute, Middleware, TraefikService               |
 | **networking.istio.io** | VirtualService, DestinationRule, Gateway, ServiceEntry |
 | **cert-manager.io**     | Certificate, ClusterIssuer                             |
 
-### Проверка в k8s-gui
+Nothing reconciles them, so every `status` is whatever the manifest says —
+enough to check how the app renders them, not enough to judge behaviour.
 
-1. Перейдите в **Cluster → CRDs**
-2. Найдите установленные CRDs:
-   - `ingressroutes.traefik.io`
-   - `virtualservices.networking.istio.io`
-   - `certificates.cert-manager.io`
-3. Кликните на CRD для просмотра ресурсов
-4. Проверьте:
-   - [ ] Список всех CRD в кластере
-   - [ ] Фильтрация по группе (traefik.io, networking.istio.io)
-   - [ ] Просмотр Custom Resources внутри CRD
-   - [ ] Детали CR (YAML, metadata)
+### In Rubick
 
-### Удаление тестовых CRDs
+Open **CRDs** and check:
+
+- [ ] Every CRD in the cluster is listed
+- [ ] Filtering by group (traefik.io, networking.istio.io)
+- [ ] The objects inside a CRD
+- [ ] An object's own page (YAML, metadata)
+
+### Clean up
 
 ```bash
 kubectl delete -f crd-resources-test.yaml
@@ -217,42 +212,41 @@ kubectl delete -f crds-traefik-istio.yaml
 
 ---
 
-## Loki (интеграция `logs.history`)
+## Loki (the `logs.history` capability)
 
-`loki-stack.yaml` поднимает Loki (single binary, filesystem, retention 72h) и
-Promtail рядом с демо-Prometheus в namespace `monitoring`. Это то, что читает
-лог-вьюер, когда пода уже нет: `--previous` даёт ровно один прошлый запуск и
-только пока объект пода жив.
+`loki-stack.yaml` brings up Loki (single binary, filesystem, 72h retention) and
+Promtail beside the demo Prometheus in the `monitoring` namespace. This is what
+the log viewer reads once a pod is gone: `--previous` gives exactly one earlier
+run, and only while the pod object still exists.
 
 ```bash
-# перед установкой: Promtail открывает inotify-instance на каждую директорию
+# Before installing: Promtail opens an inotify instance per directory
 sudo sysctl -w fs.inotify.max_user_instances=1024
 
 kubectl apply -f loki-stack.yaml
 kubectl -n monitoring rollout status deploy/loki
 
-# адрес для Settings -> Integrations -> Loki -> Connect
+# The address for Settings -> Integrations -> Loki -> Connect
 echo "http://$(kubectl get node -o jsonpath='{.items[0].status.addresses[0].address}'):30310"
 
-kubectl delete -f loki-stack.yaml   # удалить
+kubectl delete -f loki-stack.yaml   # remove it
 ```
 
-Метки, по которым спрашивает приложение — `namespace` и `pod` (см.
-`src/integrations/loki/queries.ts`). Если в вашей установке Promtail/Alloy
-переименовывает их, вьюер честно скажет, какие метки он пробовал, вместо
-пустой панели.
+The app queries on the `namespace` and `pod` labels (see
+`src/integrations/loki/queries.ts`). If your Promtail or Alloy renames them,
+the viewer says which labels it tried rather than showing an empty panel.
 
 ---
 
 ## Troubleshooting
 
-### StatefulSet pending
+### The StatefulSet stays pending
 
-Если redis pods в Pending — возможно нет default StorageClass:
+Usually there is no default StorageClass:
 
 ```bash
 kubectl get sc
-# Если пусто, создайте локальный:
+# If that is empty, make a local one:
 kubectl apply -f - <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -263,30 +257,32 @@ volumeBindingMode: WaitForFirstConsumer
 EOF
 ```
 
-### LoadBalancer pending
+### The LoadBalancer stays pending
 
-В локальном кластере (minikube/kind) LoadBalancer будет в Pending. Это нормально.
-Для minikube: `minikube tunnel`
+Expected on a local cluster (minikube, kind, k3d) — nothing is there to assign
+an address. For minikube, `minikube tunnel` provides one.
 
-### Ingress не работает
+### The Ingress does nothing
 
-Убедитесь что установлен ingress controller:
+Check that a controller is installed:
 
 ```bash
-# Для minikube
+# minikube
 minikube addons enable ingress
 
-# Для kind
+# kind
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 ```
 
-### Helm релизы не отображаются
+k3d ships Traefik as its controller, so nothing extra is needed there.
 
-1. Проверьте что Helm CLI установлен: `helm version`
-2. Проверьте наличие секретов: `kubectl get secrets -l owner=helm --all-namespaces`
-3. Если секреты есть но релизы не видны — проверьте логи приложения
+### Helm releases do not appear
 
-### CRDs не отображаются
+1. Check the Helm CLI is on PATH: `helm version`
+2. Check the release secrets exist: `kubectl get secrets -l owner=helm --all-namespaces`
+3. If the secrets are there and the releases are not, the app's log will say why
 
-1. Проверьте что CRDs созданы: `kubectl get crds`
-2. Убедитесь что у вас есть права на просмотр CRDs
+### CRDs do not appear
+
+1. Check they were created: `kubectl get crds`
+2. Check your context is allowed to list them

@@ -1,11 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for K8s GUI",
-  "windows": [
-    "main",
-    "auth-*"
-  ],
+  "description": "Default capabilities for Rubick",
+  "windows": ["main", "auth-*"],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -27,10 +24,6 @@
     "process:allow-restart"
   ],
   "remote": {
-    "urls": [
-      "https://*",
-      "http://127.0.0.1:*",
-      "http://localhost:*"
-    ]
+    "urls": ["https://*", "http://127.0.0.1:*", "http://localhost:*"]
   }
 }
