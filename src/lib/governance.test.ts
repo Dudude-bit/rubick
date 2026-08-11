@@ -414,7 +414,12 @@ describe("what the YAML editor's apply reads", () => {
   it("stays quiet about the autoscaler when the save does not touch replicas", () => {
     const governed = conns([governs(hpa("hpa-busy"))]);
     const before = doc(3);
-    const after = before.replace("kind: Deployment", "kind: Deployment");
+    // A real edit somewhere else in the document. Replacing a string with
+    // itself would leave `after === before`, and this test would pass even
+    // if the gate named the autoscaler on every save — which is the failure
+    // it exists to catch.
+    const after = before.replace("    spec: {}", "    spec: { nodeName: n1 }");
+    expect(after).not.toBe(before);
     expect(
       applyWarnings(governed, null, changesReplicaCount(before, after))
     ).toEqual([]);
