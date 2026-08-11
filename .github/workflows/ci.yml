@@ -40,9 +40,9 @@ jobs:
       - name: Build frontend
         # Required so `tauri::generate_context!()` can read ../dist during
         # cargo clippy / cargo test. (build.yml goes through cargo tauri
-        # build which runs npm run build via beforeBuildCommand; here we
+        # build which runs bun run build via beforeBuildCommand; here we
         # don't, so we do it explicitly.)
-        run: npm run build
+        run: bun run build
 
       - name: Rust clippy
         # Informational for now — a single new warning breaking CI for all
@@ -55,14 +55,14 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Frontend type check
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Frontend tests
-        run: npm test
+        run: bun run test
 
       - name: Frontend lint
         # Informational while the react-hooks@7 upgrade rule set is being
         # triaged. Flip to required once remaining violations are addressed
         # or rules are explicitly dialled down in eslint.config.js.
         continue-on-error: true
-        run: npm run lint
+        run: bun run lint

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
+import { SectionHeader } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -90,7 +92,7 @@ export function Helm() {
     data: releases = [],
     isLoading,
     refetch,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["helm-releases-native", selectedNamespace],
     queryFn: async () => {
       try {
@@ -101,7 +103,7 @@ export function Helm() {
       }
     },
     enabled: isConnected,
-    refetchInterval: 30000,
+    refresh: "steady",
   });
 
   const { data: historyData = [], isLoading: historyLoading } = useQuery({
@@ -312,28 +314,35 @@ export function Helm() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
       <HelmStatusBanner />
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Helm</h1>
-      </div>
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="releases">
-            <Package className="h-4 w-4 mr-2" />
-            Releases
-          </TabsTrigger>
-          <TabsTrigger value="charts" disabled={!helmCliAvailable}>
-            <Search className="h-4 w-4 mr-2" />
-            Charts
-          </TabsTrigger>
-          <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
-            <FolderGit2 className="h-4 w-4 mr-2" />
-            Repositories
-          </TabsTrigger>
-        </TabsList>
+        {/* The window tab strip already says which screen this is, so the
+            page gets the same 13px section heading as everything else —
+            and the tabs sit on its right instead of under a title block.
+            They stay inside the Tabs root so Radix keeps triggers and
+            panels wired together. */}
+        <SectionHeader
+          title="Helm"
+          count={`${releases.length} ${releases.length === 1 ? "release" : "releases"}`}
+          actions={
+            <TabsList>
+              <TabsTrigger value="releases">
+                <Package className="h-3 w-3" aria-hidden="true" />
+                Releases
+              </TabsTrigger>
+              <TabsTrigger value="charts" disabled={!helmCliAvailable}>
+                <Search className="h-3 w-3" aria-hidden="true" />
+                Charts
+              </TabsTrigger>
+              <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
+                <FolderGit2 className="h-3 w-3" aria-hidden="true" />
+                Repositories
+              </TabsTrigger>
+            </TabsList>
+          }
+        />
 
         <TabsContent value="releases">
           <HelmReleasesTab

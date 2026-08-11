@@ -6,7 +6,7 @@
 )]
 
 use k8s_gui_common::init_tracing;
-use k8s_gui_lib::{commands, shell, state::AppState};
+use k8s_gui_lib::{commands, integrations, shell, state::AppState};
 use tauri::{Emitter, Manager};
 
 fn main() {
@@ -74,10 +74,16 @@ fn main() {
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
+            commands::cluster::get_kubeconfig_source,
+            commands::binaries::locate_binaries,
             // Namespace management
             commands::namespace::list_namespaces,
             // Generic resource management
             commands::resources::list_resources,
+            // Cross-cluster search
+            commands::search::start_resource_search,
+            commands::search::resource_search_subscribed,
+            commands::search::cancel_resource_search,
             // CRD commands
             commands::crds::list_crds,
             commands::crds::get_crd,
@@ -111,6 +117,11 @@ fn main() {
             commands::deployments::update_deployment_image,
             commands::deployments::get_deployment_pods,
             commands::deployments::get_rollout_status,
+            // ReplicaSet commands — a detail page and a Deployment's
+            // revisions; deliberately no list, there is no list page.
+            commands::replicasets::get_replicaset,
+            commands::replicasets::get_replicaset_pods,
+            commands::replicasets::get_deployment_replicasets,
             // Service commands
             commands::services::list_services,
             commands::services::get_service,
@@ -134,8 +145,27 @@ fn main() {
             commands::config_resources::get_secret_data,
             commands::config_resources::get_secret_yaml,
             commands::config_resources::delete_secret,
+            // TLS certificates — core, and readable without cert-manager
+            commands::certificates::get_tls_certificates,
+            // In-cluster extensions: detected, never configured
+            integrations::detect_in_cluster_extensions,
+            integrations::cert_manager::get_certificate_issuance,
+            // Configured extensions: an address per cluster, and the
+            // credential stays on this side of the boundary
+            integrations::prometheus::get_prometheus_connection,
+            integrations::prometheus::save_prometheus_connection,
+            integrations::prometheus::forget_prometheus_connection,
+            integrations::prometheus::probe_prometheus,
+            integrations::prometheus::prometheus_query,
+            integrations::prometheus::prometheus_query_range,
+            integrations::loki::get_loki_connection,
+            integrations::loki::save_loki_connection,
+            integrations::loki::forget_loki_connection,
+            integrations::loki::probe_loki,
+            integrations::loki::loki_query_range,
             // Resource references command
             commands::config_resources::get_resource_references,
+            commands::connections::get_resource_connections,
             // Node commands
             commands::nodes::list_nodes,
             commands::nodes::get_node,
@@ -264,12 +294,15 @@ fn main() {
             // Network commands
             commands::network::list_ingresses,
             commands::network::get_ingress,
+            commands::network::resolve_ingress_class,
             commands::network::delete_ingress,
             commands::network::list_endpoints,
+            commands::network::list_service_endpoints,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Stats commands
             commands::stats::get_cluster_stats,
+            commands::overview::get_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
             commands::metrics::get_nodes_metrics,
@@ -278,6 +311,7 @@ fn main() {
             commands::workloads::list_statefulsets,
             commands::workloads::get_statefulset,
             commands::workloads::get_statefulset_yaml,
+            commands::workloads::scale_statefulset,
             commands::workloads::delete_statefulset,
             commands::workloads::list_daemonsets,
             commands::workloads::get_daemonset,

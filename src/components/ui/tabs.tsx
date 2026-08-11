@@ -10,10 +10,9 @@ const TabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
-      className
-    )}
+    // Same shape as the window tab strip: no track, no pill background —
+    // only the selected tab gets a fill, and it is the selection tint.
+    className={cn("inline-flex h-7 items-center gap-1 text-fg-mut", className)}
     {...props}
   />
 ));
@@ -26,7 +25,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+      "inline-flex h-6 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-40 data-[state=active]:bg-sel data-[state=active]:text-fg",
       className
     )}
     {...props}
@@ -41,7 +40,13 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      // Radix hides the inactive panel with the `hidden` attribute alone, and
+      // any display utility a caller puts on the panel out-specifies it: every
+      // inactive panel then stays in flow as an empty box carrying its own
+      // margin, and the selected tab is pushed down by the sum of the ones
+      // declared before it. Saying it again as a variant puts the hiding back
+      // out of reach of `flex` and `grid`.
+      "mt-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info data-[state=inactive]:hidden",
       className
     )}
     {...props}

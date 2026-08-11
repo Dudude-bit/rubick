@@ -59,22 +59,20 @@ export const RealtimeCountdown = memo(function RealtimeCountdown({
   );
 
   if (!target) {
-    return (
-      <span className={cn("text-muted-foreground", className)}>{fallback}</span>
-    );
+    return <span className={cn("text-fg-fnt", className)}>{fallback}</span>;
   }
 
   const colorClass = showWarningColors
     ? warningLevel === "critical"
-      ? "text-destructive font-medium"
+      ? "font-medium text-err"
       : warningLevel === "warning"
-        ? "text-yellow-600 dark:text-yellow-500"
+        ? "text-warn"
         : ""
     : "";
 
   if (isExpired) {
     return (
-      <span className={cn("text-destructive font-medium", className)}>
+      <span className={cn("font-medium text-err", className)}>
         {expiredText}
       </span>
     );

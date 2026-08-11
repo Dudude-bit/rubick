@@ -54,9 +54,9 @@ export function KeyValueRowsEditor({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {rows.map((row, index) => (
-        <div key={`${row.key}-${index}`} className="flex items-center gap-2">
+        <div key={`${row.key}-${index}`} className="flex items-center gap-1">
           <Input
             placeholder={keyPlaceholder}
             value={row.key}
@@ -73,14 +73,15 @@ export function KeyValueRowsEditor({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label={`Remove ${itemLabel}`}
             onClick={() => removeRow(index)}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={addRow}>
-        <Plus className="mr-2 h-4 w-4" />
+      <Button type="button" variant="ghost" size="sm" onClick={addRow}>
+        <Plus className="mr-1.5 h-3 w-3" aria-hidden="true" />
         Add {itemLabel}
       </Button>
     </div>

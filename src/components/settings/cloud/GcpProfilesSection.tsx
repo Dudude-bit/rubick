@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, Loader2, Plus, TestTube, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProfileRow, ProfileSection } from "./ProfileSection";
 import {
   Dialog,
   DialogContent,
@@ -124,72 +124,30 @@ export function GcpProfilesSection() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">GCP Profiles</h3>
-        <Button size="sm" variant="outline" onClick={openCreateDialog}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Profile
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      ) : profiles?.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">
-          No GCP profiles configured. Using Application Default Credentials.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {profiles?.map((item) => (
-            <div
-              key={item.name}
-              className="flex items-center justify-between p-3 border rounded-lg"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{item.name}</span>
-                  {item.profile.serviceAccountKeyPath && (
-                    <Badge variant="secondary">Service Account</Badge>
-                  )}
-                </div>
-                {item.profile.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {item.profile.description}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => testMutation.mutate(item.name)}
-                  disabled={testMutation.isPending}
-                >
-                  <TestTube className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => openEditDialog(item.name, item.profile)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => deleteMutation.mutate(item.name)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <>
+      <ProfileSection
+        title="GCP"
+        addLabel="Add profile"
+        onAdd={openCreateDialog}
+        isLoading={isLoading}
+        isEmpty={!profiles || profiles.length === 0}
+        emptyMessage="No profiles — using Application Default Credentials."
+      >
+        {profiles?.map((item) => (
+          <ProfileRow
+            key={item.name}
+            name={item.name}
+            detail={
+              item.profile.serviceAccountKeyPath ? "service account" : undefined
+            }
+            description={item.profile.description}
+            onTest={() => testMutation.mutate(item.name)}
+            onEdit={() => openEditDialog(item.name, item.profile)}
+            onDelete={() => deleteMutation.mutate(item.name)}
+            busy={testMutation.isPending || deleteMutation.isPending}
+          />
+        ))}
+      </ProfileSection>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -239,13 +197,15 @@ export function GcpProfilesSection() {
                 />
                 <Button
                   variant="outline"
+                  size="icon"
+                  aria-label="Browse for a service account key"
                   onClick={() => handleFilePicker("serviceAccountKeyPath")}
                 >
-                  <FolderOpen className="h-4 w-4" />
+                  <FolderOpen className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                If not set, uses Application Default Credentials (gcloud auth)
+              <p className="text-[11px] text-fg-mut">
+                If not set, uses Application Default Credentials (gcloud auth).
               </p>
             </div>
             <div className="space-y-2">
@@ -288,13 +248,13 @@ export function GcpProfilesSection() {
               disabled={!newProfileName || saveMutation.isPending}
             >
               {saveMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               )}
               Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

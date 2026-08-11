@@ -4,7 +4,7 @@
 use crate::commands::filters::ResourceFilters;
 use crate::error::{Error, Result};
 use crate::state::AppState;
-use kube::api::DeleteParams;
+use kube::api::{DeleteParams, Patch, PatchParams};
 use tauri::State;
 
 use super::context::ResourceContext;
@@ -47,6 +47,33 @@ where
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let params = delete_params.unwrap_or_default();
     ctx.namespaced_api::<K>().delete(&name, &params).await?;
+    Ok(())
+}
+
+/// Set a namespaced workload's replica count.
+///
+/// A merge patch on `spec.replicas` rather than the `scale` subresource: the
+/// two reach the same field, and the plain patch is the one every other write
+/// in this app already uses, so a refusal comes back shaped like every other
+/// refusal instead of as a subresource error the frontend has never seen.
+pub async fn scale_resource<K>(
+    name: String,
+    replicas: i32,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()>
+where
+    K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>
+        + Clone
+        + std::fmt::Debug
+        + serde::de::DeserializeOwned,
+    K::DynamicType: Default,
+{
+    let ctx = ResourceContext::for_command(&state, namespace)?;
+    let patch = serde_json::json!({ "spec": { "replicas": replicas } });
+    ctx.namespaced_api::<K>()
+        .patch(&name, &PatchParams::default(), &Patch::Merge(&patch))
+        .await?;
     Ok(())
 }
 

@@ -1,39 +1,45 @@
 /**
- * ResourceDetailLayout - Unified layout for resource detail pages
+ * The frame every resource detail page sits in: the header, what is wrong with
+ * the object, and the tab strip.
  *
- * Provides common structure for detail pages including:
- * - Loading state with skeleton
- * - Error state with navigation
- * - Consistent layout structure
+ * The order is the whole point. Identity, then the one or two lines that say
+ * the object is in trouble, then the strip — which carries the page's actions
+ * on its row. Nothing of the page's own grows above that strip, so Scale,
+ * Restart and Delete are above the fold by construction rather than by luck:
+ * this frame used to render the page's blocks between the header and the
+ * strip, and the day the Overview stopped being two short columns the controls
+ * left the screen.
+ *
+ * Nothing here draws a surface. Sections are separated by 22px of canvas and
+ * the occasional hairline, which is the same rhythm the overview uses.
  */
 
-import type { ReactNode } from "react";
-import type { ConditionInfo } from "@/generated/types";
-import { Button } from "@/components/ui/button";
+import { type ReactNode } from "react";
+import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ResourceDetailHeader } from "./ResourceDetailHeader";
-import { LabelsDisplay } from "./LabelsDisplay";
-import { ConditionsDisplay } from "./ConditionsDisplay";
-import { ArrowLeft, AlertCircle, RefreshCw } from "lucide-react";
+import { CaptionScope, Section } from "@/components/ui/section";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { cn } from "@/lib/utils";
+import { ResourceDetailHeader } from "./ResourceDetailHeader";
+import { DetailTabs } from "./DetailTabs";
+import { DetailAction } from "./detail-blocks";
+import { DeliveryBanner, DeliveryMarks } from "./delivery";
+import { surfaceIsOpen, type DetailTab } from "./detail-tab";
+import { useDelivery } from "@/hooks/useDelivery";
+import type { Freshness } from "@/hooks/useLiveQuery";
+import type { DeliveryQuery } from "@/integrations";
 
-/**
- * Error state for detail pages
- */
+/** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
+export type { DetailTab } from "./detail-tab";
+
 interface DetailErrorProps {
-  /** Error object or message */
   error: Error | string | null;
-  /** Resource kind for display */
   resourceKind: string;
-  /** Go back callback */
   onBack: () => void;
-  /** Optional: Action to find replacement */
+  /** Pods are replaced rather than restarted, so a 404 offers to follow. */
   onFindReplacement?: () => void;
-  /** Is searching for replacement */
   isSearching?: boolean;
-  /** Additional message */
   additionalMessage?: string;
 }
 
@@ -46,189 +52,156 @@ export function DetailError({
   additionalMessage,
 }: DetailErrorProps) {
   const isNotFound = isResourceNotFoundError(error);
+  const kind = resourceKind.toLowerCase();
 
   return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4">
-      <AlertCircle className="h-12 w-12 text-destructive" />
-      <p className="text-destructive text-lg font-medium">
+    <Section className="max-w-lg">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+        <h2 className="text-[13px] font-semibold tracking-tight text-err">
+          {isNotFound
+            ? `${resourceKind} not found`
+            : `Could not read this ${kind}`}
+        </h2>
+      </div>
+      <p className="text-xs text-fg-mut">
         {isNotFound
-          ? `${resourceKind} not found`
-          : `Failed to load ${resourceKind.toLowerCase()} details`}
+          ? `The ${kind} may have been deleted or recreated under a new name.`
+          : typeof error === "string"
+            ? error
+            : (error?.message ?? "The cluster did not answer.")}
       </p>
-      {isNotFound && (
-        <p className="text-muted-foreground text-sm">
-          The {resourceKind.toLowerCase()} may have been deleted or recreated
-        </p>
-      )}
       {additionalMessage && (
-        <p className="text-muted-foreground text-sm">{additionalMessage}</p>
+        <p className="text-xs text-fg-mut">{additionalMessage}</p>
       )}
-      {isSearching && (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span>Looking for replacement...</span>
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Go Back
-        </Button>
+      <div className="flex items-center gap-1 pt-1">
+        <DetailAction label="Go back" icon={ArrowLeft} onClick={onBack} />
         {isNotFound && onFindReplacement && (
-          <Button onClick={onFindReplacement} disabled={isSearching}>
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${isSearching ? "animate-spin" : ""}`}
-            />
-            {isSearching ? "Searching..." : "Find Replacement"}
-          </Button>
+          <DetailAction
+            label={isSearching ? "Searching…" : "Find replacement"}
+            icon={RefreshCw}
+            onClick={onFindReplacement}
+            busy={isSearching}
+          />
         )}
       </div>
-    </div>
+    </Section>
   );
 }
 
-/**
- * Info row component for displaying key-value pairs
- */
-interface InfoRowProps {
-  label: string;
-  value: ReactNode;
-  className?: string;
-}
-
-export function InfoRow({ label, value, className }: InfoRowProps) {
-  return (
-    <div
-      className={`flex justify-between items-center py-1 ${className ?? ""}`}
-    >
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
-/**
- * Info card component for grouping related info
- */
-interface InfoCardProps {
-  title: string;
-  icon?: ReactNode;
-  children: ReactNode;
-  className?: string;
-  contentClassName?: string;
-}
-
-export function InfoCard({
-  title,
-  icon,
-  children,
-  className,
-  contentClassName,
-}: InfoCardProps) {
-  return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center gap-2">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className={contentClassName}>{children}</CardContent>
-    </Card>
-  );
-}
-
-/**
- * Tab definition for resource detail tabs
- */
-export interface DetailTab {
-  id: string;
-  label: string;
-  content: ReactNode;
-}
-
-/**
- * Props for ResourceDetailLayout
- */
 interface ResourceDetailLayoutProps {
-  /** Resource data */
   resource: unknown;
-  /** Is loading */
   isLoading: boolean;
-  /** Error state */
   error: Error | string | null;
-  /** Resource kind for display */
+  /** Kind, used for the breadcrumb and every "not found" message. */
   resourceKind: string;
+  /**
+   * Breadcrumb overrides for kinds the resource registry does not own, and
+   * `null` for a kind with no list page to send the reader to.
+   */
+  listUrl?: string | null;
+  listLabel?: string;
 
-  /** Header title */
+  /** The object's name. */
   title: string;
-  /** Namespace */
   namespace?: string;
-  /** Status badge */
+  /** `null` where narrowing to the namespace has no list to open under it. */
+  namespaceUrl?: string | null;
+  createdAt?: string | null;
   statusBadge?: ReactNode;
-  /** Additional badges */
+  /** Qualifiers shown beside the name. */
   badges?: ReactNode;
-  /** Action buttons */
+  /**
+   * The object, for the one question every detail page in the app is asked:
+   * *where do I change this, and will my change stick.*
+   *
+   * Answered here rather than page by page, and that is the whole reason it is
+   * a prop on the frame: provenance is not a property of workloads. A ConfigMap
+   * is delivered from git exactly as much as a Deployment is, and a fact that
+   * appeared on eleven detail pages and was missing on the twelfth would teach
+   * the reader that its absence means "not delivered" — which on the twelfth
+   * page would be a lie. A page passes the object and gets the mark, the earned
+   * line and nothing else to think about.
+   *
+   * Omitted only where the page's subject is not an applied manifest at all.
+   */
+  delivery?: DeliveryQuery | null;
+  /**
+   * What this page lets you do to the object, as `DetailAction`s.
+   *
+   * Rendered at the right end of the tab strip rather than in the header.
+   * How many fit: the peek panel folds its overflow into a More menu past
+   * five controls in a row, and that budget is not re-derived here because
+   * nothing reaches it — a Pod's four is the widest set in the app and a
+   * Deployment's Scale, Restart and Delete is three. What is scarce on this
+   * row is width rather than count, since the tab strip is on it too, so the
+   * rule is which of the two gives way: the actions are pinned to the right
+   * at their natural width and the tab labels truncate, because an action
+   * that wrapped onto a second line would undo the whole point of the row.
+   */
   actions?: ReactNode;
-  /** Header icon */
-  icon?: ReactNode;
 
-  /** Go back callback */
   onBack: () => void;
-  /** Find replacement callback (for pods) */
   onFindReplacement?: () => void;
-  /** Is searching for replacement */
   isSearchingReplacement?: boolean;
 
-  /** Tab definitions */
+  /**
+   * What is wrong with the object, in the two or three lines that say it.
+   *
+   * The only thing a page still puts above the strip, and the bar is high:
+   * it is about the *object* rather than about the Overview, so it is worth
+   * seeing while reading Conditions or a log, and it is worth the height it
+   * takes from a full-height tab. A pod's problem summary qualifies; a
+   * rollout in flight qualifies. A block does not — blocks are what the
+   * Overview tab is, and there is no slot here for them any more.
+   */
+  summary?: ReactNode;
+
+  /**
+   * What the object's own query is worth right now, from `useResourceDetail`.
+   *
+   * Every detail page passes it and the header draws the same reading from it,
+   * for the reason `delivery` is a prop on this frame too: a badge that is on
+   * eleven pages and missing on the twelfth teaches the reader that the twelfth
+   * is live, which is the one thing it must never be able to say by accident.
+   */
+  freshness?: Freshness;
+
   tabs: DetailTab[];
-  /** Active tab */
   activeTab: string;
-  /** Set active tab */
   onTabChange: (tab: string) => void;
-
-  /** Labels for LabelsDisplay */
-  labels?: Record<string, string>;
-  /** Annotations for display */
-  annotations?: Record<string, string>;
-  /** Conditions for ConditionsDisplay */
-  conditions?: ConditionInfo[];
-
-  /** Additional content below tabs */
-  children?: ReactNode;
 }
 
-/**
- * Unified layout component for resource detail pages
- */
 export function ResourceDetailLayout({
   resource,
   isLoading,
   error,
   resourceKind,
+  listUrl,
+  listLabel,
   title,
   namespace,
+  namespaceUrl,
+  createdAt,
   statusBadge,
   badges,
+  delivery,
   actions,
-  icon,
   onBack,
   onFindReplacement,
   isSearchingReplacement,
+  summary,
+  freshness,
   tabs,
   activeTab,
   onTabChange,
-  labels,
-  annotations,
-  conditions,
-  children,
 }: ResourceDetailLayoutProps) {
-  // Loading state
+  const { deliveries } = useDelivery(delivery ?? null);
+
   if (isLoading) {
     return <DetailSkeleton />;
   }
 
-  // Error state
   if (error || !resource) {
     return (
       <DetailError
@@ -241,64 +214,59 @@ export function ResourceDetailLayout({
     );
   }
 
-  // Build combined badges
-  const allBadges = (
-    <>
-      {statusBadge}
-      {badges}
-    </>
-  );
+  // Which of the two the page's height belongs to: the flow, or the pane the
+  // open tab is. Nothing above the strip is hidden for it — a banner earned by
+  // this object is worth its two lines on a log as much as on the Overview,
+  // and it is the tab's own content that grows into what is left.
+  const surface = surfaceIsOpen(tabs, activeTab);
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <ResourceDetailHeader
-        title={title}
-        namespace={namespace}
-        badges={allBadges}
-        actions={actions}
-        onBack={onBack}
-        icon={icon}
-      />
-
-      {/* Additional children (Info Cards, etc.) */}
-      {children}
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={onTabChange}>
-        <TabsList>
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        {/* Tab contents */}
-        {tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="space-y-4">
-            {tab.content}
-          </TabsContent>
-        ))}
-      </Tabs>
-
-      {/* Labels section (if on overview tab and labels exist) */}
-      {activeTab === "overview" && labels && Object.keys(labels).length > 0 && (
-        <LabelsDisplay labels={labels} title="Labels" />
-      )}
-
-      {/* Annotations section */}
-      {activeTab === "overview" &&
-        annotations &&
-        Object.keys(annotations).length > 0 && (
-          <LabelsDisplay labels={annotations} title="Annotations" />
+    <CaptionScope kind={resourceKind}>
+      <div
+        className={cn(
+          // 12px rather than the page's 22px: what is left in this column is
+          // chrome — identity, then the strip — and the mock's whole gain is
+          // that the two read as one band. The 22px rhythm still belongs to
+          // the blocks, which the open tab's panel now owns.
+          "flex flex-col animate-in fade-in duration-200",
+          surface ? "h-full min-h-0 gap-2" : "gap-3"
         )}
+      >
+        <ResourceDetailHeader
+          name={title}
+          kind={resourceKind}
+          listUrl={listUrl}
+          listLabel={listLabel}
+          namespace={namespace}
+          namespaceUrl={namespaceUrl}
+          createdAt={createdAt}
+          status={statusBadge}
+          meta={
+            <>
+              {badges}
+              <DeliveryMarks deliveries={deliveries} />
+            </>
+          }
+          onBack={onBack}
+          dataUpdatedAt={freshness?.dataUpdatedAt}
+          slowed={freshness?.slowed}
+        />
 
-      {/* Conditions section */}
-      {activeTab === "overview" && conditions && conditions.length > 0 && (
-        <ConditionsDisplay conditions={conditions} />
-      )}
-    </div>
+        {/* Above the strip, and so on every tab: both say something about the
+            object rather than about a view of it. Usually neither is there at
+            all — the delivery line is earned per object, never per managed
+            object, and a summary is what a healthy object does not have. */}
+        <DeliveryBanner deliveries={deliveries} />
+        {summary}
+
+        <DetailTabs
+          tabs={tabs}
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          actions={actions}
+        />
+      </div>
+    </CaptionScope>
   );
 }
 

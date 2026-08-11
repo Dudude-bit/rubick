@@ -1,13 +1,13 @@
 //! Secret commands — list / get / get-data (decoded) / get-yaml
 //! (with redaction option) / delete.
 
+use super::data::ConfigData;
 use crate::commands::filters::SecretFilters;
 use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
 use crate::error::{Error, Result};
 use crate::resources::SecretInfo;
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Secret;
-use std::collections::BTreeMap;
 use tauri::State;
 
 /// List Secrets
@@ -39,34 +39,38 @@ pub async fn get_secret(
     get_resource_info::<Secret, SecretInfo>(name, namespace, state).await
 }
 
-/// Get decoded Secret data (base64 decoded to UTF-8 strings)
+/// Get decoded Secret data.
+///
+/// A PEM private key is perfectly valid UTF-8, so decoding every value and
+/// offering it for reveal and copy put `tls.key` one click from the
+/// clipboard. Withholding happens in `ConfigData::take`, at the one door the
+/// values come through, rather than in the component that draws them.
 #[tauri::command]
 pub async fn get_secret_data(
     name: String,
     namespace: Option<String>,
     state: State<'_, AppState>,
-) -> Result<BTreeMap<String, String>> {
+) -> Result<ConfigData> {
     crate::validation::validate_dns_subdomain(&name)?;
     let secret: Secret = crate::commands::helpers::get_resource(name, namespace, state).await?;
+    let secret_type = secret.type_.clone().unwrap_or_default();
 
-    let mut decoded_data = BTreeMap::new();
+    let mut out = ConfigData::default();
 
     if let Some(data) = secret.data {
         for (key, value) in data {
-            // Decode base64 bytes to UTF-8 string (lossy for non-UTF8 binary data)
-            let decoded = String::from_utf8_lossy(&value.0).to_string();
-            decoded_data.insert(key, decoded);
+            out.take(&secret_type, key, &value.0);
         }
     }
 
     // Also include stringData if present (already strings)
     if let Some(string_data) = secret.string_data {
         for (key, value) in string_data {
-            decoded_data.insert(key, value);
+            out.take(&secret_type, key, value.as_bytes());
         }
     }
 
-    Ok(decoded_data)
+    Ok(out)
 }
 
 /// Get Secret YAML (with data redacted)
@@ -90,7 +94,13 @@ pub async fn get_secret_yaml(
         }
     }
 
-    let yaml = serde_yaml::to_string(&secret).map_err(|e| Error::Serialization(e.to_string()))?;
+    // The private key goes whether or not the caller asked for redaction:
+    // `redact: false` means "show me the values", never "show me the key".
+    let mut object =
+        serde_json::to_value(&secret).map_err(|e| Error::Serialization(e.to_string()))?;
+    crate::resources::redact_private_keys(&mut object);
+
+    let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 

@@ -1,290 +1,92 @@
 /**
- * StatusBadge - Unified badge component for Kubernetes resource statuses
+ * StatusBadge - status indicator for Kubernetes resources.
  *
- * Provides consistent styling for all status indicators across the application.
- * Uses design system tokens for colors.
+ * Colour is derived from a semantic role, never written per status. The
+ * label is always present: colour reinforces meaning, it never carries
+ * it alone — and the glyph gives it a third channel, so the column still
+ * reads sorted in greyscale.
+ *
+ * Not a pill. A filled chip is a container, and the design removed those
+ * everywhere else. What made the chip shout was its area, not its hue: a
+ * ten-pixel glyph spends a fraction of the ink a filled plate does, which
+ * is why every role can carry its colour here without the healthy majority
+ * drowning the one row that crashed.
  */
-
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import {
+  ROLE_DOT,
+  ROLE_ICON,
+  ROLE_TEXT,
+  statusRole,
+  type StatusRole,
+} from "@/lib/status-role";
 
-const statusBadgeVariants = cva(
-  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
-  {
-    variants: {
-      variant: {
-        // Success states
-        running:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        ready:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        available:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        active:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        succeeded:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        bound:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        // Helm deployed status
-        deployed:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-
-        // Pending/In-progress states
-        pending:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        waiting:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        progressing:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        creating:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        // Helm pending statuses
-        pendinginstall:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        pendingupgrade:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        pendingrollback:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        uninstalling:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-
-        // Warning states
-        warning:
-          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-        degraded:
-          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-        // Helm/Flux suspended status
-        suspended:
-          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-        // Helm superseded (previous revision)
-        superseded:
-          "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400",
-
-        // Error states
-        error: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-        failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-        crashloopbackoff:
-          "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-        evicted: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-        oomkilled:
-          "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-        imagepullbackoff:
-          "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-
-        // Terminated/Completed states
-        terminated:
-          "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-        completed:
-          "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-        // Helm uninstalled
-        uninstalled:
-          "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-
-        // Service types
-        clusterip:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-        nodeport:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-        loadbalancer:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-
-        // Unknown/Default states
-        unknown:
-          "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400",
-        default:
-          "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400",
-      },
-      size: {
-        sm: "px-2 py-0.5 text-xs",
-        md: "px-2.5 py-0.5 text-xs",
-        lg: "px-3 py-1 text-sm",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "md",
-    },
-  }
-);
-
-export interface StatusBadgeProps
-  extends
-    React.HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof statusBadgeVariants> {
-  /** Status string - will be normalized to match variants */
-  status?: string;
-  /** Optional dot indicator */
+export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  /** Raw status from the API, e.g. "Running", "CrashLoopBackOff". */
+  status: string;
+  /** Show a leading dot in the role colour, instead of the role's glyph. */
   showDot?: boolean;
-  /** Pulse animation for active states */
-  pulse?: boolean;
+  /** Off where the surrounding layout already carries a severity mark. */
+  showIcon?: boolean;
+  /**
+   * Override the derived role when the caller knows better. Not named
+   * `role` — that collides with the ARIA `role` attribute inherited from
+   * `React.HTMLAttributes`, which is a type error, not a style choice.
+   */
+  roleOverride?: StatusRole;
 }
 
-// Status to variant mapping
-const statusVariantMap: Record<
-  string,
-  VariantProps<typeof statusBadgeVariants>["variant"]
-> = {
-  // Success
-  running: "running",
-  ready: "ready",
-  available: "available",
-  active: "active",
-  succeeded: "succeeded",
-  bound: "bound",
-  true: "ready",
-  deployed: "deployed",
-
-  // Pending
-  pending: "pending",
-  waiting: "waiting",
-  progressing: "progressing",
-  creating: "creating",
-  containercreating: "creating",
-  // Helm pending states
-  pendinginstall: "pendinginstall",
-  pendingupgrade: "pendingupgrade",
-  pendingrollback: "pendingrollback",
-  uninstalling: "uninstalling",
-
-  // Warning
-  warning: "warning",
-  degraded: "degraded",
-  suspended: "suspended",
-  // Helm superseded (previous revision)
-  superseded: "superseded",
-
-  // Error
-  error: "error",
-  failed: "failed",
-  crashloopbackoff: "crashloopbackoff",
-  evicted: "evicted",
-  oomkilled: "oomkilled",
-  imagepullbackoff: "imagepullbackoff",
-  errimagepull: "imagepullbackoff",
-  false: "error",
-
-  // Terminated
-  terminated: "terminated",
-  completed: "completed",
-  uninstalled: "uninstalled",
-
-  // Unknown
-  unknown: "unknown",
-
-  // Service types
-  clusterip: "clusterip",
-  nodeport: "nodeport",
-  loadbalancer: "loadbalancer",
-};
-
-/**
- * Get variant from status string
- */
-function getVariantFromStatus(
-  status?: string
-): VariantProps<typeof statusBadgeVariants>["variant"] {
-  if (!status) return "default";
-  const normalized = status.toLowerCase().replace(/[^a-z]/g, "");
-  return statusVariantMap[normalized] || "default";
-}
-
-/**
- * StatusBadge component for displaying Kubernetes resource statuses
- *
- * @example
- * // Basic usage with status
- * <StatusBadge status="Running" />
- *
- * // With variant override
- * <StatusBadge variant="error">Custom Error</StatusBadge>
- *
- * // With dot indicator
- * <StatusBadge status="Running" showDot />
- *
- * // With pulse animation
- * <StatusBadge status="Pending" pulse />
- */
 export function StatusBadge({
-  className,
-  variant,
-  size,
   status,
-  showDot,
-  pulse,
+  showDot = false,
+  showIcon = true,
+  roleOverride,
+  className,
   children,
   ...props
 }: StatusBadgeProps) {
-  // Determine variant from status if not explicitly provided
-  const resolvedVariant = variant ?? getVariantFromStatus(status);
-
-  // Get dot color based on variant
-  const getDotColor = () => {
-    switch (resolvedVariant) {
-      case "running":
-      case "ready":
-      case "available":
-      case "active":
-      case "succeeded":
-      case "bound":
-      case "deployed":
-        return "bg-green-500";
-      case "pending":
-      case "waiting":
-      case "progressing":
-      case "creating":
-      case "pendinginstall":
-      case "pendingupgrade":
-      case "pendingrollback":
-      case "uninstalling":
-        return "bg-blue-500";
-      case "warning":
-      case "degraded":
-      case "suspended":
-        return "bg-yellow-500";
-      case "error":
-      case "failed":
-      case "crashloopbackoff":
-      case "evicted":
-      case "oomkilled":
-      case "imagepullbackoff":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
-
+  const resolved = roleOverride ?? statusRole(status);
+  const Icon = ROLE_ICON[resolved];
   return (
     <span
       className={cn(
-        statusBadgeVariants({ variant: resolvedVariant, size }),
-        pulse && "animate-pulse-subtle",
+        // Mono, because a status column is a set of fixed tokens read down
+        // the page rather than prose read across it, and the same glyph
+        // width is what makes it scannable now the chip is gone. 16px line
+        // box with no vertical padding: the status must never be what
+        // decides how tall a table row is.
+        "inline-flex items-center gap-1 font-mono text-[11px] font-medium leading-4",
+        ROLE_TEXT[resolved],
         className
       )}
       {...props}
     >
-      {showDot && (
+      {showDot ? (
         <span
           className={cn(
-            "mr-1.5 h-1.5 w-1.5 rounded-full",
-            getDotColor(),
-            pulse && "animate-pulse"
+            "h-1.5 w-1.5 flex-none rounded-full",
+            ROLE_DOT[resolved]
           )}
         />
+      ) : (
+        showIcon && (
+          <Icon
+            className="h-2.5 w-2.5 flex-none"
+            aria-hidden="true"
+            data-testid="status-badge-icon"
+          />
+        )
       )}
       {children ?? status}
     </span>
   );
 }
 
-/**
- * ConditionBadge - Badge for Kubernetes conditions (True/False/Unknown)
- */
 export interface ConditionBadgeProps extends Omit<StatusBadgeProps, "status"> {
-  /** Condition status: "True", "False", or "Unknown" */
+  /** Condition status: "True", "False" or "Unknown". */
   conditionStatus: string;
-  /** Condition type (e.g., "Ready", "Available") */
+  /** Condition type, e.g. "Ready". */
   conditionType?: string;
 }
 
@@ -294,23 +96,9 @@ export function ConditionBadge({
   children,
   ...props
 }: ConditionBadgeProps) {
-  const normalizedStatus = conditionStatus.toLowerCase();
-  let variant: VariantProps<typeof statusBadgeVariants>["variant"] = "unknown";
-
-  if (normalizedStatus === "true") {
-    variant = "ready";
-  } else if (normalizedStatus === "false") {
-    variant = "error";
-  }
-
   return (
-    <StatusBadge variant={variant} {...props}>
+    <StatusBadge status={conditionStatus} {...props}>
       {children ?? conditionType ?? conditionStatus}
     </StatusBadge>
   );
 }
-
-// `statusBadgeVariants` co-located with the StatusBadge component —
-// same HMR / consumer-ergonomics trade-off as Badge / Button.
-// eslint-disable-next-line react-refresh/only-export-components
-export { statusBadgeVariants };

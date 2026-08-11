@@ -1,10 +1,9 @@
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Badge } from "@/components/ui/badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Trash2, Globe, ExternalLink } from "lucide-react";
+import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -13,8 +12,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceList } from "@/components/resources/ResourceList";
 import {
+  createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
 } from "@/components/resources/columns";
@@ -43,50 +44,41 @@ const getIngressOpenUrl = (ingress: IngressInfo): string | null => {
 };
 
 const baseColumns: ColumnDef<IngressInfo>[] = [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Globe className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{row.original.name}</span>
-      </div>
-    ),
-  },
+  createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
   {
     accessorKey: "className",
     header: "Class",
-    cell: ({ row }) => row.original.className || "default",
+    cell: ({ row }) => (
+      <span className="text-fg-mut">{row.original.className || "default"}</span>
+    ),
   },
   {
     accessorKey: "rules",
     header: "Hosts",
     cell: ({ row }) => {
-      const hosts = row.original.rules.map((r) => r.host).filter(Boolean);
-      if (hosts.length === 0) return "*";
+      const hosts = row.original.rules
+        .map((rule) => rule.host)
+        .filter((host): host is string => Boolean(host));
+      if (hosts.length === 0) return <span className="text-fg-mut">*</span>;
       return (
-        <div className="flex flex-wrap gap-1">
-          {hosts.slice(0, 2).map((host, i) => (
-            <Badge key={i} variant="outline" className="text-xs">
-              {host}
-            </Badge>
-          ))}
-          {hosts.length > 2 && (
-            <Tooltip>
-              <TooltipTrigger>
-                <Badge variant="secondary" className="text-xs">
-                  +{hosts.length - 2}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                {hosts.slice(2).map((host, i) => (
-                  <div key={i}>{host}</div>
-                ))}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
+        <Tooltip>
+          <TooltipTrigger className="flex flex-wrap items-baseline gap-x-2 font-mono text-fg-mid">
+            {hosts.slice(0, 2).map((host) => (
+              <span key={host}>{host}</span>
+            ))}
+            {hosts.length > 2 && (
+              <span className="text-fg-fnt">+{hosts.length - 2} more</span>
+            )}
+          </TooltipTrigger>
+          <TooltipContent>
+            {hosts.map((host) => (
+              <div key={host} className="text-xs">
+                {host}
+              </div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
       );
     },
   },
@@ -94,21 +86,19 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     id: "paths",
     header: "Paths",
     cell: ({ row }) => {
-      const allPaths = row.original.rules.flatMap((r) => r.paths);
-      if (allPaths.length === 0) return "-";
+      const allPaths = row.original.rules.flatMap((rule) => rule.paths);
+      if (allPaths.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
         <Tooltip>
-          <TooltipTrigger>
-            <Badge variant="secondary">{allPaths.length} path(s)</Badge>
+          <TooltipTrigger className="text-fg-mut">
+            {allPaths.length} {allPaths.length === 1 ? "path" : "paths"}
           </TooltipTrigger>
           <TooltipContent>
-            <div className="space-y-1 text-xs">
-              {allPaths.map((p, i) => (
-                <div key={i}>
-                  {p.path} → {p.backendService}:{p.backendPort}
-                </div>
-              ))}
-            </div>
+            {allPaths.map((path, i) => (
+              <div key={i} className="font-mono text-xs">
+                {path.path} → {path.backendService}:{path.backendPort}
+              </div>
+            ))}
           </TooltipContent>
         </Tooltip>
       );
@@ -119,17 +109,22 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     header: "Address",
     cell: ({ row }) => {
       const ips = row.original.loadBalancerIps;
-      if (ips.length === 0)
-        return <span className="text-muted-foreground">Pending</span>;
+      // No address is the state worth naming: the ingress exists but is not
+      // reachable yet.
+      if (ips.length === 0) return <span className="text-fg-fnt">pending</span>;
       return (
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{ips[0]}</span>
+        <span className="flex items-baseline gap-2">
+          <CopyableAddress
+            value={ips[0]}
+            label="Ingress address"
+            className="text-fg-mid"
+          />
           {ips.length > 1 && (
-            <Badge variant="secondary" className="text-xs">
-              +{ips.length - 1}
-            </Badge>
+            <span className="text-[11px] text-fg-fnt">
+              +{ips.length - 1} more
+            </span>
           )}
-        </div>
+        </span>
       );
     },
   },
@@ -240,7 +235,8 @@ export function IngressList() {
         resourceType: ResourceType.Ingress,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? undefined : false}
+      refresh={watchFailed ? undefined : false}
+      live={!watchFailed}
       searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)

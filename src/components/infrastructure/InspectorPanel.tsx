@@ -155,7 +155,7 @@ export function InspectorPanel({
 
   if (!node) {
     return (
-      <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+      <div className="border-l border-hair pl-3 text-xs text-fg-mut">
         Select a resource to edit its configuration.
       </div>
     );
@@ -183,37 +183,49 @@ export function InspectorPanel({
     namespaceSelectValue === "__custom__";
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+    // Column, not card: the hairline down its left edge is the only thing
+    // separating the inspector from the canvas beside it.
+    <div className="flex flex-col gap-4 border-l border-hair pl-3">
       <div>
-        <div className="text-sm font-semibold">{node.data.kind} Settings</div>
-        <p className="text-xs text-muted-foreground">
-          Adjust core fields here, or switch to YAML for advanced options.
+        <h3 className="text-[13px] font-semibold tracking-tight text-fg">
+          {node.data.kind}
+        </h3>
+        <p className="text-[11px] text-fg-mut">
+          Core fields here; switch to YAML for anything else.
         </p>
       </div>
 
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="resource-name">Name</Label>
+          <Label
+            htmlFor="resource-name"
+            className="text-[11px] font-normal text-fg-mut"
+          >
+            Name
+          </Label>
           <Input
             id="resource-name"
             value={node.data.name}
             className={
-              nameConflict
-                ? "border-destructive focus-visible:ring-destructive"
-                : undefined
+              nameConflict ? "border-err focus-visible:ring-err" : undefined
             }
             onChange={(event) =>
               onUpdate(node.id, { name: event.target.value })
             }
           />
           {nameConflict && (
-            <p className="text-xs text-destructive">
+            <p className="text-[11px] text-err">
               Name already used for a {node.data.kind} in this namespace.
             </p>
           )}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="resource-namespace">Namespace</Label>
+          <Label
+            htmlFor="resource-namespace"
+            className="text-[11px] font-normal text-fg-mut"
+          >
+            Namespace
+          </Label>
           {isConnected && namespaceOptions.length > 0 ? (
             <>
               <Select
@@ -274,7 +286,12 @@ export function InspectorPanel({
           )}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="resource-labels">Labels</Label>
+          <Label
+            htmlFor="resource-labels"
+            className="text-[11px] font-normal text-fg-mut"
+          >
+            Labels
+          </Label>
           <KeyValueRowsEditor
             rows={labelRows}
             onChange={(next) => {
@@ -289,7 +306,12 @@ export function InspectorPanel({
       {node.data.kind === ResourceType.Pod && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="pod-image">Container Image</Label>
+            <Label
+              htmlFor="pod-image"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Container Image
+            </Label>
             <ImageSearchInput
               id="pod-image"
               value={node.data.image}
@@ -298,7 +320,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pod-ports">Ports</Label>
+            <Label
+              htmlFor="pod-ports"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Ports
+            </Label>
             <Input
               id="pod-ports"
               placeholder="80, 443"
@@ -316,7 +343,12 @@ export function InspectorPanel({
       {node.data.kind === ResourceType.Deployment && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="deployment-replicas">Replicas</Label>
+            <Label
+              htmlFor="deployment-replicas"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Replicas
+            </Label>
             <Input
               id="deployment-replicas"
               type="number"
@@ -330,7 +362,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="deployment-image">Container Image</Label>
+            <Label
+              htmlFor="deployment-image"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Container Image
+            </Label>
             <ImageSearchInput
               id="deployment-image"
               value={node.data.image}
@@ -339,7 +376,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="deployment-ports">Ports</Label>
+            <Label
+              htmlFor="deployment-ports"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Ports
+            </Label>
             <Input
               id="deployment-ports"
               placeholder="80, 443"
@@ -357,7 +399,9 @@ export function InspectorPanel({
       {node.data.kind === ResourceType.Service && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Service Type</Label>
+            <Label className="text-[11px] font-normal text-fg-mut">
+              Service Type
+            </Label>
             <Select
               value={node.data.serviceType}
               onValueChange={(value) =>
@@ -380,10 +424,15 @@ export function InspectorPanel({
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <Label>Session Affinity</Label>
+              <Label className="text-[11px] font-normal text-fg-mut">
+                Session Affinity
+              </Label>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className="text-muted-foreground">
+                  <button
+                    type="button"
+                    className="text-fg-fnt hover:text-fg-mut"
+                  >
                     <HelpCircle className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
@@ -415,7 +464,12 @@ export function InspectorPanel({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="service-ports">Ports</Label>
+            <Label
+              htmlFor="service-ports"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Ports
+            </Label>
             <Input
               id="service-ports"
               placeholder="80, 443"
@@ -428,7 +482,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="service-selectors">Selectors</Label>
+            <Label
+              htmlFor="service-selectors"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Selectors
+            </Label>
             <KeyValueRowsEditor
               rows={selectorRows}
               onChange={(next) => {
@@ -444,7 +503,12 @@ export function InspectorPanel({
       {node.data.kind === ResourceType.Ingress && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="ingress-host">Host</Label>
+            <Label
+              htmlFor="ingress-host"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Host
+            </Label>
             <Input
               id="ingress-host"
               placeholder="example.com"
@@ -455,7 +519,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ingress-path">Path</Label>
+            <Label
+              htmlFor="ingress-path"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Path
+            </Label>
             <Input
               id="ingress-path"
               placeholder="/"
@@ -467,10 +536,15 @@ export function InspectorPanel({
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <Label>Path Type</Label>
+              <Label className="text-[11px] font-normal text-fg-mut">
+                Path Type
+              </Label>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className="text-muted-foreground">
+                  <button
+                    type="button"
+                    className="text-fg-fnt hover:text-fg-mut"
+                  >
                     <HelpCircle className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
@@ -501,7 +575,12 @@ export function InspectorPanel({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ingress-service">Backend Service</Label>
+            <Label
+              htmlFor="ingress-service"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Backend Service
+            </Label>
             <Input
               id="ingress-service"
               placeholder="service-name"
@@ -512,7 +591,12 @@ export function InspectorPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ingress-port">Backend Port</Label>
+            <Label
+              htmlFor="ingress-port"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Backend Port
+            </Label>
             <Input
               id="ingress-port"
               type="number"
@@ -530,7 +614,7 @@ export function InspectorPanel({
 
       {node.data.kind === ResourceType.ConfigMap && (
         <div className="space-y-1.5">
-          <Label>Data</Label>
+          <Label className="text-[11px] font-normal text-fg-mut">Data</Label>
           <KeyValueRowsEditor
             rows={configMapRows}
             onChange={(next) => {
@@ -545,7 +629,12 @@ export function InspectorPanel({
       {node.data.kind === ResourceType.Secret && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="secret-type">Secret Type</Label>
+            <Label
+              htmlFor="secret-type"
+              className="text-[11px] font-normal text-fg-mut"
+            >
+              Secret Type
+            </Label>
             <Select
               value={secretTypeValue}
               onValueChange={(value) => {
@@ -582,7 +671,7 @@ export function InspectorPanel({
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Data</Label>
+            <Label className="text-[11px] font-normal text-fg-mut">Data</Label>
             <KeyValueRowsEditor
               rows={secretRows}
               onChange={(next) => {

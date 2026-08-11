@@ -13,8 +13,8 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 
+import { fluxHelmReleasePath } from "@/integrations";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenuItem,
@@ -27,19 +27,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease } from "@/generated/types";
-import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
 
 const getHelmReleaseRowId = (row: HelmRelease) =>
   `${row.source}-${row.namespace}-${row.name}`;
+
+const helmReleaseHref = (row: HelmRelease) =>
+  `/helm/${row.source}/${row.namespace}/${row.name}`;
 
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
@@ -82,16 +87,12 @@ export function HelmReleasesTab({
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <button
-            className="font-medium text-primary hover:underline text-left"
-            onClick={() =>
-              navigate(
-                `/helm/${row.original.source}/${row.original.namespace}/${row.original.name}`
-              )
-            }
+          <RouteLink
+            to={helmReleaseHref(row.original)}
+            className="font-mono text-info hover:underline"
           >
             {row.original.name}
-          </button>
+          </RouteLink>
         ),
       },
       { accessorKey: "namespace", header: "Namespace" },
@@ -113,22 +114,21 @@ export function HelmReleasesTab({
         accessorKey: "chart",
         header: "Chart",
         cell: ({ row }) => (
-          <span className="text-muted-foreground">{row.original.chart}</span>
+          <span className="font-mono text-fg-mut">{row.original.chart}</span>
         ),
       },
       {
         accessorKey: "appVersion",
         header: "App Version",
-        cell: ({ row }) => row.original.appVersion || "-",
+        cell: ({ row }) => row.original.appVersion || "—",
       },
       {
         accessorKey: "updated",
         header: "Updated",
         cell: ({ row }) => {
-          if (!row.original.updated) return "-";
-          const date = new Date(row.original.updated);
-          if (isNaN(date.getTime())) return row.original.updated;
-          return date.toLocaleString();
+          return (
+            formatDate(row.original.updated) ?? row.original.updated ?? "—"
+          );
         },
       },
       {
@@ -197,7 +197,7 @@ export function HelmReleasesTab({
                     <TooltipTrigger asChild>
                       <DropdownMenuItem
                         disabled={!helmCliAvailable}
-                        className="text-destructive"
+                        className="text-err"
                         onClick={() => onUninstall(release)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -234,7 +234,7 @@ export function HelmReleasesTab({
                   <DropdownMenuItem
                     onClick={() =>
                       navigate(
-                        `/crds/helm.toolkit.fluxcd.io/helmreleases/${release.namespace}/${release.name}`
+                        fluxHelmReleasePath(release.namespace, release.name)
                       )
                     }
                   >
@@ -259,31 +259,32 @@ export function HelmReleasesTab({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Select value={selectedNamespace} onValueChange={onNamespaceChange}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All namespaces" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All namespaces</SelectItem>
-              {namespaces.map((ns) => (
-                <SelectItem key={ns} value={ns}>
-                  {ns}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Select value={selectedNamespace} onValueChange={onNamespaceChange}>
+          <SelectTrigger
+            aria-label="Namespace"
+            className="h-6 w-44 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+          >
+            <SelectValue placeholder="All namespaces" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All namespaces</SelectItem>
+            {namespaces.map((ns) => (
+              <SelectItem key={ns} value={ns}>
+                {ns}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="ml-auto">
+          <DetailAction
+            label="Refresh"
+            icon={RefreshCw}
+            onClick={onRefetch}
+            busy={isLoading}
+          />
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onRefetch}
-          disabled={isLoading}
-        >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-        </Button>
       </div>
 
       <DataTable
@@ -293,7 +294,7 @@ export function HelmReleasesTab({
         searchPlaceholder="Search releases..."
         searchKey="name"
         getRowId={getHelmReleaseRowId}
-        getRowHref={(row) => `/helm/${row.source}/${row.namespace}/${row.name}`}
+        getRowHref={helmReleaseHref}
       />
     </div>
   );

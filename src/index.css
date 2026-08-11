@@ -4,98 +4,73 @@
 
 @layer base {
   :root {
-    /* ============================================
-     * Core Theme Variables
-     * ============================================ */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
 
     /* ============================================
-     * Status Colors (unified design system)
+     * Role tokens (one flat canvas). Same role names as .dark below,
+     * different implementation: on light the hairlines are dark alpha
+     * and the status colours darken, because pale green on white does
+     * not read.
      * ============================================ */
-    --status-running: 142.1 76.2% 36.3%;
-    --status-ready: 142.1 76.2% 36.3%;
-    --status-available: 142.1 76.2% 36.3%;
-    --status-active: 142.1 76.2% 36.3%;
-    --status-succeeded: 142.1 76.2% 36.3%;
+    --canvas: 40 30% 98%;
+    --hair: 34 20% 30% / 0.14;
+    --hover: 34 25% 20% / 0.06;
+    --sel: 34 25% 20% / 0.1;
+    --fg: 32 16% 11%;
+    --fg-mid: 32 10% 26%;
+    --fg-mut: 32 8% 37%;
+    --fg-fnt: 32 8% 49%;
+    --ok: 148 55% 29%;
+    --warn: 30 80% 37%;
+    --err: 4 66% 45%;
+    --info: 210 67% 40%;
 
-    --status-pending: 221.2 83.2% 53.3%;
-    --status-waiting: 221.2 83.2% 53.3%;
-    --status-progressing: 221.2 83.2% 53.3%;
+    /* Kind and identity hues. Hue is a number from TypeScript; saturation
+     * and lightness live here so both palettes track the theme. Held well
+     * below the status colours' saturation — a tinted identifier must never
+     * read as a severity. */
+    /* 30%, not 38%: the tint now covers a whole name when there is no
+     * generated tail to carry it, and at 38% the yellow-green end of the
+     * hue ring only reached 3.3:1 against this canvas. */
+    --ident-s: 58%;
+    --ident-l: 30%;
+    --kind-s: 42%;
+    --kind-l: 38%;
 
-    --status-warning: 38 92% 50%;
-    --status-degraded: 38 92% 50%;
+    /* The log gutter, same rule with its own pair: a container rule is a 3px
+     * block of solid colour rather than text, so it can hold a heavier
+     * lightness on this canvas than a tinted name could — and it must, or a
+     * three-pixel stripe at the identity text's lightness vanishes against
+     * near-white. */
+    --ctr-s: 62%;
+    --ctr-l: 42%;
 
-    --status-error: 0 84.2% 60.2%;
-    --status-failed: 0 84.2% 60.2%;
-    --status-crashloopbackoff: 0 84.2% 60.2%;
-    --status-evicted: 0 84.2% 60.2%;
-    --status-oomkilled: 0 84.2% 60.2%;
+    /* YAML syntax, same rule again with its own pair. A manifest is long runs
+     * of 12px mono rather than one tinted word in a row, so the identity
+     * strength is wrong for it in both directions: on dark it puts a scalar at
+     * 4.7:1, below the `--fg-mid` body grey it replaces, and on light it is
+     * more saturated than a whole document wants to be. Held at body contrast
+     * instead — which hue means what is in `yaml/editor-theme.ts`. */
+    --syn-s: 48%;
+    --syn-l: 34%;
 
-    --status-terminated: 215 16.3% 46.9%;
-    --status-completed: 215 16.3% 46.9%;
-    --status-unknown: 215 16.3% 46.9%;
+    /* Event families. Quieter than identity because an event row already
+     * spends hue on the object it names, and two tinted columns at the same
+     * strength turn the feed into a swatch book. Lower still than the status
+     * colours, so a family never competes with the warning it sits beside.
+     *
+     * 33%, not 36%: at 36% the yellow-green and teal ends of the family ring
+     * reached only 4.2:1 against this canvas, and the reason is 12px text,
+     * not a swatch. The dark pair is tuned the same way from its own end. */
+    --evt-s: 46%;
+    --evt-l: 33%;
 
-    /* ============================================
-     * Resource Type Colors (unified design system)
-     * ============================================ */
-    --resource-pod: 217 91% 60%;
-    --resource-pod-bg: 213 100% 96%;
-    --resource-deployment: 271 91% 65%;
-    --resource-deployment-bg: 270 100% 96%;
-    --resource-service: 142 71% 45%;
-    --resource-service-bg: 142 76% 94%;
-    --resource-configmap: 47 95% 53%;
-    --resource-configmap-bg: 47 100% 94%;
-    --resource-secret: 0 84% 60%;
-    --resource-secret-bg: 0 100% 96%;
-    --resource-node: 215 16% 47%;
-    --resource-node-bg: 210 40% 96%;
-    --resource-namespace: 200 90% 50%;
-    --resource-namespace-bg: 200 100% 96%;
-    --resource-ingress: 320 72% 55%;
-    --resource-ingress-bg: 320 100% 96%;
-    --resource-pv: 160 60% 45%;
-    --resource-pv-bg: 160 76% 94%;
-    --resource-pvc: 180 60% 45%;
-    --resource-pvc-bg: 180 76% 94%;
-
-    /* ============================================
-     * Utilization Colors (CPU/Memory gauges)
-     * ============================================ */
-    --utilization-low: 142.1 76.2% 36.3%;
-    --utilization-medium: 38 92% 50%;
-    --utilization-high: 0 84.2% 60.2%;
-    --utilization-critical: 0 84.2% 40%;
-
-    /* ============================================
-     * Spacing Scale (design system)
-     * ============================================ */
-    --space-xs: 0.25rem;
-    --space-sm: 0.5rem;
-    --space-md: 1rem;
-    --space-lg: 1.5rem;
-    --space-xl: 2rem;
-    --space-2xl: 3rem;
-    --space-3xl: 4rem;
+    /* The single documented exception to the flat canvas: an overlay has
+     * to read as floating above the page or it looks like a rendering
+     * fault. On light the canvas is already near-white, so the lift comes
+     * from pure white plus the shadow rather than from a lighter fill. */
+    --raise: 0 0% 100%;
+    --pop-shadow: 0 14px 32px -14px hsl(32 16% 13% / 0.35);
 
     /* ============================================
      * Animation Timings
@@ -107,50 +82,68 @@
   }
 
   .dark {
-    /* Core Theme Variables */
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-
-    /* Resource Type Colors (dark mode adjustments) */
-    --resource-pod-bg: 217 91% 15%;
-    --resource-deployment-bg: 271 91% 15%;
-    --resource-service-bg: 142 71% 15%;
-    --resource-configmap-bg: 47 95% 15%;
-    --resource-secret-bg: 0 84% 15%;
-    --resource-node-bg: 215 16% 20%;
-    --resource-namespace-bg: 200 90% 15%;
-    --resource-ingress-bg: 320 72% 15%;
-    --resource-pv-bg: 160 60% 15%;
-    --resource-pvc-bg: 180 60% 15%;
+    /* Role tokens (one flat canvas).
+     *
+     * Calibrated against a reference screenshot rather than by eye. The
+     * reference is just as flat as this (94% of its pixels are grey, 90%
+     * sit within six levels of its median) — flatness was never the
+     * problem. What differed was that its canvas sat lighter and its body
+     * text brighter, so the whole page read murky here by comparison.
+     * Most text in this app lives on --fg-mid / --fg-mut / --fg-fnt, which
+     * makes those three, not the headings, what "washed out" actually
+     * means. The alphas move with the canvas so a hairline keeps the same
+     * weight against it. */
+    --canvas: 220 8% 13%;
+    --hair: 0 0% 100% / 0.09;
+    --hover: 0 0% 100% / 0.055;
+    --sel: 0 0% 100% / 0.11;
+    --fg: 220 6% 93%;
+    --fg-mid: 212 7% 79%;
+    --fg-mut: 213 6% 65%;
+    --fg-fnt: 213 6% 51%;
+    --ok: 152 44% 49%;
+    --warn: 44 82% 48%;
+    --err: 358 81% 68%;
+    --info: 212 66% 58%;
+    --ident-s: 52%;
+    --ident-l: 66%;
+    --kind-s: 38%;
+    --kind-l: 70%;
+    --ctr-s: 44%;
+    --ctr-l: 65%;
+    --syn-s: 42%;
+    --syn-l: 78%;
+    --evt-s: 40%;
+    --evt-l: 66%;
+    --raise: 220 7% 18%;
+    --pop-shadow: 0 16px 40px -12px hsl(0 0% 0% / 0.7);
   }
 }
 
 @layer base {
+  /* A bare `border` / `border-b` anywhere in the app should be the hairline,
+   * not the old shadcn border colour — otherwise every un-suffixed border is
+   * a fresh way for the flat canvas to drift. */
   * {
-    @apply border-border;
+    @apply border-hair;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-canvas text-fg;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
+  }
+
+  /* Resource metrics rewrite themselves on every watch event. Proportional
+   * digits change width as the value changes, so a column of CPU/memory
+   * readings visibly jitters on each update. Tabular figures keep every
+   * digit the same advance width. */
+  table,
+  .font-mono,
+  code,
+  kbd,
+  samp {
+    font-variant-numeric: tabular-nums;
   }
 
   /* Smooth transitions for theme changes */
@@ -161,13 +154,24 @@
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 150ms;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer utilities {
   /* Custom scrollbar */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted)) transparent;
+    scrollbar-color: hsl(var(--sel)) transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -180,59 +184,23 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted));
+    background: hsl(var(--sel));
     border-radius: 4px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
+    background: hsl(var(--fg-fnt));
   }
 
-  /* Status indicators */
-  .status-running {
-    @apply text-success;
+  /* A 38px strip has no room to spend 8px on a scrollbar, and it does not
+   * need one: a tab clipped by the edge is the overflow signal, and the
+   * active tab is scrolled into view whenever it changes. */
+  .scrollbar-none {
+    scrollbar-width: none;
   }
 
-  .status-pending {
-    @apply text-pending;
-  }
-
-  .status-warning {
-    @apply text-warning;
-  }
-
-  .status-error {
-    @apply text-error;
-  }
-
-  /* Resource badge colors */
-  .badge-pod {
-    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
-  }
-
-  .badge-deployment {
-    @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
-  }
-
-  .badge-service {
-    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
-  }
-
-  .badge-configmap {
-    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
-  }
-
-  .badge-secret {
-    @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
-  }
-
-  .badge-node {
-    @apply bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200;
-  }
-
-  /* Terminal styles */
-  .terminal-container {
-    @apply bg-black text-green-400 font-mono text-sm;
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -241,8 +209,13 @@
   padding: 8px;
 }
 
+/* xterm.css hardcodes the viewport to #000 and xterm repaints it with an
+ * inline style, so only `!important` reaches it. Without this the padding
+ * above — which the renderer's canvases do not cover — draws a black frame
+ * around the terminal on the light canvas. */
 .xterm-viewport {
   overflow-y: auto !important;
+  background-color: hsl(var(--canvas)) !important;
 }
 
 /* Monaco editor theme support (for YAML editing) */

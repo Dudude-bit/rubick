@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import type { ConfigData } from "@/generated/types";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,8 +31,110 @@ import type {
   EnvVarSourceType,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { SourceBadge, type SourceType } from "@/components/ui/source-badge";
+import { ResourceType } from "@/lib/resource-registry";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
+
+/**
+ * Where a variable's value came from.
+ *
+ * Printed as a word plus a link, never as a badge: a source is a fact about
+ * the variable, not a lifecycle status, and a column of tinted pills reads as
+ * a column of alarms.
+ */
+type SourceType =
+  | "direct"
+  | "secret"
+  | "configmap"
+  | "field"
+  | "resource"
+  | "envFromSecret"
+  | "envFromConfigMap";
+
+const SOURCE_LABEL: Record<SourceType, string> = {
+  direct: "inline",
+  secret: "secret",
+  configmap: "configmap",
+  field: "fieldRef",
+  resource: "resourceRef",
+  envFromSecret: "secret · envFrom",
+  envFromConfigMap: "configmap · envFrom",
+};
+
+/** Which filter option a row answers to. One mapping, so the control
+ *  offering an option and the list honouring it cannot drift. */
+function filterOf(sourceType: SourceType): FilterOption {
+  return sourceType === "envFromSecret" || sourceType === "envFromConfigMap"
+    ? "envFrom"
+    : sourceType;
+}
+
+/** The picker names a source with the same word its rows do. */
+const FILTER_LABEL: Record<FilterOption, string> = {
+  all: "all sources",
+  direct: SOURCE_LABEL.direct,
+  secret: SOURCE_LABEL.secret,
+  configmap: SOURCE_LABEL.configmap,
+  field: SOURCE_LABEL.field,
+  resource: SOURCE_LABEL.resource,
+  envFrom: "envFrom",
+};
+
+const FILTER_ORDER = [
+  "direct",
+  "secret",
+  "configmap",
+  "field",
+  "resource",
+  "envFrom",
+] as const satisfies readonly FilterOption[];
+
+/**
+ * Which object a variable was drawn from, and which entry of it.
+ *
+ * The key is printed beside the reference and is deliberately *not* part of
+ * it: `database.url` inside a ConfigMap is not an object and has no URL, so
+ * making it look like one would promise a destination that cannot exist. The
+ * reference goes to the ConfigMap — which is the page where that key and its
+ * value are on screen — and the key says which line to read when you get
+ * there.
+ */
+function SourceCell({
+  type,
+  name,
+  sourceKey,
+  namespace,
+}: {
+  type: SourceType;
+  name?: string;
+  sourceKey?: string;
+  namespace?: string;
+}) {
+  const isSecret = type === "secret" || type === "envFromSecret";
+  const isConfigMap = type === "configmap" || type === "envFromConfigMap";
+  return (
+    <span className="text-[11px] text-fg-fnt">
+      {/* The word already says the kind, so the reference does not repeat
+          it — `configmap app-config`, not `configmap ConfigMap/app-config`. */}
+      {SOURCE_LABEL[type]}
+      {name && " "}
+      {name &&
+        (namespace && (isSecret || isConfigMap) ? (
+          <ResourceRef
+            kind={isSecret ? ResourceType.Secret : ResourceType.ConfigMap}
+            name={name}
+            namespace={namespace}
+            showKind={false}
+          />
+        ) : (
+          <span className="font-mono text-fg-mut">{name}</span>
+        ))}
+      {name && sourceKey && (
+        <span className="font-mono text-fg-fnt"> → {sourceKey}</span>
+      )}
+    </span>
+  );
+}
 
 interface EnvironmentVariablesProps {
   env: EnvVarInfo[];
@@ -44,6 +146,26 @@ interface EnvironmentVariablesProps {
 // Cache for ConfigMap and Secret data
 type DataCache = Record<string, Record<string, string>>;
 
+/**
+ * Resolved values by resource name — one entry per name that answered, empty
+ * for one that refused. A name still in flight is absent, which is how the
+ * rows tell "reading" from "not readable".
+ */
+function useDataCache(
+  names: string[],
+  queries: { data?: ConfigData; isError: boolean }[]
+): DataCache {
+  return useMemo(() => {
+    const cache: DataCache = {};
+    names.forEach((name, i) => {
+      const q = queries[i];
+      if (q?.data) cache[name] = q.data.values;
+      else if (q?.isError) cache[name] = {};
+    });
+    return cache;
+  }, [names, queries]);
+}
+
 // Filter options for source types
 type FilterOption =
   | "all"
@@ -54,7 +176,6 @@ type FilterOption =
   | "resource"
   | "envFrom";
 
-// Map EnvVarSourceType to SourceBadge's SourceType
 function mapSourceType(sourceType: EnvVarSourceType): SourceType {
   switch (sourceType) {
     case "secretKeyRef":
@@ -157,12 +278,10 @@ export function EnvironmentVariables({
   const hasSecrets =
     secretEnvVars.length > 0 || envFrom.some((ef) => ef.secretRef);
 
-  // Per-name parallel queries via useQueries. See VolumeMounts.tsx
-  // for the reasoning behind staleTime: Infinity + retry: false +
-  // silent ?? {} fallback — same shape applies here. The original
-  // `loadingConfigMaps` / `loadingSecrets` were single booleans (any
-  // in-flight); we derive them from `.some(isFetching)` to preserve
-  // that semantic.
+  // Per-name parallel queries via useQueries. A referenced ConfigMap or
+  // Secret may not be readable with the current access, so a failure is
+  // swallowed into `?? {}` rather than surfaced — the env row still renders,
+  // just without the resolved value.
   const configMapQueries = useQueries({
     queries: allConfigMapNames.map((name) => ({
       queryKey: ["configmap-data", namespace, name] as const,
@@ -183,25 +302,12 @@ export function EnvironmentVariables({
     })),
   });
 
-  const configMapCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    allConfigMapNames.forEach((name, i) => {
-      const q = configMapQueries[i];
-      if (q?.data) cache[name] = q.data;
-      else if (q?.isError) cache[name] = {};
-    });
-    return cache;
-  }, [allConfigMapNames, configMapQueries]);
-
-  const secretCache = useMemo<DataCache>(() => {
-    const cache: DataCache = {};
-    allSecretNames.forEach((name, i) => {
-      const q = secretQueries[i];
-      if (q?.data) cache[name] = q.data;
-      else if (q?.isError) cache[name] = {};
-    });
-    return cache;
-  }, [allSecretNames, secretQueries]);
+  // Only the values the backend was willing to hand over, for both kinds. A
+  // withheld or binary key stays out of the cache, so an env var reading one
+  // is drawn as an env var whose value the app does not have rather than as
+  // an empty one — or, for binary, as mojibake.
+  const configMapCache = useDataCache(allConfigMapNames, configMapQueries);
+  const secretCache = useDataCache(allSecretNames, secretQueries);
 
   const loadingConfigMaps = configMapQueries.some((q) => q.isFetching);
   const loadingSecrets = secretQueries.some((q) => q.isFetching);
@@ -296,32 +402,24 @@ export function EnvironmentVariables({
     loadingConfigMaps,
   ]);
 
-  // Filter expanded env vars based on selected filter
-  const filteredEnvVars = useMemo(() => {
-    if (filter === "all") return expandedEnvVars;
+  const filteredEnvVars = useMemo(
+    () =>
+      filter === "all"
+        ? expandedEnvVars
+        : expandedEnvVars.filter((ev) => filterOf(ev.sourceType) === filter),
+    [expandedEnvVars, filter]
+  );
 
-    return expandedEnvVars.filter((ev) => {
-      switch (filter) {
-        case "direct":
-          return ev.sourceType === "direct";
-        case "secret":
-          return ev.sourceType === "secret";
-        case "configmap":
-          return ev.sourceType === "configmap";
-        case "field":
-          return ev.sourceType === "field";
-        case "resource":
-          return ev.sourceType === "resource";
-        case "envFrom":
-          return (
-            ev.sourceType === "envFromSecret" ||
-            ev.sourceType === "envFromConfigMap"
-          );
-        default:
-          return true;
-      }
-    });
-  }, [expandedEnvVars, filter]);
+  /**
+   * The sources actually present. A picker offering six of them over a
+   * container whose variables all came from one place is a control whose
+   * every setting but the current one empties the list.
+   */
+  const sources = useMemo(() => {
+    const present = new Set<FilterOption>();
+    for (const ev of expandedEnvVars) present.add(filterOf(ev.sourceType));
+    return present;
+  }, [expandedEnvVars]);
 
   // Get the value to display for an env var
   const getDisplayValue = (ev: ExpandedEnvVar): string => {
@@ -403,53 +501,57 @@ export function EnvironmentVariables({
       .map((ev) => ev.name);
   }, [expandedEnvVars]);
 
+  // Chrome after content, never before it. A container that declares no
+  // variables was still getting a heading, a bordered source picker and a
+  // chevron — three controls over an empty list, on four of the five
+  // containers of an ordinary pod.
+  //
+  // Nothing at all, not a one-line denial: on `log-demo` that denial was the
+  // same sentence printed five times down the tab, which is longer than the
+  // fact it reports and reads as a fault rather than as an absence. Every
+  // other optional row here — ports, limits, last exit — is simply missing
+  // when it has no content, and a reader who wants the empty list has the
+  // YAML tab.
+  if (!hasEnvVars) return null;
+
   return (
-    <Card>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80">
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
+    <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
+      <Section>
+        <SectionHeader
+          title="Environment"
+          count={expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length}
+          actions={
+            <>
+              {sources.size > 1 && (
+                <Select
+                  value={filter}
+                  onValueChange={(value) => setFilter(value as FilterOption)}
+                >
+                  {/* Borderless, like every other picker on a detail page:
+                      the canvas has no boxed controls. */}
+                  <SelectTrigger
+                    aria-label="Filter by source"
+                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{FILTER_LABEL.all}</SelectItem>
+                    {FILTER_ORDER.filter((option) => sources.has(option)).map(
+                      (option) => (
+                        <SelectItem key={option} value={option}>
+                          {FILTER_LABEL[option]}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
               )}
-              <CardTitle className="text-base">
-                Environment Variables
-                {hasEnvVars && (
-                  <Badge variant="secondary" className="ml-2">
-                    {
-                      expandedEnvVars.filter((ev) => !ev.name.endsWith("*"))
-                        .length
-                    }
-                  </Badge>
-                )}
-              </CardTitle>
-            </CollapsibleTrigger>
-            <div className="flex items-center gap-4">
-              {/* Filter dropdown */}
-              <Select
-                value={filter}
-                onValueChange={(value) => setFilter(value as FilterOption)}
-              >
-                <SelectTrigger className="w-[140px] h-8">
-                  <SelectValue placeholder="Filter by source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="direct">Direct</SelectItem>
-                  <SelectItem value="secret">Secret</SelectItem>
-                  <SelectItem value="configmap">ConfigMap</SelectItem>
-                  <SelectItem value="field">Field Ref</SelectItem>
-                  <SelectItem value="resource">Resource Ref</SelectItem>
-                  <SelectItem value="envFrom">EnvFrom</SelectItem>
-                </SelectContent>
-              </Select>
 
               {hasSecrets && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-2">
                   {loadingSecrets && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
                   )}
                   <Switch
                     id={`show-secrets-${containerName}`}
@@ -467,95 +569,120 @@ export function EnvironmentVariables({
                   />
                   <Label
                     htmlFor={`show-secrets-${containerName}`}
-                    className="text-sm"
+                    className="text-[11px] text-fg-mut"
                   >
                     Show secrets
                   </Label>
                 </div>
               )}
-            </div>
-          </div>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="pt-0">
-            {!hasEnvVars ? (
-              <p className="text-sm text-muted-foreground">
-                No environment variables defined
-              </p>
-            ) : filteredEnvVars.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No environment variables match the selected filter
-              </p>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">Name</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead className="w-[200px]">Source</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEnvVars.map((ev) => {
-                      const isSecret =
-                        ev.sourceType === "secret" ||
-                        ev.sourceType === "envFromSecret";
-                      const isRevealed = revealedSecrets.has(ev.name);
-                      const displayValue = getDisplayValue(ev);
-                      const isPlaceholder = ev.name.endsWith("*");
 
-                      return (
-                        <TableRow
-                          key={`${ev.sourceType}-${ev.sourceName || ""}-${ev.name}`}
-                        >
-                          <TableCell className="font-mono text-xs font-medium">
-                            {isPlaceholder ? (
-                              <span className="text-muted-foreground italic">
-                                (all keys from {ev.sourceName})
-                              </span>
-                            ) : (
-                              ev.name
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isPlaceholder ? (
-                              <span className="text-muted-foreground text-xs italic">
-                                {displayValue}
-                              </span>
-                            ) : isSecret ? (
-                              <MaskedValue
-                                value={displayValue}
-                                isRevealed={isRevealed}
-                                onToggleReveal={() => toggleReveal(ev.name)}
-                                isLoading={loadingSecrets}
-                                showCopy={isRevealed}
-                                compact
+              <CollapsibleTrigger
+                aria-label={isExpanded ? "Collapse" : "Expand"}
+                className="ml-1 text-fg-mut hover:text-fg"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </CollapsibleTrigger>
+            </>
+          }
+        />
+        <CollapsibleContent>
+          {filteredEnvVars.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No environment variables match the selected filter
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Name</TableHead>
+                  <TableHead>Value</TableHead>
+                  {/* Wide enough for `configmap demo-config → database.url` on one
+                      line: the object and the key it points into are one fact,
+                      and wrapping between them reads as two. */}
+                  <TableHead className="w-[280px]">Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredEnvVars.map((ev) => {
+                  const isSecret =
+                    ev.sourceType === "secret" ||
+                    ev.sourceType === "envFromSecret";
+                  const isRevealed = revealedSecrets.has(ev.name);
+                  const displayValue = getDisplayValue(ev);
+                  const isPlaceholder = ev.name.endsWith("*");
+
+                  return (
+                    <TableRow
+                      key={`${ev.sourceType}-${ev.sourceName || ""}-${ev.name}`}
+                    >
+                      <TableCell className="font-mono text-xs font-medium">
+                        {isPlaceholder ? (
+                          <span className="text-fg-fnt">
+                            all keys from{" "}
+                            {ev.sourceName && namespace ? (
+                              <ResourceRef
+                                kind={
+                                  isSecret
+                                    ? ResourceType.Secret
+                                    : ResourceType.ConfigMap
+                                }
+                                name={ev.sourceName}
+                                namespace={namespace}
+                                showKind={false}
                               />
                             ) : (
-                              <span className="font-mono text-xs break-all">
-                                {displayValue}
-                              </span>
+                              ev.sourceName
                             )}
-                          </TableCell>
-                          <TableCell>
-                            <SourceBadge
-                              type={ev.sourceType}
-                              name={ev.sourceName}
-                              namespace={namespace}
-                              linkable={!!ev.sourceName && !!namespace}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
+                          </span>
+                        ) : (
+                          ev.name
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isPlaceholder ? (
+                          <span className="text-xs text-fg-fnt">
+                            {displayValue}
+                          </span>
+                        ) : isSecret ? (
+                          <MaskedValue
+                            value={displayValue}
+                            isRevealed={isRevealed}
+                            onToggleReveal={() => toggleReveal(ev.name)}
+                            isLoading={loadingSecrets}
+                            showCopy={isRevealed}
+                            compact
+                          />
+                        ) : (
+                          <span className="font-mono text-xs break-all">
+                            {displayValue}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <SourceCell
+                          type={ev.sourceType}
+                          name={ev.sourceName}
+                          // On an envFrom row the key *is* the variable's
+                          // name, already the first column; repeating it
+                          // here would print it twice on the same line.
+                          sourceKey={
+                            ev.isFromEnvFrom ? undefined : ev.sourceKey
+                          }
+                          namespace={namespace}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CollapsibleContent>
-      </Collapsible>
-    </Card>
+      </Section>
+    </Collapsible>
   );
 }

@@ -3,8 +3,8 @@ import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
-import { ServiceTypeBadge, PortsDisplay } from "@/components/network";
+import { PortsDisplay } from "@/components/network";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -12,19 +12,37 @@ import {
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
+/**
+ * A service type is a configuration fact, so it is printed rather than badged.
+ * The one distinction worth a cue is whether the service is reachable from
+ * outside the cluster, and that reads as weight — a coloured pill on every
+ * LoadBalancer row would claim something is wrong when nothing is.
+ */
+const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
+
 const columns = (): ColumnDef<ServiceInfo>[] => [
-  createNameColumn<ServiceInfo>(getResourceListUrl(ResourceType.Service)),
+  createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
   {
     accessorKey: "type",
     header: "Type",
-    cell: ({ row }) => <ServiceTypeBadge type={row.original.type} />,
+    cell: ({ row }) => (
+      <span
+        className={
+          EXTERNALLY_REACHABLE.has(row.original.type)
+            ? "text-fg"
+            : "text-fg-mut"
+        }
+      >
+        {row.original.type}
+      </span>
+    ),
   },
   {
     accessorKey: "clusterIp",
     header: "Cluster IP",
     cell: ({ row }) => (
-      <span className="font-mono text-sm">{row.original.clusterIp}</span>
+      <CopyableAddress value={row.original.clusterIp} label="Cluster IP" />
     ),
   },
   {
@@ -33,13 +51,13 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     cell: ({ row }) => {
       const ips = row.original.externalIps;
       if (!ips || ips.length === 0)
-        return <span className="text-muted-foreground">-</span>;
+        return <span className="text-fg-fnt">—</span>;
       return (
         <div className="flex flex-col gap-1">
           {ips.map((ip, i) => (
-            <div key={i} className="flex items-center gap-1 font-mono text-xs">
-              <ExternalLink className="h-3 w-3" />
-              {ip}
+            <div key={i} className="flex items-center gap-1 text-xs">
+              <ExternalLink className="h-3 w-3 flex-none" aria-hidden="true" />
+              <CopyableAddress value={ip} label="External IP" />
             </div>
           ))}
         </div>

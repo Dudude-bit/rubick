@@ -155,8 +155,13 @@ export function ImageSearchInput({
     <div className="space-y-2">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label className="text-xs text-muted-foreground">Registry</Label>
-          <Link to="/settings" className="text-xs text-primary hover:underline">
+          <Label className="text-[11px] font-normal text-fg-mut">
+            Registry
+          </Label>
+          <Link
+            to="/settings/registries"
+            className="text-[11px] text-info hover:underline"
+          >
             Manage
           </Link>
         </div>
@@ -186,19 +191,22 @@ export function ImageSearchInput({
         onBlur={handleBlur}
       />
       {showResults && (
-        <div className="rounded-md border border-border bg-popover p-2 text-sm shadow-sm">
+        // A results list that hangs over the field it belongs to is an
+        // overlay, so it takes the one documented elevation: raised fill,
+        // hairline, shadow.
+        <div className="rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop">
           {status === "loading" && (
-            <div className="px-2 py-1 text-xs text-muted-foreground">
-              Searching {selectedRegistry.label}...
+            <div className="px-2 py-1 text-[11px] text-fg-mut">
+              Searching {selectedRegistry.label}…
             </div>
           )}
           {status === "error" && (
-            <div className="px-2 py-1 text-xs text-destructive">
+            <div className="px-2 py-1 text-[11px] text-err">
               Search failed. Check registry settings.
             </div>
           )}
           {status === "idle" && results.length === 0 && (
-            <div className="px-2 py-1 text-xs text-muted-foreground">
+            <div className="px-2 py-1 text-[11px] text-fg-mut">
               No matches found.
             </div>
           )}
@@ -206,23 +214,23 @@ export function ImageSearchInput({
             <button
               key={result.id}
               type="button"
-              className="flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left hover:bg-muted"
+              className="flex w-full flex-col gap-0.5 rounded px-2 py-1 text-left transition-colors hover:bg-hover"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onChange(result.name);
                 setFocused(false);
               }}
             >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span>{result.name}</span>
+              <span className="flex items-baseline gap-2 text-xs">
+                <span className="font-mono text-fg">{result.name}</span>
                 {result.isOfficial && (
-                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-500">
-                    Official
+                  <span className="text-[10px] uppercase tracking-[0.05em] text-fg-fnt">
+                    official
                   </span>
                 )}
-              </div>
+              </span>
               {result.description && (
-                <span className="text-xs text-muted-foreground">
+                <span className="truncate text-[11px] text-fg-mut">
                   {result.description}
                 </span>
               )}

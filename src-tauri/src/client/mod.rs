@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod context;
-pub use context::{ClusterContext, ContextInfo};
+pub use context::{ClusterContext, ContextAuth, ContextInfo};
 
 /// Manages Kubernetes client connections for multiple clusters
 pub struct K8sClientManager {
@@ -108,10 +108,15 @@ impl K8sClientManager {
             .iter()
             .map(|ctx| {
                 let context = ctx.context.as_ref();
+                let cluster = context.map(|c| c.cluster.clone()).unwrap_or_default();
+                let user = context.and_then(|c| c.user.clone()).unwrap_or_default();
                 ContextInfo {
                     name: ctx.name.clone(),
-                    cluster: context.map(|c| c.cluster.clone()).unwrap_or_default(),
-                    user: context.and_then(|c| c.user.clone()).unwrap_or_default(),
+                    server: server_for_cluster(kubeconfig, &cluster),
+                    exec_command: exec_command_for_user(kubeconfig, &user),
+                    auth: auth_for_user(kubeconfig, &user),
+                    cluster,
+                    user,
                     namespace: context.and_then(|c| c.namespace.clone()),
                     is_current: Some(&ctx.name) == current_context.as_ref(),
                 }
@@ -275,6 +280,85 @@ pub struct ClusterInfo {
     pub git_version: String,
 }
 
+/// The API server URL a context will dial, as the kubeconfig writes it.
+fn server_for_cluster(kubeconfig: &Kubeconfig, cluster: &str) -> Option<String> {
+    kubeconfig
+        .clusters
+        .iter()
+        .find(|entry| entry.name == cluster)
+        .and_then(|entry| entry.cluster.as_ref())
+        .and_then(|cluster| cluster.server.clone())
+}
+
+/// The credential plugin a context runs, printed the way a shell would.
+///
+/// Arguments are joined with a single space and left unquoted: this is
+/// read, never executed, and quoting it would put characters on screen
+/// that the app is not going to send.
+fn exec_command_for_user(kubeconfig: &Kubeconfig, user: &str) -> Option<String> {
+    let exec = kubeconfig
+        .auth_infos
+        .iter()
+        .find(|entry| entry.name == user)
+        .and_then(|entry| entry.auth_info.as_ref())
+        .and_then(|auth| auth.exec.as_ref())?;
+    let command = exec.command.as_ref()?;
+    Some(match exec.args.as_ref() {
+        Some(args) if !args.is_empty() => format!("{command} {}", args.join(" ")),
+        _ => command.clone(),
+    })
+}
+
+/// Which credential a user entry holds, in the order kube-rs would try
+/// them: a plugin or a provider takes over the whole exchange, so it
+/// outranks any certificate or token sitting in the same entry.
+///
+/// A user entry that is absent, empty, or holds only a client *key* is
+/// deliberately `Unrecognised`. The screen prints that as "cannot tell
+/// from the file", which is true; naming a mechanism the app did not
+/// find would put a confident wrong sentence on a debugging screen.
+fn auth_for_user(kubeconfig: &Kubeconfig, user: &str) -> ContextAuth {
+    let Some(auth) = kubeconfig
+        .auth_infos
+        .iter()
+        .find(|entry| entry.name == user)
+        .and_then(|entry| entry.auth_info.as_ref())
+    else {
+        return ContextAuth::Unrecognised;
+    };
+
+    if auth.exec.is_some() {
+        return ContextAuth::Exec;
+    }
+    if let Some(provider) = auth.auth_provider.as_ref() {
+        return ContextAuth::AuthProvider {
+            name: provider.name.clone(),
+        };
+    }
+    if auth.client_certificate_data.is_some() {
+        return ContextAuth::ClientCertificate { source: None };
+    }
+    if let Some(path) = auth.client_certificate.as_ref() {
+        return ContextAuth::ClientCertificate {
+            source: Some(path.clone()),
+        };
+    }
+    if auth.token.is_some() {
+        return ContextAuth::Token { source: None };
+    }
+    if let Some(path) = auth.token_file.as_ref() {
+        return ContextAuth::Token {
+            source: Some(path.clone()),
+        };
+    }
+    if auth.username.is_some() || auth.password.is_some() {
+        return ContextAuth::Basic {
+            username: auth.username.clone(),
+        };
+    }
+    ContextAuth::Unrecognised
+}
+
 /// Resolve a kubeconfig path: expands `~`, follows symlinks, and
 /// rejects paths whose target does not exist. Used as a chokepoint
 /// before any `Kubeconfig::read_from(...)` so a stray `..` segment
@@ -311,6 +395,96 @@ mod tests {
     async fn test_client_manager_creation() {
         let manager = K8sClientManager::new();
         assert!(manager.connected_contexts().is_empty());
+    }
+
+    /// Every context row on the Clusters screen states how it
+    /// authenticates. If this fails, either a shape the file describes
+    /// perfectly well has started reading as "cannot tell", or — worse —
+    /// an entry the app cannot classify has started claiming a mechanism.
+    #[test]
+    fn every_user_shape_is_classified_or_admitted() {
+        let kubeconfig: Kubeconfig = serde_yaml::from_str(
+            r#"
+apiVersion: v1
+kind: Config
+users:
+  - name: embedded-cert
+    user:
+      client-certificate-data: Zm9v
+      client-key-data: YmFy
+  - name: cert-on-disk
+    user:
+      client-certificate: /home/u/.minikube/client.crt
+      client-key: /home/u/.minikube/client.key
+  - name: inline-token
+    user:
+      token: abc123
+  - name: token-on-disk
+    user:
+      tokenFile: /var/run/secrets/token
+  - name: basic
+    user:
+      username: admin
+      password: hunter2
+  - name: legacy-oidc
+    user:
+      auth-provider:
+        name: oidc
+  - name: plugin
+    user:
+      exec:
+        apiVersion: client.authentication.k8s.io/v1beta1
+        command: kubelogin
+  - name: plugin-wins-over-cert
+    user:
+      client-certificate-data: Zm9v
+      exec:
+        apiVersion: client.authentication.k8s.io/v1beta1
+        command: kubelogin
+  - name: empty
+    user: {}
+  - name: key-only
+    user:
+      client-key: /home/u/only.key
+"#,
+        )
+        .expect("parse");
+
+        let of = |user: &str| auth_for_user(&kubeconfig, user);
+        assert_eq!(
+            of("embedded-cert"),
+            ContextAuth::ClientCertificate { source: None }
+        );
+        assert_eq!(
+            of("cert-on-disk"),
+            ContextAuth::ClientCertificate {
+                source: Some("/home/u/.minikube/client.crt".to_string())
+            }
+        );
+        assert_eq!(of("inline-token"), ContextAuth::Token { source: None });
+        assert_eq!(
+            of("token-on-disk"),
+            ContextAuth::Token {
+                source: Some("/var/run/secrets/token".to_string())
+            }
+        );
+        assert_eq!(
+            of("basic"),
+            ContextAuth::Basic {
+                username: Some("admin".to_string())
+            }
+        );
+        assert_eq!(
+            of("legacy-oidc"),
+            ContextAuth::AuthProvider {
+                name: "oidc".to_string()
+            }
+        );
+        assert_eq!(of("plugin"), ContextAuth::Exec);
+        assert_eq!(of("plugin-wins-over-cert"), ContextAuth::Exec);
+        assert_eq!(of("empty"), ContextAuth::Unrecognised);
+        assert_eq!(of("key-only"), ContextAuth::Unrecognised);
+        assert_eq!(of("no-such-user"), ContextAuth::Unrecognised);
     }
 
     #[test]

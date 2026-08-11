@@ -21,6 +21,7 @@ pub use cluster::{
 pub use context::ResourceContext;
 pub use namespaced::{
     delete_resource, get_resource, get_resource_info, list_resource_infos, list_resources,
+    scale_resource,
 };
 pub use params::{build_label_selector, build_list_params};
 pub use yaml::{clean_yaml_for_editor, get_resource_yaml};

@@ -132,6 +132,41 @@ describe("useGenericTerminalSession deferred-start handshake", () => {
     expect(result.current.error).toBeNull();
   });
 
+  /**
+   * The one thing a terminal is for. `send` gates on a ref that mirrors the
+   * status, and the ref was never written — so a pod shell painted a prompt,
+   * accepted a click, and silently swallowed everything typed into it.
+   */
+  it("sends what is typed once the session is attached", async () => {
+    const { commands } = await import("@/lib/commands");
+    const { result } = renderHook(() =>
+      useGenericTerminalSession({ sessionId: "typing-session" })
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("connected");
+    });
+    await result.current.send("ps\r");
+
+    expect(vi.mocked(commands.terminalInput)).toHaveBeenCalledWith(
+      "typing-session",
+      "ps\r"
+    );
+  });
+
+  /**
+   * The id can already be known when the terminal first mounts: the xterm
+   * chunk is lazy, and `openPodShell` often answers before it arrives.
+   */
+  it("reaches connected when the session id is there from the first render", async () => {
+    const { result } = renderHook(() =>
+      useGenericTerminalSession({ sessionId: "eager-session" })
+    );
+    await waitFor(() => {
+      expect(result.current.status).toBe("connected");
+    });
+  });
+
   it("DOES set error status when listen() itself rejects (real Tauri IPC failure)", async () => {
     // The flip side: if `listen()` itself fails — that's a genuine
     // IPC problem, not a session-lifecycle race, and the user

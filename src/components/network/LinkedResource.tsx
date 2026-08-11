@@ -32,9 +32,7 @@ export function LinkedResource({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            className={`text-destructive flex items-center gap-1 ${className}`}
-          >
+          <span className={`text-err flex items-center gap-1 ${className}`}>
             <AlertTriangle className="h-3 w-3" />
             {displayText}
           </span>
@@ -51,7 +49,7 @@ export function LinkedResource({
       <TooltipTrigger asChild>
         <Link
           to={url}
-          className={`text-primary hover:underline flex items-center gap-1 ${className}`}
+          className={`text-info hover:underline flex items-center gap-1 ${className}`}
         >
           {displayText}
           <ExternalLink className="h-3 w-3" />

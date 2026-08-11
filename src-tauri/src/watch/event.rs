@@ -26,14 +26,17 @@ pub(super) fn emit_event<K, F, U>(
             send(event_tx, stream_id, WatchOp::Deleted, transform(&obj));
         }
         Event::Init => {
-            // Ignore — `InitApply` events follow and `InitDone` ends
-            // the resync. We only emit a `restarted` once below.
+            // Start of a (re)sync: the burst of `InitApply` events that
+            // follows is the complete new state, so tell the frontend to
+            // drop what it has. Emitting this on `InitDone` instead would
+            // wipe the cache the burst just filled.
+            send::<()>(event_tx, stream_id, WatchOp::Restarted, None);
         }
         Event::InitApply(obj) => {
             send(event_tx, stream_id, WatchOp::Applied, transform(&obj));
         }
         Event::InitDone => {
-            send::<()>(event_tx, stream_id, WatchOp::Restarted, None);
+            // End of the resync — the frontend cache is already current.
         }
     }
 }
@@ -51,4 +54,62 @@ fn send<U: Serialize>(
         resource,
         error: None,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::ConfigMap;
+
+    fn named(name: &str) -> ConfigMap {
+        ConfigMap {
+            metadata: kube::core::ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Drains the channel into the op sequence the frontend would see.
+    fn ops_for(events: Vec<Event<ConfigMap>>) -> Vec<WatchOp> {
+        let (tx, mut rx) = broadcast::channel(32);
+        let transform = |c: &ConfigMap| c.metadata.name.clone();
+        for event in events {
+            emit_event(&tx, "s1", event, &transform);
+        }
+        drop(tx);
+
+        let mut ops = Vec::new();
+        while let Ok(AppEvent::ResourceWatchEvent { op, .. }) = rx.try_recv() {
+            ops.push(op);
+        }
+        ops
+    }
+
+    /// `restarted` clears the frontend cache, so it has to precede the
+    /// `InitApply` burst. Emitting it on `InitDone` wiped the list the
+    /// burst had just filled — every list page rendered empty until
+    /// unrelated `Apply` heartbeats trickled rows back in.
+    #[test]
+    fn resync_clears_cache_before_the_burst_not_after() {
+        let ops = ops_for(vec![
+            Event::Init,
+            Event::InitApply(named("a")),
+            Event::InitApply(named("b")),
+            Event::InitDone,
+        ]);
+
+        assert_eq!(
+            ops,
+            vec![WatchOp::Restarted, WatchOp::Applied, WatchOp::Applied],
+            "restarted must come first and InitDone must emit nothing"
+        );
+    }
+
+    #[test]
+    fn steady_state_events_map_to_applied_and_deleted() {
+        let ops = ops_for(vec![Event::Apply(named("a")), Event::Delete(named("a"))]);
+        assert_eq!(ops, vec![WatchOp::Applied, WatchOp::Deleted]);
+    }
 }

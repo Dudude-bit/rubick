@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt};
+use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
 /// Basic Job info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +77,11 @@ pub struct JobDetailInfo {
     pub start_time: Option<String>,
     pub completion_time: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
+    /// The template's `initContainers`, in the order the kubelet would run
+    /// them, with each sidecar marked by its `phase`.
+    pub init_containers: Vec<DeploymentContainerInfo>,
+    /// The identity every replica will hold; see `TemplateContainers`.
+    pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
@@ -103,16 +108,7 @@ impl From<&Job> for JobDetailInfo {
             "Pending"
         };
 
-        let containers = spec
-            .and_then(|s| s.template.spec.as_ref())
-            .map(|pod_spec| {
-                pod_spec
-                    .containers
-                    .iter()
-                    .map(DeploymentContainerInfo::from)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let template = TemplateContainers::of(spec.and_then(|s| s.template.spec.as_ref()));
 
         let conditions = status
             .and_then(|s| s.conditions.as_ref())
@@ -135,7 +131,9 @@ impl From<&Job> for JobDetailInfo {
             completion_time: status
                 .and_then(|s| s.completion_time.as_ref())
                 .to_rfc3339_opt(),
-            containers,
+            containers: template.containers,
+            init_containers: template.init_containers,
+            service_account_name: template.service_account_name,
             labels: job.labels().clone(),
             annotations: job.annotations().clone(),
             conditions,

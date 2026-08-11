@@ -1,17 +1,24 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-} from "@/components/resources/ResourceDetailLayout";
-import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { HardDrive, Link as LinkIcon, Database } from "lucide-react";
-import { commands } from "@/lib/commands";
-import type { PersistentVolumeInfo } from "@/generated/types";
+import { Info, Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { connectionsTab } from "@/components/resources/connections-tab";
+import { viewGlyph } from "@/components/resources/detail-tab";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { ClaimRef } from "@/components/resources/storage-refs";
+import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
+import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { ResourceType } from "@/lib/resource-registry";
+import type { PersistentVolumeInfo } from "@/generated/types";
 
 export function PersistentVolumeDetail() {
   const {
@@ -24,132 +31,118 @@ export function PersistentVolumeDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
+    freshness,
   } = useResourceDetail<PersistentVolumeInfo>({
     resourceKind: ResourceType.PersistentVolume,
     isClusterScoped: true,
     fetchResource: (name) => commands.getPersistentVolume(name),
     deleteResource: (name) => commands.deletePersistentVolume(name),
-    defaultTab: "details",
+    defaultTab: "overview",
   });
+
+  const facts: KeyValue[] = [
+    { label: "Capacity", value: pv?.capacity ?? "—", mono: true },
+    {
+      label: "Access modes",
+      value: pv?.accessModes.length ? pv.accessModes.join(" · ") : "none",
+      mono: true,
+    },
+    {
+      label: "Claim",
+      // A volume with no claim is storage nobody is using — the one fact on
+      // this page that is worth a colour. Bound is the correct, quiet case.
+      value: pv?.claim ? (
+        <ClaimRef claim={pv.claim} />
+      ) : (
+        "unbound — no claim is using this volume"
+      ),
+      tone: pv?.claim ? undefined : "warn",
+    },
+    {
+      label: "Storage class",
+      value: pv?.storageClass ? (
+        <ResourceRef
+          kind={ResourceType.StorageClass}
+          name={pv.storageClass}
+          showKind={false}
+        />
+      ) : (
+        "none"
+      ),
+    },
+    { label: "Reclaim policy", value: pv?.reclaimPolicy ?? "—", mono: true },
+    ...(pv?.reason
+      ? [{ label: "Reason", value: pv.reason, tone: "err" as const }]
+      : []),
+  ];
+
+  const deliveryQuery = deliveryOfKind(ResourceType.PersistentVolume, pv);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+  // Cluster-scoped, and the claim it names is in a namespace of its own. The
+  // block above links to that claim; this says whether it is still there and
+  // what it says about itself, which a link cannot.
+  const connections = useConnections(ResourceType.PersistentVolume, name, null);
 
   const tabs = [
     {
-      id: "details",
-      label: "Details",
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Volume Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <StatusBadge status={pv?.status || ""} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Capacity</p>
-                <p className="font-mono">{pv?.capacity}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Access Modes</p>
-                <div className="flex flex-wrap gap-1">
-                  {pv?.accessModes.map((mode, i) => (
-                    <Badge key={i} variant="outline">
-                      {mode}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Reclaim Policy</p>
-                <Badge variant="outline">{pv?.reclaimPolicy}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Storage Class</p>
-                <p className="font-mono">{pv?.storageClass || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Claim</p>
-                <p className="font-mono">{pv?.claim || "Unbound"}</p>
-              </div>
-              {pv?.reason && (
-                <div className="col-span-2">
-                  <p className="text-sm text-muted-foreground">Reason</p>
-                  <p>{pv.reason}</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="PersistentVolume YAML"
-          yaml={pvYaml}
-          resourceKind={ResourceType.PersistentVolume}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    connectionsTab(connections, deliveryQuery),
+    yamlTab({
+      title: "PersistentVolume YAML",
+      yaml: pvYaml,
+      resourceKind: ResourceType.PersistentVolume,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={pv}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.PersistentVolume}
       title={pv?.name || name || ""}
-      namespace={undefined}
-      badges={<StatusBadge status={pv?.status || ""} />}
-      icon={<HardDrive className="h-8 w-8 text-muted-foreground" />}
+      statusBadge={pv && <StatusBadge status={pv.status} />}
+      badges={
+        pv && (
+          <>
+            <span className="font-mono text-[11px] text-fg-mut">
+              {pv.capacity}
+            </span>
+            <span className="text-[11px] text-fg-fnt">
+              {pv.accessModes.join(" · ") || "no access modes"}
+            </span>
+            {!pv.claim && (
+              <span className="text-[11px] text-warn">unbound</span>
+            )}
+          </>
+        )
+      }
       onBack={goBack}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
-    >
-      <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Capacity"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">{pv?.capacity}</div>
-        </InfoCard>
-
-        <InfoCard
-          title="Access Modes"
-          icon={<LinkIcon className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="flex flex-wrap gap-1">
-            {pv?.accessModes.map((mode, i) => (
-              <Badge key={i} variant="secondary">
-                {mode}
-              </Badge>
-            ))}
-          </div>
-        </InfoCard>
-
-        <InfoCard
-          title="Reclaim Policy"
-          icon={<HardDrive className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">{pv?.reclaimPolicy}</div>
-        </InfoCard>
-
-        <InfoCard
-          title="Storage Class"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">{pv?.storageClass || "-"}</div>
-        </InfoCard>
-      </div>
-    </ResourceDetailLayout>
+      actions={
+        <InterceptedAction
+          intercept={intercept("Delete")}
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
+    />
   );
 }

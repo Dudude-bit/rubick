@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -8,22 +7,24 @@ import {
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { cn } from "@/lib/utils";
 
+/**
+ * A container port that opens a port-forward.
+ *
+ * A port number is a value, not a lifecycle status, so it is printed in mono
+ * rather than badged. It still has to read as pressable: the informational
+ * colour and a dotted underline mark it the way a link is marked, and it is a
+ * real `<button>`, so it keeps its place in the tab order.
+ */
+
 export interface ClickablePortProps {
-  /** Port number */
   port: number;
-  /** Optional port name */
   portName?: string;
-  /** Protocol (TCP, UDP) */
   protocol?: string;
-  /** Pod name for port forwarding */
+  /** Pod to forward from. */
   podName: string;
-  /** Pod namespace for port forwarding */
   podNamespace: string;
-  /** Badge variant */
-  variant?: "default" | "secondary" | "outline";
-  /** Additional class names */
   className?: string;
-  /** Show protocol in badge */
+  /** Off when the protocol is already implied by the surrounding row. */
   showProtocol?: boolean;
 }
 
@@ -33,13 +34,12 @@ export function ClickablePort({
   protocol = "TCP",
   podName,
   podNamespace,
-  variant = "secondary",
   className,
   showProtocol = true,
 }: ClickablePortProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const displayText = portName
+  const label = portName
     ? `${port} (${portName})`
     : showProtocol
       ? `${port}/${protocol}`
@@ -49,22 +49,24 @@ export function ClickablePort({
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge
-            variant={variant}
+          <button
+            type="button"
             className={cn(
-              "cursor-pointer transition-colors hover:bg-primary hover:text-primary-foreground",
+              "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info",
               className
             )}
             onClick={(e) => {
+              // The row underneath navigates to the pod; forwarding a port is
+              // not that.
               e.stopPropagation();
               setDialogOpen(true);
             }}
           >
-            {displayText}
-          </Badge>
+            {label}
+          </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          Click to port forward
+          Forward this port
         </TooltipContent>
       </Tooltip>
 
@@ -80,36 +82,27 @@ export function ClickablePort({
   );
 }
 
-/** Props for rendering multiple ports */
 export interface ClickablePortsProps {
-  /** Array of port info */
   ports: Array<{
     containerPort: number;
     name?: string | null;
     protocol?: string | null;
   }>;
-  /** Pod name */
   podName: string;
-  /** Pod namespace */
   podNamespace: string;
-  /** Badge variant */
-  variant?: "default" | "secondary" | "outline";
-  /** Additional class for container */
   className?: string;
 }
 
-/** Render multiple clickable ports */
 export function ClickablePorts({
   ports,
   podName,
   podNamespace,
-  variant = "secondary",
   className,
 }: ClickablePortsProps) {
   if (!ports || ports.length === 0) return null;
 
   return (
-    <div className={cn("flex flex-wrap gap-1", className)}>
+    <span className={cn("flex flex-wrap gap-x-3 gap-y-0.5", className)}>
       {ports.map((port, idx) => (
         <ClickablePort
           key={`${port.containerPort}-${idx}`}
@@ -118,9 +111,8 @@ export function ClickablePorts({
           protocol={port.protocol || "TCP"}
           podName={podName}
           podNamespace={podNamespace}
-          variant={variant}
         />
       ))}
-    </div>
+    </span>
   );
 }

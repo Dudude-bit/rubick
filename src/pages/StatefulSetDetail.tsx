@@ -1,26 +1,52 @@
-import { useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import type { StatefulSetDetailInfo } from "@/generated/types";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RealtimeAge } from "@/components/ui/realtime";
-import { Trash2, Database, RefreshCw } from "lucide-react";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
-import { RelatedResources } from "@/components/resources/RelatedResources";
-import { PodListCard } from "@/components/resources/PodListCard";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-  InfoRow,
-} from "@/components/resources/ResourceDetailLayout";
+import { useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { BadgeCheck, Info, Layers2, Scale, Trash2 } from "lucide-react";
 
-import { useResourceDetail } from "@/hooks";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
+import { PodListCard } from "@/components/resources/PodListCard";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  conditionsMark,
+  kindGlyph,
+  podsMark,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
+import { ContainerRows } from "@/components/resources/container-rows";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import {
+  Composition,
+  ConditionRows,
+  DetailAction,
+} from "@/components/resources/detail-blocks";
+import { ScaleDialog } from "@/components/resources/ScaleDialog";
+import { scaleWarnings } from "@/lib/governance";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useResourceDetail, useResourceMutation } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
+import { commands } from "@/lib/commands";
+import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import type { StatefulSetDetailInfo } from "@/generated/types";
 
 export function StatefulSetDetail() {
   const {
@@ -29,13 +55,13 @@ export function StatefulSetDetail() {
     resource: statefulSet,
     isLoading,
     error,
-    refetch,
     yaml,
     copyYaml,
     activeTab,
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<StatefulSetDetailInfo>({
     resourceKind: ResourceType.StatefulSet,
     fetchResource: (name, ns) => commands.getStatefulset(name, ns),
@@ -43,23 +69,31 @@ export function StatefulSetDetail() {
     defaultTab: "overview",
   });
 
-  // Fetch pods for this StatefulSet
-  const { data: pods = [] } = useQuery({
+  const connections = useConnections(ResourceType.StatefulSet, name, namespace);
+
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["statefulset-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
       try {
-        // StatefulSet pods typically have a label app=<statefulset-name>
-        const allPods = await commands.listPods({
-          namespace: namespace,
-          labelSelector: `app=${name}`,
+        const all = await commands.listPods({
+          namespace,
+          labelSelector: null,
           fieldSelector: null,
           limit: null,
           statusFilter: null,
           selector: null,
           nodeName: null,
         });
-        return allPods;
+        // The API does not expose a StatefulSet's match labels, but it does
+        // guarantee the pod names: `<set>-0`, `<set>-1`, and so on. The old
+        // `app=<name>` guess found nothing whenever the chart labelled
+        // its pods differently.
+        return all.filter(
+          (pod) =>
+            pod.name.startsWith(`${name}-`) &&
+            /^\d+$/.test(pod.name.slice(name.length + 1))
+        );
       } catch {
         return [];
       }
@@ -67,170 +101,180 @@ export function StatefulSetDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
-  const isReady = statefulSet?.replicas.ready === statefulSet?.replicas.desired;
-  const statusVariant = isReady ? "success" : "warning";
-  const statusText = isReady ? "Ready" : "Updating";
+  const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const [scaleOpen, setScaleOpen] = useState(false);
+
+  const scaleMutation = useResourceMutation(
+    async (replicas: number) => {
+      if (!name) return;
+      await commands.scaleStatefulset(name, replicas, namespace || null);
+    },
+    {
+      toast: {
+        successTitle: "StatefulSet scaled",
+        successDescription: (_data, replicas) =>
+          `StatefulSet ${name} scaled to ${replicas} replicas.`,
+        errorPrefix: "Failed to scale StatefulSet",
+      },
+      invalidateQueryKeys:
+        namespace && name ? [["statefulset", namespace, name]] : [],
+      onSuccess: () => setScaleOpen(false),
+    }
+  );
+
+  const replicas = statefulSet?.replicas;
+  const desired = replicas?.desired ?? 0;
+  const current = replicas?.current ?? 0;
+  const ready = replicas?.ready ?? 0;
+  const short = ready < desired;
 
   const tabs = useMemo(
     () => [
       {
         id: "overview",
         label: "Overview",
+        glyph: viewGlyph(Info),
         content: (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoCard
-                title="StatefulSet Info"
-                icon={<Database className="h-4 w-4" />}
-              >
-                <div className="space-y-1">
-                  <InfoRow
-                    label="Service Name"
-                    value={statefulSet?.serviceName || "-"}
-                  />
-                  <InfoRow
-                    label="Pod Management"
-                    value={statefulSet?.podManagementPolicy || "OrderedReady"}
-                  />
-                  <InfoRow
-                    label="Update Strategy"
-                    value={statefulSet?.updateStrategy || "RollingUpdate"}
-                  />
-                  <InfoRow
-                    label="Created"
-                    value={
-                      <RealtimeAge
-                        timestamp={statefulSet?.createdAt}
-                        fallback="-"
-                      />
+          <>
+            <WorkloadOverview
+              count={
+                <CountBlock title="Replicas" governance={connections}>
+                  {/* Ordinals matter here: a StatefulSet brings replicas up one
+                      at a time, so the gap between desired and current is a
+                      queue, not a failure. The bar shows both without three
+                      separate rows, and the note under it is what explains the
+                      gap — which is why the pod management policy is said there
+                      rather than as a row in a fact table three blocks away. */}
+                  <Composition
+                    total={desired}
+                    label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                    segments={[
+                      { label: "ready", count: ready, tone: "ok" },
+                      {
+                        label: "starting",
+                        count: Math.max(0, current - ready),
+                        tone: "warn",
+                      },
+                      {
+                        label: "not created",
+                        count: Math.max(0, desired - current),
+                        tone: "err",
+                      },
+                    ]}
+                    note={
+                      statefulSet?.podManagementPolicy === "Parallel"
+                        ? "Started in parallel"
+                        : "Started in order, one at a time"
                     }
                   />
-                </div>
-              </InfoCard>
+                </CountBlock>
+              }
+              usage={
+                <WorkloadUsage
+                  kind={ResourceType.StatefulSet}
+                  uid={statefulSet?.uid}
+                  name={statefulSet?.name || name}
+                  namespace={statefulSet?.namespace || namespace}
+                  template={statefulSet}
+                  pods={pods}
+                  idle={
+                    desired === 0
+                      ? "This StatefulSet is scaled to zero."
+                      : "None of this StatefulSet's pods is running."
+                  }
+                  connections={connections.data}
+                />
+              }
+              traffic={<TrafficChain query={connections} />}
+              declared={
+                <FactBlock
+                  title="How it is declared"
+                  items={declaration(statefulSet)}
+                />
+              }
+            >
+              {statefulSet && (
+                <RelatedResources
+                  ownerReferences={statefulSet.ownerReferences}
+                  namespace={statefulSet.namespace}
+                />
+              )}
+            </WorkloadOverview>
 
-              <InfoCard title="Replicas">
-                <div className="space-y-1">
-                  <InfoRow
-                    label="Desired"
-                    value={statefulSet?.replicas.desired ?? 0}
-                  />
-                  <InfoRow
-                    label="Current"
-                    value={statefulSet?.replicas.current ?? 0}
-                  />
-                  <InfoRow
-                    label="Ready"
-                    value={statefulSet?.replicas.ready ?? 0}
-                  />
-                </div>
-              </InfoCard>
-            </div>
-          </div>
+            <KeyValueSection
+              title="Labels"
+              count={Object.keys(statefulSet?.labels ?? {}).length}
+              items={recordToKeyValues(statefulSet?.labels ?? {})}
+              emptyMessage="No labels"
+            />
+            <KeyValueSection
+              title="Annotations"
+              count={Object.keys(statefulSet?.annotations ?? {}).length}
+              items={recordToKeyValues(statefulSet?.annotations ?? {})}
+              emptyMessage="No annotations"
+            />
+          </>
         ),
       },
+      connectionsTab(connections, deliveryQuery),
       {
-        id: "containers",
-        label: "Containers",
-        content: (
-          <div className="space-y-4">
-            {(statefulSet?.containers || []).map((container) => (
-              <Card key={container.name}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{container.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Image</span>
-                      <span className="font-mono text-xs">
-                        {container.image}
-                      </span>
-                    </div>
-                    {container.ports.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ports</span>
-                        <span>{container.ports.join(", ")}</span>
-                      </div>
-                    )}
-                    {container.resources.requests &&
-                      Object.keys(container.resources.requests).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Requests
-                          </span>
-                          <span>
-                            {Object.entries(container.resources.requests)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                    {container.resources.limits &&
-                      Object.keys(container.resources.limits).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Limits</span>
-                          <span>
-                            {Object.entries(container.resources.limits)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                  </div>
-
-                  {/* Environment Variables */}
-                  {(container.env.length > 0 ||
-                    container.envFrom.length > 0) && (
-                    <EnvironmentVariables
-                      env={container.env}
-                      envFrom={container.envFrom}
-                      containerName={container.name}
-                      namespace={namespace}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-            {(!statefulSet?.containers ||
-              statefulSet.containers.length === 0) && (
-              <p className="text-center text-muted-foreground py-8">
-                No containers defined
-              </p>
-            )}
-          </div>
-        ),
+        id: "container-template",
+        label: "Template",
+        glyph: viewGlyph(Layers2),
+        content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
       {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
+        glyph: kindGlyph(ResourceType.Pod),
+        mark: podsMark(pods),
         content: <PodListCard pods={pods} />,
-      },
-      {
-        id: "yaml",
-        label: "YAML",
-        content: (
-          <YamlTabContent
-            yaml={yaml}
-            onCopy={copyYaml}
-            title={statefulSet?.name || "StatefulSet YAML"}
-            resourceKind={ResourceType.StatefulSet}
-            resourceName={statefulSet?.name || name || ""}
-            namespace={statefulSet?.namespace || namespace}
-          />
-        ),
       },
       {
         id: "conditions",
         label: "Conditions",
+        glyph: viewGlyph(BadgeCheck),
+        mark: conditionsMark(statefulSet?.conditions),
         content: (
-          <ConditionsDisplay conditions={statefulSet?.conditions || []} />
+          <Section>
+            <SectionHeader
+              title="Conditions"
+              count={statefulSet?.conditions.length}
+            />
+            <ConditionRows
+              conditions={statefulSet?.conditions ?? []}
+              subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+            />
+          </Section>
         ),
       },
+      yamlTab({
+        yaml,
+        onCopy: copyYaml,
+        title: "StatefulSet YAML",
+        resourceKind: ResourceType.StatefulSet,
+        resourceName: statefulSet?.name || name || "",
+        namespace: statefulSet?.namespace || namespace,
+      }),
     ],
-    [statefulSet, pods, yaml, copyYaml, namespace, name]
+    [
+      statefulSet,
+      pods,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      connections,
+      deliveryQuery,
+      desired,
+      current,
+      ready,
+    ]
   );
 
   if (!statefulSet && !isLoading && !error) {
@@ -238,54 +282,95 @@ export function StatefulSetDetail() {
   }
 
   return (
-    <ResourceDetailLayout
-      resource={statefulSet}
-      isLoading={isLoading}
-      error={error}
-      resourceKind="StatefulSet"
-      title={name || ""}
-      namespace={namespace}
-      statusBadge={<Badge variant={statusVariant}>{statusText}</Badge>}
-      badges={
-        <>
-          <Badge variant="outline">
-            {statefulSet?.replicas.ready ?? 0}/
-            {statefulSet?.replicas.desired ?? 0} ready
-          </Badge>
-        </>
-      }
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation?.mutate()}
-            disabled={deleteMutation?.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </>
-      }
-      icon={<Database className="h-5 w-5" />}
-      onBack={goBack}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      labels={statefulSet?.labels}
-      annotations={statefulSet?.annotations}
-    >
-      {/* Related Resources (Owner References) */}
-      {statefulSet && (
-        <RelatedResources
-          ownerReferences={statefulSet.ownerReferences}
-          namespace={statefulSet.namespace}
-        />
-      )}
-    </ResourceDetailLayout>
+    <>
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={statefulSet}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.StatefulSet}
+        title={statefulSet?.name || name || ""}
+        namespace={statefulSet?.namespace || namespace}
+        createdAt={statefulSet?.createdAt}
+        statusBadge={
+          statefulSet && (
+            <StatusBadge status={short ? "Degraded" : "Ready"}>
+              {ready}/{desired} ready
+            </StatusBadge>
+          )
+        }
+        onBack={goBack}
+        actions={
+          <>
+            {/* Plain, not intercepted: the Scale dialog carries the delivery
+                warning itself, stacked with the autoscaler's. A second dialog
+                in front of it would ask the same question twice. */}
+            <DetailAction
+              label="Scale"
+              icon={Scale}
+              onClick={() => statefulSet && setScaleOpen(true)}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label="Delete"
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
+        }
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {/* Outside the frame, because it is opened from the strip's row and so
+          from any tab — inside the Overview's panel it would be unmounted the
+          moment the reader was on Logs, which is when Scale still has to
+          work. It draws nothing until it is open, and portals when it is. */}
+      <ScaleDialog
+        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        open={scaleOpen}
+        onOpenChange={setScaleOpen}
+        kind={ResourceType.StatefulSet}
+        current={desired}
+        busy={scaleMutation.isPending}
+        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
+      />
+    </>
   );
+}
+
+/**
+ * How it is declared: the facts a reader needs once, and never while the
+ * object is fine.
+ */
+function declaration(
+  statefulSet: StatefulSetDetailInfo | undefined
+): KeyValue[] {
+  return [
+    {
+      label: "Governing service",
+      value: statefulSet?.serviceName ? (
+        <ResourceRef
+          kind={ResourceType.Service}
+          name={statefulSet.serviceName}
+          namespace={statefulSet.namespace}
+          showKind={false}
+        />
+      ) : (
+        // Without a headless service the stable network identity a
+        // StatefulSet exists for does not resolve.
+        "none — pods have no stable DNS"
+      ),
+      tone: statefulSet?.serviceName ? undefined : "warn",
+    },
+    {
+      label: "Update strategy",
+      value: statefulSet?.updateStrategy || "RollingUpdate",
+    },
+    serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),
+  ];
 }

@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -6,17 +5,19 @@ import {
 } from "@/components/ui/tooltip";
 import type { ServicePortInfo } from "@/generated/types";
 
+/**
+ * A service's ports inside a list row.
+ *
+ * A port number is a value, not a lifecycle status, so it is printed rather
+ * than badged: the published port at full foreground, the target behind a
+ * dimmed arrow, and the name and protocol quiet beside them. The complete
+ * record stays in the tooltip, because five fields per port would turn a
+ * table cell into a paragraph.
+ */
+
 interface PortsDisplayProps {
   ports: ServicePortInfo[];
   maxDisplay?: number;
-}
-
-function formatPortCompact(port: ServicePortInfo): string {
-  let result = `${port.port}→${port.targetPort}`;
-  if (port.nodePort) {
-    result += ` (${port.nodePort})`;
-  }
-  return result;
 }
 
 function formatPortFull(port: ServicePortInfo): string {
@@ -31,39 +32,58 @@ function formatPortFull(port: ServicePortInfo): string {
   return parts.join("\n");
 }
 
+function PortText({ port }: { port: ServicePortInfo }) {
+  const qualifier = [port.name, port.protocol].filter(Boolean).join(" · ");
+  return (
+    <span className="cursor-default">
+      <span className="font-mono text-fg">{port.port}</span>
+      <span className="font-mono text-fg-fnt">→</span>
+      <span className="font-mono text-fg-mut">{port.targetPort}</span>
+      {port.nodePort != null && (
+        <span className="font-mono text-fg-mut">:{port.nodePort}</span>
+      )}
+      {qualifier && (
+        <span className="ml-1 text-[11px] text-fg-fnt">{qualifier}</span>
+      )}
+    </span>
+  );
+}
+
 export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
   if (ports.length === 0) {
-    return <span className="text-muted-foreground">No ports</span>;
+    return <span className="text-fg-fnt">—</span>;
   }
 
-  const displayPorts = ports.slice(0, maxDisplay);
-  const remainingCount = ports.length - maxDisplay;
+  const shown = ports.slice(0, maxDisplay);
+  const rest = ports.slice(maxDisplay);
 
   return (
-    <div className="flex flex-wrap gap-1 items-center">
-      {displayPorts.map((port, idx) => (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
+      {shown.map((port, idx) => (
         <Tooltip key={idx}>
-          <TooltipTrigger>
-            <Badge variant="secondary" className="text-xs font-mono">
-              {formatPortCompact(port)}
-            </Badge>
+          <TooltipTrigger asChild>
+            <span>
+              <PortText port={port} />
+            </span>
           </TooltipTrigger>
           <TooltipContent>
-            <pre className="text-xs whitespace-pre">{formatPortFull(port)}</pre>
+            <pre className="whitespace-pre text-[11px]">
+              {formatPortFull(port)}
+            </pre>
           </TooltipContent>
         </Tooltip>
       ))}
-      {remainingCount > 0 && (
+      {rest.length > 0 && (
         <Tooltip>
-          <TooltipTrigger>
-            <Badge variant="outline" className="text-xs">
-              +{remainingCount}
-            </Badge>
+          <TooltipTrigger asChild>
+            <span className="cursor-default text-[11px] text-fg-fnt">
+              +{rest.length} more
+            </span>
           </TooltipTrigger>
           <TooltipContent>
-            <div className="space-y-2">
-              {ports.slice(maxDisplay).map((port, idx) => (
-                <pre key={idx} className="text-xs whitespace-pre">
+            <div className="flex flex-col gap-2">
+              {rest.map((port, idx) => (
+                <pre key={idx} className="whitespace-pre text-[11px]">
                   {formatPortFull(port)}
                 </pre>
               ))}

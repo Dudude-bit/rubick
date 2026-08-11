@@ -1,0 +1,742 @@
+import { useEffect } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { Info } from "lucide-react";
+
+import { SectionHeader } from "@/components/ui/section";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { ResourceDetailLayout } from "./ResourceDetailLayout";
+
+/**
+ * A client, because the frame now asks a capability where this object came
+ * from. With nothing installed it answers "nothing" — which is the state this
+ * whole file's cluster is in and exactly what it must draw.
+ */
+const client = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+import {
+  countMark,
+  kindGlyph,
+  liveMark,
+  severityMark,
+  viewGlyph,
+  type DetailTab,
+} from "./detail-tab";
+
+const wrap = (ui: React.ReactNode) =>
+  render(
+    <QueryClientProvider client={client()}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  );
+
+/** Where a click landed, read out of the router rather than guessed at. */
+function LocationProbe() {
+  const { pathname } = useLocation();
+  return <span data-testid="location">{pathname}</span>;
+}
+
+const base = {
+  // A loaded object: the layout renders its "not found" state instead when
+  // `resource` is nullish, and that state has no tabs at all.
+  resource: { name: "pv-demo" },
+  title: "pv-demo",
+  resourceKind: "PersistentVolume",
+  isLoading: false,
+  error: null,
+  onBack: () => {},
+  onTabChange: () => {},
+};
+
+/**
+ * Nothing of the page's own grows above the tab strip.
+ *
+ * This is the whole shape of the page and not a detail of it: the strip
+ * carries Scale, Restart and Delete on its row, so anything that can grow
+ * between the header and the strip can push every control off the screen. It
+ * did — the day the Overview became full-width blocks, a StatefulSet's Scale
+ * button moved a screen below the fold. The frame therefore has no slot for
+ * blocks at all, and the blocks are the first tab's content.
+ */
+describe("ResourceDetailLayout puts nothing of the page above the strip", () => {
+  it("will not compile a page that hands the frame blocks", () => {
+    const blocks = (
+      // @ts-expect-error - the frame takes no children. If this line ever
+      // stops being an error, a page can render above the strip again and the
+      // controls can leave the screen with it.
+      <ResourceDetailLayout {...base} activeTab="overview" tabs={[]}>
+        <p>capacity 2Gi</p>
+      </ResourceDetailLayout>
+    );
+    expect(blocks).toBeTruthy();
+  });
+
+  it("draws the open tab's content after the strip, never before it", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: <p>capacity 2Gi</p>,
+          },
+        ]}
+      />
+    );
+    const strip = screen.getByRole("tablist");
+    const block = screen.getByText("capacity 2Gi");
+    expect(
+      strip.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  /**
+   * The one exception, and it earns it: what is wrong with the *object* is
+   * worth its two lines on every tab, including a full-height one.
+   */
+  it("keeps the summary above the strip, on a surface tab as much as any", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="logs"
+        summary={<p>CrashLoopBackOff — the container keeps exiting</p>}
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "logs",
+            label: "Logs",
+            glyph: viewGlyph(Info),
+            kind: "surface",
+            content: null,
+          },
+        ]}
+      />
+    );
+    const strip = screen.getByRole("tablist");
+    const said = screen.getByText(/CrashLoopBackOff/);
+    expect(
+      strip.compareDocumentPosition(said) & Node.DOCUMENT_POSITION_PRECEDING
+    ).toBeTruthy();
+  });
+});
+
+/**
+ * A surface owns the page's height. It used to be denied that on a page whose
+ * every tab was a surface, because hiding the blocks above the strip for good
+ * is how PersistentVolume once lost its capacity, binding and reclaim policy.
+ * There is nothing above the strip to hide any more — a page's blocks are a
+ * tab, and PersistentVolume's are its Overview — so the exception is gone and
+ * a page made only of surfaces gets the window it is built to fill.
+ */
+describe("ResourceDetailLayout and who owns the height", () => {
+  const onlySurfaces = (
+    <ResourceDetailLayout
+      {...base}
+      activeTab="yaml"
+      tabs={[
+        {
+          id: "yaml",
+          label: "YAML",
+          glyph: viewGlyph(Info),
+          kind: "surface",
+          content: null,
+        },
+      ]}
+    />
+  );
+
+  it("gives the window to a page whose every tab is a surface", () => {
+    const { container } = wrap(onlySurfaces);
+    expect(container.firstChild).toHaveClass("h-full");
+  });
+
+  it("leaves the page scrolling on a tab made of blocks", () => {
+    const { container } = wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "yaml",
+            label: "YAML",
+            glyph: viewGlyph(Info),
+            kind: "surface",
+            content: null,
+          },
+        ]}
+      />
+    );
+    expect(container.firstChild).not.toHaveClass("h-full");
+  });
+});
+
+/**
+ * A surface tab holds something live: an attached shell, a log stream, an
+ * editor's undo history. Radix unmounts the panel of every tab that is not the
+ * open one, so a shell opened here died the instant the reader clicked Logs —
+ * which is the whole reason the shell was moved onto a tab. Unmounting a
+ * surface is not hiding it, it is ending it.
+ *
+ * The other half of the rule matters just as much: a surface nobody has opened
+ * must not be mounted, or arriving on a pod would open an exec session into it.
+ */
+describe("ResourceDetailLayout surface tabs and what lives in them", () => {
+  const mounted = vi.fn();
+
+  function Session() {
+    useEffect(() => {
+      mounted();
+    }, []);
+    return <p>attached to app</p>;
+  }
+
+  const withShell = (activeTab: string) => ({
+    ...base,
+    activeTab,
+    tabs: [
+      {
+        id: "overview",
+        label: "Overview",
+        glyph: viewGlyph(Info),
+        content: null,
+      },
+      {
+        id: "shell",
+        label: "Shell",
+        glyph: viewGlyph(Info),
+        kind: "surface" as const,
+        content: <Session />,
+      },
+    ],
+  });
+
+  it("keeps a session alive through a trip to another tab and back", () => {
+    mounted.mockClear();
+    const { rerender } = wrap(<ResourceDetailLayout {...withShell("shell")} />);
+    expect(mounted).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <QueryClientProvider client={client()}>
+        <MemoryRouter>
+          <ResourceDetailLayout {...withShell("overview")} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    // Still in the DOM, merely off the screen: `hidden` is what a reader loses
+    // when they click away, and the session is not theirs to lose with it.
+    expect(screen.getByText("attached to app")).toBeInTheDocument();
+
+    rerender(
+      <QueryClientProvider client={client()}>
+        <MemoryRouter>
+          <ResourceDetailLayout {...withShell("shell")} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    // The number that matters: a second mount would be a second `openPodShell`
+    // and a dead prompt where the reader left a live one.
+    expect(mounted).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mount a surface nobody has opened", () => {
+    mounted.mockClear();
+    wrap(<ResourceDetailLayout {...withShell("overview")} />);
+    expect(screen.queryByText("attached to app")).not.toBeInTheDocument();
+    expect(mounted).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * One band of chrome, not two. The page's actions belong on the tab strip's
+ * row, and the header keeps only what says which object this is.
+ */
+describe("ResourceDetailLayout chrome", () => {
+  const withActions = (activeTab: string, kind?: "sections" | "surface") =>
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        createdAt="2020-01-01T00:00:00Z"
+        activeTab={activeTab}
+        actions={<button type="button">Delete</button>}
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "yaml",
+            label: "YAML",
+            glyph: viewGlyph(Info),
+            kind,
+            content: null,
+          },
+        ]}
+      />
+    );
+
+  it("puts the actions on the tab strip's row", () => {
+    withActions("overview");
+    const row = screen.getByRole("tablist").parentElement;
+    expect(row).toContainElement(
+      screen.getByRole("button", { name: "Delete" })
+    );
+  });
+
+  it("keeps them off the header, which is now identity only", () => {
+    withActions("overview");
+    const header = screen
+      .getByRole("heading", { level: 1 })
+      .closest("div")?.parentElement;
+    expect(header).not.toContainElement(
+      screen.getByRole("button", { name: "Delete" })
+    );
+  });
+
+  // The header used to drop the age and the qualifying badges on a full-height
+  // tab, to buy back the second row it needed for the actions. It is one row
+  // either way now, so there is nothing to buy and nothing to drop — and a
+  // header that restructures itself when the reader clicks Logs reads as the
+  // page reloading.
+  it("says the same things on a full-height tab as on any other", () => {
+    withActions("yaml", "surface");
+    expect(screen.getByText(/old/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The strip is a heading. Whatever a tab opens with does not get to say the
+ * word the reader just clicked, and no block gets to say the kind the
+ * breadcrumb and the title already carry.
+ */
+describe("ResourceDetailLayout captions", () => {
+  it("drops a block heading that only repeats the tab label", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="conditions"
+        tabs={[
+          {
+            id: "conditions",
+            label: "Conditions",
+            glyph: viewGlyph(Info),
+            content: <SectionHeader title="Conditions" />,
+          },
+        ]}
+      />
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Conditions" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the count the strip does not carry, with its noun", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="conditions"
+        tabs={[
+          {
+            id: "conditions",
+            label: "Conditions",
+            glyph: viewGlyph(Info),
+            content: <SectionHeader title="Conditions" count={3} />,
+          },
+        ]}
+      />
+    );
+    expect(screen.getByText("3 conditions")).toBeInTheDocument();
+  });
+
+  it("drops a block heading that only repeats the kind", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: <SectionHeader title="PersistentVolume" />,
+          },
+        ]}
+      />
+    );
+    expect(
+      screen.queryByRole("heading", { name: "PersistentVolume" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves a heading that says something new", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="access"
+        tabs={[
+          {
+            id: "access",
+            label: "Access",
+            glyph: viewGlyph(Info),
+            content: <SectionHeader title="Reachable at" />,
+          },
+        ]}
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: "Reachable at" })
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * The strip is scanned, not read. A tab without a glyph is a tab that has to
+ * be read to be told from its neighbours, and one page shipping four glyphs
+ * beside fourteen bare words is worse than none of them having any — so the
+ * rule is enforced twice: the type will not compile a tab without one, and
+ * the strip is asserted to draw one for every tab it is given.
+ */
+describe("ResourceDetailLayout glyphs", () => {
+  const glyphOf = (name: string | RegExp) =>
+    screen.getByRole("tab", { name }).querySelector("svg");
+
+  it("will not compile a tab that ships without a glyph", () => {
+    // @ts-expect-error - `glyph` is required. If this line ever stops being an
+    // error, eighteen pages have quietly been allowed to drop theirs.
+    const glyphless: DetailTab = { id: "x", label: "X", content: null };
+    expect(glyphless.label).toBe("X");
+  });
+
+  it("draws one for every tab, and hides it from the accessible name", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "pods",
+            label: "Pods",
+            glyph: kindGlyph("Pod"),
+            content: null,
+          },
+        ]}
+      />
+    );
+    for (const tab of screen.getAllByRole("tab")) {
+      const glyphs = tab.querySelectorAll("svg");
+      expect(glyphs).toHaveLength(1);
+      expect(glyphs[0]).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+
+  /**
+   * A tab that names a kind keeps that kind's hue whether or not it is the
+   * open one — meeting the same cube on a Deployment's Pods tab that was
+   * clicked in the sidebar is the entire reason kinds carry a hue.
+   */
+  it("tints a tab that names a kind, active or not", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "pods",
+            label: "Pods",
+            glyph: kindGlyph("Pod"),
+            content: null,
+          },
+        ]}
+      />
+    );
+    expect(glyphOf("Pods")?.getAttribute("style")).toContain("var(--kind-s)");
+  });
+
+  /** A view is a verb. Giving it a hue would claim it is a resource. */
+  it("leaves a tab that names a view untinted", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+        ]}
+      />
+    );
+    expect(glyphOf("Overview")?.getAttribute("style") ?? "").not.toContain(
+      "hsl"
+    );
+  });
+});
+
+/**
+ * A mark earns its pixels by changing which tab gets clicked, and it never
+ * spends colour alone: the words are in the accessible name, because a red
+ * disc is nothing at all to a reader who cannot see red.
+ */
+describe("ResourceDetailLayout tab marks", () => {
+  const strip = (mark: DetailTab["mark"]) =>
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: null,
+          },
+          {
+            id: "containers",
+            label: "Containers",
+            glyph: kindGlyph("Pod"),
+            mark,
+            content: null,
+          },
+        ]}
+      />
+    );
+
+  it("says how many a collection holds, so an empty one needs no click", () => {
+    strip(countMark(0));
+    expect(screen.getByRole("tab", { name: /Containers/ })).toHaveTextContent(
+      "Containers0"
+    );
+  });
+
+  it("puts a severity dot's meaning into words", () => {
+    strip(severityMark("err", "1 of 4 failing"));
+    expect(
+      screen.getByRole("tab", { name: "Containers — 1 of 4 failing" })
+    ).toBeInTheDocument();
+  });
+
+  it("does the same for a live session", () => {
+    strip(liveMark("session attached to app"));
+    expect(
+      screen.getByRole("tab", { name: "Containers — session attached to app" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The only animated thing in the strip, which is what lets it mean one
+   * thing — and it stops for a reader who asked motion to stop.
+   */
+  it("animates the live dot and nothing else, and not under reduced motion", () => {
+    strip(liveMark("session attached to app"));
+    const dot = screen
+      .getByRole("tab", { name: /Containers/ })
+      .querySelector("span[aria-hidden='true']");
+    expect(dot?.className).toContain("animate-tab-live");
+    expect(dot?.className).toContain("motion-reduce:animate-none");
+  });
+});
+
+/**
+ * The kind segment of the breadcrumb is a `<Link>` on every page, and an
+ * unrouted destination inside the layout route matches no branch at all —
+ * React Router renders nothing and the whole shell disappears. A kind with no
+ * list page has to say the word without offering it.
+ */
+describe("the breadcrumb's kind segment", () => {
+  const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: null,
+    },
+  ];
+
+  it("links to the list route the sidebar uses", () => {
+    wrap(<ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />);
+    expect(
+      screen.getByRole("link", { name: "persistentvolumes" })
+    ).toHaveAttribute("href", "/storage/persistentvolumes");
+  });
+
+  it("is plain text when there is nowhere to go", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    expect(screen.getByText("replicasets")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "replicasets" })).toBeNull();
+  });
+});
+
+/**
+ * `pods / k8s-gui-test / burst-demo` reads as a path, and for as long as the
+ * middle of it was a `<span>` only two thirds of it behaved like one. The
+ * segment stands for a scope, so it hands the tab that scope on the way to
+ * the list — and a modified gesture that opened a tab *without* it would put
+ * the reader's second view of `k8s-gui-test` on a tab scoped to everything.
+ */
+describe("the breadcrumb's namespace segment", () => {
+  const pod = {
+    ...base,
+    resource: { name: "burst-demo" },
+    title: "burst-demo",
+    resourceKind: "Pod",
+    namespace: "k8s-gui-test",
+  };
+  const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: null,
+    },
+  ];
+
+  function place(ui: React.ReactNode) {
+    return render(
+      <QueryClientProvider client={client()}>
+        <MemoryRouter initialEntries={["/pods/k8s-gui-test/burst-demo"]}>
+          {ui}
+          <LocationProbe />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  const where = () => screen.getByTestId("location").textContent;
+  const segment = () => screen.getByTitle(/k8s-gui-test/);
+
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: null, currentNamespace: "" });
+    useScopeTabStore.setState({
+      tabs: [
+        {
+          id: "trail",
+          context: null,
+          namespace: "",
+          href: "/pods/k8s-gui-test/burst-demo",
+          missing: false,
+        },
+      ],
+      activeId: "trail",
+      pendingHref: null,
+    });
+  });
+
+  it("narrows this tab and opens the list on a plain click", async () => {
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    await userEvent.click(segment());
+    expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
+    expect(where()).toBe("/workloads/pods");
+  });
+
+  it("carries the namespace into the tab a middle click opens", () => {
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    // Testing Library has no `auxClick` helper; React binds `onAuxClick`
+    // to the native `auxclick` event, so dispatch that one.
+    fireEvent(
+      segment(),
+      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })
+    );
+    const { tabs: open, activeId } = useScopeTabStore.getState();
+    expect(open).toHaveLength(2);
+    expect(open[1]).toMatchObject({
+      namespace: "k8s-gui-test",
+      href: "/workloads/pods",
+    });
+    // Behind, like the browser: the reader is still reading the pod.
+    expect(activeId).toBe("trail");
+    expect(useClusterStore.getState().currentNamespace).toBe("");
+  });
+
+  it("says it narrows the tab only while that is true", () => {
+    const { unmount } = place(
+      <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
+    );
+    expect(segment()).toHaveAccessibleName(
+      "Show pods in k8s-gui-test — narrows this tab to that namespace"
+    );
+    unmount();
+
+    useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
+    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    expect(segment()).toHaveAccessibleName("Show pods in k8s-gui-test");
+  });
+
+  /**
+   * A ReplicaSet's parent is a Deployment and Helm's list keeps a namespace
+   * filter this scope does not drive, so there is no list to narrow. The
+   * scope is still the segment's to give, and giving it must not throw the
+   * reader off the page they are reading to do it.
+   */
+  it("hands over the scope in place when there is no list to narrow", async () => {
+    place(
+      <ResourceDetailLayout
+        {...pod}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        namespaceUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    await userEvent.click(segment());
+    expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
+    expect(where()).toBe("/pods/k8s-gui-test/burst-demo");
+  });
+
+  it("is plain text once that scope is the one the tab already holds", () => {
+    useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
+    place(
+      <ResourceDetailLayout
+        {...pod}
+        resourceKind="ReplicaSet"
+        listUrl={null}
+        namespaceUrl={null}
+        activeTab="overview"
+        tabs={tabs}
+      />
+    );
+    expect(screen.getByText("k8s-gui-test")).toBeInTheDocument();
+    expect(screen.queryByTitle(/k8s-gui-test/)).toBeNull();
+  });
+});

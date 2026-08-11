@@ -1,6 +1,6 @@
-# Lefthook git hooks. Install once after `npm install`:
+# Lefthook git hooks. Install once after `bun install`:
 #
-#     npx lefthook install
+#     bunx lefthook install
 #
 # Skip a single commit's hooks with `LEFTHOOK=0 git commit ...`.
 
@@ -15,10 +15,10 @@ pre-commit:
       # Lint reports many warnings post-react-hooks@7 upgrade — allow them
       # for now, fail only on errors. Tighten by removing this once the
       # warnings backlog is triaged.
-      run: npx eslint {staged_files}
+      run: bunx eslint {staged_files}
     prettier:
       glob: "*.{ts,tsx,css,json,md}"
-      run: npx prettier --check {staged_files}
+      run: bunx prettier --check {staged_files}
 
 pre-push:
   parallel: true
@@ -31,7 +31,7 @@ pre-push:
     # build was never run pre-push because the hook itself skipped.
     frontend-tests:
       glob: "*.{ts,tsx}"
-      run: npm test
+      run: bun run test
     rust-tests:
       glob: "*.rs"
       run: cargo test --manifest-path src-tauri/Cargo.toml --lib

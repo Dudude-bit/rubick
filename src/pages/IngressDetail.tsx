@@ -1,56 +1,64 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-} from "@/components/resources/ResourceDetailLayout";
-import { LinkedResource } from "@/components/network";
-import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { REFRESH_INTERVALS } from "@/lib/refresh";
-import {
-  Globe,
-  ExternalLink,
-  Shield,
-  Network,
-  Copy,
-  Link2,
-  Tag,
-  FileText,
-  ArrowRight,
-  AlertTriangle,
-  Info,
-  Clock,
-  Calendar,
-} from "lucide-react";
-import { RealtimeAge } from "@/components/ui/realtime";
-import { commands } from "@/lib/commands";
-import type {
-  IngressInfo,
-  IngressRule,
-  EventInfo,
-  EventFilters,
-} from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { useQuery } from "@tanstack/react-query";
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { cn } from "@/lib/utils";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { Copy, ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
-// Helper to generate full URLs from ingress rules
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  countMark,
+  kindGlyph,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
+import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import {
+  KeyValueList,
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import {
+  recordToKeyValues,
+  TONE_CLASS,
+} from "@/components/resources/key-values";
+import { CertificateLine } from "@/components/resources/CertificateFacts";
+import { IssuanceSection } from "@/components/resources/IssuanceChain";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
+import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
+import { useTlsCertificates } from "@/hooks/useTlsCertificates";
+import { expiryOf } from "@/lib/certificates";
+import { deliveryOfKind } from "@/lib/delivery";
+import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
+import { ResourceType } from "@/lib/resource-registry";
+import { cn } from "@/lib/utils";
+import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
+
 interface AccessUrl {
   fullUrl: string;
   host: string;
   displayHost: string;
   path: string;
-  pathType: string;
   backendService: string;
   backendPort: string;
   resourceBackend: string | null;
   isHttps: boolean;
-  tlsReason: "explicit" | "catch-all" | null;
+  /** `true` when TLS covers the host only through a catch-all entry. */
+  viaCatchAll: boolean;
 }
 
 function generateAccessUrls(
@@ -62,38 +70,59 @@ function generateAccessUrls(
 
   for (const rule of rules) {
     const isWildcard = rule.host === "*" || !rule.host;
-    const displayHost = isWildcard ? "All hosts" : rule.host;
+    const explicit = tlsHosts.includes(rule.host);
+    const isHttps = explicit || hasCatchAllTls;
+    const scheme = isHttps ? "https" : "http";
     const actualHost = isWildcard ? "" : rule.host;
 
-    // TLS detection: host is in tlsHosts, or there's a catch-all TLS config
-    const isHttps = tlsHosts.includes(rule.host) || hasCatchAllTls;
-    const scheme = isHttps ? "https" : "http";
-    const tlsReason = tlsHosts.includes(rule.host)
-      ? "explicit"
-      : hasCatchAllTls
-        ? "catch-all"
-        : null;
-
     for (const path of rule.paths) {
-      const fullUrl = actualHost
-        ? `${scheme}://${actualHost}${path.path}`
-        : `${scheme}://<host>${path.path}`;
       urls.push({
-        fullUrl,
+        fullUrl: actualHost
+          ? `${scheme}://${actualHost}${path.path}`
+          : `${scheme}://<host>${path.path}`,
         host: rule.host,
-        displayHost,
+        displayHost: isWildcard ? "All hosts" : rule.host,
         path: path.path,
-        pathType: path.pathType,
         backendService: path.backendService,
         backendPort: path.backendPort,
         resourceBackend: path.resourceBackend,
         isHttps,
-        tlsReason,
+        viaCatchAll: isHttps && !explicit,
       });
     }
   }
 
   return urls;
+}
+
+/** "1 host", "2 hosts" — the count and its noun agree. */
+function countOf(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+const ACCESS_ROW =
+  "grid grid-cols-[44px_minmax(0,1fr)_minmax(0,190px)_50px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
+
+function IconAction({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: typeof Copy;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="flex h-5 w-5 items-center justify-center rounded text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
+  );
 }
 
 export function IngressDetail() {
@@ -109,6 +138,7 @@ export function IngressDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<IngressInfo>({
     resourceKind: ResourceType.Ingress,
     fetchResource: async (name, ns) => {
@@ -125,25 +155,58 @@ export function IngressDetail() {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
-    defaultTab: "access",
+    defaultTab: "overview",
   });
 
   const rules = ingress?.rules ?? [];
   const tlsHosts = ingress?.tlsHosts ?? [];
   const tlsConfigs = ingress?.tlsConfigs ?? [];
   const loadBalancerIps = ingress?.loadBalancerIps ?? [];
-  const labels = ingress?.labels ?? {};
-  const annotations = ingress?.annotations ?? {};
   const hasCatchAllTls = ingress?.hasCatchAllTls ?? false;
   const accessUrls = generateAccessUrls(rules, tlsHosts, hasCatchAllTls);
+  const hasTls = tlsHosts.length > 0 || tlsConfigs.length > 0;
+  const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
 
-  // Fetch events for this ingress
+  const connections = useConnections(ResourceType.Ingress, name, namespace);
+  const tlsSecretNames = tlsConfigs.flatMap((config) =>
+    config.secretName ? [config.secretName] : []
+  );
+  const certificates = useTlsCertificates(
+    ingress?.namespace ?? namespace,
+    tlsSecretNames
+  );
+  const issuance = useCertificateIssuance(
+    ingress?.namespace ?? namespace,
+    tlsSecretNames
+  );
+
+  // Which controller claims this Ingress. Core: IngressClass is a built-in
+  // kind, and "none does" is the failure that is silent everywhere else.
+  const { data: controller } = useQuery({
+    queryKey: ["ingress-class", ingress?.className ?? null],
+    queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
+    enabled: !!ingress,
+  });
+
+  // The soonest expiry across every certificate this Ingress serves: one
+  // Ingress with four hosts has four certificates, and the badge can only
+  // carry the one that runs out first.
+  const soonest = tlsConfigs
+    .map((config) =>
+      config.secretName
+        ? certificates.data?.get(config.secretName)?.certificate
+        : undefined
+    )
+    .filter((cert) => cert != null)
+    .map((cert) => expiryOf(cert))
+    .sort((a, b) => a.days - b.days)[0];
+
   const {
     data: events = [],
     isLoading: eventsLoading,
     error: eventsError,
     refetch: refetchEvents,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["ingress-events", namespace, name],
     queryFn: async () => {
       const filters: EventFilters = {
@@ -157,505 +220,403 @@ export function IngressDetail() {
       return await commands.listEvents(filters);
     },
     enabled: !!name && !!namespace,
-    refetchInterval: REFRESH_INTERVALS.overview,
+    refresh: "overview",
   });
+
+  const facts: KeyValue[] = [
+    {
+      // The class is a request; the controller is who answers it. Naming
+      // only the request is how an Ingress nothing serves reads as fine.
+      label: "Class",
+      value: controller
+        ? controller.resolved
+          ? `${controller.resolved}${controller.controller ? ` · ${controller.controller}` : ""}`
+          : `${ingress?.className ?? "no class"} — nothing serves it`
+        : ingress?.className || "cluster default",
+      mono: !!ingress?.className,
+      tone: controller && !controller.resolved ? ("err" as const) : undefined,
+    },
+    {
+      label: "Load balancer",
+      // Until the controller assigns an address nothing reaches this ingress,
+      // which is the single most common reason it "does not work".
+      // The empty state keeps its own tone, so it stays plain text rather
+      // than the component's faint fallback.
+      value:
+        loadBalancerIps.length > 0 ? (
+          <CopyableAddresses values={loadBalancerIps} label="Ingress address" />
+        ) : (
+          "pending"
+        ),
+      tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
+    },
+    { label: "Rules", value: rules.length, mono: true },
+    { label: "Paths", value: accessUrls.length, mono: true },
+    {
+      label: "TLS",
+      // Once the certificate has been read, how long it has left is a more
+      // useful answer than how many hosts it covers — the host count is a
+      // shape, and the expiry is a date somebody has to act on.
+      value: !hasTls
+        ? "none — traffic is unencrypted"
+        : soonest
+          ? soonest.text
+          : hasCatchAllTls
+            ? "catch-all certificate"
+            : `${tlsHosts.length} host${tlsHosts.length === 1 ? "" : "s"}`,
+      tone: !hasTls
+        ? "warn"
+        : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
+    },
+  ];
+
+  const deliveryQuery = deliveryOfKind(ResourceType.Ingress, ingress);
 
   const tabs = [
     {
-      id: "access",
-      label: "Access",
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
-        <div className="space-y-4">
-          {/* Access URLs Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Link2 className="h-5 w-5" />
-                How to Access This Ingress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {accessUrls.length > 0 ? (
-                <div className="space-y-3">
-                  {accessUrls.map((url, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between rounded-lg border p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            url.isHttps
-                              ? "bg-green-500/10 text-green-500"
-                              : "bg-yellow-500/10 text-yellow-500"
-                          }
-                        >
-                          {url.isHttps ? "HTTPS" : "HTTP"}
-                        </Badge>
-                        <div className="flex items-center gap-1 flex-1 min-w-0">
-                          <Badge variant="outline" className="shrink-0">
-                            {url.displayHost}
-                          </Badge>
-                          <code className="text-sm font-mono truncate">
-                            {url.path}
-                          </code>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm text-muted-foreground shrink-0">
-                          {url.resourceBackend ? (
-                            `Resource: ${url.resourceBackend}`
-                          ) : url.backendService ? (
-                            <LinkedResource
-                              resourceType={ResourceType.Service}
-                              name={url.backendService}
-                              namespace={ingress?.namespace || ""}
-                              port={url.backendPort}
-                            />
-                          ) : (
-                            "No backend"
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 ml-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            copyToClipboard(
-                              url.host !== "*" && url.host
-                                ? url.fullUrl
-                                : url.path
-                            )
-                          }
-                          title="Copy URL"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        {url.host !== "*" && url.host && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              window.open(url.fullUrl, "_blank", "noreferrer")
-                            }
-                            title="Open in Browser"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  No access URLs available
-                </p>
-              )}
+        <>
+          <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
 
-              {/* Load Balancer / External IP info */}
-              {loadBalancerIps.length > 0 && (
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="text-sm font-medium mb-2">
-                    External Addresses
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {loadBalancerIps.map((ip, idx) => (
-                      <Badge key={idx} variant="outline" className="font-mono">
-                        {ip}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          <TrafficChain
+            query={connections}
+            certificates={certificates.data}
+            issuance={issuance}
+            controller={controller}
+          />
+        </>
       ),
     },
     {
+      id: "access",
+      label: "Access",
+      glyph: viewGlyph(ExternalLink),
+      content: (
+        <Section>
+          <SectionHeader
+            title="Reachable at"
+            count={
+              plainHttp > 0
+                ? `${countOf(accessUrls.length, "path")} · ${plainHttp} over plain HTTP`
+                : countOf(accessUrls.length, "path")
+            }
+          />
+          {accessUrls.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No rules, so this ingress routes nothing.
+            </p>
+          ) : (
+            <div>
+              {accessUrls.map((url) => (
+                <div key={`${url.host}${url.path}`} className={ACCESS_ROW}>
+                  <span
+                    className={cn(
+                      "text-[11px] font-medium",
+                      url.isHttps ? "text-fg-fnt" : "text-warn"
+                    )}
+                  >
+                    {url.isHttps ? "HTTPS" : "HTTP"}
+                  </span>
+                  <span className="min-w-0 break-all font-mono text-fg">
+                    <span className="text-fg-mut">{url.displayHost}</span>
+                    {url.path}
+                  </span>
+                  <span className="min-w-0 truncate text-fg-fnt">
+                    {url.resourceBackend ? (
+                      <span className="font-mono">{url.resourceBackend}</span>
+                    ) : url.backendService ? (
+                      <>
+                        <ResourceRef
+                          kind={ResourceType.Service}
+                          name={url.backendService}
+                          namespace={ingress?.namespace}
+                          showKind={false}
+                        />
+                        <span className="font-mono">:{url.backendPort}</span>
+                      </>
+                    ) : (
+                      "no backend"
+                    )}
+                  </span>
+                  <span className="flex justify-end gap-0.5">
+                    <IconAction
+                      label="Copy URL"
+                      icon={Copy}
+                      onClick={() =>
+                        copyToClipboard(
+                          url.host && url.host !== "*" ? url.fullUrl : url.path
+                        )
+                      }
+                    />
+                    {url.host && url.host !== "*" && (
+                      <IconAction
+                        label="Open in browser"
+                        icon={ExternalLink}
+                        onClick={() =>
+                          window.open(url.fullUrl, "_blank", "noreferrer")
+                        }
+                      />
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      ),
+    },
+    connectionsTab(connections, deliveryQuery),
+    {
       id: "rules",
       label: "Rules",
+      glyph: viewGlyph(Route),
+      mark: countMark(rules.length),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ingress Rules</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {rules.map((rule, idx) => {
-                const isWildcard = rule.host === "*" || !rule.host;
-                const displayHost = isWildcard ? "All hosts" : rule.host;
-                const hasTls = tlsHosts.includes(rule.host) || hasCatchAllTls;
-
-                return (
-                  <div key={idx} className="rounded-lg border p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Badge variant="outline">{displayHost}</Badge>
-                      {hasTls && (
-                        <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                          <Shield className="h-3 w-3 mr-1" />
-                          TLS
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {rule.paths.map((path, pathIdx) => (
-                        <div
-                          key={pathIdx}
-                          className="flex items-center justify-between rounded border p-2 bg-muted/30"
-                        >
-                          <div className="flex items-center gap-2">
-                            <code className="text-sm">{path.path}</code>
-                            <Badge variant="secondary" className="text-xs">
-                              {path.pathType}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-1">
-                            →{" "}
-                            {path.resourceBackend ? (
-                              `Resource: ${path.resourceBackend}`
-                            ) : path.backendService ? (
-                              <LinkedResource
-                                resourceType={ResourceType.Service}
+        <Section>
+          <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
+          {rules.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No rules, so this ingress routes nothing — every request reaching
+              the controller falls through to its default backend.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Path</TableHead>
+                  <TableHead>Match</TableHead>
+                  <TableHead>Backend</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rules.map((rule, ruleIdx) => {
+                  const isWildcard = rule.host === "*" || !rule.host;
+                  const covered =
+                    tlsHosts.includes(rule.host) || hasCatchAllTls;
+                  return [
+                    // The host is context for the paths under it, so it is
+                    // said once above them instead of on every row.
+                    <TableRow
+                      key={`host-${ruleIdx}`}
+                      data-quiet
+                      className="border-0"
+                    >
+                      <TableCell
+                        colSpan={3}
+                        className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+                      >
+                        <span className="font-mono text-fg-mut">
+                          {isWildcard ? "All hosts" : rule.host}
+                        </span>
+                        {!covered && (
+                          <span className="text-warn"> · no TLS</span>
+                        )}
+                      </TableCell>
+                    </TableRow>,
+                    ...rule.paths.map((path) => (
+                      <TableRow key={`${ruleIdx}-${path.path}`} data-quiet>
+                        <TableCell className="font-mono text-fg">
+                          {path.path}
+                        </TableCell>
+                        <TableCell className="text-fg-fnt">
+                          {path.pathType}
+                        </TableCell>
+                        <TableCell>
+                          {path.resourceBackend ? (
+                            <span className="font-mono text-fg-mut">
+                              {path.resourceBackend}
+                            </span>
+                          ) : path.backendService ? (
+                            <>
+                              <ResourceRef
+                                kind={ResourceType.Service}
                                 name={path.backendService}
-                                namespace={ingress?.namespace || ""}
-                                port={path.backendPort}
+                                namespace={ingress?.namespace}
+                                showKind={false}
                               />
-                            ) : (
-                              "No backend"
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-              {rules.length === 0 && (
-                <p className="text-muted-foreground">No rules defined</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                              <span className="font-mono text-fg-fnt">
+                                :{path.backendPort}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-warn">no backend</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )),
+                  ];
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
       ),
     },
     {
       id: "tls",
       label: "TLS",
+      glyph: viewGlyph(Lock),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              TLS Configuration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {tlsConfigs.length > 0 ? (
-              <div className="space-y-4">
-                {/* Explicit TLS Hosts */}
-                {tlsConfigs.filter((c) => !c.isCatchAll).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">
-                      Explicit TLS Hosts
-                    </h4>
-                    <div className="space-y-3">
-                      {tlsConfigs
-                        .filter((c) => !c.isCatchAll)
-                        .map((config, idx) => (
-                          <div key={idx} className="rounded-lg border p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Shield className="h-4 w-4 text-green-500" />
-                              <span className="font-medium">
-                                Secret:{" "}
-                                {config.secretName || "(auto-generated)"}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {config.hosts.map((host, hostIdx) => (
-                                <Badge
-                                  key={hostIdx}
-                                  variant="outline"
-                                  className="font-mono"
-                                >
-                                  {host}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Catch-all TLS */}
-                {tlsConfigs.filter((c) => c.isCatchAll).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                      Catch-all TLS
-                    </h4>
-                    <div className="space-y-3">
-                      {tlsConfigs
-                        .filter((c) => c.isCatchAll)
-                        .map((config, idx) => (
-                          <div
-                            key={idx}
-                            className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4"
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <Shield className="h-4 w-4 text-yellow-500" />
-                              <span className="font-medium">
-                                Secret:{" "}
-                                {config.secretName || "(auto-generated)"}
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Applies to all hosts not explicitly listed above
-                            </p>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No TLS configured</p>
-            )}
-          </CardContent>
-        </Card>
+        <Section>
+          <SectionHeader title="TLS" count={tlsConfigs.length || undefined} />
+          {tlsConfigs.length === 0 ? (
+            <p className="text-xs text-fg-fnt">
+              No TLS configured — this ingress serves plain HTTP.
+            </p>
+          ) : (
+            <KeyValueList
+              items={tlsConfigs.map((config) => ({
+                // The certificate lives in a Secret in this namespace, and
+                // "which Secret holds the cert for this host" is the question
+                // this tab exists to answer — so the label is the way to it.
+                // `showKind` is off: the block is titled TLS and every row in
+                // it is a Secret.
+                label: config.secretName ? (
+                  <ResourceRef
+                    kind={ResourceType.Secret}
+                    name={config.secretName}
+                    namespace={ingress?.namespace}
+                    showKind={false}
+                  />
+                ) : (
+                  "(auto-generated)"
+                ),
+                value: (
+                  <span className="flex flex-col gap-0.5">
+                    <span className={cn(!config.isCatchAll && "font-mono")}>
+                      {config.isCatchAll
+                        ? "catch-all · applies to every host not listed"
+                        : config.hosts.join(", ") || "no hosts"}
+                    </span>
+                    {config.secretName && (
+                      <CertificateLine
+                        read={certificates.data?.get(config.secretName)}
+                        hosts={config.hosts}
+                      />
+                    )}
+                  </span>
+                ),
+                tone: config.isCatchAll ? ("warn" as const) : undefined,
+              }))}
+            />
+          )}
+          {/* The four objects and the sentence that says what failed. Below
+              the certificate facts, because those are core and read the
+              same on a cluster with nothing installed on it. */}
+          {tlsConfigs.map(
+            (config) =>
+              config.secretName && (
+                <IssuanceSection
+                  key={config.secretName}
+                  issuance={issuance}
+                  secretName={config.secretName}
+                />
+              )
+          )}
+        </Section>
       ),
     },
     {
       id: "metadata",
       label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
-        <div className="space-y-4">
-          {/* Labels */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Tag className="h-5 w-5" />
-                Labels
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {Object.keys(labels).length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(labels).map(([key, value]) => (
-                    <Badge key={key} variant="outline" className="text-xs">
-                      <span className="font-medium">{key}</span>
-                      <span className="mx-1">=</span>
-                      <span>{value}</span>
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No labels</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Annotations */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Annotations
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {Object.keys(annotations).length > 0 ? (
-                <div className="space-y-2">
-                  {Object.entries(annotations).map(([key, value]) => (
-                    <div
-                      key={key}
-                      className="flex flex-col gap-1 rounded border p-2 bg-muted/30"
-                    >
-                      <code className="text-xs font-medium text-muted-foreground">
-                        {key}
-                      </code>
-                      <code className="text-sm break-all">{value}</code>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No annotations</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <>
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(ingress?.labels ?? {}).length}
+            items={recordToKeyValues(ingress?.labels ?? {})}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(ingress?.annotations ?? {}).length}
+            items={recordToKeyValues(ingress?.annotations ?? {})}
+            emptyMessage="No annotations"
+          />
+        </>
       ),
     },
     {
       id: "events",
       label: "Events",
+      glyph: kindGlyph(ResourceType.Event),
+      mark: countMark(events.length),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Events
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {eventsError ? (
-              <div className="flex items-center justify-between p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm">Failed to load events</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => refetchEvents()}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : eventsLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            ) : events.length > 0 ? (
-              <div className="space-y-3">
-                {events.map((event: EventInfo) => {
-                  const isWarning = event.type === "Warning";
-                  return (
-                    <div
-                      key={event.uid}
-                      className={cn(
-                        "rounded-lg border p-3",
-                        isWarning
-                          ? "border-yellow-500/50 bg-yellow-500/5"
-                          : "border-border"
-                      )}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          {isWarning ? (
-                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                          ) : (
-                            <Info className="h-4 w-4 text-blue-500" />
-                          )}
-                          <span className="font-medium">{event.reason}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {event.lastTimestamp
-                            ? new Date(event.lastTimestamp).toLocaleString()
-                            : "Unknown"}
-                          {(event.count || 0) > 1 && (
-                            <Badge variant="secondary" className="ml-2">
-                              x{event.count}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {event.message}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No events found</p>
-            )}
-          </CardContent>
-        </Card>
+        <Section>
+          <SectionHeader
+            title="Events"
+            count={events.length || undefined}
+            actions={
+              eventsError && (
+                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+              )
+            }
+          />
+          {eventsError ? (
+            <p className="text-xs text-warn">
+              Could not read events for this ingress.
+            </p>
+          ) : eventsLoading ? (
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          ) : (
+            <EventRows events={events} />
+          )}
+        </Section>
       ),
     },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Ingress YAML"
-          yaml={ingressYaml}
-          resourceKind={ResourceType.Ingress}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
-      ),
-    },
+    yamlTab({
+      title: "Ingress YAML",
+      yaml: ingressYaml,
+      resourceKind: ResourceType.Ingress,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={ingress}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Ingress}
       title={ingress?.name || name || ""}
       namespace={ingress?.namespace || namespace}
+      createdAt={ingress?.createdAt}
       badges={
         <>
           {ingress?.className && (
-            <Badge variant="outline">{ingress.className}</Badge>
+            <span className="font-mono text-[11px] text-fg-mut">
+              {ingress.className}
+            </span>
           )}
-          {(tlsHosts.length > 0 || tlsConfigs.length > 0) && (
-            <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-              <Shield className="mr-1 h-3 w-3" />
-              TLS
-            </Badge>
-          )}
-          {ingress?.createdAt && (
-            <Badge variant="outline" className="gap-1">
-              <Calendar className="h-3 w-3" />
-              <RealtimeAge timestamp={ingress.createdAt} />
-            </Badge>
-          )}
+          <span
+            className={cn(
+              "text-[11px]",
+              !hasTls
+                ? "text-warn"
+                : soonest?.tone
+                  ? TONE_CLASS[soonest.tone]
+                  : "text-fg-fnt"
+            )}
+          >
+            {!hasTls ? "no TLS" : (soonest?.tone && soonest.text) || "TLS"}
+          </span>
         </>
       }
-      icon={<Globe className="h-8 w-8 text-muted-foreground" />}
       onBack={goBack}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
-    >
-      <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Ingress Class"
-          icon={<Globe className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">
-            {ingress?.className || "default"}
-          </div>
-        </InfoCard>
-
-        <InfoCard
-          title="Load Balancer"
-          icon={<ExternalLink className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">
-            {loadBalancerIps.length > 0 ? loadBalancerIps[0] : "Pending"}
-          </div>
-          {loadBalancerIps.length > 1 && (
-            <div className="text-xs text-muted-foreground">
-              +{loadBalancerIps.length - 1} more
-            </div>
-          )}
-        </InfoCard>
-
-        <InfoCard
-          title="Rules"
-          icon={<Network className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">{rules.length}</div>
-        </InfoCard>
-
-        <InfoCard
-          title="Access URLs"
-          icon={<Link2 className="h-4 w-4 text-muted-foreground" />}
-        >
-          <div className="text-xl font-bold">{accessUrls.length}</div>
-        </InfoCard>
-      </div>
-    </ResourceDetailLayout>
+    />
   );
 }

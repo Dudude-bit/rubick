@@ -80,6 +80,10 @@ pub struct AppInfo {
     pub version: String,
     pub name: String,
     pub tauri_version: String,
+    /// Host OS: "macos" | "windows" | "linux". Drives which modifier
+    /// glyph the UI prints — the frontend must never guess this from a
+    /// user agent string, which lies inside a webview.
+    pub os: String,
 }
 
 /// Get application version and build info
@@ -90,6 +94,7 @@ pub fn get_app_info(app: tauri::AppHandle) -> AppInfo {
         version: package_info.version.to_string(),
         name: package_info.name.to_string(),
         tauri_version: tauri::VERSION.to_string(),
+        os: std::env::consts::OS.to_string(),
     }
 }
 

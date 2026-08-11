@@ -1,264 +1,373 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
-  Box,
-  Network,
-  Database,
-  FileText,
-  Server,
-  Activity,
   Package,
   Settings,
-  ChevronDown,
-  Puzzle,
+  type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import { useEffect, useState } from "react";
+
+import { ProviderMark } from "@/components/ui/provider-mark";
+import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { useIntegrationPages } from "@/integrations";
+import { detectProvider } from "@/lib/cluster-identity";
 import {
   ResourceType,
   getDisplayPlural,
+  getResourceIcon,
   getResourceListUrl,
+  type ResourceKind,
 } from "@/lib/resource-registry";
+import { cn } from "@/lib/utils";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
+import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Overview", path: "/" },
+type NavItem = {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  /** Which of the backend's counts belongs at the end of this row. */
+  count?: keyof ResourceCounts;
+  /**
+   * The route prefix this row owns, where that is wider than where it goes.
+   * Settings has five panes and one row; whichever pane the row happens to
+   * open, all five must light it.
+   */
+  section?: string;
+  /** Whether a waiting update puts its dot on this row. */
+  updateBadge?: boolean;
+};
+
+/** Where a waiting update actually is. `/settings` opens on Appearance. */
+const UPDATES_PATH = "/settings/about";
+
+/** A row whose label, route and icon all come from the resource registry. */
+function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
+  return {
+    label: getDisplayPlural(kind),
+    path: getResourceListUrl(kind),
+    icon: getResourceIcon(kind),
+    count,
+  };
+}
+
+/**
+ * The nav, in reading order.
+ *
+ * A group is a caption, not a control: the resources under it are what the
+ * sidebar is for, and hiding them behind a disclosure the user has to open
+ * on every launch made the panel a list of four words. Captioned groups
+ * cost one line each and keep every destination one click away.
+ */
+const GROUPS: { caption?: string; items: NavItem[] }[] = [
   {
-    icon: Box,
-    label: "Workloads",
-    path: "/workloads",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.Pod),
-        path: getResourceListUrl(ResourceType.Pod),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Deployment),
-        path: getResourceListUrl(ResourceType.Deployment),
-      },
-      {
-        label: getDisplayPlural(ResourceType.StatefulSet),
-        path: getResourceListUrl(ResourceType.StatefulSet),
-      },
-      {
-        label: getDisplayPlural(ResourceType.DaemonSet),
-        path: getResourceListUrl(ResourceType.DaemonSet),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Job),
-        path: getResourceListUrl(ResourceType.Job),
-      },
-      {
-        label: getDisplayPlural(ResourceType.CronJob),
-        path: getResourceListUrl(ResourceType.CronJob),
-      },
+    items: [
+      { label: "Overview", path: "/", icon: LayoutDashboard },
+      resource(ResourceType.Event, "events"),
     ],
   },
   {
-    icon: Network,
-    label: "Network",
-    path: "/network",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.Service),
-        path: getResourceListUrl(ResourceType.Service),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Ingress),
-        path: getResourceListUrl(ResourceType.Ingress),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Endpoints),
-        path: getResourceListUrl(ResourceType.Endpoints),
-      },
+    caption: "Workloads",
+    items: [
+      resource(ResourceType.Pod, "pods"),
+      resource(ResourceType.Deployment, "deployments"),
+      resource(ResourceType.StatefulSet, "statefulSets"),
+      resource(ResourceType.DaemonSet, "daemonSets"),
+      resource(ResourceType.Job, "jobs"),
+      resource(ResourceType.CronJob, "cronJobs"),
     ],
   },
   {
-    icon: Database,
-    label: "Storage",
-    path: "/storage",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.PersistentVolume),
-        path: getResourceListUrl(ResourceType.PersistentVolume),
-      },
-      {
-        label: getDisplayPlural(ResourceType.PersistentVolumeClaim),
-        path: getResourceListUrl(ResourceType.PersistentVolumeClaim),
-      },
-      {
-        label: getDisplayPlural(ResourceType.StorageClass),
-        path: getResourceListUrl(ResourceType.StorageClass),
-      },
+    caption: "Cluster",
+    items: [
+      resource(ResourceType.Node, "nodes"),
+      resource(ResourceType.Namespace, "namespaces"),
+      resource(ResourceType.CustomResourceDefinition),
+      { label: "Helm", path: "/helm", icon: Package },
     ],
   },
   {
-    icon: FileText,
-    label: "Configuration",
-    path: "/configuration",
-    children: [
-      {
-        label: getDisplayPlural(ResourceType.ConfigMap),
-        path: getResourceListUrl(ResourceType.ConfigMap),
-      },
-      {
-        label: getDisplayPlural(ResourceType.Secret),
-        path: getResourceListUrl(ResourceType.Secret),
-      },
-      { label: "Builder", path: "/configuration/builder" },
+    caption: "Network",
+    items: [
+      resource(ResourceType.Service, "services"),
+      // Services name the endpoints behind each one; this is the only place
+      // that answers "what is behind everything at once" — which is the
+      // question asked when it is not yet known which Service is wrong.
+      // No count: `ResourceCounts` has no endpoints field to read.
+      resource(ResourceType.Endpoints),
+      resource(ResourceType.Ingress, "ingresses"),
     ],
   },
   {
-    icon: Server,
-    label: getDisplayPlural(ResourceType.Node),
-    path: getResourceListUrl(ResourceType.Node),
+    caption: "Storage",
+    items: [
+      resource(ResourceType.PersistentVolumeClaim),
+      resource(ResourceType.PersistentVolume),
+      resource(ResourceType.StorageClass),
+    ],
   },
   {
-    icon: Activity,
-    label: getDisplayPlural(ResourceType.Event),
-    path: getResourceListUrl(ResourceType.Event),
+    caption: "Config",
+    items: [
+      resource(ResourceType.ConfigMap, "configMaps"),
+      resource(ResourceType.Secret, "secrets"),
+    ],
   },
+];
+
+/**
+ * After the Integrations category, which sits between the fixed nav and this
+ * — everything above is what every cluster has, and Settings is the last row
+ * on every screen the app has ever drawn.
+ */
+const TAIL: NavItem[] = [
   {
-    icon: Puzzle,
-    label: getDisplayPlural(ResourceType.CustomResourceDefinition),
-    path: getResourceListUrl(ResourceType.CustomResourceDefinition),
+    label: "Settings",
+    path: "/settings",
+    icon: Settings,
+    section: "/settings",
+    updateBadge: true,
   },
-  { icon: Package, label: "Helm", path: "/helm" },
-  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 export function Sidebar() {
-  const [expandedItems, setExpandedItems] = useState<string[]>([]);
-  const location = useLocation();
-  const updateAvailable = useUpdaterStore((state) => state.available);
-  const { data: appInfo } = useQuery({
-    queryKey: ["appInfo"],
-    queryFn: commands.getAppInfo,
-    staleTime: Infinity,
-  });
+  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const { data } = useClusterOverview(currentNamespace);
 
-  useEffect(() => {
-    const activeParents = navItems
-      .filter((item) => item.children)
-      .filter((item) => {
-        if (
-          location.pathname === item.path ||
-          location.pathname.startsWith(`${item.path}/`)
-        ) {
-          return true;
-        }
-        return item.children?.some(
-          (child) =>
-            location.pathname === child.path ||
-            location.pathname.startsWith(`${child.path}/`)
-        );
-      })
-      .map((item) => item.label);
-
-    if (activeParents.length === 0) {
-      return;
-    }
-
-    // Genuine union-of-user-intent-and-external-state pattern: the
-    // user can collapse parents manually, but route navigation must
-    // auto-expand the matching parent. Splitting into separate
-    // userExpanded / autoExpanded sets would require a state model
-    // refactor — left as a follow-up.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      activeParents.forEach((label) => next.add(label));
-      return Array.from(next);
-    });
-  }, [location.pathname]);
-
-  const toggleExpanded = (label: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(label)
-        ? prev.filter((item) => item !== label)
-        : [...prev, label]
-    );
-  };
+  // The overview query keeps its last answer as placeholder data across the
+  // key change a disconnect causes, which is right while switching clusters
+  // and wrong once there is no cluster: the rail went on printing the counts
+  // of the cluster the reader had just left. The status bar has always said
+  // "not connected" here; the rail now agrees rather than inventing numbers.
+  const overview = isConnected ? data : undefined;
 
   return (
-    <aside className="flex w-56 flex-col border-r border-border bg-card">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-          <span className="text-lg font-bold text-primary-foreground">K8</span>
-        </div>
-        <span className="font-semibold">K8s GUI</span>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin py-2">
-        {navItems.map((item) => (
-          <div key={item.label}>
-            {item.children ? (
-              <>
-                <button
-                  onClick={() => toggleExpanded(item.label)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      expandedItems.includes(item.label) && "rotate-180"
-                    )}
-                  />
-                </button>
-                {expandedItems.includes(item.label) && (
-                  <div className="ml-4 border-l border-border pl-4">
-                    {item.children.map((child) => (
-                      <NavLink
-                        key={child.path}
-                        to={child.path}
-                        className={({ isActive }) =>
-                          cn(
-                            "block py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
-                            isActive && "font-medium text-primary"
-                          )
-                        }
-                      >
-                        {child.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                    isActive && "bg-accent text-foreground"
-                  )
-                }
-              >
-                <div className="relative">
-                  <item.icon className="h-4 w-4" />
-                  {item.label === "Settings" && updateAvailable && (
-                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </div>
-                {item.label}
-              </NavLink>
-            )}
+    <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
+      <ClusterRow />
+      <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
+        {GROUPS.map((group, index) => (
+          <div key={group.caption ?? `ungrouped-${index}`}>
+            {group.caption && <GroupCaption>{group.caption}</GroupCaption>}
+            {group.items.map((item) => (
+              <NavRow key={item.path} item={item} overview={overview} />
+            ))}
           </div>
         ))}
+        <IntegrationsGroup />
+        <div>
+          {TAIL.map((item) => (
+            <NavRow key={item.path} item={item} overview={overview} />
+          ))}
+        </div>
       </nav>
-
-      {/* Version */}
-      <div className="border-t border-border p-4 text-xs text-muted-foreground">
-        {appInfo?.version ?? "..."}
-      </div>
     </aside>
   );
+}
+
+function GroupCaption({ children }: { children: string }) {
+  return (
+    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The one group that is absent rather than empty.
+ *
+ * Every other caption in this rail names something every cluster has. This
+ * one names what *this* cluster happens to have installed, and on most
+ * clusters that is nothing — so it draws nothing at all, not a caption over
+ * a gap.
+ *
+ * Hiding a feature is normally the wrong answer, and it is the right one
+ * here only because Settings → Integrations already names every extension
+ * the app knows, installed or not, with what each one would give. "What
+ * could this app do" has a screen built for it; the sidebar stays a list of
+ * things you actually have.
+ */
+function IntegrationsGroup() {
+  const pages = useIntegrationPages();
+  if (pages.length === 0) return null;
+
+  return (
+    <div>
+      <GroupCaption>Integrations</GroupCaption>
+      {pages.map((page) => (
+        <NavRow
+          key={page.path}
+          item={{ label: page.name, path: page.path, icon: page.icon }}
+          overview={undefined}
+          value={page.count}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The top row names the cluster, not the product.
+ *
+ * Which cluster this window is pointed at is the fact that decides whether a
+ * command is routine or an outage; the product's own name is something the
+ * user already knows and can never act on.
+ *
+ * It is also the one place a rename is not allowed to win outright. The tab
+ * strip and the front door can show a nickname alone because both are one
+ * hover or one glance from the truth; this row is on screen the whole time
+ * and is what somebody checks before they run something. So a renamed
+ * cluster gets both lines here — the name they gave it, and under it, at
+ * the faintest contrast the theme has, the context name itself.
+ */
+function ClusterRow() {
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const alias = useClusterMark(currentContext).alias?.trim();
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const isLoading = useClusterStore((s) => s.isLoading);
+  const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
+
+  const connecting = isLoading || isAuthenticating;
+
+  return (
+    <div className="flex h-[38px] flex-none items-center gap-2 px-2.5">
+      <ProviderMark
+        provider={detectProvider(currentContext ?? "")}
+        className="h-[15px] w-[15px] flex-none"
+        style={{ color: "var(--cluster)" }}
+      />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
+          {alias ?? currentContext ?? "no cluster"}
+        </span>
+        {alias && currentContext && (
+          // Clipped from the front, not the back. This rail is 200px wide
+          // and an ARN spends its first thirty characters on a region and
+          // an account number; cut the usual way it reads
+          // `arn:aws:eks:us-east-1:1…`, which is the half that cannot tell
+          // prod from staging. `direction: rtl` moves the ellipsis to the
+          // start and leaves the run itself in order, because the name is
+          // ASCII from end to end.
+          <span className="truncate text-left font-mono text-[10px] leading-[12px] text-fg-fnt [direction:rtl]">
+            {currentContext}
+          </span>
+        )}
+      </span>
+      {/* The halo is what makes a 7px dot readable in peripheral vision,
+          which is the only way this indicator is ever looked at. */}
+      <span
+        aria-label={
+          isConnected ? "connected" : connecting ? "connecting" : "disconnected"
+        }
+        className={cn(
+          "ml-auto h-[7px] w-[7px] flex-none rounded-full",
+          !isConnected && (connecting ? "bg-warn" : "bg-fg-fnt")
+        )}
+        style={
+          isConnected
+            ? {
+                background: "var(--cluster)",
+                boxShadow:
+                  "0 0 0 3px color-mix(in srgb, var(--cluster) 22%, transparent)",
+              }
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+function NavRow({
+  item,
+  overview,
+  value,
+}: {
+  item: NavItem;
+  overview: ClusterOverview | undefined;
+  /** A count this row carries itself, for a row the overview knows nothing about. */
+  value?: number | null;
+}) {
+  const { pathname } = useLocation();
+  const updateAvailable = useUpdaterStore((state) => state.available);
+  const badge = item.updateBadge === true && updateAvailable;
+
+  // The dot is a deep link, not a decoration. It says an update is waiting,
+  // so it goes where the update is; `/settings` redirects to Appearance,
+  // which is the one pane that says nothing about updates.
+  const to = badge ? UPDATES_PATH : item.path;
+
+  // ...and pointing at one pane must not stop the other four lighting the
+  // row, which is what the href alone would now decide.
+  const ownsRoute =
+    item.section !== undefined && pathname.startsWith(item.section);
+
+  return (
+    <NavLink
+      to={to}
+      end={item.path === "/"}
+      className={({ isActive }) =>
+        cn(
+          "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
+          (isActive || ownsRoute) && "bg-sel font-medium text-fg"
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <div className="relative flex-none">
+            <item.icon
+              className={cn(
+                // The icon sits a step below the label in contrast — it aids
+                // recognition without competing with it. Only the active row
+                // lifts it, which is what marks the row rather than the fill.
+                "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut",
+                (isActive || ownsRoute) && "text-info group-hover:text-info"
+              )}
+            />
+            {badge && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
+            )}
+          </div>
+          {item.label}
+          {value === undefined ? (
+            <NavCount item={item} overview={overview} />
+          ) : (
+            value !== null && (
+              <span className="ml-auto text-[11px] text-fg-fnt">{value}</span>
+            )
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/**
+ * The number at the end of a row.
+ *
+ * A count the cluster refused to hand over renders as nothing at all. `0`
+ * is a measurement — "this namespace has no secrets" — and printing it for
+ * a list the token may not read would state that as fact.
+ */
+function NavCount({
+  item,
+  overview,
+}: {
+  item: NavItem;
+  overview: ClusterOverview | undefined;
+}) {
+  if (!overview) return null;
+
+  if (item.path === "/") {
+    // Uncapped: the backend truncates its ranked list, and a headline that
+    // shrank when things got worse would be the one number nobody can use.
+    const problems = overview.problems.length + overview.problemsTruncated;
+    if (problems === 0) return null;
+    return <span className="ml-auto text-[11px] text-err">{problems}</span>;
+  }
+
+  const count = item.count && overview.counts[item.count];
+  if (count == null) return null;
+  return <span className="ml-auto text-[11px] text-fg-fnt">{count}</span>;
 }

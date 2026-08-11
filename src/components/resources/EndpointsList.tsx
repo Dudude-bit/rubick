@@ -1,29 +1,25 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Network, CircleDot } from "lucide-react";
+import { CircleDot } from "lucide-react";
 
 import type { EndpointsInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { Badge } from "@/components/ui/badge";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { createNamespaceColumn, createAgeColumn } from "./columns";
+import {
+  createNameColumn,
+  createNamespaceColumn,
+  createAgeColumn,
+} from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
 const columns = (): ColumnDef<EndpointsInfo>[] => [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Network className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{row.original.name}</span>
-      </div>
-    ),
-  },
+  createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
   createNamespaceColumn<EndpointsInfo>(),
   {
     id: "endpoints",
@@ -39,7 +35,9 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
       );
 
       if (readyCount === 0 && notReadyCount === 0) {
-        return <span className="text-muted-foreground">No endpoints</span>;
+        // No backing pods at all is the failure this column exists to
+        // surface — it is the one state here that earns a colour.
+        return <span className="text-err">No endpoints</span>;
       }
 
       return (
@@ -47,8 +45,8 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
           {readyCount > 0 && (
             <Tooltip>
               <TooltipTrigger>
-                <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                  <CircleDot className="mr-1 h-3 w-3" />
+                <Badge variant="success">
+                  <CircleDot className="h-2.5 w-2.5" aria-hidden="true" />
                   {readyCount} ready
                 </Badge>
               </TooltipTrigger>
@@ -57,7 +55,7 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
                   {row.original.subsets.flatMap((s) =>
                     s.addresses.map((addr, i) => (
                       <div key={i}>
-                        {addr.ip}
+                        <CopyableAddress value={addr.ip} label="Address" />
                         {addr.targetRef &&
                           ` (${addr.targetRef.kind}/${addr.targetRef.name})`}
                       </div>
@@ -70,16 +68,14 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
           {notReadyCount > 0 && (
             <Tooltip>
               <TooltipTrigger>
-                <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-                  {notReadyCount} not ready
-                </Badge>
+                <Badge variant="warning">{notReadyCount} not ready</Badge>
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1 text-xs">
                   {row.original.subsets.flatMap((s) =>
                     s.notReadyAddresses.map((addr, i) => (
                       <div key={i}>
-                        {addr.ip}
+                        <CopyableAddress value={addr.ip} label="Address" />
                         {addr.targetRef &&
                           ` (${addr.targetRef.kind}/${addr.targetRef.name})`}
                       </div>
@@ -98,21 +94,22 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
     header: "Ports",
     cell: ({ row }) => {
       const ports = row.original.subsets.flatMap((s) => s.ports);
-      if (ports.length === 0) return "-";
+      if (ports.length === 0) return <span className="text-fg-fnt">—</span>;
+      // Ports are values, not states: a pill around each one turns a
+      // three-item list into three little boxes.
       return (
-        <div className="flex flex-wrap gap-1">
-          {ports.slice(0, 3).map((port, i) => (
-            <Badge key={i} variant="secondary" className="text-xs">
-              {port.name ? `${port.name}:` : ""}
-              {port.port}/{port.protocol}
-            </Badge>
-          ))}
+        <span className="font-mono text-fg-mid">
+          {ports
+            .slice(0, 3)
+            .map(
+              (port) =>
+                `${port.name ? `${port.name}:` : ""}${port.port}/${port.protocol}`
+            )
+            .join(" ")}
           {ports.length > 3 && (
-            <Badge variant="outline" className="text-xs">
-              +{ports.length - 3}
-            </Badge>
+            <span className="text-fg-fnt"> +{ports.length - 3}</span>
           )}
-        </div>
+        </span>
       );
     },
   },
@@ -122,17 +119,21 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
     cell: ({ row }) => {
       const addresses = row.original.subsets.flatMap((s) => s.addresses);
       if (addresses.length === 0) {
-        return <span className="text-muted-foreground">None</span>;
+        return <span className="text-fg-fnt">—</span>;
       }
       return (
         <Tooltip>
           <TooltipTrigger>
-            <Badge variant="outline">{addresses.length} IP(s)</Badge>
+            <span className="font-mono text-fg-mut underline decoration-dotted underline-offset-2">
+              {addresses.length}
+            </span>
           </TooltipTrigger>
           <TooltipContent>
-            <div className="space-y-1 text-xs font-mono">
+            <div className="space-y-1 text-xs">
               {addresses.map((addr, i) => (
-                <div key={i}>{addr.ip}</div>
+                <div key={i}>
+                  <CopyableAddress value={addr.ip} label="Address" />
+                </div>
               ))}
             </div>
           </TooltipContent>

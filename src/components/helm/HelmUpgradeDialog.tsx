@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { KeyValueRow } from "@/components/resources/detail-kv";
 import type { HelmRelease } from "@/generated/types";
 
 export interface HelmUpgradeDialogProps {
@@ -55,16 +56,14 @@ export function HelmUpgradeDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Current Chart:</span>
-              <p className="font-medium">{release?.chart}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Revision:</span>
-              <p className="font-medium">{release?.revision}</p>
-            </div>
-          </div>
+          <dl className="max-w-sm">
+            <KeyValueRow label="Current chart" mono>
+              {release?.chart}
+            </KeyValueRow>
+            <KeyValueRow label="Revision" mono>
+              {release?.revision}
+            </KeyValueRow>
+          </dl>
           <div className="space-y-2">
             <Label htmlFor="upgrade-version">New Version (optional)</Label>
             <Input

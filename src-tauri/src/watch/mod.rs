@@ -171,6 +171,12 @@ impl WatchManager {
     /// Shared spawn loop for both subscribe variants. Holds the
     /// session-table insert, the deferred-start gate, the watcher
     /// loop, and the RAII cleanup guard.
+    ///
+    /// Must be called from a Tokio context — it spawns. Every caller
+    /// is a `#[tauri::command] async fn` for that reason; making one
+    /// of them sync puts it on a reactor-less worker thread, where the
+    /// `tokio::spawn` below panics across the IPC FFI boundary and
+    /// aborts the process rather than returning an error.
     fn spawn_watcher<K, F, U>(
         &self,
         api: Api<K>,

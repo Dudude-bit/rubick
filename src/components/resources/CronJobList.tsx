@@ -3,9 +3,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
-import { Badge } from "@/components/ui/badge";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import {
   createNameColumn,
@@ -19,21 +18,28 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
-  createNameColumn<CronJobInfoWithMetrics>(
-    getResourceListUrl(ResourceType.CronJob)
-  ),
+  createNameColumn<CronJobInfoWithMetrics>(ResourceType.CronJob),
   createNamespaceColumn<CronJobInfoWithMetrics>(),
   createCpuColumn<CronJobInfoWithMetrics>(),
   createMemoryColumn<CronJobInfoWithMetrics>(),
-  { accessorKey: "schedule", header: "Schedule" },
+  {
+    accessorKey: "schedule",
+    header: "Schedule",
+    cell: ({ row }) => (
+      <span className="font-mono text-fg-mid">{row.original.schedule}</span>
+    ),
+  },
   {
     id: "suspend",
     header: "Suspend",
-    cell: ({ row }) => (
-      <Badge variant={row.original.suspend ? "destructive" : "secondary"}>
-        {row.original.suspend ? "Yes" : "No"}
-      </Badge>
-    ),
+    // Suspended is the exception worth colouring; "No" is the resting
+    // state of every cronjob and stays quiet text.
+    cell: ({ row }) =>
+      row.original.suspend ? (
+        <StatusBadge status="Suspended" />
+      ) : (
+        <span className="text-fg-fnt">No</span>
+      ),
   },
   {
     id: "active",
@@ -43,14 +49,17 @@ const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   {
     id: "last_schedule",
     header: "Last Schedule",
-    cell: ({ row }) =>
-      row.original.lastSchedule ? (
-        <>
-          <RealtimeAge timestamp={row.original.lastSchedule} /> ago
-        </>
-      ) : (
-        "Never"
-      ),
+    cell: ({ row }) => (
+      <span className="text-fg-fnt">
+        {row.original.lastSchedule ? (
+          <>
+            <RealtimeAge timestamp={row.original.lastSchedule} /> ago
+          </>
+        ) : (
+          "Never"
+        )}
+      </span>
+    ),
   },
   createAgeColumn<CronJobInfoWithMetrics>(),
 ];

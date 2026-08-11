@@ -43,6 +43,18 @@ pub async fn get_statefulset_yaml(
     crate::commands::helpers::get_resource_yaml::<StatefulSet>(name, namespace, state).await
 }
 
+/// Scale a `StatefulSet`
+#[tauri::command]
+pub async fn scale_statefulset(
+    name: String,
+    replicas: i32,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_label(&name)?;
+    crate::commands::helpers::scale_resource::<StatefulSet>(name, replicas, namespace, state).await
+}
+
 #[tauri::command]
 pub async fn delete_statefulset(
     name: String,

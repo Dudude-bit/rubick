@@ -9,16 +9,22 @@ pub mod deployment;
 pub mod metadata;
 pub mod node;
 pub mod pod;
+pub mod pod_display;
 pub mod service;
 
 pub use common::{
-    extract_owner_references, ConditionInfo, ContainerInfo, ContainerPortInfo, ContainerState,
-    EnvFromInfo, EnvVarInfo, EnvVarSourceInfo, EnvVarSourceType,
+    extract_owner_references, ConditionInfo, ContainerInfo, ContainerPhase, ContainerPortInfo,
+    ContainerState, EnvFromInfo, EnvVarInfo, EnvVarSourceInfo, EnvVarSourceType, TerminationInfo,
 };
 pub use deployment::{
     DeploymentContainerInfo, DeploymentContainerResources, DeploymentInfo, ReplicaInfo,
+    TemplateContainers,
 };
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};
-pub use pod::{PodInfo, PodStatusInfo};
+pub use pod::{
+    mounts_of, volume_source, PodInfo, PodStatusInfo, PodVolumeInfo, VolumeMountInfo,
+    VolumeObjectRef,
+};
+pub use pod_display::condition_is_true;
 pub use service::{ServiceInfo, ServicePortInfo};

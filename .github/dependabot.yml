@@ -11,7 +11,7 @@ updates:
       patch-and-minor:
         update-types: ["patch", "minor"]
 
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: "/"
     schedule:
       interval: weekly

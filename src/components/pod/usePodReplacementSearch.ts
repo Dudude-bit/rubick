@@ -66,9 +66,12 @@ export function usePodReplacementSearch(
           nodeName: null,
         });
 
+        // The derived status, not the phase: a crash-looping pod is in
+        // phase `Running` and is the last thing to send someone to when
+        // the pod they were reading disappeared.
         return (
           pods.find(
-            (p) => p.name !== podName && p.status.phase === "Running"
+            (p) => p.name !== podName && p.status.display === "Running"
           ) ?? null
         );
       } catch (err) {

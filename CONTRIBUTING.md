@@ -8,6 +8,7 @@ Thanks for your interest in contributing.
 
 - Rust stable (`rustup default stable`)
 - Node.js 24 LTS (or newer)
+- Bun 1.3+ (<https://bun.sh> — the package manager for this repo)
 - Tauri platform dependencies: <https://v2.tauri.app/start/prerequisites/>
 
 ### Setup
@@ -15,9 +16,9 @@ Thanks for your interest in contributing.
 ```bash
 git clone https://github.com/Dudude-bit/k8s-gui.git
 cd k8s-gui
-npm install
-npx lefthook install   # one-time: enables pre-commit + pre-push hooks
-npm run tauri dev
+bun install
+bunx lefthook install   # one-time: enables pre-commit + pre-push hooks
+bun run tauri dev
 ```
 
 The hooks (defined in `lefthook.yml`) run `cargo fmt --check`, `eslint`,
@@ -35,7 +36,7 @@ Before committing:
 ```bash
 cargo fmt --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-npm run lint
+bun run lint
 ```
 
 ## Tests

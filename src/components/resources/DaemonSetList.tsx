@@ -3,8 +3,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { DaemonSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
 import { matchDaemonSetPods, type ResourceMetrics } from "@/lib/metrics";
+import { cn } from "@/lib/utils";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -17,9 +17,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
-  createNameColumn<DaemonSetInfoWithMetrics>(
-    getResourceListUrl(ResourceType.DaemonSet)
-  ),
+  createNameColumn<DaemonSetInfoWithMetrics>(ResourceType.DaemonSet),
   createNamespaceColumn<DaemonSetInfoWithMetrics>(),
   createCpuColumn<DaemonSetInfoWithMetrics>(),
   createMemoryColumn<DaemonSetInfoWithMetrics>(),
@@ -38,9 +36,14 @@ const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     header: "Ready",
     cell: ({ row }) => {
       const { ready, desired } = row.original;
+      // Full coverage is the expected state and stays quiet; only a shortfall
+      // is worth a colour.
       return (
         <span
-          className={ready === desired ? "text-green-500" : "text-yellow-500"}
+          className={cn(
+            "font-mono",
+            ready === desired ? "text-fg" : "text-warn"
+          )}
         >
           {ready}
         </span>

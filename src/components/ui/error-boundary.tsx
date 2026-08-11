@@ -60,11 +60,11 @@ export class ErrorBoundary extends React.Component<
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="text-lg font-semibold">Something went wrong</div>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-xs text-fg-mut">
           The page failed to render. You can reload or return home.
         </div>
         {this.state.error?.message && (
-          <pre className="max-w-2xl whitespace-pre-wrap rounded-md bg-muted px-4 py-3 text-left text-xs text-muted-foreground">
+          <pre className="max-w-2xl whitespace-pre-wrap rounded-md bg-hover px-4 py-3 text-left text-xs text-fg-mut">
             {this.state.error.message}
           </pre>
         )}

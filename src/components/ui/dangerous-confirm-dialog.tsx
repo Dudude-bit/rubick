@@ -72,7 +72,7 @@ export function DangerousConfirmDialog({
         <div className="py-4 space-y-2">
           <Label htmlFor="confirmation-input" className="text-sm">
             Type{" "}
-            <code className="px-1.5 py-0.5 bg-muted rounded text-destructive font-mono text-sm">
+            <code className="rounded bg-err/[0.16] px-1.5 py-0.5 font-mono text-xs text-err">
               {confirmationText}
             </code>{" "}
             to confirm

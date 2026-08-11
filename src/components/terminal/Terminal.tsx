@@ -21,7 +21,7 @@ export function Terminal(props: TerminalProps) {
     <Suspense
       fallback={
         <div
-          className="flex h-full w-full items-center justify-center text-xs text-muted-foreground"
+          className="flex h-full w-full items-center justify-center text-xs text-fg-mut"
           aria-busy="true"
         >
           Loading terminal…

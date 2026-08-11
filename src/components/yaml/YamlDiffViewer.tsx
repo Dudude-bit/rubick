@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 interface DiffLine {
   type: "added" | "removed" | "unchanged";
@@ -137,41 +137,41 @@ export function YamlDiffViewer({
 
   if (!hasChanges) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground py-8">
-        <CheckCircle2 className="mr-2 h-4 w-4" />
+      <div className="flex h-full items-center justify-center gap-1.5 py-8 text-xs text-fg-mut">
+        <CheckCircle2 className="h-3.5 w-3.5" />
         No changes detected
       </div>
     );
   }
 
   return (
-    <ScrollArea
-      className={`h-[${height}] rounded-md border`}
+    <div
+      className="overflow-auto border-t border-hair py-1 font-mono text-xs"
       style={{ height }}
     >
-      <div className="p-2 font-mono text-xs">
-        {diffLines.map((line, idx) => (
-          <div
-            key={idx}
-            className={`px-2 py-0.5 ${
-              line.type === "added"
-                ? "bg-green-500/20 text-green-700 dark:text-green-300"
-                : line.type === "removed"
-                  ? "bg-red-500/20 text-red-700 dark:text-red-300"
-                  : ""
-            }`}
+      {diffLines.map((line, idx) => (
+        <div
+          key={idx}
+          className={cn(
+            "flex gap-2 px-2",
+            line.type === "added" && "bg-ok/[0.16] text-ok",
+            line.type === "removed" && "bg-err/[0.16] text-err",
+            line.type === "unchanged" && "text-fg-mid"
+          )}
+        >
+          {/* The gutter is the cue that survives without hue — a diff
+              read in greyscale still has to say which side a line is on. */}
+          <span
+            className={cn(
+              "w-2 flex-none",
+              line.type === "unchanged" && "text-fg-fnt"
+            )}
           >
-            <span className="inline-block w-6 text-muted-foreground mr-2">
-              {line.type === "added"
-                ? "+"
-                : line.type === "removed"
-                  ? "-"
-                  : " "}
-            </span>
-            <span className="whitespace-pre">{line.content}</span>
-          </div>
-        ))}
-      </div>
-    </ScrollArea>
+            {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+          </span>
+          <span className="whitespace-pre">{line.content}</span>
+        </div>
+      ))}
+    </div>
   );
 }

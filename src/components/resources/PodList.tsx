@@ -7,7 +7,7 @@ import {
   type PodWithMetrics,
 } from "@/hooks/usePodsWithMetrics";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NodeBadge } from "@/components/ui/node-badge";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -15,24 +15,17 @@ import {
   createCpuColumn,
   createMemoryColumn,
 } from "./columns";
-import type { ContainerInfo } from "@/generated/types";
+import { podReadiness } from "@/lib/container-sequence";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "./ResourceList";
+import { ResourceRef } from "./ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  getResourceDetailUrl,
-  getResourceListUrl,
-} from "@/lib/navigation-utils";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
+import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
-
-// Helper to format ready containers count
-function formatReady(containers: ContainerInfo[]): string {
-  const ready = containers.filter((c) => c.ready).length;
-  return `${ready}/${containers.length}`;
-}
 
 export function PodList() {
   const navigate = useNavigate();
@@ -41,33 +34,64 @@ export function PodList() {
     podStatus,
     isLoading,
     dataUpdatedAt,
+    watchLive,
   } = usePodsWithMetrics();
 
   const columns = useMemo<ColumnDef<PodWithMetrics>[]>(
     () => [
-      // Use disableLink since row is clickable
-      createNameColumn<PodWithMetrics>(getResourceListUrl(ResourceType.Pod)),
+      createNameColumn<PodWithMetrics>(ResourceType.Pod),
       createNamespaceColumn<PodWithMetrics>(),
       {
         id: "status",
         header: "Status",
-        cell: ({ row }) => <StatusBadge status={row.original.status.phase} />,
+        // The derived status, not the phase: a pod that has crashed 653
+        // times is in phase `Running` and nobody means that by "how is
+        // it". The phase rides along in the tooltip so it is not lost.
+        cell: ({ row }) => (
+          <StatusBadge
+            status={row.original.status.display}
+            title={`Phase ${row.original.status.phase}`}
+          />
+        ),
       },
       createCpuColumn<PodWithMetrics>(),
       createMemoryColumn<PodWithMetrics>(),
       {
         id: "ready",
         header: "Ready",
-        cell: ({ row }) => formatReady(row.original.containers),
+        // The number people compare against `kubectl get pod` in the next
+        // window, so it is kubectl's number: sidecars in both halves,
+        // finished init containers in neither.
+        cell: ({ row }) => {
+          const { ready, total } = podReadiness(row.original);
+          return (
+            <span className="font-mono text-fg-mid">
+              {ready}/{total}
+            </span>
+          );
+        },
       },
       {
         id: "restarts",
         header: "Restarts",
+        // kubectl prints the count with the age of the last one, and it is
+        // the half that carries the news: 653 an hour ago and 653 last
+        // week are the same number and not the same pod.
         cell: ({ row }) => (
           <span
-            className={row.original.restartCount > 5 ? "text-yellow-500" : ""}
+            className={
+              row.original.restartCount > 5
+                ? "font-mono text-warn"
+                : "font-mono text-fg-mut"
+            }
           >
             {row.original.restartCount}
+            {row.original.restartCount > 0 && row.original.lastRestartAt && (
+              <span className="text-fg-fnt">
+                {" "}
+                ({formatAge(row.original.lastRestartAt)} ago)
+              </span>
+            )}
           </span>
         ),
       },
@@ -76,15 +100,26 @@ export function PodList() {
         header: "Node",
         cell: ({ row }) =>
           row.original.nodeName ? (
-            <NodeBadge nodeName={row.original.nodeName} />
+            <ResourceRef
+              kind={ResourceType.Node}
+              name={row.original.nodeName}
+              showKind={false}
+            />
           ) : (
-            <span className="text-muted-foreground">-</span>
+            <span className="text-fg-fnt">-</span>
           ),
       },
       {
         id: "ip",
         header: "IP",
-        cell: ({ row }) => row.original.podIp || "-",
+        cell: ({ row }) => (
+          <CopyableAddress
+            value={row.original.podIp}
+            label="Pod IP"
+            fallback="-"
+            className="text-fg-mut"
+          />
+        ),
       },
       createAgeColumn<PodWithMetrics>(),
     ],
@@ -141,6 +176,7 @@ export function PodList() {
         data={podsWithMetrics}
         isLoading={isLoading}
         dataUpdatedAt={dataUpdatedAt}
+        live={watchLive}
         getRowId={getResourceRowId}
         columns={columns}
         quickActions={quickActions}

@@ -1,27 +1,48 @@
 import { useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { commands } from "@/lib/commands";
-import type { DaemonSetDetailInfo } from "@/generated/types";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RealtimeAge } from "@/components/ui/realtime";
-import { Trash2, Server, RefreshCw } from "lucide-react";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { EnvironmentVariables } from "@/components/resources/EnvironmentVariables";
-import { RelatedResources } from "@/components/resources/RelatedResources";
-import { PodListCard } from "@/components/resources/PodListCard";
-import {
-  ResourceDetailLayout,
-  InfoCard,
-  InfoRow,
-} from "@/components/resources/ResourceDetailLayout";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
+import { PodListCard } from "@/components/resources/PodListCard";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import {
+  conditionsMark,
+  kindGlyph,
+  podsMark,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
+import { ContainerRows } from "@/components/resources/container-rows";
+import { deliveryOfKind } from "@/lib/delivery";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import {
+  Composition,
+  ConditionRows,
+} from "@/components/resources/detail-blocks";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { useConnections } from "@/hooks/useConnections";
+import { commands } from "@/lib/commands";
+import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import type { DaemonSetDetailInfo } from "@/generated/types";
 
 export function DaemonSetDetail() {
   const {
@@ -30,13 +51,13 @@ export function DaemonSetDetail() {
     resource: daemonSet,
     isLoading,
     error,
-    refetch,
     yaml,
     copyYaml,
     activeTab,
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<DaemonSetDetailInfo>({
     resourceKind: ResourceType.DaemonSet,
     fetchResource: (name, ns) => commands.getDaemonset(name, ns),
@@ -44,187 +65,220 @@ export function DaemonSetDetail() {
     defaultTab: "overview",
   });
 
-  // Fetch pods for this DaemonSet
-  const { data: pods = [] } = useQuery({
-    queryKey: ["daemonset-pods", namespace, name],
+  const connections = useConnections(ResourceType.DaemonSet, name, namespace);
+
+  // The DaemonSet publishes its own selector, in the API's own text form —
+  // so a set-based one reaches the API server as written, where rebuilding
+  // it from match labels dropped it and listed nothing.
+  const labelSelector = daemonSet?.selector || null;
+
+  const { data: pods = [] } = useLiveQuery({
+    queryKey: ["daemonset-pods", namespace, name, labelSelector],
     queryFn: async () => {
-      if (!name || !namespace) return [];
+      if (!namespace) return [];
       try {
-        const allPods = await commands.listPods({
-          namespace: namespace,
-          labelSelector: `app=${name}`,
+        return await commands.listPods({
+          namespace,
+          labelSelector,
           fieldSelector: null,
           limit: null,
           statusFilter: null,
           selector: null,
           nodeName: null,
         });
-        return allPods;
       } catch {
         return [];
       }
     },
-    enabled: !!namespace && !!name,
+    enabled: !!namespace && !!labelSelector,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
-  const isReady = daemonSet?.ready === daemonSet?.desired;
-  const statusVariant = isReady ? "success" : "warning";
-  const statusText = isReady ? "Ready" : "Updating";
+  const deliveryQuery = deliveryOfKind(ResourceType.DaemonSet, daemonSet);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const desired = daemonSet?.desired ?? 0;
+  const current = daemonSet?.current ?? 0;
+  const ready = daemonSet?.ready ?? 0;
+  const upToDate = daemonSet?.upToDate ?? 0;
+  const available = daemonSet?.available ?? 0;
+  const short = ready < desired;
 
   const tabs = useMemo(
     () => [
       {
         id: "overview",
         label: "Overview",
+        glyph: viewGlyph(Info),
         content: (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoCard
-                title="DaemonSet Info"
-                icon={<Server className="h-4 w-4" />}
-              >
-                <div className="space-y-1">
-                  <InfoRow
-                    label="Update Strategy"
-                    value={daemonSet?.updateStrategy || "RollingUpdate"}
-                  />
-                  <InfoRow
-                    label="Created"
-                    value={
-                      <RealtimeAge
-                        timestamp={daemonSet?.createdAt}
-                        fallback="-"
-                      />
-                    }
-                  />
-                </div>
-              </InfoCard>
-
-              <InfoCard title="Status">
-                <div className="space-y-1">
-                  <InfoRow label="Desired" value={daemonSet?.desired ?? 0} />
-                  <InfoRow label="Current" value={daemonSet?.current ?? 0} />
-                  <InfoRow label="Ready" value={daemonSet?.ready ?? 0} />
-                  <InfoRow
-                    label="Up-to-date"
-                    value={daemonSet?.upToDate ?? 0}
-                  />
-                  <InfoRow
-                    label="Available"
-                    value={daemonSet?.available ?? 0}
-                  />
-                </div>
-              </InfoCard>
-            </div>
-
-            {/* Selector */}
-            {daemonSet?.selector &&
-              Object.keys(daemonSet.selector).length > 0 && (
-                <LabelsDisplay labels={daemonSet.selector} title="Selector" />
+          <>
+            <WorkloadOverview
+              count={
+                <CountBlock
+                  title="Rollout"
+                  subject="one pod per eligible node"
+                  governance={connections}
+                >
+                  {/* One fact, not five: desired/current/ready/up-to-date/
+                      available are the same rollout read five ways, and the
+                      reader was left to subtract them to find the gap. Two bars
+                      rather than one because a DaemonSet counts two things —
+                      how many nodes have a pod, and how many of those pods are
+                      the current spec. */}
+                  <div className="grid grid-cols-2 gap-[22px]">
+                    <Composition
+                      total={desired}
+                      label={desired === 1 ? "node wanted" : "nodes wanted"}
+                      segments={[
+                        { label: "ready", count: ready, tone: "ok" },
+                        {
+                          label: "not ready",
+                          count: Math.max(0, current - ready),
+                          tone: "warn",
+                        },
+                        {
+                          label: "not scheduled",
+                          count: Math.max(0, desired - current),
+                          tone: "err",
+                        },
+                      ]}
+                      note={`${available} available`}
+                    />
+                    <Composition
+                      total={desired}
+                      label="on the current spec"
+                      segments={[
+                        { label: "up to date", count: upToDate, tone: "ok" },
+                        {
+                          label: "outdated",
+                          count: Math.max(0, desired - upToDate),
+                          tone: "warn",
+                        },
+                      ]}
+                    />
+                  </div>
+                </CountBlock>
+              }
+              usage={
+                <WorkloadUsage
+                  kind={ResourceType.DaemonSet}
+                  uid={daemonSet?.uid}
+                  name={daemonSet?.name || name}
+                  namespace={daemonSet?.namespace || namespace}
+                  template={daemonSet}
+                  pods={pods}
+                  idle={
+                    desired === 0
+                      ? "No node matches this DaemonSet, so it has placed no pods."
+                      : "None of this DaemonSet's pods is running."
+                  }
+                  connections={connections.data}
+                />
+              }
+              traffic={<TrafficChain query={connections} />}
+              declared={
+                <FactBlock
+                  title="How it is declared"
+                  items={declaration(daemonSet)}
+                />
+              }
+            >
+              {daemonSet && (
+                <RelatedResources
+                  ownerReferences={daemonSet.ownerReferences}
+                  namespace={daemonSet.namespace}
+                />
               )}
-          </div>
+            </WorkloadOverview>
+
+            <KeyValueSection
+              title="Selector"
+              items={
+                daemonSet?.selector
+                  ? [
+                      {
+                        label: "Pods",
+                        value: daemonSet.selector,
+                        mono: true,
+                      },
+                    ]
+                  : []
+              }
+              emptyMessage="No selector — this DaemonSet matches nothing"
+            />
+            <KeyValueSection
+              title="Labels"
+              count={Object.keys(daemonSet?.labels ?? {}).length}
+              items={recordToKeyValues(daemonSet?.labels ?? {})}
+              emptyMessage="No labels"
+            />
+            <KeyValueSection
+              title="Annotations"
+              count={Object.keys(daemonSet?.annotations ?? {}).length}
+              items={recordToKeyValues(daemonSet?.annotations ?? {})}
+              emptyMessage="No annotations"
+            />
+          </>
         ),
       },
+      connectionsTab(connections, deliveryQuery),
       {
-        id: "containers",
-        label: "Containers",
-        content: (
-          <div className="space-y-4">
-            {(daemonSet?.containers || []).map((container) => (
-              <Card key={container.name}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{container.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Image</span>
-                      <span className="font-mono text-xs">
-                        {container.image}
-                      </span>
-                    </div>
-                    {container.ports.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ports</span>
-                        <span>{container.ports.join(", ")}</span>
-                      </div>
-                    )}
-                    {container.resources.requests &&
-                      Object.keys(container.resources.requests).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Requests
-                          </span>
-                          <span>
-                            {Object.entries(container.resources.requests)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                    {container.resources.limits &&
-                      Object.keys(container.resources.limits).length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Limits</span>
-                          <span>
-                            {Object.entries(container.resources.limits)
-                              .map(([k, v]) => `${k}: ${v}`)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                  </div>
-
-                  {/* Environment Variables */}
-                  {(container.env.length > 0 ||
-                    container.envFrom.length > 0) && (
-                    <EnvironmentVariables
-                      env={container.env}
-                      envFrom={container.envFrom}
-                      containerName={container.name}
-                      namespace={namespace}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-            {(!daemonSet?.containers || daemonSet.containers.length === 0) && (
-              <p className="text-center text-muted-foreground py-8">
-                No containers defined
-              </p>
-            )}
-          </div>
-        ),
+        id: "container-template",
+        label: "Template",
+        glyph: viewGlyph(Layers2),
+        content: <ContainerRows template={daemonSet} namespace={namespace} />,
       },
       {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
+        glyph: kindGlyph(ResourceType.Pod),
+        mark: podsMark(pods),
         content: <PodListCard pods={pods} />,
-      },
-      {
-        id: "yaml",
-        label: "YAML",
-        content: (
-          <YamlTabContent
-            yaml={yaml}
-            onCopy={copyYaml}
-            title={daemonSet?.name || "DaemonSet YAML"}
-            resourceKind={ResourceType.DaemonSet}
-            resourceName={daemonSet?.name || name || ""}
-            namespace={daemonSet?.namespace || namespace}
-          />
-        ),
       },
       {
         id: "conditions",
         label: "Conditions",
-        content: <ConditionsDisplay conditions={daemonSet?.conditions || []} />,
+        glyph: viewGlyph(BadgeCheck),
+        mark: conditionsMark(daemonSet?.conditions),
+        content: (
+          <Section>
+            <SectionHeader
+              title="Conditions"
+              count={daemonSet?.conditions.length}
+            />
+            <ConditionRows
+              conditions={daemonSet?.conditions ?? []}
+              subject={{ kind: ResourceType.DaemonSet, name, namespace }}
+            />
+          </Section>
+        ),
       },
+      yamlTab({
+        yaml,
+        onCopy: copyYaml,
+        title: "DaemonSet YAML",
+        resourceKind: ResourceType.DaemonSet,
+        resourceName: daemonSet?.name || name || "",
+        namespace: daemonSet?.namespace || namespace,
+      }),
     ],
-    [daemonSet, pods, yaml, copyYaml, namespace, name]
+    [
+      daemonSet,
+      pods,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      connections,
+      deliveryQuery,
+      desired,
+      current,
+      ready,
+      upToDate,
+      available,
+    ]
   );
 
   if (!daemonSet && !isLoading && !error) {
@@ -233,52 +287,52 @@ export function DaemonSetDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={daemonSet}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
-      resourceKind="DaemonSet"
-      title={name || ""}
-      namespace={namespace}
-      statusBadge={<Badge variant={statusVariant}>{statusText}</Badge>}
+      resourceKind={ResourceType.DaemonSet}
+      title={daemonSet?.name || name || ""}
+      namespace={daemonSet?.namespace || namespace}
+      createdAt={daemonSet?.createdAt}
+      statusBadge={
+        daemonSet && (
+          <StatusBadge status={short ? "Degraded" : "Ready"}>
+            {ready}/{desired} ready
+          </StatusBadge>
+        )
+      }
       badges={
-        <>
-          <Badge variant="outline">
-            {daemonSet?.ready ?? 0}/{daemonSet?.desired ?? 0} ready
-          </Badge>
-        </>
+        upToDate < desired && (
+          <span className="text-[11px] text-info">rolling out</span>
+        )
       }
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation?.mutate()}
-            disabled={deleteMutation?.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </>
-      }
-      icon={<Server className="h-5 w-5" />}
       onBack={goBack}
+      actions={
+        <InterceptedAction
+          intercept={intercept("Delete")}
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      labels={daemonSet?.labels}
-      annotations={daemonSet?.annotations}
-    >
-      {/* Related Resources (Owner References) */}
-      {daemonSet && (
-        <RelatedResources
-          ownerReferences={daemonSet.ownerReferences}
-          namespace={daemonSet.namespace}
-        />
-      )}
-    </ResourceDetailLayout>
+    />
   );
+}
+
+/** How it is declared: read once, and never while the rollout is fine. */
+function declaration(daemonSet: DaemonSetDetailInfo | undefined): KeyValue[] {
+  return [
+    {
+      label: "Update strategy",
+      value: daemonSet?.updateStrategy || "RollingUpdate",
+    },
+    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
+  ];
 }

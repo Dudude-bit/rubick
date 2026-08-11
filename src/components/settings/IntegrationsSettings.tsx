@@ -1,0 +1,288 @@
+import * as React from "react";
+import { Link } from "react-router-dom";
+
+import { ConnectIntegration } from "@/components/settings/ConnectIntegration";
+import { SettingsGroup } from "@/components/settings/settings-row";
+import { useSettingSearchMatch } from "@/components/settings/settings-search";
+import { Button } from "@/components/ui/button";
+import {
+  EXTENSION_NAMES,
+  useIntegrations,
+  type IntegrationStatus,
+  type VendorFact,
+} from "@/integrations";
+import { cn } from "@/lib/utils";
+
+/**
+ * The one screen allowed to name an extension.
+ *
+ * Everywhere else asks for a capability. Here the reader is asking a
+ * different question — what does this cluster have, and is it working —
+ * and the answer is a list of names with what each one is currently doing
+ * underneath it.
+ *
+ * **Two kinds of row, and the difference is real.** A *detected* extension
+ * has no Connect button and no fields, because there is nothing to connect
+ * or fill in: its CRDs exist in this cluster's API server or they do not.
+ * A *configured* one is the opposite — it is only here because somebody
+ * gave it an address, so its row carries that address, when it last
+ * answered, and a way to change it. Neither kind gets an install button:
+ * the app does not put things into anybody's cluster, so a dimmed row
+ * saying what it *would* give is the whole of what absence is allowed to
+ * say for a detected extension, and a Connect button is the whole of what
+ * it is allowed to say for a configured one.
+ *
+ * And a broken one says so *here*, once, instead of leaving the reader to
+ * infer it from a chart somewhere else that quietly went shorter.
+ *
+ * A status list, not a dashboard. No charts, no per-object tables, no
+ * editing beyond the address: every fact ends in a link to the objects that
+ * own it, and the reader continues in the part of the app built for them.
+ */
+export function IntegrationsSettings({ active = true }: { active?: boolean }) {
+  const { statuses, isPending, error } = useIntegrations({ facts: active });
+
+  if (error) {
+    return (
+      <div className="max-w-[64ch] py-8">
+        <h3 className="text-xs font-medium text-fg">
+          Could not read this cluster&rsquo;s CRDs
+        </h3>
+        <p className="mt-1.5 text-xs text-fg-mut">
+          Every extension here is detected by asking the API server for the
+          custom resource definitions it installs, and that request failed — so
+          this list would be a guess rather than an answer.
+        </p>
+        <p className="mt-2 text-[11px] text-fg-fnt">{error.message}</p>
+      </div>
+    );
+  }
+
+  // Two groups, because the two kinds answer to different rules and a
+  // reader scanning this screen is asking two different questions: what does
+  // this cluster already have, and what could I plug in.
+  const configured = statuses.filter((status) => status.connection !== null);
+  const detected = statuses.filter((status) => status.connection === null);
+  const anyDetected = detected.some((status) => status.installed);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {configured.length > 0 && (
+        <SettingsGroup title="Configured — an address per cluster">
+          {configured.map((status) => (
+            <ExtensionRow
+              key={status.vendor.id}
+              status={status}
+              isPending={isPending}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+      {!isPending && !anyDetected ? (
+        <NothingInstalled />
+      ) : (
+        <SettingsGroup title="Detected in this cluster">
+          {detected.map((status) => (
+            <ExtensionRow
+              key={status.vendor.id}
+              status={status}
+              isPending={isPending}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Naming what was looked for is the point.
+ *
+ * "No integrations" leaves the reader wondering whether the app checked,
+ * checked for the right things, or is broken. The names and the method
+ * answer all three, and they double as the list of what supporting one
+ * would buy.
+ */
+function NothingInstalled() {
+  const visible = useSettingSearchMatch(
+    "integrations extensions",
+    EXTENSION_NAMES.join(" ")
+  );
+  return (
+    <div className={cn("max-w-[64ch] py-8", !visible && "hidden")}>
+      <h3 className="text-xs font-medium text-fg">
+        Nothing installed that this app knows how to use
+      </h3>
+      <p className="mt-1.5 text-xs text-fg-mut">
+        The cluster works exactly as it does now — every extension here is
+        optional, and none of them is needed to read a pod.
+      </p>
+      <p className="mt-2 text-[11px] text-fg-fnt">
+        Looked for {sentenceList(EXTENSION_NAMES)} by asking the API server for
+        their CRDs. None of them are in this cluster.
+      </p>
+    </div>
+  );
+}
+
+/** "a, b and c" — the list reads as a sentence, because it is one. */
+function sentenceList(names: readonly string[]): string {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function ExtensionRow({
+  status,
+  isPending,
+}: {
+  status: IntegrationStatus;
+  isPending: boolean;
+}) {
+  const { vendor, extension, installed, version, facts, connection } = status;
+  const Icon = extension.icon;
+  const visible = useSettingSearchMatch(vendor.name, extension.gives);
+  const [editing, setEditing] = React.useState(false);
+
+  // A configured vendor is never "looking…": nothing is being detected, and
+  // its own state says whether the address has been read yet.
+  const configured =
+    connection !== null && connection.state !== "notConfigured";
+  const pending = connection ? connection.state === "reading" : isPending;
+  // The facts belong under a configured row even when it is not answering —
+  // that is where its address and its refusal are printed.
+  const showFacts = connection ? configured : installed;
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hair py-2.5",
+        // Dimmed rather than hidden: the absent ones are the list of what
+        // this cluster could gain, and that is worth reading once.
+        !installed && !configured && !pending && "opacity-55",
+        !visible && "hidden"
+      )}
+      hidden={!visible}
+    >
+      <Icon className="mt-0.5 size-4 text-fg-mut" aria-hidden />
+      <div className="min-w-0">
+        <div className="text-xs text-fg-mid">
+          {vendor.name}
+          {version && (
+            <span className="ml-2 font-mono text-[11px] text-fg-fnt">
+              {version}
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 text-[11px] text-fg-fnt">
+          {installed || configured ? "Gives " : "Would give "}
+          <span className="text-fg-mut">{extension.gives}</span>
+        </div>
+        {showFacts && <Facts facts={facts} />}
+      </div>
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            "whitespace-nowrap text-[11px]",
+            pending
+              ? "text-fg-fnt"
+              : connection
+                ? connection.state === "connected"
+                  ? "text-ok"
+                  : connection.state === "unreachable"
+                    ? "text-err"
+                    : "text-fg-fnt"
+                : installed
+                  ? "text-ok"
+                  : "text-fg-fnt"
+          )}
+        >
+          {pending
+            ? connection
+              ? "asking…"
+              : "looking…"
+            : connection
+              ? CONNECTION_WORD[connection.state]
+              : installed
+                ? "detected"
+                : "not installed"}
+        </span>
+        {connection && !pending && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => setEditing(true)}
+            >
+              {configured ? "Edit" : "Connect"}
+            </Button>
+            <ConnectIntegration
+              vendorId={vendor.id}
+              vendorName={vendor.name}
+              gives={extension.gives}
+              open={editing}
+              onOpenChange={setEditing}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The word for each state, and there are four because there are four.
+ *
+ * "not configured" is not "not installed": the app has no idea whether the
+ * thing exists, only that nobody has given it an address.
+ */
+const CONNECTION_WORD: Record<string, string> = {
+  reading: "asking…",
+  notConfigured: "not configured",
+  connected: "connected",
+  unreachable: "no answer",
+};
+
+/**
+ * What it is doing for you, as the second half of the sentence "gives"
+ * starts.
+ *
+ * A count is quiet and a problem is coloured — the same discipline the
+ * condition rows and the tab marks follow. "7 certificates" is inventory;
+ * "1 renewal failing" is why you came.
+ */
+function Facts({ facts }: { facts: IntegrationStatus["facts"] }) {
+  if (facts.state === "none") return null;
+  if (facts.state === "loading") {
+    return <p className="mt-1.5 text-[11px] text-fg-fnt">reading…</p>;
+  }
+  if (facts.state === "failed") {
+    return (
+      <p className="mt-1.5 text-[11px] text-warn">
+        It is installed, but its objects could not be read — {facts.reason}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+      {facts.facts.map((fact) => (
+        <Fact key={fact.text} fact={fact} />
+      ))}
+    </div>
+  );
+}
+
+function Fact({ fact }: { fact: VendorFact }) {
+  const tone =
+    fact.tone === "err"
+      ? "text-err"
+      : fact.tone === "warn"
+        ? "text-warn"
+        : "text-fg-mut";
+  if (!fact.to) return <span className={tone}>{fact.text}</span>;
+  return (
+    <Link to={fact.to} className="text-info hover:underline">
+      {fact.text}
+    </Link>
+  );
+}

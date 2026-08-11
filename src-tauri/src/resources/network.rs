@@ -233,6 +233,11 @@ pub struct EndpointsInfo {
     pub namespace: String,
     pub subsets: Vec<EndpointSubset>,
     pub created_at: Option<String>,
+    /// The control plane's own admission that it dropped addresses from this
+    /// object. It holds 1000 and stops, so past that the list below is not
+    /// the answer and a page drawing it as one is showing 1000 of however
+    /// many there really are.
+    pub over_capacity: bool,
 }
 
 impl From<&Endpoints> for EndpointsInfo {
@@ -304,6 +309,7 @@ impl From<&Endpoints> for EndpointsInfo {
             namespace: ns,
             subsets,
             created_at,
+            over_capacity: super::published::legacy_over_capacity(ep),
         }
     }
 }

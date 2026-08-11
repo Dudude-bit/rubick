@@ -1,262 +1,426 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Play,
-  Square,
-  Plus,
-  Settings,
-  Circle,
   AlertCircle,
   Loader2,
+  MoreHorizontal,
+  Network,
+  Pencil,
+  Play,
+  Plus,
+  Square,
+  Trash2,
 } from "lucide-react";
-import { usePortForwardStore } from "@/stores/portForwardStore";
-import { useClusterStore } from "@/stores/clusterStore";
-import { cn } from "@/lib/utils";
 
-interface PortForwardsTabProps {
-  onClose?: () => void;
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/components/ui/use-toast";
+import { PortForwardConfigDialog } from "@/components/port-forward/PortForwardConfigDialog";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceType } from "@/lib/resource-registry";
+import { normalizeTauriError } from "@/lib/error-utils";
+import { useClusterStore } from "@/stores/clusterStore";
+import {
+  usePortForwardStore,
+  type PortForwardConfig,
+  type PortForwardSession,
+  type PortForwardStatus,
+} from "@/stores/portForwardStore";
+import { cn } from "@/lib/utils";
+import {
+  ACTIVITY_ROW,
+  ActivityAction,
+  ActivityEmpty,
+  ActivityGroup,
+} from "./primitives";
+
+/** Same shape the store keys sessions by; do not reorder the parts. */
+const forwardKey = (item: {
+  context: string;
+  pod: string;
+  namespace: string;
+  localPort: number;
+  remotePort: number;
+}) =>
+  `${item.context}:${item.pod}:${item.namespace}:${item.localPort}:${item.remotePort}`;
+
+/** `undefined` is closed, `null` is the new-config form. */
+type Editing = PortForwardConfig | null | undefined;
+
+/**
+ * One running forward.
+ *
+ * `namesCluster` follows the scope-tab rule: the cluster's name is spent
+ * only where it discriminates. Inside the current context every row shares
+ * it and the panel header has just said it; in the elsewhere group it is the
+ * whole point of the row. The pod stops being a link there too — the route
+ * would resolve against the cluster the reader is in, which is a different
+ * pod with the same name, or none.
+ */
+function SessionRow({
+  session,
+  status,
+  isBusy,
+  onStop,
+  namesCluster = false,
+}: {
+  session: PortForwardSession;
+  status: PortForwardStatus | undefined;
+  isBusy: boolean;
+  onStop: () => void;
+  namesCluster?: boolean;
+}) {
+  const isError = status?.status === "error";
+  const isReconnecting =
+    status?.status === "reconnecting" || status?.status === "reconnected";
+
+  return (
+    <div className={ACTIVITY_ROW}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "h-1.5 w-1.5 flex-none rounded-full",
+          isError ? "bg-err" : isReconnecting ? "bg-warn" : "bg-ok"
+        )}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">
+          {/* The panel's whole job is telling you what is running and against
+              what; the target was the one thing in it you could not get to. */}
+          {namesCluster ? (
+            session.pod
+          ) : (
+            <ResourceRef
+              kind={ResourceType.Pod}
+              name={session.pod}
+              namespace={session.namespace}
+              showKind={false}
+            />
+          )}
+        </span>
+        <span className="block truncate font-mono text-[11px] text-fg-fnt">
+          {namesCluster && `${session.context} · `}
+          {session.namespace} · :{session.localPort} → :{session.remotePort}
+          {isError && " · failed"}
+          {isReconnecting && " · reconnecting"}
+        </span>
+      </span>
+      <ActivityAction
+        aria-label={`Stop forwarding ${session.pod}`}
+        onClick={onStop}
+        disabled={isBusy}
+      >
+        {isBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Square className="h-3.5 w-3.5" />
+        )}
+      </ActivityAction>
+    </div>
+  );
 }
 
-export function PortForwardsTab({ onClose }: PortForwardsTabProps) {
-  const navigate = useNavigate();
+/**
+ * Everything about a port forward, in the panel that owns running things.
+ *
+ * Settings used to keep a second copy of this list — the same forward with
+ * two homes that could disagree, one of them on a page about preferences.
+ * A forward is a process, so the list lives here, and the editing that
+ * only the Settings copy could do came with it.
+ */
+export function PortForwardsTab() {
+  const { toast } = useToast();
   const currentContext = useClusterStore((state) => state.currentContext);
-  const {
-    configs,
-    sessions,
-    statusBySession,
-    startConfig,
-    stopSession,
-    configsLoaded,
-    refreshConfigs,
-  } = usePortForwardStore();
-
-  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-
-  // Filter configs for current context
-  const contextConfigs = configs.filter(
-    (config) => config.context === currentContext
+  const configs = usePortForwardStore((state) => state.configs);
+  const sessions = usePortForwardStore((state) => state.sessions);
+  const statusBySession = usePortForwardStore((state) => state.statusBySession);
+  const configsLoaded = usePortForwardStore((state) => state.configsLoaded);
+  const refreshConfigs = usePortForwardStore((state) => state.refreshConfigs);
+  const startConfig = usePortForwardStore((state) => state.startConfig);
+  const stopSession = usePortForwardStore((state) => state.stopSession);
+  const removeConfig = usePortForwardStore((state) => state.removeConfig);
+  const startAllForContext = usePortForwardStore(
+    (state) => state.startAllForContext
   );
 
-  // Create a map of active sessions by config key
-  const sessionByKey = new Map(
-    sessions.map((session) => [
-      `${session.context}:${session.pod}:${session.namespace}:${session.localPort}:${session.remotePort}`,
-      session,
-    ])
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<Editing>(undefined);
+  const [startingAll, setStartingAll] = useState(false);
+
+  useEffect(() => {
+    if (configsLoaded) return;
+    refreshConfigs().catch((error) => {
+      console.error("Failed to load port-forward configs:", error);
+    });
+  }, [configsLoaded, refreshConfigs]);
+
+  const contextConfigs = useMemo(
+    () => configs.filter((config) => config.context === currentContext),
+    [configs, currentContext]
   );
 
-  const getConfigKey = (config: (typeof configs)[0]) =>
-    `${config.context}:${config.pod}:${config.namespace}:${config.localPort}:${config.remotePort}`;
+  const sessionByKey = useMemo(
+    () => new Map(sessions.map((session) => [forwardKey(session), session])),
+    [sessions]
+  );
 
-  const handleStart = async (configId: string) => {
-    setLoadingIds((prev) => new Set(prev).add(configId));
+  // A forward is a process, and one started against another cluster is still
+  // running and still holding a local port — deleting it from the list would
+  // be the panel lying about what is on the machine. So it is separated
+  // rather than dropped, the way the scope tabs name a cluster only where
+  // the name is what tells two rows apart.
+  const [contextSessions, otherSessions] = useMemo(
+    () => [
+      sessions.filter((session) => session.context === currentContext),
+      sessions.filter((session) => session.context !== currentContext),
+    ],
+    [sessions, currentContext]
+  );
+
+  const idleCount = useMemo(
+    () =>
+      contextConfigs.filter((config) => !sessionByKey.has(forwardKey(config)))
+        .length,
+    [contextConfigs, sessionByKey]
+  );
+
+  const withBusy = async (id: string, run: () => Promise<unknown>) => {
+    setBusyIds((prev) => new Set(prev).add(id));
     try {
-      await startConfig(configId);
-    } catch (error) {
-      console.error("Failed to start port forward:", error);
+      await run();
     } finally {
-      setLoadingIds((prev) => {
+      setBusyIds((prev) => {
         const next = new Set(prev);
-        next.delete(configId);
+        next.delete(id);
         return next;
       });
     }
   };
 
-  const handleStop = async (sessionId: string) => {
-    setLoadingIds((prev) => new Set(prev).add(sessionId));
-    try {
-      await stopSession(sessionId);
-    } catch (error) {
-      console.error("Failed to stop port forward:", error);
-    } finally {
-      setLoadingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(sessionId);
-        return next;
-      });
-    }
-  };
+  const handleStart = (configId: string) =>
+    withBusy(configId, async () => {
+      try {
+        await startConfig(configId);
+      } catch (error) {
+        toast({
+          title: "Failed to start port forward",
+          description: normalizeTauriError(error),
+          variant: "destructive",
+        });
+      }
+    });
 
-  const goToSettings = () => {
-    onClose?.();
-    navigate("/settings");
+  const handleStop = (sessionId: string) =>
+    withBusy(sessionId, async () => {
+      try {
+        await stopSession(sessionId);
+      } catch (error) {
+        toast({
+          title: "Failed to stop port forward",
+          description: normalizeTauriError(error),
+          variant: "destructive",
+        });
+      }
+    });
+
+  const handleDelete = (config: PortForwardConfig) =>
+    withBusy(config.id, async () => {
+      try {
+        await removeConfig(config.id);
+      } catch (error) {
+        toast({
+          title: "Failed to delete port forward",
+          description: normalizeTauriError(error),
+          variant: "destructive",
+        });
+      }
+    });
+
+  const handleStartAll = async () => {
+    if (!currentContext) return;
+    setStartingAll(true);
+    try {
+      const result = await startAllForContext(currentContext);
+      toast({
+        title: "Started port forwards",
+        description: `${result.started} started, ${result.skipped} already running, ${result.failed} failed.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to start port forwards",
+        description: normalizeTauriError(error),
+        variant: "destructive",
+      });
+    } finally {
+      setStartingAll(false);
+    }
   };
 
   if (!currentContext) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-        <AlertCircle className="h-8 w-8 mb-2" />
-        <p>Connect to a cluster to manage port forwards</p>
-      </div>
+      <ActivityEmpty
+        icon={AlertCircle}
+        title="Connect to a cluster to manage port forwards"
+      />
     );
   }
 
   if (!configsLoaded) {
-    refreshConfigs();
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-10">
+        <Loader2 className="h-4 w-4 animate-spin text-fg-fnt" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Active Sessions */}
-      {sessions.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">
-            Active Sessions
-          </h4>
-          <ScrollArea className="max-h-[200px]">
-            <div className="space-y-2">
-              {sessions.map((session) => {
-                const status = statusBySession[session.id];
-                const isLoading = loadingIds.has(session.id);
-                const isError = status?.status === "error";
-                const isReconnecting =
-                  status?.status === "reconnecting" ||
-                  status?.status === "reconnected";
-
-                return (
-                  <div
-                    key={session.id}
-                    className="flex items-center justify-between rounded-md border p-3"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Circle
-                        className={cn(
-                          "h-2 w-2 flex-shrink-0",
-                          isError
-                            ? "fill-destructive text-destructive"
-                            : isReconnecting
-                              ? "fill-yellow-500 text-yellow-500"
-                              : "fill-green-500 text-green-500"
-                        )}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {session.pod}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {session.namespace} • :{session.localPort} → :
-                          {session.remotePort}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0"
-                      onClick={() => handleStop(session.id)}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Square className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </div>
+    <div className="pb-3">
+      {contextSessions.length > 0 && (
+        <ActivityGroup title="Running" count={contextSessions.length}>
+          {contextSessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              status={statusBySession[session.id]}
+              isBusy={busyIds.has(session.id)}
+              onStop={() => handleStop(session.id)}
+            />
+          ))}
+        </ActivityGroup>
       )}
 
-      {/* Saved Configs */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-muted-foreground">
-            Saved Configs
-          </h4>
-          <Badge variant="secondary" className="text-xs">
-            {contextConfigs.length}
-          </Badge>
-        </div>
+      {otherSessions.length > 0 && (
+        <ActivityGroup title="Running elsewhere" count={otherSessions.length}>
+          {otherSessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              status={statusBySession[session.id]}
+              isBusy={busyIds.has(session.id)}
+              onStop={() => handleStop(session.id)}
+              namesCluster
+            />
+          ))}
+        </ActivityGroup>
+      )}
 
+      <ActivityGroup
+        title="Saved"
+        count={contextConfigs.length}
+        action={
+          <span className="flex items-center gap-0.5">
+            {idleCount > 1 && (
+              <ActivityAction onClick={handleStartAll} disabled={startingAll}>
+                <Play className="h-3 w-3" />
+                {startingAll ? "Starting…" : "Start all"}
+              </ActivityAction>
+            )}
+            <ActivityAction onClick={() => setEditing(null)}>
+              <Plus className="h-3 w-3" />
+              New
+            </ActivityAction>
+          </span>
+        }
+      >
         {contextConfigs.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">
-            <p>No port forwards configured</p>
-            <p className="text-xs mt-1">Create one in Settings or from a Pod</p>
-          </div>
+          // Saved configs are filtered to the current context, so a forward
+          // saved against another cluster is not gone — it is just not here,
+          // and "none saved" said otherwise. The New button is a foot away
+          // in this group's own header, so the hint spends its words on the
+          // scope instead of naming it again.
+          <ActivityEmpty
+            icon={Network}
+            title={`No port forwards saved for ${currentContext}`}
+            hint={
+              configs.length > 0
+                ? `${configs.length} saved against other clusters, reachable by switching to them.`
+                : "A forward saved here can be started again without retyping the pod and ports."
+            }
+          />
         ) : (
-          <ScrollArea className="max-h-[250px]">
-            <div className="space-y-2">
-              {contextConfigs.map((config) => {
-                const key = getConfigKey(config);
-                const activeSession = sessionByKey.get(key);
-                const isActive = !!activeSession;
-                const isLoading = loadingIds.has(config.id);
+          contextConfigs.map((config) => {
+            const activeSession = sessionByKey.get(forwardKey(config));
+            const isBusy = busyIds.has(config.id);
 
-                return (
-                  <div
-                    key={config.id}
-                    className="flex items-center justify-between rounded-md border p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">
-                          {config.name}
-                        </p>
-                        {config.autoStart && (
-                          <Badge variant="outline" className="text-xs">
-                            Auto
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {config.pod} • :{config.localPort} → :
-                        {config.remotePort}
-                      </p>
-                    </div>
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0"
-                      onClick={() =>
-                        isActive
-                          ? handleStop(activeSession.id)
-                          : handleStart(config.id)
-                      }
-                      disabled={isLoading}
+            return (
+              <div key={config.id} className={ACTIVITY_ROW}>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-fg-mid">
+                    {config.name}
+                    {config.autoStart && (
+                      <span className="ml-1.5 text-[11px] text-fg-fnt">
+                        auto
+                      </span>
+                    )}
+                  </span>
+                  <span className="block truncate font-mono text-[11px] text-fg-fnt">
+                    <ResourceRef
+                      kind={ResourceType.Pod}
+                      name={config.pod}
+                      namespace={config.namespace}
+                      showKind={false}
+                    />{" "}
+                    · :{config.localPort} → :{config.remotePort}
+                  </span>
+                </span>
+                <ActivityAction
+                  aria-label={`${activeSession ? "Stop" : "Start"} ${config.name}`}
+                  onClick={() =>
+                    activeSession
+                      ? handleStop(activeSession.id)
+                      : handleStart(config.id)
+                  }
+                  disabled={isBusy}
+                >
+                  {isBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : activeSession ? (
+                    <Square className="h-3.5 w-3.5" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                </ActivityAction>
+                {/* Editing and deleting are rare next to start and stop, so
+                    they sit behind one affordance instead of widening every
+                    row by two buttons. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <ActivityAction
+                      aria-label={`More actions for ${config.name}`}
                     >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : isActive ? (
-                        <Square className="h-4 w-4" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </ActivityAction>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => setEditing(config)}>
+                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-err"
+                      onSelect={() => handleDelete(config)}
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            );
+          })
         )}
-      </div>
+      </ActivityGroup>
 
-      {/* Actions */}
-      <div className="flex gap-2 pt-2 border-t">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1"
-          onClick={goToSettings}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          New
-        </Button>
-        <Button variant="outline" size="sm" onClick={goToSettings}>
-          <Settings className="h-4 w-4" />
-        </Button>
-      </div>
+      {editing !== undefined && (
+        <PortForwardConfigDialog
+          context={currentContext}
+          config={editing ?? undefined}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
     </div>
   );
 }

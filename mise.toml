@@ -1,3 +1,10 @@
 [tools]
 node = "24"
-rust = "stable"
+bun = "1.3"
+# nightly is only for `cargo expand`, which the binding generator shells out
+# to — the crate itself builds on stable.
+rust = ["stable", "nightly"]
+"cargo:tauri-ts-generator" = "2.1.0"
+# Without cargo-expand the generator cannot see macro-generated commands and
+# silently drops all 15 `subscribe_*_watch` bindings while still exiting 0.
+"cargo:cargo-expand" = "1.0.124"

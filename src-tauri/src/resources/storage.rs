@@ -29,6 +29,11 @@ pub struct PersistentVolumeInfo {
     pub claim: Option<String>,
     pub storage_class: String,
     pub reason: Option<String>,
+    /// Carried so the app can tell a volume somebody applied from a
+    /// repository from one a provisioner made. Both are on the object
+    /// itself, so this costs a clone and no extra call.
+    pub labels: BTreeMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
     pub age: String,
 }
 
@@ -70,6 +75,8 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
                 .and_then(|s| s.storage_class_name.clone())
                 .unwrap_or_default(),
             reason: status.and_then(|s| s.reason.clone()),
+            labels: pv.labels().clone(),
+            annotations: pv.annotations().clone(),
             age: format_k8s_age(pv.metadata.creation_timestamp.as_ref()),
         }
     }
@@ -86,6 +93,8 @@ pub struct PersistentVolumeClaimInfo {
     pub capacity: String,
     pub access_modes: Vec<String>,
     pub storage_class: String,
+    pub labels: BTreeMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
     pub age: String,
 }
 
@@ -124,6 +133,8 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
             storage_class: spec
                 .and_then(|s| s.storage_class_name.clone())
                 .unwrap_or_default(),
+            labels: pvc.labels().clone(),
+            annotations: pvc.annotations().clone(),
             age: format_k8s_age(pvc.metadata.creation_timestamp.as_ref()),
         }
     }
@@ -140,6 +151,8 @@ pub struct StorageClassInfo {
     pub allow_volume_expansion: bool,
     pub is_default: bool,
     pub parameters: BTreeMap<String, String>,
+    pub labels: BTreeMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
     pub age: String,
 }
 
@@ -165,6 +178,8 @@ impl From<&StorageClass> for StorageClassInfo {
             allow_volume_expansion: sc.allow_volume_expansion.unwrap_or(false),
             is_default,
             parameters: sc.parameters.clone().unwrap_or_default(),
+            labels: sc.labels().clone(),
+            annotations: sc.annotations().clone(),
             age: format_k8s_age(sc.metadata.creation_timestamp.as_ref()),
         }
     }

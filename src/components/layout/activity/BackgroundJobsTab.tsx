@@ -1,7 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress";
 import {
   Loader2,
   CheckCircle2,
@@ -17,6 +13,12 @@ import {
 } from "@/stores/backgroundJobStore";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
+import {
+  ACTIVITY_ROW,
+  ActivityAction,
+  ActivityEmpty,
+  ActivityGroup,
+} from "./primitives";
 
 const JOB_TYPE_LABELS: Record<BackgroundJobType, string> = {
   delete: "Delete",
@@ -32,14 +34,35 @@ const JOB_TYPE_LABELS: Record<BackgroundJobType, string> = {
 function JobStatusIcon({ job }: { job: BackgroundJob }) {
   switch (job.status) {
     case "pending":
-      return <Clock className="h-4 w-4 text-muted-foreground" />;
+      return <Clock className="h-3.5 w-3.5 flex-none text-fg-fnt" />;
     case "running":
-      return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+      return (
+        <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-info" />
+      );
     case "completed":
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      return <CheckCircle2 className="h-3.5 w-3.5 flex-none text-ok" />;
     case "failed":
-      return <XCircle className="h-4 w-4 text-destructive" />;
+      return <XCircle className="h-3.5 w-3.5 flex-none text-err" />;
   }
+}
+
+function JobIdentity({ job }: { job: BackgroundJob }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-fg-mid">
+        {JOB_TYPE_LABELS[job.type]} {job.resourceType}
+      </span>
+      <span className="block truncate font-mono text-[11px] text-fg-fnt">
+        {job.resourceName}
+        {job.namespace && ` · ${job.namespace}`}
+      </span>
+      {job.status === "failed" && job.message && (
+        <span className="block truncate text-[11px] text-err">
+          {job.message}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function BackgroundJobsTab() {
@@ -54,124 +77,67 @@ export function BackgroundJobsTab() {
 
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-        <RefreshCw className="h-8 w-8 mb-2 opacity-50" />
-        <p>No background jobs</p>
-        <p className="text-xs mt-1">
-          Operations like delete, scale, and restart will appear here
-        </p>
-      </div>
+      <ActivityEmpty
+        icon={RefreshCw}
+        title="No background jobs"
+        hint="Delete, scale and restart operations show up here"
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Active Jobs */}
+    <div className="pb-3">
       {activeJobs.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              In Progress
-            </h4>
-            <Badge variant="secondary" className="text-xs">
-              {activeJobs.length}
-            </Badge>
-          </div>
-          <ScrollArea className="max-h-[150px]">
-            <div className="space-y-2">
-              {activeJobs.map((job) => (
-                <div key={job.id} className="rounded-md border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <JobStatusIcon job={job} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {JOB_TYPE_LABELS[job.type]} {job.resourceType}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {job.resourceName}
-                          {job.namespace && ` • ${job.namespace}`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  {job.progress !== undefined && (
-                    <Progress value={job.progress} className="h-1" />
-                  )}
-                  {job.message && (
-                    <p className="text-xs text-muted-foreground truncate">
-                      {job.message}
-                    </p>
-                  )}
-                </div>
-              ))}
+        <ActivityGroup title="Running" count={activeJobs.length}>
+          {activeJobs.map((job) => (
+            <div key={job.id} className={cn(ACTIVITY_ROW, "flex-col gap-1")}>
+              <span className="flex w-full items-center gap-2.5">
+                <JobStatusIcon job={job} />
+                <JobIdentity job={job} />
+              </span>
+              {job.progress !== undefined && (
+                <span className="h-[3px] w-full overflow-hidden rounded-sm bg-sel">
+                  <span
+                    className="block h-full bg-info"
+                    style={{ width: `${job.progress}%` }}
+                  />
+                </span>
+              )}
+              {job.message && (
+                <span className="w-full truncate text-[11px] text-fg-fnt">
+                  {job.message}
+                </span>
+              )}
             </div>
-          </ScrollArea>
-        </div>
+          ))}
+        </ActivityGroup>
       )}
 
-      {/* Completed Jobs */}
       {completedJobs.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Recent
-            </h4>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs"
-              onClick={clearCompleted}
-            >
-              Clear
-            </Button>
-          </div>
-          <ScrollArea className="max-h-[250px]">
-            <div className="space-y-2">
-              {completedJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className={cn(
-                    "flex items-center justify-between rounded-md border p-3",
-                    job.status === "failed" && "border-destructive/50"
-                  )}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <JobStatusIcon job={job} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {JOB_TYPE_LABELS[job.type]} {job.resourceType}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {job.resourceName}
-                        {job.namespace && ` • ${job.namespace}`}
-                      </p>
-                      {job.status === "failed" && job.message && (
-                        <p className="text-xs text-destructive truncate mt-1">
-                          {job.message}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <RealtimeAge
-                      timestamp={job.completedAt ?? job.createdAt}
-                      className="text-xs text-muted-foreground"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => removeJob(job.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+        <ActivityGroup
+          title="Finished"
+          count={completedJobs.length}
+          action={
+            <ActivityAction onClick={clearCompleted}>Clear</ActivityAction>
+          }
+        >
+          {completedJobs.map((job) => (
+            <div key={job.id} className={ACTIVITY_ROW}>
+              <JobStatusIcon job={job} />
+              <JobIdentity job={job} />
+              <RealtimeAge
+                timestamp={job.completedAt ?? job.createdAt}
+                className="flex-none text-[11px] text-fg-fnt"
+              />
+              <ActivityAction
+                aria-label={`Dismiss ${JOB_TYPE_LABELS[job.type]} ${job.resourceName}`}
+                onClick={() => removeJob(job.id)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </ActivityAction>
             </div>
-          </ScrollArea>
-        </div>
+          ))}
+        </ActivityGroup>
       )}
     </div>
   );

@@ -1,16 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
-import { Eye, Trash2, Database } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { StorageClassRef } from "./storage-refs";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  createAccessModesColumn,
+  createCapacityColumn,
+  createNameColumn,
+  createNamespaceColumn,
+} from "./columns";
+import { ResourceRef } from "./ResourceRef";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
@@ -23,29 +25,10 @@ import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 
 const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-muted-foreground" />
-        <Link
-          to={getResourceDetailUrl(
-            ResourceType.PersistentVolumeClaim,
-            row.original.name,
-            row.original.namespace
-          )}
-          className="font-medium text-primary hover:underline"
-        >
-          {row.original.name}
-        </Link>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "namespace",
-    header: "Namespace",
-  },
+  createNameColumn<PersistentVolumeClaimInfo>(
+    ResourceType.PersistentVolumeClaim
+  ),
+  createNamespaceColumn<PersistentVolumeClaimInfo>(),
   {
     accessorKey: "status",
     header: "Status",
@@ -54,42 +37,25 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     accessorKey: "volume",
     header: "Volume",
-    cell: ({ row }) => row.original.volume || "-",
+    cell: ({ row }) =>
+      row.original.volume ? (
+        <ResourceRef
+          kind={ResourceType.PersistentVolume}
+          name={row.original.volume}
+          showKind={false}
+        />
+      ) : (
+        <span className="text-fg-fnt">—</span>
+      ),
   },
-  {
-    accessorKey: "capacity",
-    header: "Capacity",
-    cell: ({ row }) => (
-      <Badge variant="outline">{row.original.capacity || "N/A"}</Badge>
-    ),
-  },
-  {
-    accessorKey: "accessModes",
-    header: "Access Modes",
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        {row.original.accessModes.map((mode, i) => (
-          <Tooltip key={i}>
-            <TooltipTrigger>
-              <Badge variant="secondary" className="text-xs">
-                {mode}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              {mode === "RWO" && "ReadWriteOnce"}
-              {mode === "ROX" && "ReadOnlyMany"}
-              {mode === "RWX" && "ReadWriteMany"}
-              {mode === "RWOP" && "ReadWriteOncePod"}
-            </TooltipContent>
-          </Tooltip>
-        ))}
-      </div>
-    ),
-  },
+  createCapacityColumn<PersistentVolumeClaimInfo>(),
+  createAccessModesColumn<PersistentVolumeClaimInfo>(),
   {
     accessorKey: "storageClass",
     header: "Storage Class",
-    cell: ({ row }) => row.original.storageClass || "default",
+    cell: ({ row }) => (
+      <StorageClassRef name={row.original.storageClass} fallback="default" />
+    ),
   },
   {
     accessorKey: "age",
@@ -195,7 +161,8 @@ export function PersistentVolumeClaimList() {
         resourceType: ResourceType.PersistentVolumeClaim,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? undefined : false}
+      refresh={watchFailed ? undefined : false}
+      live={!watchFailed}
       searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(

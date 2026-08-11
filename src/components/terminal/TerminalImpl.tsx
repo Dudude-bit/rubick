@@ -1,14 +1,59 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { useThemeStore } from "@/stores/themeStore";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Terminal as TerminalIcon } from "lucide-react";
 import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
+import type { StatusRole } from "@/lib/status-role";
+
+/** Used only if `--canvas` cannot be read; matches the dark canvas token. */
+const CANVAS_FALLBACK = "rgb(26, 28, 30)";
+
+/**
+ * The canvas colour as a literal xterm can parse.
+ *
+ * xterm needs a colour string, not a class, so the terminal cannot inherit
+ * `bg-canvas` and used to hardcode a bluish `#1a1a2e` that read as a panel
+ * floating on the page. Reading the token keeps it exactly the page colour.
+ * It is resolved through a probe element rather than passed as `hsl(...)`
+ * because xterm parses `#rrggbb` and `rgb()` directly and hands anything else
+ * to a canvas 2D context it may fail to acquire.
+ */
+function readCanvasTheme(): { background: string; dark: boolean } {
+  const root = document.documentElement;
+  const dark = root.classList.contains("dark");
+  const token = getComputedStyle(root).getPropertyValue("--canvas").trim();
+  if (!token) return { background: CANVAS_FALLBACK, dark };
+
+  const probe = document.createElement("span");
+  probe.style.cssText = `position:absolute;visibility:hidden;color:hsl(${token})`;
+  document.body.appendChild(probe);
+  const background = getComputedStyle(probe).color;
+  probe.remove();
+
+  return { background: background || CANVAS_FALLBACK, dark };
+}
+
+function useCanvasTheme() {
+  const [canvas, setCanvas] = useState(readCanvasTheme);
+
+  useEffect(() => {
+    // The theme is a class on <html> written by an effect in App, which is an
+    // ancestor — its effect runs *after* this one, so subscribing to the theme
+    // store here would read the previous theme's colours. Watching the
+    // attribute reads them once they exist, and covers the OS-level flip that
+    // the "system" setting resolves to as well.
+    const sync = () => setCanvas(readCanvasTheme());
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return canvas;
+}
 
 export interface TerminalMetadata {
   /** Main title to display (e.g., pod name, command) */
@@ -35,7 +80,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initializedRef = useRef(false);
-  const { theme } = useThemeStore();
+  const { background, dark: isDark } = useCanvasTheme();
 
   const onOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);
@@ -57,12 +102,13 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     }
   );
 
-  const isDark = theme === "dark";
+  // The sixteen ANSI slots stay literal: they are terminal semantics a program
+  // addresses by index, not app chrome.
   const terminalTheme = useMemo(
     () =>
       isDark
         ? {
-            background: "#1a1a2e",
+            background,
             foreground: "#e4e4e7",
             cursor: "#3b82f6",
             selectionBackground: "#3b82f680",
@@ -84,7 +130,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
             brightWhite: "#ffffff",
           }
         : {
-            background: "#fafafa",
+            background,
             foreground: "#18181b",
             cursor: "#2563eb",
             selectionBackground: "#3b82f640",
@@ -105,7 +151,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
             brightCyan: "#06b6d4",
             brightWhite: "#ffffff",
           },
-    [isDark]
+    [isDark, background]
   );
 
   // Store callbacks in refs to avoid dependency issues
@@ -175,61 +221,53 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     }
   }, [terminalTheme]);
 
-  const terminalBackground = terminalTheme.background;
-
-  const statusLabel = (() => {
+  /**
+   * The session state in the app's one status vocabulary.
+   *
+   * A filled green chip saying `Connected` was the last one left in the
+   * app — every other status is mono text and a role glyph, and the chip
+   * was shouting a fact that is true almost all the time. The role is
+   * given rather than derived: `statusRole` reads Kubernetes words, and
+   * "Connected" is not one of them.
+   */
+  const [statusLabel, statusRoleOverride]: [string, StatusRole] = (() => {
     switch (status) {
       case "connecting":
-        return "Connecting";
+        return ["Connecting", "pending"];
       case "connected":
-        return "Connected";
+        return ["Connected", "ok"];
       case "closed":
-        return "Ended";
+        return ["Ended", "neutral"];
       case "error":
-        return "Error";
+        return ["Error", "err"];
       default:
-        return "Idle";
-    }
-  })();
-
-  const statusVariant: ComponentProps<typeof Badge>["variant"] = (() => {
-    switch (status) {
-      case "connected":
-        return "success";
-      case "error":
-        return "error";
-      case "connecting":
-        return "secondary";
-      case "closed":
-        return "secondary";
-      default:
-        return "outline";
+        return ["Idle", "neutral"];
     }
   })();
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
-      <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted border-b">
-        <div className="flex min-w-0 items-center gap-2 text-sm">
-          <TerminalIcon className="h-4 w-4 shrink-0" />
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs">
+          <TerminalIcon className="h-3.5 w-3.5 shrink-0 text-fg-fnt" />
           {metadata?.title && (
-            <span className="truncate font-mono text-sm font-semibold">
+            <span className="truncate font-mono font-medium text-fg">
               {metadata.title}
             </span>
           )}
           {metadata?.subtitle && (
             <>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate font-mono text-sm text-blue-500">
+              <span className="text-fg-fnt">/</span>
+              <span className="truncate font-mono text-fg-mid">
                 {metadata.subtitle}
               </span>
             </>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={statusVariant}>{statusLabel}</Badge>
+          <StatusBadge status={statusLabel} roleOverride={statusRoleOverride} />
           {error && status !== "connected" && (
-            <span className="text-xs text-muted-foreground max-w-[240px] truncate">
+            <span className="max-w-[240px] truncate text-xs text-fg-mut">
               {error}
             </span>
           )}
@@ -245,10 +283,12 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
           )}
         </div>
       </div>
+      {/* xterm sizes itself to whole rows and columns, so the remainder of
+       *  this box shows through; without the canvas colour on it the terminal
+       *  sits inside a black frame. */}
       <div
         ref={terminalRef}
-        className="flex-1 min-h-0 overflow-hidden"
-        style={{ backgroundColor: terminalBackground }}
+        className="min-h-0 flex-1 overflow-hidden bg-canvas"
       />
     </div>
   );

@@ -25,6 +25,10 @@ pub struct NodeInfo {
     pub taints: Vec<TaintInfo>,
     pub capacity: ResourceQuantities,
     pub allocatable: ResourceQuantities,
+    /// The cloud's own name for this machine, e.g. `gce://project/zone/name`.
+    /// Its scheme is the only unambiguous statement of which cloud a node is
+    /// on — a node pool label can be applied by anyone.
+    pub provider_id: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -165,6 +169,7 @@ impl From<&Node> for NodeInfo {
             taints,
             capacity,
             allocatable,
+            provider_id: spec.and_then(|s| s.provider_id.clone()),
             created_at: node.creation_timestamp().map(|t| t.0),
         }
     }

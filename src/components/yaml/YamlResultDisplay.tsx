@@ -1,32 +1,39 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { ManifestResult } from "@/generated/types";
+import { cn } from "@/lib/utils";
 
 export interface YamlResultDisplayProps {
   result: ManifestResult;
 }
 
+/**
+ * The outcome of applying a manifest. No tinted panel: the icon and the
+ * word carry the result, and the colour only reinforces them — a filled
+ * green block on the canvas would be the only surface on the screen.
+ */
 export function YamlResultDisplay({ result }: YamlResultDisplayProps) {
   return (
-    <div
-      className={`rounded-lg border p-3 text-xs ${
-        result.success
-          ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800"
-          : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200 border-red-200 dark:border-red-800"
-      }`}
-    >
-      <div className="flex items-center gap-2 font-semibold mb-1">
+    <div className="border-t border-hair pt-2 text-xs">
+      <p
+        className={cn(
+          "flex items-center gap-1.5 font-medium",
+          result.success ? "text-ok" : "text-err"
+        )}
+      >
         {result.success ? (
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="h-3.5 w-3.5 flex-none" />
         ) : (
-          <XCircle className="h-4 w-4" />
+          <XCircle className="h-3.5 w-3.5 flex-none" />
         )}
         {result.success ? "Success" : "Error"}
-      </div>
+      </p>
       {result.stdout && (
-        <pre className="whitespace-pre-wrap text-xs mt-2">{result.stdout}</pre>
+        <pre className="mt-1.5 whitespace-pre-wrap font-mono text-[11px] text-fg-mid">
+          {result.stdout}
+        </pre>
       )}
       {result.stderr && (
-        <pre className="whitespace-pre-wrap text-xs mt-2 text-red-600 dark:text-red-400">
+        <pre className="mt-1.5 whitespace-pre-wrap font-mono text-[11px] text-err">
           {result.stderr}
         </pre>
       )}

@@ -10,13 +10,17 @@ import { BrowserRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import App from "./App";
+// Fonts are bundled, not fetched: the app's CSP is `style-src 'self'` /
+// `font-src 'self' data:`, which blocks the Google Fonts stylesheet and
+// the gstatic font files outright. Loading them from a CDN also breaks
+// on the airgapped networks this tool is used on.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import { logDebug, logError, logInfo } from "@/lib/logger";
-import { registerBuiltInPlugins } from "@/lib/crd-plugins/plugins";
 import { STALE_TIMES } from "@/lib/refresh";
-
-// Register built-in CRD plugins for enhanced UI
-registerBuiltInPlugins();
+import { commands } from "@/lib/commands";
+import { setHostOs } from "@/lib/platform";
 
 const formatKey = (key: unknown) => {
   try {
@@ -76,15 +80,36 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BrowserRouter>
-          <App />
-          <Toaster />
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+// The rendered modifier differs per platform and Kbd reads it
+// synchronously, so resolve it before the first paint rather than
+// letting an early mount render the wrong glyph with no way to
+// re-render. A hung IPC must not white-screen the app, so the wait is
+// bounded and falls back to the Ctrl default.
+async function resolveHostOs(): Promise<void> {
+  try {
+    const info = await Promise.race([
+      commands.getAppInfo(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 2000)
+      ),
+    ]);
+    setHostOs(info.os);
+  } catch {
+    // keep the Ctrl fallback
+  }
+}
+
+void resolveHostOs().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <BrowserRouter>
+            <App />
+            <Toaster />
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+});

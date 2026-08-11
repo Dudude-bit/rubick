@@ -81,6 +81,7 @@ function buildNode(overrides: Partial<NodeInfo> = {}): NodeInfo {
       pods: "110",
       ephemeralStorage: "90Gi",
     },
+    providerId: null,
     createdAt: "2026-04-25T00:00:00Z",
     ...overrides,
   };
@@ -96,7 +97,7 @@ function defaultUseResourceDetailReturn(node: NodeInfo) {
     yaml: "kind: Node\nmetadata:\n  name: test-node-1\n",
     yamlError: null,
     copyYaml: vi.fn(),
-    activeTab: "info",
+    activeTab: "overview",
     setActiveTab: vi.fn(),
     goBack: vi.fn(),
     refetch: vi.fn(),
@@ -129,7 +130,11 @@ describe("NodeDetail", () => {
 
   it("renders the node name in the page title", () => {
     renderPage();
-    expect(screen.getByText("test-node-1")).toBeInTheDocument();
+    // The title is a `ResourceName`, so the identity tail is its own span:
+    // the heading's text content is the name, its `getByText` is not.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+      "test-node-1"
+    );
   });
 
   it("shows the role badge when the node has a role", () => {
@@ -159,9 +164,9 @@ describe("NodeDetail", () => {
     expect(screen.getByText(/notready/i)).toBeInTheDocument();
   });
 
-  it("renders the four tabs (Info, Conditions, Labels, YAML)", () => {
+  it("renders the four tabs (Overview, Conditions, Labels, YAML)", () => {
     renderPage();
-    expect(screen.getByRole("tab", { name: /info/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /overview/i })).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: /conditions/i })
     ).toBeInTheDocument();

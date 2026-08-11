@@ -7,17 +7,16 @@
  */
 
 import {
-  useQuery,
   useMutation,
   useQueryClient,
   keepPreviousData,
-  UseQueryOptions,
   UseMutationOptions,
 } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
+import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 
 // ============================================================================
 // Query Hooks
@@ -26,7 +25,7 @@ import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 export interface UseResourceOptions<
   TData = unknown,
   TError = Error,
-> extends Partial<UseQueryOptions<TData, TError>> {
+> extends Partial<LiveQueryOptions<TData, TError, TData, string[]>> {
   /** Override the isConnected check */
   ignoreConnection?: boolean;
 }
@@ -46,17 +45,16 @@ export function useResource<TData = unknown, TError = Error>(
   options?: UseResourceOptions<TData, TError>
 ) {
   const isConnected = useClusterStore((state) => state.isConnected);
-  const { ignoreConnection, refetchInterval, ...queryOptions } = options ?? {};
+  const { ignoreConnection, ...queryOptions } = options ?? {};
 
-  return useQuery({
+  return useLiveQuery<TData, TError, TData, string[]>({
     queryKey,
     queryFn,
     enabled:
       (ignoreConnection || isConnected) && queryOptions?.enabled !== false,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceDetail,
-    refetchInterval: refetchInterval ?? REFRESH_INTERVALS.resourceList,
-    refetchOnWindowFocus: false,
+    refresh: "resourceList",
     ...queryOptions,
   });
 }

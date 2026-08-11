@@ -1,15 +1,19 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { cn } from "@/lib/utils";
-import { commands } from "@/lib/commands";
-import { useState, useEffect, useMemo } from "react";
-import { useResourceMutation, useResourceDetail } from "@/hooks";
-import { useMetrics } from "@/hooks/useMetrics";
-import type { DeploymentInfo } from "@/generated/types";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { useEffect, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import {
+  AlignLeft,
+  BadgeCheck,
+  Info,
+  Layers2,
+  RefreshCw,
+  Scale,
+  Trash2,
+} from "lucide-react";
+
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,35 +30,60 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Trash2,
-  RefreshCw,
-  Scale,
-  RotateCcw,
-  FileText,
-  Rocket,
-} from "lucide-react";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { MetricsStatusBanner } from "@/components/metrics";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { ContainerCard } from "@/components/resources/ContainerCard";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
+import { TrafficChain } from "@/components/resources/TrafficChain";
+import { connectionsTab } from "@/components/resources/connections-tab";
 import { PodListCard } from "@/components/resources/PodListCard";
-import { MetricCard } from "@/components/ui/metric-card";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
-  parseCPU as parseKubernetesCPU,
-  parseMemory as parseKubernetesMemory,
-} from "@/lib/k8s-quantity";
-import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
+  conditionsMark,
+  countMark,
+  kindGlyph,
+  podsMark,
+  viewGlyph,
+  type DetailTab,
+} from "@/components/resources/detail-tab";
+import { RevisionRows } from "@/components/resources/child-rows";
+import { ResourceMessage } from "@/components/resources/ResourceMessage";
+import { ScaleDialog } from "@/components/resources/ScaleDialog";
+import { ContainerRows } from "@/components/resources/container-rows";
+import { deliveryOfKind } from "@/lib/delivery";
+import { scaleWarnings } from "@/lib/governance";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import {
+  Composition,
+  ConditionRows,
+  DetailAction,
+} from "@/components/resources/detail-blocks";
+import { WorkloadUsage } from "@/components/resources/workload-usage";
+import { serviceAccountRow } from "@/components/resources/identity-rows";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useResourceMutation, useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
+import { useMetrics } from "@/hooks/useMetrics";
+import { commands } from "@/lib/commands";
+import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import type { DeploymentInfo } from "@/generated/types";
 
 export function DeploymentDetail() {
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
-  const [newReplicas, setNewReplicas] = useState(1);
   const [newImage, setNewImage] = useState("");
   const [selectedContainer, setSelectedContainer] = useState("");
   const [selectedLogPod, setSelectedLogPod] = useState<string | null>(null);
@@ -70,6 +99,7 @@ export function DeploymentDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<DeploymentInfo>({
     resourceKind: ResourceType.Deployment,
     fetchResource: (name, ns) => commands.getDeployment(name, ns),
@@ -77,16 +107,12 @@ export function DeploymentDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["deployment-pods", namespace, name],
     queryFn: async () => {
       try {
         if (!name) return [];
-        const result = await commands.getDeploymentPods(
-          name,
-          namespace || null
-        );
-        return result;
+        return await commands.getDeploymentPods(name, namespace || null);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
@@ -94,27 +120,29 @@ export function DeploymentDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
     refetchOnWindowFocus: false,
   });
 
-  // Get pod metrics for real-time updates
-  const { podMetrics, podStatus } = useMetrics({
+  const connections = useConnections(ResourceType.Deployment, name, namespace);
+
+  const { data: revisions = [] } = useLiveQuery({
+    queryKey: ["deployment-replicasets", namespace, name],
+    queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
+    enabled: !!namespace && !!name,
+    placeholderData: keepPreviousData,
+    staleTime: STALE_TIMES.resourceList,
+    refresh: "resourceList",
+  });
+
+  // For the banner only. The Usage block reads the same query through the
+  // same key, so this costs one fetch between them.
+  const { podStatus } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     includeCluster: false,
     enabled: !!deployment,
   });
-
-  // Merge pods with metrics
-  const podsWithMetrics = useMemo(() => {
-    return mergePodsWithMetrics(pods, podMetrics);
-  }, [pods, podMetrics]);
-
-  // Calculate aggregated metrics for deployment
-  const aggregatedMetrics = useMemo(() => {
-    return aggregatePodMetrics(podsWithMetrics);
-  }, [podsWithMetrics]);
 
   // Auto-select first pod for logs when pods load. Genuine
   // sync-async-data-into-local-state — could be derived as
@@ -128,75 +156,32 @@ export function DeploymentDetail() {
     }
   }, [pods, selectedLogPod]);
 
-  // Get the currently selected pod for logs
   const logPod = pods.find((p) => p.name === selectedLogPod);
 
-  // Calculate total CPU/Memory limits/requests from containers
-  const totalResources = useMemo(() => {
-    if (!deployment?.containers)
-      return {
-        cpuLimit: null,
-        cpuRequest: null,
-        memoryLimit: null,
-        memoryRequest: null,
-      };
-
-    const replicas = deployment.replicas.desired || 1;
-    let totalCpuLimits = 0;
-    let totalCpuRequests = 0;
-    let totalMemoryLimits = 0;
-    let totalMemoryRequests = 0;
-
-    deployment.containers.forEach((c) => {
-      if (c.resources?.limits?.cpu) {
-        totalCpuLimits += parseKubernetesCPU(c.resources.limits.cpu);
-      }
-      if (c.resources?.requests?.cpu) {
-        totalCpuRequests += parseKubernetesCPU(c.resources.requests.cpu);
-      }
-      if (c.resources?.limits?.memory) {
-        totalMemoryLimits += parseKubernetesMemory(c.resources.limits.memory);
-      }
-      if (c.resources?.requests?.memory) {
-        totalMemoryRequests += parseKubernetesMemory(
-          c.resources.requests.memory
-        );
-      }
-    });
-
-    return {
-      cpuLimit: totalCpuLimits > 0 ? totalCpuLimits * replicas : null,
-      cpuRequest: totalCpuRequests > 0 ? totalCpuRequests * replicas : null,
-      memoryLimit: totalMemoryLimits > 0 ? totalMemoryLimits * replicas : null,
-      memoryRequest:
-        totalMemoryRequests > 0 ? totalMemoryRequests * replicas : null,
-    };
-  }, [deployment]);
-
-  const { data: rolloutStatus } = useQuery({
+  const { data: rolloutStatus } = useLiveQuery({
     queryKey: ["rollout-status", namespace, name],
     queryFn: async () => {
       try {
         if (!name) return null;
-        const result = await commands.getRolloutStatus(name, namespace || null);
-        return result;
+        return await commands.getRolloutStatus(name, namespace || null);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
     enabled: !!namespace && !!name,
-    refetchInterval: REFRESH_INTERVALS.fast,
+    refresh: "fast",
   });
 
   const scaleMutation = useResourceMutation(
-    async () => {
+    async (replicas: number) => {
       if (!name) return;
-      await commands.scaleDeployment(name, newReplicas, namespace || null);
+      await commands.scaleDeployment(name, replicas, namespace || null);
     },
     {
       toast: {
         successTitle: "Deployment scaled",
-        successDescription: `Deployment ${name} scaled to ${newReplicas} replicas.`,
+        successDescription: (_data, replicas) =>
+          `Deployment ${name} scaled to ${replicas} replicas.`,
         errorPrefix: "Failed to scale deployment",
       },
       invalidateQueryKeys:
@@ -248,10 +233,7 @@ export function DeploymentDetail() {
   );
 
   const openScaleDialog = () => {
-    if (deployment) {
-      setNewReplicas(deployment.replicas.desired);
-      setScaleDialogOpen(true);
-    }
+    if (deployment) setScaleDialogOpen(true);
   };
 
   const openImageDialog = (containerName: string, currentImage: string) => {
@@ -259,6 +241,9 @@ export function DeploymentDetail() {
     setNewImage(currentImage);
     setImageDialogOpen(true);
   };
+
+  const deliveryQuery = deliveryOfKind(ResourceType.Deployment, deployment);
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   if (!deployment && !isLoading && !error) {
     return null;
@@ -281,9 +266,7 @@ export function DeploymentDetail() {
     );
 
   const rolloutMessage = (() => {
-    if (!rolloutStatus) {
-      return null;
-    }
+    if (!rolloutStatus) return null;
     const progressing = rolloutStatus.conditions.find(
       (c) => c.conditionType === "Progressing"
     );
@@ -300,308 +283,294 @@ export function DeploymentDetail() {
     return available?.message || "Deployment is available";
   })();
 
-  const tabs = [
+  const replicas = deployment?.replicas;
+  const shortReplicas = !!replicas && replicas.ready < replicas.desired;
+  const desired = replicas?.desired ?? 0;
+  const ready = replicas?.ready ?? 0;
+
+  // Desired, ready, available and up-to-date are one count read four ways, and
+  // as four rows the reader had to subtract them to find the gap the bar shows
+  // outright. The two the bar does not partition qualify it underneath.
+  const facts: KeyValue[] = [
+    { label: "Strategy", value: deployment?.strategy || "RollingUpdate" },
+    serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace),
+  ];
+
+  const tabs: DetailTab[] = [
     {
       id: "overview",
       label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Deployment Info</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Strategy</span>
-                  <span>{deployment?.strategy || "RollingUpdate"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Replicas</span>
-                  <span>{deployment?.replicas.desired}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Ready</span>
-                  <span>{deployment?.replicas.ready}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Available</span>
-                  <span>{deployment?.replicas.available}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Created</span>
-                  <span>{deployment?.createdAt || "-"}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <LabelsDisplay labels={deployment?.labels || {}} title="Labels" />
-          </div>
-
+        <>
           {podStatus?.status !== "available" && (
             <MetricsStatusBanner status={podStatus} />
           )}
-          {/* Resource Usage Metrics */}
-          <div className="grid grid-cols-2 gap-4">
-            <MetricCard
-              title="CPU Usage"
-              used={aggregatedMetrics.cpuMillicores}
-              request={totalResources.cpuRequest}
-              limit={totalResources.cpuLimit}
-              type="cpu"
-              showProgressBar
-            />
-            <MetricCard
-              title="Memory Usage"
-              used={aggregatedMetrics.memoryBytes}
-              request={totalResources.memoryRequest}
-              limit={totalResources.memoryLimit}
-              type="memory"
-              showProgressBar
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Aggregated across {podsWithMetrics.length} pod
-            {podsWithMetrics.length !== 1 ? "s" : ""}
-          </p>
-        </div>
+
+          <WorkloadOverview
+            count={
+              <CountBlock title="Replicas" governance={connections}>
+                <Composition
+                  total={desired}
+                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  segments={[
+                    { label: "ready", count: ready, tone: "ok" },
+                    {
+                      label: "not ready",
+                      count: Math.max(0, desired - ready),
+                      tone: "warn",
+                    },
+                  ]}
+                  emptyMessage="scaled to zero"
+                  note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
+                />
+              </CountBlock>
+            }
+            usage={
+              <WorkloadUsage
+                kind={ResourceType.Deployment}
+                uid={deployment?.uid}
+                name={deployment?.name || name}
+                namespace={deployment?.namespace || namespace}
+                template={deployment}
+                pods={pods}
+                idle={
+                  desired === 0
+                    ? "This Deployment is scaled to zero."
+                    : "None of this Deployment's pods is running."
+                }
+                connections={connections.data}
+              />
+            }
+            traffic={<TrafficChain query={connections} />}
+            declared={<FactBlock title="How it is declared" items={facts} />}
+          >
+            {deployment && (
+              <RelatedResources
+                ownerReferences={deployment.ownerReferences}
+                namespace={deployment.namespace}
+              />
+            )}
+          </WorkloadOverview>
+
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(deployment?.labels ?? {}).length}
+            items={recordToKeyValues(deployment?.labels ?? {})}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(deployment?.annotations ?? {}).length}
+            items={recordToKeyValues(deployment?.annotations ?? {})}
+            emptyMessage="No annotations"
+          />
+        </>
       ),
     },
+    connectionsTab(connections, deliveryQuery),
     {
       id: "container-template",
-      label: "Container Template",
+      label: "Template",
+      glyph: viewGlyph(Layers2),
       content: (
-        <div className="space-y-4">
-          {(deployment?.containers || []).map((container) => (
-            <ContainerCard
-              key={container.name}
-              container={container}
-              namespace={namespace}
-              showUpdateImage={true}
-              onUpdateImage={openImageDialog}
-            />
-          ))}
-        </div>
+        <ContainerRows
+          template={deployment}
+          namespace={namespace}
+          onUpdateImage={openImageDialog}
+        />
       ),
     },
     {
       id: toPlural(ResourceType.Pod),
       label: "Pods",
+      glyph: kindGlyph(ResourceType.Pod),
+      mark: podsMark(pods),
       content: <PodListCard pods={pods} />,
+    },
+    {
+      id: toPlural(ResourceType.ReplicaSet),
+      label: "Revisions",
+      glyph: kindGlyph(ResourceType.ReplicaSet),
+      // A count rather than a severity: an old revision at zero is what a
+      // rollout leaves behind, not a fault.
+      mark: countMark(revisions.length),
+      content: <RevisionRows revisions={revisions} />,
     },
     {
       id: "logs",
       label: "Logs",
+      glyph: viewGlyph(AlignLeft),
+      kind: "surface",
       content: (
-        <Card className="h-[600px]">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Pod Logs
-              </CardTitle>
+        <div className="flex h-full flex-col">
+          <SectionHeader
+            className="flex-none pb-2"
+            title="Logs"
+            actions={
               <Select
                 value={selectedLogPod || ""}
                 onValueChange={setSelectedLogPod}
               >
-                <SelectTrigger className="w-64">
+                <SelectTrigger
+                  aria-label="Pod"
+                  className="h-6 w-56 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                >
                   <SelectValue placeholder="Select pod" />
                 </SelectTrigger>
                 <SelectContent>
                   {pods.map((pod) => {
-                    const status = pod.status?.phase || "Unknown";
+                    const phase = pod.status?.display || "Unknown";
                     return (
                       <SelectItem key={pod.name} value={pod.name}>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              status === "Running"
-                                ? "bg-green-500"
-                                : status === "Pending"
-                                  ? "bg-yellow-500"
-                                  : "bg-red-500"
-                            }`}
-                          />
-                          {pod.name}
-                        </div>
+                        <span className="flex items-center gap-2">
+                          <span className="font-mono">{pod.name}</span>
+                          <StatusBadge status={phase} showDot />
+                        </span>
                       </SelectItem>
                     );
                   })}
                 </SelectContent>
               </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 h-[calc(100%-4rem)]">
+            }
+          />
+          <div className="min-h-0 flex-1 border-t border-hair">
             {logPod ? (
               <LogViewer
                 key={`${logPod.namespace}:${logPod.name}`}
                 podName={logPod.name}
                 namespace={logPod.namespace}
-                containers={logPod.containers?.map((c) => c.name) || []}
-                initialContainer={logPod.containers?.[0]?.name}
+                containers={podContainers(logPod)}
+                // The live half still reads one pod, because that is all the
+                // API server will follow. The workload is what a *range* is
+                // asked about — the pods this Deployment had an hour ago are
+                // gone from this very selector, and they are the ones
+                // somebody reading a rollout came for.
+                workload={
+                  name ? { owner: name, ownerKind: "Deployment" } : null
+                }
               />
             ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
+              <p className="py-8 text-center text-xs text-fg-fnt">
                 {pods.length === 0
-                  ? "No pods available for this deployment"
+                  ? "This deployment has no pods to read logs from."
                   : "Select a pod to view logs"}
-              </div>
+              </p>
             )}
-          </CardContent>
-        </Card>
-      ),
-    },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="Deployment YAML"
-          yaml={deploymentYaml}
-          resourceKind={ResourceType.Deployment}
-          resourceName={name || ""}
-          namespace={namespace}
-          onCopy={copyYaml}
-        />
+          </div>
+        </div>
       ),
     },
     {
       id: "conditions",
       label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(deployment?.conditions),
       content: (
-        <ConditionsDisplay
-          conditions={deployment?.conditions || []}
-          title="Deployment Conditions"
-        />
+        <Section>
+          <SectionHeader
+            title="Conditions"
+            count={deployment?.conditions.length}
+          />
+          <ConditionRows
+            conditions={deployment?.conditions ?? []}
+            subject={{ kind: ResourceType.Deployment, name, namespace }}
+          />
+        </Section>
       ),
     },
+    yamlTab({
+      title: "Deployment YAML",
+      yaml: deploymentYaml,
+      resourceKind: ResourceType.Deployment,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (
-    <ResourceDetailLayout
-      resource={deployment}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Deployment}
-      title={deployment?.name || ""}
-      namespace={deployment?.namespace}
-      badges={
-        deployment && (
+    <>
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={deployment}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Deployment}
+        title={deployment?.name || ""}
+        namespace={deployment?.namespace}
+        createdAt={deployment?.createdAt}
+        statusBadge={
+          replicas && (
+            <StatusBadge status={shortReplicas ? "Degraded" : "Available"}>
+              {replicas.ready}/{replicas.desired} ready
+            </StatusBadge>
+          )
+        }
+        badges={
+          isRolloutInProgress && (
+            <span className="text-[11px] text-info">rolling out</span>
+          )
+        }
+        onBack={goBack}
+        actions={
           <>
-            <Badge
-              variant={
-                deployment.replicas.ready === deployment.replicas.desired
-                  ? "success"
-                  : "warning"
-              }
-            >
-              {deployment.replicas.ready}/{deployment.replicas.desired} pods
-              ready
-            </Badge>
-            {isRolloutInProgress && (
-              <Badge variant="secondary" className="animate-pulse">
-                <RotateCcw className="mr-1 h-3 w-3 animate-spin" />
-                Rolling out...
-              </Badge>
-            )}
-          </>
-        )
-      }
-      icon={<Rocket className="h-8 w-8 text-muted-foreground" />}
-      onBack={goBack}
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={openScaleDialog}>
-            <Scale className="mr-2 h-4 w-4" />
-            Scale
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => restartMutation.mutate()}
-            disabled={restartMutation.isPending}
-          >
-            <RefreshCw
-              className={cn(
-                "mr-2 h-4 w-4",
-                restartMutation.isPending && "animate-spin"
-              )}
+            <DetailAction
+              label="Scale"
+              icon={Scale}
+              onClick={openScaleDialog}
             />
-            Restart
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => deleteMutation && deleteMutation.mutate()}
-            disabled={deleteMutation?.isPending}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-        </>
-      }
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    >
-      {/* Rollout Progress Card */}
-      {isRolloutInProgress && rolloutStatus && (
-        <Card className="border-blue-500/50 bg-blue-500/10 mb-4">
-          <CardContent className="py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">{rolloutMessage}</span>
-              <span className="text-sm text-muted-foreground">
-                {rolloutReady}/{rolloutDesired} pods ready
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Info Cards (Optional, current deployment view has mostly overview tab info) */}
-      {/* If there were specific high-level metrics cards they would go here */}
-
-      {/* Related Resources (Owner References) */}
-      {deployment && (
-        <RelatedResources
-          ownerReferences={deployment.ownerReferences}
-          namespace={deployment.namespace}
-        />
-      )}
-
-      {/* Scale Dialog */}
-      <Dialog open={scaleDialogOpen} onOpenChange={setScaleDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Scale Deployment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="replicas">Number of replicas</Label>
-              <Input
-                id="replicas"
-                type="number"
-                min={0}
-                value={newReplicas}
-                onChange={(e) => setNewReplicas(parseInt(e.target.value) || 0)}
+            <InterceptedAction
+              intercept={intercept("Restart")}
+              label="Restart"
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate()}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label="Delete"
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
+        }
+        summary={
+          isRolloutInProgress &&
+          rolloutStatus && (
+            <p className="text-[11px] text-info">
+              <ResourceMessage
+                message={rolloutMessage ?? ""}
+                subject={{ kind: ResourceType.Deployment, name, namespace }}
               />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScaleDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => scaleMutation.mutate()}
-              disabled={scaleMutation.isPending}
-            >
-              Scale
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <span className="text-fg-fnt">
+                {" "}
+                · {rolloutReady}/{rolloutDesired} pods ready
+              </span>
+            </p>
+          )
+        }
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-      {/* Update Image Dialog */}
+      {/* Both are opened from the strip's row, and so from whichever tab the
+          reader is on. Inside the Overview's panel they would be unmounted the
+          moment that tab was not the open one. */}
+      <ScaleDialog
+        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        open={scaleDialogOpen}
+        onOpenChange={setScaleDialogOpen}
+        kind={ResourceType.Deployment}
+        current={deployment?.replicas.desired ?? 0}
+        busy={scaleMutation.isPending}
+        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
+      />
+
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -635,6 +604,6 @@ export function DeploymentDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ResourceDetailLayout>
+    </>
   );
 }

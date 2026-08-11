@@ -1,14 +1,19 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { Info, SlidersHorizontal, Trash2 } from "lucide-react";
+
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
-  ResourceDetailLayout,
-  InfoCard,
-} from "@/components/resources/ResourceDetailLayout";
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
-import { ResourceType } from "@/lib/resource-registry";
-import { Layers, Star, Settings } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 
 export function StorageClassDetail() {
@@ -22,172 +27,115 @@ export function StorageClassDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
+    freshness,
   } = useResourceDetail<StorageClassInfo>({
     resourceKind: ResourceType.StorageClass,
     isClusterScoped: true,
     fetchResource: (name) => commands.getStorageClass(name),
     deleteResource: (name) => commands.deleteStorageClass(name),
-    defaultTab: "details",
+    defaultTab: "overview",
   });
 
   const parameters = sc?.parameters ?? {};
 
+  const facts: KeyValue[] = [
+    { label: "Provisioner", value: sc?.provisioner ?? "—", mono: true },
+    {
+      label: "Default class",
+      // The one question people open this page to answer: does a claim that
+      // names no class land here?
+      value: sc?.isDefault
+        ? "yes — claims that name no class use this one"
+        : "no",
+    },
+    { label: "Reclaim policy", value: sc?.reclaimPolicy ?? "—", mono: true },
+    { label: "Binding mode", value: sc?.volumeBindingMode ?? "—", mono: true },
+    {
+      label: "Volume expansion",
+      value: sc?.allowVolumeExpansion
+        ? "allowed"
+        : "not allowed — claims cannot grow",
+    },
+  ];
+
+  const deliveryQuery = deliveryOfKind(ResourceType.StorageClass, sc);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+
   const tabs = [
     {
-      id: "details",
-      label: "Details",
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Storage Class Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Provisioner</p>
-                <code className="text-sm rounded bg-muted px-2 py-1">
-                  {sc?.provisioner}
-                </code>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Reclaim Policy</p>
-                <Badge variant="outline">{sc?.reclaimPolicy}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Volume Binding Mode
-                </p>
-                <Badge variant="secondary">{sc?.volumeBindingMode}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Allow Expansion</p>
-                <Badge
-                  variant={sc?.allowVolumeExpansion ? "default" : "outline"}
-                >
-                  {sc?.allowVolumeExpansion ? "Yes" : "No"}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Default</p>
-                {sc?.isDefault ? (
-                  <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-                    <Star className="mr-1 h-3 w-3 fill-yellow-500" />
-                    Yes
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">No</Badge>
-                )}
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Age</p>
-                <p>{sc?.age}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KeyValueSection
+          title="Storage class"
+          items={facts}
+          className="max-w-lg"
+        />
       ),
     },
     {
       id: "parameters",
       label: "Parameters",
+      glyph: viewGlyph(SlidersHorizontal),
+      mark: countMark(Object.keys(parameters).length),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Parameters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {Object.keys(parameters).length > 0 ? (
-              <div className="space-y-2">
-                {Object.entries(parameters).map(([key, value]) => (
-                  <div key={key} className="rounded-lg border p-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {key}
-                    </p>
-                    <p className="font-mono text-sm break-all">{value}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No parameters defined</p>
-            )}
-          </CardContent>
-        </Card>
-      ),
-    },
-    {
-      id: "yaml",
-      label: "YAML",
-      content: (
-        <YamlTabContent
-          title="StorageClass YAML"
-          yaml={scYaml}
-          resourceKind={ResourceType.StorageClass}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
+        <KeyValueSection
+          title="Parameters"
+          count={Object.keys(parameters).length || undefined}
+          items={recordToKeyValues(parameters)}
+          emptyMessage="No parameters — the provisioner uses its own defaults."
         />
       ),
     },
+    yamlTab({
+      title: "StorageClass YAML",
+      yaml: scYaml,
+      resourceKind: ResourceType.StorageClass,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={sc}
+      delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.StorageClass}
       title={sc?.name || name || ""}
-      namespace={undefined}
       badges={
-        <>
-          {sc?.isDefault && (
-            <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-              <Star className="mr-1 h-3 w-3 fill-yellow-500" />
-              Default
-            </Badge>
-          )}
-          {sc?.allowVolumeExpansion && (
-            <Badge variant="outline">Expansion Allowed</Badge>
-          )}
-        </>
+        sc && (
+          <>
+            {sc.isDefault && (
+              <span className="text-[11px] font-medium text-fg">
+                default class
+              </span>
+            )}
+            <span className="font-mono text-[11px] text-fg-mut">
+              {sc.provisioner}
+            </span>
+          </>
+        )
       }
-      icon={<Layers className="h-8 w-8 text-muted-foreground" />}
       onBack={goBack}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
-    >
-      <div className="grid gap-4 md:grid-cols-4">
-        <InfoCard
-          title="Provisioner"
-          icon={<Settings className="h-4 w-4 text-muted-foreground" />}
-        >
-          <code className="text-sm">{sc?.provisioner}</code>
-        </InfoCard>
-
-        <InfoCard
-          title="Reclaim Policy"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
-          <Badge variant="outline">{sc?.reclaimPolicy}</Badge>
-        </InfoCard>
-
-        <InfoCard
-          title="Binding Mode"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
-          <Badge variant="secondary">{sc?.volumeBindingMode}</Badge>
-        </InfoCard>
-
-        <InfoCard
-          title="Volume Expansion"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
-          <Badge variant={sc?.allowVolumeExpansion ? "default" : "outline"}>
-            {sc?.allowVolumeExpansion ? "Allowed" : "Disabled"}
-          </Badge>
-        </InfoCard>
-      </div>
-    </ResourceDetailLayout>
+      actions={
+        <InterceptedAction
+          intercept={intercept("Delete")}
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
+    />
   );
 }

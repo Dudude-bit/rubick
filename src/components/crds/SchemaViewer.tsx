@@ -8,7 +8,6 @@ import {
   Braces,
   ToggleLeft,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface SchemaViewerProps {
@@ -64,21 +63,26 @@ function getTypeIcon(type: string | undefined) {
   }
 }
 
+/**
+ * Four role colours cover six JSON types, which is fine: the type name is
+ * printed next to every field and the icon differs per type, so the hue is
+ * the third cue rather than the only one. Inventing a purple and an orange
+ * for `boolean` and `array` would be two colours the theme cannot honour.
+ */
 function getTypeColor(type: string | undefined): string {
   switch (type) {
     case "string":
-      return "text-green-600 dark:text-green-400";
+      return "text-ok";
     case "number":
     case "integer":
-      return "text-blue-600 dark:text-blue-400";
+      return "text-info";
     case "boolean":
-      return "text-purple-600 dark:text-purple-400";
+      return "text-warn";
     case "array":
-      return "text-orange-600 dark:text-orange-400";
     case "object":
-      return "text-cyan-600 dark:text-cyan-400";
+      return "text-fg-mid";
     default:
-      return "text-muted-foreground";
+      return "text-fg-fnt";
   }
 }
 
@@ -140,11 +144,11 @@ function SchemaNode({
   }, [schema]);
 
   return (
-    <div className="font-mono text-sm">
+    <div className="font-mono text-xs">
       {/* Node header */}
       <div
         className={cn(
-          "flex items-start gap-2 py-1 px-2 hover:bg-muted/50 rounded cursor-pointer",
+          "flex cursor-pointer items-start gap-2 rounded px-2 py-0.5 hover:bg-hover",
           level > 0 && "ml-4"
         )}
         onClick={() => hasChildren && setExpanded(!expanded)}
@@ -167,30 +171,23 @@ function SchemaNode({
         </span>
 
         {/* Property name */}
-        <span className="font-semibold">{name}</span>
+        <span className="font-medium text-fg">{name}</span>
 
-        {/* Required badge */}
-        {required && (
-          <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">
-            required
-          </Badge>
-        )}
+        {required && <span className="text-[10px] text-err">required</span>}
 
         {/* Type */}
-        <span className={cn("text-xs", getTypeColor(schema.type))}>
+        <span className={cn("text-[11px]", getTypeColor(schema.type))}>
           {formatType(schema)}
         </span>
 
         {/* Format */}
         {schema.format && (
-          <span className="text-xs text-muted-foreground">
-            ({schema.format})
-          </span>
+          <span className="text-[11px] text-fg-fnt">({schema.format})</span>
         )}
 
         {/* Enum values */}
         {schema.enum && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[11px] text-fg-fnt">
             [{schema.enum.slice(0, 3).join(", ")}
             {schema.enum.length > 3 && "..."}]
           </span>
@@ -198,7 +195,7 @@ function SchemaNode({
 
         {/* Default value */}
         {schema.default !== undefined && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[11px] text-fg-fnt">
             = {JSON.stringify(schema.default)}
           </span>
         )}
@@ -207,7 +204,7 @@ function SchemaNode({
       {/* Description */}
       {schema.description && (
         <div
-          className="text-xs text-muted-foreground ml-8 mb-1"
+          className="mb-1 ml-8 text-[11px] text-fg-mut"
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
           {schema.description}
@@ -221,7 +218,7 @@ function SchemaNode({
         schema.maxLength !== undefined ||
         schema.pattern) && (
         <div
-          className="text-xs text-muted-foreground ml-8 mb-1 flex gap-2"
+          className="mb-1 ml-8 flex gap-2 text-[11px] text-fg-fnt"
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
           {schema.minimum !== undefined && <span>min: {schema.minimum}</span>}
@@ -239,7 +236,7 @@ function SchemaNode({
       {/* Children */}
       {expanded && hasChildren && (
         <div
-          className="border-l border-border ml-4"
+          className="ml-4 border-l border-hair"
           style={{ marginLeft: `${level * 16 + 16}px` }}
         >
           {/* Object properties */}
@@ -268,7 +265,7 @@ function SchemaNode({
           {/* Additional properties */}
           {schema.additionalProperties === true && (
             <div
-              className="text-xs text-muted-foreground py-1"
+              className="py-1 text-[11px] text-fg-fnt"
               style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
             >
               (additional properties allowed)
@@ -285,7 +282,7 @@ function SchemaNode({
           {/* x-kubernetes-preserve-unknown-fields */}
           {schema["x-kubernetes-preserve-unknown-fields"] && (
             <div
-              className="text-xs text-muted-foreground py-1"
+              className="py-1 text-[11px] text-fg-fnt"
               style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
             >
               (preserves unknown fields)
@@ -302,9 +299,7 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
 
   if (!parsedSchema || typeof parsedSchema !== "object") {
     return (
-      <div className="text-muted-foreground text-sm">
-        No schema information available.
-      </div>
+      <p className="text-xs text-fg-mut">No schema information available.</p>
     );
   }
 
@@ -317,98 +312,96 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
     | undefined;
 
   return (
-    <div className="space-y-4">
-      {title && <h3 className="font-semibold text-lg">{title}</h3>}
+    <div className="flex flex-col gap-2">
+      {title && (
+        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+          {title}
+        </h2>
+      )}
 
-      <div className="border rounded-lg overflow-hidden bg-card">
-        {/* Spec section */}
-        {specSchema && (
-          <div className="border-b last:border-b-0">
-            <div className="bg-muted/50 px-3 py-2 font-semibold text-sm">
-              spec
-            </div>
-            <div className="p-2">
-              {specSchema.properties ? (
-                Object.entries(specSchema.properties).map(
-                  ([name, propSchema]) => (
-                    <SchemaNode
-                      key={name}
-                      name={name}
-                      schema={propSchema}
-                      required={specSchema.required?.includes(name)}
-                      level={0}
-                      defaultExpanded={true}
-                    />
-                  )
-                )
-              ) : (
-                <SchemaNode
-                  name="spec"
-                  schema={specSchema}
-                  level={0}
-                  defaultExpanded={true}
-                />
-              )}
-            </div>
+      {specSchema && (
+        <section>
+          <div className="border-b border-hair px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+            spec
           </div>
-        )}
-
-        {/* Status section */}
-        {statusSchema && (
-          <div className="border-b last:border-b-0">
-            <div className="bg-muted/50 px-3 py-2 font-semibold text-sm">
-              status
-            </div>
-            <div className="p-2">
-              {statusSchema.properties ? (
-                Object.entries(statusSchema.properties).map(
-                  ([name, propSchema]) => (
-                    <SchemaNode
-                      key={name}
-                      name={name}
-                      schema={propSchema}
-                      required={statusSchema.required?.includes(name)}
-                      level={0}
-                    />
-                  )
+          <div className="py-1">
+            {specSchema.properties ? (
+              Object.entries(specSchema.properties).map(
+                ([name, propSchema]) => (
+                  <SchemaNode
+                    key={name}
+                    name={name}
+                    schema={propSchema}
+                    required={specSchema.required?.includes(name)}
+                    level={0}
+                    defaultExpanded={true}
+                  />
                 )
-              ) : (
-                <SchemaNode name="status" schema={statusSchema} level={0} />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* If no spec/status, show root properties */}
-        {!specSchema && !statusSchema && parsedSchema.properties && (
-          <div className="p-2">
-            {Object.entries(parsedSchema.properties).map(
-              ([name, propSchema]) => (
-                <SchemaNode
-                  key={name}
-                  name={name}
-                  schema={propSchema as SchemaProperty}
-                  required={parsedSchema.required?.includes(name)}
-                  level={0}
-                  defaultExpanded={true}
-                />
               )
+            ) : (
+              <SchemaNode
+                name="spec"
+                schema={specSchema}
+                level={0}
+                defaultExpanded={true}
+              />
             )}
           </div>
-        )}
+        </section>
+      )}
 
-        {/* Fallback for simple schemas */}
-        {!parsedSchema.properties && (
-          <div className="p-2">
+      {statusSchema && (
+        <section>
+          <div className="border-b border-hair px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+            status
+          </div>
+          <div className="py-1">
+            {statusSchema.properties ? (
+              Object.entries(statusSchema.properties).map(
+                ([name, propSchema]) => (
+                  <SchemaNode
+                    key={name}
+                    name={name}
+                    schema={propSchema}
+                    required={statusSchema.required?.includes(name)}
+                    level={0}
+                  />
+                )
+              )
+            ) : (
+              <SchemaNode name="status" schema={statusSchema} level={0} />
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* If no spec/status, show root properties */}
+      {!specSchema && !statusSchema && parsedSchema.properties && (
+        <div className="py-1">
+          {Object.entries(parsedSchema.properties).map(([name, propSchema]) => (
             <SchemaNode
-              name="root"
-              schema={parsedSchema}
+              key={name}
+              name={name}
+              schema={propSchema as SchemaProperty}
+              required={parsedSchema.required?.includes(name)}
               level={0}
               defaultExpanded={true}
             />
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Fallback for simple schemas */}
+      {!parsedSchema.properties && (
+        <div className="py-1">
+          <SchemaNode
+            name="root"
+            schema={parsedSchema}
+            level={0}
+            defaultExpanded={true}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -215,3 +215,151 @@ pub async fn get_cluster_info(context: String, state: State<'_, AppState>) -> Re
         .await
         .map_err(|e| crate::error::Error::Connection(e.to_string()))
 }
+
+// ============================================================================
+// Where the cluster list came from
+// ============================================================================
+
+/// One file the app would read a kubeconfig from, and whether it is there.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KubeconfigCandidate {
+    pub path: String,
+    pub exists: bool,
+    /// Why this path is in the list: `override`, `env` or `default`.
+    pub origin: String,
+}
+
+/// What the file that was read actually held. Absent when nothing parsed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KubeconfigCounts {
+    pub contexts: usize,
+    pub clusters: usize,
+    pub users: usize,
+}
+
+/// Where the cluster list came from, for the screen that has none.
+///
+/// "Why is my cluster not listed" is almost always the wrong file, so the
+/// answer has to be the paths themselves rather than a sentence about
+/// where the app usually looks.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KubeconfigSource {
+    /// Every path that would be read, in the order it would be read.
+    pub candidates: Vec<KubeconfigCandidate>,
+    /// `$KUBECONFIG` exactly as this process sees it; `None` when unset.
+    pub kubeconfig_env: Option<String>,
+    pub counts: Option<KubeconfigCounts>,
+    /// The reader's own message when the read failed.
+    pub error: Option<String>,
+}
+
+fn candidate(path: std::path::PathBuf, origin: &str) -> KubeconfigCandidate {
+    KubeconfigCandidate {
+        exists: path.exists(),
+        path: path.to_string_lossy().into_owned(),
+        origin: origin.to_string(),
+    }
+}
+
+/// Mirrors the lookup `load_kubeconfig_resolved` performs: a persisted
+/// override wins outright, otherwise `$KUBECONFIG` (which kube-rs splits
+/// on the platform's path separator and merges), otherwise the one
+/// default path.
+fn kubeconfig_candidates(
+    override_path: Option<std::path::PathBuf>,
+    env: Option<&str>,
+) -> Vec<KubeconfigCandidate> {
+    if let Some(path) = override_path {
+        return vec![candidate(path, "override")];
+    }
+    if let Some(value) = env.filter(|v| !v.is_empty()) {
+        let separator = if cfg!(windows) { ';' } else { ':' };
+        return value
+            .split(separator)
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| candidate(std::path::PathBuf::from(entry), "env"))
+            .collect();
+    }
+    let default = dirs::home_dir()
+        .map(|home| home.join(".kube").join("config"))
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.kube/config"));
+    vec![candidate(default, "default")]
+}
+
+/// Report the kubeconfig lookup and what it found.
+#[tauri::command]
+pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<KubeconfigSource> {
+    let kubeconfig_env = std::env::var("KUBECONFIG").ok();
+    let override_path = read_kubeconfig_override();
+    let candidates = kubeconfig_candidates(override_path.clone(), kubeconfig_env.as_deref());
+
+    // Load through the same path the rest of the app uses, so a failure
+    // here is the failure the cluster list would have hit.
+    let error = state
+        .client_manager
+        .load_kubeconfig_resolved(override_path)
+        .await
+        .err()
+        .map(|e| e.to_string());
+
+    let counts = match state.client_manager.kubeconfig_clone().await {
+        Ok(kubeconfig) => Some(KubeconfigCounts {
+            contexts: kubeconfig.contexts.len(),
+            clusters: kubeconfig.clusters.len(),
+            users: kubeconfig.auth_infos.len(),
+        }),
+        Err(_) => None,
+    };
+
+    Ok(KubeconfigSource {
+        candidates,
+        kubeconfig_env,
+        counts,
+        error,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::kubeconfig_candidates;
+
+    #[test]
+    fn env_kubeconfig_lists_every_file_it_would_merge() {
+        let candidates = kubeconfig_candidates(
+            None,
+            Some(if cfg!(windows) {
+                "a.yaml;b.yaml"
+            } else {
+                "a.yaml:b.yaml"
+            }),
+        );
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates.iter().all(|c| c.origin == "env"));
+        assert_eq!(candidates[0].path, "a.yaml");
+    }
+
+    #[test]
+    fn unset_kubeconfig_falls_back_to_the_one_default_path() {
+        let candidates = kubeconfig_candidates(None, None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].origin, "default");
+        assert!(candidates[0].path.ends_with("config"));
+    }
+
+    #[test]
+    fn empty_kubeconfig_is_treated_as_unset() {
+        assert_eq!(kubeconfig_candidates(None, Some(""))[0].origin, "default");
+    }
+
+    /// An override is the only file that would be read, so listing the
+    /// default path beside it would say the app looked somewhere it did not.
+    #[test]
+    fn an_override_is_the_only_candidate() {
+        let candidates = kubeconfig_candidates(
+            Some(std::path::PathBuf::from("/tmp/pinned")),
+            Some("a.yaml"),
+        );
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].origin, "override");
+    }
+}

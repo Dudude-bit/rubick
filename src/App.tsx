@@ -14,6 +14,7 @@ import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
+import { startWindowActivity } from "@/lib/window-activity";
 import { logInfo, flushLogs } from "@/lib/logger";
 
 // Lazy load all pages for code splitting
@@ -39,6 +40,11 @@ const NodeList = lazy(() =>
     default: m.NodeList,
   }))
 );
+const NamespaceList = lazy(() =>
+  import("@/components/resources/NamespaceList").then((m) => ({
+    default: m.NamespaceList,
+  }))
+);
 const Events = lazy(() =>
   import("@/pages/Events").then((m) => ({ default: m.Events }))
 );
@@ -57,6 +63,11 @@ const PodDetail = lazy(() =>
 const DeploymentDetail = lazy(() =>
   import("@/pages/DeploymentDetail").then((m) => ({
     default: m.DeploymentDetail,
+  }))
+);
+const ReplicaSetDetail = lazy(() =>
+  import("@/pages/ReplicaSetDetail").then((m) => ({
+    default: m.ReplicaSetDetail,
   }))
 );
 const ServiceDetail = lazy(() =>
@@ -123,6 +134,11 @@ const ConfigMapDetail = lazy(() =>
 const SecretDetail = lazy(() =>
   import("@/pages/SecretDetail").then((m) => ({ default: m.SecretDetail }))
 );
+const IntegrationPage = lazy(() =>
+  import("@/pages/IntegrationPage").then((m) => ({
+    default: m.IntegrationPage,
+  }))
+);
 
 export default function App() {
   const { theme } = useThemeStore();
@@ -141,6 +157,11 @@ export default function App() {
   usePortForwardAutoStart();
   // Initialize auto-updater
   useAutoUpdater();
+
+  // Mounted here rather than in a component that can remount: every query in
+  // the app polls against these three facts, and a second set of listeners
+  // would double-count the reader's clicks.
+  useEffect(() => startWindowActivity(), []);
 
   useEffect(() => {
     const cleanup = setupFrontendLogger();
@@ -208,13 +229,23 @@ export default function App() {
               path={`${toPlural(ResourceType.Node)}/:name`}
               element={<NodeDetail />}
             />
+            <Route
+              path={toPlural(ResourceType.Namespace)}
+              element={<NamespaceList />}
+            />
             <Route path="events" element={<Events />} />
             <Route path="helm" element={<Helm />} />
             <Route
               path="helm/:source/:namespace/:name"
               element={<HelmDetail />}
             />
-            <Route path="settings" element={<Settings />} />
+            {/* A splat, because each settings section is its own URL. */}
+            <Route path="settings/*" element={<Settings />} />
+            {/* One route for every vendor page: the shell resolves the slug
+                through the integrations registry and never names a vendor.
+                Which tab is open is a query parameter, so a scope tab parks
+                and restores the whole screen. */}
+            <Route path="integrations/:slug" element={<IntegrationPage />} />
             <Route
               path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}
               element={<PodDetail />}
@@ -222,6 +253,12 @@ export default function App() {
             <Route
               path={`${toPlural(ResourceType.Deployment)}/:namespace/:name`}
               element={<DeploymentDetail />}
+            />
+            {/* A detail route and no list route: a ReplicaSet is somewhere
+                you land, never somewhere you browse. */}
+            <Route
+              path={`${toPlural(ResourceType.ReplicaSet)}/:namespace/:name`}
+              element={<ReplicaSetDetail />}
             />
             <Route
               path={`${toPlural(ResourceType.Service)}/:namespace/:name`}

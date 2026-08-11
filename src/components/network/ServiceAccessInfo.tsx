@@ -1,6 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
-import { Link2, Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -70,71 +70,55 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Link2 className="h-5 w-5" />
-          How to Access This Service
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {accessItems.map((item, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between rounded-lg border p-3 bg-muted/30"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium">{item.label}</span>
-                </div>
-                <code className="text-sm font-mono text-muted-foreground break-all">
-                  {item.url}
-                </code>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {item.description}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 ml-3">
+    <Section>
+      {/* "How to Access This Service" was the tab label padded out to six
+          Title Case words. This names the thing under it instead, and says
+          it the way the ingress page already says it. */}
+      <SectionHeader title="Reachable at" />
+      <SectionBody className="flex flex-col divide-y divide-hair">
+        {accessItems.map((item, idx) => (
+          <div key={idx} className="flex items-center justify-between py-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-1">
+              <span className="text-sm font-medium">{item.label}</span>
+              <code className="text-sm font-mono text-fg-mid break-all">
+                {item.url}
+              </code>
+              <p className="text-xs text-fg-mut">{item.description}</p>
+            </div>
+            <div className="flex items-center gap-2 ml-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => copyToClipboard(item.url)}
+                title="Copy"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              {item.canOpen && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => copyToClipboard(item.url)}
-                  title="Copy"
+                  onClick={() => window.open(item.url, "_blank", "noreferrer")}
+                  title="Open in Browser"
                 >
-                  <Copy className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4" />
                 </Button>
-                {item.canOpen && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      window.open(item.url, "_blank", "noreferrer")
-                    }
-                    title="Open in Browser"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
-          ))}
-        </div>
-
-        {service.type === "ClusterIP" && (
-          <div className="mt-4 p-3 rounded-lg bg-muted/50 border">
-            <p className="text-sm text-muted-foreground">
-              <strong>ClusterIP</strong> services are only accessible from
-              within the cluster. Use port-forward for local development:
-              <code className="ml-1 text-xs bg-muted px-1 rounded">
-                kubectl port-forward svc/{service.name}{" "}
-                {service.ports[0]?.port || 8080}:
-                {service.ports[0]?.port || 8080}
-              </code>
-            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        ))}
+      </SectionBody>
+
+      {service.type === "ClusterIP" && (
+        <p className="text-sm text-fg-mut">
+          <strong>ClusterIP</strong> services are only accessible from within
+          the cluster. Use port-forward for local development:
+          <code className="ml-1 text-xs bg-hover px-1 rounded">
+            kubectl port-forward svc/{service.name}{" "}
+            {service.ports[0]?.port || 8080}:{service.ports[0]?.port || 8080}
+          </code>
+        </p>
+      )}
+    </Section>
   );
 }

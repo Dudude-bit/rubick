@@ -1,13 +1,18 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * A placeholder is a shape the real content will occupy — nothing more.
+ * The old skeletons drew a filled, shadowed card frame around their bars, so
+ * every loading screen promised a layout the loaded screen no longer has.
+ */
 function Skeleton({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      className={cn("animate-pulse rounded bg-hover", className)}
       {...props}
     />
   );
@@ -28,55 +33,44 @@ function TableSkeleton({
   showSearch = true,
 }: TableSkeletonProps) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
-      {showSearch && <Skeleton className="h-10 w-64" />}
-
-      <div className="rounded-md border">
-        <div className="border-b">
-          <div className="flex h-12 items-center gap-4 px-4">
-            {Array.from({ length: columns }).map((_, i) => (
-              <Skeleton key={i} className="h-4 w-24" />
-            ))}
-          </div>
-        </div>
-
-        {Array.from({ length: rows }).map((_, i) => (
-          <div
-            key={i}
-            className="flex h-16 items-center gap-4 border-b px-4 last:border-0"
-          >
-            {Array.from({ length: columns }).map((_, j) => (
-              <Skeleton key={j} className="h-4 w-24" />
-            ))}
-          </div>
+    <div className="space-y-2 animate-in fade-in duration-200" aria-hidden>
+      {showSearch && <Skeleton className="h-7 w-40" />}
+      <div className="flex h-6 items-center gap-4 border-b border-hair px-2.5">
+        {Array.from({ length: columns }).map((_, i) => (
+          <Skeleton key={i} className="h-2.5 w-20" />
         ))}
       </div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex h-6 items-center gap-4 border-b border-hair px-2.5"
+        >
+          {Array.from({ length: columns }).map((_, j) => (
+            <Skeleton key={j} className="h-2.5 w-24" />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
 
 /**
- * Skeleton for card content
+ * Skeleton for a block of key/value rows
  */
-interface CardSkeletonProps {
+interface BlockSkeletonProps {
   showHeader?: boolean;
   lines?: number;
 }
 
-function CardSkeleton({ showHeader = true, lines = 3 }: CardSkeletonProps) {
+function BlockSkeleton({ showHeader = true, lines = 3 }: BlockSkeletonProps) {
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 space-y-3">
-      {showHeader && (
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-5 w-36" />
-          <Skeleton className="h-6 w-6 rounded-full" />
-        </div>
-      )}
-      <div className="space-y-2">
+    <div className="space-y-2">
+      {showHeader && <Skeleton className="h-3 w-32" />}
+      <div className="space-y-1.5 border-t border-hair pt-2">
         {Array.from({ length: lines }).map((_, i) => (
           <Skeleton
             key={i}
-            className={cn("h-4", i === lines - 1 ? "w-[70%]" : "w-full")}
+            className={cn("h-2.5", i === lines - 1 ? "w-[70%]" : "w-full")}
           />
         ))}
       </div>
@@ -85,51 +79,32 @@ function CardSkeleton({ showHeader = true, lines = 3 }: CardSkeletonProps) {
 }
 
 /**
- * Skeleton for detail pages
+ * Skeleton for detail pages: title, tab strip, then blocks of rows.
  */
 interface DetailSkeletonProps {
-  rows?: number;
-  showHeader?: boolean;
-}
-
-function DetailSkeleton({ rows = 4, showHeader = true }: DetailSkeletonProps) {
-  return (
-    <DetailTabsSkeleton tabCount={3} rows={rows} showHeader={showHeader} />
-  );
-}
-
-/**
- * Skeleton for detail pages with tabs
- */
-interface DetailTabsSkeletonProps {
   tabCount?: number;
   rows?: number;
   showHeader?: boolean;
 }
 
-function DetailTabsSkeleton({
-  tabCount = 4,
+function DetailSkeleton({
+  tabCount = 3,
   rows = 4,
   showHeader = true,
-}: DetailTabsSkeletonProps) {
+}: DetailSkeletonProps) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
-      {showHeader && (
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-8 w-8" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-      )}
+    <div className="space-y-4 animate-in fade-in duration-200" aria-hidden>
+      {showHeader && <Skeleton className="h-3.5 w-64" />}
 
-      <div className="flex gap-2">
+      <div className="flex gap-1">
         {Array.from({ length: tabCount }).map((_, i) => (
-          <Skeleton key={i} className="h-9 w-20" />
+          <Skeleton key={i} className="h-6 w-20" />
         ))}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {Array.from({ length: rows }).map((_, i) => (
-          <CardSkeleton key={i} />
+          <BlockSkeleton key={i} />
         ))}
       </div>
     </div>
@@ -137,7 +112,7 @@ function DetailTabsSkeleton({
 }
 
 /**
- * Skeleton for stats cards grid
+ * Skeleton for the overview's composition bars
  */
 interface StatsSkeletonProps {
   count?: number;
@@ -145,21 +120,12 @@ interface StatsSkeletonProps {
 
 function StatsSkeleton({ count = 4 }: StatsSkeletonProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" aria-hidden>
       {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-4 rounded-full" />
-          </div>
-          <Skeleton className="h-7 w-[60px]" />
-          <div className="flex gap-2">
-            <Skeleton className="h-5 w-[70px]" />
-            <Skeleton className="h-5 w-[70px]" />
-          </div>
+        <div key={i} className="space-y-2">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-[3px] w-full" />
+          <Skeleton className="h-2.5 w-24" />
         </div>
       ))}
     </div>
@@ -167,26 +133,7 @@ function StatsSkeleton({ count = 4 }: StatsSkeletonProps) {
 }
 
 /**
- * Skeleton for pages with a header and stats cards
- */
-interface HeaderStatsSkeletonProps {
-  stats?: number;
-}
-
-function HeaderStatsSkeleton({ stats = 4 }: HeaderStatsSkeletonProps) {
-  return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-10 w-10" />
-        <Skeleton className="h-8 w-64" />
-      </div>
-      <StatsSkeleton count={stats} />
-    </div>
-  );
-}
-
-/**
- * Skeleton for page headers with optional subtitle
+ * Skeleton for section headers with optional subtitle
  */
 interface HeaderSkeletonProps {
   showSubtitle?: boolean;
@@ -194,34 +141,9 @@ interface HeaderSkeletonProps {
 
 function HeaderSkeleton({ showSubtitle = true }: HeaderSkeletonProps) {
   return (
-    <div className="space-y-2">
-      <Skeleton className="h-8 w-48" />
-      {showSubtitle && <Skeleton className="h-4 w-72" />}
-    </div>
-  );
-}
-
-/**
- * Skeleton for list items
- */
-interface ListSkeletonProps {
-  count?: number;
-  showIcon?: boolean;
-}
-
-function ListSkeleton({ count = 5, showIcon = true }: ListSkeletonProps) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded-md border">
-          {showIcon && <Skeleton className="h-10 w-10 rounded-full" />}
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-3/5" />
-            <Skeleton className="h-3 w-2/5" />
-          </div>
-          <Skeleton className="h-6 w-16" />
-        </div>
-      ))}
+    <div className="space-y-1" aria-hidden>
+      <Skeleton className="h-3.5 w-40" />
+      {showSubtitle && <Skeleton className="h-2.5 w-64" />}
     </div>
   );
 }
@@ -237,12 +159,12 @@ function TextSkeleton({ lines = 3 }: TextSkeletonProps) {
   const widths = ["w-full", "w-[92%]", "w-[96%]", "w-[88%]"];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5" aria-hidden>
       {Array.from({ length: lines }).map((_, i) => (
         <Skeleton
           key={i}
           className={cn(
-            "h-4",
+            "h-2.5",
             i === lines - 1 ? "w-[70%]" : widths[i % widths.length]
           )}
         />
@@ -261,16 +183,14 @@ interface PageSkeletonProps {
 function PageSkeleton({ className }: PageSkeletonProps) {
   return (
     <div
-      className={cn("space-y-6 animate-in fade-in duration-200 p-4", className)}
+      className={cn(
+        "space-y-6 animate-in fade-in duration-200 px-4 py-3.5",
+        className
+      )}
     >
-      <Skeleton className="h-8 w-52" />
-
+      <HeaderSkeleton />
       <StatsSkeleton count={4} />
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <CardSkeleton lines={5} />
-        <CardSkeleton lines={5} />
-      </div>
+      <TableSkeleton columns={5} rows={6} showSearch={false} />
     </div>
   );
 }
@@ -278,13 +198,9 @@ function PageSkeleton({ className }: PageSkeletonProps) {
 export {
   Skeleton,
   TableSkeleton,
-  CardSkeleton,
   DetailSkeleton,
-  DetailTabsSkeleton,
   StatsSkeleton,
-  HeaderStatsSkeleton,
   HeaderSkeleton,
-  ListSkeleton,
   TextSkeleton,
   PageSkeleton,
 };

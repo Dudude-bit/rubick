@@ -140,7 +140,7 @@ export function YamlEditorToolbar({
                 onClick={() => onRestoreHistory?.(entry.timestamp)}
               >
                 <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-fg-mut">
                     {new Date(entry.timestamp).toLocaleString()}
                   </span>
                   {entry.label && (

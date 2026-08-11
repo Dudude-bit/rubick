@@ -33,6 +33,7 @@ import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { ResourceList } from "./ResourceList";
+import { deliveryScopeOf } from "@/lib/delivery";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
@@ -126,7 +127,7 @@ export function createWorkloadListPage<T extends Workload>(
     const listQuery = useResourceList(
       queryKey,
       () => config.fetchList({ namespace: currentNamespace || null }),
-      watchFactory && !watchFailed ? { refetchInterval: false } : undefined
+      watchFactory && !watchFailed ? ({ refresh: false } as const) : undefined
     );
 
     useResourceWatch<T>({
@@ -187,7 +188,10 @@ export function createWorkloadListPage<T extends Workload>(
           data={dataWithMetrics}
           isLoading={listQuery.isLoading || isLoadingPods}
           dataUpdatedAt={listQuery.dataUpdatedAt}
+          live={!!watchFactory && !watchFailed}
+          slowed={listQuery.freshness.slowed}
           getRowId={getResourceRowId}
+          delivery={deliveryScopeOf(config.resourceType)}
           columns={columns}
           quickActions={quickActions}
           emptyStateLabel={

@@ -26,12 +26,15 @@ pub fn build_list_params(
     params
 }
 
-/// Build a label selector string from key-value pairs
+/// Build a label selector string from key-value pairs.
+///
+/// For the equality-only shape — a Service's selector, a filter the reader
+/// typed. Anything holding a `metav1.LabelSelector` goes through
+/// [`Selector::Query`](crate::resources::Selector) instead, which is the only
+/// form that can express `matchExpressions`.
 #[must_use]
 pub fn build_label_selector(labels: &BTreeMap<String, String>) -> String {
-    labels
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join(",")
+    crate::resources::Selector::Equality(labels)
+        .query_text()
+        .unwrap_or_default()
 }

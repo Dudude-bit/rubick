@@ -3,7 +3,10 @@ import { Terminal, TerminalMetadata } from "./Terminal";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { describeTermination } from "@/lib/pod-status";
+import { listenForStreamFailure } from "@/lib/stream-failure";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -70,6 +73,7 @@ export function PodTerminal({
         return;
       }
 
+      sessionIdRef.current = sid;
       setSessionId(sid);
       setIsConnecting(false);
 
@@ -99,6 +103,47 @@ export function PodTerminal({
       setSessionId(null);
     }
   }, [sessionId, removeSession]);
+
+  // A session that dies on its own. `openPodShell` hands back an id
+  // before the exec upgrade has been answered, so a rejected handshake
+  // — a 500 on this cluster — used to leave `sessionId` set, `error`
+  // null and the pane blank forever.
+  //
+  // Registered once on mount, matching against a ref, so it exists
+  // before any id does. The backend holds the failure until
+  // `terminalSubscribed` releases its gate, which the inner Terminal
+  // only calls after this component has already stored the id.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    listenForStreamFailure(
+      () => sessionIdRef.current,
+      (failure) => {
+        const sid = sessionIdRef.current;
+        if (sid) removeSession(sid);
+        sessionIdRef.current = null;
+        setSessionId(null);
+        setIsConnecting(false);
+        // Two banners, one component: `unavailableReason` is the
+        // no-way-back copy the pod-status poll already writes, `error`
+        // is the retryable one.
+        if (failure.kind === "gone") {
+          setUnavailableReason(failure.message);
+        } else {
+          setError(failure.message);
+        }
+      }
+    ).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [removeSession]);
 
   // Initial connection: fire-and-forget async session startup, which
   // ends up calling setSessionId inside. Genuine side-effect (talks
@@ -130,20 +175,19 @@ export function PodTerminal({
       try {
         const pod = await commands.getPod(podName, namespace);
 
-        // Check regular containers
-        const container = pod.containers?.find(
+        // Both lists: a shell attached to a sidecar is attached to an
+        // entry of `.initContainers`, and looking for it in `.containers`
+        // found nothing and left the pane open over a dead process.
+        const container = podContainers(pod).find(
           (item) => item.name === containerName
         );
 
-        if (container) {
-          if (container.state.type === "terminated") {
-            const reason = container.state.reason
-              ? `: ${container.state.reason}`
-              : "";
-            setUnavailableReason(`Container terminated${reason}`);
-            disconnect();
-            return;
-          }
+        if (container?.state.type === "terminated") {
+          setUnavailableReason(
+            `Container terminated · ${describeTermination(container.state.termination)}`
+          );
+          disconnect();
+          return;
         }
 
         const phase = pod.status.phase.toLowerCase();
@@ -174,23 +218,46 @@ export function PodTerminal({
     onClose?.();
   }, [disconnect, onClose]);
 
-  // Show reconnect button if not connected and not connecting
-  const showReconnect =
-    !sessionId && !isConnecting && (error || unavailableReason);
+  // The session is down and something knows why.
+  const failureReason =
+    !isConnecting && !sessionId && (error || unavailableReason);
+  // Only `error` is worth a button. `unavailableReason` means the
+  // container itself is gone — reconnecting attaches to nothing, and
+  // offering it reads as "we do not know what happened".
+  const canReconnect = !!error;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
-      {showReconnect && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted border-b">
-          <div className="flex min-w-0 items-center gap-2 text-sm">
-            <span className="text-xs text-muted-foreground">
-              {error || unavailableReason}
-            </span>
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
+      {failureReason && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 border-b border-hair px-4 py-2"
+        >
+          <div className="min-w-0">
+            <p className={`text-xs ${canReconnect ? "text-err" : "text-warn"}`}>
+              {canReconnect
+                ? `No shell on ${podName}/${containerName}.`
+                : `${podName}/${containerName} is no longer available.`}
+            </p>
+            <p className="mt-0.5 break-words text-[11px] text-fg-mut">
+              {failureReason}
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={connect}>
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            Reconnect
-          </Button>
+          {canReconnect ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={connect}
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Reconnect
+            </Button>
+          ) : (
+            <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+              Nothing left to attach to
+            </span>
+          )}
         </div>
       )}
       <Terminal

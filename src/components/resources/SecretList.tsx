@@ -1,44 +1,28 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Lock } from "lucide-react";
 import type { SecretInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { Badge } from "@/components/ui/badge";
 import {
+  createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
   createDataKeysColumn,
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
-const SECRET_TYPE_COLOR: Record<string, string> = {
-  "kubernetes.io/tls": "bg-blue-500/20 text-blue-500",
-  "kubernetes.io/dockerconfigjson": "bg-purple-500/20 text-purple-500",
-  "kubernetes.io/service-account-token": "bg-green-500/20 text-green-500",
-};
-
-const getSecretTypeColor = (type: string): string =>
-  SECRET_TYPE_COLOR[type] ?? "bg-gray-500/20 text-gray-500";
-
 const columns = (): ColumnDef<SecretInfo>[] => [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Lock className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{row.original.name}</span>
-      </div>
-    ),
-  },
+  createNameColumn<SecretInfo>(ResourceType.Secret),
   createNamespaceColumn<SecretInfo>(),
   {
     id: "type",
     header: "Type",
+    // A secret's type is a classification, not a state. The previous
+    // colour-per-type table spent four hues telling the reader something
+    // the word already says.
     cell: ({ row }) => (
-      <Badge className={getSecretTypeColor(row.original.type)}>
+      <span className="font-mono text-fg-mut">
         {row.original.type.replace("kubernetes.io/", "")}
-      </Badge>
+      </span>
     ),
   },
   createDataKeysColumn<SecretInfo>(),

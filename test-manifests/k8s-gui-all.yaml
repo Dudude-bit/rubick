@@ -211,7 +211,14 @@ spec:
       containers:
         - name: job
           image: busybox:1.36
-          command: ["sh", "-c", "echo job-start && sleep 10 && echo job-done"]
+          # Fifteen minutes, not the ten seconds this used to be. A finished
+          # Job is the case a history supplier is best at — "what did it use
+          # when it ran" is the only question left to ask about it — and a pod
+          # that lives for less than one 15s scrape leaves nothing for any
+          # Prometheus to have measured. Fifteen because the app's 6h range
+          # buckets at three minutes: shorter than five buckets and the answer
+          # to that question is a dot rather than a line.
+          command: ["sh", "-c", "echo job-start && sleep 900 && echo job-done"]
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -265,6 +272,21 @@ spec:
           image: nginx:1.27-alpine
           ports:
             - containerPort: 80
+          # A CPU request, and only a request: an HPA computes utilisation
+          # against it, so without one `hpa-stateful` below would report
+          # `FailedGetResourceMetric` and demo the blind autoscaler a second
+          # time instead of the working one. No limit, because the usage rows
+          # on this page are the specimen for a workload that declares none.
+          #
+          # 100m and not 10m, which is what nginx idling would need: something
+          # in this namespace is usually curling this Service in a loop, and
+          # against a 10m request that traffic is enough to cross 80% and make
+          # the autoscaler genuinely add a pod. A demo that oscillates leaves a
+          # PersistentVolumeClaim behind on every pass.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 16Mi
           volumeMounts:
             - name: data
               mountPath: /usr/share/nginx/html
@@ -350,3 +372,2577 @@ spec:
   description: "Widget for k8s-gui CRD testing"
 status:
   ready: "true"
+---
+# Init:CrashLoopBackOff. `wait-for-db` succeeds, `migrate` fails on its
+# second line, `seed` never gets a turn, and `app` never starts — the
+# specimen for reading an init container's log, and for the previous
+# run that holds the error.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-demo
+  namespace: k8s-gui-test
+  labels:
+    app: init-demo
+spec:
+  initContainers:
+    - name: wait-for-db
+      image: busybox:1.36
+      command: ["sh", "-c", "echo checking db; sleep 3; echo db is up"]
+    - name: migrate
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - >-
+          echo applying 014_add_index.sql;
+          echo applying 015_backfill.sql;
+          echo 'ERROR: relation "orders" does not exist' >&2;
+          echo migration failed, exiting 1;
+          exit 1
+    - name: seed
+      image: busybox:1.36
+      command: ["sh", "-c", "echo seeding; sleep 2"]
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "while true; do echo app tick; sleep 5; done"]
+---
+# `proxy` is an init container with `restartPolicy: Always`: it starts
+# during init and never finishes, so it is neither an init step nor an
+# app container.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sidecar-demo
+  namespace: k8s-gui-test
+  labels:
+    app: sidecar-demo
+spec:
+  initContainers:
+    - name: prepare
+      image: busybox:1.36
+      command: ["sh", "-c", "echo prepared; sleep 2"]
+    - name: proxy
+      image: busybox:1.36
+      restartPolicy: Always
+      command: ["sh", "-c", "while true; do echo proxy heartbeat; sleep 7; done"]
+      # A mesh proxy's port lives on an init container, which is exactly the
+      # port a forward is usually aimed at and exactly the one a reader of
+      # `.containers` alone never sees.
+      ports:
+        - name: envoy-prom
+          containerPort: 15090
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "while true; do echo app tick; sleep 5; done"]
+      ports:
+        - name: http
+          containerPort: 8080
+---
+# The same shape as `sidecar-demo`, one level up: the init container and
+# the native sidecar live in a *template*, which is where five kinds —
+# Deployment, StatefulSet, DaemonSet, Job, CronJob — share one container
+# type and all of them used to answer "which containers does this run"
+# with `app` alone.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meshed-demo
+  namespace: k8s-gui-test
+  labels:
+    app: meshed-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meshed-demo
+  template:
+    metadata:
+      labels:
+        app: meshed-demo
+    spec:
+      initContainers:
+        - name: wait-for-config
+          image: busybox:1.36
+          command: ["sh", "-c", "echo fetching config; sleep 2; echo config ready"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        - name: proxy
+          image: busybox:1.36
+          restartPolicy: Always
+          command: ["sh", "-c", "while true; do echo proxy heartbeat; sleep 7; done"]
+          ports:
+            - name: envoy-prom
+              containerPort: 15090
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo app tick; sleep 5; done"]
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+---
+# A second kind carrying the same template shape, because the five detail
+# pages share one renderer and a fix that only lands on Deployment is the
+# drift this is meant to prevent. Suspended: the template is the point,
+# not the run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: meshed-cron-demo
+  namespace: k8s-gui-test
+spec:
+  schedule: "*/30 * * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: fetch-input
+              image: busybox:1.36
+              command: ["sh", "-c", "echo fetching input; sleep 1"]
+            - name: metrics-pusher
+              image: busybox:1.36
+              restartPolicy: Always
+              command: ["sh", "-c", "while true; do echo pushing metrics; sleep 10; done"]
+          containers:
+            - name: report
+              image: busybox:1.36
+              command: ["sh", "-c", "echo report written"]
+---
+# `mounts-demo`: a pod that draws on every kind of source a reference can
+# reach — a ConfigMap volume, a Secret volume, a claim, an env var from a
+# ConfigMap key and one from a Secret key, a bulk envFrom, and a service
+# account. `unread-config` is mounted by nothing on purpose: a volume no
+# container reads is a silent mistake, and this is the specimen for it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mounts-demo
+  namespace: k8s-gui-test
+  labels:
+    app: mounts-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mounts-demo
+  template:
+    metadata:
+      labels:
+        app: mounts-demo
+    spec:
+      serviceAccountName: k8s-gui-test
+      initContainers:
+        - name: seed
+          image: busybox:1.36
+          command: ["sh", "-c", "echo seeding from /etc/app; sleep 1"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/app
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo serving; sleep 30; done"]
+          env:
+            - name: APP_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: demo-config
+                  key: app.conf
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-secret
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: demo-config
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/app
+              readOnly: true
+            - name: app-secret
+              mountPath: /etc/creds
+            - name: data
+              mountPath: /var/lib/data
+            - name: scratch
+              mountPath: /tmp/scratch
+      volumes:
+        - name: app-config
+          configMap:
+            name: demo-config
+        - name: app-secret
+          secret:
+            secretName: demo-secret
+        - name: data
+          persistentVolumeClaim:
+            claimName: pvc-demo
+        - name: scratch
+          emptyDir: {}
+        - name: unread-config
+          configMap:
+            name: demo-config
+---
+# A TLS certificate lives in a Secret, and "which Secret holds the cert for
+# this host" is the question the Ingress TLS tab exists to answer. `log-demo`
+# is deliberately left without TLS as the warning specimen, so the reference
+# needs one of its own.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tls-demo-cert
+  namespace: k8s-gui-test
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    not-a-real-certificate
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    not-a-real-key
+    -----END PRIVATE KEY-----
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tls-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - tls-demo.local
+      secretName: tls-demo-cert
+  rules:
+    - host: tls-demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tls-demo
+                port:
+                  number: 80
+---
+# The chain that stops at the Service: the Ingress is wired, the Service
+# exists, and its selector matches no pod in the namespace. Nothing carries
+# `app: tls-demo` on purpose — anything reaching tls-demo.local gets a
+# connection refused, and no list page in the app says so.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tls-demo
+  namespace: k8s-gui-test
+spec:
+  type: ClusterIP
+  selector:
+    app: tls-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+# The chain that stops one hop earlier: an Ingress backend naming a Service
+# that does not exist. Distinct from `tls-demo` — there the Service is real
+# and empty, here there is no Service at all, and the two are not the same
+# repair.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ghost-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ghost-demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ghost-demo
+                port:
+                  number: 80
+---
+# The chain that stops last, and the one the rest of the app hides: pods
+# exist, the selector matches them, and not one of them is ready. The
+# readiness probe hits a port nothing listens on, so the pods run forever
+# and the Service has no endpoints. Every list page shows this workload
+# `Running`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unready-demo
+  namespace: k8s-gui-test
+  labels:
+    app: unready-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: unready-demo
+  template:
+    metadata:
+      labels:
+        app: unready-demo
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo not ready; sleep 30; done"]
+          readinessProbe:
+            tcpSocket:
+              port: 9999
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unready-demo
+  namespace: k8s-gui-test
+spec:
+  type: ClusterIP
+  selector:
+    app: unready-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+# A Service with no selector at all. It selects no pods, which is not the
+# same as selecting pods and finding none — the specimen that stops an
+# emptiness check from reading a name that was never there as a fault.
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-demo
+  namespace: k8s-gui-test
+spec:
+  type: ExternalName
+  externalName: example.com
+---
+# An Ingress backend that names an API object instead of a Service. The app
+# does not follow one, and the path has to survive being unfollowable.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resource-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: resource-demo.local
+      http:
+        paths:
+          - path: /assets
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: k8s.example.com
+                kind: StorageBucket
+                name: assets
+---
+# The same unfollowable backend, claimed by Traefik instead.
+#
+# Two specimens rather than one because a routing page only draws the
+# Ingresses its own controller claims, and `resource-demo` above names
+# `nginx`: on a k3d cluster, where Traefik is the only IngressClass, that one
+# is invisible on Traefik's page and the blind spot it exists to catch would
+# go on being untested there.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resource-demo-traefik
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: resource-demo-traefik.local
+      http:
+        paths:
+          - path: /assets
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: k8s.example.com
+                kind: StorageBucket
+                name: assets
+---
+# --- cert-manager fixtures -------------------------------------------------
+# Everything below needs cert-manager in the cluster; without it these
+# objects are skipped and the rest of this file still applies, which is
+# itself the state worth testing:
+#
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+#
+# A self-signed root, so nothing here ever talks to a real CA, and a local
+# ACME server (Pebble) whose HTTP-01 validation cannot reach these hosts —
+# which is the failing issuance chain the feature exists for, with no risk
+# to anybody's Let's Encrypt rate limit.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: k8s-gui-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: k8s-gui-root-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: k8s-gui test root
+  secretName: k8s-gui-root-ca
+  duration: 87600h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: k8s-gui-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: k8s-gui-ca
+spec:
+  ca:
+    secretName: k8s-gui-root-ca
+---
+# Healthy: 90 days, renews 30 days out. The quiet case, and the one most
+# certificates are in forever.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: shop-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: shop-tls
+  duration: 2160h
+  renewBefore: 720h
+  commonName: shop.k8s-gui.test
+  dnsNames:
+    - shop.k8s-gui.test
+    - www.shop.k8s-gui.test
+  issuerRef:
+    name: k8s-gui-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Near expiry: issued for 10 days and told not to renew until the last hour,
+# so it sits inside the window a reader is supposed to act in.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: checkout-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: checkout-tls
+  duration: 240h
+  renewBefore: 1h
+  commonName: checkout.k8s-gui.test
+  dnsNames:
+    - checkout.k8s-gui.test
+  issuerRef:
+    name: k8s-gui-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - shop.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: shop.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: checkout
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - checkout.k8s-gui.test
+      secretName: checkout-tls
+  rules:
+    - host: checkout.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Pebble: a local ACME server. Its HTTP-01 validation reaches out to
+# <host>:5002, which does not resolve for these test hosts — so the Order
+# gets a Challenge and the Challenge fails with a sentence worth reading.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pebble
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: pebble
+  ports:
+    - name: acme
+      port: 14000
+      targetPort: 14000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pebble
+  namespace: k8s-gui-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pebble
+  template:
+    metadata:
+      labels:
+        app: pebble
+    spec:
+      containers:
+        - name: pebble
+          image: ghcr.io/letsencrypt/pebble:latest
+          args: ["-config", "/test/config/pebble-config.json"]
+          env:
+            - name: PEBBLE_VA_NOSLEEP
+              value: "1"
+          ports:
+            - containerPort: 14000
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: pebble-acme
+  namespace: k8s-gui-test
+spec:
+  acme:
+    server: https://pebble.k8s-gui-test.svc:14000/dir
+    skipTLSVerify: true
+    privateKeySecretRef:
+      name: pebble-acme-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+# The screen the whole feature exists for: an ACME certificate whose
+# challenge cannot complete, four objects deep.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: promo-tls
+  namespace: k8s-gui-test
+spec:
+  secretName: promo-tls
+  commonName: promo.k8s-gui.test
+  dnsNames:
+    - promo.k8s-gui.test
+  issuerRef:
+    name: pebble-acme
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - promo.k8s-gui.test
+      secretName: promo-tls
+  rules:
+    - host: promo.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+
+---
+# --- Traefik routing page ------------------------------------------------
+#
+# The hosts the Traefik integration page draws, and the findings it draws
+# them for. Every one exists to make a finding real rather than to be
+# plausible: a route whose Service has no ready endpoints, a route whose
+# backend was never created, a host served in the clear, two objects claiming
+# one path, and two match rules the app refuses to paraphrase.
+#
+# `expiring-tls` is not here, because a certificate checked into a file is an
+# expired certificate a week later. Make it beside this:
+#
+#   openssl req -x509 -newkey rsa:2048 -nodes -days 4 \
+#     -keyout tls.key -out tls.crt -subj "/CN=expiring.k8s-gui.test" \
+#     -addext "subjectAltName=DNS:expiring.k8s-gui.test"
+#   kubectl -n k8s-gui-test create secret tls expiring-tls \
+#     --cert=tls.crt --key=tls.key
+#
+# Cleanup, which also takes the Ingress below with it:
+#
+#   kubectl -n k8s-gui-test delete \
+#     ingressroute/shop-api ingressroute/unready-route \
+#     ingressroute/mystery-route ingressroute/canary-route \
+#     middleware/strip-api middleware/rate-limit middleware/orphan-auth \
+#     ingress/ghost-traefik ingress/internal-plain ingress/legacy-old \
+#     ingress/legacy-new ingress/expiring-demo secret/expiring-tls
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-api
+  namespace: k8s-gui-test
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: k8s-gui-test
+spec:
+  rateLimit:
+    average: 100
+    burst: 200
+---
+# Referenced by nothing. The Middlewares tab is the only place in the app
+# that can say so.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: orphan-auth
+  namespace: k8s-gui-test
+spec:
+  basicAuth:
+    secret: demo-secret
+---
+# A healthy chain: entry point -> rule -> two middlewares -> service -> pods.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: shop-api
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`shop.k8s-gui.test`) && PathPrefix(`/api`)
+      kind: Rule
+      middlewares:
+        - name: strip-api
+        - name: rate-limit
+      services:
+        - name: log-demo
+          port: 80
+  tls:
+    secretName: shop-tls
+---
+# Pods running, none of them ready: the case every list page draws as healthy.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: unready-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`unready.k8s-gui.test`)
+      kind: Rule
+      services:
+        - name: unready-demo
+          port: 80
+---
+# A backend that was never created.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ghost-traefik
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ghost.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: never-created
+                port:
+                  number: 80
+---
+# Bound to the plain entry point, with no TLS and no redirect middleware.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: internal-plain
+  namespace: k8s-gui-test
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: internal.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Two objects, one host, one path. Which one Traefik serves is not something
+# these objects settle, and the page says so rather than picking.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legacy-old
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: legacy.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: legacy-new
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: legacy.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: stateful-demo
+                port:
+                  number: 80
+---
+# A negated rule. The app refuses to paraphrase it and prints it as written.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mystery-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: "!PathPrefix(`/private`) && Host(`mystery.k8s-gui.test`)"
+      kind: Rule
+      services:
+        - name: log-demo
+          port: 80
+---
+# A rule the app reads in part: the host is a fact, the header matcher is not
+# interpreted and is shown verbatim.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: canary-route
+  namespace: k8s-gui-test
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`canary.k8s-gui.test`) && HeaderRegexp(`X-Canary`, `^(on|yes)$`)
+      kind: Rule
+      services:
+        - name: log-demo
+          port: 80
+---
+# The host whose certificate is running out. Its Secret is made by the
+# openssl lines above, because a checked-in certificate expires.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: expiring-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - expiring.k8s-gui.test
+      secretName: expiring-tls
+  rules:
+    - host: expiring.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# --- Argo CD and Flux, for the two delivery pages ------------------------
+#
+# Both controllers have to be installed first — they are not in this file,
+# because a vendor's own install manifest is thirty thousand lines and is
+# published by the vendor:
+#
+#   kubectl apply -f https://github.com/fluxcd/flux2/releases/latest/download/install.yaml
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#
+# Three of the states below cannot be declared, because each of them is a
+# *transition*: an object that worked and then stopped. Apply this file,
+# wait for everything to go green, and then:
+#
+#   kubectl -n argocd patch application analytics --type merge \
+#     -p '{"operation":{"sync":{"revision":"master","syncOptions":["CreateNamespace=true"]}}}'
+#   kubectl -n argo-analytics set image deploy/podinfo podinfod=ghcr.io/stefanprodan/podinfo:6.5.4
+#   kubectl -n flux-system patch kustomization tenant-b --type merge -p '{"spec":{"suspend":true}}'
+#   kubectl -n flux-system patch gitrepository podinfo --type merge \
+#     -p '{"spec":{"url":"https://github.com/k8s-gui-demo/podinfo-moved"}}'
+#
+# The last one is the important one: it breaks a source that had already
+# fetched, which is what leaves the appliers under it reporting Ready from a
+# revision nothing can refresh — the state the Flux page exists to show and
+# the one a fresh apply can never produce.
+# A Flux Kustomization does not create its targetNamespace, and neither
+# does an Argo Application without CreateNamespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-apps
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-ingress
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-tenant-b
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-analytics
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: prod
+  namespace: argocd
+spec:
+  description: The demo project the k8s-gui Argo CD page reads
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: "*"
+      server: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+# Healthy and synced: the ordinary case, and the one that must stay quiet.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-podinfo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# Finding one: sync failing with auto-sync on. The destination namespace does
+# not exist and CreateNamespace is deliberately absent, so the API server
+# refuses every object and Argo retries for ever.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-shop-nowhere
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+---
+# Finding two: out of sync with auto-sync off. Identical to Argo's status
+# column and the opposite problem — nothing is retrying, and nothing will
+# change until a person decides. Needs the sync-then-drift steps above.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: analytics
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-analytics
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+---
+# A generated Application: editing the Application it makes is pointless.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: tenant-a
+  template:
+    metadata:
+      name: "{{name}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/stefanprodan/podinfo
+        path: kustomize
+        targetRevision: master
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "argo-{{name}}"
+      syncPolicy:
+        automated: {}
+        syncOptions:
+          - CreateNamespace=true
+---
+# What makes Argo's UI address knowable at all. Without an Ingress in front of
+# argocd-server there is no route from the reader's machine, and the page says
+# so instead of offering a link into a connection error.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  rules:
+    - host: argocd.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
+---
+# The source that fetches, and is then broken by hand — see the note above.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 2m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+---
+# A source that never fetches at all: a different sentence from one that
+# stopped, because nothing under it has ever been applied.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: infra
+  namespace: flux-system
+spec:
+  interval: 2m
+  url: https://github.com/k8s-gui-demo/private-infra
+  ref:
+    branch: main
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-apps
+---
+# The root of a dependsOn chain, and the one to fix.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform
+  namespace: flux-system
+spec:
+  interval: 5m
+  retryInterval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: infra
+  path: ./clusters/prod
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-monitoring
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: ingress
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-ingress
+---
+# Suspended after a successful run — see the patch above. It keeps Ready=True
+# and reconciles nothing, which is the one state that looks perfect.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tenant-b
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  prune: true
+  targetNamespace: flux-tenant-b
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: https://stefanprodan.github.io/podinfo
+---
+# A reconciler whose source is a chart repository and whose unit is a version.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: podinfo
+      version: "6.5.4"
+      sourceRef:
+        kind: HelmRepository
+        name: podinfo
+  targetNamespace: flux-helm
+  install:
+    createNamespace: true
+---
+# --- The two provenance states no controller produces on its own ------------
+#
+# The "managed by" mark resolves a label against the owner rather than
+# trusting it, and these are the two cases that proves. Neither can be reached
+# by installing Argo or Flux correctly, which is exactly why they are declared.
+#
+# One: a label nothing honours. `apps` is a real Kustomization and its
+# `status.inventory` does not contain this Deployment — the shape left behind
+# by a Kustomization deleted with `prune: false`, or by a manifest committed
+# with somebody else's reconciler labels still in it. The app must say
+# "labelled as delivered by apps, which does not list it" and must not state a
+# revision or a revert behaviour for it.
+#
+# Flux and not Argo, and that is the finding rather than a preference: a live
+# Argo controller **adopts** anything carrying its tracking annotation and adds
+# it to `status.resources` as out of sync, so with Argo running this state
+# lasts one reconcile. Flux's inventory only ever contains what Flux applied,
+# so the disowned object stays disowned — which is what makes it demonstrable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: left-behind
+  namespace: k8s-gui-test
+  labels:
+    kustomize.toolkit.fluxcd.io/name: apps
+    kustomize.toolkit.fluxcd.io/namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: left-behind
+  template:
+    metadata:
+      labels:
+        app: left-behind
+    spec:
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+---
+# Two: an object both controllers really do apply. Argo is pointed at the same
+# manifests, in the namespace Flux's `apps` Kustomization already reconciles
+# into, so each one lists the Deployment in its own inventory and each undoes
+# the other on its next pass. Both claims confirm, which is the one state a
+# first-provider capability lookup could never have found.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: overlap
+  namespace: argocd
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: master
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flux-apps
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+---
+# --- What acts on a workload without the workload asking ---------------------
+#
+# Five objects, five states, and each one is a state the app must be able to
+# tell from the others. Cleanup:
+#
+#   kubectl delete -n k8s-gui-test hpa/hpa-blind hpa/hpa-busy hpa/hpa-stateful \
+#     pdb/pdb-log-demo pdb/pdb-stateful-demo deploy/busy-demo
+#
+# `hpa-busy` drives `busy-demo` to its maximum; deleting the HPA first and the
+# Deployment second leaves nothing behind.
+
+# One: an autoscaler that cannot read its metric, which is the failure that
+# announces itself nowhere. `log-demo` has five containers and only one of them
+# declares a CPU request, so the HPA cannot compute a utilisation for the pod
+# at all and reports `ScalingActive=False · FailedGetResourceMetric` forever.
+# Its replica count, its conditions and its events are indistinguishable from a
+# healthy workload's; the autoscaler simply never moves the number. This is
+# also the state a cluster with no metrics-server puts *every* CPU autoscaler
+# in, which is why it is worth a demo of its own.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-blind
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: log-demo
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Two: a workload that is genuinely, permanently over its target, so its
+# autoscaler sits pinned at `maxReplicas` with `ScalingLimited=True`. A shell
+# spin loop capped at 20m of CPU burns its whole limit, which is 200% of its
+# request, so the autoscaler wants ten replicas and is allowed two.
+#
+# This deliberately does not reuse an existing workload: the finding needs the
+# *desired* count to exceed the maximum, and an idle pod reporting 0m or 1m
+# lands on either side of that depending on the second you look. A workload
+# whose usage is decided by its own limit is the only way the state holds
+# still long enough to be a demo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busy-demo
+  namespace: k8s-gui-test
+  labels:
+    app: busy-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: busy-demo
+  template:
+    metadata:
+      labels:
+        app: busy-demo
+    spec:
+      containers:
+        - name: spin
+          image: busybox:1.36
+          command: ["sh", "-c", "while :; do :; done"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 20m
+              memory: 32Mi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-busy
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: busy-demo
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+---
+# Three: a budget with room. Two ready replicas and a floor of one, so one pod
+# may be evicted and a drain of either node goes through.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-log-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: log-demo
+---
+# Four: a budget with none, and the reason the app's tone here matters. A
+# single-replica StatefulSet with `minAvailable: 1` reports
+# `DisruptionAllowed=False` and `disruptionsAllowed: 0` every second of its
+# healthy life — it is the budget working, not a fault, and it is exactly what
+# blocks a node drain. The app states the fact and spends no colour on it.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-stateful-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: stateful-demo
+---
+# Five: an autoscaler on a kind that is not a Deployment. `scaleTargetRef`
+# takes anything with a scale subresource, and a StatefulSet is the one people
+# actually point one at — so it is the specimen for the Scale dialog's warning
+# reaching a page other than a Deployment's. Served nginx against the 100m
+# request above sits far below the 80% target, so this holds at `minReplicas`
+# and stays still: what is being demonstrated is that the app names the
+# autoscaler before you set a number by hand, not that the number moves.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-stateful
+  namespace: k8s-gui-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: stateful-demo
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# --- EndpointSlices: four shapes a pod-readiness deduction cannot tell apart
+#
+# Cleanup:
+#   kubectl delete -n k8s-gui-test deploy/named-port-demo deploy/draining-demo \
+#     deploy/mixed-port-ok deploy/mixed-port-bad deploy/topology-demo
+#   kubectl delete -n k8s-gui-test svc/named-port-demo svc/draining-demo \
+#     svc/headless-demo svc/manual-demo svc/mixed-port-demo svc/topology-demo
+#   kubectl delete -n k8s-gui-test endpoints/manual-demo
+#   kubectl label node k3d-k8s-gui-dev-server-0 topology.kubernetes.io/zone-
+#   kubectl label node k3d-k8s-gui-dev-agent-0 topology.kubernetes.io/zone-
+#
+# topology-demo needs the nodes to carry `topology.kubernetes.io/zone`; k3d
+# nodes have none, so label them before applying and remove the labels after:
+#   kubectl label node k3d-k8s-gui-dev-server-0 topology.kubernetes.io/zone=west1-b
+#   kubectl label node k3d-k8s-gui-dev-agent-0  topology.kubernetes.io/zone=west1-c
+#
+# draining-demo shows `serving: true, ready: false` only while a pod is
+# terminating. `kubectl scale deploy/draining-demo -n k8s-gui-test --replicas=0`
+# opens a fifteen-minute window; scale back to 1 to close it.
+#
+# The 1000-address truncation of the legacy Endpoints object is impractical to
+# stand up and is covered by unit tests instead — `legacy_over_capacity` in
+# src-tauri/src/resources/published.rs and `legacyNote` in src/lib/published.ts.
+
+# 1. Healthy selector, Ready pods, and nothing published: the Service asks for
+#    a port name no container declares, so the endpoint controller writes the
+#    pods into a slice with no port at all and kube-proxy gets nothing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+  labels:
+    app: named-port-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: named-port-demo
+  template:
+    metadata:
+      labels:
+        app: named-port-demo
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            # Named `web`; the Service below asks for `http`.
+            - name: web
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: named-port-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The same Service behind a hostname, so the routing page reports the stop in
+# the traffic chain's own words rather than inventing a second vocabulary.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: named-port-demo
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: named-port.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: named-port-demo
+                port:
+                  number: 80
+---
+# 2. The same mistake on half the pods: one Deployment names the port and the
+#    other does not, so the Service publishes one address and the second list
+#    on its page has the other.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-port-ok
+  namespace: k8s-gui-test
+  labels:
+    app: mixed-port-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mixed-port-demo
+      role: ok
+  template:
+    metadata:
+      labels:
+        app: mixed-port-demo
+        role: ok
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-port-bad
+  namespace: k8s-gui-test
+  labels:
+    app: mixed-port-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mixed-port-demo
+      role: bad
+  template:
+    metadata:
+      labels:
+        app: mixed-port-demo
+        role: bad
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: web
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mixed-port-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: mixed-port-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# 3. A pod that keeps taking traffic while it terminates. The grace period and
+#    the preStop sleep are wide enough to read `serving: true, ready: false`
+#    on screen; the legacy Endpoints object drops it entirely.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: draining-demo
+  namespace: k8s-gui-test
+  labels:
+    app: draining-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: draining-demo
+  template:
+    metadata:
+      labels:
+        app: draining-demo
+    spec:
+      terminationGracePeriodSeconds: 900
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 900"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: draining-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: draining-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# 4. Headless: no cluster IP by design, and a slice all the same.
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-demo
+  namespace: k8s-gui-test
+spec:
+  clusterIP: None
+  selector:
+    app: log-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+# 5. No selector at all, and endpoints written by hand. The mirroring
+#    controller turns the legacy object into a slice, which is what the app
+#    reads back — and no finding is raised, because nothing here is broken.
+apiVersion: v1
+kind: Service
+metadata:
+  name: manual-demo
+  namespace: k8s-gui-test
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: manual-demo
+  namespace: k8s-gui-test
+subsets:
+  - addresses:
+      - ip: 10.42.9.11
+      - ip: 10.42.9.12
+    ports:
+      - name: http
+        port: 8080
+        protocol: TCP
+---
+# 6. Topology-aware routing: one pod per zone, and hints that keep a client's
+#    traffic in its own. Needs the node labels named at the top of this block.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: topology-demo
+  namespace: k8s-gui-test
+  labels:
+    app: topology-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: topology-demo
+  template:
+    metadata:
+      labels:
+        app: topology-demo
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: topology-demo
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: topology-demo
+  namespace: k8s-gui-test
+spec:
+  trafficDistribution: PreferClose
+  selector:
+    app: topology-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# --- A selector that is not a list of equalities -----------------------------
+#
+# `matchExpressions` is half of what `metav1.LabelSelector` can say, and every
+# selector test in this app used to read `matchLabels` and stop. A workload
+# selecting its pods by a set-based requirement came back with no pods at all,
+# and the traffic chain — which promises to say *where the path stops* — would
+# have printed "no pod carries this selector" over a Deployment serving
+# traffic. Cleanup:
+#
+#   kubectl delete -n k8s-gui-test deploy/expr-demo svc/expr-demo \
+#     pdb/expr-demo
+#
+# One thing this cannot demonstrate, and it is worth writing down: a Service's
+# `spec.selector` is a plain `map[string]string`, not a `LabelSelector`. There
+# is no such thing as a Service with `matchExpressions`; the API server prunes
+# it. The Service here selects the same pods by equality, which is what makes
+# it the control — the chain in front of an expression-selected workload has to
+# be as healthy as the chain in front of any other.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+  labels:
+    app: expr-demo
+spec:
+  replicas: 2
+  # All four operators in one selector, and no `matchLabels` at all: read by
+  # the old code this selector was empty, which the same code then read as
+  # "matches nothing".
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [expr-demo, expr-demo-old]
+      - key: tier
+        operator: Exists
+      - key: track
+        operator: NotIn
+        values: [canary]
+      - key: retired
+        operator: DoesNotExist
+  template:
+    metadata:
+      labels:
+        app: expr-demo
+        tier: web
+        track: stable
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+spec:
+  selector:
+    app: expr-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# A budget whose selector is set-based. `policy/v1` reads an absent selector as
+# "no pods" and an empty `{}` one as "every pod in the namespace" — the reverse
+# of a Service's rule — so the two shapes cannot share one emptiness test.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: expr-demo
+  namespace: k8s-gui-test
+spec:
+  minAvailable: 1
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [expr-demo]
+      - key: track
+        operator: NotIn
+        values: [canary]
+
+---
+# --- ingress-nginx routing page ------------------------------------------
+#
+# ingress-nginx is not in this file: it has no CRDs and installs as a
+# controller Deployment plus an IngressClass, from its own static manifest.
+# Install it first, as NodePort so it does not fight k3d's Traefik for the
+# load balancer — this page reads objects, not traffic, so that is enough:
+#
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/baremetal/deploy.yaml
+#
+# Then let the snippets below through, which the shipped ConfigMap forbids
+# by default, and set two global settings the page has something to say
+# about:
+#
+#   kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
+#     --type merge -p '{"data":{"allow-snippet-annotations":"true",
+#     "annotations-risk-level":"Critical","proxy-body-size":"8m",
+#     "use-forwarded-headers":"true","server-tokens":"false",
+#     "ssl-protocols":"TLSv1.2 TLSv1.3",
+#     "log-format-upstream":"$remote_addr - $status $request_time"}}'
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete ingress \
+#     shop-nginx promo-nginx promo-nginx-canary snippet-nginx \
+#     ghost-nginx plain-nginx dupe-nginx-old dupe-nginx-new lonely-canary
+#   kubectl delete -f <the ingress-nginx manifest above>
+
+---
+# Twelve annotations, which is the case the page exists for: a plain Ingress
+# carrying a program. Ten of them decode; `mirror-target` is not in the
+# app's table and `proxy-body-size: enormous` is a value it will not read, so
+# both are printed as written and said to be.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/whitelist-source-range: 10.0.0.0/8,192.168.0.0/16
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: demo-secret
+    nginx.ingress.kubernetes.io/auth-realm: Staging only
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/mirror-target: https://mirror.k8s-gui.test/$request_uri
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - shop.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: shop.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# The canary pair. Two Ingresses, one host, and the page must draw it as one
+# host divided 80/20 rather than as two hosts each taking everything.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo-nginx
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - promo.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: promo.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: promo-nginx-canary
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "20"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: promo.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: topology-demo
+                port:
+                  number: 80
+---
+# A canary with no host to shadow. nginx merges a canary into the server
+# block of a host another Ingress already serves; there is no such block
+# here, so this is correct YAML that is never served.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lonely-canary
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: X-Preview
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: lonely.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# The rule the whole annotation feature is built on. Raw nginx config, shown
+# as written and flagged as raw — never paraphrased at any confidence.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: snippet-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Env: staging";
+      if ($request_uri ~* "^/internal") {
+        return 403;
+      }
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /healthz { return 200 'ok'; }
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - snippet.nginx.k8s-gui.test
+      secretName: shop-tls
+  rules:
+    - host: snippet.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# A backend that was never created.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ghost-nginx
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ghost.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: never-created
+                port:
+                  number: 80
+---
+# Served in the clear, and carrying the annotation that looks like it fixes
+# that. `ssl-redirect` does nothing on a host with no certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plain-nginx
+  namespace: k8s-gui-test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: internal.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+# Two objects, one host, one path. nginx serves the older one and logs a
+# warning nothing else in this cluster surfaces.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dupe-nginx-old
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: legacy.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dupe-nginx-new
+  namespace: k8s-gui-test
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: legacy.nginx.k8s-gui.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: topology-demo
+                port:
+                  number: 80
+
+---
+# --- Istio routing page ---------------------------------------------------
+#
+# Istio is not in this file either: its CRDs and istiod come from its own
+# installer. Install it first — the minimal profile is enough, because this
+# page reads objects rather than traffic and needs no sidecars and no
+# ingress gateway pod:
+#
+#   istioctl install --set profile=minimal -y
+#
+# The Gateway below selects `istio: ingressgateway`, which the minimal
+# profile does not deploy. That is deliberate and does not weaken anything:
+# every finding here is a reference between objects, and none of them needs
+# a running proxy to be true.
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete \
+#     gateway/mesh-edge virtualservice/shop-mesh \
+#     virtualservice/orphan-mesh virtualservice/typo-mesh \
+#     virtualservice/skewed-mesh virtualservice/raw-match-mesh \
+#     destinationrule/log-demo-versions
+#   istioctl uninstall --purge -y && kubectl delete namespace istio-system
+
+---
+# The edge listener the healthy host comes in through.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: mesh-edge
+  namespace: k8s-gui-test
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - shop.mesh.k8s-gui.test
+        - split.mesh.k8s-gui.test
+        - raw.mesh.k8s-gui.test
+        - skewed.mesh.k8s-gui.test
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: shop-tls
+      hosts:
+        - shop.mesh.k8s-gui.test
+---
+# The subsets the healthy route names. Both labels exist on log-demo's pods
+# only in the sense that a subset is a selector — v2 selects nothing, which
+# the chain's last column says rather than the mesh.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: log-demo-versions
+  namespace: k8s-gui-test
+spec:
+  host: log-demo
+  subsets:
+    - name: v1
+      labels:
+        app: log-demo
+    - name: v2
+      labels:
+        app: log-demo
+---
+# The healthy chain end to end: Gateway -> VirtualService -> DestinationRule
+# -> Service -> pods, with a match this app reads in full and a split that
+# adds up.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: shop-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - shop.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - name: api
+      match:
+        - uri:
+            prefix: /api
+          headers:
+            x-env:
+              exact: staging
+      route:
+        - destination:
+            host: log-demo
+            subset: v1
+            port:
+              number: 80
+          weight: 80
+        - destination:
+            host: log-demo
+            subset: v2
+            port:
+              number: 80
+          weight: 20
+    - name: everything-else
+      route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
+---
+# Finding one: a host no Gateway serves. `mesh-edge` exists and covers three
+# hostnames, none of them this one, and `north-gateway` does not exist at
+# all. Istio accepts both references without a status, an event or a
+# condition anywhere — the VirtualService simply never receives a request.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: orphan-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - orphan.mesh.k8s-gui.test
+  gateways:
+    - north-gateway
+  http:
+    - route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
+---
+# Finding two: a route to a subset no DestinationRule defines. `v3` is a
+# label selector that exists nowhere, and every request on this route is
+# answered with a 503.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: typo-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - split.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - match:
+        - uri:
+            prefix: /v3
+      route:
+        - destination:
+            host: log-demo
+            subset: v3
+            port:
+              number: 80
+---
+# Finding three: weights that do not add up to a hundred. Sixty and thirty
+# leaves a tenth of the requests matching this rule covered by nothing.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: skewed-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - skewed.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - route:
+        - destination:
+            host: log-demo
+            subset: v1
+          weight: 60
+        - destination:
+            host: log-demo
+            subset: v2
+          weight: 30
+---
+# A match this app refuses to paraphrase: a regular expression, a query
+# parameter and a source label, none of which it will describe. The whole
+# entry is printed as written, which is the rule the routing pages share.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: raw-match-mesh
+  namespace: k8s-gui-test
+spec:
+  hosts:
+    - raw.mesh.k8s-gui.test
+  gateways:
+    - mesh-edge
+  http:
+    - match:
+        - uri:
+            regex: ^/v[12]/(items|carts)/.*$
+          queryParams:
+            debug:
+              exact: "1"
+          sourceLabels:
+            app: checkout
+      route:
+        - destination:
+            host: log-demo
+            port:
+              number: 80
+---
+# --- the managed clouds' own controllers -----------------------------------
+# Everything below needs the three clouds' CRDs, which no dev cluster has and
+# which are fetched from the vendors rather than written here. ingress-gce
+# builds its two in Go at controller start and publishes no YAML at all, so
+# the definitions come out of upstream's own code:
+#
+#   kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/gke-managed-certs/master/deploy/managedcertificates-crd.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/helm/aws-load-balancer-controller/crds/crds.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/Azure/application-gateway-kubernetes-ingress/master/crds/AzureIngressProhibitedTarget-v1-CRD-v1.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/Azure/aad-pod-identity/master/charts/aad-pod-identity/crds/crd.yaml
+#   # BackendConfig and FrontendConfig: no upstream YAML exists. See the
+#   # note in `test-manifests/README.md`.
+#
+# **No controller acts on any of this.** The statuses below were written by
+# hand to produce the states the app has to draw; on a real cluster they are
+# written by ingress-gce, gke-managed-certs and the AWS Load Balancer
+# Controller, and nothing here has been tested against those. What *is* real
+# is the schema: every object below is validated by the vendor's own CRD.
+#
+# TargetGroupBinding keeps its status behind a subresource, so `apply` drops
+# it and it has to be patched separately:
+#
+#   kubectl -n k8s-gui-test patch targetgroupbinding checkout-web \
+#     --subresource=status --type=merge -p '{"status":{"conditions":[{"type":"Ready","status":"False","reason":"FailedCleanup","message":"TargetGroup not found: k8s-shop-checkout-9f8e7d","lastTransitionTime":"2026-01-01T00:00:00Z"}]}}'
+#
+# Cleanup:
+#
+#   kubectl -n k8s-gui-test delete \
+#     backendconfig/shop-backend frontendconfig/shop-frontend \
+#     managedcertificate/shop-cert managedcertificate/checkout-cert \
+#     managedcertificate/unwritten-cert \
+#     targetgroupbinding/shop-web targetgroupbinding/checkout-web \
+#     azureidentity/shop-identity azureidentitybinding/shop-binding \
+#     azureidentitybinding/typo-binding \
+#     azureingressprohibitedtarget/legacy-paths \
+#     deploy/cloud-demo svc/cloud-demo svc/cloud-ghost
+#   kubectl delete ingressclassparams/shop-alb
+
+# The Service the traffic chain draws the hop note on: annotated with a
+# BackendConfig that exists, and backed by pods that are actually ready, so
+# the note sits under a hop that reads whole without it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-demo
+  namespace: k8s-gui-test
+  annotations:
+    cloud.google.com/backend-config: '{"default":"shop-backend"}'
+spec:
+  selector:
+    app: cloud-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# The other half of the same test: a Service naming a BackendConfig that does
+# not exist. GKE applies nothing at all in this case and says so only in an
+# event on the Ingress, so the backend silently keeps the defaults the reader
+# thought they had overridden. It is the one problem a BackendConfig can
+# produce, because the object itself reports no status of any kind.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-ghost
+  namespace: k8s-gui-test
+  annotations:
+    cloud.google.com/backend-config: '{"default":"ghost-backend"}'
+spec:
+  selector:
+    app: cloud-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-demo
+  namespace: k8s-gui-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloud-demo
+  template:
+    metadata:
+      labels:
+        app: cloud-demo
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/e2e-test-images/agnhost:2.47
+          args: ["netexec", "--http-port=8080"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+# What a GKE Ingress is actually configured by, and the object the chain hop
+# names. Note what is *not* here: any statement about whether that health
+# check passes. BackendConfig is declared upstream with no status at all, so
+# the only honest reading of it is as configuration.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: shop-backend
+  namespace: k8s-gui-test
+spec:
+  timeoutSec: 30
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    type: HTTP
+    port: 8080
+    requestPath: /healthz
+    checkIntervalSec: 10
+  cdn:
+    enabled: true
+    cacheMode: CACHE_ALL_STATIC
+  logging:
+    enable: true
+    sampleRate: 1
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: shop-frontend
+  namespace: k8s-gui-test
+spec:
+  sslPolicy: gke-ingress-ssl-policy
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# Provisioned and serving.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: shop-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - shop.k8s-gui.test
+status:
+  certificateStatus: Active
+  certificateName: mcrt-0a1b2c3d
+  expireTime: "2027-01-01T00:00:00Z"
+  domainStatus:
+    - domain: shop.k8s-gui.test
+      status: Active
+---
+# The state this whole row exists for. The top-level status says only
+# "Provisioning" and will keep saying it forever, because one of the two
+# domains has no DNS record pointing at the load balancer — which is a fact
+# one level down, in a field nothing in the app read before.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: checkout-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - checkout.k8s-gui.test
+    - www.checkout.k8s-gui.test
+status:
+  certificateStatus: FailedNotVisible
+  domainStatus:
+    - domain: checkout.k8s-gui.test
+      status: Active
+    - domain: www.checkout.k8s-gui.test
+      status: FailedNotVisible
+---
+# A certificate the controller has never written to — which is every
+# certificate on a cluster where that controller is not running. It must be
+# counted and must not be sorted into any state: an absent status is not a
+# verdict, and this object is here to keep anything from treating it as one.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: unwritten-cert
+  namespace: k8s-gui-test
+spec:
+  domains:
+    - quiet.k8s-gui.test
+---
+# The link from a Service to a real ALB target group, which is a fact the app
+# could not state at all before: an ALB-fronted Service shows a ClusterIP and
+# nothing else, and the ARN was on the same API server the whole time.
+#
+# No conditions, deliberately. The AWS controller writes one only when
+# something failed, so this is what a working binding looks like — and it is
+# indistinguishable from a binding on a cluster whose controller is not
+# running, which is why neither is read as health.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: shop-web
+  namespace: k8s-gui-test
+spec:
+  serviceRef:
+    name: cloud-demo
+    port: 80
+  targetType: ip
+  ipAddressType: ipv4
+  targetGroupARN: arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/k8s-shop-web-9f8e7d/0a1b2c3d4e5f6789
+---
+# The failing half. Its status is behind a subresource and has to be patched
+# after apply — see the command in the section header above.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: checkout-web
+  namespace: k8s-gui-test
+spec:
+  serviceRef:
+    name: cloud-ghost
+    port: 80
+  targetType: ip
+  targetGroupARN: arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/k8s-shop-checkout-9f8e7d/1b2c3d4e5f678901
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: IngressClassParams
+metadata:
+  name: shop-alb
+spec:
+  group:
+    name: shop
+  scheme: internet-facing
+  ipAddressType: dualstack
+---
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentity
+metadata:
+  name: shop-identity
+  namespace: k8s-gui-test
+spec:
+  type: 0
+  resourceID: /subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shop-api
+  clientID: 11111111-2222-3333-4444-555555555555
+---
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentityBinding
+metadata:
+  name: shop-binding
+  namespace: k8s-gui-test
+spec:
+  azureIdentity: shop-identity
+  selector: shop
+---
+# A reference nothing validates, and the quietest failure in this whole file:
+# the binding is accepted, no AzureAssignedIdentity is ever created, the pods
+# run perfectly, and every call they make to Azure comes back 403 with no
+# Kubernetes-side symptom at all. Found by looking for the object, not by
+# reading a status — these kinds report none.
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentityBinding
+metadata:
+  name: typo-binding
+  namespace: k8s-gui-test
+spec:
+  azureIdentity: shop-identiy
+  selector: checkout
+---
+# Why an Ingress somebody wrote is being ignored: AGIC is told to leave this
+# hostname's paths alone, and nothing else in the app could say so.
+apiVersion: appgw.ingress.k8s.io/v1
+kind: AzureIngressProhibitedTarget
+metadata:
+  name: legacy-paths
+  namespace: k8s-gui-test
+spec:
+  hostname: shop.k8s-gui.test
+  paths:
+    - /legacy/*

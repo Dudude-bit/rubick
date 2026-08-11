@@ -6,13 +6,20 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Link } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { MetricBadge } from "@/components/ui/metric-card";
+import { MetricValue, UnitValue } from "@/components/ui/metric-value";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Eye, Trash2 } from "lucide-react";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
+import { cn } from "@/lib/utils";
+import type { ResourceKind } from "@/lib/resource-registry";
+import { ResourceRef } from "./ResourceRef";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -51,47 +58,24 @@ interface WithLabels {
 }
 
 /**
- * Creates a name column with link to detail page
- * @param linkPrefix - URL prefix for the detail page
- * @param options.className - Custom class name for the link/span
- * @param options.disableLink - If true, renders as span instead of link (use with row-level click)
+ * The name cell.
+ *
+ * `showKind` is off because the column header already says the kind: repeating
+ * it in every row is the noise the coloured reference exists to remove.
  */
-export function createNameColumn<T extends BaseResource>(
-  linkPrefix: string,
-  options?: { className?: string; disableLink?: boolean }
-): ColumnDef<T> {
-  return {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) =>
-      options?.disableLink ? (
-        <span className={options?.className ?? "font-medium text-primary"}>
-          {row.original.name}
-        </span>
-      ) : (
-        <Link
-          to={`${linkPrefix}/${row.original.namespace}/${row.original.name}`}
-          className={
-            options?.className ?? "font-medium text-primary hover:underline"
-          }
-        >
-          {row.original.name}
-        </Link>
-      ),
-  };
-}
-
-/**
- * Creates a name column without link (just displays the name)
- */
-export function createSimpleNameColumn<
-  T extends { name: string },
->(): ColumnDef<T> {
+export function createNameColumn<
+  T extends { name: string; namespace?: string | null },
+>(kind: ResourceKind): ColumnDef<T> {
   return {
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
-      <span className="font-medium text-primary">{row.original.name}</span>
+      <ResourceRef
+        kind={kind}
+        name={row.original.name}
+        namespace={row.original.namespace}
+        showKind={false}
+      />
     ),
   };
 }
@@ -105,6 +89,9 @@ export function createNamespaceColumn<
   return {
     accessorKey: "namespace",
     header: "Namespace",
+    cell: ({ row }) => (
+      <span className="font-mono text-fg-mut">{row.original.namespace}</span>
+    ),
   };
 }
 
@@ -116,7 +103,11 @@ export function createAgeColumn<T extends WithCreatedAt>(): ColumnDef<T> {
   return {
     id: "age",
     header: "Age",
-    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
+    cell: ({ row }) => (
+      <span className="text-fg-fnt">
+        <RealtimeAge timestamp={row.original.createdAt} />
+      </span>
+    ),
   };
 }
 
@@ -131,13 +122,17 @@ export function createTimeAgoColumn<T>(
   return {
     id: header.toLowerCase().replace(/\s+/g, "-"),
     header,
-    cell: ({ row }) => <RealtimeAge timestamp={accessor(row.original)} />,
+    cell: ({ row }) => (
+      <span className="text-fg-fnt">
+        <RealtimeAge timestamp={accessor(row.original)} />
+      </span>
+    ),
   };
 }
 
 /**
- * Creates a CPU usage column with MetricBadge component
- * Uses smart percentage: limit > request > no percentage
+ * Creates a CPU usage column: the number with a dimmed unit, plus an
+ * inline bar when the container declares a limit.
  */
 export function createCpuColumn<
   T extends WithCpuUsage & Partial<WithCpuLimits>,
@@ -154,15 +149,15 @@ export function createCpuColumn<
         ? parseCPU(row.original.cpuLimits)
         : null;
       return (
-        <MetricBadge used={used} request={request} limit={limit} type="cpu" />
+        <MetricValue used={used} request={request} limit={limit} type="cpu" />
       );
     },
   };
 }
 
 /**
- * Creates a Memory usage column with MetricBadge component
- * Uses smart percentage: limit > request > no percentage
+ * Creates a Memory usage column: the number with a dimmed unit, plus an
+ * inline bar when the container declares a limit.
  */
 export function createMemoryColumn<
   T extends WithMemoryUsage & Partial<WithMemoryLimits>,
@@ -179,7 +174,7 @@ export function createMemoryColumn<
         ? parseMemory(row.original.memoryLimits)
         : null;
       return (
-        <MetricBadge
+        <MetricValue
           used={used}
           request={request}
           limit={limit}
@@ -187,6 +182,63 @@ export function createMemoryColumn<
         />
       );
     },
+  };
+}
+
+/** Kubernetes prints the short form; the long one is what people mean. */
+const ACCESS_MODE_NAME: Record<string, string> = {
+  RWO: "ReadWriteOnce",
+  ROX: "ReadOnlyMany",
+  RWX: "ReadWriteMany",
+  RWOP: "ReadWriteOncePod",
+};
+
+/**
+ * Access modes, as text.
+ *
+ * A mode is a fixed property of the volume, not a state it is in, so it gets
+ * no pill — the abbreviations are already the shortest form there is.
+ */
+export function createAccessModesColumn<
+  T extends { accessModes: string[] },
+>(): ColumnDef<T> {
+  return {
+    accessorKey: "accessModes",
+    header: "Access Modes",
+    cell: ({ row }) => {
+      const modes = row.original.accessModes;
+      if (modes.length === 0) return <span className="text-fg-fnt">—</span>;
+      return (
+        <Tooltip>
+          <TooltipTrigger className="font-mono text-fg-mid">
+            {modes.join(" ")}
+          </TooltipTrigger>
+          <TooltipContent>
+            {modes.map((mode) => (
+              <div key={mode} className="text-xs">
+                {ACCESS_MODE_NAME[mode] ?? mode}
+              </div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      );
+    },
+  };
+}
+
+/** Declared storage size, with the unit dimmed like every other quantity. */
+export function createCapacityColumn<
+  T extends { capacity?: string | null },
+>(): ColumnDef<T> {
+  return {
+    accessorKey: "capacity",
+    header: "Capacity",
+    cell: ({ row }) =>
+      row.original.capacity ? (
+        <UnitValue value={row.original.capacity} />
+      ) : (
+        <span className="text-fg-fnt">—</span>
+      ),
   };
 }
 
@@ -222,7 +274,9 @@ export function createReplicasColumn<
       const { ready, desired } = row.original.replicas;
       const isHealthy = ready === desired;
       return (
-        <span className={isHealthy ? "text-green-500" : "text-yellow-500"}>
+        <span
+          className={cn("font-mono", isHealthy ? "text-fg-mid" : "text-warn")}
+        >
           {ready}/{desired}
         </span>
       );
@@ -231,7 +285,11 @@ export function createReplicasColumn<
 }
 
 /**
- * Creates a labels column showing badges
+ * Labels, as `key=value` text.
+ *
+ * A label is arbitrary user data, never a state, so pilling it put an
+ * outlined box around every `app=nginx` in the table and made the column
+ * heavier than the resource name beside it.
  */
 export function createLabelsColumn<T extends WithLabels>(options?: {
   maxDisplay?: number;
@@ -242,27 +300,28 @@ export function createLabelsColumn<T extends WithLabels>(options?: {
     header: "Labels",
     cell: ({ row }) => {
       const entries = Object.entries(row.original.labels);
+      if (entries.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
-        <div className="flex flex-wrap gap-1">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
           {entries.slice(0, maxDisplay).map(([key, value]) => (
-            <Badge key={key} variant="outline" className="text-xs">
-              {key}={value}
-            </Badge>
+            <span key={key} className="font-mono text-fg-mut">
+              {key}
+              <span className="text-fg-fnt">=</span>
+              {value}
+            </span>
           ))}
           {entries.length > maxDisplay && (
-            <Badge variant="secondary" className="text-xs">
+            <span className="text-fg-fnt">
               +{entries.length - maxDisplay} more
-            </Badge>
+            </span>
           )}
-        </div>
+        </span>
       );
     },
   };
 }
 
-/**
- * Creates a data keys column for ConfigMaps/Secrets
- */
+/** Data keys for ConfigMaps/Secrets. Identifiers, so mono and unboxed. */
 export function createDataKeysColumn<
   T extends { dataKeys?: string[] },
 >(options?: { maxDisplay?: number }): ColumnDef<T> {
@@ -272,19 +331,20 @@ export function createDataKeysColumn<
     header: "Keys",
     cell: ({ row }) => {
       const keys = row.original.dataKeys ?? [];
+      if (keys.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
-        <div className="flex flex-wrap gap-1">
-          {keys.slice(0, maxDisplay).map((key, i) => (
-            <Badge key={i} variant="secondary" className="text-xs">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+          {keys.slice(0, maxDisplay).map((key) => (
+            <span key={key} className="font-mono text-fg-mut">
               {key}
-            </Badge>
+            </span>
           ))}
           {keys.length > maxDisplay && (
-            <Badge variant="outline" className="text-xs">
+            <span className="text-fg-fnt">
               +{keys.length - maxDisplay} more
-            </Badge>
+            </span>
           )}
-        </div>
+        </span>
       );
     },
   };
@@ -299,7 +359,9 @@ export function createTypeBadgeColumn<T extends { type?: string }>(options?: {
   return {
     id: "type",
     header: options?.header ?? "Type",
-    cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge>,
+    cell: ({ row }) => (
+      <span className="text-fg-mid">{row.original.type ?? "-"}</span>
+    ),
   };
 }
 
@@ -354,9 +416,7 @@ export function createActionsColumn<T extends BaseResource>(
               <DropdownMenuItem
                 key={index}
                 className={
-                  action.variant === "destructive"
-                    ? "text-destructive"
-                    : undefined
+                  action.variant === "destructive" ? "text-err" : undefined
                 }
                 onClick={() => action.onClick?.(row.original)}
               >
@@ -394,45 +454,4 @@ export function createStandardActions<T extends BaseResource>(
       variant: "destructive",
     },
   ];
-}
-
-/**
- * Builds a complete column set for a resource list
- */
-export function buildResourceColumns<T extends BaseResource & WithCreatedAt>(
-  config: {
-    linkPrefix: string;
-    includeNamespace?: boolean;
-    includeCpu?: boolean;
-    includeMemory?: boolean;
-    customColumns?: ColumnDef<T>[];
-    actions?: (setDeleteTarget: (item: T) => void) => ActionMenuItem<T>[];
-  },
-  setDeleteTarget?: (item: T) => void
-): ColumnDef<T>[] {
-  const columns: ColumnDef<T>[] = [createNameColumn<T>(config.linkPrefix)];
-
-  if (config.includeNamespace !== false) {
-    columns.push(createNamespaceColumn<T>());
-  }
-
-  if (config.includeCpu) {
-    columns.push(createCpuColumn<T & WithCpuUsage>() as ColumnDef<T>);
-  }
-
-  if (config.includeMemory) {
-    columns.push(createMemoryColumn<T & WithMemoryUsage>() as ColumnDef<T>);
-  }
-
-  if (config.customColumns) {
-    columns.push(...config.customColumns);
-  }
-
-  columns.push(createAgeColumn<T>());
-
-  if (config.actions && setDeleteTarget) {
-    columns.push(createActionsColumn<T>(config.actions, setDeleteTarget));
-  }
-
-  return columns;
 }

@@ -1,79 +1,162 @@
-import { ReactNode, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, FileCode, Box, Link as LinkIcon } from "lucide-react";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { Activity, Info, ListTree, Tag, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { YamlEditor } from "@/components/yaml/YamlEditor";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useToast } from "@/components/ui/use-toast";
+import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { RealtimeAge } from "@/components/ui/realtime";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import { useClusterStore } from "@/stores/clusterStore";
+import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { deliveryOf } from "@/lib/delivery";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 
-// Component to render spec/status as a tree
-function JsonTreeViewer({
-  data,
-  depth = 0,
+/**
+ * A custom resource is whatever its author decided it is, so nothing on this
+ * page may assume a shape. Every value is rendered from its JSON type alone:
+ * leaves become one wrapping row, containers announce their size and nest
+ * one hairline deeper. Indentation stops growing after six levels — a deeply
+ * nested operator spec would otherwise push its own values off the right
+ * edge, and a horizontal scrollbar hides exactly the end of the string the
+ * reader came for.
+ */
+const MAX_INDENT_LEVEL = 6;
+
+function isContainer(value: unknown): boolean {
+  return (
+    (Array.isArray(value) && value.length > 0) ||
+    (typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.keys(value as object).length > 0)
+  );
+}
+
+function JsonLeaf({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-fg-fnt">null</span>;
+  }
+  if (Array.isArray(value)) {
+    return <span className="text-fg-fnt">empty list</span>;
+  }
+  if (typeof value === "object") {
+    return <span className="text-fg-fnt">empty object</span>;
+  }
+  return <span className="break-words font-mono text-fg">{String(value)}</span>;
+}
+
+function JsonEntries({ data, depth }: { data: unknown; depth: number }) {
+  const entries: [string, unknown][] = Array.isArray(data)
+    ? data.map((item, index) => [`${index}`, item])
+    : Object.entries(data as Record<string, unknown>);
+
+  return (
+    <div className={depth > 0 ? "border-l border-hair pl-2.5" : undefined}>
+      {entries.map(([key, value]) => (
+        <JsonRow key={key} label={key} value={value} depth={depth} />
+      ))}
+    </div>
+  );
+}
+
+function JsonRow({
+  label,
+  value,
+  depth,
 }: {
-  data: unknown;
-  depth?: number;
-}): ReactNode {
-  if (data === null || data === undefined) {
-    return <span className="text-muted-foreground">null</span>;
-  }
-
-  if (typeof data === "boolean") {
+  label: string;
+  value: unknown;
+  depth: number;
+}) {
+  if (!isContainer(value)) {
     return (
-      <Badge variant={data ? "default" : "secondary"}>{String(data)}</Badge>
-    );
-  }
-
-  if (typeof data === "number" || typeof data === "string") {
-    return <span className="font-mono text-sm">{String(data)}</span>;
-  }
-
-  if (Array.isArray(data)) {
-    if (data.length === 0) {
-      return <span className="text-muted-foreground">[]</span>;
-    }
-    return (
-      <div className={depth > 0 ? "ml-4 border-l pl-4" : ""}>
-        {data.map((item, index) => (
-          <div key={index} className="py-1">
-            <span className="text-muted-foreground mr-2">[{index}]</span>
-            <JsonTreeViewer data={item} depth={depth + 1} />
-          </div>
-        ))}
+      <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
+        <span className="break-words text-[11px] text-fg-fnt">{label}</span>
+        <span className="min-w-0 text-xs">
+          <JsonLeaf value={value} />
+        </span>
       </div>
     );
   }
 
-  if (typeof data === "object") {
-    const entries = Object.entries(data as Record<string, unknown>);
-    if (entries.length === 0) {
-      return <span className="text-muted-foreground">{"{}"}</span>;
-    }
-    return (
-      <div className={depth > 0 ? "ml-4 border-l pl-4" : ""}>
-        {entries.map(([key, value]) => (
-          <div key={key} className="py-1">
-            <span className="font-medium text-primary">{key}:</span>{" "}
-            <JsonTreeViewer data={value} depth={depth + 1} />
-          </div>
-        ))}
+  const size = Array.isArray(value)
+    ? `${value.length} item${value.length === 1 ? "" : "s"}`
+    : `${Object.keys(value as object).length} field${
+        Object.keys(value as object).length === 1 ? "" : "s"
+      }`;
+
+  return (
+    <div className="border-b border-hair py-1 last:border-b-0">
+      <div className="flex items-baseline gap-2">
+        <span className="break-words text-[11px] font-medium text-fg-mid">
+          {label}
+        </span>
+        <span className="text-[11px] text-fg-fnt">{size}</span>
       </div>
+      <div className="mt-0.5">
+        <JsonEntries
+          data={value}
+          depth={Math.min(depth + 1, MAX_INDENT_LEVEL)}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The root of a spec or status block. */
+function JsonTree({ data }: { data: unknown }) {
+  if (!isContainer(data)) {
+    return (
+      <p className="py-1 text-xs">
+        <JsonLeaf value={data} />
+      </p>
     );
   }
+  return <JsonEntries data={data} depth={0} />;
+}
 
-  return <span>{String(data)}</span>;
+/**
+ * Custom resources report health in whatever field their author picked.
+ * These four cover cert-manager, Flux, Argo and most operators; anything
+ * else simply gets no badge rather than a wrong one.
+ */
+function statusOf(resource: CustomResourceDetailInfo): string | null {
+  if (!resource.status || typeof resource.status !== "object") return null;
+  const status = resource.status as Record<string, unknown>;
+
+  if (typeof status.phase === "string") return status.phase;
+  if (typeof status.state === "string") return status.state;
+
+  if (Array.isArray(status.conditions)) {
+    const ready = status.conditions.find(
+      (c: unknown) =>
+        typeof c === "object" &&
+        c !== null &&
+        (c as Record<string, unknown>).type === "Ready"
+    ) as Record<string, unknown> | undefined;
+    if (ready) return ready.status === "True" ? "Ready" : "NotReady";
+  }
+
+  if (typeof status.ready === "boolean")
+    return status.ready ? "Ready" : "NotReady";
+
+  return null;
 }
 
 export function CustomResourceDetail() {
@@ -86,36 +169,33 @@ export function CustomResourceDetail() {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const copyToClipboard = useCopyToClipboard();
   const [activeTab, setActiveTab] = useState("overview");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Decode CRD name from URL
   const decodedCrdName = crdName ? decodeURIComponent(crdName) : "";
 
   const goBack = () => navigate(-1);
 
-  // Fetch CRD info to get kind and other metadata
   const { data: crdInfo } = useQuery({
     queryKey: ["crd", decodedCrdName],
     queryFn: () => commands.getCrd(decodedCrdName),
     enabled: isConnected && !!decodedCrdName,
   });
 
-  // Fetch the custom resource
   const {
     data: resource,
     isLoading,
     error,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["custom-resource", decodedCrdName, namespace, name],
     queryFn: () =>
       commands.getCustomResource(decodedCrdName, name || "", namespace || null),
     enabled: isConnected && !!decodedCrdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
-    refetchInterval: REFRESH_INTERVALS.resourceDetail,
+    refresh: "resourceDetail",
   });
 
-  // Fetch YAML
   const { data: yaml = "" } = useQuery({
     queryKey: ["custom-resource-yaml", decodedCrdName, namespace, name],
     queryFn: () =>
@@ -128,7 +208,6 @@ export function CustomResourceDetail() {
     staleTime: STALE_TIMES.resourceDetail,
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: () =>
       commands.deleteCustomResource(
@@ -155,183 +234,83 @@ export function CustomResourceDetail() {
     },
   });
 
-  const handleCopyYaml = () => {
-    navigator.clipboard.writeText(yaml);
-    toast({
-      title: "Copied to clipboard",
-      description: "YAML has been copied to clipboard.",
-    });
-  };
+  const status = resource ? statusOf(resource) : null;
+  const owners = resource?.ownerReferences ?? [];
+  const finalizers = resource?.finalizers ?? [];
 
-  // Determine status from resource
-  const statusValue = resource ? getStatusFromResource(resource) : null;
-  const statusVariant = getStatusVariant(statusValue);
+  const facts: KeyValue[] = [
+    { label: "API version", value: resource?.apiVersion ?? "—", mono: true },
+    { label: "Kind", value: resource?.kind ?? "—", mono: true },
+    { label: "UID", value: resource?.uid ?? "—", mono: true },
+    ...(resource?.resourceVersion
+      ? [
+          {
+            label: "Resource version",
+            value: resource.resourceVersion,
+            mono: true,
+          },
+        ]
+      : []),
+    {
+      // The CRD is what says this object's shape, and it has a page of its
+      // own. The label already says what it is, so the reference does not.
+      label: "Definition",
+      value: (
+        <ResourceRef
+          kind={ResourceType.CustomResourceDefinition}
+          name={decodedCrdName}
+          showKind={false}
+        />
+      ),
+    },
+  ];
 
-  // Build tabs
-  const tabs = [
+  const ownerItems: KeyValue[] = owners.map((owner) => ({
+    label: `${owner.kind}${owner.controller ? " · controller" : ""}`,
+    // An owner is often another custom resource, which has no route of its
+    // own. Linking on a guessed plural would hand the user a dead end.
+    value: (
+      <ResourceRef
+        kind={owner.kind}
+        name={owner.name}
+        namespace={resource?.namespace}
+        showKind={false}
+      />
+    ),
+  }));
+
+  const deliveryQuery = crdInfo
+    ? deliveryOf(crdInfo.group, crdInfo.kind, resource)
+    : null;
+
+  const tabs: DetailTab[] = [
     {
       id: "overview",
       label: "Overview",
-      content: resource && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Basic Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileCode className="h-4 w-4" />
-                  Resource Info
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">API Version</span>
-                  <span className="font-mono">{resource.apiVersion}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Kind</span>
-                  <span>{resource.kind}</span>
-                </div>
-                {resource.namespace && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Namespace</span>
-                    <span>{resource.namespace}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">UID</span>
-                  <span className="font-mono text-xs truncate max-w-[200px]">
-                    {resource.uid}
-                  </span>
-                </div>
-                {resource.resourceVersion && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Resource Version
-                    </span>
-                    <span className="font-mono">
-                      {resource.resourceVersion}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Created</span>
-                  <RealtimeAge timestamp={resource.createdAt} fallback="-" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Owner References */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <LinkIcon className="h-4 w-4" />
-                  Owner References
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {resource.ownerReferences.length > 0 ? (
-                  <div className="space-y-2">
-                    {resource.ownerReferences.map((owner, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between text-sm p-2 rounded bg-muted/50"
-                      >
-                        <div>
-                          <span className="font-medium">{owner.name}</span>
-                          <span className="text-muted-foreground ml-2">
-                            ({owner.kind})
-                          </span>
-                        </div>
-                        {owner.controller && (
-                          <Badge variant="outline" className="text-xs">
-                            Controller
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No owner references
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Finalizers */}
-          {resource.finalizers.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Finalizers</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {resource.finalizers.map((finalizer, index) => (
-                    <Badge
-                      key={index}
-                      variant="outline"
-                      className="font-mono text-xs"
-                    >
-                      {finalizer}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Labels & Annotations */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <LabelsDisplay labels={resource.labels || {}} title="Labels" />
-            <LabelsDisplay
-              labels={resource.annotations || {}}
-              title="Annotations"
-            />
-          </div>
-
-          {/* CRD Link */}
-          {crdInfo && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Custom Resource Definition
-                    </p>
-                    <p className="font-medium">{decodedCrdName}</p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      to={`/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(decodedCrdName)}`}
-                    >
-                      View CRD
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection title="Object" items={facts} className="max-w-lg" />
       ),
     },
     {
       id: "spec",
       label: "Spec",
+      glyph: viewGlyph(ListTree),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Spec</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {resource ? (
-              <JsonTreeViewer data={resource.spec} />
-            ) : (
-              <p className="text-muted-foreground">Loading...</p>
-            )}
-          </CardContent>
-        </Card>
+        <Section>
+          <SectionHeader title="Spec" />
+          {/* The guard is on the object, not on `spec` — this is "the read
+              has not landed", which on a CRD the reader has never seen
+              before is indistinguishable from "this kind has no spec". */}
+          {resource ? (
+            <JsonTree data={resource.spec} />
+          ) : (
+            <p className="text-xs text-fg-fnt">
+              This custom resource has not been read yet — its spec is whatever
+              the CRD defines, and nothing here has seen it.
+            </p>
+          )}
+        </Section>
       ),
     },
     ...(resource?.status != null
@@ -339,37 +318,64 @@ export function CustomResourceDetail() {
           {
             id: "status",
             label: "Status",
+            glyph: viewGlyph(Activity),
             content: (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <JsonTreeViewer data={resource.status} />
-                </CardContent>
-              </Card>
+              <Section>
+                <SectionHeader title="Status" count={status ?? undefined} />
+                <JsonTree data={resource.status} />
+              </Section>
             ),
           },
         ]
       : []),
     {
-      id: "yaml",
-      label: "YAML",
+      id: "metadata",
+      label: "Metadata",
+      glyph: viewGlyph(Tag),
       content: (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">YAML Definition</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleCopyYaml}>
-              Copy
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <YamlEditor value={yaml} readOnly height="500px" />
-          </CardContent>
-        </Card>
+        <>
+          <KeyValueSection
+            title="Owned by"
+            count={owners.length || undefined}
+            items={ownerItems}
+            emptyMessage="Nothing owns this object — it was created directly."
+          />
+          <KeyValueSection
+            title="Finalizers"
+            count={finalizers.length || undefined}
+            items={finalizers.map((finalizer) => ({
+              label: finalizer,
+              value: "blocks deletion until cleared",
+              mono: false,
+            }))}
+            emptyMessage="No finalizers"
+          />
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(resource?.labels ?? {}).length}
+            items={recordToKeyValues(resource?.labels ?? {})}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(resource?.annotations ?? {}).length}
+            items={recordToKeyValues(resource?.annotations ?? {})}
+            emptyMessage="No annotations"
+          />
+        </>
       ),
     },
+    yamlTab({
+      title: `${resource?.kind || "Resource"} YAML`,
+      yaml,
+      onCopy: () => copyToClipboard(yaml),
+    }),
   ];
+
+  // The group comes off the CRD rather than a lookup table, which is the whole
+  // reason a custom resource can be asked at all: an `Application` is itself
+  // delivered on an app-of-apps cluster, and nothing here has heard of one.
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   return (
     <>
@@ -377,41 +383,44 @@ export function CustomResourceDetail() {
         resource={resource}
         isLoading={isLoading}
         error={error}
+        delivery={deliveryQuery}
         resourceKind={crdInfo?.kind || "Resource"}
-        title={resource?.name || ""}
+        listUrl={`/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(
+          decodedCrdName
+        )}`}
+        listLabel={crdInfo?.kind || decodedCrdName}
+        title={resource?.name || name || ""}
         namespace={resource?.namespace ?? undefined}
-        statusBadge={
-          statusValue && <Badge variant={statusVariant}>{statusValue}</Badge>
-        }
+        createdAt={resource?.createdAt}
+        statusBadge={status && <StatusBadge status={status} />}
         badges={
           resource && (
-            <span className="text-muted-foreground">{resource.kind}</span>
+            <span className="font-mono text-[11px] text-fg-fnt">
+              {resource.apiVersion}
+            </span>
           )
         }
-        icon={<Box className="h-8 w-8 text-muted-foreground" />}
         onBack={goBack}
         actions={
-          <Button
-            variant="destructive"
-            size="sm"
+          <InterceptedAction
+            intercept={intercept("Delete")}
+            label="Delete"
+            icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
-            disabled={deleteMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+            busy={deleteMutation.isPending}
+            danger
+          />
         }
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title={`Delete ${crdInfo?.kind || "Resource"}?`}
-        description={`Are you sure you want to delete "${name}"? This action cannot be undone.`}
+        title={`Delete ${crdInfo?.kind || "resource"}?`}
+        description={`"${name}" will be removed from the cluster. This cannot be undone.`}
         confirmLabel="Delete"
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
@@ -422,84 +431,4 @@ export function CustomResourceDetail() {
       />
     </>
   );
-}
-
-// Helper to extract status from resource
-function getStatusFromResource(
-  resource: CustomResourceDetailInfo
-): string | null {
-  if (!resource.status || typeof resource.status !== "object") {
-    return null;
-  }
-
-  const status = resource.status as Record<string, unknown>;
-
-  // Common status fields
-  if (typeof status.phase === "string") {
-    return status.phase;
-  }
-
-  if (typeof status.state === "string") {
-    return status.state;
-  }
-
-  // Check conditions for Ready condition
-  if (Array.isArray(status.conditions)) {
-    const readyCondition = status.conditions.find(
-      (c: unknown) =>
-        typeof c === "object" &&
-        c !== null &&
-        (c as Record<string, unknown>).type === "Ready"
-    );
-    if (readyCondition) {
-      const cond = readyCondition as Record<string, unknown>;
-      return cond.status === "True" ? "Ready" : "NotReady";
-    }
-  }
-
-  // Cert-manager specific
-  if (typeof status.ready === "boolean") {
-    return status.ready ? "Ready" : "NotReady";
-  }
-
-  return null;
-}
-
-// Helper to get badge variant based on status
-function getStatusVariant(
-  status: string | null
-): "default" | "secondary" | "destructive" | "outline" {
-  if (!status) return "outline";
-
-  const lowerStatus = status.toLowerCase();
-
-  if (
-    lowerStatus === "ready" ||
-    lowerStatus === "running" ||
-    lowerStatus === "active" ||
-    lowerStatus === "healthy" ||
-    lowerStatus === "true" ||
-    lowerStatus === "succeeded"
-  ) {
-    return "default";
-  }
-
-  if (
-    lowerStatus === "notready" ||
-    lowerStatus === "failed" ||
-    lowerStatus === "error" ||
-    lowerStatus === "false"
-  ) {
-    return "destructive";
-  }
-
-  if (
-    lowerStatus === "pending" ||
-    lowerStatus === "progressing" ||
-    lowerStatus === "unknown"
-  ) {
-    return "secondary";
-  }
-
-  return "outline";
 }

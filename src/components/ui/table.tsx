@@ -1,6 +1,11 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * The table sits directly on the canvas. No wrapper border, no rounding,
+ * no zebra: structure comes from alignment and from one hairline per row.
+ * A box around a list of rows is the card pattern in disguise.
+ */
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
@@ -8,7 +13,7 @@ const Table = React.forwardRef<
   <div className="relative w-full overflow-auto">
     <table
       ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
+      className={cn("w-full caption-bottom border-collapse text-xs", className)}
       {...props}
     />
   </div>
@@ -19,7 +24,7 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  <thead ref={ref} className={className} {...props} />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -29,7 +34,14 @@ const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tbody
     ref={ref}
-    className={cn("[&_tr:last-child]:border-0", className)}
+    // Hover belongs to data rows only — a header or a group caption that
+    // lights up on mouse-over reads as clickable when it is not. Those
+    // rows opt out with `data-quiet`; the attribute selector outranks the
+    // plain one, so the opt-out wins regardless of utility order.
+    className={cn(
+      "[&>tr:hover]:bg-hover [&>tr[data-quiet]:hover]:bg-transparent [&>tr:last-child]:border-0",
+      className
+    )}
     {...props}
   />
 ));
@@ -42,7 +54,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+      "border-t border-hair font-medium [&>tr]:last:border-b-0",
       className
     )}
     {...props}
@@ -57,7 +69,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      "border-b border-hair transition-colors data-[state=selected]:bg-sel",
       className
     )}
     {...props}
@@ -71,8 +83,12 @@ const TableHead = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <th
     ref={ref}
+    // The header is a label, not a band: 11px at the faintest foreground,
+    // sentence case. Uppercase + tracking made it shout over the data.
+    // `whitespace-nowrap` stops two-word labels ("CPU Usage") from
+    // wrapping and doubling the header's height.
     className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+      "whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt [&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props}
@@ -86,7 +102,10 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+    className={cn(
+      "px-2.5 py-1 align-middle [&:has([role=checkbox])]:pr-0",
+      className
+    )}
     {...props}
   />
 ));
@@ -98,7 +117,7 @@ const TableCaption = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn("mt-4 text-sm text-muted-foreground", className)}
+    className={cn("mt-4 text-xs text-fg-mut", className)}
     {...props}
   />
 ));

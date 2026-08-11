@@ -32,7 +32,7 @@
     "**/target": true,
     "**/node_modules": true,
     "**/dist": true,
-    "**/package-lock.json": true,
+    "**/bun.lock": true,
     "**/Cargo.lock": true,
     "**/src/generated": true
   }

@@ -3,7 +3,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { StatefulSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceListUrl } from "@/lib/navigation-utils";
 import { matchStatefulSetPods, type ResourceMetrics } from "@/lib/metrics";
 import {
   createNameColumn,
@@ -18,9 +17,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 type StatefulSetInfoWithMetrics = StatefulSetInfo & ResourceMetrics;
 
 const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
-  createNameColumn<StatefulSetInfoWithMetrics>(
-    getResourceListUrl(ResourceType.StatefulSet)
-  ),
+  createNameColumn<StatefulSetInfoWithMetrics>(ResourceType.StatefulSet),
   createNamespaceColumn<StatefulSetInfoWithMetrics>(),
   createCpuColumn<StatefulSetInfoWithMetrics>(),
   createMemoryColumn<StatefulSetInfoWithMetrics>(),

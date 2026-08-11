@@ -1,19 +1,20 @@
 import { useCallback, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { RouteLink } from "@/components/ui/route-link";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useClusterStore } from "@/stores/clusterStore";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { usePlugin } from "@/lib/crd-plugins";
-import { getKindSpecificColumns } from "@/lib/crd-plugins/plugins";
+import { statusRole } from "@/lib/status-role";
+import { useCrdView } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
@@ -45,8 +46,8 @@ export function CustomResourceList({
 }: CustomResourceListProps) {
   const { currentNamespace } = useClusterStore();
 
-  // Get plugin for this CRD (if any)
-  const plugin = usePlugin(crdGroup, crdKind, crdPlural);
+  // How the vendor that installed this CRD draws it, if the app knows one.
+  const crdView = useCrdView(crdGroup, crdKind);
 
   const navigate = useNavigate();
   const namespace = scope === "Namespaced" ? currentNamespace : null;
@@ -86,21 +87,23 @@ export function CustomResourceList({
     [navigate, getDetailPath]
   );
 
-  // Build columns from printer columns and plugin
+  // Build columns from the vendor's view, or from the CRD's printer columns
   const baseColumns = useMemo<ColumnDef<CustomResourceListItem>[]>(() => {
     const cols: ColumnDef<CustomResourceListItem>[] = [];
 
-    // Name column (always first) - use simple text since row is clickable
+    // The name is the row's identity and where a person aims, so it carries
+    // the real anchor. An instance's path is built from the CRD, not from
+    // kind and name, which is why this is not a ResourceRef.
     cols.push({
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <Link
+        <RouteLink
           to={getDetailPath(row.original)}
-          className="font-medium text-primary hover:underline"
+          className="font-mono text-info hover:underline"
         >
           {row.original.name}
-        </Link>
+        </RouteLink>
       ),
     });
 
@@ -109,14 +112,10 @@ export function CustomResourceList({
       cols.push(createNamespaceColumn<CustomResourceListItem>());
     }
 
-    // Try to get plugin-specific columns first
-    const pluginColumns = plugin
-      ? getKindSpecificColumns(plugin.id, crdKind) || plugin.columns
-      : null;
+    const vendorColumns = crdView?.columnsFor(crdKind);
 
-    if (pluginColumns && pluginColumns.length > 0) {
-      // Use plugin columns
-      for (const pc of pluginColumns) {
+    if (vendorColumns && vendorColumns.length > 0) {
+      for (const pc of vendorColumns) {
         cols.push({
           id: pc.id,
           header: pc.header,
@@ -125,13 +124,12 @@ export function CustomResourceList({
             if (pc.cell) {
               return pc.cell(value);
             }
-            // Default formatting with status config from plugin
-            if (plugin?.status && typeof value === "string") {
-              const variant = plugin.status.getVariant(value);
-              return <Badge variant={variant}>{value}</Badge>;
+            // Default formatting with the status config the vendor supplied
+            if (crdView && typeof value === "string") {
+              return <StatusBadge status={value} />;
             }
             if (value === null || value === undefined) {
-              return <span className="text-muted-foreground">-</span>;
+              return <span className="text-fg-fnt">—</span>;
             }
             return String(value);
           },
@@ -158,13 +156,13 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, plugin, getDetailPath]);
+  }, [crdKind, scope, printerColumns, crdView, getDetailPath]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
   // setQueryData; if the watch fails (typically because the kubeconfig
   // user lacks the `watch` verb on the CRD), the toast fires and
-  // refetchInterval falls back to its default 2s.
+  // the list falls back to its default poll rate.
   const queryKey = useMemo(
     () => ["custom-resources", crdName, namespace ?? "all"] as const,
     [crdName, namespace]
@@ -221,6 +219,12 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
+      // The generic fallback ("No resources of this type…") is the one
+      // message a CRD list must not show: the whole question a reader
+      // opens it with is whether this kind exists on the cluster at all.
+      emptyMessage={`The CRD is installed, but no ${crdKind} has been created${
+        namespace ? ` in ${namespace}` : ""
+      } yet.`}
       deleteConfig={{
         mutationFn: (item) =>
           commands.deleteCustomResource(
@@ -232,7 +236,8 @@ export function CustomResourceList({
         resourceType: crdKind,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? REFRESH_INTERVALS.resourceList : false}
+      refresh={watchFailed ? "resourceList" : false}
+      live={!watchFailed}
       searchKey="name"
       searchPlaceholder={`Search ${crdKind}...`}
       embedded={embedded}
@@ -277,7 +282,7 @@ function formatColumnValue(
   columnType: string
 ): React.ReactNode {
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground">-</span>;
+    return <span className="text-fg-fnt">—</span>;
   }
 
   switch (columnType) {
@@ -296,40 +301,26 @@ function formatColumnValue(
       );
 
     case "boolean":
-      return (
-        <Badge variant={value ? "default" : "secondary"}>{String(value)}</Badge>
-      );
+      // A CRD's booleans are settings, not lifecycle — `true` gets no pill.
+      return <span className="font-mono text-fg-mid">{String(value)}</span>;
 
     case "string":
     default:
-      // Check if it looks like a status
-      if (typeof value === "string") {
-        const lowerValue = value.toLowerCase();
-        if (
-          lowerValue === "true" ||
-          lowerValue === "ready" ||
-          lowerValue === "running" ||
-          lowerValue === "active" ||
-          lowerValue === "healthy"
-        ) {
-          return <Badge variant="default">{value}</Badge>;
-        }
-        if (
-          lowerValue === "false" ||
-          lowerValue === "notready" ||
-          lowerValue === "failed" ||
-          lowerValue === "error"
-        ) {
-          return <Badge variant="destructive">{value}</Badge>;
-        }
-        if (
-          lowerValue === "pending" ||
-          lowerValue === "progressing" ||
-          lowerValue === "unknown"
-        ) {
-          return <Badge variant="secondary">{value}</Badge>;
-        }
+      // A printer column whose value names a state the app already knows how
+      // to colour is the one case that earns a badge. The vocabulary lives in
+      // `statusRole`, so this no longer keeps a third copy of it.
+      if (typeof value === "string" && isKnownStatus(value)) {
+        return <StatusBadge status={value} />;
       }
-      return <span className="truncate max-w-[200px]">{String(value)}</span>;
+      return (
+        <span className="max-w-[200px] truncate text-fg-mid">
+          {String(value)}
+        </span>
+      );
   }
+}
+
+/** Only render a badge when the string is a state, not free text. */
+function isKnownStatus(value: string): boolean {
+  return statusRole(value) !== "neutral" || value.toLowerCase() === "unknown";
 }

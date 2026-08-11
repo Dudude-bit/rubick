@@ -1,28 +1,55 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NodeBadge } from "@/components/ui/node-badge";
 import { ColumnDef } from "@tanstack/react-table";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { MetricBadge } from "@/components/ui/metric-card";
+import { MetricValue } from "@/components/ui/metric-value";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo, useState } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { createNameColumn } from "@/components/resources/columns";
+import { SpotMark } from "@/components/resources/spot-mark";
+import type { RowGrouping } from "@/components/ui/row-grouping";
+import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
 import type { NodeInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { DrainDialog } from "@/components/resources/drain-dialog";
+
+/**
+ * Nodes, grouped by the pool the cloud says made them.
+ *
+ * On a managed cluster this is the difference between forty flat rows and
+ * three pools of known machines in known places, half of them disposable. On
+ * every other cluster `poolOf` returns null for every node, no group reaches
+ * the minimum, and the page is exactly the flat list it always was.
+ */
+const poolGrouping: RowGrouping<NodeInfo> = {
+  keyOf: poolOf,
+  caption: (pool, nodes) => {
+    const facts = poolFacts(nodes);
+    const spot = spotMark(facts);
+    return (
+      <span className="inline-flex items-baseline gap-2">
+        <span className="font-mono text-fg-mid">{pool}</span>
+        <span>{describePool(facts)}</span>
+        {spot && <SpotMark says={spot} />}
+      </span>
+    );
+  },
+};
 
 export function NodeList() {
   const { isConnected } = useClusterStore();
@@ -130,17 +157,11 @@ export function NodeList() {
     },
   });
 
+  const [draining, setDraining] = useState<string | null>(null);
+
   const columns: ColumnDef<NodeInfo>[] = useMemo(
     () => [
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row }) => (
-          <Link to={getResourceDetailUrl(ResourceType.Node, row.original.name)}>
-            <NodeBadge nodeName={row.original.name} />
-          </Link>
-        ),
-      },
+      createNameColumn<NodeInfo>(ResourceType.Node),
       {
         id: "status",
         header: "Status",
@@ -153,13 +174,13 @@ export function NodeList() {
         accessorKey: "roles",
         header: "Roles",
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {row.original.roles.map((role) => (
-              <Badge key={role} variant="outline" className="text-xs">
-                {role}
-              </Badge>
-            ))}
-          </div>
+          <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
+            {row.original.roles.length === 0 ? (
+              <span className="text-fg-fnt">—</span>
+            ) : (
+              row.original.roles.map((role) => <span key={role}>{role}</span>)
+            )}
+          </span>
         ),
       },
       {
@@ -173,7 +194,13 @@ export function NodeList() {
           const address = row.original.status.addresses.find(
             (a) => a.type === "InternalIP"
           );
-          return address?.address || "-";
+          return (
+            <CopyableAddress
+              value={address?.address}
+              label="Internal IP"
+              fallback="-"
+            />
+          );
         },
       },
       {
@@ -185,7 +212,7 @@ export function NodeList() {
             ? row.original.capacity.cpu
             : null;
           return (
-            <MetricBadge
+            <MetricValue
               used={metrics?.cpuMillicores ?? null}
               limit={capacity ? parseCPU(capacity) : null}
               type="cpu"
@@ -202,7 +229,7 @@ export function NodeList() {
             ? row.original.capacity.memory
             : null;
           return (
-            <MetricBadge
+            <MetricValue
               used={metrics?.memoryBytes ?? null}
               limit={capacity ? parseMemory(capacity) : null}
               type="memory"
@@ -245,30 +272,46 @@ export function NodeList() {
       {
         icon: AlertTriangle,
         label: "Drain",
-        onClick: (item) => drainMutation.mutate(item.name),
+        // Straight to the dialog rather than to the mutation: a drain is the
+        // one action here that can be refused by something the reader cannot
+        // see from this row.
+        onClick: (item) => setDraining(item.name),
         variant: "destructive",
       },
     ],
-    [navigate, cordonMutation, uncordonMutation, drainMutation]
+    [navigate, cordonMutation, uncordonMutation]
   );
 
   return (
-    <ResourceList<NodeInfo>
-      title="Nodes"
-      queryKey={queryKeys.resources(ResourceType.Node, null)}
-      getRowId={getResourceRowId}
-      queryFn={() => commands.listNodes(null)}
-      columns={columns}
-      quickActions={quickActions}
-      emptyStateLabel={toPlural(ResourceType.Node)}
-      staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? undefined : false}
-      headerContent={
-        nodeStatus?.status !== "available" ? (
-          <MetricsStatusBanner status={nodeStatus} />
-        ) : null
-      }
-      getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
-    />
+    <>
+      <ResourceList<NodeInfo>
+        title="Nodes"
+        queryKey={queryKeys.resources(ResourceType.Node, null)}
+        getRowId={getResourceRowId}
+        queryFn={() => commands.listNodes(null)}
+        columns={columns}
+        quickActions={quickActions}
+        grouping={poolGrouping}
+        emptyStateLabel={toPlural(ResourceType.Node)}
+        staleTime={STALE_TIMES.resourceList}
+        refresh={watchFailed ? undefined : false}
+        live={!watchFailed}
+        headerContent={
+          nodeStatus?.status !== "available" ? (
+            <MetricsStatusBanner status={nodeStatus} />
+          ) : null
+        }
+        getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
+      />
+      <DrainDialog
+        node={draining}
+        onOpenChange={(open) => !open && setDraining(null)}
+        busy={drainMutation.isPending}
+        onConfirm={(node) => {
+          setDraining(null);
+          drainMutation.mutate(node);
+        }}
+      />
+    </>
   );
 }

@@ -1,16 +1,13 @@
-import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Star } from "lucide-react";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ResourceRef } from "./ResourceRef";
 import { createResourceListPage } from "./createResourceListPage";
 
 const columns = (): ColumnDef<StorageClassInfo>[] => [
@@ -18,82 +15,69 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Layers className="h-4 w-4 text-muted-foreground" />
-        <Link
-          to={getResourceDetailUrl(
-            ResourceType.StorageClass,
-            row.original.name
-          )}
-          className="font-medium text-primary hover:underline"
-        >
-          {row.original.name}
-        </Link>
+      <span className="flex items-baseline gap-2">
+        <ResourceRef
+          kind={ResourceType.StorageClass}
+          name={row.original.name}
+          showKind={false}
+        />
+        {/* Which class a PVC gets when it names none is worth saying in
+         *  words: a gold star said it in colour and shape alone. */}
         {row.original.isDefault && (
-          <Tooltip>
-            <TooltipTrigger>
-              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-            </TooltipTrigger>
-            <TooltipContent>Default Storage Class</TooltipContent>
-          </Tooltip>
+          <span className="text-[11px] text-fg-fnt">default</span>
         )}
-      </div>
+      </span>
     ),
   },
   {
     accessorKey: "provisioner",
     header: "Provisioner",
     cell: ({ row }) => (
-      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-        {row.original.provisioner}
-      </code>
+      <span className="font-mono text-fg-mut">{row.original.provisioner}</span>
     ),
   },
   {
     accessorKey: "reclaimPolicy",
     header: "Reclaim Policy",
     cell: ({ row }) => (
-      <Badge variant="outline">{row.original.reclaimPolicy}</Badge>
+      <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
     ),
   },
   {
     accessorKey: "volumeBindingMode",
     header: "Binding Mode",
     cell: ({ row }) => (
-      <Badge variant="secondary">{row.original.volumeBindingMode}</Badge>
+      <span className="text-fg-mid">{row.original.volumeBindingMode}</span>
     ),
   },
   {
     accessorKey: "allowVolumeExpansion",
     header: "Expansion",
     cell: ({ row }) => (
-      <Badge
-        variant={row.original.allowVolumeExpansion ? "default" : "outline"}
-      >
-        {row.original.allowVolumeExpansion ? "Allowed" : "Disabled"}
-      </Badge>
+      <span className="text-fg-mid">
+        {row.original.allowVolumeExpansion ? "allowed" : "disabled"}
+      </span>
     ),
   },
   {
     accessorKey: "parameters",
     header: "Parameters",
     cell: ({ row }) => {
-      const params = row.original.parameters;
-      const paramCount = Object.keys(params).length;
-      if (paramCount === 0) return "-";
+      const params = Object.entries(row.original.parameters);
+      if (params.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
         <Tooltip>
-          <TooltipTrigger>
-            <Badge variant="outline">{paramCount} params</Badge>
+          <TooltipTrigger className="text-fg-mut">
+            {params.length} params
           </TooltipTrigger>
           <TooltipContent>
-            <div className="space-y-1">
-              {Object.entries(params).map(([key, value]) => (
-                <div key={key} className="text-xs">
-                  <span className="font-medium">{key}:</span> {value}
-                </div>
-              ))}
-            </div>
+            {params.map(([key, value]) => (
+              <div key={key} className="font-mono text-xs">
+                {key}
+                <span className="text-fg-fnt">=</span>
+                {value}
+              </div>
+            ))}
           </TooltipContent>
         </Tooltip>
       );

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getResourceDetailUrl, getResourceListUrl } from "./navigation-utils";
+import { getResourceDetailUrl } from "./navigation-utils";
 
 describe("getResourceDetailUrl", () => {
   it("includes the namespace for namespaced resources", () => {
@@ -37,14 +37,5 @@ describe("getResourceDetailUrl", () => {
     expect(getResourceDetailUrl("Pod", "my.pod", "default")).toBe(
       "/pods/default/my.pod"
     );
-  });
-});
-
-describe("getResourceListUrl", () => {
-  it("returns the plural list path", () => {
-    expect(getResourceListUrl("Pod")).toBe("/pods");
-    expect(getResourceListUrl("Deployment")).toBe("/deployments");
-    expect(getResourceListUrl("Service")).toBe("/services");
-    expect(getResourceListUrl("Node")).toBe("/nodes");
   });
 });

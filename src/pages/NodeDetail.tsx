@@ -1,38 +1,52 @@
-import { Badge } from "@/components/ui/badge";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { BadgeCheck, Bug, Info, Tag } from "lucide-react";
+
+import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Server, Cpu, HardDrive, MemoryStick, Bug } from "lucide-react";
+import { CopyableAddress } from "@/components/ui/copyable-value";
+import { MetricsStatusBanner } from "@/components/metrics";
+import { DebugNodeDialog } from "@/components/debug";
+import { yamlTab } from "@/components/resources/yaml-tab";
+import { connectionsTab } from "@/components/resources/connections-tab";
+import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { conditionsMark, viewGlyph } from "@/components/resources/detail-tab";
+import {
+  ConditionRows,
+  DetailAction,
+  UsageRow,
+} from "@/components/resources/detail-blocks";
+import { UsageBlock } from "@/components/resources/usage-block";
+import {
+  KeyValueSection,
+  type KeyValue,
+} from "@/components/resources/detail-kv";
+import { recordToKeyValues } from "@/components/resources/key-values";
+import { SpotMark } from "@/components/resources/spot-mark";
+import { nodePlacement, statesPlacement } from "@/lib/node-pool";
+import { useResourceDetail } from "@/hooks";
+import { useConnections } from "@/hooks/useConnections";
+import { useMetrics } from "@/hooks/useMetrics";
+import { commands } from "@/lib/commands";
 import {
   formatKubernetesBytes,
   parseCPU,
   parseMemory,
 } from "@/lib/k8s-quantity";
-import { MetricCard } from "@/components/ui/metric-card";
-import { ConditionsDisplay } from "@/components/resources/ConditionsDisplay";
-import { LabelsDisplay } from "@/components/resources/LabelsDisplay";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
-import { useMemo, useState } from "react";
-import { commands } from "@/lib/commands";
-import { useResourceDetail } from "@/hooks";
-import {
-  ResourceType,
-  getResourceIcon,
-  toPlural,
-} from "@/lib/resource-registry";
-import {
-  InfoRow,
-  ResourceDetailLayout,
-} from "@/components/resources/ResourceDetailLayout";
-import type { NodeInfo, DebugResult } from "@/generated/types";
-import { DebugNodeDialog } from "@/components/debug";
-import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useMetrics } from "@/hooks/useMetrics";
-import { MetricsStatusBanner } from "@/components/metrics";
+import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
 
-const NodeIcon = getResourceIcon(ResourceType.Node);
+/** A taint is the usual answer to "why is nothing scheduling here". */
+function taintKeyValues(taints: TaintInfo[]): KeyValue[] {
+  return taints.map((taint) => ({
+    label: taint.key,
+    value: `${taint.value ? `${taint.value} · ` : ""}${taint.effect}`,
+    mono: true,
+    tone: taint.effect === "PreferNoSchedule" ? undefined : ("warn" as const),
+  }));
+}
 
 export function NodeDetail() {
   const navigate = useNavigate();
@@ -48,33 +62,20 @@ export function NodeDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<NodeInfo>({
     resourceKind: ResourceType.Node,
     isClusterScoped: true,
     fetchResource: (name) => commands.getNode(name),
-    defaultTab: "info",
+    defaultTab: "overview",
   });
 
-  const { data: podCount } = useQuery({
-    queryKey: ["node-pods", name],
-    queryFn: async () => {
-      if (!name) return 0;
-      const pods = await commands.listPods({
-        nodeName: name,
-        namespace: null,
-        selector: null,
-        statusFilter: null,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-      });
-      return pods.length;
-    },
-    enabled: !!name,
-    placeholderData: keepPreviousData,
-  });
+  // A Node is cluster-scoped, so its neighbourhood is read with no namespace
+  // at all — the same query the drain dialog opens, and the same answer.
+  const connections = useConnections(ResourceType.Node, name, null);
+  const podCount = podsOnNode(connections.data);
 
-  const { nodeMetrics, nodeStatus } = useMetrics({
+  const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
     includeCluster: false,
     enabled: !!node,
@@ -88,202 +89,255 @@ export function NodeDetail() {
     return null;
   }
 
-  const openDebugDialog = async () => {
-    if (!node) return;
-    setDebugDialogOpen(true);
-  };
-
   const handleDebugStart = (result: DebugResult) => {
-    // Navigate to the debug pod
     navigate(
       `/${toPlural(ResourceType.Pod)}/${result.namespace}/${result.podName}`,
       { replace: false }
     );
   };
 
-  const getInternalIP = () => {
-    const internal = node?.status.addresses.find(
-      (a) => a.type === "InternalIP"
-    );
-    return internal?.address || "-";
-  };
+  const address = (type: string) =>
+    node?.status.addresses.find((a) => a.type === type)?.address;
 
-  const getExternalIP = () => {
-    const external = node?.status.addresses.find(
-      (a) => a.type === "ExternalIP"
-    );
-    return external?.address || "-";
-  };
+  const podCapacity = Number(node?.allocatable.pods ?? node?.capacity.pods);
+
+  const facts: KeyValue[] = [
+    {
+      label: "Internal IP",
+      value: (
+        <CopyableAddress
+          value={address("InternalIP")}
+          label="Internal IP"
+          fallback="-"
+        />
+      ),
+    },
+    {
+      label: "External IP",
+      value: (
+        <CopyableAddress
+          value={address("ExternalIP")}
+          label="External IP"
+          fallback="-"
+        />
+      ),
+    },
+    { label: "Hostname", value: address("Hostname") ?? "-", mono: true },
+    { label: "Kubernetes", value: node?.version, mono: true },
+    { label: "Container runtime", value: node?.containerRuntime, mono: true },
+    { label: "OS", value: node?.os },
+    { label: "Architecture", value: node?.arch },
+    {
+      label: "Created",
+      value: node?.createdAt ? new Date(node.createdAt).toLocaleString() : "-",
+    },
+  ];
+
+  // What a managed cluster already states about the machine under this node.
+  // Every row is dropped rather than stubbed when the cluster is silent, so a
+  // k3d node keeps the page it had before any of this existed.
+  const placement = node ? nodePlacement(node) : null;
+  const machine: KeyValue[] = placement
+    ? [
+        ...(placement.pool
+          ? [{ label: "Pool", value: placement.pool, mono: true }]
+          : []),
+        ...(placement.machine
+          ? [{ label: "Instance type", value: placement.machine, mono: true }]
+          : []),
+        ...(placement.zone
+          ? [{ label: "Zone", value: placement.zone, mono: true }]
+          : []),
+        ...(placement.region
+          ? [{ label: "Region", value: placement.region, mono: true }]
+          : []),
+        ...(placement.spot
+          ? [
+              {
+                label: "Spot",
+                value:
+                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+              },
+            ]
+          : []),
+        // Named from the providerID's scheme and from nothing else. A pool
+        // label can be typed by anyone; this is the cloud signing its work.
+        ...(placement.cloud
+          ? [{ label: "Cloud", value: placement.cloud }]
+          : []),
+        ...(placement.providerId
+          ? [
+              {
+                label: "Provider ID",
+                value: placement.providerId,
+                mono: true,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  const allocatable: KeyValue[] = [
+    { label: "CPU", value: node?.allocatable.cpu ?? "-", mono: true },
+    {
+      label: "Memory",
+      value: formatKubernetesBytes(node?.allocatable.memory),
+      mono: true,
+    },
+    { label: "Pods", value: node?.allocatable.pods ?? "-", mono: true },
+    {
+      label: "Ephemeral storage",
+      value: formatKubernetesBytes(node?.allocatable.ephemeralStorage),
+      mono: true,
+    },
+  ];
 
   const tabs = [
     {
-      id: "info",
-      label: "Info",
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
       content: (
-        <Card>
-          <CardHeader>
-            <CardTitle>Node Information</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <InfoRow
-              label="Internal IP"
-              value={<span className="font-mono">{getInternalIP()}</span>}
+        <>
+          {nodeStatus?.status !== "available" && (
+            <MetricsStatusBanner status={nodeStatus} />
+          )}
+
+          <UsageBlock
+            title="Headroom"
+            kind={ResourceType.Node}
+            uid={node?.uid}
+            cpu={nodeWithMetrics?.cpuMillicores}
+            memory={nodeWithMetrics?.memoryBytes}
+            cpuLimit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
+            memoryLimit={
+              node?.capacity.memory ? parseMemory(node.capacity.memory) : null
+            }
+            limitNoun="capacity"
+            sampledAt={nodeSampledAt}
+            status={nodeStatus}
+            history={node?.name ? { kind: "node", node: node.name } : undefined}
+          >
+            {/* A tally of scheduled pods, not a reading from metrics-server:
+             *  it comes from the pod list, it moves in steps of one, and a line
+             *  through it would imply a resolution it does not have. */}
+            <UsageRow
+              label="Pods"
+              used={podCount}
+              total={Number.isFinite(podCapacity) ? podCapacity : null}
+              type="count"
             />
-            <InfoRow
-              label="External IP"
-              value={<span className="font-mono">{getExternalIP()}</span>}
+          </UsageBlock>
+
+          <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
+            <KeyValueSection title="Host" items={facts} />
+            <KeyValueSection
+              title="Allocatable"
+              count="what the scheduler may hand out"
+              items={allocatable}
             />
-            <InfoRow label="Kubernetes Version" value={node?.version} />
-            <InfoRow label="Container Runtime" value={node?.containerRuntime} />
-            <InfoRow label="OS" value={node?.os} />
-            <InfoRow label="Architecture" value={node?.arch} />
-            <InfoRow
-              label="Created"
-              value={
-                node?.createdAt
-                  ? new Date(node.createdAt).toLocaleString()
-                  : "-"
-              }
+            {placement && statesPlacement(placement) && (
+              <KeyValueSection
+                title="Placement"
+                count="what the cloud says this node is and where"
+                items={machine}
+              />
+            )}
+          </div>
+          {node && node.taints.length > 0 && (
+            <KeyValueSection
+              title="Taints"
+              count={node.taints.length}
+              items={taintKeyValues(node.taints)}
             />
-          </CardContent>
-        </Card>
+          )}
+        </>
       ),
     },
     {
       id: "conditions",
       label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(node?.status.conditions),
       content: (
-        <ConditionsDisplay
-          conditions={node?.status.conditions || []}
-          title="Conditions"
-        />
+        <Section>
+          <SectionHeader
+            title="Conditions"
+            count={node?.status.conditions.length}
+          />
+          <ConditionRows
+            conditions={node?.status.conditions ?? []}
+            subject={{ kind: ResourceType.Node, name }}
+          />
+        </Section>
       ),
     },
     {
       id: "labels",
       label: "Labels",
-      content: <LabelsDisplay labels={node?.labels || {}} title="Labels" />,
-    },
-    {
-      id: "yaml",
-      label: "YAML",
+      glyph: viewGlyph(Tag),
       content: (
-        <YamlTabContent
-          title="Node YAML"
-          yaml={nodeYaml}
-          resourceKind={ResourceType.Node}
-          resourceName={name || ""}
-          namespace={undefined}
-          onCopy={copyYaml}
+        <KeyValueSection
+          title="Labels"
+          count={Object.keys(node?.labels ?? {}).length}
+          items={recordToKeyValues(node?.labels ?? {})}
+          // A whole tab, not a row beside Annotations — and every node kubelet
+          // registers carries `kubernetes.io/*`, so an empty one is the read
+          // failing rather than a node with nothing to say about itself.
+          emptyMessage="No labels on this node — not even the kubernetes.io/* set kubelet registers, which usually means the object was not read."
         />
       ),
     },
+    connectionsTab(connections),
+    yamlTab({
+      title: "Node YAML",
+      yaml: nodeYaml,
+      resourceKind: ResourceType.Node,
+      resourceName: name || "",
+      namespace: undefined,
+      onCopy: copyYaml,
+    }),
   ];
 
   return (
-    <ResourceDetailLayout
-      resource={node}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Node}
-      title={node?.name || ""}
-      badges={
-        node && (
-          <>
-            {node.roles.map((role) => (
-              <Badge key={role} variant="outline">
-                {role}
-              </Badge>
-            ))}
+    <>
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={node}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Node}
+        title={node?.name || ""}
+        createdAt={node?.createdAt}
+        statusBadge={
+          node && (
             <StatusBadge status={node.status.ready ? "Ready" : "NotReady"} />
-          </>
-        )
-      }
-      icon={<NodeIcon className="h-8 w-8 text-muted-foreground" />}
-      onBack={goBack}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={openDebugDialog}
-          disabled={!node}
-        >
-          <Bug className="mr-2 h-4 w-4" />
-          Debug Node
-        </Button>
-      }
-    >
-      {nodeStatus?.status !== "available" && (
-        <MetricsStatusBanner status={nodeStatus} />
-      )}
-      <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard
-          title="CPU Usage"
-          used={nodeWithMetrics?.cpuMillicores ?? null}
-          limit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
-          type="cpu"
-          icon={<Cpu className="h-4 w-4" />}
-          showProgressBar={true}
-          description={
-            node?.allocatable.cpu
-              ? `Allocatable: ${node.allocatable.cpu}`
-              : undefined
-          }
-        />
+          )
+        }
+        badges={[
+          ...(node?.roles.map((role) => (
+            <span key={role} className="text-[11px] text-fg-fnt">
+              {role}
+            </span>
+          )) ?? []),
+          ...(placement?.spot ? [<SpotMark key="spot" says="spot" />] : []),
+        ]}
+        onBack={goBack}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        actions={
+          <DetailAction
+            label="Debug node"
+            icon={Bug}
+            onClick={() => setDebugDialogOpen(true)}
+            disabled={!node}
+          />
+        }
+      />
 
-        <MetricCard
-          title="Memory Usage"
-          used={nodeWithMetrics?.memoryBytes ?? null}
-          limit={
-            node?.capacity.memory ? parseMemory(node.capacity.memory) : null
-          }
-          type="memory"
-          icon={<MemoryStick className="h-4 w-4" />}
-          showProgressBar={true}
-          description={
-            node?.allocatable.memory
-              ? `Allocatable: ${formatKubernetesBytes(node.allocatable.memory)}`
-              : undefined
-          }
-        />
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pods (running)
-            </CardTitle>
-            <Server className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{podCount ?? "-"}</div>
-            <p className="text-xs text-muted-foreground">
-              Allocatable:{" "}
-              {node?.allocatable.pods || node?.capacity.pods || "-"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold truncate text-lg">
-              {node && formatKubernetesBytes(node.capacity.ephemeralStorage)}
-            </div>
-            <p className="text-xs text-muted-foreground truncate">
-              Allocatable:{" "}
-              {node && formatKubernetesBytes(node.allocatable.ephemeralStorage)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Debug Node Dialog */}
+      {/* Outside the frame: Debug is on the strip's row and so on every tab,
+          and a dialog inside the open tab's panel would go with the tab. */}
       {node && (
         <DebugNodeDialog
           open={debugDialogOpen}
@@ -292,6 +346,6 @@ export function NodeDetail() {
           onDebugStart={handleDebugStart}
         />
       )}
-    </ResourceDetailLayout>
+    </>
   );
 }

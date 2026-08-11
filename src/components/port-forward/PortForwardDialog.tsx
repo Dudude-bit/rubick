@@ -180,7 +180,7 @@ export function PortForwardDialog({
         <div className="space-y-4">
           <div className="rounded-md border p-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Target</span>
+              <span className="text-fg-mut">Target</span>
               <span className="font-medium">
                 {podNamespace}/{podName}
               </span>
@@ -224,7 +224,7 @@ export function PortForwardDialog({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Auto reconnect</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Retry when the pod or connection drops
                 </p>
               </div>
@@ -238,7 +238,7 @@ export function PortForwardDialog({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Save as config</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-mut">
                   Keep this port-forward for quick reuse
                 </p>
               </div>
@@ -254,7 +254,7 @@ export function PortForwardDialog({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">Auto start</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-fg-mut">
                       Start automatically when this cluster connects
                     </p>
                   </div>
@@ -292,7 +292,7 @@ export function PortForwardDialog({
                     <div className="font-medium">
                       {session.localPort} → {session.pod}:{session.remotePort}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-fg-mut">
                       {statusBySession[session.id]?.message ||
                         statusBySession[session.id]?.status ||
                         "Active"}

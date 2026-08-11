@@ -1,18 +1,31 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor, YamlEditorAction } from "@/components/yaml";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
-interface YamlTabContentProps {
-  title: string;
+import { DetailAction } from "./detail-blocks";
+
+export interface YamlTabContentProps {
+  /**
+   * The pane's accessible name. Deliberately not drawn: the breadcrumb, the
+   * page header and the tab strip have each already named this object, and
+   * line 2 of the document says its kind. Kept as the label a screen reader
+   * gets for the region, which is the one place the name is not a repeat.
+   */
+  title?: string;
   yaml: string | undefined;
-  resourceKind: string;
-  resourceName: string;
-  namespace: string | undefined;
   onCopy: () => void;
+  /** What the document is. One line, in the reader's terms, not the API's. */
+  note?: string;
+  /**
+   * The live object behind the text. Without one there is nothing to edit —
+   * a rendered Helm manifest is not something the API server will take back —
+   * and the edit action is left off rather than shown dead.
+   */
+  resourceKind?: string;
+  resourceName?: string;
+  namespace?: string;
 }
 
 export function YamlTabContent({
@@ -21,45 +34,53 @@ export function YamlTabContent({
   resourceKind,
   resourceName,
   namespace,
+  note = "the object as the API server has it",
   onCopy,
 }: YamlTabContentProps) {
   const isYamlLoading = yaml == null;
 
   const handleFetchYaml = useCallback(() => {
-    return fetchResourceYaml(resourceKind, resourceName, namespace);
+    return fetchResourceYaml(resourceKind ?? "", resourceName ?? "", namespace);
   }, [resourceKind, resourceName, namespace]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>{title}</CardTitle>
-        <div className="flex items-center gap-2">
-          <YamlEditorAction
-            title={`Edit ${resourceKind}: ${resourceName}`}
-            resourceKey={{
-              kind: resourceKind,
-              name: resourceName,
-              namespace: namespace,
-            }}
-            fetchYaml={handleFetchYaml}
+    <section aria-label={title} className="flex h-full flex-col">
+      {/* A section header without the heading: the actions keep the row and
+          the rhythm, and the line the title used to occupy says something
+          the reader did not already know. */}
+      <div className="flex flex-none items-center gap-2 pb-2">
+        <p className="text-[11px] text-fg-fnt">{note}</p>
+        <div className="ml-auto flex items-center gap-1">
+          {resourceKind && resourceName && (
+            <YamlEditorAction
+              title={`Edit ${resourceKind}: ${resourceName}`}
+              resourceKey={{
+                kind: resourceKind,
+                name: resourceName,
+                namespace: namespace,
+              }}
+              fetchYaml={handleFetchYaml}
+            />
+          )}
+          <DetailAction
+            label="Copy"
+            icon={Copy}
+            onClick={onCopy}
+            disabled={isYamlLoading}
           />
-          <Button variant="outline" size="sm" onClick={onCopy}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copy
-          </Button>
         </div>
-      </CardHeader>
-      <CardContent>
-        {isYamlLoading ? (
-          <div className="rounded-md border bg-muted/40 p-4">
-            <TextSkeleton lines={18} />
-          </div>
-        ) : (
-          <div className="rounded-md border overflow-hidden">
-            <YamlEditor value={yaml} readOnly height="500px" />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      {isYamlLoading ? (
+        <div className="min-h-0 flex-1 overflow-hidden border-t border-hair p-4">
+          <TextSkeleton lines={18} />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
+          {/* The editor scrolls itself, so it is handed the box rather than a
+              number: a manifest is read against the window it is read in. */}
+          <YamlEditor value={yaml} readOnly height="100%" />
+        </div>
+      )}
+    </section>
   );
 }

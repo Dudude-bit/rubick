@@ -63,17 +63,23 @@ export function QuickActions<T>({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7",
+                  // The row's height is whatever the tallest cell is, and
+                  // an icon button is usually it. The visual target is 20px
+                  // so it fits a compact row's line box; the pseudo-element
+                  // pushes the pointer target back out to 24px, because a
+                  // 20px click target is hostile even when it looks tidy.
+                  "relative h-5 w-5 before:absolute before:-inset-0.5 before:content-['']",
                   action.variant === "destructive" &&
-                    "text-destructive hover:text-destructive hover:bg-destructive/10"
+                    "text-err hover:bg-err/[0.16] hover:text-err"
                 )}
+                aria-label={action.label}
                 disabled={isDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
                   action.onClick(item);
                 }}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">

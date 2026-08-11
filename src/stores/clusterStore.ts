@@ -10,13 +10,14 @@
 
 import { create } from "zustand";
 
-import type { ClusterContext } from "@/types/kubernetes";
+import type { ContextInfo } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
+import { useClusterRecencyStore } from "./clusterRecencyStore";
 
 /** Cluster store state and actions */
 interface ClusterState {
-  contexts: ClusterContext[];
+  contexts: ContextInfo[];
   currentContext: string | null;
   currentNamespace: string;
   isConnected: boolean;
@@ -26,6 +27,12 @@ interface ClusterState {
   pendingContext: string | null;
   errorContext: string | null;
   connectionAttemptId: number;
+  /**
+   * When the in-flight connect started, so the waiting screen can say how
+   * long it has been waiting instead of showing a spinner that means
+   * nothing. Null whenever nothing is in flight.
+   */
+  connectStartedAt: number | null;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -46,19 +53,12 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   pendingContext: null,
   errorContext: null,
   connectionAttemptId: 0,
+  connectStartedAt: null,
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
     try {
-      const contextInfos = await commands.listContexts();
-      // Convert ContextInfo[] to ClusterContext[]
-      const contexts: ClusterContext[] = contextInfos.map((ctx) => ({
-        name: ctx.name,
-        cluster: ctx.cluster,
-        user: ctx.user,
-        namespace: ctx.namespace ?? undefined,
-        is_current: ctx.is_current,
-      }));
+      const contexts = await commands.listContexts();
       const currentContext = await commands.getCurrentContext();
       set({ contexts, currentContext, isLoading: false });
 
@@ -149,6 +149,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       currentNamespace: nextNamespace,
       isConnected: false,
       connectionAttemptId: attemptId,
+      connectStartedAt: Date.now(),
     });
     try {
       const info = await commands.connectCluster(targetContext);
@@ -162,7 +163,12 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         isLoading: false,
         isAuthenticating: false,
         pendingContext: null,
+        connectStartedAt: null,
       });
+      // Only a connection that landed counts as "used": ordering the
+      // front door by clusters the reader failed to reach would put the
+      // broken ones on top.
+      useClusterRecencyStore.getState().recordUse(connectedContext);
       // Save selected cluster on successful connection
       commands
         .saveClusterPreferences(connectedContext, null, null)
@@ -182,6 +188,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         isAuthenticating: false,
         isConnected: false,
         pendingContext: null,
+        connectStartedAt: null,
       });
     }
   },
@@ -201,6 +208,13 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       pendingContext: null,
       error: null,
       errorContext: null,
+      isAuthenticating: false,
+      isLoading: false,
+      connectStartedAt: null,
+      // A connect already in flight would otherwise resolve after this and
+      // hand the window back a cluster the user just left — bumping the
+      // attempt id is what makes disconnecting the last word.
+      connectionAttemptId: get().connectionAttemptId + 1,
     });
   },
 }));

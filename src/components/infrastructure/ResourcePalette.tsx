@@ -39,10 +39,15 @@ export function ResourcePalette({
   onPointerDown,
 }: ResourcePaletteProps) {
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+    // A palette is a list, not a panel. One vertical hairline separates it
+    // from the canvas; each item is a row that lights up on hover like any
+    // other row in the app.
+    <div className="flex flex-col gap-4 border-r border-hair pr-3">
       <div>
-        <div className="text-sm font-semibold">Resources</div>
-        <div className="mt-3 space-y-2">
+        <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+          Resources
+        </h3>
+        <div className="border-t border-hair">
           {RESOURCE_ITEMS.map((item) => (
             <div
               key={item.kind}
@@ -56,36 +61,33 @@ export function ResourcePalette({
                   onAdd(item.kind);
                 }
               }}
-              className="w-full cursor-grab select-none touch-none rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+              className="w-full cursor-grab touch-none select-none rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info active:cursor-grabbing"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">{item.kind}</span>
-                <span className="text-[11px] text-muted-foreground">Drag</span>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium text-fg">{item.kind}</span>
+                <span className="text-[11px] text-fg-fnt">drag</span>
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
-                {item.description}
-              </div>
+              <div className="text-[11px] text-fg-mut">{item.description}</div>
             </div>
           ))}
         </div>
       </div>
       <div>
-        <div className="text-sm font-semibold">Templates</div>
-        <div className="mt-3 space-y-2">
+        <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+          Templates
+        </h3>
+        <div className="border-t border-hair">
           {TEMPLATE_ITEMS.map((item) => (
             <Button
               key={item.id}
-              variant="outline"
-              size="sm"
-              className="h-auto w-full justify-start px-3 py-2 text-left"
+              variant="ghost"
+              className="h-auto w-full flex-col items-start gap-0 px-1.5 py-1 text-left"
               onClick={() => onTemplate(item.id)}
             >
-              <div>
-                <div className="text-xs font-semibold">{item.label}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {item.description}
-                </div>
-              </div>
+              <span className="font-medium text-fg">{item.label}</span>
+              <span className="text-[11px] font-normal text-fg-mut">
+                {item.description}
+              </span>
             </Button>
           ))}
         </div>

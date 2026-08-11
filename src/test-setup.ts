@@ -24,6 +24,9 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
   if (!window.ResizeObserver) {
     window.ResizeObserver = class {
       observe() {}
@@ -31,6 +34,28 @@ if (typeof window !== "undefined") {
       disconnect() {}
     } as unknown as typeof ResizeObserver;
   }
+}
+
+// Node 26 defines its own global `localStorage`, which shadows jsdom's and
+// stays undefined unless the process was started with `--localstorage-file`.
+// Any store wrapped in zustand's `persist` reads it at import time and throws.
+// The setup file runs before the test module graph is loaded, so replacing it
+// here is early enough for every persisted store.
+if (!globalThis.localStorage?.setItem) {
+  const memory = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => void memory.set(key, value),
+      removeItem: (key: string) => void memory.delete(key),
+      clear: () => memory.clear(),
+      key: (index: number) => [...memory.keys()][index] ?? null,
+      get length() {
+        return memory.size;
+      },
+    },
+  });
 }
 
 // Tauri API mocks — every call returns a resolved promise / no-op listener.
