@@ -1,15 +1,22 @@
-# Rubick
+<div align="center">
 
-[![CI](https://github.com/Dudude-bit/rubick/actions/workflows/ci.yml/badge.svg)](https://github.com/Dudude-bit/rubick/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/github/license/Dudude-bit/rubick)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/Dudude-bit/rubick)](https://github.com/Dudude-bit/rubick/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Dudude-bit/rubick/total)](https://github.com/Dudude-bit/rubick/releases)
+# Rubick
 
 **A desktop Kubernetes client that tries not to lie to you.**
 
-Like Lens, k9s or Headlamp, it reads your kubeconfig and shows your clusters. Unlike them, it treats "I don't know" as an answer worth giving — and it spends its effort on the moments when what a cluster reports and what is actually happening are two different things.
+Like Lens, k9s or Headlamp, it reads your kubeconfig and shows your clusters.<br>
+Unlike them, it treats "I don't know" as an answer worth giving.
 
-**[⬇ Download for macOS, Windows or Linux](https://github.com/Dudude-bit/rubick/releases/latest)** · free, MIT, no account, no telemetry
+[![Download](https://img.shields.io/badge/Download-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2563eb?style=for-the-badge)](https://github.com/Dudude-bit/rubick/releases/latest)
+
+[![CI](https://img.shields.io/github/actions/workflow/status/Dudude-bit/rubick/ci.yml?branch=main&label=CI)](https://github.com/Dudude-bit/rubick/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dudude-bit/rubick)](https://github.com/Dudude-bit/rubick/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Dudude-bit/rubick/total)](https://github.com/Dudude-bit/rubick/releases)
+[![License](https://img.shields.io/github/license/Dudude-bit/rubick)](LICENSE)
+
+Free and MIT. No account, no telemetry.
+
+</div>
 
 ![Rubick on a workload page](docs/images/hero-workload-detail.png)
 
@@ -25,7 +32,7 @@ Like Lens, k9s or Headlamp, it reads your kubeconfig and shows your clusters. Un
 
 ## What you get
 
-|                      |                                                                                                                                                                                         |
+| Area                 | What Rubick shows                                                                                                                                                                       |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Workloads**        | Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs — with init containers as an ordered sequence, sidecars told apart from them, and CPU/memory over time         |
 | **Logs**             | Virtualised, multi-container, server-side filtering, repeat collapsing — and they open **where the answer is**: on a pod stuck in init, that means the failing container's previous run |
@@ -41,7 +48,7 @@ Like Lens, k9s or Headlamp, it reads your kubeconfig and shows your clusters. Un
 
 Detected ones need nothing from you — their CRDs are in the cluster or they are not. Configured ones need an address, and Rubick never goes looking for one.
 
-|                  |                                                                                                                                                                                                                 |
+| Integration      | What it gives you                                                                                                                                                                                               |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Routing**      | Traefik, ingress-nginx, Istio — hosts, rules and middleware read as routing. nginx annotations become sentences with the raw key beside each; a `configuration-snippet` is shown verbatim and never paraphrased |
 | **Certificates** | cert-manager — expiry wherever TLS is named, and the issuance chain when renewal fails                                                                                                                          |
@@ -59,13 +66,23 @@ Adding one costs a folder and a line — see [CONTRIBUTING](CONTRIBUTING.md).
 Every name you can go to is a link, with the gestures you expect: click to peek, middle-click for a background tab, shift for a foreground one. Tabs carry a route **and** a scope, so several clusters stay open side by side. Search reaches across clusters — `!cluster-name` aims it. Light and dark, and identity colouring that still works in greyscale or with colour blindness.
 
 <details>
-<summary>More screenshots</summary>
+<summary><b>More screenshots</b></summary>
+<br>
 
-![The Connections tab, grouped by question](docs/images/connections-tab.png)
-![Scaling something an autoscaler owns](docs/images/scale-interception.png)
-![Usage with real history](docs/images/usage-history.png)
-![Search, from anywhere](docs/images/command-palette.png)
+<table>
+<tr>
+<td width="50%"><img src="docs/images/connections-tab.png" alt="Connections, grouped by question"><br><b>Connections</b> — grouped by the question you are asking</td>
+<td width="50%"><img src="docs/images/scale-interception.png" alt="Scaling something an autoscaler owns"><br><b>Before you act</b> — who will undo this, and how fast</td>
+</tr>
+<tr>
+<td><img src="docs/images/usage-history.png" alt="Usage with real history"><br><b>Usage</b> — the watched window, or real ranges with Prometheus</td>
+<td><img src="docs/images/command-palette.png" alt="Search, from anywhere"><br><b>Search</b> — across clusters, aimed with <code>!cluster-name</code></td>
+</tr>
+</table>
+
 ![The same page in the light theme](docs/images/light-theme.png)
+
+**Light theme** — the same page, the same tokens.
 
 </details>
 
