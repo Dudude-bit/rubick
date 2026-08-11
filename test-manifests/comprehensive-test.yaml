@@ -80,9 +80,9 @@ data:
   index.html: |
     <!DOCTYPE html>
     <html>
-    <head><title>K8s GUI Test</title></head>
+    <head><title>Rubick Test</title></head>
     <body>
-      <h1>Welcome to K8s GUI Test</h1>
+      <h1>Welcome to Rubick Test</h1>
       <p>This is a test page for k8s-gui application.</p>
     </body>
     </html>

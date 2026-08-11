@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "K8s GUI",
+  "productName": "Rubick",
   "version": "2.1.0",
   "identifier": "com.k8s-gui.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "K8s GUI",
+        "title": "Rubick",
         "width": 1400,
         "height": 900,
         "minWidth": 1024,
@@ -43,7 +43,7 @@
     ],
     "resources": [],
     "externalBin": [],
-    "copyright": "\u00a9 2024 K8s GUI",
+    "copyright": "\u00a9 2024 Rubick",
     "category": "DeveloperTool",
     "shortDescription": "Kubernetes GUI Client",
     "longDescription": "A modern, cross-platform Kubernetes GUI client built with Tauri and Rust",

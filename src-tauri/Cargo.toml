@@ -3,7 +3,7 @@ name = "k8s-gui"
 version = "2.1.0"
 edition = "2021"
 rust-version = "1.91"
-authors = ["K8s GUI Team"]
+authors = ["Rubick Team"]
 description = "A minimalist Kubernetes GUI client inspired by Lens"
 license = "MIT"
 

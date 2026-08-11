@@ -1,7 +1,7 @@
-//! Common utilities for K8s GUI projects
+//! Common utilities for Rubick projects
 //!
 //! This crate provides shared functionality used across multiple
-//! K8s GUI projects, including:
+//! Rubick projects, including:
 //!
 //! - **Tracing**: Unified logging and tracing initialization
 //! - **Validation**: Input validation (pagination)

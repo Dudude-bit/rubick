@@ -1,6 +1,6 @@
 //! Tracing initialization utilities
 //!
-//! Provides a unified way to initialize tracing across all K8s GUI projects.
+//! Provides a unified way to initialize tracing across all Rubick projects.
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 

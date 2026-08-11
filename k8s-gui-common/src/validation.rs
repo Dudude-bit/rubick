@@ -1,6 +1,6 @@
 //! Input validation utilities
 //!
-//! This module provides unified validation logic used across all K8s GUI projects.
+//! This module provides unified validation logic used across all Rubick projects.
 
 /// Validation result with error message
 pub type ValidationResult = Result<(), String>;

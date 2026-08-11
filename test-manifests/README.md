@@ -1,4 +1,4 @@
-# K8s GUI Test Manifests
+# Rubick Test Manifests
 
 Тестовые манифесты для проверки всех функций k8s-gui.
 

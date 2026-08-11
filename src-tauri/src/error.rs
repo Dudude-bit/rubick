@@ -1,10 +1,10 @@
-//! Error handling for K8s GUI application
+//! Error handling for Rubick application
 //!
 //! This module provides a comprehensive error type that covers all possible
 //! error scenarios in the application, with proper conversion from library errors.
 //!
 //! The `Error` type implements the `ErrorExt` trait from `k8s_gui_common` for
-//! consistent error handling across all K8s GUI projects.
+//! consistent error handling across all Rubick projects.
 
 use k8s_gui_common::ErrorExt;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ pub mod messages {
 /// Application-wide result type
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Main error type for the K8s GUI application
+/// Main error type for the Rubick application
 #[derive(Error, Debug)]
 pub enum Error {
     /// Kubernetes API errors

@@ -1,4 +1,4 @@
-# Rustfmt configuration for K8s GUI project
+# Rustfmt configuration for Rubick project
 # This ensures consistent code formatting across all Rust projects
 
 # Basic formatting options

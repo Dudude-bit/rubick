@@ -1,4 +1,4 @@
-//! K8s GUI - A minimalist Kubernetes GUI client
+//! Rubick - A minimalist Kubernetes GUI client
 //!
 //! This application provides a modern, Lens-inspired interface for managing
 //! Kubernetes clusters with support for multiple authentication methods
