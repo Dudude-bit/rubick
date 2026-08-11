@@ -37,6 +37,10 @@ import {
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
 import {
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
+import {
   ConditionRows,
   DetailAction,
   ProblemSummary,
@@ -755,35 +759,44 @@ export function PodDetail() {
         <MetricsStatusBanner status={podStatus} />
       )}
 
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <KeyValueSection title="Placement" items={placement} />
-        <UsageBlock
-          kind={ResourceType.Pod}
-          uid={pod?.uid}
-          cpu={podWithMetrics?.cpuMillicores}
-          memory={podWithMetrics?.memoryBytes}
-          cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
-          memoryLimit={pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null}
-          restarts={pod?.restartCount ?? null}
-          sampledAt={podSampledAt}
-          status={podStatus}
-          connections={connections.data}
-          history={
-            pod?.namespace && pod?.name
-              ? { kind: "pod", namespace: pod.namespace, pod: pod.name }
-              : undefined
-          }
-        />
-      </div>
-
-      <TrafficChain query={connections} />
-
-      {pod && (
-        <RelatedResources
-          ownerReferences={pod.ownerReferences}
-          namespace={pod.namespace}
-        />
-      )}
+      {/* A Pod is the only member of the family with no count block: it does
+          not have a replica count, it *is* one, and the page that answers
+          "who sets the number" for it is the owner at the top of its chain —
+          which `RelatedResources` names below, with the clause saying which
+          of the two hops the count lives on. What takes the first slot is the
+          question a Pod does have in the same place: where the one is. */}
+      <WorkloadOverview
+        count={<FactBlock title="Placement" items={placement} />}
+        usage={
+          <UsageBlock
+            kind={ResourceType.Pod}
+            uid={pod?.uid}
+            cpu={podWithMetrics?.cpuMillicores}
+            memory={podWithMetrics?.memoryBytes}
+            cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
+            memoryLimit={
+              pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null
+            }
+            restarts={pod?.restartCount ?? null}
+            sampledAt={podSampledAt}
+            status={podStatus}
+            connections={connections.data}
+            history={
+              pod?.namespace && pod?.name
+                ? { kind: "pod", namespace: pod.namespace, pod: pod.name }
+                : undefined
+            }
+          />
+        }
+        traffic={<TrafficChain query={connections} />}
+      >
+        {pod && (
+          <RelatedResources
+            ownerReferences={pod.ownerReferences}
+            namespace={pod.namespace}
+          />
+        )}
+      </WorkloadOverview>
 
       {pod && (
         <PodPortForwardDialog

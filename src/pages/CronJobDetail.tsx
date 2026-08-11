@@ -13,7 +13,6 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
-import { declaredContainers } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -23,6 +22,11 @@ import {
   nextCronRun,
 } from "@/components/resources/cron-schedule";
 import { Composition, Headline } from "@/components/resources/detail-blocks";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { WorkloadUsage } from "@/components/resources/workload-usage";
 import {
@@ -266,15 +270,6 @@ export function CronJobDetail() {
           "none — missed runs are skipped",
       mono: cronJob?.startingDeadlineSeconds != null,
     },
-    {
-      label: "History kept",
-      value: `${kept.succeeded} succeeded · ${kept.failed} failed`,
-    },
-    {
-      label: "Containers",
-      value: cronJob ? declaredContainers(cronJob).length : 0,
-      mono: true,
-    },
     serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
   ];
 
@@ -310,60 +305,73 @@ export function CronJobDetail() {
     >
       {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
 
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <Section>
-          <SectionHeader title="Runs" count="jobs this CronJob still owns" />
-          <Composition
-            total={jobs.length}
-            label={jobs.length === 1 ? "job kept" : "jobs kept"}
-            // Every segment is counted off the same list as the total, so the
-            // bar cannot disagree with the rows under the Jobs tab.
-            segments={[
-              {
-                label: "running",
-                count: jobs.filter((job) => job.status === "Running").length,
-                tone: "ok",
-              },
-              {
-                label: "succeeded",
-                count: jobs.filter((job) => job.status === "Complete").length,
-                tone: "neutral",
-              },
-              {
-                label: "failed",
-                count: jobs.filter((job) => job.status === "Failed").length,
-                tone: "err",
-              },
-            ]}
-            note={
-              cronJob?.active
-                ? `${cronJob.active} active per the controller`
-                : undefined
+      <WorkloadOverview
+        count={
+          <CountBlock
+            title="Runs"
+            // What decides how many a CronJob has is the schedule and the
+            // history limits, and the schedule is already answered above the
+            // fold by the three headlines — so this block counts what is
+            // there and says what keeps it.
+            subject="jobs this CronJob still owns"
+          >
+            <Composition
+              total={jobs.length}
+              label={jobs.length === 1 ? "job kept" : "jobs kept"}
+              // Every segment is counted off the same list as the total, so the
+              // bar cannot disagree with the rows under the Jobs tab.
+              segments={[
+                {
+                  label: "running",
+                  count: jobs.filter((job) => job.status === "Running").length,
+                  tone: "ok",
+                },
+                {
+                  label: "succeeded",
+                  count: jobs.filter((job) => job.status === "Complete").length,
+                  tone: "neutral",
+                },
+                {
+                  label: "failed",
+                  count: jobs.filter((job) => job.status === "Failed").length,
+                  tone: "err",
+                },
+              ]}
+              note={
+                <>
+                  {kept.succeeded} succeeded · {kept.failed} failed kept
+                  {cronJob?.active
+                    ? ` · ${cronJob.active} active per the controller`
+                    : ""}
+                </>
+              }
+            />
+          </CountBlock>
+        }
+        usage={
+          <WorkloadUsage
+            kind={ResourceType.CronJob}
+            uid={cronJob?.uid}
+            name={cronJob?.name || name}
+            namespace={cronJob?.namespace || namespace}
+            template={cronJob}
+            pods={pods}
+            idle={
+              cronJob?.suspend
+                ? "This CronJob is suspended, so no run will start."
+                : "No run of this CronJob is in flight."
             }
           />
-        </Section>
-        <KeyValueSection title="Policy" items={policy} />
-        <WorkloadUsage
-          kind={ResourceType.CronJob}
-          uid={cronJob?.uid}
-          name={cronJob?.name || name}
-          namespace={cronJob?.namespace || namespace}
-          template={cronJob}
-          pods={pods}
-          idle={
-            cronJob?.suspend
-              ? "This CronJob is suspended, so no run will start."
-              : "No run of this CronJob is in flight."
-          }
-        />
-      </div>
-
-      {cronJob && (
-        <RelatedResources
-          ownerReferences={cronJob.ownerReferences}
-          namespace={cronJob.namespace}
-        />
-      )}
+        }
+        declared={<FactBlock title="How it is declared" items={policy} />}
+      >
+        {cronJob && (
+          <RelatedResources
+            ownerReferences={cronJob.ownerReferences}
+            namespace={cronJob.namespace}
+          />
+        )}
+      </WorkloadOverview>
     </ResourceDetailLayout>
   );
 }

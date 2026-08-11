@@ -19,6 +19,8 @@ vi.mock("@/lib/commands", () => ({
     deleteStatefulset: vi.fn(),
     scaleStatefulset: vi.fn(async () => undefined),
     listPods: vi.fn(async () => []),
+    // Read at call time so a test can put this workload in a different
+    // neighbourhood before it renders.
     getResourceConnections: vi.fn(async () => connections),
   },
 }));
@@ -54,7 +56,9 @@ function buildSet(
  * it. The warning has to survive the whole path — the page's `useConnections`
  * on the StatefulSet kind, `scaleWarnings`, and the dialog.
  */
-const connections: ResourceConnections = {
+let connections: ResourceConnections;
+
+const governed: ResourceConnections = {
   subject: {
     kind: "StatefulSet",
     name: "stateful-demo",
@@ -97,6 +101,12 @@ const connections: ResourceConnections = {
   notLookedAt: [],
 };
 
+/** The common case: nothing scales it and nothing guards it. */
+const ungoverned: ResourceConnections = {
+  ...governed,
+  edges: [],
+};
+
 function mockDetail(set: StatefulSetDetailInfo | undefined) {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: set?.name ?? "stateful-demo",
@@ -130,7 +140,10 @@ function renderPage() {
 }
 
 describe("StatefulSetDetail", () => {
-  beforeEach(() => mockDetail(buildSet()));
+  beforeEach(() => {
+    connections = governed;
+    mockDetail(buildSet());
+  });
 
   it("offers Scale — a StatefulSet has a replica count like any other", () => {
     renderPage();
@@ -148,5 +161,53 @@ describe("StatefulSetDetail", () => {
     expect(
       screen.getByRole("button", { name: "Scale anyway" })
     ).toBeInTheDocument();
+  });
+
+  it("lays the Overview out as blocks in one column, never a page-level grid", async () => {
+    const { container } = renderPage();
+    await screen.findByText("Set by");
+
+    // A grid is allowed *inside* a block — a bar beside its rows, a short
+    // fact table in two columns. What is not allowed back is the page-level
+    // auto-flow that put "who sets the replica count" and "what a drain must
+    // respect" in opposite columns: a grid whose items are the page's blocks.
+    for (const grid of container.querySelectorAll('[class*="grid-cols"]')) {
+      expect(grid.querySelectorAll("section").length).toBeLessThan(2);
+    }
+  });
+
+  it("states the replica count once — the bar owns it", async () => {
+    mockDetail(buildSet({ replicas: { desired: 3, ready: 3, current: 3 } }));
+    connections = {
+      ...governed,
+      edges: governed.edges.map((edge) => ({
+        ...edge,
+        from: {
+          ...edge.from,
+          facts:
+            edge.from.facts?.kind === "autoscaler"
+              ? { ...edge.from.facts, currentReplicas: 3, desiredReplicas: 3 }
+              : edge.from.facts,
+        },
+      })),
+    };
+
+    renderPage();
+    await screen.findByText("Set by");
+
+    // The header's `3/3 ready` is identity and exempt; inside the page's own
+    // blocks the number is stated by the composition and by nothing else.
+    expect(screen.getAllByText("3")).toHaveLength(1);
+    expect(screen.queryByText(/3 running/)).toBeNull();
+  });
+
+  it("draws no empty Set by row for a workload nothing scales", async () => {
+    connections = ungoverned;
+    renderPage();
+
+    // The bar is what a workload with no autoscaler and no budget shows.
+    await screen.findByText("replica wanted");
+    expect(screen.queryByText("Set by")).toBeNull();
+    expect(screen.queryByText("A drain waits")).toBeNull();
   });
 });

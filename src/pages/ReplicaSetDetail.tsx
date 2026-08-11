@@ -18,6 +18,11 @@ import {
   Composition,
   ConditionRows,
 } from "@/components/resources/detail-blocks";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -28,7 +33,6 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { declaredContainers } from "@/lib/container-sequence";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -151,11 +155,6 @@ export function ReplicaSetDetail() {
           </>
         ),
       mono: revision !== null,
-    },
-    {
-      label: "Containers",
-      value: replicaSet ? declaredContainers(replicaSet).length : 0,
-      mono: true,
     },
     serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace),
   ];
@@ -293,34 +292,35 @@ export function ReplicaSetDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <KeyValueSection title="Revision" items={facts} />
-        <Section>
-          <SectionHeader title="Replicas" />
-          <Composition
-            total={desired}
-            label={desired === 1 ? "replica wanted" : "replicas wanted"}
-            segments={[
-              { label: "ready", count: ready, tone: "ok" },
-              {
-                label: "starting",
-                count: Math.max(0, current - ready),
-                tone: "warn",
-              },
-              {
-                label: "not created",
-                count: Math.max(0, desired - current),
-                tone: "err",
-              },
-            ]}
-            emptyMessage="scaled to zero"
-            // A bar of nothing is the picture of a fault. The end of a
-            // rollout looks identical, and only the sentence tells them
-            // apart — so the empty case never renders without one.
-            note={emptyPods ? whyEmpty : undefined}
-          />
-        </Section>
-      </div>
+      <WorkloadOverview
+        count={
+          <CountBlock title="Replicas" subject="what this revision runs">
+            <Composition
+              total={desired}
+              label={desired === 1 ? "replica wanted" : "replicas wanted"}
+              segments={[
+                { label: "ready", count: ready, tone: "ok" },
+                {
+                  label: "starting",
+                  count: Math.max(0, current - ready),
+                  tone: "warn",
+                },
+                {
+                  label: "not created",
+                  count: Math.max(0, desired - current),
+                  tone: "err",
+                },
+              ]}
+              emptyMessage="scaled to zero"
+              // A bar of nothing is the picture of a fault. The end of a
+              // rollout looks identical, and only the sentence tells them
+              // apart — so the empty case never renders without one.
+              note={emptyPods ? whyEmpty : undefined}
+            />
+          </CountBlock>
+        }
+        declared={<FactBlock title="Revision" items={facts} />}
+      />
     </ResourceDetailLayout>
   );
 }

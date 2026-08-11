@@ -49,13 +49,17 @@ import { RevisionRows } from "@/components/resources/child-rows";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
-import { declaredContainers } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
-import { Governance } from "@/components/resources/governance";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
+  Composition,
   ConditionRows,
   DetailAction,
 } from "@/components/resources/detail-blocks";
@@ -279,23 +283,14 @@ export function DeploymentDetail() {
 
   const replicas = deployment?.replicas;
   const shortReplicas = !!replicas && replicas.ready < replicas.desired;
+  const desired = replicas?.desired ?? 0;
+  const ready = replicas?.ready ?? 0;
 
+  // Desired, ready, available and up-to-date are one count read four ways, and
+  // as four rows the reader had to subtract them to find the gap the bar shows
+  // outright. The two the bar does not partition qualify it underneath.
   const facts: KeyValue[] = [
     { label: "Strategy", value: deployment?.strategy || "RollingUpdate" },
-    { label: "Desired", value: replicas?.desired ?? 0, mono: true },
-    {
-      label: "Ready",
-      value: replicas?.ready ?? 0,
-      mono: true,
-      tone: shortReplicas ? "warn" : undefined,
-    },
-    { label: "Available", value: replicas?.available ?? 0, mono: true },
-    { label: "Up to date", value: replicas?.updated ?? 0, mono: true },
-    {
-      label: "Containers",
-      value: deployment ? declaredContainers(deployment).length : 0,
-      mono: true,
-    },
     serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace),
   ];
 
@@ -506,77 +501,98 @@ export function DeploymentDetail() {
         <MetricsStatusBanner status={podStatus} />
       )}
 
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <KeyValueSection title="Rollout" items={facts} />
-        <WorkloadUsage
+      <WorkloadOverview
+        count={
+          <CountBlock title="Replicas" governance={connections}>
+            <Composition
+              total={desired}
+              label={desired === 1 ? "replica wanted" : "replicas wanted"}
+              segments={[
+                { label: "ready", count: ready, tone: "ok" },
+                {
+                  label: "not ready",
+                  count: Math.max(0, desired - ready),
+                  tone: "warn",
+                },
+              ]}
+              emptyMessage="scaled to zero"
+              note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
+            />
+          </CountBlock>
+        }
+        usage={
+          <WorkloadUsage
+            kind={ResourceType.Deployment}
+            uid={deployment?.uid}
+            name={deployment?.name || name}
+            namespace={deployment?.namespace || namespace}
+            template={deployment}
+            pods={pods}
+            idle={
+              desired === 0
+                ? "This Deployment is scaled to zero."
+                : "None of this Deployment's pods is running."
+            }
+            connections={connections.data}
+          />
+        }
+        traffic={<TrafficChain query={connections} />}
+        declared={<FactBlock title="How it is declared" items={facts} />}
+      >
+        {deployment && (
+          <RelatedResources
+            ownerReferences={deployment.ownerReferences}
+            namespace={deployment.namespace}
+          />
+        )}
+
+        <ScaleDialog
+          warnings={scaleWarnings(connections.data, intercept("Scale"))}
+          open={scaleDialogOpen}
+          onOpenChange={setScaleDialogOpen}
           kind={ResourceType.Deployment}
-          uid={deployment?.uid}
-          name={deployment?.name || name}
-          namespace={deployment?.namespace || namespace}
-          template={deployment}
-          pods={pods}
-          idle={
-            replicas?.desired === 0
-              ? "This Deployment is scaled to zero."
-              : "None of this Deployment's pods is running."
-          }
-          connections={connections.data}
+          current={deployment?.replicas.desired ?? 0}
+          busy={scaleMutation.isPending}
+          onSubmit={(replicas) => scaleMutation.mutate(replicas)}
         />
-        <Governance query={connections} />
-      </div>
 
-      <TrafficChain query={connections} />
-
-      {deployment && (
-        <RelatedResources
-          ownerReferences={deployment.ownerReferences}
-          namespace={deployment.namespace}
-        />
-      )}
-
-      <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"))}
-        open={scaleDialogOpen}
-        onOpenChange={setScaleDialogOpen}
-        kind={ResourceType.Deployment}
-        current={deployment?.replicas.desired ?? 0}
-        busy={scaleMutation.isPending}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
-
-      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update Container Image</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Container</Label>
-              <Input value={selectedContainer} disabled />
+        <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Container Image</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Container</Label>
+                <Input value={selectedContainer} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="image">New Image</Label>
+                <Input
+                  id="image"
+                  value={newImage}
+                  onChange={(e) => setNewImage(e.target.value)}
+                  placeholder="e.g., nginx:1.21"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="image">New Image</Label>
-              <Input
-                id="image"
-                value={newImage}
-                onChange={(e) => setNewImage(e.target.value)}
-                placeholder="e.g., nginx:1.21"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => updateImageMutation.mutate()}
-              disabled={updateImageMutation.isPending || !newImage}
-            >
-              Update
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setImageDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => updateImageMutation.mutate()}
+                disabled={updateImageMutation.isPending || !newImage}
+              >
+                Update
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </WorkloadOverview>
     </ResourceDetailLayout>
   );
 }

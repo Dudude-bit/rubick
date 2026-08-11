@@ -254,6 +254,19 @@ export function autoscalerReplicas(facts: AutoscalerFacts): string {
   return parts.join(" · ");
 }
 
+/**
+ * When the count last moved, or nothing where it never has.
+ *
+ * Split out of {@link autoscalerReplicas} because the replica numbers beside
+ * it belong to the workload's own block now, and this clause does not: it is
+ * the one thing the autoscaler knows that the count itself cannot say.
+ */
+export function lastScaled(facts: AutoscalerFacts): string | null {
+  return facts.lastScaleTime
+    ? `last scaled ${formatAge(facts.lastScaleTime)} ago`
+    : null;
+}
+
 /** "at least 1 available" / "at most 1 unavailable". */
 export function budgetRule(facts: BudgetFacts): string {
   if (facts.minAvailable !== null)

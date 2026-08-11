@@ -17,8 +17,12 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
-import { declaredContainers } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
@@ -34,7 +38,6 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
-import { Governance } from "@/components/resources/governance";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -201,12 +204,6 @@ export function DaemonSetDetail() {
       label: "Update strategy",
       value: daemonSet?.updateStrategy || "RollingUpdate",
     },
-    { label: "Available", value: available, mono: true },
-    {
-      label: "Containers",
-      value: daemonSet ? declaredContainers(daemonSet).length : 0,
-      mono: true,
-    },
     serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
   ];
 
@@ -247,70 +244,78 @@ export function DaemonSetDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <Section>
-          {/* One fact, not five: desired/current/ready/up-to-date/available
-              are the same rollout read five ways, and the reader was left to
-              subtract them to find the gap. */}
-          <SectionHeader title="Rollout" count="one pod per eligible node" />
-          <div className="grid grid-cols-2 gap-[22px]">
-            <Composition
-              total={desired}
-              label={desired === 1 ? "node wanted" : "nodes wanted"}
-              segments={[
-                { label: "ready", count: ready, tone: "ok" },
-                {
-                  label: "not ready",
-                  count: Math.max(0, current - ready),
-                  tone: "warn",
-                },
-                {
-                  label: "not scheduled",
-                  count: Math.max(0, desired - current),
-                  tone: "err",
-                },
-              ]}
-            />
-            <Composition
-              total={desired}
-              label="on the current spec"
-              segments={[
-                { label: "up to date", count: upToDate, tone: "ok" },
-                {
-                  label: "outdated",
-                  count: Math.max(0, desired - upToDate),
-                  tone: "warn",
-                },
-              ]}
-            />
-          </div>
-        </Section>
-        <KeyValueSection title="DaemonSet" items={facts} />
-        <WorkloadUsage
-          kind={ResourceType.DaemonSet}
-          uid={daemonSet?.uid}
-          name={daemonSet?.name || name}
-          namespace={daemonSet?.namespace || namespace}
-          template={daemonSet}
-          pods={pods}
-          idle={
-            desired === 0
-              ? "No node matches this DaemonSet, so it has placed no pods."
-              : "None of this DaemonSet's pods is running."
-          }
-          connections={connections.data}
-        />
-        <Governance query={connections} />
-      </div>
-
-      <TrafficChain query={connections} />
-
-      {daemonSet && (
-        <RelatedResources
-          ownerReferences={daemonSet.ownerReferences}
-          namespace={daemonSet.namespace}
-        />
-      )}
+      <WorkloadOverview
+        count={
+          <CountBlock
+            title="Rollout"
+            subject="one pod per eligible node"
+            governance={connections}
+          >
+            {/* One fact, not five: desired/current/ready/up-to-date/available
+                are the same rollout read five ways, and the reader was left to
+                subtract them to find the gap. Two bars rather than one because
+                a DaemonSet counts two things — how many nodes have a pod, and
+                how many of those pods are the current spec. */}
+            <div className="grid grid-cols-2 gap-[22px]">
+              <Composition
+                total={desired}
+                label={desired === 1 ? "node wanted" : "nodes wanted"}
+                segments={[
+                  { label: "ready", count: ready, tone: "ok" },
+                  {
+                    label: "not ready",
+                    count: Math.max(0, current - ready),
+                    tone: "warn",
+                  },
+                  {
+                    label: "not scheduled",
+                    count: Math.max(0, desired - current),
+                    tone: "err",
+                  },
+                ]}
+                note={`${available} available`}
+              />
+              <Composition
+                total={desired}
+                label="on the current spec"
+                segments={[
+                  { label: "up to date", count: upToDate, tone: "ok" },
+                  {
+                    label: "outdated",
+                    count: Math.max(0, desired - upToDate),
+                    tone: "warn",
+                  },
+                ]}
+              />
+            </div>
+          </CountBlock>
+        }
+        usage={
+          <WorkloadUsage
+            kind={ResourceType.DaemonSet}
+            uid={daemonSet?.uid}
+            name={daemonSet?.name || name}
+            namespace={daemonSet?.namespace || namespace}
+            template={daemonSet}
+            pods={pods}
+            idle={
+              desired === 0
+                ? "No node matches this DaemonSet, so it has placed no pods."
+                : "None of this DaemonSet's pods is running."
+            }
+            connections={connections.data}
+          />
+        }
+        traffic={<TrafficChain query={connections} />}
+        declared={<FactBlock title="How it is declared" items={facts} />}
+      >
+        {daemonSet && (
+          <RelatedResources
+            ownerReferences={daemonSet.ownerReferences}
+            namespace={daemonSet.namespace}
+          />
+        )}
+      </WorkloadOverview>
     </ResourceDetailLayout>
   );
 }

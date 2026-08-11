@@ -15,7 +15,11 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
-import { declaredContainers } from "@/lib/container-sequence";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -199,11 +203,6 @@ export function JobDetail() {
           },
         ]
       : []),
-    {
-      label: "Containers",
-      value: job ? declaredContainers(job).length : 0,
-      mono: true,
-    },
     serviceAccountRow(job?.serviceAccountName, job?.namespace),
   ];
 
@@ -240,63 +239,69 @@ export function JobDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <Section>
-          {/* Completions, parallelism and the backoff limit are one setting
-              read three ways — how many runs, how fast, how many retries —
-              so the two that qualify the count sit under it rather than
-              beside it as equal rows. */}
-          <SectionHeader
+      <WorkloadOverview
+        count={
+          <CountBlock
             title="Run"
-            count={`${parallelism} at a time · up to ${backoffLimit} ${
-              backoffLimit === 1 ? "retry" : "retries"
-            }`}
-          />
-          <Composition
-            total={completions}
-            label={
-              job?.completions == null
-                ? "successful pod needed"
-                : completions === 1
-                  ? "completion wanted"
-                  : "completions wanted"
+            // A Job counts completions rather than replicas, and what decides
+            // the number is the spec rather than an autoscaler: parallelism
+            // and the backoff limit are the same setting read two more ways,
+            // so they qualify the count under the bar instead of standing as
+            // rows beside it.
+            subject="how many have to succeed, and what it costs to retry"
+          >
+            <Composition
+              total={completions}
+              label={
+                job?.completions == null
+                  ? "successful pod needed"
+                  : completions === 1
+                    ? "completion wanted"
+                    : "completions wanted"
+              }
+              segments={[
+                { label: "succeeded", count: succeeded, tone: "neutral" },
+                { label: "running", count: active, tone: "ok" },
+                { label: "failed", count: failed, tone: "err" },
+              ]}
+              note={
+                <>
+                  {parallelism} at a time · up to {backoffLimit}{" "}
+                  {backoffLimit === 1 ? "retry" : "retries"}
+                  {succeeded < completions && active === 0 && failed > 0 && (
+                    <> · no pod is running and the last one failed</>
+                  )}
+                </>
+              }
+            />
+          </CountBlock>
+        }
+        usage={
+          <WorkloadUsage
+            kind={ResourceType.Job}
+            uid={job?.uid}
+            name={job?.name || name}
+            namespace={job?.namespace || namespace}
+            template={job}
+            pods={pods}
+            idle={
+              job?.completionTime
+                ? "This Job has finished."
+                : failed > 0
+                  ? "No pod of this Job is running, and the last one failed."
+                  : "No pod of this Job is running."
             }
-            segments={[
-              { label: "succeeded", count: succeeded, tone: "neutral" },
-              { label: "running", count: active, tone: "ok" },
-              { label: "failed", count: failed, tone: "err" },
-            ]}
-            note={
-              succeeded < completions && active === 0 && failed > 0
-                ? "no pod is running and the last one failed"
-                : undefined
-            }
           />
-        </Section>
-        <KeyValueSection title="Timing" items={timing} />
-        <WorkloadUsage
-          kind={ResourceType.Job}
-          uid={job?.uid}
-          name={job?.name || name}
-          namespace={job?.namespace || namespace}
-          template={job}
-          pods={pods}
-          idle={
-            job?.completionTime
-              ? "This Job has finished."
-              : failed > 0
-                ? "No pod of this Job is running, and the last one failed."
-                : "No pod of this Job is running."
-          }
-        />
-      </div>
-
-      {job && (
-        <RelatedResources
-          ownerReferences={job.ownerReferences}
-          namespace={job.namespace}
-        />
-      )}
+        }
+        declared={<FactBlock title="Timing" items={timing} />}
+      >
+        {job && (
+          <RelatedResources
+            ownerReferences={job.ownerReferences}
+            namespace={job.namespace}
+          />
+        )}
+      </WorkloadOverview>
     </ResourceDetailLayout>
   );
 }

@@ -17,7 +17,6 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
-import { declaredContainers } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -38,7 +37,11 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
-import { Governance } from "@/components/resources/governance";
+import {
+  CountBlock,
+  FactBlock,
+  WorkloadOverview,
+} from "@/components/resources/workload-overview";
 import { commands } from "@/lib/commands";
 import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -226,17 +229,8 @@ export function StatefulSetDetail() {
       tone: statefulSet?.serviceName ? undefined : "warn",
     },
     {
-      label: "Pod management",
-      value: statefulSet?.podManagementPolicy || "OrderedReady",
-    },
-    {
       label: "Update strategy",
       value: statefulSet?.updateStrategy || "RollingUpdate",
-    },
-    {
-      label: "Containers",
-      value: statefulSet ? declaredContainers(statefulSet).length : 0,
-      mono: true,
     },
     serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),
   ];
@@ -283,73 +277,75 @@ export function StatefulSetDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
-      <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
-        <Section>
-          {/* Ordinals matter here: a StatefulSet brings replicas up one at a
-              time, so the gap between desired and current is a queue, not a
-              failure. The bar shows both without three separate rows. */}
-          <SectionHeader
-            title="Replicas"
-            count={
-              statefulSet?.podManagementPolicy === "Parallel"
-                ? "started in parallel"
-                : "started in order, one at a time"
+      <WorkloadOverview
+        count={
+          <CountBlock title="Replicas" governance={connections}>
+            {/* Ordinals matter here: a StatefulSet brings replicas up one at
+                a time, so the gap between desired and current is a queue, not
+                a failure. The bar shows both without three separate rows, and
+                the note under it is what explains the gap — which is why the
+                pod management policy is said there rather than as a row in a
+                fact table three blocks away. */}
+            <Composition
+              total={desired}
+              label={desired === 1 ? "replica wanted" : "replicas wanted"}
+              segments={[
+                { label: "ready", count: ready, tone: "ok" },
+                {
+                  label: "starting",
+                  count: Math.max(0, current - ready),
+                  tone: "warn",
+                },
+                {
+                  label: "not created",
+                  count: Math.max(0, desired - current),
+                  tone: "err",
+                },
+              ]}
+              note={
+                statefulSet?.podManagementPolicy === "Parallel"
+                  ? "Started in parallel"
+                  : "Started in order, one at a time"
+              }
+            />
+          </CountBlock>
+        }
+        usage={
+          <WorkloadUsage
+            kind={ResourceType.StatefulSet}
+            uid={statefulSet?.uid}
+            name={statefulSet?.name || name}
+            namespace={statefulSet?.namespace || namespace}
+            template={statefulSet}
+            pods={pods}
+            idle={
+              desired === 0
+                ? "This StatefulSet is scaled to zero."
+                : "None of this StatefulSet's pods is running."
             }
+            connections={connections.data}
           />
-          <Composition
-            total={desired}
-            label={desired === 1 ? "replica wanted" : "replicas wanted"}
-            segments={[
-              { label: "ready", count: ready, tone: "ok" },
-              {
-                label: "starting",
-                count: Math.max(0, current - ready),
-                tone: "warn",
-              },
-              {
-                label: "not created",
-                count: Math.max(0, desired - current),
-                tone: "err",
-              },
-            ]}
+        }
+        traffic={<TrafficChain query={connections} />}
+        declared={<FactBlock title="How it is declared" items={facts} />}
+      >
+        {statefulSet && (
+          <RelatedResources
+            ownerReferences={statefulSet.ownerReferences}
+            namespace={statefulSet.namespace}
           />
-        </Section>
-        <KeyValueSection title="StatefulSet" items={facts} />
-        <WorkloadUsage
+        )}
+
+        <ScaleDialog
+          warnings={scaleWarnings(connections.data, intercept("Scale"))}
+          open={scaleOpen}
+          onOpenChange={setScaleOpen}
           kind={ResourceType.StatefulSet}
-          uid={statefulSet?.uid}
-          name={statefulSet?.name || name}
-          namespace={statefulSet?.namespace || namespace}
-          template={statefulSet}
-          pods={pods}
-          idle={
-            desired === 0
-              ? "This StatefulSet is scaled to zero."
-              : "None of this StatefulSet's pods is running."
-          }
-          connections={connections.data}
+          current={desired}
+          busy={scaleMutation.isPending}
+          onSubmit={(replicas) => scaleMutation.mutate(replicas)}
         />
-        <Governance query={connections} />
-      </div>
-
-      <TrafficChain query={connections} />
-
-      {statefulSet && (
-        <RelatedResources
-          ownerReferences={statefulSet.ownerReferences}
-          namespace={statefulSet.namespace}
-        />
-      )}
-
-      <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"))}
-        open={scaleOpen}
-        onOpenChange={setScaleOpen}
-        kind={ResourceType.StatefulSet}
-        current={desired}
-        busy={scaleMutation.isPending}
-        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-      />
+      </WorkloadOverview>
     </ResourceDetailLayout>
   );
 }
