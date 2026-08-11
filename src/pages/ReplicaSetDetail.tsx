@@ -1,4 +1,5 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { BadgeCheck, Info, Layers2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -33,7 +34,7 @@ import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { ReplicaSetInfo } from "@/generated/types";
 
@@ -58,19 +59,20 @@ export function ReplicaSetDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<ReplicaSetInfo>({
     resourceKind: ResourceType.ReplicaSet,
     fetchResource: (name, ns) => commands.getReplicaset(name, ns),
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["replicaset-pods", namespace, name],
     queryFn: () => commands.getReplicasetPods(name!, namespace || null),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const owner = replicaSet?.ownerReferences.find(
@@ -80,12 +82,12 @@ export function ReplicaSetDetail() {
   // Only to say how many other revisions the Deployment is holding on to.
   // Without it a page that is empty because it was superseded looks exactly
   // like a page that is empty because nothing ever ran.
-  const { data: siblings = [] } = useQuery({
+  const { data: siblings = [] } = useLiveQuery({
     queryKey: ["deployment-replicasets", namespace, owner?.name],
     queryFn: () => commands.getDeploymentReplicasets(owner!.name, namespace!),
     enabled: !!owner && !!namespace,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const replicas = replicaSet?.replicas;
@@ -267,6 +269,7 @@ export function ReplicaSetDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={replicaSet}
       delivery={deliveryOfKind(ResourceType.ReplicaSet, replicaSet)}
       isLoading={isLoading}

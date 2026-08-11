@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Copy, ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
 import {
@@ -43,7 +44,6 @@ import { expiryOf } from "@/lib/certificates";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
@@ -138,6 +138,7 @@ export function IngressDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<IngressInfo>({
     resourceKind: ResourceType.Ingress,
     fetchResource: async (name, ns) => {
@@ -205,7 +206,7 @@ export function IngressDetail() {
     isLoading: eventsLoading,
     error: eventsError,
     refetch: refetchEvents,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["ingress-events", namespace, name],
     queryFn: async () => {
       const filters: EventFilters = {
@@ -219,7 +220,7 @@ export function IngressDetail() {
       return await commands.listEvents(filters);
     },
     enabled: !!name && !!namespace,
-    refetchInterval: REFRESH_INTERVALS.overview,
+    refresh: "overview",
   });
 
   const facts: KeyValue[] = [
@@ -582,6 +583,7 @@ export function IngressDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={ingress}
       delivery={deliveryQuery}
       isLoading={isLoading}

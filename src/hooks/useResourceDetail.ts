@@ -12,15 +12,15 @@
 import { useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  useQuery,
   useMutation,
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useResourceYaml } from "./useResourceYaml";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -39,8 +39,8 @@ export interface UseResourceDetailOptions<T> {
   placeholderData?: boolean;
   /** Default tab to show */
   defaultTab?: string;
-  /** Override refetch interval */
-  refetchInterval?: number | false;
+  /** Which rate this re-reads at, or `false` for a watch-fed page. */
+  refresh?: RefreshRate | false;
   /** Override stale time */
   staleTime?: number;
 }
@@ -55,6 +55,8 @@ export interface UseResourceDetailResult<T> {
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
+  /** What the header's freshness reading is drawn from. */
+  freshness: Freshness;
 
   // YAML data
   yaml: string | undefined;
@@ -95,7 +97,7 @@ export function useResourceDetail<T>(
     onDeleted,
     placeholderData = true,
     defaultTab = "overview",
-    refetchInterval = REFRESH_INTERVALS.resourceDetail,
+    refresh = "resourceDetail",
     staleTime = STALE_TIMES.resourceDetail,
   } = options;
 
@@ -118,8 +120,9 @@ export function useResourceDetail<T>(
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: [resourceKind.toLowerCase(), namespace, name],
+    freshness,
+  } = useLiveQuery<T, Error, T, string[]>({
+    queryKey: [resourceKind.toLowerCase(), namespace, name] as string[],
     queryFn: async () => {
       if (!name) throw new Error("Name is required");
       const result = await fetchResource(name, namespace || null);
@@ -129,8 +132,7 @@ export function useResourceDetail<T>(
     enabled: !!name,
     placeholderData: placeholderData ? keepPreviousData : undefined,
     staleTime,
-    refetchInterval,
-    refetchOnWindowFocus: false,
+    refresh,
   });
 
   // Always use useResourceYaml for YAML fetching
@@ -188,6 +190,7 @@ export function useResourceDetail<T>(
     isLoading,
     error: error as Error | null,
     refetch,
+    freshness,
     yaml,
     isLoadingYaml,
     copyYaml,

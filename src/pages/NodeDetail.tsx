@@ -62,6 +62,7 @@ export function NodeDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<NodeInfo>({
     resourceKind: ResourceType.Node,
     isClusterScoped: true,
@@ -301,6 +302,7 @@ export function NodeDetail() {
   return (
     <>
       <ResourceDetailLayout
+        freshness={freshness}
         resource={node}
         isLoading={isLoading}
         error={error}

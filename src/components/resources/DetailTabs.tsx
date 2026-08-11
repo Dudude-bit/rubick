@@ -15,6 +15,7 @@ import { useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CaptionScope } from "@/components/ui/section";
+import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 
@@ -91,6 +92,11 @@ export function DetailTabs({
 }) {
   const opened = useOpenedTabs(activeTab);
   const surface = surfaceIsOpen(tabs, activeTab);
+  // Force-mounting a surface keeps its shell attached and its log stream
+  // running, which is the point. It must not also keep its queries re-reading
+  // the cluster for a panel nobody can see, and since the panel is mounted
+  // nothing downstream can work that out for itself.
+  const pageVisible = useSurfaceVisible();
 
   return (
     <Tabs
@@ -145,9 +151,13 @@ export function DetailTabs({
               : "mt-[18px] flex flex-col gap-[22px]"
           }
         >
-          {/* The strip has just said this word; whatever the tab opens
-              with does not have to say it again. */}
-          <CaptionScope tab={tab.label}>{tab.content}</CaptionScope>
+          <SurfaceVisibility.Provider
+            value={pageVisible && tab.id === activeTab}
+          >
+            {/* The strip has just said this word; whatever the tab opens
+                with does not have to say it again. */}
+            <CaptionScope tab={tab.label}>{tab.content}</CaptionScope>
+          </SurfaceVisibility.Provider>
         </TabsContent>
       ))}
     </Tabs>

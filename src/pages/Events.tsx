@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -15,7 +16,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -38,7 +39,8 @@ export function Events() {
     data: events = [],
     isLoading,
     dataUpdatedAt,
-  } = useQuery({
+    freshness,
+  } = useLiveQuery({
     queryKey: [
       toPlural(ResourceType.Event),
       currentNamespace,
@@ -62,7 +64,7 @@ export function Events() {
       }
     },
     enabled: isConnected,
-    refetchInterval: REFRESH_INTERVALS.fast,
+    refresh: "fast",
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.fast,
     refetchOnWindowFocus: false,
@@ -126,7 +128,10 @@ export function Events() {
                 ))}
               </SelectContent>
             </Select>
-            <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+            <DataFreshness
+              dataUpdatedAt={dataUpdatedAt}
+              slowed={freshness.slowed}
+            />
           </>
         }
       />

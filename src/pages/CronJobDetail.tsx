@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -38,7 +39,7 @@ import { useResourceDetail } from "@/hooks";
 import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
 import { commands } from "@/lib/commands";
 import { matchCronJobPods } from "@/lib/metrics";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import type { CronJobDetailInfo } from "@/generated/types";
@@ -126,6 +127,7 @@ export function CronJobDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<CronJobDetailInfo>({
     resourceKind: ResourceType.CronJob,
     fetchResource: (name, ns) => commands.getCronjob(name, ns),
@@ -133,7 +135,7 @@ export function CronJobDetail() {
     defaultTab: "overview",
   });
 
-  const { data: jobs = [] } = useQuery({
+  const { data: jobs = [] } = useLiveQuery({
     queryKey: ["cronjob-jobs", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -154,7 +156,7 @@ export function CronJobDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   // A CronJob's pods are two hops away — its runs own them — so they are
@@ -163,7 +165,7 @@ export function CronJobDetail() {
   // is a fetch that answers a question already answered.
   const inFlight = (cronJob?.active ?? 0) > 0;
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -185,7 +187,7 @@ export function CronJobDetail() {
     enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const deliveryQuery = deliveryOfKind(ResourceType.CronJob, cronJob);
@@ -330,6 +332,7 @@ export function CronJobDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={cronJob}
       delivery={deliveryQuery}
       isLoading={isLoading}

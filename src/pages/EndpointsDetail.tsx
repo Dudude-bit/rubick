@@ -45,6 +45,7 @@ export function EndpointsDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<EndpointsInfo>({
     resourceKind: ResourceType.Endpoints,
     fetchResource: (name, ns) => commands.getEndpoints(name, ns),
@@ -275,6 +276,7 @@ export function EndpointsDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={endpoints}
       isLoading={isLoading}
       error={error}

@@ -44,6 +44,7 @@ export function ServiceDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    freshness,
   } = useResourceDetail<ServiceInfo>({
     resourceKind: ResourceType.Service,
     fetchResource: (name, ns) => commands.getService(name, ns),
@@ -235,6 +236,7 @@ export function ServiceDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={service}
       delivery={deliveryQuery}
       isLoading={isLoading}

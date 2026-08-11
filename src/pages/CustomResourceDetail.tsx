@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Activity, Info, ListTree, Tag, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,7 +22,7 @@ import { commands } from "@/lib/commands";
 import { deliveryOf } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
@@ -186,13 +187,13 @@ export function CustomResourceDetail() {
     data: resource,
     isLoading,
     error,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["custom-resource", decodedCrdName, namespace, name],
     queryFn: () =>
       commands.getCustomResource(decodedCrdName, name || "", namespace || null),
     enabled: isConnected && !!decodedCrdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
-    refetchInterval: REFRESH_INTERVALS.resourceDetail,
+    refresh: "resourceDetail",
   });
 
   const { data: yaml = "" } = useQuery({

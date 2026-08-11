@@ -16,7 +16,7 @@ import {
   matchesDeliveryFilter,
   type DeliveryFilter,
 } from "@/lib/delivery";
-import { STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -65,6 +65,8 @@ export interface ResourceListProps<
   dataUpdatedAt?: number;
   /** A watch stream feeds this list and has not failed. */
   live?: boolean;
+  /** Polled, and backed off past its rate because nothing is changing. */
+  slowed?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
     | ColumnDef<T>[]
@@ -79,8 +81,8 @@ export interface ResourceListProps<
   deleteConfig?: ResourceDeleteConfig<T>;
   /** Optional stale time override (default: 5000ms) */
   staleTime?: number;
-  /** Optional refetch interval (default: undefined - no auto refetch) */
-  refetchInterval?: number | false;
+  /** Which rate the list re-reads at, or `false` where a watch feeds it. */
+  refresh?: RefreshRate | false;
   /** Optional custom header actions */
   headerActions?: ReactNode;
   /** Optional content rendered between header and table */
@@ -132,12 +134,13 @@ export function ResourceList<
   isLoading,
   dataUpdatedAt: externalDataUpdatedAt,
   live,
+  slowed: externalSlowed,
   columns,
   emptyStateLabel,
   emptyMessage,
   deleteConfig,
   staleTime,
-  refetchInterval,
+  refresh,
   headerActions,
   headerContent,
   embedded = false,
@@ -161,7 +164,7 @@ export function ResourceList<
     {
       enabled: shouldUseQuery,
       staleTime: staleTime ?? STALE_TIMES.resourceList,
-      ...(refetchInterval !== undefined ? { refetchInterval } : {}),
+      ...(refresh !== undefined ? { refresh } : {}),
     }
   );
 
@@ -268,6 +271,7 @@ export function ResourceList<
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
           live={live}
+          slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
         />
       )}
       {headerContent}

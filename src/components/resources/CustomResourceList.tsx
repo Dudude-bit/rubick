@@ -14,7 +14,7 @@ import { useCrdView } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
@@ -162,7 +162,7 @@ export function CustomResourceList({
   // as the other migrated lists: watch events update the cache via
   // setQueryData; if the watch fails (typically because the kubeconfig
   // user lacks the `watch` verb on the CRD), the toast fires and
-  // refetchInterval falls back to its default 2s.
+  // the list falls back to its default poll rate.
   const queryKey = useMemo(
     () => ["custom-resources", crdName, namespace ?? "all"] as const,
     [crdName, namespace]
@@ -236,7 +236,7 @@ export function CustomResourceList({
         resourceType: crdKind,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? REFRESH_INTERVALS.resourceList : false}
+      refresh={watchFailed ? "resourceList" : false}
       live={!watchFailed}
       searchKey="name"
       searchPlaceholder={`Search ${crdKind}...`}

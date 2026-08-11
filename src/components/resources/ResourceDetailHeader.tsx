@@ -49,6 +49,8 @@ export interface ResourceDetailHeaderProps {
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
+  /** Polled, and backed off past its rate because nothing is changing. */
+  slowed?: boolean;
 }
 
 /** Both segments of the trail, so the reader's eye reads one path. */
@@ -170,6 +172,7 @@ export function ResourceDetailHeader({
   createdAt,
   onBack,
   dataUpdatedAt,
+  slowed,
 }: ResourceDetailHeaderProps) {
   const segment = {
     to: listUrl === null ? null : (listUrl ?? getResourceListUrl(kind)),
@@ -244,7 +247,7 @@ export function ResourceDetailHeader({
         </span>
       )}
       <div className="ml-auto flex flex-none items-center">
-        <DataFreshness dataUpdatedAt={dataUpdatedAt} />
+        <DataFreshness dataUpdatedAt={dataUpdatedAt} slowed={slowed} />
       </div>
     </div>
   );

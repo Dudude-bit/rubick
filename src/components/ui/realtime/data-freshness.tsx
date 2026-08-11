@@ -4,9 +4,17 @@
  * This used to render a green "Live" the moment any data existed, which
  * made it a decoration rather than a reading: it said "Live" over a
  * disconnected cluster and over screens that have no watch at all and
- * merely re-read on a timer. Three states, three words, and a shape as
+ * merely re-read on a timer. Four states, four words, and a shape as
  * well as a colour — a reader who cannot see the hue still gets the
  * answer from the ring and the label.
+ *
+ * The fourth word is "slowed", and it is the reason this component was
+ * touched at all. Screens that have stopped changing now re-read less
+ * often (see `lib/refresh`), which is only allowed because the badge says
+ * so: a backed-off screen under a word that means "as it happens" is the
+ * exact class of lie this indicator was written to remove. So the age
+ * comes onto the face of it, the way it does when offline — those are the
+ * two states where how old the number is changes what to do with it.
  *
  * @module components/ui/realtime/data-freshness
  */
@@ -33,6 +41,15 @@ export interface DataFreshnessProps {
    * not get to claim it.
    */
   live?: boolean;
+  /**
+   * This view is polled, and has backed off past its normal rate because
+   * nothing has changed for a while.
+   *
+   * Ignored while {@link DataFreshnessProps.live} is set, and that is not a
+   * precedence trick: a connected watch keeps the view up to date whatever
+   * a poll beside it is doing, so there is nothing slowed about it.
+   */
+  slowed?: boolean;
   className?: string;
 }
 
@@ -47,6 +64,13 @@ const STATES = {
     dot: "bg-fg-fnt",
     note: "No watch on this view — it re-reads the cluster on a timer.",
   },
+  slowed: {
+    label: "slowed",
+    // Hollow, like offline: both are states where the number on screen may
+    // no longer be the cluster's, and neither may rely on a hue to say so.
+    dot: "border border-fg-fnt",
+    note: "Nothing here has changed for a while, so it is being re-read less often. Anything you do on this page brings it back up to rate.",
+  },
   offline: {
     // A ring, not a fill: offline is the one state a reader must not miss,
     // and it is the one that cannot rely on a hue to say so.
@@ -59,6 +83,7 @@ const STATES = {
 export const DataFreshness = memo(function DataFreshness({
   dataUpdatedAt,
   live = false,
+  slowed = false,
   className,
 }: DataFreshnessProps) {
   const isConnected = useClusterStore((s) => s.isConnected);
@@ -67,7 +92,13 @@ export const DataFreshness = memo(function DataFreshness({
   // screen's own loading state is saying it.
   if (!dataUpdatedAt) return null;
 
-  const state = !isConnected ? "offline" : live ? "live" : "polling";
+  const state = !isConnected
+    ? "offline"
+    : live
+      ? "live"
+      : slowed
+        ? "slowed"
+        : "polling";
   const { label, dot, note } = STATES[state];
   const stamp = new Date(dataUpdatedAt).toISOString();
 
@@ -82,10 +113,10 @@ export const DataFreshness = memo(function DataFreshness({
         >
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
           <span>{label}</span>
-          {/* Only the offline reading needs an age on the face of it: it is
-              the one state where how old the data is changes what the
-              reader should do with it. */}
-          {state === "offline" && (
+          {/* The two readings that need an age on the face of them: they are
+              the states where how old the data is changes what the reader
+              should do with it. */}
+          {(state === "offline" || state === "slowed") && (
             <>
               <span aria-hidden="true">·</span>
               <RealtimeAge timestamp={stamp} fallback="" />

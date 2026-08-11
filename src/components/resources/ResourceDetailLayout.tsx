@@ -27,6 +27,7 @@ import { DetailAction } from "./detail-blocks";
 import { DeliveryBanner, DeliveryMarks } from "./delivery";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 import { useDelivery } from "@/hooks/useDelivery";
+import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
@@ -156,6 +157,16 @@ interface ResourceDetailLayoutProps {
    */
   summary?: ReactNode;
 
+  /**
+   * What the object's own query is worth right now, from `useResourceDetail`.
+   *
+   * Every detail page passes it and the header draws the same reading from it,
+   * for the reason `delivery` is a prop on this frame too: a badge that is on
+   * eleven pages and missing on the twelfth teaches the reader that the twelfth
+   * is live, which is the one thing it must never be able to say by accident.
+   */
+  freshness?: Freshness;
+
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -180,6 +191,7 @@ export function ResourceDetailLayout({
   onFindReplacement,
   isSearchingReplacement,
   summary,
+  freshness,
   tabs,
   activeTab,
   onTabChange,
@@ -236,6 +248,8 @@ export function ResourceDetailLayout({
             </>
           }
           onBack={onBack}
+          dataUpdatedAt={freshness?.dataUpdatedAt}
+          slowed={freshness?.slowed}
         />
 
         {/* Above the strip, and so on every tab: both say something about the

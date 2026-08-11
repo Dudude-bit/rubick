@@ -30,6 +30,7 @@ export function ConfigMapDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<ConfigMapInfo>({
     resourceKind: ResourceType.ConfigMap,
     fetchResource: (name, ns) => commands.getConfigmap(name, ns),
@@ -109,6 +110,7 @@ export function ConfigMapDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={configMap}
       delivery={deliveryQuery}
       isLoading={isLoading}

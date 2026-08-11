@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Link } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2, List } from "lucide-react";
@@ -20,7 +21,7 @@ import { createAgeColumn } from "@/components/resources/columns";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
@@ -44,7 +45,8 @@ export function Crds() {
     data: crdGroups = [],
     isLoading,
     dataUpdatedAt,
-  } = useQuery({
+    freshness,
+  } = useLiveQuery({
     queryKey: ["crds", "grouped"],
     queryFn: async () => {
       try {
@@ -55,7 +57,7 @@ export function Crds() {
     },
     enabled: isConnected,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.slow,
+    refresh: "slow",
   });
 
   const deleteMutation = useMutation({
@@ -186,6 +188,7 @@ export function Crds() {
             : `${crds.length} · ${crdGroups.length} API ${crdGroups.length === 1 ? "group" : "groups"}`
         }
         dataUpdatedAt={dataUpdatedAt}
+        slowed={freshness.slowed}
       />
       {/* One table, one search field. The previous page nested a full
           DataTable — search, density toggle, pagination — inside every

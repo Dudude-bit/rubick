@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -39,7 +40,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DaemonSetDetailInfo } from "@/generated/types";
 
@@ -56,6 +57,7 @@ export function DaemonSetDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<DaemonSetDetailInfo>({
     resourceKind: ResourceType.DaemonSet,
     fetchResource: (name, ns) => commands.getDaemonset(name, ns),
@@ -70,7 +72,7 @@ export function DaemonSetDetail() {
   // it from match labels dropped it and listed nothing.
   const labelSelector = daemonSet?.selector || null;
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["daemonset-pods", namespace, name, labelSelector],
     queryFn: async () => {
       if (!namespace) return [];
@@ -91,7 +93,7 @@ export function DaemonSetDetail() {
     enabled: !!namespace && !!labelSelector,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const deliveryQuery = deliveryOfKind(ResourceType.DaemonSet, daemonSet);
@@ -285,6 +287,7 @@ export function DaemonSetDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={daemonSet}
       delivery={deliveryQuery}
       isLoading={isLoading}

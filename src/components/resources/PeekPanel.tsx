@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +17,7 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
@@ -91,11 +91,11 @@ function PeekContent({
 
   const source = useMemo(() => resolveSource(target.kind), [target.kind]);
 
-  const { data, error, isLoading } = useQuery({
+  const { data, error, isLoading } = useLiveQuery({
     queryKey: ["peek", target.kind, namespace, target.name],
     queryFn: () => source.fetch(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
-    refetchInterval: REFRESH_INTERVALS.resourceDetail,
+    refresh: "resourceDetail",
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -398,7 +398,7 @@ function PeekSkeleton() {
 }
 
 function PeekEvents({ target }: { target: PeekTarget }) {
-  const { data: events, error } = useQuery({
+  const { data: events, error } = useLiveQuery({
     queryKey: [
       "peek-events",
       target.kind,
@@ -415,7 +415,7 @@ function PeekEvents({ target }: { target: PeekTarget }) {
         limit: 20,
       }),
     staleTime: STALE_TIMES.fast,
-    refetchInterval: REFRESH_INTERVALS.overview,
+    refresh: "overview",
     refetchOnWindowFocus: false,
     retry: false,
   });

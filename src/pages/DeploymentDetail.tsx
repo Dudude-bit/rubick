@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
   AlignLeft,
   BadgeCheck,
@@ -76,7 +77,7 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
 
@@ -98,6 +99,7 @@ export function DeploymentDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<DeploymentInfo>({
     resourceKind: ResourceType.Deployment,
     fetchResource: (name, ns) => commands.getDeployment(name, ns),
@@ -105,7 +107,7 @@ export function DeploymentDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["deployment-pods", namespace, name],
     queryFn: async () => {
       try {
@@ -118,19 +120,19 @@ export function DeploymentDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
     refetchOnWindowFocus: false,
   });
 
   const connections = useConnections(ResourceType.Deployment, name, namespace);
 
-  const { data: revisions = [] } = useQuery({
+  const { data: revisions = [] } = useLiveQuery({
     queryKey: ["deployment-replicasets", namespace, name],
     queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   // For the banner only. The Usage block reads the same query through the
@@ -156,7 +158,7 @@ export function DeploymentDetail() {
 
   const logPod = pods.find((p) => p.name === selectedLogPod);
 
-  const { data: rolloutStatus } = useQuery({
+  const { data: rolloutStatus } = useLiveQuery({
     queryKey: ["rollout-status", namespace, name],
     queryFn: async () => {
       try {
@@ -167,7 +169,7 @@ export function DeploymentDetail() {
       }
     },
     enabled: !!namespace && !!name,
-    refetchInterval: REFRESH_INTERVALS.fast,
+    refresh: "fast",
   });
 
   const scaleMutation = useResourceMutation(
@@ -490,6 +492,7 @@ export function DeploymentDetail() {
   return (
     <>
       <ResourceDetailLayout
+        freshness={freshness}
         resource={deployment}
         delivery={deliveryQuery}
         isLoading={isLoading}

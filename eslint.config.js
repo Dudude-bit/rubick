@@ -60,9 +60,32 @@ export default [
     // it replaces it — which silently switches the colour guard off for
     // every file the later block matches.
     files: ["src/**/*.{ts,tsx}"],
+    // The one file allowed to name a polling interval. Exempting it here
+    // rather than in a config object of its own is deliberate: a second
+    // object naming `no-restricted-syntax` would replace this whole list
+    // instead of adding to it, and quietly switch the colour guard off for
+    // the file it matched.
+    ignores: ["src/hooks/useLiveQuery.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
+        {
+          // What made an idle app cost the API server ~1000 requests a
+          // minute: 45 hand-written intervals, of which 2 checked whether
+          // anybody was looking at the screen they belonged to.
+          //
+          // The number is not the problem — the number with nothing around
+          // it is. `useLiveQuery` asks for a *rate* and derives the interval
+          // from whether the surface is on screen, whether the window has
+          // focus, and whether the answer has stopped changing; and it is
+          // what tells `DataFreshness` to stop saying "polling" once it has
+          // backed off. A `refetchInterval` written by hand has none of
+          // that, and no way to acquire it later.
+          selector:
+            "Property[key.name=/^refetchInterval(InBackground)?$/], TSPropertySignature[key.name=/^refetchInterval(InBackground)?$/]",
+          message:
+            "Do not set refetchInterval. Use useLiveQuery({ refresh: '<rate>' }) — the rates live in src/lib/refresh.ts, and going through the hook is what stops a screen nobody is looking at from polling and what keeps the freshness badge honest about a backed-off query.",
+        },
         {
           selector:
             "Literal[value=/(^|[^a-z0-9-])(bg|text|border|ring|fill|stroke|from|via|to)-(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone|white|black)([-/][0-9]{1,3})?(?![a-z0-9-])/]",

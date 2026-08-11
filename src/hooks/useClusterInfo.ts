@@ -7,16 +7,17 @@
  * @module hooks/useClusterInfo
  */
 
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 export function useClusterInfo() {
   const { isConnected, currentContext } = useClusterStore();
 
-  return useQuery({
+  return useLiveQuery({
     queryKey: ["cluster-info", currentContext],
     queryFn: async () => {
       if (!currentContext) return null;
@@ -29,7 +30,6 @@ export function useClusterInfo() {
     enabled: isConnected && !!currentContext,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.overview,
-    refetchInterval: REFRESH_INTERVALS.overview,
-    refetchOnWindowFocus: false,
+    refresh: "overview",
   });
 }

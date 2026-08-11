@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useMetrics } from "@/hooks/useMetrics";
 import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import type { PodInfo } from "@/generated/types";
@@ -56,7 +57,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     data: pods = [],
     isLoading: isLoadingPods,
     dataUpdatedAt,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey,
     queryFn: async () => {
       try {
@@ -76,8 +77,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: watchFailed ? REFRESH_INTERVALS.resourceList : false,
-    refetchOnWindowFocus: false,
+    refresh: watchFailed ? "resourceList" : false,
   });
 
   const subscribePods = useCallback(

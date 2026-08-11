@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { BadgeCheck, Info, Layers2, Scale, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -43,7 +44,7 @@ import {
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
 
@@ -60,6 +61,7 @@ export function StatefulSetDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<StatefulSetDetailInfo>({
     resourceKind: ResourceType.StatefulSet,
     fetchResource: (name, ns) => commands.getStatefulset(name, ns),
@@ -69,7 +71,7 @@ export function StatefulSetDetail() {
 
   const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["statefulset-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -99,7 +101,7 @@ export function StatefulSetDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
@@ -282,6 +284,7 @@ export function StatefulSetDetail() {
   return (
     <>
       <ResourceDetailLayout
+        freshness={freshness}
         resource={statefulSet}
         delivery={deliveryQuery}
         isLoading={isLoading}

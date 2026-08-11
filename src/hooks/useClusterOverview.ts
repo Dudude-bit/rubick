@@ -1,8 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -18,7 +19,7 @@ export function useClusterOverview(namespace: string | null) {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
 
-  return useQuery({
+  return useLiveQuery({
     queryKey: ["cluster-overview", currentContext, namespace ?? ""],
     queryFn: async () => {
       try {
@@ -30,7 +31,6 @@ export function useClusterOverview(namespace: string | null) {
     enabled: isConnected,
     staleTime: STALE_TIMES.overview,
     placeholderData: keepPreviousData,
-    refetchInterval: REFRESH_INTERVALS.overview,
-    refetchOnWindowFocus: false,
+    refresh: "overview",
   });
 }

@@ -14,6 +14,7 @@ import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
+import { startWindowActivity } from "@/lib/window-activity";
 import { logInfo, flushLogs } from "@/lib/logger";
 
 // Lazy load all pages for code splitting
@@ -156,6 +157,11 @@ export default function App() {
   usePortForwardAutoStart();
   // Initialize auto-updater
   useAutoUpdater();
+
+  // Mounted here rather than in a component that can remount: every query in
+  // the app polls against these three facts, and a second set of listeners
+  // would double-count the reader's clicks.
+  useEffect(() => startWindowActivity(), []);
 
   useEffect(() => {
     const cleanup = setupFrontendLogger();

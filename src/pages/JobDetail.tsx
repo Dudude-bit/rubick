@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -36,7 +37,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import type { JobDetailInfo } from "@/generated/types";
@@ -69,6 +70,7 @@ export function JobDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<JobDetailInfo>({
     resourceKind: ResourceType.Job,
     fetchResource: (name, ns) => commands.getJob(name, ns),
@@ -76,7 +78,7 @@ export function JobDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useQuery({
+  const { data: pods = [] } = useLiveQuery({
     queryKey: ["job-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -97,7 +99,7 @@ export function JobDetail() {
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
   });
 
   const deliveryQuery = deliveryOfKind(ResourceType.Job, job);
@@ -261,6 +263,7 @@ export function JobDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={job}
       delivery={deliveryQuery}
       isLoading={isLoading}

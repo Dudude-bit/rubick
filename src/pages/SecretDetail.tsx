@@ -35,6 +35,7 @@ export function SecretDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<SecretInfo>({
     resourceKind: ResourceType.Secret,
     fetchResource: (name, ns) => commands.getSecret(name, ns),
@@ -136,6 +137,7 @@ export function SecretDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={secret}
       delivery={deliveryQuery}
       isLoading={isLoading}

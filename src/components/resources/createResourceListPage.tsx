@@ -80,7 +80,7 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   /**
    * Optional watch subscription factory. When supplied, the page
    * subscribes to backend `resource-event` updates and the polling
-   * `refetchInterval` is disabled — the cache is kept fresh by
+   * `refresh` rate is switched off — the cache is kept fresh by
    * incremental setQueryData updates instead. Receives the resolved
    * namespace (`null` for cluster-scoped pages or "all namespaces")
    * and returns a stream id from the matching `subscribe_*_watch`
@@ -204,7 +204,7 @@ export function createResourceListPage<T extends ListableResource>(
         }
         delivery={deliveryScopeOf(config.resourceType)}
         staleTime={STALE_TIMES.resourceList}
-        refetchInterval={watchFactory && !watchFailed ? false : undefined}
+        refresh={watchFactory && !watchFailed ? false : undefined}
         live={!!watchFactory && !watchFailed}
       />
     );

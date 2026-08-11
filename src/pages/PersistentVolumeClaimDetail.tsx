@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Info, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -24,7 +24,6 @@ import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
   EventFilters,
@@ -44,6 +43,7 @@ export function PersistentVolumeClaimDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<PersistentVolumeClaimInfo>({
     resourceKind: ResourceType.PersistentVolumeClaim,
     fetchResource: (name, ns) => commands.getPersistentVolumeClaim(name, ns),
@@ -67,7 +67,7 @@ export function PersistentVolumeClaimDetail() {
     isLoading: eventsLoading,
     error: eventsError,
     refetch: refetchEvents,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["pvc-events", namespace, name],
     queryFn: async () => {
       const filters: EventFilters = {
@@ -81,7 +81,7 @@ export function PersistentVolumeClaimDetail() {
       return await commands.listEvents(filters);
     },
     enabled: !!name && !!namespace,
-    refetchInterval: REFRESH_INTERVALS.overview,
+    refresh: "overview",
   });
 
   const facts: KeyValue[] = [
@@ -186,6 +186,7 @@ export function PersistentVolumeClaimDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={pvc}
       delivery={deliveryQuery}
       isLoading={isLoading}

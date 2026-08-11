@@ -7,9 +7,10 @@ import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor } from "@/components/yaml";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { podContainers } from "@/lib/container-sequence";
@@ -381,14 +382,14 @@ function PeekPodsTab({
       ? (detail as DaemonSetDetailInfo | undefined)?.selector
       : undefined;
 
-  const { data, error, isPending, isFetching, refetch } = useQuery({
+  const { data, error, isPending, isFetching, refetch } = useLiveQuery({
     queryKey: ["peek-pods", kind, namespace, target.name, selector],
     queryFn: () => fetchOwnedPods(target, namespace!, detail),
     // A DaemonSet's selector arrives with the Overview fetch; asking before
     // it lands would list the whole namespace.
     enabled: !!namespace && (kind !== "DaemonSet" || !!selector),
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,
@@ -419,7 +420,7 @@ function PeekPodsTab({
 function PeekJobsTab({ target }: { target: PeekTarget }) {
   const namespace = target.namespace ?? null;
 
-  const { data, error, isPending, isFetching, refetch } = useQuery({
+  const { data, error, isPending, isFetching, refetch } = useLiveQuery({
     queryKey: ["peek-jobs", namespace, target.name],
     queryFn: async () => {
       const jobs = await commands.listJobs({
@@ -436,7 +437,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
     },
     enabled: !!namespace,
     staleTime: STALE_TIMES.resourceList,
-    refetchInterval: REFRESH_INTERVALS.resourceList,
+    refresh: "resourceList",
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,
@@ -495,13 +496,13 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   const copy = useCopyToClipboard();
   const namespace = target.namespace ?? null;
 
-  const { data, error, isPending, isFetching, refetch } = useQuery({
+  const { data, error, isPending, isFetching, refetch } = useLiveQuery({
     queryKey: ["peek-yaml", target.kind, namespace, target.name],
     queryFn: () => fetchResourceYaml(target.kind, target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
     // Slower than the summary above it: a manifest is read to compare against
     // something, and a column that reflows under the reader is unusable.
-    refetchInterval: REFRESH_INTERVALS.slow,
+    refresh: "slow",
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,

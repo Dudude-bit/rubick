@@ -7,10 +7,11 @@
  * reader opens first, and switching tabs costs nothing.
  */
 
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import type { ResourceConnections } from "@/generated/types";
 
 export type ConnectionsQuery = ReturnType<typeof useConnections>;
@@ -29,7 +30,7 @@ export function useConnections(
    */
   enabled = true
 ) {
-  return useQuery<ResourceConnections>({
+  return useLiveQuery<ResourceConnections>({
     queryKey: ["connections", kind, namespace ?? null, name],
     queryFn: () =>
       commands.getResourceConnections(kind, name!, namespace ?? null),
@@ -38,7 +39,7 @@ export function useConnections(
     // the list pages rather than sitting on a stale answer.
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceDetail,
-    refetchInterval: REFRESH_INTERVALS.slow,
+    refresh: "slow",
     retry: false,
   });
 }

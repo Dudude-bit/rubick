@@ -127,7 +127,7 @@ export function createWorkloadListPage<T extends Workload>(
     const listQuery = useResourceList(
       queryKey,
       () => config.fetchList({ namespace: currentNamespace || null }),
-      watchFactory && !watchFailed ? { refetchInterval: false } : undefined
+      watchFactory && !watchFailed ? ({ refresh: false } as const) : undefined
     );
 
     useResourceWatch<T>({
@@ -189,6 +189,7 @@ export function createWorkloadListPage<T extends Workload>(
           isLoading={listQuery.isLoading || isLoadingPods}
           dataUpdatedAt={listQuery.dataUpdatedAt}
           live={!!watchFactory && !watchFailed}
+          slowed={listQuery.freshness.slowed}
           getRowId={getResourceRowId}
           delivery={deliveryScopeOf(config.resourceType)}
           columns={columns}

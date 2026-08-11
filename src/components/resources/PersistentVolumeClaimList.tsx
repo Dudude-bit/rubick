@@ -161,7 +161,7 @@ export function PersistentVolumeClaimList() {
         resourceType: ResourceType.PersistentVolumeClaim,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refetchInterval={watchFailed ? undefined : false}
+      refresh={watchFailed ? undefined : false}
       live={!watchFailed}
       searchKey="name"
       getRowHref={(row) =>

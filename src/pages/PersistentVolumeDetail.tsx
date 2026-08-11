@@ -32,6 +32,7 @@ export function PersistentVolumeDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<PersistentVolumeInfo>({
     resourceKind: ResourceType.PersistentVolume,
     isClusterScoped: true,
@@ -105,6 +106,7 @@ export function PersistentVolumeDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={pv}
       delivery={deliveryQuery}
       isLoading={isLoading}

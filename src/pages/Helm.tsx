@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
@@ -91,7 +92,7 @@ export function Helm() {
     data: releases = [],
     isLoading,
     refetch,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: ["helm-releases-native", selectedNamespace],
     queryFn: async () => {
       try {
@@ -102,7 +103,7 @@ export function Helm() {
       }
     },
     enabled: isConnected,
-    refetchInterval: 30000,
+    refresh: "steady",
   });
 
   const { data: historyData = [], isLoading: historyLoading } = useQuery({

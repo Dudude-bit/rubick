@@ -28,6 +28,7 @@ export function StorageClassDetail() {
     setActiveTab,
     goBack,
     deleteMutation,
+    freshness,
   } = useResourceDetail<StorageClassInfo>({
     resourceKind: ResourceType.StorageClass,
     isClusterScoped: true,
@@ -100,6 +101,7 @@ export function StorageClassDetail() {
 
   return (
     <ResourceDetailLayout
+      freshness={freshness}
       resource={sc}
       delivery={deliveryQuery}
       isLoading={isLoading}

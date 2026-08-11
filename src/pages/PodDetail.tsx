@@ -285,6 +285,7 @@ export function PodDetail() {
     refetch,
     copyYaml,
     deleteMutation,
+    freshness,
   } = useResourceDetail<PodInfo>({
     resourceKind: ResourceType.Pod,
     fetchResource: (name, namespace) => commands.getPod(name, namespace),
@@ -551,6 +552,7 @@ export function PodDetail() {
   return (
     <>
       <ResourceDetailLayout
+        freshness={freshness}
         resource={pod}
         delivery={deliveryQuery}
         isLoading={isLoading}

@@ -1,16 +1,18 @@
-import {
-  useQuery,
-  keepPreviousData,
-  UseQueryOptions,
-} from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import type {
   PodMetricsResponse,
   NodeMetricsResponse,
   ClusterMetricsResponse,
 } from "@/generated/types";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
+import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
+
+type MetricsQueryOptions<T> = Omit<
+  LiveQueryOptions<T, Error, T, string[]>,
+  "queryKey" | "queryFn"
+>;
 
 export interface UseMetricsOptions {
   namespace?: string | null;
@@ -18,18 +20,9 @@ export interface UseMetricsOptions {
   includePods?: boolean;
   includeNodes?: boolean;
   includeCluster?: boolean;
-  podQueryOptions?: Omit<
-    UseQueryOptions<PodMetricsResponse>,
-    "queryKey" | "queryFn"
-  >;
-  nodeQueryOptions?: Omit<
-    UseQueryOptions<NodeMetricsResponse>,
-    "queryKey" | "queryFn"
-  >;
-  clusterQueryOptions?: Omit<
-    UseQueryOptions<ClusterMetricsResponse>,
-    "queryKey" | "queryFn"
-  >;
+  podQueryOptions?: MetricsQueryOptions<PodMetricsResponse>;
+  nodeQueryOptions?: MetricsQueryOptions<NodeMetricsResponse>;
+  clusterQueryOptions?: MetricsQueryOptions<ClusterMetricsResponse>;
 }
 
 export function useMetrics(options?: UseMetricsOptions) {
@@ -38,7 +31,7 @@ export function useMetrics(options?: UseMetricsOptions) {
   const includeNodes = options?.includeNodes ?? true;
   const includeCluster = options?.includeCluster ?? true;
 
-  const podMetricsQuery = useQuery({
+  const podMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.pods(options?.namespace),
     queryFn: async () => {
       return await commands.getPodsMetrics(options?.namespace ?? null);
@@ -46,12 +39,11 @@ export function useMetrics(options?: UseMetricsOptions) {
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.metrics,
-    refetchInterval: REFRESH_INTERVALS.metrics,
-    refetchOnWindowFocus: false,
+    refresh: "metrics",
     ...options?.podQueryOptions,
   });
 
-  const nodeMetricsQuery = useQuery({
+  const nodeMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.nodes(),
     queryFn: async () => {
       return await commands.getNodesMetrics();
@@ -59,12 +51,11 @@ export function useMetrics(options?: UseMetricsOptions) {
     enabled: enabled && includeNodes,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.metrics,
-    refetchInterval: REFRESH_INTERVALS.metrics,
-    refetchOnWindowFocus: false,
+    refresh: "metrics",
     ...options?.nodeQueryOptions,
   });
 
-  const clusterMetricsQuery = useQuery({
+  const clusterMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.cluster(),
     queryFn: async () => {
       return await commands.getClusterMetrics();
@@ -72,8 +63,7 @@ export function useMetrics(options?: UseMetricsOptions) {
     enabled: enabled && includeCluster,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.metrics,
-    refetchInterval: REFRESH_INTERVALS.metricsCluster,
-    refetchOnWindowFocus: false,
+    refresh: "metricsCluster",
     ...options?.clusterQueryOptions,
   });
 
@@ -87,6 +77,8 @@ export function useMetrics(options?: UseMetricsOptions) {
     // readers is recognised as one reading instead of several.
     podSampledAt: podMetricsQuery.dataUpdatedAt,
     nodeSampledAt: nodeMetricsQuery.dataUpdatedAt,
+    podFreshness: podMetricsQuery.freshness,
+    nodeFreshness: nodeMetricsQuery.freshness,
     clusterMetrics: clusterMetricsQuery.data?.data ?? null,
     clusterStatus: clusterMetricsQuery.data?.status ?? null,
     podMetricsQuery,

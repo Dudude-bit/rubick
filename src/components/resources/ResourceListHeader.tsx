@@ -12,6 +12,8 @@ interface ResourceListHeaderProps {
   dataUpdatedAt?: number;
   /** A watch stream feeds this list and has not failed. */
   live?: boolean;
+  /** Polled, and backed off past its rate because nothing is changing. */
+  slowed?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function ResourceListHeader({
   actions,
   dataUpdatedAt,
   live,
+  slowed,
 }: ResourceListHeaderProps) {
   return (
     <SectionHeader
@@ -35,7 +38,11 @@ export function ResourceListHeader({
       actions={
         <>
           {actions}
-          <DataFreshness dataUpdatedAt={dataUpdatedAt} live={live} />
+          <DataFreshness
+            dataUpdatedAt={dataUpdatedAt}
+            live={live}
+            slowed={slowed}
+          />
         </>
       }
     />
