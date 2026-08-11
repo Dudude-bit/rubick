@@ -301,6 +301,56 @@ export function DeploymentDetail() {
       glyph: viewGlyph(Info),
       content: (
         <>
+          {podStatus?.status !== "available" && (
+            <MetricsStatusBanner status={podStatus} />
+          )}
+
+          <WorkloadOverview
+            count={
+              <CountBlock title="Replicas" governance={connections}>
+                <Composition
+                  total={desired}
+                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  segments={[
+                    { label: "ready", count: ready, tone: "ok" },
+                    {
+                      label: "not ready",
+                      count: Math.max(0, desired - ready),
+                      tone: "warn",
+                    },
+                  ]}
+                  emptyMessage="scaled to zero"
+                  note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
+                />
+              </CountBlock>
+            }
+            usage={
+              <WorkloadUsage
+                kind={ResourceType.Deployment}
+                uid={deployment?.uid}
+                name={deployment?.name || name}
+                namespace={deployment?.namespace || namespace}
+                template={deployment}
+                pods={pods}
+                idle={
+                  desired === 0
+                    ? "This Deployment is scaled to zero."
+                    : "None of this Deployment's pods is running."
+                }
+                connections={connections.data}
+              />
+            }
+            traffic={<TrafficChain query={connections} />}
+            declared={<FactBlock title="How it is declared" items={facts} />}
+          >
+            {deployment && (
+              <RelatedResources
+                ownerReferences={deployment.ownerReferences}
+                namespace={deployment.namespace}
+              />
+            )}
+          </WorkloadOverview>
+
           <KeyValueSection
             title="Labels"
             count={Object.keys(deployment?.labels ?? {}).length}
@@ -438,161 +488,119 @@ export function DeploymentDetail() {
   ];
 
   return (
-    <ResourceDetailLayout
-      resource={deployment}
-      delivery={deliveryQuery}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Deployment}
-      title={deployment?.name || ""}
-      namespace={deployment?.namespace}
-      createdAt={deployment?.createdAt}
-      statusBadge={
-        replicas && (
-          <StatusBadge status={shortReplicas ? "Degraded" : "Available"}>
-            {replicas.ready}/{replicas.desired} ready
-          </StatusBadge>
-        )
-      }
-      badges={
-        isRolloutInProgress && (
-          <span className="text-[11px] text-info">rolling out</span>
-        )
-      }
-      onBack={goBack}
-      actions={
-        <>
-          <DetailAction label="Scale" icon={Scale} onClick={openScaleDialog} />
-          <InterceptedAction
-            intercept={intercept("Restart")}
-            label="Restart"
-            icon={RefreshCw}
-            onClick={() => restartMutation.mutate()}
-            busy={restartMutation.isPending}
-          />
-          <InterceptedAction
-            intercept={intercept("Delete")}
-            label="Delete"
-            icon={Trash2}
-            onClick={() => deleteMutation?.mutate()}
-            busy={deleteMutation?.isPending}
-            danger
-          />
-        </>
-      }
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    >
-      {isRolloutInProgress && rolloutStatus && (
-        <p className="text-[11px] text-info">
-          <ResourceMessage
-            message={rolloutMessage ?? ""}
-            subject={{ kind: ResourceType.Deployment, name, namespace }}
-          />
-          <span className="text-fg-fnt">
-            {" "}
-            · {rolloutReady}/{rolloutDesired} pods ready
-          </span>
-        </p>
-      )}
-
-      {podStatus?.status !== "available" && (
-        <MetricsStatusBanner status={podStatus} />
-      )}
-
-      <WorkloadOverview
-        count={
-          <CountBlock title="Replicas" governance={connections}>
-            <Composition
-              total={desired}
-              label={desired === 1 ? "replica wanted" : "replicas wanted"}
-              segments={[
-                { label: "ready", count: ready, tone: "ok" },
-                {
-                  label: "not ready",
-                  count: Math.max(0, desired - ready),
-                  tone: "warn",
-                },
-              ]}
-              emptyMessage="scaled to zero"
-              note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
+    <>
+      <ResourceDetailLayout
+        resource={deployment}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Deployment}
+        title={deployment?.name || ""}
+        namespace={deployment?.namespace}
+        createdAt={deployment?.createdAt}
+        statusBadge={
+          replicas && (
+            <StatusBadge status={shortReplicas ? "Degraded" : "Available"}>
+              {replicas.ready}/{replicas.desired} ready
+            </StatusBadge>
+          )
+        }
+        badges={
+          isRolloutInProgress && (
+            <span className="text-[11px] text-info">rolling out</span>
+          )
+        }
+        onBack={goBack}
+        actions={
+          <>
+            <DetailAction
+              label="Scale"
+              icon={Scale}
+              onClick={openScaleDialog}
             />
-          </CountBlock>
+            <InterceptedAction
+              intercept={intercept("Restart")}
+              label="Restart"
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate()}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label="Delete"
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
         }
-        usage={
-          <WorkloadUsage
-            kind={ResourceType.Deployment}
-            uid={deployment?.uid}
-            name={deployment?.name || name}
-            namespace={deployment?.namespace || namespace}
-            template={deployment}
-            pods={pods}
-            idle={
-              desired === 0
-                ? "This Deployment is scaled to zero."
-                : "None of this Deployment's pods is running."
-            }
-            connections={connections.data}
-          />
+        summary={
+          isRolloutInProgress &&
+          rolloutStatus && (
+            <p className="text-[11px] text-info">
+              <ResourceMessage
+                message={rolloutMessage ?? ""}
+                subject={{ kind: ResourceType.Deployment, name, namespace }}
+              />
+              <span className="text-fg-fnt">
+                {" "}
+                · {rolloutReady}/{rolloutDesired} pods ready
+              </span>
+            </p>
+          )
         }
-        traffic={<TrafficChain query={connections} />}
-        declared={<FactBlock title="How it is declared" items={facts} />}
-      >
-        {deployment && (
-          <RelatedResources
-            ownerReferences={deployment.ownerReferences}
-            namespace={deployment.namespace}
-          />
-        )}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-        <ScaleDialog
-          warnings={scaleWarnings(connections.data, intercept("Scale"))}
-          open={scaleDialogOpen}
-          onOpenChange={setScaleDialogOpen}
-          kind={ResourceType.Deployment}
-          current={deployment?.replicas.desired ?? 0}
-          busy={scaleMutation.isPending}
-          onSubmit={(replicas) => scaleMutation.mutate(replicas)}
-        />
+      {/* Both are opened from the strip's row, and so from whichever tab the
+          reader is on. Inside the Overview's panel they would be unmounted the
+          moment that tab was not the open one. */}
+      <ScaleDialog
+        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        open={scaleDialogOpen}
+        onOpenChange={setScaleDialogOpen}
+        kind={ResourceType.Deployment}
+        current={deployment?.replicas.desired ?? 0}
+        busy={scaleMutation.isPending}
+        onSubmit={(replicas) => scaleMutation.mutate(replicas)}
+      />
 
-        <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Update Container Image</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Container</Label>
-                <Input value={selectedContainer} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="image">New Image</Label>
-                <Input
-                  id="image"
-                  value={newImage}
-                  onChange={(e) => setNewImage(e.target.value)}
-                  placeholder="e.g., nginx:1.21"
-                />
-              </div>
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Container Image</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Container</Label>
+              <Input value={selectedContainer} disabled />
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setImageDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => updateImageMutation.mutate()}
-                disabled={updateImageMutation.isPending || !newImage}
-              >
-                Update
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </WorkloadOverview>
-    </ResourceDetailLayout>
+            <div className="space-y-2">
+              <Label htmlFor="image">New Image</Label>
+              <Input
+                id="image"
+                value={newImage}
+                onChange={(e) => setNewImage(e.target.value)}
+                placeholder="e.g., nginx:1.21"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => updateImageMutation.mutate()}
+              disabled={updateImageMutation.isPending || !newImage}
+            >
+              Update
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

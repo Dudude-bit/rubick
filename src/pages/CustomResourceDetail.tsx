@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, ListTree, Tag, Trash2 } from "lucide-react";
+import { Activity, Info, ListTree, Tag, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -169,7 +169,7 @@ export function CustomResourceDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const copyToClipboard = useCopyToClipboard();
-  const [activeTab, setActiveTab] = useState("spec");
+  const [activeTab, setActiveTab] = useState("overview");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const decodedCrdName = crdName ? decodeURIComponent(crdName) : "";
@@ -284,6 +284,14 @@ export function CustomResourceDetail() {
 
   const tabs: DetailTab[] = [
     {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection title="Object" items={facts} className="max-w-lg" />
+      ),
+    },
+    {
       id: "spec",
       label: "Spec",
       glyph: viewGlyph(ListTree),
@@ -297,8 +305,8 @@ export function CustomResourceDetail() {
             <JsonTree data={resource.spec} />
           ) : (
             <p className="text-xs text-fg-fnt">
-              This custom resource has not been read yet — its spec is
-              whatever the CRD defines, and nothing here has seen it.
+              This custom resource has not been read yet — its spec is whatever
+              the CRD defines, and nothing here has seen it.
             </p>
           )}
         </Section>
@@ -405,9 +413,7 @@ export function CustomResourceDetail() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-      >
-        <KeyValueSection title="Object" items={facts} className="max-w-lg" />
-      </ResourceDetailLayout>
+      />
 
       <ConfirmDialog
         open={deleteDialogOpen}

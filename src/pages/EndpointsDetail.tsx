@@ -10,7 +10,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
-import { Plug, Waypoints } from "lucide-react";
+import { Info, Plug, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -121,6 +121,14 @@ export function EndpointsDetail() {
 
   const tabs = [
     {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection title="Endpoints" items={facts} className="max-w-lg" />
+      ),
+    },
+    {
       id: "addresses",
       label: "Backends",
       glyph: viewGlyph(Waypoints),
@@ -220,8 +228,8 @@ export function EndpointsDetail() {
           <SectionHeader title="Ports" count={allPorts.length} />
           {allPorts.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No ports across any subset — the backends above, if there are
-              any, are reachable on nothing.
+              No ports across any subset — the backends above, if there are any,
+              are reachable on nothing.
             </p>
           ) : (
             <Table>
@@ -290,8 +298,6 @@ export function EndpointsDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
-    >
-      <KeyValueSection title="Endpoints" items={facts} className="max-w-lg" />
-    </ResourceDetailLayout>
+    />
   );
 }

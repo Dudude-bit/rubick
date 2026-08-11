@@ -549,254 +549,262 @@ export function PodDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   return (
-    <ResourceDetailLayout
-      resource={pod}
-      delivery={deliveryQuery}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Pod}
-      title={pod?.name || name || "Pod"}
-      namespace={pod?.namespace || namespace}
-      createdAt={pod?.createdAt}
-      onBack={() => navigate(-1)}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      statusBadge={
-        pod?.status.display ? (
-          <StatusBadge
-            status={pod.status.display}
-            title={`Phase ${pod.status.phase}`}
-          />
-        ) : null
-      }
-      // The kubelet's word for the trouble, on every tab — but only when
-      // the badge is not already saying it. Now the badge carries the
-      // derived status, `CrashLoopBackOff CrashLoopBackOff` is what the
-      // unconditional version renders.
-      badges={
-        problem &&
-        // `endsWith` rather than equality: a pod held in init displays
-        // `Init:CrashLoopBackOff`, and the init container's own reason is
-        // the tail of it — printing both is the same word twice with a
-        // prefix.
-        !pod?.status.display?.endsWith(problem.reason) && (
-          <span
-            className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
-          >
-            {problem.reason}
-          </span>
-        )
-      }
-      onFindReplacement={handleFindReplacement}
-      isSearchingReplacement={isSearchingReplacement}
-      actions={
-        <>
-          <DetailAction
-            label="Debug"
-            icon={Bug}
-            onClick={() => setDebugDialogOpen(true)}
-            disabled={!currentContext || !pod}
-          />
-          <DetailAction
-            label="Port forward"
-            icon={Network}
-            onClick={openPortForwardDialog}
-            disabled={!currentContext || !pod}
-          />
-          <InterceptedAction
-            intercept={intercept("Restart")}
-            label="Restart"
-            icon={RefreshCw}
-            onClick={() => restartMutation.mutate()}
-            disabled={!pod}
-            busy={restartMutation.isPending}
-          />
-          <InterceptedAction
-            intercept={intercept("Delete")}
-            label="Delete"
-            icon={Trash2}
-            onClick={() => deleteMutation?.mutate()}
-            disabled={!pod}
-            busy={deleteMutation?.isPending}
-            danger
-          />
-        </>
-      }
-      tabs={[
-        {
-          id: "overview",
-          label: "Overview",
-          glyph: viewGlyph(Info),
-          content: (
-            <>
-              {pod && (
-                <VolumeRows
-                  volumes={pod.volumes}
-                  namespace={pod.namespace}
-                  containerCount={
-                    pod.containers.length + pod.initContainers.length
-                  }
-                />
-              )}
-              <KeyValueSection
-                title="Labels"
-                count={Object.keys(pod?.labels ?? {}).length}
-                items={recordToKeyValues(pod?.labels ?? {})}
-                emptyMessage="No labels"
-              />
-              <KeyValueSection
-                title="Annotations"
-                count={Object.keys(pod?.annotations ?? {}).length}
-                items={recordToKeyValues(pod?.annotations ?? {})}
-                emptyMessage="No annotations"
-              />
-            </>
-          ),
-        },
-        connectionsTab(connections, deliveryQuery),
-        {
-          id: "containers",
-          label: "Containers",
-          // A container has no kind of its own; it is what a Pod is made of,
-          // so it arrives under the Pod's cube and the Pod's hue — the same
-          // mark the reader clicked to get here.
-          glyph: kindGlyph(ResourceType.Pod),
-          // The dot displaces the count rather than joining it: a pod with a
-          // dead container is not asking how many it has.
-          mark:
-            problem?.tab === "containers"
-              ? severityMark(problem.tone, problem.headline)
-              : countMark(pod ? podContainers(pod).length : 0),
-          content: pod ? (
-            <ContainerRows
-              pod={pod}
-              namespace={pod.namespace}
-              podName={pod.name}
-              onOpenShell={openTerminal}
-              onOpenLogs={openLogs}
+    <>
+      <ResourceDetailLayout
+        resource={pod}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Pod}
+        title={pod?.name || name || "Pod"}
+        namespace={pod?.namespace || namespace}
+        createdAt={pod?.createdAt}
+        onBack={() => navigate(-1)}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        statusBadge={
+          pod?.status.display ? (
+            <StatusBadge
+              status={pod.status.display}
+              title={`Phase ${pod.status.phase}`}
             />
-          ) : null,
-        },
-        {
-          id: "logs",
-          label: "Logs",
-          glyph: viewGlyph(AlignLeft),
-          kind: "surface",
-          content: pod ? (
-            <LogViewer
-              key={`logs:${logContainer ?? ""}`}
-              podName={pod.name}
-              namespace={pod.namespace}
-              containers={podContainers(pod)}
-              soloContainer={logContainer}
-            />
-          ) : null,
-        },
-        {
-          id: "shell",
-          label: "Shell",
-          glyph: viewGlyph(SquareTerminal),
-          kind: "surface",
-          mark: shellSession
-            ? liveMark(`session attached to ${shellSession.containerName}`)
-            : undefined,
-          content: pod ? (
-            <PodShell
-              pod={pod}
-              container={shellContainer}
-              ended={shellEnded}
-              onChoose={openTerminal}
-              onOpenLogs={openLogs}
-              onDebug={() => setDebugDialogOpen(true)}
-              onEnd={handleTerminalClose}
-            />
-          ) : null,
-        },
-        {
-          id: "conditions",
-          label: "Conditions",
-          glyph: viewGlyph(BadgeCheck),
-          mark: conditionsMark(pod?.status.conditions),
-          content: (
-            <Section>
-              <SectionHeader
-                title="Conditions"
-                count={pod?.status.conditions.length}
-              />
-              <ConditionRows
-                conditions={pod?.status.conditions ?? []}
-                subject={{ kind: ResourceType.Pod, name, namespace }}
-              />
-            </Section>
-          ),
-        },
-        yamlTab({
-          yaml,
-          onCopy: copyYaml,
-          title: pod?.name || "Pod YAML",
-          resourceKind: ResourceType.Pod,
-          resourceName: pod?.name || name || "",
-          namespace: pod?.namespace || namespace,
-        }),
-      ]}
-    >
-      {problem && (
-        <ProblemSummary
-          headline={problem.headline}
-          detail={problem.detail}
-          tone={problem.tone}
-          action={
-            <DetailAction
-              label={`See ${problem.tab}`}
-              icon={ArrowRight}
-              onClick={() => setActiveTab(problem.tab)}
-            />
-          }
-        />
-      )}
-
-      {podStatus?.status !== "available" && (
-        <MetricsStatusBanner status={podStatus} />
-      )}
-
-      {/* A Pod is the only member of the family with no count block: it does
-          not have a replica count, it *is* one, and the page that answers
-          "who sets the number" for it is the owner at the top of its chain —
-          which `RelatedResources` names below, with the clause saying which
-          of the two hops the count lives on. What takes the first slot is the
-          question a Pod does have in the same place: where the one is. */}
-      <WorkloadOverview
-        count={<FactBlock title="Placement" items={placement} />}
-        usage={
-          <UsageBlock
-            kind={ResourceType.Pod}
-            uid={pod?.uid}
-            cpu={podWithMetrics?.cpuMillicores}
-            memory={podWithMetrics?.memoryBytes}
-            cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
-            memoryLimit={
-              pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null
-            }
-            restarts={pod?.restartCount ?? null}
-            sampledAt={podSampledAt}
-            status={podStatus}
-            connections={connections.data}
-            history={
-              pod?.namespace && pod?.name
-                ? { kind: "pod", namespace: pod.namespace, pod: pod.name }
-                : undefined
-            }
-          />
+          ) : null
         }
-        traffic={<TrafficChain query={connections} />}
-      >
-        {pod && (
-          <RelatedResources
-            ownerReferences={pod.ownerReferences}
-            namespace={pod.namespace}
-          />
-        )}
-      </WorkloadOverview>
+        // The kubelet's word for the trouble, on every tab — but only when
+        // the badge is not already saying it. Now the badge carries the
+        // derived status, `CrashLoopBackOff CrashLoopBackOff` is what the
+        // unconditional version renders.
+        badges={
+          problem &&
+          // `endsWith` rather than equality: a pod held in init displays
+          // `Init:CrashLoopBackOff`, and the init container's own reason is
+          // the tail of it — printing both is the same word twice with a
+          // prefix.
+          !pod?.status.display?.endsWith(problem.reason) && (
+            <span
+              className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
+            >
+              {problem.reason}
+            </span>
+          )
+        }
+        onFindReplacement={handleFindReplacement}
+        isSearchingReplacement={isSearchingReplacement}
+        summary={
+          problem && (
+            <ProblemSummary
+              headline={problem.headline}
+              detail={problem.detail}
+              tone={problem.tone}
+              action={
+                <DetailAction
+                  label={`See ${problem.tab}`}
+                  icon={ArrowRight}
+                  onClick={() => setActiveTab(problem.tab)}
+                />
+              }
+            />
+          )
+        }
+        actions={
+          <>
+            <DetailAction
+              label="Debug"
+              icon={Bug}
+              onClick={() => setDebugDialogOpen(true)}
+              disabled={!currentContext || !pod}
+            />
+            <DetailAction
+              label="Port forward"
+              icon={Network}
+              onClick={openPortForwardDialog}
+              disabled={!currentContext || !pod}
+            />
+            <InterceptedAction
+              intercept={intercept("Restart")}
+              label="Restart"
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate()}
+              disabled={!pod}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label="Delete"
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              disabled={!pod}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
+        }
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: (
+              <>
+                {podStatus?.status !== "available" && (
+                  <MetricsStatusBanner status={podStatus} />
+                )}
+
+                {/* A Pod is the only member of the family with no count block: it
+                  does not have a replica count, it *is* one, and the page that
+                  answers "who sets the number" for it is the owner at the top
+                  of its chain — which `RelatedResources` names below, with the
+                  clause saying which of the two hops the count lives on. What
+                  takes the first slot is the question a Pod does have in the
+                  same place: where the one is. */}
+                <WorkloadOverview
+                  count={<FactBlock title="Placement" items={placement} />}
+                  usage={
+                    <UsageBlock
+                      kind={ResourceType.Pod}
+                      uid={pod?.uid}
+                      cpu={podWithMetrics?.cpuMillicores}
+                      memory={podWithMetrics?.memoryBytes}
+                      cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
+                      memoryLimit={
+                        pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null
+                      }
+                      restarts={pod?.restartCount ?? null}
+                      sampledAt={podSampledAt}
+                      status={podStatus}
+                      connections={connections.data}
+                      history={
+                        pod?.namespace && pod?.name
+                          ? {
+                              kind: "pod",
+                              namespace: pod.namespace,
+                              pod: pod.name,
+                            }
+                          : undefined
+                      }
+                    />
+                  }
+                  traffic={<TrafficChain query={connections} />}
+                >
+                  {pod && (
+                    <RelatedResources
+                      ownerReferences={pod.ownerReferences}
+                      namespace={pod.namespace}
+                    />
+                  )}
+                </WorkloadOverview>
+
+                {pod && (
+                  <VolumeRows
+                    volumes={pod.volumes}
+                    namespace={pod.namespace}
+                    containerCount={
+                      pod.containers.length + pod.initContainers.length
+                    }
+                  />
+                )}
+                <KeyValueSection
+                  title="Labels"
+                  count={Object.keys(pod?.labels ?? {}).length}
+                  items={recordToKeyValues(pod?.labels ?? {})}
+                  emptyMessage="No labels"
+                />
+                <KeyValueSection
+                  title="Annotations"
+                  count={Object.keys(pod?.annotations ?? {}).length}
+                  items={recordToKeyValues(pod?.annotations ?? {})}
+                  emptyMessage="No annotations"
+                />
+              </>
+            ),
+          },
+          connectionsTab(connections, deliveryQuery),
+          {
+            id: "containers",
+            label: "Containers",
+            // A container has no kind of its own; it is what a Pod is made of,
+            // so it arrives under the Pod's cube and the Pod's hue — the same
+            // mark the reader clicked to get here.
+            glyph: kindGlyph(ResourceType.Pod),
+            // The dot displaces the count rather than joining it: a pod with a
+            // dead container is not asking how many it has.
+            mark:
+              problem?.tab === "containers"
+                ? severityMark(problem.tone, problem.headline)
+                : countMark(pod ? podContainers(pod).length : 0),
+            content: pod ? (
+              <ContainerRows
+                pod={pod}
+                namespace={pod.namespace}
+                podName={pod.name}
+                onOpenShell={openTerminal}
+                onOpenLogs={openLogs}
+              />
+            ) : null,
+          },
+          {
+            id: "logs",
+            label: "Logs",
+            glyph: viewGlyph(AlignLeft),
+            kind: "surface",
+            content: pod ? (
+              <LogViewer
+                key={`logs:${logContainer ?? ""}`}
+                podName={pod.name}
+                namespace={pod.namespace}
+                containers={podContainers(pod)}
+                soloContainer={logContainer}
+              />
+            ) : null,
+          },
+          {
+            id: "shell",
+            label: "Shell",
+            glyph: viewGlyph(SquareTerminal),
+            kind: "surface",
+            mark: shellSession
+              ? liveMark(`session attached to ${shellSession.containerName}`)
+              : undefined,
+            content: pod ? (
+              <PodShell
+                pod={pod}
+                container={shellContainer}
+                ended={shellEnded}
+                onChoose={openTerminal}
+                onOpenLogs={openLogs}
+                onDebug={() => setDebugDialogOpen(true)}
+                onEnd={handleTerminalClose}
+              />
+            ) : null,
+          },
+          {
+            id: "conditions",
+            label: "Conditions",
+            glyph: viewGlyph(BadgeCheck),
+            mark: conditionsMark(pod?.status.conditions),
+            content: (
+              <Section>
+                <SectionHeader
+                  title="Conditions"
+                  count={pod?.status.conditions.length}
+                />
+                <ConditionRows
+                  conditions={pod?.status.conditions ?? []}
+                  subject={{ kind: ResourceType.Pod, name, namespace }}
+                />
+              </Section>
+            ),
+          },
+          yamlTab({
+            yaml,
+            onCopy: copyYaml,
+            title: pod?.name || "Pod YAML",
+            resourceKind: ResourceType.Pod,
+            resourceName: pod?.name || name || "",
+            namespace: pod?.namespace || namespace,
+          }),
+        ]}
+      />
 
       {pod && (
         <PodPortForwardDialog
@@ -824,6 +832,6 @@ export function PodDetail() {
           onDebugStart={handleDebugStart}
         />
       )}
-    </ResourceDetailLayout>
+    </>
   );
 }

@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Info, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { countMark, kindGlyph } from "@/components/resources/detail-tab";
+import {
+  countMark,
+  kindGlyph,
+  viewGlyph,
+} from "@/components/resources/detail-tab";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -45,7 +49,7 @@ export function PersistentVolumeClaimDetail() {
     fetchResource: (name, ns) => commands.getPersistentVolumeClaim(name, ns),
     deleteResource: (name, ns) =>
       commands.deletePersistentVolumeClaim(name, ns),
-    defaultTab: "events",
+    defaultTab: "overview",
   });
 
   const connections = useConnections(
@@ -123,6 +127,14 @@ export function PersistentVolumeClaimDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
+      ),
+    },
     connectionsTab(connections, deliveryQuery),
     {
       id: "events",
@@ -213,8 +225,6 @@ export function PersistentVolumeClaimDetail() {
           danger
         />
       }
-    >
-      <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
-    </ResourceDetailLayout>
+    />
   );
 }

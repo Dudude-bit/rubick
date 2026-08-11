@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { BadgeCheck, Info, Layers2 } from "lucide-react";
 
@@ -159,81 +158,108 @@ export function ReplicaSetDetail() {
     serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace),
   ];
 
-  const tabs = useMemo(
-    () => [
-      {
-        id: "overview",
-        label: "Overview",
-        glyph: viewGlyph(Info),
-        content: (
-          <>
-            <KeyValueSection
-              title="Labels"
-              count={Object.keys(replicaSet?.labels ?? {}).length}
-              items={recordToKeyValues(replicaSet?.labels ?? {})}
-              emptyMessage="No labels"
-            />
-            <KeyValueSection
-              title="Annotations"
-              count={Object.keys(replicaSet?.annotations ?? {}).length}
-              items={recordToKeyValues(replicaSet?.annotations ?? {})}
-              emptyMessage="No annotations"
-            />
-          </>
-        ),
-      },
-      {
-        id: "container-template",
-        label: "Template",
-        glyph: viewGlyph(Layers2),
-        content: <ContainerRows template={replicaSet} namespace={namespace} />,
-      },
-      {
-        id: toPlural(ResourceType.Pod),
-        label: "Pods",
-        glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
-        content: (
-          <PodListCard
-            pods={pods}
-            // "No pods" on a superseded revision reads as a fault. It is the
-            // ordinary end of a rollout, and the page has to say so.
-            emptyMessage={
-              emptyPods ? noPods : "This revision has no pods right now"
+  const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <>
+          <WorkloadOverview
+            count={
+              <CountBlock title="Replicas" subject="what this revision runs">
+                <Composition
+                  total={desired}
+                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  segments={[
+                    { label: "ready", count: ready, tone: "ok" },
+                    {
+                      label: "starting",
+                      count: Math.max(0, current - ready),
+                      tone: "warn",
+                    },
+                    {
+                      label: "not created",
+                      count: Math.max(0, desired - current),
+                      tone: "err",
+                    },
+                  ]}
+                  emptyMessage="scaled to zero"
+                  // A bar of nothing is the picture of a fault. The end of a
+                  // rollout looks identical, and only the sentence tells them
+                  // apart — so the empty case never renders without one.
+                  note={emptyPods ? whyEmpty : undefined}
+                />
+              </CountBlock>
             }
+            declared={<FactBlock title="Revision" items={facts} />}
           />
-        ),
-      },
-      {
-        id: "conditions",
-        label: "Conditions",
-        glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(replicaSet?.conditions),
-        content: (
-          <Section>
-            <SectionHeader
-              title="Conditions"
-              count={replicaSet?.conditions.length}
-            />
-            <ConditionRows
-              conditions={replicaSet?.conditions ?? []}
-              emptyMessage="This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod."
-              subject={{ kind: ResourceType.ReplicaSet, name, namespace }}
-            />
-          </Section>
-        ),
-      },
-      yamlTab({
-        yaml,
-        onCopy: copyYaml,
-        title: "ReplicaSet YAML",
-        resourceKind: ResourceType.ReplicaSet,
-        resourceName: replicaSet?.name || name || "",
-        namespace: replicaSet?.namespace || namespace,
-      }),
-    ],
-    [replicaSet, pods, yaml, copyYaml, namespace, name, emptyPods, noPods]
-  );
+
+          <KeyValueSection
+            title="Labels"
+            count={Object.keys(replicaSet?.labels ?? {}).length}
+            items={recordToKeyValues(replicaSet?.labels ?? {})}
+            emptyMessage="No labels"
+          />
+          <KeyValueSection
+            title="Annotations"
+            count={Object.keys(replicaSet?.annotations ?? {}).length}
+            items={recordToKeyValues(replicaSet?.annotations ?? {})}
+            emptyMessage="No annotations"
+          />
+        </>
+      ),
+    },
+    {
+      id: "container-template",
+      label: "Template",
+      glyph: viewGlyph(Layers2),
+      content: <ContainerRows template={replicaSet} namespace={namespace} />,
+    },
+    {
+      id: toPlural(ResourceType.Pod),
+      label: "Pods",
+      glyph: kindGlyph(ResourceType.Pod),
+      mark: podsMark(pods),
+      content: (
+        <PodListCard
+          pods={pods}
+          // "No pods" on a superseded revision reads as a fault. It is the
+          // ordinary end of a rollout, and the page has to say so.
+          emptyMessage={
+            emptyPods ? noPods : "This revision has no pods right now"
+          }
+        />
+      ),
+    },
+    {
+      id: "conditions",
+      label: "Conditions",
+      glyph: viewGlyph(BadgeCheck),
+      mark: conditionsMark(replicaSet?.conditions),
+      content: (
+        <Section>
+          <SectionHeader
+            title="Conditions"
+            count={replicaSet?.conditions.length}
+          />
+          <ConditionRows
+            conditions={replicaSet?.conditions ?? []}
+            emptyMessage="This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod."
+            subject={{ kind: ResourceType.ReplicaSet, name, namespace }}
+          />
+        </Section>
+      ),
+    },
+    yamlTab({
+      yaml,
+      onCopy: copyYaml,
+      title: "ReplicaSet YAML",
+      resourceKind: ResourceType.ReplicaSet,
+      resourceName: replicaSet?.name || name || "",
+      namespace: replicaSet?.namespace || namespace,
+    }),
+  ];
 
   if (!replicaSet && !isLoading && !error) {
     return null;
@@ -291,36 +317,6 @@ export function ReplicaSetDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <WorkloadOverview
-        count={
-          <CountBlock title="Replicas" subject="what this revision runs">
-            <Composition
-              total={desired}
-              label={desired === 1 ? "replica wanted" : "replicas wanted"}
-              segments={[
-                { label: "ready", count: ready, tone: "ok" },
-                {
-                  label: "starting",
-                  count: Math.max(0, current - ready),
-                  tone: "warn",
-                },
-                {
-                  label: "not created",
-                  count: Math.max(0, desired - current),
-                  tone: "err",
-                },
-              ]}
-              emptyMessage="scaled to zero"
-              // A bar of nothing is the picture of a fault. The end of a
-              // rollout looks identical, and only the sentence tells them
-              // apart — so the empty case never renders without one.
-              note={emptyPods ? whyEmpty : undefined}
-            />
-          </CountBlock>
-        }
-        declared={<FactBlock title="Revision" items={facts} />}
-      />
-    </ResourceDetailLayout>
+    />
   );
 }

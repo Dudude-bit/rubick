@@ -199,6 +199,83 @@ export function CronJobDetail() {
         glyph: viewGlyph(Info),
         content: (
           <>
+            {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
+
+            <WorkloadOverview
+              count={
+                <CountBlock
+                  title="Runs"
+                  // What decides how many a CronJob has is the schedule and the
+                  // history limits, and the schedule is already answered by the
+                  // three headlines above — so this block counts what is there
+                  // and says what keeps it.
+                  subject="jobs this CronJob still owns"
+                >
+                  <Composition
+                    total={jobs.length}
+                    label={jobs.length === 1 ? "job kept" : "jobs kept"}
+                    // Every segment is counted off the same list as the total,
+                    // so the bar cannot disagree with the rows under the Jobs
+                    // tab.
+                    segments={[
+                      {
+                        label: "running",
+                        count: jobs.filter((job) => job.status === "Running")
+                          .length,
+                        tone: "ok",
+                      },
+                      {
+                        label: "succeeded",
+                        count: jobs.filter((job) => job.status === "Complete")
+                          .length,
+                        tone: "neutral",
+                      },
+                      {
+                        label: "failed",
+                        count: jobs.filter((job) => job.status === "Failed")
+                          .length,
+                        tone: "err",
+                      },
+                    ]}
+                    note={
+                      <>
+                        {cronJob?.successfulJobsHistoryLimit ?? 3} succeeded ·{" "}
+                        {cronJob?.failedJobsHistoryLimit ?? 1} failed kept
+                        {cronJob?.active
+                          ? ` · ${cronJob.active} active per the controller`
+                          : ""}
+                      </>
+                    }
+                  />
+                </CountBlock>
+              }
+              usage={
+                <WorkloadUsage
+                  kind={ResourceType.CronJob}
+                  uid={cronJob?.uid}
+                  name={cronJob?.name || name}
+                  namespace={cronJob?.namespace || namespace}
+                  template={cronJob}
+                  pods={pods}
+                  idle={
+                    cronJob?.suspend
+                      ? "This CronJob is suspended, so no run will start."
+                      : "No run of this CronJob is in flight."
+                  }
+                />
+              }
+              declared={
+                <FactBlock title="How it is declared" items={policy(cronJob)} />
+              }
+            >
+              {cronJob && (
+                <RelatedResources
+                  ownerReferences={cronJob.ownerReferences}
+                  namespace={cronJob.namespace}
+                />
+              )}
+            </WorkloadOverview>
+
             <KeyValueSection
               title="Labels"
               count={Object.keys(cronJob?.labels ?? {}).length}
@@ -244,34 +321,12 @@ export function CronJobDetail() {
         namespace: cronJob?.namespace || namespace,
       }),
     ],
-    [cronJob, jobs, yaml, copyYaml, namespace, name]
+    [cronJob, jobs, pods, yaml, copyYaml, namespace, name]
   );
 
   if (!cronJob && !isLoading && !error) {
     return null;
   }
-
-  const kept = {
-    succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
-    failed: cronJob?.failedJobsHistoryLimit ?? 1,
-  };
-
-  const policy: KeyValue[] = [
-    {
-      label: "Concurrency",
-      value: cronJob?.concurrencyPolicy || "Allow",
-    },
-    {
-      label: "Starting deadline",
-      value: cronJob?.startingDeadlineSeconds
-        ? `${cronJob.startingDeadlineSeconds}s`
-        : // Without a deadline a run missed during controller downtime is
-          // skipped silently rather than started late.
-          "none — missed runs are skipped",
-      mono: cronJob?.startingDeadlineSeconds != null,
-    },
-    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
-  ];
 
   return (
     <ResourceDetailLayout
@@ -302,76 +357,27 @@ export function CronJobDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
-
-      <WorkloadOverview
-        count={
-          <CountBlock
-            title="Runs"
-            // What decides how many a CronJob has is the schedule and the
-            // history limits, and the schedule is already answered above the
-            // fold by the three headlines — so this block counts what is
-            // there and says what keeps it.
-            subject="jobs this CronJob still owns"
-          >
-            <Composition
-              total={jobs.length}
-              label={jobs.length === 1 ? "job kept" : "jobs kept"}
-              // Every segment is counted off the same list as the total, so the
-              // bar cannot disagree with the rows under the Jobs tab.
-              segments={[
-                {
-                  label: "running",
-                  count: jobs.filter((job) => job.status === "Running").length,
-                  tone: "ok",
-                },
-                {
-                  label: "succeeded",
-                  count: jobs.filter((job) => job.status === "Complete").length,
-                  tone: "neutral",
-                },
-                {
-                  label: "failed",
-                  count: jobs.filter((job) => job.status === "Failed").length,
-                  tone: "err",
-                },
-              ]}
-              note={
-                <>
-                  {kept.succeeded} succeeded · {kept.failed} failed kept
-                  {cronJob?.active
-                    ? ` · ${cronJob.active} active per the controller`
-                    : ""}
-                </>
-              }
-            />
-          </CountBlock>
-        }
-        usage={
-          <WorkloadUsage
-            kind={ResourceType.CronJob}
-            uid={cronJob?.uid}
-            name={cronJob?.name || name}
-            namespace={cronJob?.namespace || namespace}
-            template={cronJob}
-            pods={pods}
-            idle={
-              cronJob?.suspend
-                ? "This CronJob is suspended, so no run will start."
-                : "No run of this CronJob is in flight."
-            }
-          />
-        }
-        declared={<FactBlock title="How it is declared" items={policy} />}
-      >
-        {cronJob && (
-          <RelatedResources
-            ownerReferences={cronJob.ownerReferences}
-            namespace={cronJob.namespace}
-          />
-        )}
-      </WorkloadOverview>
-    </ResourceDetailLayout>
+    />
   );
+}
+
+/** How it is declared: the settings that decide what a missed or overlapping
+ *  run does, which nobody reads until one has happened. */
+function policy(cronJob: CronJobDetailInfo | undefined): KeyValue[] {
+  return [
+    {
+      label: "Concurrency",
+      value: cronJob?.concurrencyPolicy || "Allow",
+    },
+    {
+      label: "Starting deadline",
+      value: cronJob?.startingDeadlineSeconds
+        ? `${cronJob.startingDeadlineSeconds}s`
+        : // Without a deadline a run missed during controller downtime is
+          // skipped silently rather than started late.
+          "none — missed runs are skipped",
+      mono: cronJob?.startingDeadlineSeconds != null,
+    },
+    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
+  ];
 }

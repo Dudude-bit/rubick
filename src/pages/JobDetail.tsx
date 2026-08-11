@@ -103,6 +103,14 @@ export function JobDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Job, job);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  // An unset `completions` means the job is done after one successful pod.
+  const completions = job?.completions ?? 1;
+  const parallelism = job?.parallelism ?? 1;
+  const backoffLimit = job?.backoffLimit ?? 6;
+  const succeeded = job?.succeeded ?? 0;
+  const failed = job?.failed ?? 0;
+  const active = job?.active ?? 0;
+
   const tabs = useMemo(
     () => [
       {
@@ -111,6 +119,72 @@ export function JobDetail() {
         glyph: viewGlyph(Info),
         content: (
           <>
+            <WorkloadOverview
+              count={
+                <CountBlock
+                  title="Run"
+                  // A Job counts completions rather than replicas, and what
+                  // decides the number is the spec rather than an autoscaler:
+                  // parallelism and the backoff limit are the same setting read
+                  // two more ways, so they qualify the count under the bar
+                  // instead of standing as rows beside it.
+                  subject="how many have to succeed, and what it costs to retry"
+                >
+                  <Composition
+                    total={completions}
+                    label={
+                      job?.completions == null
+                        ? "successful pod needed"
+                        : completions === 1
+                          ? "completion wanted"
+                          : "completions wanted"
+                    }
+                    segments={[
+                      { label: "succeeded", count: succeeded, tone: "neutral" },
+                      { label: "running", count: active, tone: "ok" },
+                      { label: "failed", count: failed, tone: "err" },
+                    ]}
+                    note={
+                      <>
+                        {parallelism} at a time · up to {backoffLimit}{" "}
+                        {backoffLimit === 1 ? "retry" : "retries"}
+                        {succeeded < completions &&
+                          active === 0 &&
+                          failed > 0 && (
+                            <> · no pod is running and the last one failed</>
+                          )}
+                      </>
+                    }
+                  />
+                </CountBlock>
+              }
+              usage={
+                <WorkloadUsage
+                  kind={ResourceType.Job}
+                  uid={job?.uid}
+                  name={job?.name || name}
+                  namespace={job?.namespace || namespace}
+                  template={job}
+                  pods={pods}
+                  idle={
+                    job?.completionTime
+                      ? "This Job has finished."
+                      : failed > 0
+                        ? "No pod of this Job is running, and the last one failed."
+                        : "No pod of this Job is running."
+                  }
+                />
+              }
+              declared={<FactBlock title="Timing" items={timing(job)} />}
+            >
+              {job && (
+                <RelatedResources
+                  ownerReferences={job.ownerReferences}
+                  namespace={job.namespace}
+                />
+              )}
+            </WorkloadOverview>
+
             <KeyValueSection
               title="Labels"
               count={Object.keys(job?.labels ?? {}).length}
@@ -165,46 +239,25 @@ export function JobDetail() {
         namespace: job?.namespace || namespace,
       }),
     ],
-    [job, pods, yaml, copyYaml, namespace, name]
+    [
+      job,
+      pods,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      completions,
+      parallelism,
+      backoffLimit,
+      succeeded,
+      failed,
+      active,
+    ]
   );
 
   if (!job && !isLoading && !error) {
     return null;
   }
-
-  // An unset `completions` means the job is done after one successful pod.
-  const completions = job?.completions ?? 1;
-  const parallelism = job?.parallelism ?? 1;
-  const backoffLimit = job?.backoffLimit ?? 6;
-  const succeeded = job?.succeeded ?? 0;
-  const failed = job?.failed ?? 0;
-  const active = job?.active ?? 0;
-  const ran = duration(job?.startTime ?? null, job?.completionTime ?? null);
-
-  const timing: KeyValue[] = [
-    {
-      label: "Started",
-      value: job?.startTime ? formatDate(job.startTime) : "not started",
-      tone: job?.startTime ? undefined : "warn",
-    },
-    {
-      label: "Finished",
-      value: job?.completionTime
-        ? formatDate(job.completionTime)
-        : "still running",
-    },
-    ...(ran ? [{ label: "Ran for", value: ran, mono: true }] : []),
-    ...(job?.activeDeadlineSeconds
-      ? [
-          {
-            label: "Deadline",
-            value: `${job.activeDeadlineSeconds}s after start`,
-            mono: true,
-          },
-        ]
-      : []),
-    serviceAccountRow(job?.serviceAccountName, job?.namespace),
-  ];
 
   return (
     <ResourceDetailLayout
@@ -238,70 +291,36 @@ export function JobDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <WorkloadOverview
-        count={
-          <CountBlock
-            title="Run"
-            // A Job counts completions rather than replicas, and what decides
-            // the number is the spec rather than an autoscaler: parallelism
-            // and the backoff limit are the same setting read two more ways,
-            // so they qualify the count under the bar instead of standing as
-            // rows beside it.
-            subject="how many have to succeed, and what it costs to retry"
-          >
-            <Composition
-              total={completions}
-              label={
-                job?.completions == null
-                  ? "successful pod needed"
-                  : completions === 1
-                    ? "completion wanted"
-                    : "completions wanted"
-              }
-              segments={[
-                { label: "succeeded", count: succeeded, tone: "neutral" },
-                { label: "running", count: active, tone: "ok" },
-                { label: "failed", count: failed, tone: "err" },
-              ]}
-              note={
-                <>
-                  {parallelism} at a time · up to {backoffLimit}{" "}
-                  {backoffLimit === 1 ? "retry" : "retries"}
-                  {succeeded < completions && active === 0 && failed > 0 && (
-                    <> · no pod is running and the last one failed</>
-                  )}
-                </>
-              }
-            />
-          </CountBlock>
-        }
-        usage={
-          <WorkloadUsage
-            kind={ResourceType.Job}
-            uid={job?.uid}
-            name={job?.name || name}
-            namespace={job?.namespace || namespace}
-            template={job}
-            pods={pods}
-            idle={
-              job?.completionTime
-                ? "This Job has finished."
-                : failed > 0
-                  ? "No pod of this Job is running, and the last one failed."
-                  : "No pod of this Job is running."
-            }
-          />
-        }
-        declared={<FactBlock title="Timing" items={timing} />}
-      >
-        {job && (
-          <RelatedResources
-            ownerReferences={job.ownerReferences}
-            namespace={job.namespace}
-          />
-        )}
-      </WorkloadOverview>
-    </ResourceDetailLayout>
+    />
   );
+}
+
+/** When it started, when it stopped, and what it runs as. */
+function timing(job: JobDetailInfo | undefined): KeyValue[] {
+  const ran = duration(job?.startTime ?? null, job?.completionTime ?? null);
+
+  return [
+    {
+      label: "Started",
+      value: job?.startTime ? formatDate(job.startTime) : "not started",
+      tone: job?.startTime ? undefined : "warn",
+    },
+    {
+      label: "Finished",
+      value: job?.completionTime
+        ? formatDate(job.completionTime)
+        : "still running",
+    },
+    ...(ran ? [{ label: "Ran for", value: ran, mono: true }] : []),
+    ...(job?.activeDeadlineSeconds
+      ? [
+          {
+            label: "Deadline",
+            value: `${job.activeDeadlineSeconds}s after start`,
+            mono: true,
+          },
+        ]
+      : []),
+    serviceAccountRow(job?.serviceAccountName, job?.namespace),
+  ];
 }

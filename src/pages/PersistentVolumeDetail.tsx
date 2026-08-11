@@ -1,8 +1,9 @@
-import { Trash2 } from "lucide-react";
+import { Info, Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
+import { viewGlyph } from "@/components/resources/detail-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -36,7 +37,7 @@ export function PersistentVolumeDetail() {
     isClusterScoped: true,
     fetchResource: (name) => commands.getPersistentVolume(name),
     deleteResource: (name) => commands.deletePersistentVolume(name),
-    defaultTab: "yaml",
+    defaultTab: "overview",
   });
 
   const facts: KeyValue[] = [
@@ -83,6 +84,14 @@ export function PersistentVolumeDetail() {
   const connections = useConnections(ResourceType.PersistentVolume, name, null);
 
   const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
+      ),
+    },
     connectionsTab(connections, deliveryQuery),
     yamlTab({
       title: "PersistentVolume YAML",
@@ -132,8 +141,6 @@ export function PersistentVolumeDetail() {
           danger
         />
       }
-    >
-      <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
-    </ResourceDetailLayout>
+    />
   );
 }

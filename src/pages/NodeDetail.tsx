@@ -66,7 +66,7 @@ export function NodeDetail() {
     resourceKind: ResourceType.Node,
     isClusterScoped: true,
     fetchResource: (name) => commands.getNode(name),
-    defaultTab: "info",
+    defaultTab: "overview",
   });
 
   // A Node is cluster-scoped, so its neighbourhood is read with no namespace
@@ -193,11 +193,41 @@ export function NodeDetail() {
 
   const tabs = [
     {
-      id: "info",
-      label: "Info",
+      id: "overview",
+      label: "Overview",
       glyph: viewGlyph(Info),
       content: (
         <>
+          {nodeStatus?.status !== "available" && (
+            <MetricsStatusBanner status={nodeStatus} />
+          )}
+
+          <UsageBlock
+            title="Headroom"
+            kind={ResourceType.Node}
+            uid={node?.uid}
+            cpu={nodeWithMetrics?.cpuMillicores}
+            memory={nodeWithMetrics?.memoryBytes}
+            cpuLimit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
+            memoryLimit={
+              node?.capacity.memory ? parseMemory(node.capacity.memory) : null
+            }
+            limitNoun="capacity"
+            sampledAt={nodeSampledAt}
+            status={nodeStatus}
+            history={node?.name ? { kind: "node", node: node.name } : undefined}
+          >
+            {/* A tally of scheduled pods, not a reading from metrics-server:
+             *  it comes from the pod list, it moves in steps of one, and a line
+             *  through it would imply a resolution it does not have. */}
+            <UsageRow
+              label="Pods"
+              used={podCount}
+              total={Number.isFinite(podCapacity) ? podCapacity : null}
+              type="count"
+            />
+          </UsageBlock>
+
           <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
             <KeyValueSection title="Host" items={facts} />
             <KeyValueSection
@@ -269,69 +299,43 @@ export function NodeDetail() {
   ];
 
   return (
-    <ResourceDetailLayout
-      resource={node}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Node}
-      title={node?.name || ""}
-      createdAt={node?.createdAt}
-      statusBadge={
-        node && (
-          <StatusBadge status={node.status.ready ? "Ready" : "NotReady"} />
-        )
-      }
-      badges={[
-        ...(node?.roles.map((role) => (
-          <span key={role} className="text-[11px] text-fg-fnt">
-            {role}
-          </span>
-        )) ?? []),
-        ...(placement?.spot ? [<SpotMark key="spot" says="spot" />] : []),
-      ]}
-      onBack={goBack}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      actions={
-        <DetailAction
-          label="Debug node"
-          icon={Bug}
-          onClick={() => setDebugDialogOpen(true)}
-          disabled={!node}
-        />
-      }
-    >
-      {nodeStatus?.status !== "available" && (
-        <MetricsStatusBanner status={nodeStatus} />
-      )}
-
-      <UsageBlock
-        title="Headroom"
-        kind={ResourceType.Node}
-        uid={node?.uid}
-        cpu={nodeWithMetrics?.cpuMillicores}
-        memory={nodeWithMetrics?.memoryBytes}
-        cpuLimit={node?.capacity.cpu ? parseCPU(node.capacity.cpu) : null}
-        memoryLimit={
-          node?.capacity.memory ? parseMemory(node.capacity.memory) : null
+    <>
+      <ResourceDetailLayout
+        resource={node}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Node}
+        title={node?.name || ""}
+        createdAt={node?.createdAt}
+        statusBadge={
+          node && (
+            <StatusBadge status={node.status.ready ? "Ready" : "NotReady"} />
+          )
         }
-        limitNoun="capacity"
-        sampledAt={nodeSampledAt}
-        status={nodeStatus}
-        history={node?.name ? { kind: "node", node: node.name } : undefined}
-      >
-        {/* A tally of scheduled pods, not a reading from metrics-server:
-         *  it comes from the pod list, it moves in steps of one, and a line
-         *  through it would imply a resolution it does not have. */}
-        <UsageRow
-          label="Pods"
-          used={podCount}
-          total={Number.isFinite(podCapacity) ? podCapacity : null}
-          type="count"
-        />
-      </UsageBlock>
+        badges={[
+          ...(node?.roles.map((role) => (
+            <span key={role} className="text-[11px] text-fg-fnt">
+              {role}
+            </span>
+          )) ?? []),
+          ...(placement?.spot ? [<SpotMark key="spot" says="spot" />] : []),
+        ]}
+        onBack={goBack}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        actions={
+          <DetailAction
+            label="Debug node"
+            icon={Bug}
+            onClick={() => setDebugDialogOpen(true)}
+            disabled={!node}
+          />
+        }
+      />
 
+      {/* Outside the frame: Debug is on the strip's row and so on every tab,
+          and a dialog inside the open tab's panel would go with the tab. */}
       {node && (
         <DebugNodeDialog
           open={debugDialogOpen}
@@ -340,6 +344,6 @@ export function NodeDetail() {
           onDebugStart={handleDebugStart}
         />
       )}
-    </ResourceDetailLayout>
+    </>
   );
 }

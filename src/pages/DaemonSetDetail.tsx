@@ -97,6 +97,13 @@ export function DaemonSetDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.DaemonSet, daemonSet);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const desired = daemonSet?.desired ?? 0;
+  const current = daemonSet?.current ?? 0;
+  const ready = daemonSet?.ready ?? 0;
+  const upToDate = daemonSet?.upToDate ?? 0;
+  const available = daemonSet?.available ?? 0;
+  const short = ready < desired;
+
   const tabs = useMemo(
     () => [
       {
@@ -105,6 +112,85 @@ export function DaemonSetDetail() {
         glyph: viewGlyph(Info),
         content: (
           <>
+            <WorkloadOverview
+              count={
+                <CountBlock
+                  title="Rollout"
+                  subject="one pod per eligible node"
+                  governance={connections}
+                >
+                  {/* One fact, not five: desired/current/ready/up-to-date/
+                      available are the same rollout read five ways, and the
+                      reader was left to subtract them to find the gap. Two bars
+                      rather than one because a DaemonSet counts two things —
+                      how many nodes have a pod, and how many of those pods are
+                      the current spec. */}
+                  <div className="grid grid-cols-2 gap-[22px]">
+                    <Composition
+                      total={desired}
+                      label={desired === 1 ? "node wanted" : "nodes wanted"}
+                      segments={[
+                        { label: "ready", count: ready, tone: "ok" },
+                        {
+                          label: "not ready",
+                          count: Math.max(0, current - ready),
+                          tone: "warn",
+                        },
+                        {
+                          label: "not scheduled",
+                          count: Math.max(0, desired - current),
+                          tone: "err",
+                        },
+                      ]}
+                      note={`${available} available`}
+                    />
+                    <Composition
+                      total={desired}
+                      label="on the current spec"
+                      segments={[
+                        { label: "up to date", count: upToDate, tone: "ok" },
+                        {
+                          label: "outdated",
+                          count: Math.max(0, desired - upToDate),
+                          tone: "warn",
+                        },
+                      ]}
+                    />
+                  </div>
+                </CountBlock>
+              }
+              usage={
+                <WorkloadUsage
+                  kind={ResourceType.DaemonSet}
+                  uid={daemonSet?.uid}
+                  name={daemonSet?.name || name}
+                  namespace={daemonSet?.namespace || namespace}
+                  template={daemonSet}
+                  pods={pods}
+                  idle={
+                    desired === 0
+                      ? "No node matches this DaemonSet, so it has placed no pods."
+                      : "None of this DaemonSet's pods is running."
+                  }
+                  connections={connections.data}
+                />
+              }
+              traffic={<TrafficChain query={connections} />}
+              declared={
+                <FactBlock
+                  title="How it is declared"
+                  items={declaration(daemonSet)}
+                />
+              }
+            >
+              {daemonSet && (
+                <RelatedResources
+                  ownerReferences={daemonSet.ownerReferences}
+                  namespace={daemonSet.namespace}
+                />
+              )}
+            </WorkloadOverview>
+
             <KeyValueSection
               title="Selector"
               items={
@@ -185,27 +271,17 @@ export function DaemonSetDetail() {
       name,
       connections,
       deliveryQuery,
+      desired,
+      current,
+      ready,
+      upToDate,
+      available,
     ]
   );
 
   if (!daemonSet && !isLoading && !error) {
     return null;
   }
-
-  const desired = daemonSet?.desired ?? 0;
-  const current = daemonSet?.current ?? 0;
-  const ready = daemonSet?.ready ?? 0;
-  const upToDate = daemonSet?.upToDate ?? 0;
-  const available = daemonSet?.available ?? 0;
-  const short = ready < desired;
-
-  const facts: KeyValue[] = [
-    {
-      label: "Update strategy",
-      value: daemonSet?.updateStrategy || "RollingUpdate",
-    },
-    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
-  ];
 
   return (
     <ResourceDetailLayout
@@ -243,79 +319,17 @@ export function DaemonSetDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <WorkloadOverview
-        count={
-          <CountBlock
-            title="Rollout"
-            subject="one pod per eligible node"
-            governance={connections}
-          >
-            {/* One fact, not five: desired/current/ready/up-to-date/available
-                are the same rollout read five ways, and the reader was left to
-                subtract them to find the gap. Two bars rather than one because
-                a DaemonSet counts two things — how many nodes have a pod, and
-                how many of those pods are the current spec. */}
-            <div className="grid grid-cols-2 gap-[22px]">
-              <Composition
-                total={desired}
-                label={desired === 1 ? "node wanted" : "nodes wanted"}
-                segments={[
-                  { label: "ready", count: ready, tone: "ok" },
-                  {
-                    label: "not ready",
-                    count: Math.max(0, current - ready),
-                    tone: "warn",
-                  },
-                  {
-                    label: "not scheduled",
-                    count: Math.max(0, desired - current),
-                    tone: "err",
-                  },
-                ]}
-                note={`${available} available`}
-              />
-              <Composition
-                total={desired}
-                label="on the current spec"
-                segments={[
-                  { label: "up to date", count: upToDate, tone: "ok" },
-                  {
-                    label: "outdated",
-                    count: Math.max(0, desired - upToDate),
-                    tone: "warn",
-                  },
-                ]}
-              />
-            </div>
-          </CountBlock>
-        }
-        usage={
-          <WorkloadUsage
-            kind={ResourceType.DaemonSet}
-            uid={daemonSet?.uid}
-            name={daemonSet?.name || name}
-            namespace={daemonSet?.namespace || namespace}
-            template={daemonSet}
-            pods={pods}
-            idle={
-              desired === 0
-                ? "No node matches this DaemonSet, so it has placed no pods."
-                : "None of this DaemonSet's pods is running."
-            }
-            connections={connections.data}
-          />
-        }
-        traffic={<TrafficChain query={connections} />}
-        declared={<FactBlock title="How it is declared" items={facts} />}
-      >
-        {daemonSet && (
-          <RelatedResources
-            ownerReferences={daemonSet.ownerReferences}
-            namespace={daemonSet.namespace}
-          />
-        )}
-      </WorkloadOverview>
-    </ResourceDetailLayout>
+    />
   );
+}
+
+/** How it is declared: read once, and never while the rollout is fine. */
+function declaration(daemonSet: DaemonSetDetailInfo | undefined): KeyValue[] {
+  return [
+    {
+      label: "Update strategy",
+      value: daemonSet?.updateStrategy || "RollingUpdate",
+    },
+    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
+  ];
 }

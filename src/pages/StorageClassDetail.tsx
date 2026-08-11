@@ -1,4 +1,4 @@
-import { SlidersHorizontal, Trash2 } from "lucide-react";
+import { Info, SlidersHorizontal, Trash2 } from "lucide-react";
 
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -33,7 +33,7 @@ export function StorageClassDetail() {
     isClusterScoped: true,
     fetchResource: (name) => commands.getStorageClass(name),
     deleteResource: (name) => commands.deleteStorageClass(name),
-    defaultTab: "parameters",
+    defaultTab: "overview",
   });
 
   const parameters = sc?.parameters ?? {};
@@ -62,6 +62,18 @@ export function StorageClassDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection
+          title="Storage class"
+          items={facts}
+          className="max-w-lg"
+        />
+      ),
+    },
     {
       id: "parameters",
       label: "Parameters",
@@ -122,12 +134,6 @@ export function StorageClassDetail() {
           danger
         />
       }
-    >
-      <KeyValueSection
-        title="Storage class"
-        items={facts}
-        className="max-w-lg"
-      />
-    </ResourceDetailLayout>
+    />
   );
 }

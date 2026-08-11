@@ -143,18 +143,19 @@ export function podsMark(pods: readonly PodInfo[]): DetailTabMark {
 }
 
 /**
- * Whether the open tab is a surface, which is what decides who owns the
- * page's height — the tab strip's own layout, and whether the page's blocks
- * above it are hidden.
+ * Whether the open tab is a surface, which is what decides who owns the page's
+ * height: the flow, or the pane.
  *
- * Only while another tab still shows those blocks: a page whose every tab is
- * a surface would hide them for good, which is how PersistentVolume once lost
- * its capacity, binding and reclaim policy entirely.
+ * It used to ask a second question — whether *any* other tab was a stack of
+ * blocks — because a surface also hid the blocks the page drew above the tab
+ * strip, and a page whose every tab was a surface hid them for good. That is
+ * how PersistentVolume once lost its capacity, binding and reclaim policy
+ * entirely. A page has nothing above the strip to hide any more: its blocks
+ * are a tab of their own, and a tab is never the thing that gets hidden. So
+ * the case the guard existed for cannot recur — a page with only surface tabs
+ * has no blocks to lose — and keeping it would only deny such a page the
+ * window height its one kind of tab is built to fill.
  */
 export function surfaceIsOpen(tabs: DetailTab[], activeTab: string): boolean {
-  const hasSectionsTab = tabs.some((tab) => tab.kind !== "surface");
-  return (
-    hasSectionsTab &&
-    tabs.find((tab) => tab.id === activeTab)?.kind === "surface"
-  );
+  return tabs.find((tab) => tab.id === activeTab)?.kind === "surface";
 }

@@ -76,15 +76,30 @@ export function SecretDetail() {
       glyph: viewGlyph(Table2),
       mark: countMark(dataKeys.length),
       content: (
-        <DataSection
-          data={secretData?.values ?? {}}
-          withheld={secretData?.withheld}
-          binary={secretData?.binary}
-          keys={dataKeys}
-          sensitive
-          isLoading={isDataLoading}
-          emptyMessage="This Secret holds no keys"
-        />
+        <>
+          {/* First, and in this tab rather than one of its own: on a TLS
+              Secret the certificate is what the page is about and the keys
+              under it are how it is stored. A Secret that is not one has no
+              certificate to show, and an Overview tab that was empty on every
+              Opaque Secret in the cluster would be worse than no tab. */}
+          {isTls && name && (
+            <>
+              <CertificateSection read={certificates.data?.get(name)} />
+              {/* Core first and whole; the extension adds why, or nothing. */}
+              <IssuanceSection issuance={issuance} secretName={name} />
+            </>
+          )}
+
+          <DataSection
+            data={secretData?.values ?? {}}
+            withheld={secretData?.withheld}
+            binary={secretData?.binary}
+            keys={dataKeys}
+            sensitive
+            isLoading={isDataLoading}
+            emptyMessage="This Secret holds no keys"
+          />
+        </>
       ),
     },
     connectionsTab(connections, deliveryQuery),
@@ -155,16 +170,6 @@ export function SecretDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      {/* Above the tabs, because on a TLS Secret the certificate is what
-          the page is about and the keys under it are how it is stored. */}
-      {isTls && name && (
-        <>
-          <CertificateSection read={certificates.data?.get(name)} />
-          {/* Core first and whole; the extension adds why, or nothing. */}
-          <IssuanceSection issuance={issuance} secretName={name} />
-        </>
-      )}
-    </ResourceDetailLayout>
+    />
   );
 }

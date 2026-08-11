@@ -1,6 +1,14 @@
 /**
- * The frame every resource detail page sits in: the header, the page's own
- * blocks and the tab strip.
+ * The frame every resource detail page sits in: the header, what is wrong with
+ * the object, and the tab strip.
+ *
+ * The order is the whole point. Identity, then the one or two lines that say
+ * the object is in trouble, then the strip — which carries the page's actions
+ * on its row. Nothing of the page's own grows above that strip, so Scale,
+ * Restart and Delete are above the fold by construction rather than by luck:
+ * this frame used to render the page's blocks between the header and the
+ * strip, and the day the Overview stopped being two short columns the controls
+ * left the screen.
  *
  * Nothing here draws a surface. Sections are separated by 22px of canvas and
  * the occasional hairline, which is the same rhythm the overview uses.
@@ -136,11 +144,21 @@ interface ResourceDetailLayoutProps {
   onFindReplacement?: () => void;
   isSearchingReplacement?: boolean;
 
+  /**
+   * What is wrong with the object, in the two or three lines that say it.
+   *
+   * The only thing a page still puts above the strip, and the bar is high:
+   * it is about the *object* rather than about the Overview, so it is worth
+   * seeing while reading Conditions or a log, and it is worth the height it
+   * takes from a full-height tab. A pod's problem summary qualifies; a
+   * rollout in flight qualifies. A block does not — blocks are what the
+   * Overview tab is, and there is no slot here for them any more.
+   */
+  summary?: ReactNode;
+
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
-
-  children?: ReactNode;
 }
 
 export function ResourceDetailLayout({
@@ -161,10 +179,10 @@ export function ResourceDetailLayout({
   onBack,
   onFindReplacement,
   isSearchingReplacement,
+  summary,
   tabs,
   activeTab,
   onTabChange,
-  children,
 }: ResourceDetailLayoutProps) {
   const { deliveries } = useDelivery(delivery ?? null);
 
@@ -184,18 +202,22 @@ export function ResourceDetailLayout({
     );
   }
 
-  // Collapsing the page's own blocks is not a control the reader operates:
-  // clicking "Logs" already said what they came for, and a toggle would spend
-  // a slot in the very row it exists to shrink. Reversing it is the Overview
-  // tab, one click away.
+  // Which of the two the page's height belongs to: the flow, or the pane the
+  // open tab is. Nothing above the strip is hidden for it — a banner earned by
+  // this object is worth its two lines on a log as much as on the Overview,
+  // and it is the tab's own content that grows into what is left.
   const surface = surfaceIsOpen(tabs, activeTab);
 
   return (
     <CaptionScope kind={resourceKind}>
       <div
         className={cn(
+          // 12px rather than the page's 22px: what is left in this column is
+          // chrome — identity, then the strip — and the mock's whole gain is
+          // that the two read as one band. The 22px rhythm still belongs to
+          // the blocks, which the open tab's panel now owns.
           "flex flex-col animate-in fade-in duration-200",
-          surface ? "h-full min-h-0 gap-2" : "gap-[22px]"
+          surface ? "h-full min-h-0 gap-2" : "gap-3"
         )}
       >
         <ResourceDetailHeader
@@ -216,17 +238,12 @@ export function ResourceDetailLayout({
           onBack={onBack}
         />
 
-        {/* Above the page's own blocks, and usually not there at all: the line
-            is earned per object, never per managed object. */}
-        {!surface && <DeliveryBanner deliveries={deliveries} />}
-
-        {/* `contents` so the page's own blocks keep sitting in this column at
-            its own rhythm; `hidden` takes all of them off a surface tab at
-            once. Kept mounted either way — the dialogs a page hangs here
-            portal to the body and have to survive the tab that opened them. */}
-        {children && (
-          <div className={surface ? "hidden" : "contents"}>{children}</div>
-        )}
+        {/* Above the strip, and so on every tab: both say something about the
+            object rather than about a view of it. Usually neither is there at
+            all — the delivery line is earned per object, never per managed
+            object, and a summary is what a healthy object does not have. */}
+        <DeliveryBanner deliveries={deliveries} />
+        {summary}
 
         <DetailTabs
           tabs={tabs}

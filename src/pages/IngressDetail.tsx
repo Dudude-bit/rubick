@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Copy, ExternalLink, Lock, Route, Tag } from "lucide-react";
+import { Copy, ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
 import {
   Table,
@@ -154,7 +154,7 @@ export function IngressDetail() {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
-    defaultTab: "access",
+    defaultTab: "overview",
   });
 
   const rules = ingress?.rules ?? [];
@@ -272,6 +272,23 @@ export function IngressDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Ingress, ingress);
 
   const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <>
+          <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
+
+          <TrafficChain
+            query={connections}
+            certificates={certificates.data}
+            issuance={issuance}
+            controller={controller}
+          />
+        </>
+      ),
+    },
     {
       id: "access",
       label: "Access",
@@ -598,15 +615,6 @@ export function IngressDetail() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}
-    >
-      <KeyValueSection title="Ingress" items={facts} className="max-w-lg" />
-
-      <TrafficChain
-        query={connections}
-        certificates={certificates.data}
-        issuance={issuance}
-        controller={controller}
-      />
-    </ResourceDetailLayout>
+    />
   );
 }

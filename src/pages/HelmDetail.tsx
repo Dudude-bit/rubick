@@ -5,6 +5,7 @@ import {
   Boxes,
   ExternalLink,
   History,
+  Info,
   RefreshCw,
   RotateCcw,
   ScrollText,
@@ -95,7 +96,7 @@ export function HelmDetail() {
 
   const [rollbackTarget, setRollbackTarget] = useState<number | null>(null);
   const [showUninstall, setShowUninstall] = useState(false);
-  const [activeTab, setActiveTab] = useState("history");
+  const [activeTab, setActiveTab] = useState("overview");
 
   const isNative = source === "native";
   const helmCliAvailable = helm?.available ?? false;
@@ -240,6 +241,21 @@ export function HelmDetail() {
   ];
 
   const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <>
+          <KeyValueSection title="Release" items={facts} className="max-w-lg" />
+          {!helmCliAvailable && (
+            <p className="text-[11px] text-warn">
+              Helm CLI not found — rollback and uninstall are unavailable.
+            </p>
+          )}
+        </>
+      ),
+    },
     {
       id: "history",
       label: "History",
@@ -484,14 +500,7 @@ export function HelmDetail() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-      >
-        <KeyValueSection title="Release" items={facts} className="max-w-lg" />
-        {!helmCliAvailable && (
-          <p className="text-[11px] text-warn">
-            Helm CLI not found — rollback and uninstall are unavailable.
-          </p>
-        )}
-      </ResourceDetailLayout>
+      />
 
       <ConfirmDialog
         open={rollbackTarget !== null}

@@ -12,7 +12,7 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { yamlTab } from "@/components/resources/yaml-tab";
-import { ExternalLink, Filter, Plug, Tag, Waypoints } from "lucide-react";
+import { ExternalLink, Filter, Info, Plug, Tag, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
@@ -48,7 +48,7 @@ export function ServiceDetail() {
     resourceKind: ResourceType.Service,
     fetchResource: (name, ns) => commands.getService(name, ns),
     deleteResource: (name, ns) => commands.deleteService(name, ns),
-    defaultTab: "access",
+    defaultTab: "overview",
   });
 
   const connections = useConnections(ResourceType.Service, name, namespace);
@@ -108,6 +108,18 @@ export function ServiceDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
 
   const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <>
+          <KeyValueSection title="Service" items={facts} className="max-w-lg" />
+
+          <TrafficChain query={connections} />
+        </>
+      ),
+    },
     {
       id: "access",
       label: "Access",
@@ -240,10 +252,6 @@ export function ServiceDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-    >
-      <KeyValueSection title="Service" items={facts} className="max-w-lg" />
-
-      <TrafficChain query={connections} />
-    </ResourceDetailLayout>
+    />
   );
 }

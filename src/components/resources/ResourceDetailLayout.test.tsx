@@ -53,41 +53,60 @@ const base = {
 };
 
 /**
- * A surface tab reclaims the page's height by hiding the blocks the page
- * renders above the tab strip. That is a fair trade only while some other tab
- * still shows them — on a page whose every tab is a surface it is not a trade
- * at all, and PersistentVolume lost its capacity, binding and reclaim policy
- * outright until this was caught.
+ * Nothing of the page's own grows above the tab strip.
+ *
+ * This is the whole shape of the page and not a detail of it: the strip
+ * carries Scale, Restart and Delete on its row, so anything that can grow
+ * between the header and the strip can push every control off the screen. It
+ * did — the day the Overview became full-width blocks, a StatefulSet's Scale
+ * button moved a screen below the fold. The frame therefore has no slot for
+ * blocks at all, and the blocks are the first tab's content.
  */
-describe("ResourceDetailLayout with only surface tabs", () => {
-  it("keeps the page's own blocks visible when no tab would ever show them", () => {
-    wrap(
-      <ResourceDetailLayout
-        {...base}
-        activeTab="yaml"
-        tabs={[
-          {
-            id: "yaml",
-            label: "YAML",
-            glyph: viewGlyph(Info),
-            kind: "surface",
-            content: null,
-          },
-        ]}
-      >
+describe("ResourceDetailLayout puts nothing of the page above the strip", () => {
+  it("will not compile a page that hands the frame blocks", () => {
+    const blocks = (
+      // @ts-expect-error - the frame takes no children. If this line ever
+      // stops being an error, a page can render above the strip again and the
+      // controls can leave the screen with it.
+      <ResourceDetailLayout {...base} activeTab="overview" tabs={[]}>
         <p>capacity 2Gi</p>
       </ResourceDetailLayout>
     );
-    expect(screen.getByText("capacity 2Gi").parentElement).not.toHaveClass(
-      "hidden"
-    );
+    expect(blocks).toBeTruthy();
   });
 
-  it("still hides them on a surface tab when another tab shows them", () => {
+  it("draws the open tab's content after the strip, never before it", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            glyph: viewGlyph(Info),
+            content: <p>capacity 2Gi</p>,
+          },
+        ]}
+      />
+    );
+    const strip = screen.getByRole("tablist");
+    const block = screen.getByText("capacity 2Gi");
+    expect(
+      strip.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  /**
+   * The one exception, and it earns it: what is wrong with the *object* is
+   * worth its two lines on every tab, including a full-height one.
+   */
+  it("keeps the summary above the strip, on a surface tab as much as any", () => {
     wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="logs"
+        summary={<p>CrashLoopBackOff — the container keeps exiting</p>}
         tabs={[
           {
             id: "overview",
@@ -103,21 +122,48 @@ describe("ResourceDetailLayout with only surface tabs", () => {
             content: null,
           },
         ]}
-      >
-        <p>capacity 2Gi</p>
-      </ResourceDetailLayout>
+      />
     );
-    // Asserted on the wrapper's class rather than on visibility: `hidden` is a
-    // Tailwind utility and jsdom loads no stylesheet, so `toBeVisible` cannot
-    // see it. Kept mounted either way — dialogs a page hangs here portal to
-    // the body and have to survive the tab that opened them.
-    expect(screen.getByText("capacity 2Gi").parentElement).toHaveClass(
-      "hidden"
-    );
+    const strip = screen.getByRole("tablist");
+    const said = screen.getByText(/CrashLoopBackOff/);
+    expect(
+      strip.compareDocumentPosition(said) & Node.DOCUMENT_POSITION_PRECEDING
+    ).toBeTruthy();
+  });
+});
+
+/**
+ * A surface owns the page's height. It used to be denied that on a page whose
+ * every tab was a surface, because hiding the blocks above the strip for good
+ * is how PersistentVolume once lost its capacity, binding and reclaim policy.
+ * There is nothing above the strip to hide any more — a page's blocks are a
+ * tab, and PersistentVolume's are its Overview — so the exception is gone and
+ * a page made only of surfaces gets the window it is built to fill.
+ */
+describe("ResourceDetailLayout and who owns the height", () => {
+  const onlySurfaces = (
+    <ResourceDetailLayout
+      {...base}
+      activeTab="yaml"
+      tabs={[
+        {
+          id: "yaml",
+          label: "YAML",
+          glyph: viewGlyph(Info),
+          kind: "surface",
+          content: null,
+        },
+      ]}
+    />
+  );
+
+  it("gives the window to a page whose every tab is a surface", () => {
+    const { container } = wrap(onlySurfaces);
+    expect(container.firstChild).toHaveClass("h-full");
   });
 
-  it("shows them again on the sections tab", () => {
-    wrap(
+  it("leaves the page scrolling on a tab made of blocks", () => {
+    const { container } = wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -129,20 +175,16 @@ describe("ResourceDetailLayout with only surface tabs", () => {
             content: null,
           },
           {
-            id: "logs",
-            label: "Logs",
+            id: "yaml",
+            label: "YAML",
             glyph: viewGlyph(Info),
             kind: "surface",
             content: null,
           },
         ]}
-      >
-        <p>capacity 2Gi</p>
-      </ResourceDetailLayout>
+      />
     );
-    expect(screen.getByText("capacity 2Gi").parentElement).not.toHaveClass(
-      "hidden"
-    );
+    expect(container.firstChild).not.toHaveClass("h-full");
   });
 });
 
@@ -335,12 +377,10 @@ describe("ResourceDetailLayout captions", () => {
             id: "overview",
             label: "Overview",
             glyph: viewGlyph(Info),
-            content: null,
+            content: <SectionHeader title="PersistentVolume" />,
           },
         ]}
-      >
-        <SectionHeader title="PersistentVolume" />
-      </ResourceDetailLayout>
+      />
     );
     expect(
       screen.queryByRole("heading", { name: "PersistentVolume" })

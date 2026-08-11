@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, GitBranch, ListTree, Tag, Trash2 } from "lucide-react";
+import {
+  BadgeCheck,
+  GitBranch,
+  Info,
+  ListTree,
+  Tag,
+  Trash2,
+} from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -53,7 +60,7 @@ export function CrdDetail() {
   // land on them, and a reader who then clicks another tab has changed
   // their mind — re-reading the URL after that would take it back.
   const [activeTab, setActiveTab] = useState(
-    () => searchParams.get("tab") ?? "versions"
+    () => searchParams.get("tab") ?? "overview"
   );
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
@@ -167,6 +174,18 @@ export function CrdDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const tabs: DetailTab[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection
+          title="Definition"
+          items={facts}
+          className="max-w-lg"
+        />
+      ),
+    },
     {
       id: "versions",
       label: "Versions",
@@ -373,13 +392,7 @@ export function CrdDetail() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-      >
-        <KeyValueSection
-          title="Definition"
-          items={facts}
-          className="max-w-lg"
-        />
-      </ResourceDetailLayout>
+      />
 
       <ConfirmDialog
         open={deleteDialogOpen}
