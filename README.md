@@ -10,7 +10,7 @@ A desktop Kubernetes client that tries not to lie to you.
 
 Most cluster UIs answer _what is the API server storing_. Rubick tries to answer _what is actually happening, and what will happen if you touch this_ — and where it cannot answer, it says so instead of guessing.
 
-![Rubick on a workload page](docs/images/01-hero.png)
+![Rubick on a workload page](docs/images/hero-workload-detail.png)
 
 ## The idea
 
@@ -28,7 +28,7 @@ It sounds abstract until you see what it costs a tool to break it. A pod whose c
 - Conditions coloured by meaning, not by the word `True` — `MemoryPressure=True` is a fault, `DisruptionAllowed=False` is a budget doing its job
 - Certificate expiry wherever TLS is named, and the four-object cert-manager chain walked down to the sentence that says what failed
 
-![A path that stops, and why](docs/images/02-chain-stops.png)
+![A path that stops, and why](docs/images/traffic-chain-stops.png)
 
 ### Shows how things connect
 
@@ -37,7 +37,9 @@ It sounds abstract until you see what it costs a tool to break it. A pod whose c
 - A Connections tab grouped by the question you are asking — what it needs to run, what it runs on, what made it — not by resource kind
 - What governs it: autoscalers, disruption budgets, and which GitOps controller delivers it
 
-![Logs open on the container that failed](docs/images/03-logs.png)
+![The Connections tab, grouped by question](docs/images/connections-tab.png)
+
+![Logs open on the container that failed](docs/images/logs-failing-init-container.png)
 
 ### Tells you before you act
 
@@ -45,7 +47,7 @@ It sounds abstract until you see what it costs a tool to break it. A pod whose c
 - It tells rather than blocks: scaling a managed workload by hand during an incident is legitimate, and the app has no business refusing
 - Draining a node names every disruption budget that will make the drain wait
 
-![Scaling something an autoscaler owns](docs/images/06-scale-warning.png)
+![Scaling something an autoscaler owns](docs/images/scale-interception.png)
 
 ### Integrates without pretending
 
@@ -62,7 +64,7 @@ Integrations come in three tiers with different obligations. In-cluster extensio
 
 Adding one costs a folder and a line.
 
-![Integrations, with what each is doing](docs/images/05-integrations.png)
+![Integrations, with what each is doing](docs/images/integrations-settings.png)
 
 ### Everyday things, done properly
 
@@ -70,12 +72,18 @@ Adding one costs a folder and a line.
 - Names inside event and condition prose are links too — but only when the controller stated the kind, never guessed from shape
 - Tabs are route **and** scope, so several clusters and namespaces stay open side by side
 - Search across clusters, with `!cluster-name` to aim it
+
+![Search, from anywhere](docs/images/command-palette.png)
+
 - A peek panel that answers without leaving the page, and expands to the full page when the answer is longer
 - Per-pod shell as a real tab whose session survives you looking elsewhere
 - Logs virtualised, with density, repeat collapsing, multi-container interleave and server-side filtering
 - Identity colouring that survives greyscale and colour blindness, and can be turned down or off
+- Light and dark, following the system or pinned
 
-![Usage with real history](docs/images/07-usage-history.png)
+![The same page in the light theme](docs/images/light-theme.png)
+
+![Usage with real history](docs/images/usage-history.png)
 
 ### Careful with your cluster and your laptop
 
