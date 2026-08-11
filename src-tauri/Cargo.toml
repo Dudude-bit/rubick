@@ -46,7 +46,7 @@ gcp_auth = "0.12"
 
 # Azure AKS authentication
 azure_identity = "0.21"
-azure_core = "0.21"
+azure_core = "1.1"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
