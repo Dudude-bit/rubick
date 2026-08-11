@@ -1,8 +1,9 @@
 import { Waypoints } from "lucide-react";
 
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
+import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
-import { countHosts } from "./data";
+import { countHosts, fetchMesh, MESH_KEY } from "./data";
 import { facts } from "./facts";
 
 /**
@@ -34,7 +35,12 @@ export default defineVendor({
     facts,
   },
   page: {
-    count: countHosts,
+    count: pageCount({
+      queryKey: MESH_KEY,
+      queryFn: fetchMesh,
+      select: countHosts,
+      staleTime: ROUTING_STALE,
+    }),
     load: () => import("./page"),
   },
   crd,

@@ -45,6 +45,7 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type UseQueryOptions,
 } from "@tanstack/react-query";
 import {
   lazy,
@@ -738,12 +739,21 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     data?.some((entry) => entry.id === vendor.id && entry.installed)
   );
 
+  // The page's own query, verbatim. Two observers on one cache entry, so a
+  // reader who opens the page finds it already answered and the app makes
+  // one set of reads instead of two.
   const counts = useQueries({
-    queries: detected.map((vendor) => ({
-      queryKey: ["integration-page-count", vendor.id],
-      queryFn: () => vendor.page.count(),
-      staleTime: FACTS_STALE_TIME,
-    })),
+    // `select` is declared over the payload the vendor's own query returns and
+    // erased at the registry boundary, so the list can hold every vendor's
+    // count without this file knowing what any of them reads.
+    queries: detected.map(
+      (vendor) =>
+        vendor.page.count as unknown as UseQueryOptions<
+          unknown,
+          Error,
+          number | null
+        >
+    ),
   });
 
   return detected.map((vendor, index) => ({

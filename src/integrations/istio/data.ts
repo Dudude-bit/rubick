@@ -48,14 +48,15 @@ export async function fetchMesh(): Promise<MeshSources> {
  * serves this hostname", and a row reading `1` over a page with four rows
  * would be the rail contradicting the screen it opens.
  */
-export async function countHosts(): Promise<number> {
-  const mesh = await fetchMesh();
+export function countHosts(mesh: MeshSources): number {
   return hostGroups({ ...mesh, services: [], published: [] }).length;
 }
 
+export const MESH_KEY = ["istio", "mesh"] as const;
+
 export function useMesh() {
   return useQuery({
-    queryKey: ["istio", "mesh"],
+    queryKey: MESH_KEY,
     queryFn: fetchMesh,
     staleTime: ROUTING_STALE,
   });

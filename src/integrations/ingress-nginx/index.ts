@@ -1,7 +1,8 @@
 import { Network } from "lucide-react";
 
-import { defineVendor } from "../registry";
-import { countHosts } from "./data";
+import { defineVendor, pageCount } from "../registry";
+import { ROUTING_STALE } from "../ingress";
+import { countHosts, fetchRouteSources, ROUTE_SOURCES_KEY } from "./data";
 import { facts } from "./facts";
 
 /**
@@ -31,7 +32,12 @@ export default defineVendor({
     facts,
   },
   page: {
-    count: countHosts,
+    count: pageCount({
+      queryKey: ROUTE_SOURCES_KEY,
+      queryFn: fetchRouteSources,
+      select: countHosts,
+      staleTime: ROUTING_STALE,
+    }),
     load: () => import("./page"),
   },
 });

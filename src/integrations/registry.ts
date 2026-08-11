@@ -594,10 +594,27 @@ export interface Extension {
  * extension, and the category lists only *detected* extensions, so a vendor
  * with a page and no extension would have a screen nothing could reach.
  */
-export interface VendorPage {
+/**
+ * How a sidebar row gets its number: the page's *own* query, plus the
+ * arithmetic that turns its answer into a count.
+ *
+ * A query rather than a function, and that is the whole point of the shape.
+ * Every one of these counts used to be a `() => Promise<number>` that made
+ * the same cluster reads the page makes, under a key of its own — so opening
+ * the Traefik page listed every Ingress, every IngressRoute and every
+ * Middleware twice, once for the screen and once for the number beside its
+ * name. Declaring the query instead means the row and the page share one
+ * cache entry: the row pays for the read, and opening the page costs nothing.
+ *
+ * `staleTime` is the vendor's, because a routing table and a delivery
+ * pipeline do not go out of date at the same speed. Nothing here polls.
+ */
+export interface PageCount {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<unknown>;
   /**
-   * The number at the end of the sidebar row — how many of the things the
-   * page actually lists, which is the same rule the resource rows follow.
+   * How many of the things the page actually lists, which is the same rule
+   * the resource rows follow.
    *
    * Not "how many of the vendor's CRDs exist": Traefik on a k3d cluster
    * serves plain Ingresses and may own no IngressRoute at all, and a row
@@ -605,7 +622,28 @@ export interface VendorPage {
    * empty page. `null` is the answer where the cluster refused to say, and
    * draws nothing rather than a zero.
    */
-  count: () => Promise<number | null>;
+  select: (data: never) => number | null;
+  staleTime: number;
+}
+
+/**
+ * Declare a page's count. Only a type-check, and one job: binding the payload
+ * type across `queryFn` and `select` at the call site, then erasing it, so the
+ * registry can hold every vendor's count in one list without knowing what any
+ * of them reads.
+ */
+export function pageCount<T>(count: {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<T>;
+  select: (data: T) => number | null;
+  staleTime: number;
+}): PageCount {
+  return count as PageCount;
+}
+
+export interface VendorPage {
+  /** The number at the end of the sidebar row. See {@link PageCount}. */
+  count: PageCount;
   /**
    * The page, imported when the reader opens it. A vendor page is a whole
    * screen with its own parsing and its own queries; keeping it out of the

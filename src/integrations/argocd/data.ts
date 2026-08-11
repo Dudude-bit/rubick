@@ -27,31 +27,25 @@ export const PROJECTS_CRD = `appprojects.${GROUP}`;
 const CONTROLLER_SELECTOR = "app.kubernetes.io/part-of=argocd";
 
 /** A minute: a sync takes minutes and the page is read, not watched. */
-const STALE = 60_000;
+export const ARGO_STALE = 60_000;
 
-export async function countApplications(): Promise<number> {
+export const APPLICATIONS_KEY = ["argocd", "applications"] as const;
+
+export async function fetchApplications(): Promise<ArgoApp[]> {
   const objects = await commands.listCustomResources(
     APPLICATIONS_CRD,
     null,
     null,
     null
   );
-  return objects.length;
+  return objects.map(readApplication);
 }
 
 export function useApplications() {
   return useQuery({
-    queryKey: ["argocd", "applications"],
-    queryFn: async (): Promise<ArgoApp[]> => {
-      const objects = await commands.listCustomResources(
-        APPLICATIONS_CRD,
-        null,
-        null,
-        null
-      );
-      return objects.map(readApplication);
-    },
-    staleTime: STALE,
+    queryKey: APPLICATIONS_KEY,
+    queryFn: fetchApplications,
+    staleTime: ARGO_STALE,
   });
 }
 
@@ -65,7 +59,7 @@ export function useApplicationSets() {
         // CRD, and a tab that said "could not be read" would be reporting a
         // supported install as broken.
         .catch((): CustomResourceInfo[] => []),
-    staleTime: STALE,
+    staleTime: ARGO_STALE,
   });
 }
 
@@ -73,7 +67,7 @@ export function useProjects() {
   return useQuery({
     queryKey: ["argocd", "projects"],
     queryFn: () => commands.listCustomResources(PROJECTS_CRD, null, null, null),
-    staleTime: STALE,
+    staleTime: ARGO_STALE,
   });
 }
 
@@ -172,7 +166,7 @@ export function useController() {
             : null,
       };
     },
-    staleTime: STALE,
+    staleTime: ARGO_STALE,
   });
 }
 

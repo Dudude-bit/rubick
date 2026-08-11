@@ -1,8 +1,8 @@
 import { GitBranch } from "lucide-react";
 
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
 import { crd } from "./crd";
-import { countApplications } from "./data";
+import { APPLICATIONS_KEY, ARGO_STALE, fetchApplications } from "./data";
 import { facts } from "./facts";
 import { ownerOf } from "./owner";
 
@@ -37,7 +37,12 @@ export default defineVendor({
     facts,
   },
   page: {
-    count: countApplications,
+    count: pageCount({
+      queryKey: APPLICATIONS_KEY,
+      queryFn: fetchApplications,
+      select: (apps) => apps.length,
+      staleTime: ARGO_STALE,
+    }),
     load: () => import("./page"),
   },
   crd,

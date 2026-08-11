@@ -1,9 +1,15 @@
 import { Layers } from "lucide-react";
 
 import { crdObjectPath } from "../kit";
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
 import { crd } from "./crd";
-import { countReconcilers, HELM_RELEASES_CRD } from "./data";
+import {
+  countReconcilers,
+  fetchPicture,
+  FLUX_STALE,
+  HELM_RELEASES_CRD,
+  PICTURE_KEY,
+} from "./data";
 import { facts } from "./facts";
 import { ownerOf } from "./owner";
 
@@ -39,7 +45,12 @@ export default defineVendor({
     facts,
   },
   page: {
-    count: countReconcilers,
+    count: pageCount({
+      queryKey: PICTURE_KEY,
+      queryFn: fetchPicture,
+      select: countReconcilers,
+      staleTime: FLUX_STALE,
+    }),
     load: () => import("./page"),
   },
   crd,

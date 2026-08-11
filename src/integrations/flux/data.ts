@@ -42,7 +42,7 @@ export const SOURCE_KINDS: ReadonlyArray<[kind: string, crd: string]> = [
 /** Every Flux controller carries this on its own workload. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/part-of=flux";
 
-const STALE = 60_000;
+export const FLUX_STALE = 60_000;
 
 /** A kind this API server does not serve is none of that kind, not a failure. */
 function listOptional(crd: string): Promise<CustomResourceInfo[]> {
@@ -64,26 +64,31 @@ export async function fetchPicture(): Promise<FluxPicture> {
   );
 }
 
+export const PICTURE_KEY = ["flux", "picture"] as const;
+
 /**
- * How many things Flux is reconciling — the sidebar's number.
+ * How many things Flux is reconciling — the sidebar's number, read off the
+ * same picture the page draws.
  *
  * Reconcilers rather than every Flux object: the page lists what is being
  * applied, and a cluster with one Kustomization and four sources is
  * reconciling one thing.
+ *
+ * This used to be its own two list calls, which was cheaper in isolation and
+ * more expensive in practice — the reader who opened the page paid for those
+ * two lists twice. Sharing the page's query costs four extra lists a minute on
+ * a cluster that has Flux and nobody looking at it, and nothing at all on one
+ * where somebody is.
  */
-export async function countReconcilers(): Promise<number> {
-  const [kustomizations, helmReleases] = await Promise.all([
-    commands.listCustomResources(KUSTOMIZATIONS_CRD, null, null, null),
-    listOptional(HELM_RELEASES_CRD),
-  ]);
-  return kustomizations.length + helmReleases.length;
+export function countReconcilers(picture: FluxPicture): number {
+  return picture.reconcilers.length;
 }
 
 export function usePicture() {
   return useQuery({
-    queryKey: ["flux", "picture"],
+    queryKey: PICTURE_KEY,
     queryFn: fetchPicture,
-    staleTime: STALE,
+    staleTime: FLUX_STALE,
   });
 }
 
@@ -117,6 +122,6 @@ export function useControllers() {
         }))
         .sort((left, right) => left.name.localeCompare(right.name));
     },
-    staleTime: STALE,
+    staleTime: FLUX_STALE,
   });
 }

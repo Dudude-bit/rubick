@@ -8,21 +8,19 @@
  * k3d's Traefik makes — is exactly when that goes wrong.
  */
 
-import { commands } from "@/lib/commands";
-
 import { integrationPagePath } from "../paths";
 import { plural } from "../kit";
 import type { VendorFact } from "../registry";
-import { countHosts } from "./data";
+import { countHosts, fetchRouteSources } from "./data";
 import { CONTROLLER } from "./model";
 
 export async function facts(): Promise<VendorFact[]> {
-  const [hosts, classes] = await Promise.all([
-    countHosts(),
-    commands.resolveIngressClass(null),
-  ]);
+  // `fetchRouteSources` already resolves the class binding, so the pane reads
+  // the cluster once rather than twice.
+  const sources = await fetchRouteSources();
+  const hosts = countHosts(sources);
 
-  const served = classes.available.filter(
+  const served = sources.classes.filter(
     (ingressClass) => ingressClass.controller === CONTROLLER
   );
 

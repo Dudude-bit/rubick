@@ -103,11 +103,11 @@ export interface RouteSources {
   classes: IngressClassSummary[];
 }
 
-const ROUTE_SOURCES = ["traefik", "route-sources"];
+export const ROUTE_SOURCES = ["traefik", "route-sources"] as const;
 const CONTROLLER = ["traefik", "controller"];
 
 /** A minute: routing changes with a deploy, not by the second. */
-const STALE = 60_000;
+export const ROUTE_STALE = 60_000;
 
 export async function fetchRouteSources(): Promise<RouteSources> {
   const [ingresses, ingressRoutes, middlewares, binding] = await Promise.all([
@@ -120,15 +120,12 @@ export async function fetchRouteSources(): Promise<RouteSources> {
 }
 
 /**
- * How many hosts this Traefik serves — the sidebar's number.
- *
- * The same reads the page makes, under a different query key, so the count
- * and the page do not share a cache entry: two reads on a cluster where the
- * reader opens the page, one where they never do. Worth it for a number that
- * is right on a cluster whose Traefik owns no IngressRoute at all.
+ * How many hosts this Traefik serves — the sidebar's number, from the page's
+ * own answer. Hosts rather than IngressRoutes: Traefik on a k3d cluster serves
+ * plain Ingresses and may own no IngressRoute at all, and a row reading `0`
+ * over a page with twelve hosts on it would be a lie about an empty page.
  */
-export async function countHosts(): Promise<number> {
-  const sources = await fetchRouteSources();
+export function countHosts(sources: RouteSources): number {
   const hosts = new Set(
     allRoutes({
       ...sources,
@@ -144,7 +141,7 @@ export function useRouteSources() {
   return useQuery({
     queryKey: ROUTE_SOURCES,
     queryFn: fetchRouteSources,
-    staleTime: STALE,
+    staleTime: ROUTE_STALE,
   });
 }
 
@@ -262,7 +259,7 @@ export function useController() {
   return useQuery({
     queryKey: CONTROLLER,
     queryFn: fetchController,
-    staleTime: STALE,
+    staleTime: ROUTE_STALE,
   });
 }
 
@@ -292,7 +289,7 @@ export function useRouteCertificates(routes: TraefikRoute[] | undefined) {
     queries: batches.map((batch) => ({
       queryKey: ["tls-certificates", batch.namespace, batch.names.join(",")],
       queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
-      staleTime: STALE,
+      staleTime: ROUTE_STALE,
     })),
   });
 

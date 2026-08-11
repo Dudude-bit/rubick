@@ -56,8 +56,7 @@ export async function fetchRouteSources(): Promise<RouteSources> {
  * page, and a canary pair is emphatically one. A count of objects over a
  * page pivoted by host would disagree with the page it links to.
  */
-export async function countHosts(): Promise<number> {
-  const sources = await fetchRouteSources();
+export function countHosts(sources: RouteSources): number {
   const hosts = new Set(
     allRoutes({ ...sources, services: [], published: [] }).map(
       (route) => route.host ?? ""
@@ -66,9 +65,11 @@ export async function countHosts(): Promise<number> {
   return hosts.size;
 }
 
+export const ROUTE_SOURCES_KEY = ["ingress-nginx", "route-sources"] as const;
+
 export function useRouteSources() {
   return useQuery({
-    queryKey: ["ingress-nginx", "route-sources"],
+    queryKey: ROUTE_SOURCES_KEY,
     queryFn: fetchRouteSources,
     staleTime: ROUTING_STALE,
   });

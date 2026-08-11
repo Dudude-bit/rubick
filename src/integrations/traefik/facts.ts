@@ -13,22 +13,21 @@
  * be the pane contradicting the screen it links to.
  */
 
-import { commands } from "@/lib/commands";
-
 import { integrationPagePath } from "../paths";
 import { plural } from "../kit";
 import type { VendorFact } from "../registry";
-import { countHosts, listTraefik } from "./data";
+import { countHosts, fetchRouteSources } from "./data";
 import { CONTROLLER } from "./model";
 
 export async function facts(): Promise<VendorFact[]> {
-  const [hosts, middlewares, classes] = await Promise.all([
-    countHosts(),
-    listTraefik("middlewares"),
-    commands.resolveIngressClass(null),
-  ]);
+  // One read for all three. The pane used to ask for the routes, the
+  // middlewares and the class binding separately, two of which this already
+  // contains.
+  const sources = await fetchRouteSources();
+  const hosts = countHosts(sources);
+  const middlewares = sources.middlewares;
 
-  const served = classes.available.filter(
+  const served = sources.classes.filter(
     (ingressClass) => ingressClass.controller === CONTROLLER
   );
 
