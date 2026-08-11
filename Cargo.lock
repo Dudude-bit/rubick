@@ -3414,7 +3414,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3479,7 +3479,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui-common"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "chrono",
  "serde",
