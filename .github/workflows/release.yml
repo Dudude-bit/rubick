@@ -21,6 +21,14 @@ jobs:
   release:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # GitHub's default is 6 hours. Notarisation is a poll against Apple's
+    # notary service, and a submission that never leaves "In Progress"
+    # takes the whole job down with it — v3.0.1 burned ~4 hours per macOS
+    # runner that way before failing on an unrelated network blip. A cold
+    # macOS build reaches "Notarizing" in well under 40 minutes, so 90
+    # leaves ample room for a slow notarisation and still turns a hang
+    # into a prompt, legible failure.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
