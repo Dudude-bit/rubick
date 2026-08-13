@@ -26,6 +26,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import {
+  clampScope,
+  decodeScope,
+  sameScope,
+  wireNamespace,
+} from "@/lib/namespace-scope";
 import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 
@@ -40,7 +46,18 @@ export interface ScopeTab {
   id: string;
   /** Parked scope. Ignored while this tab is the active one. */
   context: string | null;
+  /**
+   * The parked scope's wire value, and the only field a build without
+   * multi-namespace scopes reads. It is written for that build's benefit —
+   * {@link scope} is what this one restores. See `lib/namespace-scope.ts`.
+   */
   namespace: string;
+  /**
+   * The parked selection, and the truth wherever it is set. A tab persisted
+   * by a build older than this field has only `namespace`, which is where
+   * {@link tabScope} reads it from instead.
+   */
+  scope?: string[];
   /** Route as `pathname + search`; mirrored from the router while active. */
   href: string;
   /** The kubeconfig no longer lists `context`. Owned by `reconcileContexts`. */
@@ -86,6 +103,7 @@ function makeTab(init: Partial<ScopeTab> = {}): ScopeTab {
     id: makeId(),
     context: null,
     namespace: "",
+    scope: [],
     href: HOME,
     missing: false,
     ...init,
@@ -94,13 +112,19 @@ function makeTab(init: Partial<ScopeTab> = {}): ScopeTab {
 
 /** Park the live scope on the tab that currently owns it. */
 function parkActive(tabs: ScopeTab[], activeId: string): ScopeTab[] {
-  const { currentContext, currentNamespace } = useClusterStore.getState();
+  const { currentContext, currentNamespace, namespaceScope } =
+    useClusterStore.getState();
   return tabs.map((tab) =>
     // A tab whose cluster is gone never went live, so there is nothing on it
     // to park — and parking would overwrite the context name that is the
     // only record of what the tab was pointed at.
     tab.id === activeId && !tab.missing
-      ? { ...tab, context: currentContext, namespace: currentNamespace }
+      ? {
+          ...tab,
+          context: currentContext,
+          namespace: currentNamespace,
+          scope: namespaceScope,
+        }
       : tab
   );
 }
@@ -120,9 +144,45 @@ async function applyScope(tab: ScopeTab) {
     // tab's namespace has to be re-applied after it resolves.
     await cluster.connect(tab.context);
   }
-  if (useClusterStore.getState().currentNamespace !== tab.namespace) {
-    await useClusterStore.getState().switchNamespace(tab.namespace);
+  const live = useClusterStore.getState();
+  const scope = tabScope(tab);
+  if (!sameScope(live.namespaceScope, scope)) {
+    await live.setNamespaceScope(scope);
   }
+}
+
+/**
+ * The selection a tab is parked on, wherever that tab recorded it.
+ *
+ * `scope` is younger than `namespace`, so a payload from any earlier build —
+ * a single namespace, or the joined list this feature briefly stored — has
+ * only the older field, and it is read back out of that one.
+ *
+ * Both fields present but disagreeing is a third case, and it is the one a
+ * downgrade leaves behind: a build without this feature reads and writes
+ * `namespace`, cannot touch `scope`, and so parks a pair this build never
+ * writes — `namespace` is always {@link wireNamespace} of the selection
+ * beside it. The disagreement is evidence of which record is younger, and
+ * taking it is what keeps the reader's last choice from being silently
+ * discarded on the way back up.
+ */
+export function tabScope(tab: ScopeTab): string[] {
+  const parked = tab.scope;
+  if (!parked) return decodeScope(tab.namespace);
+  if (tab.namespace !== wireNamespace(parked))
+    return decodeScope(tab.namespace);
+  return parked;
+}
+
+/**
+ * A tab as this build understands it. Applied once, on the way in from disk,
+ * so that what the strip draws is what activating the tab would apply — a tab
+ * restored from a build with a larger ceiling must not name namespaces this
+ * one is not going to read.
+ */
+function normalizeTab(tab: ScopeTab): ScopeTab {
+  const scope = clampScope(tabScope(tab));
+  return { ...tab, scope, namespace: wireNamespace(scope) };
 }
 
 const initialTab = makeTab();
@@ -136,13 +196,23 @@ export const useScopeTabStore = create<ScopeTabState>()(
 
       openTab: async ({ href, context, namespace, background } = {}) => {
         const live = useClusterStore.getState();
+        // A tab opened *at* something — a link gesture on an object — lands
+        // on that object's namespace alone; one opened from the strip
+        // inherits the whole selection the reader is already reading under.
+        const scope =
+          namespace === undefined
+            ? live.namespaceScope
+            : namespace
+              ? [namespace]
+              : [];
         // A new tab inherits the cluster the reader is already looking at:
         // the common reason to open one is a second view of the same
         // cluster, and inheriting makes the shortcut instant instead of
         // routing through a connect and possibly an auth prompt.
         const tab = makeTab({
           context: context ?? live.currentContext,
-          namespace: namespace ?? live.currentNamespace,
+          namespace: wireNamespace(scope),
+          scope,
           href: href ?? HOME,
         });
         if (background) {
@@ -270,21 +340,31 @@ export const useScopeTabStore = create<ScopeTabState>()(
           | undefined;
         const tabs = (state?.tabs ?? [])
           .filter((tab) => typeof tab?.id === "string")
-          .map((tab) => ({
-            id: tab.id as string,
-            context: typeof tab.context === "string" ? tab.context : null,
-            namespace: typeof tab.namespace === "string" ? tab.namespace : "",
-            href:
-              typeof tab.href === "string" && tab.href.startsWith("/")
-                ? tab.href
-                : HOME,
-            missing: false,
-          }));
+          .map((tab) =>
+            normalizeTab({
+              id: tab.id as string,
+              context: typeof tab.context === "string" ? tab.context : null,
+              namespace: typeof tab.namespace === "string" ? tab.namespace : "",
+              // Left unset rather than emptied when the payload predates it:
+              // an empty selection is "the whole cluster", which is not what
+              // a tab parked on one namespace meant.
+              scope: Array.isArray(tab.scope) ? tab.scope : undefined,
+              href:
+                typeof tab.href === "string" && tab.href.startsWith("/")
+                  ? tab.href
+                  : HOME,
+              missing: false,
+            })
+          );
         return { tabs, activeId: state?.activeId } as ScopeTabState;
       },
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         if (!state.tabs?.length) state.tabs = [makeTab()];
+        // Not only for a version bump: a payload written before `scope`
+        // existed carries the same version this build writes, so the field
+        // has to be recovered here rather than in `migrate`.
+        state.tabs = state.tabs.map(normalizeTab);
         // Ids are a counter and the counter restarts at zero every launch,
         // so a fresh tab would otherwise be handed an id a restored tab
         // already holds — and React would key two tabs the same.
@@ -340,6 +420,7 @@ export function tabRouteLabel(href: string): string {
 export function tabTitle(tab: ScopeTab, alias?: string): string {
   const name = tab.context ?? "no cluster";
   const cluster = alias ? `${alias} (${name})` : name;
-  const scope = tab.missing ? `${cluster} (missing)` : cluster;
-  return `${scope} · ${tab.namespace || "all namespaces"} · ${tabRouteLabel(tab.href)}`;
+  const named = tab.missing ? `${cluster} (missing)` : cluster;
+  const namespaces = tabScope(tab);
+  return `${named} · ${namespaces.length === 0 ? "all namespaces" : namespaces.join(", ")} · ${tabRouteLabel(tab.href)}`;
 }

@@ -18,10 +18,11 @@ import {
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
-const columns = (): ColumnDef<EndpointsInfo>[] => [
+export const columns = (): ColumnDef<EndpointsInfo>[] => [
   createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
   createNamespaceColumn<EndpointsInfo>(),
   {
+    size: 200,
     id: "endpoints",
     header: "Endpoints",
     cell: ({ row }) => {
@@ -90,6 +91,8 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
     },
   },
   {
+    // Three `name:port/protocol` triples side by side, and a "+2" after them.
+    size: 220,
     id: "ports",
     header: "Ports",
     cell: ({ row }) => {
@@ -114,6 +117,8 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
     },
   },
   {
+    // A count, and the addresses themselves are in the tooltip.
+    size: 70,
     id: "addresses",
     header: "IPs",
     cell: ({ row }) => {
@@ -147,8 +152,8 @@ const columns = (): ColumnDef<EndpointsInfo>[] => [
 export const EndpointsList = createResourceListPage<EndpointsInfo>({
   resourceType: ResourceType.Endpoints,
   title: "Endpoints",
-  description: ({ namespace }) =>
-    `Network endpoints for services in ${namespace || "all namespaces"}`,
+  description: ({ scope }) =>
+    `Network endpoints for services in ${scope.inWords}`,
   searchKey: "name",
   fetcher: ({ namespace }) =>
     commands.listEndpoints({

@@ -36,6 +36,7 @@ import { useSearchParams } from "react-router-dom";
 import type { ChainStop } from "@/generated/types";
 import { plural } from "../kit";
 import {
+  Chain,
   Cell,
   Column,
   FilterBox,
@@ -380,7 +381,7 @@ function HostRow({
       }
     >
       <Paths group={group} sources={sources} />
-      {sources && <Chain group={group} sources={sources} />}
+      {sources && <HostChain group={group} sources={sources} />}
       <Findings group={group} />
     </TroubleRow>
   );
@@ -544,7 +545,7 @@ function Share({ route, group }: { route: NginxRoute; group: NginxHostGroup }) {
 
 // --- the chain ----------------------------------------------------------
 
-function Chain({
+function HostChain({
   group,
   sources,
 }: {
@@ -563,7 +564,7 @@ function Chain({
           the path through {route.path} on {route.source.name}
         </span>
       )}
-      <div className="grid grid-cols-5">
+      <Chain>
         <Column label="Listener">
           <Cell under={route.tlsSecret ? "TLS terminated here" : "no TLS here"}>
             {route.tlsSecret ? ":443" : ":80"}
@@ -639,7 +640,7 @@ function Chain({
             </Cell>
           )}
         </Column>
-      </div>
+      </Chain>
       {route.tlsSecret && (
         <span className="text-[11px] text-fg-fnt">
           served under{" "}

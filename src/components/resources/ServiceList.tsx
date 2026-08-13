@@ -20,10 +20,12 @@ import { createResourceListPage } from "./createResourceListPage";
  */
 const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
 
-const columns = (): ColumnDef<ServiceInfo>[] => [
+export const columns = (): ColumnDef<ServiceInfo>[] => [
   createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
   {
+    // "ExternalName" is the longest word this column ever holds.
+    size: 120,
     accessorKey: "type",
     header: "Type",
     cell: ({ row }) => (
@@ -39,6 +41,7 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
+    size: 130,
     accessorKey: "clusterIp",
     header: "Cluster IP",
     cell: ({ row }) => (
@@ -46,6 +49,8 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
+    // An address per line, each behind an icon.
+    size: 160,
     accessorKey: "externalIps",
     header: "External IPs",
     cell: ({ row }) => {
@@ -65,6 +70,8 @@ const columns = (): ColumnDef<ServiceInfo>[] => [
     },
   },
   {
+    // Two `80:30080/TCP` mappings and a "+3" after them.
+    size: 180,
     accessorKey: "ports",
     header: "Ports",
     cell: ({ row }) => (

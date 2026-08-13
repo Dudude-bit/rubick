@@ -30,6 +30,13 @@ export function useClusterInfo() {
     enabled: isConnected && !!currentContext,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.overview,
-    refresh: "overview",
+    // No rate, because there is no question to re-ask: this is the
+    // apiserver's own `/version`, and it cannot change under a live
+    // connection — an upgraded control plane is a new connection, which
+    // this query is keyed on. It rode the `overview` rate purely by
+    // habit, spending a round trip every ten seconds to be told the same
+    // version string. Coming back to the app still refetches it, so a
+    // reconnect cannot leave a stale version on screen.
+    refresh: false,
   });
 }

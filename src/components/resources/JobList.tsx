@@ -16,18 +16,21 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 
 type JobInfoWithMetrics = JobInfo & ResourceMetrics;
 
-const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
+export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
   createNameColumn<JobInfoWithMetrics>(ResourceType.Job),
   createNamespaceColumn<JobInfoWithMetrics>(),
   createCpuColumn<JobInfoWithMetrics>(),
   createMemoryColumn<JobInfoWithMetrics>(),
   {
+    // "1/1", under a header that is the widest thing in the column.
+    size: 110,
     id: "completions",
     header: "Completions",
     cell: ({ row }) =>
       `${row.original.succeeded}/${row.original.completions || "∞"}`,
   },
   {
+    size: 110,
     id: "status",
     header: "Status",
     cell: ({ row }) => <StatusBadge status={row.original.status} />,

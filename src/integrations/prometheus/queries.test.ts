@@ -98,7 +98,9 @@ describe("memory", () => {
     expect(memoryQuery(pod, HOUR)).toContain(
       "container_memory_working_set_bytes"
     );
-    expect(memoryQuery(pod, HOUR)).not.toContain("container_memory_usage_bytes");
+    expect(memoryQuery(pod, HOUR)).not.toContain(
+      "container_memory_usage_bytes"
+    );
   });
 
   /** A gauge needs no rate, and taking one would report bytes per second. */

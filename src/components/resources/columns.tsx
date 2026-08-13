@@ -5,8 +5,6 @@
  */
 
 import { ColumnDef } from "@tanstack/react-table";
-import { Link } from "react-router-dom";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
 import {
@@ -14,22 +12,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eye, Trash2 } from "lucide-react";
-import { ActionMenu } from "@/components/ui/action-menu";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "./ResourceRef";
-import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-
-// Base resource interface for column constraints
-interface BaseResource {
-  name: string;
-  namespace: string;
-}
 
 interface WithCreatedAt {
   createdAt?: string | null;
@@ -53,10 +39,6 @@ interface WithMemoryLimits {
   memoryRequests?: string | null;
 }
 
-interface WithLabels {
-  labels: Record<string, string>;
-}
-
 /**
  * The name cell.
  *
@@ -67,6 +49,7 @@ export function createNameColumn<
   T extends { name: string; namespace?: string | null },
 >(kind: ResourceKind): ColumnDef<T> {
   return {
+    size: 320,
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
@@ -87,6 +70,7 @@ export function createNamespaceColumn<
   T extends { namespace: string },
 >(): ColumnDef<T> {
   return {
+    size: 140,
     accessorKey: "namespace",
     header: "Namespace",
     cell: ({ row }) => (
@@ -101,30 +85,12 @@ export function createNamespaceColumn<
  */
 export function createAgeColumn<T extends WithCreatedAt>(): ColumnDef<T> {
   return {
+    size: 80,
     id: "age",
     header: "Age",
     cell: ({ row }) => (
       <span className="text-fg-fnt">
         <RealtimeAge timestamp={row.original.createdAt} />
-      </span>
-    ),
-  };
-}
-
-/**
- * Creates a generic time-ago column for any timestamp field
- * Uses RealtimeAge for auto-updating display
- */
-export function createTimeAgoColumn<T>(
-  accessor: (row: T) => string | null | undefined,
-  header: string
-): ColumnDef<T> {
-  return {
-    id: header.toLowerCase().replace(/\s+/g, "-"),
-    header,
-    cell: ({ row }) => (
-      <span className="text-fg-fnt">
-        <RealtimeAge timestamp={accessor(row.original)} />
       </span>
     ),
   };
@@ -138,6 +104,7 @@ export function createCpuColumn<
   T extends WithCpuUsage & Partial<WithCpuLimits>,
 >(): ColumnDef<T> {
   return {
+    size: 90,
     id: "cpu",
     header: "CPU",
     cell: ({ row }) => {
@@ -163,6 +130,7 @@ export function createMemoryColumn<
   T extends WithMemoryUsage & Partial<WithMemoryLimits>,
 >(): ColumnDef<T> {
   return {
+    size: 100,
     id: "memory",
     header: "Memory",
     cell: ({ row }) => {
@@ -203,6 +171,7 @@ export function createAccessModesColumn<
   T extends { accessModes: string[] },
 >(): ColumnDef<T> {
   return {
+    size: 130,
     accessorKey: "accessModes",
     header: "Access Modes",
     cell: ({ row }) => {
@@ -231,6 +200,7 @@ export function createCapacityColumn<
   T extends { capacity?: string | null },
 >(): ColumnDef<T> {
   return {
+    size: 100,
     accessorKey: "capacity",
     header: "Capacity",
     cell: ({ row }) =>
@@ -243,31 +213,13 @@ export function createCapacityColumn<
 }
 
 /**
- * Creates a status badge column
- */
-export function createStatusColumn<
-  T extends { status: { phase: string } | string },
->(_options?: { accessor?: string }): ColumnDef<T> {
-  return {
-    id: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const status =
-        typeof row.original.status === "string"
-          ? row.original.status
-          : row.original.status.phase;
-      return <StatusBadge status={status} />;
-    },
-  };
-}
-
-/**
  * Creates a replicas column (ready/desired)
  */
 export function createReplicasColumn<
   T extends { replicas: { ready: number; desired: number } },
 >(): ColumnDef<T> {
   return {
+    size: 100,
     id: "replicas",
     header: "Replicas",
     cell: ({ row }) => {
@@ -284,49 +236,13 @@ export function createReplicasColumn<
   };
 }
 
-/**
- * Labels, as `key=value` text.
- *
- * A label is arbitrary user data, never a state, so pilling it put an
- * outlined box around every `app=nginx` in the table and made the column
- * heavier than the resource name beside it.
- */
-export function createLabelsColumn<T extends WithLabels>(options?: {
-  maxDisplay?: number;
-}): ColumnDef<T> {
-  const maxDisplay = options?.maxDisplay ?? 3;
-  return {
-    id: "labels",
-    header: "Labels",
-    cell: ({ row }) => {
-      const entries = Object.entries(row.original.labels);
-      if (entries.length === 0) return <span className="text-fg-fnt">—</span>;
-      return (
-        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
-          {entries.slice(0, maxDisplay).map(([key, value]) => (
-            <span key={key} className="font-mono text-fg-mut">
-              {key}
-              <span className="text-fg-fnt">=</span>
-              {value}
-            </span>
-          ))}
-          {entries.length > maxDisplay && (
-            <span className="text-fg-fnt">
-              +{entries.length - maxDisplay} more
-            </span>
-          )}
-        </span>
-      );
-    },
-  };
-}
-
 /** Data keys for ConfigMaps/Secrets. Identifiers, so mono and unboxed. */
 export function createDataKeysColumn<
   T extends { dataKeys?: string[] },
 >(options?: { maxDisplay?: number }): ColumnDef<T> {
   const maxDisplay = options?.maxDisplay ?? 3;
   return {
+    size: 160,
     id: "dataKeys",
     header: "Keys",
     cell: ({ row }) => {
@@ -348,110 +264,4 @@ export function createDataKeysColumn<
       );
     },
   };
-}
-
-/**
- * Creates a type badge column
- */
-export function createTypeBadgeColumn<T extends { type?: string }>(options?: {
-  header?: string;
-}): ColumnDef<T> {
-  return {
-    id: "type",
-    header: options?.header ?? "Type",
-    cell: ({ row }) => (
-      <span className="text-fg-mid">{row.original.type ?? "-"}</span>
-    ),
-  };
-}
-
-/**
- * Action menu item definitions for reuse
- */
-export interface ActionMenuItem<T> {
-  type: "item" | "separator";
-  label?: string;
-  icon?: React.ReactNode;
-  onClick?: (item: T) => void;
-  href?: (item: T) => string;
-  variant?: "default" | "destructive";
-}
-
-/**
- * Creates an actions column with dropdown menu
- */
-export function createActionsColumn<T extends BaseResource>(
-  actions:
-    | ActionMenuItem<T>[]
-    | ((setDeleteTarget: (item: T) => void) => ActionMenuItem<T>[]),
-  setDeleteTarget?: (item: T) => void
-): ColumnDef<T> {
-  return {
-    id: "actions",
-    cell: ({ row }) => {
-      const resolvedActions =
-        typeof actions === "function"
-          ? actions(setDeleteTarget ?? (() => {}))
-          : actions;
-
-      return (
-        <ActionMenu>
-          {resolvedActions.map((action, index) => {
-            if (action.type === "separator") {
-              return <DropdownMenuSeparator key={index} />;
-            }
-
-            if (action.href) {
-              return (
-                <DropdownMenuItem key={index} asChild>
-                  <Link to={action.href(row.original)}>
-                    {action.icon}
-                    {action.label}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            }
-
-            return (
-              <DropdownMenuItem
-                key={index}
-                className={
-                  action.variant === "destructive" ? "text-err" : undefined
-                }
-                onClick={() => action.onClick?.(row.original)}
-              >
-                {action.icon}
-                {action.label}
-              </DropdownMenuItem>
-            );
-          })}
-        </ActionMenu>
-      );
-    },
-  };
-}
-
-/**
- * Creates standard view/delete actions
- */
-export function createStandardActions<T extends BaseResource>(
-  linkPrefix: string,
-  setDeleteTarget: (item: T) => void
-): ActionMenuItem<T>[] {
-  return [
-    {
-      type: "item",
-      label: "View Details",
-      icon: <Eye className="mr-2 h-4 w-4" />,
-      href: (item) => `${linkPrefix}/${item.namespace}/${item.name}`,
-    },
-    { type: "separator" },
-    {
-      type: "item",
-      label: "Delete",
-      icon: <Trash2 className="mr-2 h-4 w-4" />,
-      onClick: setDeleteTarget,
-      variant: "destructive",
-    },
-  ];
 }

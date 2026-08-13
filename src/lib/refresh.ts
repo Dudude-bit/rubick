@@ -63,7 +63,6 @@ export const REFRESH_INTERVALS = {
    */
   overview: 10_000,
   metrics: 2000,
-  metricsCluster: 2000,
   fast: 1000,
   slow: 8000,
   /**
@@ -88,10 +87,7 @@ export type RefreshRate = keyof typeof REFRESH_INTERVALS;
  * cadence for as long as somebody is watching it, and stops dead when they are
  * not, which is the one saving that costs the chart nothing.
  */
-export const RECORDED: ReadonlySet<RefreshRate> = new Set([
-  "metrics",
-  "metricsCluster",
-]);
+export const RECORDED: ReadonlySet<RefreshRate> = new Set(["metrics"]);
 
 export const STALE_TIMES = {
   resourceList: 1000,

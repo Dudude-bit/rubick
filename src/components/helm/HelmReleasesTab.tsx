@@ -86,6 +86,7 @@ export function HelmReleasesTab({
       {
         accessorKey: "name",
         header: "Name",
+        size: 260,
         cell: ({ row }) => (
           <RouteLink
             to={helmReleaseHref(row.original)}
@@ -95,11 +96,12 @@ export function HelmReleasesTab({
           </RouteLink>
         ),
       },
-      { accessorKey: "namespace", header: "Namespace" },
+      { accessorKey: "namespace", header: "Namespace", size: 150 },
       { accessorKey: "revision", header: "Rev", size: 60 },
       {
         accessorKey: "status",
         header: "Status",
+        size: 120,
         cell: ({ row }) => {
           const status = row.original.status;
           const suspended = row.original.suspended;
@@ -113,6 +115,7 @@ export function HelmReleasesTab({
       {
         accessorKey: "chart",
         header: "Chart",
+        size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.chart}</span>
         ),
@@ -120,11 +123,13 @@ export function HelmReleasesTab({
       {
         accessorKey: "appVersion",
         header: "App Version",
+        size: 120,
         cell: ({ row }) => row.original.appVersion || "—",
       },
       {
         accessorKey: "updated",
         header: "Updated",
+        size: 150,
         cell: ({ row }) => {
           return (
             formatDate(row.original.updated) ?? row.original.updated ?? "—"

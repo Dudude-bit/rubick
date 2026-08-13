@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { useResource } from "@/hooks/useResource";
 import { useDeliveries } from "@/hooks/useDelivery";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   deliveryOf,
@@ -17,6 +18,7 @@ import {
   type DeliveryFilter,
 } from "@/lib/delivery";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
+import { verbatim } from "@/lib/error-utils";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -30,6 +32,7 @@ import type { QuickAction } from "@/components/ui/quick-actions";
  */
 function deliveryColumn<T>(): ColumnDef<T> {
   return {
+    size: 150,
     id: "delivery",
     header: "Delivery",
     enableSorting: false,
@@ -65,6 +68,16 @@ export interface ResourceListProps<
   dataUpdatedAt?: number;
   /** A watch stream feeds this list and has not failed. */
   live?: boolean;
+  /**
+   * The watch is re-listing, and the rows on screen predate it.
+   *
+   * A resync used to be invisible: the cache was cleared before the burst, so
+   * a healthy cluster rendered "no resources of this type in the current
+   * scope" for the length of it. The rows are kept now, which makes the
+   * opposite claim the risk — `live` over data that is a moment old — so the
+   * surface says which it is instead.
+   */
+  resyncing?: boolean;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
@@ -134,6 +147,7 @@ export function ResourceList<
   isLoading,
   dataUpdatedAt: externalDataUpdatedAt,
   live,
+  resyncing,
   slowed: externalSlowed,
   columns,
   emptyStateLabel,
@@ -168,11 +182,26 @@ export function ResourceList<
     }
   );
 
+  // Narrowed here rather than in the fetch, and that is the whole reason a
+  // multi-namespace scope costs one request instead of one per namespace: the
+  // cache entry stays the unfiltered cluster-wide answer under the key the
+  // watch stream writes to, and the selection only decides what this table
+  // draws from it. A scope of one or none is already narrowed by the request
+  // and passes straight through.
+  const scope = useNamespaceScope();
   const resources = useMemo(
-    () => data ?? queryResult.data ?? [],
-    [data, queryResult.data]
+    () => scope.narrow(data ?? queryResult.data ?? []),
+    [data, queryResult.data, scope]
   );
   const loading = isLoading ?? queryResult.isLoading;
+  // Read at last. A failed list used to render `resources = []` with
+  // `isLoading` already false, so the table printed "No resources of this type
+  // in the current scope" — a cluster that could not be read and one that is
+  // genuinely empty looked identical, and an expired token said every list in
+  // the app was empty. The error only replaces the table when there is nothing
+  // to show: a refetch that fails keeps the rows it already had, the same rule
+  // a resync follows.
+  const failed = data === undefined ? queryResult.error : null;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
@@ -257,7 +286,10 @@ export function ResourceList<
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
 
-  const showSkeleton = loading && resources.length === 0;
+  // A resync with nothing to show is still loading; a resync with rows keeps
+  // them, and says so above rather than wearing "live" over them.
+  const showSkeleton =
+    (loading || resyncing) && resources.length === 0 && !failed;
   const resolvedTitle =
     typeof title === "function" ? title(resources.length) : title;
 
@@ -270,7 +302,10 @@ export function ResourceList<
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
-          live={live}
+          // A resync is not live: the rows below it are the ones from before
+          // the watch started re-listing, and the badge is the only thing that
+          // would otherwise still claim they are current.
+          live={live && !resyncing}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
         />
       )}
@@ -282,19 +317,30 @@ export function ResourceList<
           deliveries={resources.map(deliveriesOf)}
         />
       )}
-      <DataTable
-        columns={resolvedColumns}
-        data={rows}
-        isLoading={showSkeleton}
-        searchKey={searchKey}
-        searchPlaceholder={searchPlaceholder}
-        getRowHref={getRowHref}
-        quickActions={resolvedQuickActions}
-        getRowId={getRowId}
-        grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
-        rowLabel={emptyStateLabel.toLowerCase()}
-        emptyMessage={emptyMessage}
-      />
+      {failed && resources.length === 0 ? (
+        <div className="max-w-[68ch] py-8">
+          <p className="text-xs text-err">
+            Could not read {emptyStateLabel} in this scope.
+          </p>
+          <p className="mt-1.5 select-text break-words font-mono text-[11px] text-fg-fnt">
+            {verbatim(failed.message)}
+          </p>
+        </div>
+      ) : (
+        <DataTable
+          columns={resolvedColumns}
+          data={rows}
+          isLoading={showSkeleton}
+          searchKey={searchKey}
+          searchPlaceholder={searchPlaceholder}
+          getRowHref={getRowHref}
+          quickActions={resolvedQuickActions}
+          getRowId={getRowId}
+          grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
+          rowLabel={emptyStateLabel.toLowerCase()}
+          emptyMessage={emptyMessage}
+        />
+      )}
       {deleteConfig && (
         <ConfirmDialog
           open={deleteTarget !== null}

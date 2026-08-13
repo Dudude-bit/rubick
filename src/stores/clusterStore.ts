@@ -13,13 +13,29 @@ import { create } from "zustand";
 import type { ContextInfo } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
+import { clampScope, decodeScope, wireNamespace } from "@/lib/namespace-scope";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
 
 /** Cluster store state and actions */
 interface ClusterState {
   contexts: ContextInfo[];
   currentContext: string | null;
+  /**
+   * The one namespace to ask the API server for, or `""` for the whole
+   * cluster. Derived from {@link namespaceScope} and never set on its own —
+   * every command in the app takes one namespace, and this is it.
+   */
   currentNamespace: string;
+  /**
+   * Which namespaces the window is looking at. Empty is the whole cluster,
+   * and never longer than `SCOPE_LIMIT`.
+   *
+   * Lists are read as one cluster-wide request narrowed on this side, while
+   * the aggregates are read once per namespace; see `lib/namespace-scope.ts`
+   * for why that is the shape, what it costs, and where the ceiling comes
+   * from.
+   */
+  namespaceScope: string[];
   isConnected: boolean;
   isLoading: boolean;
   isAuthenticating: boolean;
@@ -38,6 +54,8 @@ interface ClusterState {
   loadContexts: () => Promise<void>;
   switchContext: (context: string) => Promise<void>;
   switchNamespace: (namespace: string) => Promise<void>;
+  /** Look at these namespaces, or at the whole cluster for an empty list. */
+  setNamespaceScope: (namespaces: string[]) => Promise<void>;
   connect: (context?: string) => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -46,6 +64,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
   currentContext: null,
   currentNamespace: "", // Empty string means all namespaces
+  namespaceScope: [],
   isConnected: false,
   isLoading: false,
   isAuthenticating: false,
@@ -69,10 +88,18 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
           prefs.lastContext &&
           contexts.some((c) => c.name === prefs.lastContext)
         ) {
-          // Restore saved namespace if available
-          const savedNamespace = prefs.namespaces[prefs.lastContext];
-          if (savedNamespace) {
-            set({ currentNamespace: savedNamespace });
+          // Restore the saved scope if there is one. What is stored here is
+          // one namespace or none — see `lib/namespace-scope.ts` — so this is
+          // the same window every build has always reopened; `decodeScope`
+          // covers the joined values earlier builds of this feature wrote.
+          const scope = clampScope(
+            decodeScope(prefs.namespaces[prefs.lastContext])
+          );
+          if (scope.length > 0) {
+            set({
+              namespaceScope: scope,
+              currentNamespace: wireNamespace(scope),
+            });
           }
           // Auto-connect to saved cluster
           get().connect(prefs.lastContext);
@@ -90,28 +117,45 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   switchContext: async (context: string) => {
     const previousContext = get().currentContext;
-    const nextNamespace =
-      previousContext && previousContext !== context
-        ? ""
-        : get().currentNamespace;
+    const changed = previousContext !== null && previousContext !== context;
     set({
       currentContext: context,
-      currentNamespace: nextNamespace,
+      namespaceScope: changed ? [] : get().namespaceScope,
+      currentNamespace: changed ? "" : get().currentNamespace,
       error: null,
       errorContext: null,
     });
   },
 
   switchNamespace: async (namespace: string) => {
-    // Don't set isLoading for namespace switch - it causes flickering
-    // Just update the namespace immediately, queries will refetch automatically
+    await get().setNamespaceScope(namespace === "" ? [] : [namespace]);
+  },
+
+  setNamespaceScope: async (namespaces: string[]) => {
+    // No isLoading for a scope change: it causes flickering, and the queries
+    // refetch on their own once the key changes.
     const context = get().currentContext;
-    set({ currentNamespace: namespace, error: null, errorContext: null });
-    // Save namespace preference for this context
+    // The one place the ceiling is applied. A selection this window cannot
+    // afford to answer for would leave every number on screen describing a
+    // subset of the namespaces its own label names.
+    const scope = clampScope([
+      ...new Set(namespaces.filter((name) => name !== "")),
+    ]);
+    set({
+      namespaceScope: scope,
+      currentNamespace: wireNamespace(scope),
+      error: null,
+      errorContext: null,
+    });
     if (context) {
-      commands.saveClusterPreferences(null, context, namespace).catch(() => {
-        // Ignore errors saving preferences - not critical
-      });
+      // The wire value, not the selection: this field is one opaque string
+      // per context that a build without this feature reads straight into
+      // `currentNamespace`. The selection itself is kept by the scope tab.
+      commands
+        .saveClusterPreferences(null, context, wireNamespace(scope))
+        .catch(() => {
+          // Ignore errors saving preferences - not critical
+        });
     }
   },
 
@@ -133,10 +177,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         // Best-effort cleanup to avoid stale auth sessions.
       });
     }
-    const nextNamespace =
+    const changed = Boolean(
       previousContext && previousContext !== targetContext
-        ? ""
-        : get().currentNamespace;
+    );
     const attemptId = get().connectionAttemptId + 1;
 
     set({
@@ -146,7 +189,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       errorContext: null,
       pendingContext: targetContext,
       currentContext: targetContext,
-      currentNamespace: nextNamespace,
+      namespaceScope: changed ? [] : get().namespaceScope,
+      currentNamespace: changed ? "" : get().currentNamespace,
       isConnected: false,
       connectionAttemptId: attemptId,
       connectStartedAt: Date.now(),

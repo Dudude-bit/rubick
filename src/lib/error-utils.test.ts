@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { errorToShow, verbatim } from "./error-utils";
+import { errorToShow, normalizeError, verbatim } from "./error-utils";
 
 /**
  * The failure a reader is shown is the server's, not ours.
@@ -33,5 +33,31 @@ describe("what a failure says on screen", () => {
   it("strips nothing from the middle of a message", () => {
     const message = "kubectl said: Tauri command 'x' failed: nope";
     expect(verbatim(message)).toBe(message);
+  });
+});
+
+describe("whether an error is worth retrying", () => {
+  /**
+   * Would retry a verdict. Every Kubernetes error about an Ingress or a
+   * NetworkPolicy names `networking.k8s.io`, so a substring match on
+   * "network" read a flat 403 as a network blip and asked again until it
+   * gave up.
+   */
+  it("does not retry a refusal that happens to name a network API group", () => {
+    const refusal = normalizeError(
+      new Error(
+        'ingresses.networking.k8s.io is forbidden: User "dev" cannot list resource "ingresses"'
+      )
+    );
+    expect(refusal.isRetryable).toBe(false);
+  });
+
+  it("still retries a real network failure", () => {
+    expect(normalizeError(new Error("network unreachable")).isRetryable).toBe(
+      true
+    );
+    expect(normalizeError(new Error("connection refused")).isRetryable).toBe(
+      true
+    );
   });
 });

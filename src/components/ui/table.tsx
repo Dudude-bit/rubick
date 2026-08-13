@@ -1,23 +1,48 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * The scroll port around the table. A sticky header anchors to it and a
+   * virtualiser measures it, and both want the element that genuinely
+   * scrolls — a second wrapper outside this one gives them neither.
+   */
+  containerRef?: React.Ref<HTMLDivElement>;
+  containerClassName?: string;
+  containerStyle?: React.CSSProperties;
+}
+
 /**
  * The table sits directly on the canvas. No wrapper border, no rounding,
  * no zebra: structure comes from alignment and from one hairline per row.
  * A box around a list of rows is the card pattern in disguise.
  */
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom border-collapse text-xs", className)}
-      {...props}
-    />
-  </div>
-));
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  (
+    { className, containerRef, containerClassName, containerStyle, ...props },
+    ref
+  ) => (
+    <div
+      ref={containerRef}
+      className={cn("relative w-full overflow-auto", containerClassName)}
+      style={containerStyle}
+    >
+      <table
+        ref={ref}
+        // Layout is the caller's to choose. `DataTable` asks for `table-fixed`
+        // because every one of its columns declares a width; the dozen small
+        // tables that declare none must stay on auto, where fixed layout would
+        // divide the width equally and give a revision number the same room as
+        // a sentence.
+        className={cn(
+          "w-full caption-bottom border-collapse text-xs",
+          className
+        )}
+        {...props}
+      />
+    </div>
+  )
+);
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<

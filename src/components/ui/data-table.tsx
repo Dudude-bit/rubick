@@ -4,7 +4,6 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
-  getPaginationRowModel,
   getSortedRowModel,
   getFilteredRowModel,
   type ColumnDef,
@@ -13,6 +12,7 @@ import {
   type VisibilityState,
   type Row,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Table,
   TableBody,
@@ -22,20 +22,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import {
-  ChevronLeft,
-  ChevronRight,
   Search,
   SearchX,
   Inbox,
@@ -59,7 +50,7 @@ interface DataTableProps<TData, TValue> {
   isLoading?: boolean;
   searchKey?: string;
   searchPlaceholder?: string;
-  /** Enable virtual scrolling for large datasets (default: true for >100 rows) */
+  /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
   /** Max height for virtual scroll container (default: 600px) */
   virtualScrollHeight?: number;
@@ -82,41 +73,104 @@ interface DataTableProps<TData, TValue> {
   rowLabel?: string;
 }
 
-// Extended page size options for large datasets
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200, 500];
-const LARGE_DATASET_THRESHOLD = 100;
+/**
+ * Where the table stops being a plain full-length list and becomes its own
+ * scroll port with a window drawn into it — and where it goes back.
+ *
+ * Two marks rather than one, because a single one is a number that moves
+ * under the reader: a namespace sitting at a hundred pods crosses it on a
+ * watch tick and crosses back on the next, and the page rearranges itself
+ * each time — full length one moment, a 600px box with its own scrollbar the
+ * next, scroll position lost both ways. The gap is wide enough that only a
+ * list genuinely changing size moves the layout.
+ */
+const VIRTUALISE_ABOVE_ROWS = 100;
+const STAY_FLAT_BELOW_ROWS = 75;
 const VIRTUAL_SCROLL_DEFAULT_HEIGHT = 600;
 
-// Create actions column for quick actions
+/**
+ * How long a keyboard jump waits for its row to be drawn before giving up.
+ *
+ * The scroll and the mount take a frame or two; a row that has not arrived by
+ * now is not coming. Without a deadline the pending index outlives the key
+ * press for the life of the table — a watch tick that drops the list shorter
+ * than the index strands it there, and the moment the list grows back the
+ * table pulls the focus off whatever the reader had moved to since.
+ */
+const PENDING_FOCUS_MS = 1000;
+
+/** The generated column, named once so the cells can recognise it. */
+const ACTIONS_COLUMN_ID = "_actions";
+
+/**
+ * A row's height before it has been measured, per density.
+ *
+ * Compact is the 23px pitch the cell padding is built around; comfortable is
+ * the same line box with `py-2` around it. Only a first guess — every drawn
+ * row is measured, because a comfortable row whose labels wrap is taller.
+ */
+const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
+
+/** How many rows either side of the viewport stay mounted. */
+const OVERSCAN = 12;
+
+/**
+ * The width the actions cell needs, from what it actually holds: a 20px icon
+ * and a 2px gap each, inside the cell's own 10px padding on both sides.
+ *
+ * TanStack's default is 150 — a name column's worth of the table reserved for
+ * two buttons, on every list in the app.
+ */
+const actionsColumnSize = (count: number) => 20 + count * 22;
+
 function createActionsColumn<TData, TValue>(
-  quickActions: QuickAction<TData>[],
-  hoveredRowIndex: number | null,
-  focusedRowIndex: number
+  quickActions: QuickAction<TData>[]
 ): ColumnDef<TData, TValue> {
   return {
-    id: "_actions",
+    id: ACTIONS_COLUMN_ID,
     header: () => null,
-    cell: ({ row }: { row: Row<TData> }) => {
-      const isVisible =
-        hoveredRowIndex === row.index || focusedRowIndex === row.index;
-      return (
-        // The icon buttons are 20px so their hit area can stay 24px, which
-        // is 4px more than a compact row's line box. The negative margin
-        // lets that overhang bleed into the cell padding instead of
-        // setting the height of every row in the table.
-        <div data-quick-actions className="-my-0.5 flex justify-end">
-          <QuickActions
-            item={row.original}
-            actions={quickActions}
-            visible={isVisible}
-          />
-        </div>
-      );
-    },
-    size: 120,
+    cell: ({ row }: { row: Row<TData> }) => (
+      // The icon buttons are 20px so their hit area can stay 24px, which
+      // is 4px more than a compact row's line box. The negative margin
+      // lets that overhang bleed into the cell padding instead of
+      // setting the height of every row in the table.
+      <div
+        data-quick-actions
+        className="-my-0.5 flex items-center justify-end gap-0.5"
+      >
+        <QuickActions item={row.original} actions={quickActions} />
+      </div>
+    ),
+    size: actionsColumnSize(quickActions.length),
     enableSorting: false,
     enableHiding: false,
   };
+}
+
+/**
+ * One entry per line the table draws, captions included.
+ *
+ * Descriptors rather than rendered nodes: the virtualiser needs to count and
+ * measure the lines before anything decides which of them to draw.
+ */
+type BodyItem<TData> =
+  | { key: string; caption: React.ReactNode; row?: undefined }
+  | { key: string; caption?: undefined; row: Row<TData>; rowIndex: number };
+
+/** Where a nav key wants to go, or null if it is not a nav key. */
+function navTarget(key: string, from: number, rowCount: number): number | null {
+  switch (key) {
+    case "ArrowDown":
+      return from < rowCount - 1 ? from + 1 : null;
+    case "ArrowUp":
+      return from > 0 ? from - 1 : null;
+    case "Home":
+      return 0;
+    case "End":
+      return rowCount - 1;
+    default:
+      return null;
+  }
 }
 
 export function DataTable<TData, TValue>({
@@ -145,27 +199,28 @@ export function DataTable<TData, TValue>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [searchValue, setSearchValue] = React.useState("");
-  const [pagination, setPagination] = React.useState({
-    pageIndex: 0,
-    pageSize: 25,
-  });
-  const [hoveredRowIndex, setHoveredRowIndex] = React.useState<number | null>(
-    null
-  );
   const deferredSearch = React.useDeferredValue(searchValue);
 
   // Density styling. Compact rows stay strictly single-line — a pod name
   // like `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the
-  // row grows to triple height, which defeats the point of compact. The
-  // table container already scrolls horizontally.
+  // row grows to triple height, which defeats the point of compact.
   //
   // 3px against a 16px line box and a 1px rule is a 23px pitch: nothing in
   // a cell may be taller than that line box or it, not the padding, becomes
   // the row height.
   const isCompact = tableDensity === "compact";
-  const cellPadding = isCompact
-    ? "py-[3px] px-2.5 whitespace-nowrap"
-    : "py-2 px-2.5";
+  const cellPadding = isCompact ? "py-[3px] px-2.5" : "py-2 px-2.5";
+
+  // Clipped, because the table is fixed-layout: a name longer than its
+  // column has nowhere to go and would otherwise paint straight over the
+  // namespace beside it.
+  //
+  // Text cells only. The actions cell holds 20px buttons whose pointer target
+  // is pushed back out to 24px by a pseudo-element, and hangs over the cell's
+  // padding by design; clipping that cell clips the hit area back to 20px in
+  // the density most of the app is looking at.
+  const clipText =
+    isCompact && "overflow-hidden text-ellipsis whitespace-nowrap";
 
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
@@ -188,40 +243,34 @@ export function DataTable<TData, TValue>({
     return state;
   }, [groupingActive, grouping]);
 
-  // Determine if we should use virtual scroll based on data size
-  const shouldVirtualScroll =
-    enableVirtualScroll ?? data.length > LARGE_DATASET_THRESHOLD;
-  const isShowingAllRows = pagination.pageSize >= data.length;
-  const showLargeDatasetWarning =
-    isShowingAllRows && data.length > LARGE_DATASET_THRESHOLD;
+  // Latched rather than derived: between the two marks the answer is
+  // "whatever it already was", which is a fact about the last render and not
+  // about this data.
+  const [wasLong, setWasLong] = React.useState(
+    () => data.length > VIRTUALISE_ABOVE_ROWS
+  );
+  const isLong =
+    data.length > VIRTUALISE_ABOVE_ROWS
+      ? true
+      : data.length < STAY_FLAT_BELOW_ROWS
+        ? false
+        : wasLong;
+  if (isLong !== wasLong) setWasLong(isLong);
 
-  // Keyboard navigation setup (need focusedRowIndex before creating columns)
-  const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
-
-  // Enter is left to the row itself: the hook is indexed by visual position
-  // and would have to be handed a row order that grouping only settles at
-  // render time, and it cannot see the modifiers on the key press anyway.
-  const { containerRef, focusedRowIndex, getRowProps } = useTableKeyboardNav({
-    rowCount: data.length,
-    enabled: keyboardNavEnabled,
-  });
+  const shouldVirtualScroll = enableVirtualScroll ?? isLong;
 
   // Add actions column if quickActions provided
   const columnsWithActions = React.useMemo(() => {
-    if (!quickActions || quickActions.length === 0) {
-      return columns;
-    }
+    if (!quickActions || quickActions.length === 0) return columns;
     // Filter out any existing "_actions" or "actions" columns to avoid duplicates
     const filteredColumns = columns.filter(
-      (col) => col.id !== "_actions" && col.id !== "actions"
+      (col) => col.id !== ACTIONS_COLUMN_ID && col.id !== "actions"
     );
-    const actionsColumn = createActionsColumn<TData, TValue>(
-      quickActions,
-      hoveredRowIndex,
-      focusedRowIndex
-    );
-    return [...filteredColumns, actionsColumn];
-  }, [columns, quickActions, hoveredRowIndex, focusedRowIndex]);
+    return [
+      ...filteredColumns,
+      createActionsColumn<TData, TValue>(quickActions),
+    ];
+  }, [columns, quickActions]);
 
   // TanStack Table's useReactTable returns functions that React
   // Compiler can't safely memoize. The library-level fix is upstream
@@ -233,18 +282,15 @@ export function DataTable<TData, TValue>({
     columns: columnsWithActions,
     getRowId,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: setPagination,
     state: {
       sorting,
       columnFilters,
       globalFilter,
-      pagination,
       columnVisibility,
     },
   });
@@ -252,6 +298,22 @@ export function DataTable<TData, TValue>({
   const rows = table.getRowModel().rows;
   const isClickable = !!(getRowHref || onRowClick);
   const visibleColumnCount = table.getVisibleFlatColumns().length;
+
+  const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
+
+  // Counted over the rows the table draws, not over `data`. A search narrows
+  // the list without narrowing `data`, and a hook counting to five hundred in
+  // front of three rows leaves its focus — and the table's only tab stop — on
+  // a row that is not there. Home and End mean the ends of what is on screen
+  // for the same reason.
+  //
+  // Enter is left to the row itself: the hook is indexed by visual position
+  // and would have to be handed a row order that grouping only settles at
+  // render time, and it cannot see the modifiers on the key press anyway.
+  const { containerRef, focusedRowIndex, getRowProps } = useTableKeyboardNav({
+    rowCount: rows.length,
+    enabled: keyboardNavEnabled,
+  });
 
   React.useEffect(() => {
     const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
@@ -262,26 +324,142 @@ export function DataTable<TData, TValue>({
     } else {
       setGlobalFilter(deferredSearch);
     }
-
-    table.setPageIndex(0);
   }, [deferredSearch, searchKey, table]);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;
-  const pageRows = rows.length;
-  const pageStart =
-    totalRows === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1;
-  const pageEnd = totalRows === 0 ? 0 : pageStart + pageRows - 1;
 
-  // Handle "All" page size
-  const handlePageSizeChange = (value: string) => {
-    if (value === "all") {
-      table.setPageSize(data.length || 1000);
-    } else {
-      table.setPageSize(Number(value));
-    }
-    table.setPageIndex(0);
+  // One caption per group, rows beneath it in first-seen order. Flat, so the
+  // keyboard-nav index stays the visual position and does not skip captions.
+  const items: BodyItem<TData>[] = [];
+  // Where each data row sits among those lines. The two numberings come apart
+  // wherever a caption is inserted, and the virtualiser counts lines while the
+  // keyboard counts rows.
+  const rowLine: number[] = [];
+  const pushRow = (row: Row<TData>, rowIndex: number) => {
+    rowLine[rowIndex] = items.length;
+    items.push({ key: row.id, row, rowIndex });
   };
+
+  if (groupingActive && grouping) {
+    const groups = new Map<string, Row<TData>[]>();
+    const ungrouped: Row<TData>[] = [];
+    for (const row of rows) {
+      const key = grouping.keyOf(row.original);
+      if (key === null) {
+        ungrouped.push(row);
+        continue;
+      }
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(row);
+      else groups.set(key, [row]);
+    }
+    let index = 0;
+    // No caption over these: the data did not say which group they are in,
+    // and a heading reading "ungrouped" would turn that silence into a claim.
+    for (const row of ungrouped) pushRow(row, index++);
+    for (const [key, groupRows] of groups) {
+      items.push({
+        key: `group-${key}`,
+        caption: grouping.caption(
+          key,
+          groupRows.map((row) => row.original)
+        ),
+      });
+      for (const row of groupRows) pushRow(row, index++);
+    }
+  } else {
+    rows.forEach((row, index) => pushRow(row, index));
+  }
+
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Above the threshold every row used to mount, and a list that re-reads
+  // itself every two seconds then re-rendered all of them on every tick.
+  //
+  // The window is spliced into the table with spacer rows rather than
+  // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
+  // column grid, and every cell would have to carry its own width again.
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    enabled: shouldVirtualScroll,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_ROW_PX[isCompact ? "compact" : "comfortable"],
+    // Keyed by row rather than by position, so sorting or filtering never
+    // hands a row someone else's measured height.
+    getItemKey: (index) => items[index].key,
+    overscan: OVERSCAN,
+    // Measuring inside the ResizeObserver callback that reported the resize
+    // re-enters the observer, which WebKit reports as an uncaught error and
+    // this app turns into a toast.
+    useAnimationFrameWithResizeObserver: true,
+  });
+
+  // Density changes the row height, and nothing in virtual-core notices:
+  // measured heights are cached per item and `estimateSize` is not part of
+  // what invalidates that cache. Without this, toggling density on a list
+  // whose rows have all been measured leaves the total height stale by the
+  // difference — a scrollbar that lies, and rows that jump as each one
+  // re-measures on its way back into the window.
+  React.useEffect(() => {
+    virtualizer.measure();
+  }, [isCompact, virtualizer]);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const padTop = virtualItems.length ? virtualItems[0].start : 0;
+  const padBottom = virtualItems.length
+    ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+    : 0;
+
+  // A row the reader jumped to is not in the DOM yet at the moment the key is
+  // pressed, so the focus is left pending until the virtualiser has drawn it
+  // — and dropped once the list can no longer produce it.
+  const pendingFocus = React.useRef<{ row: number; until: number } | null>(
+    null
+  );
+  React.useEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    if (pending.row >= rows.length || Date.now() > pending.until) {
+      pendingFocus.current = null;
+      return;
+    }
+    const row = containerRef.current?.querySelector(
+      `[data-row-index="${pending.row}"]`
+    );
+    if (row instanceof HTMLElement) {
+      pendingFocus.current = null;
+      row.focus();
+    }
+  });
+
+  const isDrawn = (rowIndex: number) => {
+    if (!shouldVirtualScroll || virtualItems.length === 0) return true;
+    const line = rowLine[rowIndex];
+    return (
+      line >= virtualItems[0].index &&
+      line <= virtualItems[virtualItems.length - 1].index
+    );
+  };
+
+  // A roving tab stop has to sit on a row that exists. The hook puts it on the
+  // focused row, and in a windowed table that row can be scrolled clean out of
+  // the DOM — taking the whole table out of the tab order with it. When it is
+  // gone, the first drawn row holds the stop instead.
+  let firstDrawnRow = 0;
+  if (shouldVirtualScroll) {
+    for (const virtual of virtualItems) {
+      const item = items[virtual.index];
+      if (item.row) {
+        firstDrawnRow = item.rowIndex;
+        break;
+      }
+    }
+  }
+  const tabStopRow =
+    focusedRowIndex >= 0 && isDrawn(focusedRowIndex)
+      ? focusedRowIndex
+      : firstDrawnRow;
 
   // A row is not an anchor — the name cell inside it is — but the whitespace
   // beside the name still opens the row, and it reads the gesture through the
@@ -313,12 +491,7 @@ export function DataTable<TData, TValue>({
     }
   };
 
-  // Get current page size display value
-  const currentPageSizeValue = isShowingAllRows
-    ? "all"
-    : String(pagination.pageSize);
-
-  const renderRow = (row: Row<TData>, index: number) => {
+  const renderRow = (row: Row<TData>, index: number, line: number) => {
     const rowProps = keyboardNavEnabled ? getRowProps(index) : undefined;
     const isFocused = focusedRowIndex === index;
     const act = isClickable
@@ -329,8 +502,17 @@ export function DataTable<TData, TValue>({
     return (
       <TableRow
         key={row.id}
+        data-index={line}
+        ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
         data-state={row.getIsSelected() && "selected"}
+        // `rowProps` carries `data-focused`, which is what reveals the row's
+        // actions — read by CSS rather than by React, because hovering a row
+        // used to set state, and that rebuilt every column definition and
+        // re-rendered every cell in the table under the pointer.
         {...rowProps}
+        // After the spread on purpose: the hook's tab stop follows the focused
+        // row, and the one that ships has to follow a drawn one.
+        tabIndex={rowProps && (index === tabStopRow ? 0 : -1)}
         className={cn(
           isClickable && "cursor-pointer",
           isFocused && "ring-1 ring-inset ring-info",
@@ -341,17 +523,34 @@ export function DataTable<TData, TValue>({
         onKeyDown={
           rowProps &&
           ((event: React.KeyboardEvent) => {
+            // Home and End reach past the drawn window, and so does an arrow
+            // at its edge. The hook focuses by querying the DOM, so the row
+            // has to be scrolled into existence before it can be handed over.
+            const target = navTarget(event.key, index, rows.length);
+            if (target !== null && !isDrawn(target)) {
+              event.preventDefault();
+              pendingFocus.current = {
+                row: target,
+                until: Date.now() + PENDING_FOCUS_MS,
+              };
+              virtualizer.scrollToIndex(rowLine[target], { align: "center" });
+              return;
+            }
             rowProps.onKeyDown(event);
             // The hook owns the arrows, Home/End and Escape. Enter is an
             // activation, so it belongs to the click's gesture instead.
             if (event.key === "Enter") act?.(event);
           })
         }
-        onMouseEnter={() => setHoveredRowIndex(index)}
-        onMouseLeave={() => setHoveredRowIndex(null)}
       >
         {row.getVisibleCells().map((cell) => (
-          <TableCell key={cell.id} className={cellPadding}>
+          <TableCell
+            key={cell.id}
+            className={cn(
+              cellPadding,
+              cell.column.id !== ACTIONS_COLUMN_ID && clipText
+            )}
+          >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </TableCell>
         ))}
@@ -359,46 +558,43 @@ export function DataTable<TData, TValue>({
     );
   };
 
-  // One caption per group, rows beneath it in first-seen order. Built as a
-  // flat list so the keyboard-nav index stays the visual position and does
-  // not skip over the captions.
-  const body: React.ReactNode[] = [];
-  if (groupingActive && grouping) {
-    const groups = new Map<string, Row<TData>[]>();
-    const ungrouped: Row<TData>[] = [];
-    for (const row of rows) {
-      const key = grouping.keyOf(row.original);
-      if (key === null) {
-        ungrouped.push(row);
-        continue;
-      }
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(row);
-      else groups.set(key, [row]);
-    }
-    let index = 0;
-    // No caption over these: the data did not say which group they are in,
-    // and a heading reading "ungrouped" would turn that silence into a claim.
-    for (const row of ungrouped) body.push(renderRow(row, index++));
-    for (const [key, groupRows] of groups) {
-      body.push(
-        <TableRow key={`group-${key}`} data-quiet className="border-0">
-          <TableCell
-            colSpan={visibleColumnCount}
-            className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
-          >
-            {grouping.caption(
-              key,
-              groupRows.map((row) => row.original)
-            )}
-          </TableCell>
-        </TableRow>
-      );
-      for (const row of groupRows) body.push(renderRow(row, index++));
-    }
-  } else {
-    rows.forEach((row, index) => body.push(renderRow(row, index)));
-  }
+  const renderItem = (item: BodyItem<TData>, line: number) =>
+    item.row ? (
+      renderRow(item.row, item.rowIndex, line)
+    ) : (
+      <TableRow
+        key={item.key}
+        data-index={line}
+        ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
+        data-quiet
+        className="border-0"
+      >
+        <TableCell
+          colSpan={visibleColumnCount}
+          className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+        >
+          {item.caption}
+        </TableCell>
+      </TableRow>
+    );
+
+  // A spacer, not a row: `data-quiet` keeps the hover off it and it carries
+  // no rule of its own.
+  const spacer = (where: string, height: number) => (
+    <tr key={where} data-quiet aria-hidden="true">
+      <td colSpan={visibleColumnCount} style={{ height }} />
+    </tr>
+  );
+
+  const body = shouldVirtualScroll
+    ? [
+        ...(padTop > 0 ? [spacer("pad-top", padTop)] : []),
+        ...virtualItems.map((virtual) =>
+          renderItem(items[virtual.index], virtual.index)
+        ),
+        ...(padBottom > 0 ? [spacer("pad-bottom", padBottom)] : []),
+      ]
+    : items.map((item, line) => renderItem(item, line));
 
   if (isLoading) {
     return <TableSkeleton columns={columns.length} rows={5} />;
@@ -421,10 +617,16 @@ export function DataTable<TData, TValue>({
           />
         </div>
         <div className="flex items-center gap-2">
-          {showLargeDatasetWarning && (
-            <div className="flex items-center gap-1.5 text-[11px] text-warn">
+          {/* Not a warning any more, a fact: the list is whole and only a
+              screenful of it is drawn. It stays because "why is this list
+              slow" and "why is my pod not here" have the same answer often
+              enough — narrow the scope or the search. */}
+          {isLong && (
+            <div className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
               <AlertTriangle className="h-3.5 w-3.5" />
-              <span>Showing all {data.length} rows may affect performance</span>
+              <span>
+                {data.length} rows — narrow the scope or search to trim
+              </span>
             </div>
           )}
           <Tooltip>
@@ -455,32 +657,50 @@ export function DataTable<TData, TValue>({
         role={keyboardNavEnabled ? "grid" : undefined}
         aria-label={keyboardNavEnabled ? "Data table" : undefined}
       >
-        {/* Use scrollable container for large datasets when showing all rows */}
-        <div
-          className={cn(
-            shouldVirtualScroll &&
-              isShowingAllRows &&
-              "overflow-auto scrollbar-thin"
-          )}
-          style={
-            shouldVirtualScroll && isShowingAllRows
-              ? { maxHeight: virtualScrollHeight }
-              : undefined
+        <Table
+          // The scroll port has to be the element the header sticks to and
+          // the element the virtualiser measures. Wrapping another div around
+          // the table's own container gave it neither.
+          containerRef={scrollRef}
+          // Every column here declares a width, which is what makes fixed
+          // layout safe: it stops the browser re-measuring columns from
+          // content that changes on every watch tick.
+          className="table-fixed"
+          containerClassName={cn(shouldVirtualScroll && "scrollbar-thin")}
+          containerStyle={
+            shouldVirtualScroll ? { maxHeight: virtualScrollHeight } : undefined
           }
         >
-          <Table>
-            <TableHeader
-              className={cn(
-                shouldVirtualScroll &&
-                  isShowingAllRows &&
-                  "sticky top-0 z-10 bg-canvas"
-              )}
-            >
-              {table.getHeaderGroups().map((headerGroup) => (
+          <TableHeader
+            className={cn(shouldVirtualScroll && "sticky top-0 z-10 bg-canvas")}
+          >
+            {table.getHeaderGroups().map((headerGroup) => {
+              // The denominator for the shares below. Only the columns
+              // actually on screen count, so hiding one hands its room to the
+              // rest instead of leaving a gap.
+              const totalSize = headerGroup.headers.reduce(
+                (sum, header) => sum + header.getSize(),
+                0
+              );
+              return (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     return (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        // A share of the table, not a pixel count. Fixed layout
+                        // reads its widths from the first row and resolves
+                        // `width: 100%` as `max(100%, Σ widths)` — so declared
+                        // pixels never shrink, and the ten columns a Pods list
+                        // wants added up to 378px more than the default window
+                        // has: a permanent horizontal scrollbar with the row's
+                        // actions off the right edge. As percentages the same
+                        // numbers keep their proportions and always sum to the
+                        // table, at any width.
+                        style={{
+                          width: `${(header.getSize() / totalSize) * 100}%`,
+                        }}
+                      >
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -491,111 +711,66 @@ export function DataTable<TData, TValue>({
                     );
                   })}
                 </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {rows.length ? (
-                body
-              ) : (
-                <TableRow data-quiet>
-                  <TableCell
-                    colSpan={visibleColumnCount}
-                    className="h-32 text-center"
-                  >
-                    {/* "Nothing matches your filter" and "this cluster has
-                     * none of these" are different problems with different
-                     * fixes — saying "No results." for both leaves the user
-                     * guessing which one they're looking at. */}
-                    {searchValue ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <SearchX
-                          className="h-5 w-5 text-fg-mut"
-                          aria-hidden="true"
-                        />
-                        <p className="text-xs text-fg-mut">
-                          Nothing matches{" "}
-                          <span className="font-mono text-fg">
-                            {searchValue}
-                          </span>
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => setSearchValue("")}
-                        >
-                          Clear search
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <Inbox
-                          className="h-5 w-5 text-fg-mut"
-                          aria-hidden="true"
-                        />
-                        <p className="text-xs text-fg-mut">{emptyMessage}</p>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              );
+            })}
+          </TableHeader>
+          <TableBody>
+            {rows.length ? (
+              body
+            ) : (
+              <TableRow data-quiet>
+                <TableCell
+                  colSpan={visibleColumnCount}
+                  className="h-32 text-center"
+                >
+                  {/* "Nothing matches your filter" and "this cluster has
+                   * none of these" are different problems with different
+                   * fixes — saying "No results." for both leaves the user
+                   * guessing which one they're looking at. */}
+                  {searchValue ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <SearchX
+                        className="h-5 w-5 text-fg-mut"
+                        aria-hidden="true"
+                      />
+                      <p className="text-xs text-fg-mut">
+                        Nothing matches{" "}
+                        <span className="font-mono text-fg">{searchValue}</span>
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setSearchValue("")}
+                      >
+                        Clear search
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Inbox
+                        className="h-5 w-5 text-fg-mut"
+                        aria-hidden="true"
+                      />
+                      <p className="text-xs text-fg-mut">{emptyMessage}</p>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
-      {/* Pagination is a footnote to the data, so it is text and chevrons
-          rather than a row of buttons competing with the table above. */}
+      {/* What the table holds, and nothing about pages. A live list has no
+          stable page 2 — objects appear and vanish under the reader, so a row
+          they saw a moment ago moves to another page they have to go and find
+          — and Ctrl-F only ever searched the twenty-five rows on screen. The
+          list is whole, the search narrows it, and long ones scroll. */}
       <div className="flex items-center justify-between text-[11px] text-fg-fnt">
         <div>
           {filteredRows === totalRows
             ? `${totalRows} ${totalRows === 1 ? rowLabel.replace(/s$/, "") : rowLabel}`
             : `${filteredRows} of ${totalRows} ${rowLabel}`}
-          {totalRows > 0 && !isShowingAllRows && (
-            <span className="ml-2">
-              {pageStart}–{pageEnd}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <Select
-            value={currentPageSizeValue}
-            onValueChange={handlePageSizeChange}
-          >
-            <SelectTrigger
-              aria-label="Rows per page"
-              className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
-            >
-              <SelectValue placeholder="Rows" />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  {option} / page
-                </SelectItem>
-              ))}
-              <SelectItem value="all">All</SelectItem>
-            </SelectContent>
-          </Select>
-          <button
-            type="button"
-            aria-label="Previous page"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className="flex h-6 items-center gap-0.5 rounded px-1.5 text-fg-mut transition-colors hover:bg-hover disabled:pointer-events-none disabled:text-fg-fnt disabled:opacity-40"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Prev
-          </button>
-          <button
-            type="button"
-            aria-label="Next page"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className="flex h-6 items-center gap-0.5 rounded px-1.5 text-fg-mut transition-colors hover:bg-hover disabled:pointer-events-none disabled:text-fg-fnt disabled:opacity-40"
-          >
-            Next
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
     </div>

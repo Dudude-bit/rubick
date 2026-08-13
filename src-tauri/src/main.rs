@@ -8,6 +8,12 @@
 use k8s_gui_common::init_tracing;
 use k8s_gui_lib::{commands, integrations, shell, state::AppState};
 use tauri::{Emitter, Manager};
+use tokio::sync::broadcast;
+
+/// Emitted when the frontend event bridge drops events it could not keep up
+/// with. Every surface fed by a watch treats it as that watch failing, because
+/// from the surface's point of view it is: updates it needed are gone.
+const EVENT_BRIDGE_LAGGED: &str = "event-bridge-lagged";
 
 fn main() {
     // Install rustls crypto provider before any TLS operations
@@ -50,8 +56,39 @@ fn main() {
             let mut event_rx = state.subscribe();
             let app_handle = app.handle().clone();
 
+            // Lagging is survivable; this loop treating it as the end was not.
+            //
+            // `recv()` returns `Lagged(n)` when this consumer falls behind the
+            // 1000-slot buffer — the n oldest events are gone, and the next
+            // `recv()` works normally. `while let Ok(..)` exited on it, and
+            // this is the *only* bridge to the frontend: one burst over the
+            // buffer and the window loses watch events, log lines, terminal
+            // output and port-forward status for the rest of the process, with
+            // no error anywhere, because the watcher's own "I failed, start
+            // polling" event travels the same dead channel. A cluster-wide pod
+            // watch resyncing on a large cluster is exactly that burst.
+            //
             tauri::async_runtime::spawn(async move {
-                while let Ok(event) = event_rx.recv().await {
+                loop {
+                    let event = match event_rx.recv().await {
+                        Ok(event) => event,
+                        Err(broadcast::error::RecvError::Lagged(missed)) => {
+                            tracing::warn!("Event bridge fell behind; {missed} events dropped.");
+                            // Surviving the lag is half of it. What was dropped
+                            // is gone, and for a watch that means the list on
+                            // screen is not stale but *short* — a resync clears
+                            // the cache and refills from a burst, so N missing
+                            // `applied` events are N rows that never come back.
+                            // Nothing polls them back either, because a watched
+                            // list is on `refresh: false`. So the frontend is
+                            // told, and it treats this exactly as a watch
+                            // failure: drop the "live" badge, resume polling.
+                            let _ = app_handle.emit(EVENT_BRIDGE_LAGGED, missed);
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    };
+
                     let event_name = event.channel();
                     let payload = event.payload();
 
@@ -78,8 +115,6 @@ fn main() {
             commands::binaries::locate_binaries,
             // Namespace management
             commands::namespace::list_namespaces,
-            // Generic resource management
-            commands::resources::list_resources,
             // Cross-cluster search
             commands::search::start_resource_search,
             commands::search::resource_search_subscribed,
@@ -306,7 +341,6 @@ fn main() {
             // Metrics API
             commands::metrics::get_pods_metrics,
             commands::metrics::get_nodes_metrics,
-            commands::metrics::get_cluster_metrics,
             // Workloads commands
             commands::workloads::list_statefulsets,
             commands::workloads::get_statefulset,

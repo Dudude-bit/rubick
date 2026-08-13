@@ -20,13 +20,15 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 
 type DeploymentInfoWithMetrics = DeploymentInfo & ResourceMetrics;
 
-const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
+export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   createNameColumn<DeploymentInfoWithMetrics>(ResourceType.Deployment),
   createNamespaceColumn<DeploymentInfoWithMetrics>(),
   createCpuColumn<DeploymentInfoWithMetrics>(),
   createMemoryColumn<DeploymentInfoWithMetrics>(),
   createReplicasColumn<DeploymentInfoWithMetrics>(),
   {
+    // "RollingUpdate" or "Recreate".
+    size: 130,
     id: "strategy",
     header: "Strategy",
     cell: ({ row }) => (
@@ -36,6 +38,7 @@ const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     ),
   },
   {
+    size: 120,
     id: "status",
     header: "Status",
     cell: ({ row }) => {

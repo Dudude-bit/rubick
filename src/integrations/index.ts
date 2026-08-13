@@ -57,7 +57,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { integrationPagePath } from "./paths";
+import { integrationPagePath, integrationSettingsPath } from "./paths";
 import argocd from "./argocd";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
@@ -719,24 +719,46 @@ export interface IntegrationPageEntry {
   path: string;
   /** `null` while it is being read, and where the cluster refused to say. */
   count: number | null;
+  /**
+   * Whether {@link path} is the vendor's own screen or its Settings row.
+   * The caller needs it because the second kind shares one route between
+   * several rows, and "which of these is the open one" is then a question
+   * about the query string rather than about the path.
+   */
+  own: boolean;
 }
 
 /**
- * The Integrations category: one row per *detected* vendor that owns a
- * screen, or an empty list.
+ * The Integrations category: one row per extension this cluster actually
+ * has, or an empty list.
  *
- * Empty is the answer for most clusters and the caller must draw nothing at
- * all for it — not an empty group, not a placeholder. Hiding it is only safe
- * because Settings → Integrations names every extension the app knows,
- * installed or not, with what each one would give; that screen is where
- * "what could this app do" is answered, and this one stays a list of things
- * the cluster actually has.
+ * **Every one of them, not only the ones with a screen.** The category used
+ * to list vendors declaring a `page` and silently drop the rest, which meant
+ * a cluster running cert-manager was told it had no integrations at all. An
+ * extension that owns no screen is still installed, still doing something,
+ * and still worth a row — it just goes to its Settings row, which is where
+ * what it gives and what it is currently doing are already written.
+ *
+ * Empty is still the answer for most clusters and the caller must draw
+ * nothing at all for it — not an empty group, not a placeholder. Nothing is
+ * hidden by that: with no extension installed there is no row to hide, and
+ * Settings → Integrations names every extension the app knows either way.
  */
 export function useIntegrationPages(): IntegrationPageEntry[] {
   const { data } = useDetected();
+  const connections = useConnections();
 
-  const detected = PAGES.filter((vendor) =>
-    data?.some((entry) => entry.id === vendor.id && entry.installed)
+  const here = EXTENSIONS.filter((vendor) => {
+    const connection = connections.get(vendor.id);
+    // A configured vendor is present because its address answered, never
+    // because a CRD scan found it — it installs none.
+    if (connection) return connection.state === "connected";
+    return data?.some((entry) => entry.id === vendor.id && entry.installed);
+  });
+
+  const withPages = here.filter(
+    (vendor): vendor is (typeof here)[number] & { page: VendorPage } =>
+      vendor.page !== undefined
   );
 
   // The page's own query, verbatim. Two observers on one cache entry, so a
@@ -746,7 +768,7 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     // `select` is declared over the payload the vendor's own query returns and
     // erased at the registry boundary, so the list can hold every vendor's
     // count without this file knowing what any of them reads.
-    queries: detected.map(
+    queries: withPages.map(
       (vendor) =>
         vendor.page.count as unknown as UseQueryOptions<
           unknown,
@@ -756,13 +778,22 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     ),
   });
 
-  return detected.map((vendor, index) => ({
-    id: vendor.id,
-    name: vendor.name,
-    icon: vendor.extension.icon,
-    path: integrationPagePath(vendor.id),
-    count: counts[index]?.data ?? null,
-  }));
+  return here.map((vendor): IntegrationPageEntry => {
+    const index = withPages.findIndex(
+      (candidate) => candidate.id === vendor.id
+    );
+    return {
+      id: vendor.id,
+      name: vendor.name,
+      icon: vendor.extension.icon,
+      path:
+        index === -1
+          ? integrationSettingsPath(vendor.id)
+          : integrationPagePath(vendor.id),
+      count: index === -1 ? null : (counts[index]?.data ?? null),
+      own: index !== -1,
+    };
+  });
 }
 
 /**

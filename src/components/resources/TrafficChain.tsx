@@ -18,6 +18,8 @@
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
+import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
 import { chainSilence, trafficChains, type ChainHop } from "@/lib/connections";
@@ -260,6 +262,33 @@ function Hop({
               )}
             </span>
             {hop.via && <p className="text-[11px] text-fg-fnt">{hop.via}</p>}
+            {/* The address, on the clipboard. Everything above this hop is
+                what the reader can read; this is the one line they can act
+                on, and reconstructing it by hand from a host, a path and a
+                guess at the scheme is exactly the errand this view exists to
+                save. */}
+            {hop.urls.length > 0 && (
+              <p className="mt-0.5 text-[11px]">
+                <CopyableAddresses values={hop.urls} label="Address" />
+              </p>
+            )}
+            {/* And what that hostname has to resolve to. A URL on its own is
+                only half an address on a cluster whose DNS nobody has pointed
+                yet, which is most of them — this is the number you put in
+                `--resolve` or in `/etc/hosts` to check the rest of the chain
+                without waiting for a zone to propagate. */}
+            {hop.publishedAt !== null &&
+              (hop.publishedAt.length > 0 ? (
+                <p className="text-[11px] text-fg-fnt">
+                  at{" "}
+                  <CopyableAddresses values={hop.publishedAt} label="Address" />
+                </p>
+              ) : (
+                <p className="max-w-[92ch] text-[11px] text-warn">
+                  No address yet — the controller has published none, so nothing
+                  reaches this Ingress however its rules read.
+                </p>
+              ))}
             {hop.object.kind === "Service" && (
               <EdgeNote edge={edge} object={hop.object} />
             )}
@@ -331,11 +360,23 @@ export function TrafficChain({
 }) {
   const { data, isPending, error } = query;
 
+  // The three above are the Ingress page's, which has read them from its own
+  // subject. Every other page gets the same three from here instead, so a
+  // Deployment says which controller serves it and under what certificate
+  // without five detail pages each wiring up four queries.
+  const routed = useIngressRouting(data);
+
   // Built before the early returns rather than after them, because the hop
   // notes below are fetched with a hook and a hook may not sit behind a
   // condition. `trafficChains` is pure and answers an empty list for no data,
   // which is exactly what the hook should be asked about in that case.
-  const paths = data ? trafficChains(data, { certificates, controller }) : [];
+  const paths = data
+    ? trafficChains(data, {
+        certificates: certificates ?? routed.certificates,
+        controller,
+        routing: routed.routing,
+      })
+    : [];
   const edge = useServiceEdge(
     paths.flatMap((path) =>
       path.hops.flatMap((hop) =>
@@ -372,6 +413,28 @@ export function TrafficChain({
           paths.length > 1 ? `${paths.length} Services front this` : undefined
         }
       />
+      {/* A read that failed is not a chain that is still loading, and until
+          this was drawn the two looked identical: no certificate hop, no
+          controller hop, no address — forever, with nothing saying why. The
+          hops below are still whatever could be read; this says what could
+          not, so the gaps in them are not mistaken for answers. */}
+      {routed.unread.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {routed.unread.map((unread) => (
+            <p
+              key={`${unread.ingress.namespace ?? ""}/${unread.ingress.name}/${unread.what}`}
+              className="max-w-[92ch] text-[11px] text-warn"
+            >
+              {unread.what === "ingress"
+                ? `Could not read Ingress ${unread.ingress.name}, so nothing below is complete for it`
+                : `Could not read which controller serves Ingress ${unread.ingress.name}`}
+              <span className="block select-text break-words font-mono text-fg-mut">
+                {unread.reason}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
       <div className="flex flex-col gap-4">
         {paths.map((path) => (
           <div key={path.key} className="flex flex-col">
@@ -380,7 +443,7 @@ export function TrafficChain({
                 key={index}
                 hop={hop}
                 next={path.hops[index + 1]}
-                issuance={issuance}
+                issuance={issuance ?? routed.issuance}
                 edge={edge}
               />
             ))}

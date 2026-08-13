@@ -44,6 +44,13 @@ const EVENT_FETCH_LIMIT: u32 = 500;
 /// pathological cluster cannot stall a query that re-runs every few seconds.
 const MAX_EVENT_PAGES: usize = 4;
 
+/// Page size for the count probe in [`count_of`]. One page is the whole
+/// cost of a count, so this is only "how many objects a small cluster is
+/// counted in a single round trip" — big enough that most kinds never need
+/// the apiserver's own tally, small enough to be nothing next to the
+/// collection it replaces.
+const COUNT_PAGE_SIZE: u32 = 500;
+
 /// Longest a pod may sit Pending before it counts as a problem. Scheduling
 /// and image pulls take seconds; without this grace every CronJob tick
 /// paints the panel red and the signal is gone.
@@ -780,25 +787,49 @@ fn job_composition(jobs: &[Job]) -> JobComposition {
     composition
 }
 
-/// A list that could not be read is not an empty list.
-///
-/// Every caller here is counting a kind the screen can do without, so a
-/// refusal degrades that one number to "unknown" instead of failing a query
-/// that six other panels depend on.
-fn counted<T: Clone>(result: kube::Result<kube::core::ObjectList<T>>) -> Option<usize> {
-    result.ok().map(|list| list.items.len())
+/// What one page of a limited list says about the size of the whole
+/// collection, or `None` for "cannot say" — see [`count_of`].
+fn tally(meta: &kube::core::ListMeta, seen: usize) -> Option<usize> {
+    // A continue token is the apiserver saying there is more; without one
+    // this page is the whole collection and has counted itself.
+    if meta.continue_.as_deref().unwrap_or_default().is_empty() {
+        return Some(seen);
+    }
+    let rest = meta.remaining_item_count?;
+    Some(seen + usize::try_from(rest).unwrap_or(0))
 }
 
-/// Count objects of one kind without pulling their bodies.
+/// Count objects of one kind without pulling the collection.
 ///
-/// `list_metadata` asks the apiserver for metadata alone, which is the
-/// difference between a Secrets count and shipping every Secret's payload
-/// over IPC on a query that re-runs every two seconds.
+/// `list_metadata` keeps the bodies out of the response, which is the
+/// difference between counting Secrets and shipping every Secret's payload.
+/// What it does not do is make the *list* smaller: counting Events meant the
+/// metadata of every Event in the cluster — the largest collection there is,
+/// see [`EVENT_FETCH_LIMIT`] — pulled every ten seconds, in up to four
+/// scopes at once, to produce one integer for the rail.
+///
+/// A limited list answers it in one page: alongside the page the apiserver
+/// returns `remainingItemCount`, which is the rest of the tally it has
+/// already done. So the cost is a fixed page regardless of how many objects
+/// there are.
+///
+/// An apiserver that fills the page but leaves `remainingItemCount` unset
+/// (pre-1.15, or something in the middle that drops it) leaves us knowing
+/// only "at least a page", and the rail draws `None` as nothing at all
+/// rather than a number that is wrong.
 async fn count_of<K>(api: &Api<K>) -> Option<usize>
 where
     K: Clone + DeserializeOwned + Debug,
 {
-    counted(api.list_metadata(&ListParams::default()).await)
+    // A list that could not be read is not an empty list: every caller here
+    // is counting a kind the screen can do without, so a refusal degrades
+    // that one number to "unknown" instead of stating as fact that the
+    // namespace holds none of them.
+    let page = api
+        .list_metadata(&ListParams::default().limit(COUNT_PAGE_SIZE))
+        .await
+        .ok()?;
+    tally(&page.metadata, page.items.len())
 }
 
 fn namespace_loads(pods: &[Pod]) -> Vec<NamespaceLoad> {
@@ -1473,30 +1504,30 @@ mod tests {
         assert_eq!(truncated, 0);
     }
 
-    fn forbidden<T: Clone>() -> kube::Result<kube::core::ObjectList<T>> {
-        Err(kube::Error::Api(kube::core::ErrorResponse {
-            status: "Failure".to_string(),
-            message: "secrets is forbidden".to_string(),
-            reason: "Forbidden".to_string(),
-            code: 403,
-        }))
+    fn page_meta(continue_token: Option<&str>, remaining: Option<i64>) -> kube::core::ListMeta {
+        kube::core::ListMeta {
+            continue_: continue_token.map(ToString::to_string),
+            remaining_item_count: remaining,
+            ..Default::default()
+        }
     }
 
-    fn listed<T: Clone>(items: Vec<T>) -> kube::Result<kube::core::ObjectList<T>> {
-        Ok(kube::core::ObjectList {
-            metadata: Default::default(),
-            items,
-            types: Default::default(),
-        })
-    }
-
-    /// The whole point of the optional counts. A token without `list secrets`
-    /// gets a 403, and answering it with `0` states as fact that the namespace
-    /// holds no secrets — the one thing the caller cannot know.
+    /// The whole point of the optional counts, now that a count is one page
+    /// rather than the collection. A page the apiserver says nothing follows
+    /// has counted itself; a page it *does* have more after is only a count
+    /// if it tells us how many more. Answering that case with the page size
+    /// would print "500 Events" on a cluster holding fifty thousand — and a
+    /// count nobody can back is exactly what `None` exists for, the same way
+    /// a refused list stays unknown instead of becoming zero.
     #[test]
-    fn a_refused_list_counts_as_unknown_not_zero() {
-        assert_eq!(counted(forbidden::<Secret>()), None);
-        assert_eq!(counted(listed(Vec::<Secret>::new())), Some(0));
+    fn a_page_only_counts_the_collection_when_it_can() {
+        assert_eq!(tally(&page_meta(None, None), 12), Some(12));
+        assert_eq!(tally(&page_meta(Some(""), None), 12), Some(12));
+        assert_eq!(
+            tally(&page_meta(Some("tok"), Some(49_500)), 500),
+            Some(50_000)
+        );
+        assert_eq!(tally(&page_meta(Some("tok"), None), 500), None);
     }
 
     /// A refusal on one kind must not take the rest of the screen with it.

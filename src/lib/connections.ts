@@ -13,6 +13,7 @@
  * into a sentence.
  */
 
+import { covers } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
@@ -313,6 +314,24 @@ export interface ChainHopObject {
   detail: string | null;
   /** Under the name, quieter. */
   via: string | null;
+  /**
+   * Where this hop is reachable from outside, scheme included.
+   *
+   * Only an Ingress ever has one, and only where the rule names a host: the
+   * scheme comes from whether `spec.tls` covers that host, which the routing
+   * edge already states, and a URL with a placeholder host is an address
+   * nobody can paste anywhere. Empty for every other hop.
+   */
+  urls: string[];
+  /**
+   * What that hostname has to resolve to, where the page has read it.
+   *
+   * `null` where nothing was read, which is not the same as *read and empty*
+   * — an Ingress the controller has not published is unreachable whatever its
+   * rules say, and that is a sentence the chain owes the reader rather than a
+   * gap it can leave to be inferred.
+   */
+  publishedAt: string[] | null;
 }
 
 /**
@@ -384,13 +403,40 @@ export interface ChainPath {
   broken: boolean;
 }
 
+/**
+ * What one Ingress in front of the subject says about itself, read from the
+ * Ingress rather than deduced from the edge that names it.
+ *
+ * Keyed by `refKey` of the Ingress, so a page can fill in as many as it has
+ * read and the chain simply draws less for the ones it has not.
+ */
+export interface RoutedIngress {
+  tls: Array<{ secretName: string; hosts: string[] }>;
+  /** Who picks it up, including "nobody does". */
+  binding: IngressClassBinding | null;
+  /**
+   * Where the controller published it: `status.loadBalancer.ingress`, as an
+   * address or a hostname.
+   *
+   * Empty is a finding rather than a blank. Until something assigns an
+   * address nothing reaches the Ingress at all, and it is the single most
+   * common reason a perfectly correct one "does not work" — so the chain says
+   * so instead of printing a URL that resolves to nothing.
+   */
+  addresses: string[];
+}
+
 const verb = <V extends Relation["verb"]>(
   edges: ConnectionEdge[],
   which: V
 ): (ConnectionEdge & { relation: Extract<Relation, { verb: V }> })[] =>
   edges.filter((edge) => edge.relation.verb === which) as never;
 
-function routeHop(edges: ConnectionEdge[], object: ObjectRef): ChainHopObject {
+function routeHop(
+  edges: ConnectionEdge[],
+  object: ObjectRef,
+  known?: RoutedIngress
+): ChainHopObject {
   const relations = edges.map(
     (edge) => edge.relation as Extract<Relation, { verb: "routes" }>
   );
@@ -408,6 +454,16 @@ function routeHop(edges: ConnectionEdge[], object: ObjectRef): ChainHopObject {
       relations.some((rule) => rule.tls) ? "over HTTPS" : "over plain HTTP",
       describeFacts(object.facts)
     ),
+    urls: [
+      ...new Set(
+        relations.flatMap((rule) =>
+          rule.host
+            ? [`${rule.tls ? "https" : "http"}://${rule.host}${rule.path}`]
+            : []
+        )
+      ),
+    ],
+    publishedAt: known ? known.addresses : null,
   };
 }
 
@@ -418,6 +474,8 @@ function serviceHop(object: ObjectRef, self: boolean): ChainHopObject {
     self,
     detail: servicePorts(object),
     via: describeFacts(object.facts),
+    urls: [],
+    publishedAt: null,
   };
 }
 
@@ -476,11 +534,15 @@ export function tlsSecrets(
  *
  * An entry with no hosts is the catch-all the Ingress spec allows, and it
  * covers every host the Ingress routes — which is why an empty list is a
- * match rather than a miss.
+ * match rather than a miss. Where hosts are named, matching them is
+ * {@link covers}'s job rather than string equality: a Secret named for
+ * `*.example.com` is exactly the common case, and exact matching drew no
+ * certificate hop for it at all — silently, on the setup most clusters
+ * actually use.
  */
 function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
   if (tlsHosts.length === 0) return true;
-  return pathHosts.some((host) => host === "" || tlsHosts.includes(host));
+  return pathHosts.some((host) => host === "" || covers(tlsHosts, host));
 }
 
 /**
@@ -500,7 +562,20 @@ export function trafficChains(
    */
   extra: {
     certificates?: Map<string, TlsCertificate>;
+    /** The binding for the subject Ingress, on the Ingress's own page. */
     controller?: IngressClassBinding;
+    /**
+     * What the Ingresses *in front of* the subject say about themselves, for
+     * a page whose subject is not one.
+     *
+     * The neighbourhood answer carries the routing edges and the Ingress's
+     * class, and stops there — an Ingress's `spec.tls` is only walked when
+     * the Ingress is the subject. Without this a Deployment could say which
+     * hostname reaches it and never whether that hostname is served over TLS,
+     * which is the half somebody is usually asking about. Absent, the chain
+     * draws exactly what it drew before.
+     */
+    routing?: Map<string, RoutedIngress>;
   } = {}
 ): ChainPath[] {
   const subject = conns.subject;
@@ -546,7 +621,10 @@ export function trafficChains(
         if (extra.controller) {
           hops.push({ at: "controller", binding: extra.controller });
         }
-        hops.push({ ...routeHop(mine, subject), self: true });
+        hops.push({
+          ...routeHop(mine, subject, extra.routing?.get(refKey(subject))),
+          self: true,
+        });
         hops.push(
           service.kind === "Service"
             ? serviceHop(service, false)
@@ -556,13 +634,39 @@ export function trafficChains(
                 self: false,
                 detail: null,
                 via: "a resource backend — the app does not follow these",
+                urls: [],
+                publishedAt: null,
               }
         );
       } else {
+        // One Ingress at a time, and its own certificate and controller above
+        // it: two Ingresses fronting the same Service can be served by
+        // different classes under different certificates, and a single shared
+        // hop at the top would state one of those as if it were both.
         for (const edge of routes.filter((entry) =>
           sameObject(entry.to, service)
         )) {
-          hops.push(routeHop([edge], edge.from));
+          const known = extra.routing?.get(refKey(edge.from));
+          const host = edge.relation.host ?? "";
+          for (const entry of known?.tls ?? []) {
+            if (!servesAny(entry.hosts, [host])) continue;
+            hops.push({
+              at: "certificate",
+              secret: {
+                kind: "Secret",
+                name: entry.secretName,
+                namespace: edge.from.namespace,
+                existence: "notChecked",
+                facts: null,
+              },
+              hosts: entry.hosts,
+              read: extra.certificates?.get(entry.secretName),
+            });
+          }
+          if (known?.binding) {
+            hops.push({ at: "controller", binding: known.binding });
+          }
+          hops.push(routeHop([edge], edge.from, known));
         }
         hops.push(serviceHop(service, subject.kind === "Service"));
       }
@@ -578,6 +682,8 @@ export function trafficChains(
           self: true,
           detail: null,
           via: null,
+          urls: [],
+          publishedAt: null,
         });
       }
       if (subject.kind === "Pod") {
@@ -587,6 +693,8 @@ export function trafficChains(
           self: true,
           detail: null,
           via: describeFacts(subject.facts),
+          urls: [],
+          publishedAt: null,
         });
       }
 

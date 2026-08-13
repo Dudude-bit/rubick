@@ -34,13 +34,6 @@ pub struct NodeMetricsResponse {
     pub data: Vec<NodeMetrics>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClusterMetricsResponse {
-    pub status: MetricsStatus,
-    pub data: ClusterMetrics,
-}
-
 /// Pod metrics from Metrics API (values are in millicores/bytes)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,16 +51,6 @@ pub struct NodeMetrics {
     pub name: String,
     pub cpu_millicores: Option<f64>,
     pub memory_bytes: Option<u64>,
-}
-
-/// Cluster metrics (aggregated, values are in millicores/bytes)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClusterMetrics {
-    pub total_cpu_millicores: Option<f64>,
-    pub total_memory_bytes: Option<u64>,
-    pub total_cpu_capacity_millicores: Option<f64>,
-    pub total_memory_capacity_bytes: Option<u64>,
 }
 
 // ============================================================================

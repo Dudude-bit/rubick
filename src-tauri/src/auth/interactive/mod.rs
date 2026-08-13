@@ -23,11 +23,25 @@ use cred::ExecCredentialStatus;
 ///
 /// Returns an error if the context cannot be resolved, exec
 /// authentication fails, or kubeconfig processing fails.
+/// A prepared kubeconfig, and the one fact about it that expires.
+///
+/// The credential plugin states when what it just handed over stops working,
+/// and this used to be read and thrown away on the next line. Nothing renews
+/// it — `apply_exec_credentials` strips the `exec` block that could — so that
+/// timestamp is the only thing in the process that knows the session has a
+/// deadline. It is carried out of here so a surface can say *when*, rather
+/// than only that something is wrong once every request has started failing.
+pub struct PreparedContext {
+    pub kubeconfig: Kubeconfig,
+    /// `None` where the plugin named no deadline, which many do not.
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 pub async fn prepare_kubeconfig_for_context(
     state: &AppState,
     mut kubeconfig: Kubeconfig,
     context_name: &str,
-) -> Result<Kubeconfig> {
+) -> Result<PreparedContext> {
     let (user_name, cluster_name) = resolve_context(&kubeconfig, context_name)?;
 
     // First, get the exec config and check if we need cluster info
@@ -52,10 +66,13 @@ pub async fn prepare_kubeconfig_for_context(
 
     if let Some(exec_config) = exec_config {
         let status = exec::run_exec_auth(state, context_name, &exec_config, exec_cluster).await?;
-        apply_exec_credentials(auth_info, status);
+        let expires_at = apply_exec_credentials(auth_info, status);
         auth_info.exec = None;
         auth_info.auth_provider = None;
-        return Ok(kubeconfig);
+        return Ok(PreparedContext {
+            kubeconfig,
+            expires_at,
+        });
     }
 
     if let Some(provider) = auth_info.auth_provider.clone() {
@@ -66,7 +83,10 @@ pub async fn prepare_kubeconfig_for_context(
         }
     }
 
-    Ok(kubeconfig)
+    Ok(PreparedContext {
+        kubeconfig,
+        expires_at: None,
+    })
 }
 
 fn resolve_context(kubeconfig: &Kubeconfig, context_name: &str) -> Result<(String, String)> {
@@ -113,7 +133,11 @@ fn resolve_exec_cluster(
     Ok(Some(exec_cluster))
 }
 
-fn apply_exec_credentials(auth_info: &mut AuthInfo, status: ExecCredentialStatus) {
+/// Applies what the plugin returned, and hands back the deadline it named.
+fn apply_exec_credentials(
+    auth_info: &mut AuthInfo,
+    status: ExecCredentialStatus,
+) -> Option<chrono::DateTime<chrono::Utc>> {
     if let Some(token) = status.token {
         auth_info.token = Some(SecretString::from(token));
     }
@@ -123,7 +147,11 @@ fn apply_exec_credentials(auth_info: &mut AuthInfo, status: ExecCredentialStatus
     if let Some(key) = status.client_key_data {
         auth_info.client_key_data = Some(SecretString::from(key));
     }
-    if let Some(expiry) = status.expiration_timestamp {
-        let _ = expiry;
-    }
+    // A plugin that names no expiry, or names one this cannot parse, leaves
+    // the deadline unknown — which is a different thing from "does not
+    // expire", and is why the caller gets an `Option` rather than a guess.
+    status
+        .expiration_timestamp
+        .and_then(|stamp| chrono::DateTime::parse_from_rfc3339(&stamp).ok())
+        .map(|stamp| stamp.with_timezone(&chrono::Utc))
 }

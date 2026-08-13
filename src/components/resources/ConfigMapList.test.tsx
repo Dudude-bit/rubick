@@ -10,7 +10,11 @@ import type { ConfigMapInfo } from "@/generated/types";
 // `useClusterStore()` (whole state) and `useClusterStore((s) => s.x)` (selector).
 // Apply the selector function ourselves so both forms work.
 vi.mock("@/stores/clusterStore", () => {
-  const state = { currentNamespace: "default", isConnected: true };
+  const state = {
+    currentNamespace: "default",
+    namespaceScope: ["default"],
+    isConnected: true,
+  };
   return {
     useClusterStore: vi.fn(<T,>(selector?: (s: typeof state) => T) =>
       typeof selector === "function" ? selector(state) : state

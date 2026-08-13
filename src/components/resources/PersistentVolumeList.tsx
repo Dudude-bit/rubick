@@ -12,11 +12,13 @@ import {
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
-const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
+export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   createNameColumn<PersistentVolumeInfo>(ResourceType.PersistentVolume),
   createCapacityColumn<PersistentVolumeInfo>(),
   createAccessModesColumn<PersistentVolumeInfo>(),
   {
+    // "Retain" or "Delete" under a two-word header.
+    size: 120,
     accessorKey: "reclaimPolicy",
     header: "Reclaim Policy",
     cell: ({ row }) => (
@@ -24,21 +26,26 @@ const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     ),
   },
   {
+    size: 110,
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
+    // A namespace and a claim name together, so as wide as a name column.
+    size: 240,
     accessorKey: "claim",
     header: "Claim",
     cell: ({ row }) => <ClaimRef claim={row.original.claim} />,
   },
   {
+    size: 160,
     accessorKey: "storageClass",
     header: "Storage Class",
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
   {
+    size: 80,
     accessorKey: "age",
     header: "Age",
   },

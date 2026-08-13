@@ -590,6 +590,7 @@ export interface ClusterInfo {
   server_version: string;
   platform: string;
   git_version: string;
+  credentials_expire_at: string | null;
 }
 
 export interface ContextInfo {
@@ -786,24 +787,6 @@ export interface StatefulSetInfo {
   createdAt: string | null;
 }
 
-export interface ResourceListItem {
-  metadata: ResourceMetadata;
-}
-
-export interface ResourceMetadata {
-  name: string;
-  namespace: string | null;
-}
-
-export interface ResourceQuery {
-  kind: string;
-  namespace: string | null;
-  name: string | null;
-  labelSelector: string | null;
-  fieldSelector: string | null;
-  limit: number | null;
-}
-
 export interface RolloutStatus {
   replicas: number;
   readyReplicas: number;
@@ -953,18 +936,6 @@ export interface ReplicaSetReplicaInfo {
   current: number;
   ready: number;
   available: number;
-}
-
-export interface ClusterMetricsResponse {
-  status: MetricsStatus;
-  data: ClusterMetrics;
-}
-
-export interface ClusterMetrics {
-  totalCpuMillicores: number | null;
-  totalMemoryBytes: number | null;
-  totalCpuCapacityMillicores: number | null;
-  totalMemoryCapacityBytes: number | null;
 }
 
 export interface MetricsStatus {

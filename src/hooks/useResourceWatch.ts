@@ -1,17 +1,23 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
 
 /** Operation tag — mirrors backend `WatchOp`. */
-type WatchOp = "applied" | "deleted" | "restarted" | "failed";
+type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
+
+/** One change inside a batch — mirrors backend `WatchChange`. */
+interface WatchChange<T> {
+  op: WatchOp;
+  /** `null` on the resync markers and on `failed`. */
+  resource: T | null;
+}
 
 interface ResourceEventPayload<T> {
   stream_id: string;
-  op: WatchOp;
-  /** `null` on `restarted` and `failed`. */
-  resource: T | null;
+  /** In arrival order, never empty. */
+  changes: Array<WatchChange<T>>;
   /** Set on `failed` — backend's error description. `null` for every
    *  other op. */
   error: string | null;
@@ -46,6 +52,17 @@ interface UseResourceWatchOptions {
   onRecovered?: () => void;
 }
 
+export interface ResourceWatchState {
+  /**
+   * A resync is in flight: the watcher is re-listing the collection and
+   * the rows in the cache are the last complete state, not the current
+   * one. Surfaces show what they have — or a skeleton where they have
+   * nothing — instead of an empty state that reads as "your cluster has
+   * none of these".
+   */
+  resyncing: boolean;
+}
+
 /**
  * Subscribes to a backend resource watch, listens for
  * `resource-event` Tauri events, and updates the TanStack Query
@@ -57,6 +74,9 @@ interface UseResourceWatchOptions {
  * `applied`/`restarted` events from the backend cannot land in the
  * void.
  */
+/** Matches `EVENT_BRIDGE_LAGGED` in `src-tauri/src/main.rs`. */
+const EVENT_BRIDGE_LAGGED = "event-bridge-lagged";
+
 export function useResourceWatch<
   T extends { name: string; namespace?: string | null },
 >({
@@ -65,8 +85,9 @@ export function useResourceWatch<
   queryKey,
   onError,
   onRecovered,
-}: UseResourceWatchOptions) {
+}: UseResourceWatchOptions): ResourceWatchState {
   const queryClient = useQueryClient();
+  const [resyncing, setResyncing] = useState(false);
   // Latest callbacks captured via refs so flipping a useState in
   // either callback doesn't tear down the subscription.
   const onErrorRef = useRef(onError);
@@ -87,9 +108,22 @@ export function useResourceWatch<
     // per failure→recovery transition (instead of on every successful
     // event).
     let inFailedState = false;
+    // The rows a resync has delivered so far, held here rather than in
+    // the cache until the backend says the burst is complete.
+    let staged: Map<string, T> | null = null;
+
+    // Give up on a resync that can no longer complete. What was staged is
+    // dropped rather than committed — a half-delivered burst is not a
+    // state — and the surface stops waiting on one, which it would
+    // otherwise do forever.
+    const abandonResync = () => {
+      staged = null;
+      setResyncing(false);
+    };
 
     const teardown = async () => {
       active = false;
+      abandonResync();
       if (unlisten) {
         unlisten();
         unlisten = null;
@@ -119,24 +153,80 @@ export function useResourceWatch<
           (event) => {
             const payload = event.payload;
             if (payload.stream_id !== id) return;
-            if (payload.op === "failed") {
+            if (payload.changes.some((change) => change.op === "failed")) {
               inFailedState = true;
+              abandonResync();
               onErrorRef.current?.(payload.error ?? "Resource watch failed");
               return;
             }
+            if (payload.changes.length === 0) return;
             if (inFailedState) {
               inFailedState = false;
               onRecoveredRef.current?.();
             }
-            applyEvent<T>(queryClient, queryKey, payload);
+
+            // Live changes accumulate and land as one cache write, so a
+            // batch is one render no matter how many objects moved.
+            let live: Array<WatchChange<T>> = [];
+            for (const change of payload.changes) {
+              if (change.op === "restarted") {
+                staged = new Map();
+                setResyncing(true);
+                // The resync's list is the whole truth; anything from
+                // before it is about to be superseded.
+                live = [];
+                continue;
+              }
+              if (change.op === "synced") {
+                const rows = staged;
+                staged = null;
+                setResyncing(false);
+                if (rows) {
+                  queryClient.setQueryData<T[]>(queryKey, [...rows.values()]);
+                }
+                continue;
+              }
+              if (staged) {
+                stage(staged, change);
+              } else {
+                live.push(change);
+              }
+            }
+
+            if (live.length > 0) {
+              const changes = live;
+              queryClient.setQueryData<T[]>(queryKey, (prev) =>
+                applyChanges(prev ?? [], changes)
+              );
+            }
           }
         );
 
+        // The bridge dropping events is this watch failing, whatever the
+        // stream itself is doing. A resync replaces the cache from a burst,
+        // so events lost in that burst are rows that never arrive — the list
+        // is not stale, it is short, and nothing polls it back while it
+        // believes it is live. Same treatment as a failed stream: say so,
+        // drop the badge, start polling again.
+        const offLagged = await listen<number>(EVENT_BRIDGE_LAGGED, (event) => {
+          inFailedState = true;
+          // A resync missing an unknown number of its own rows is not a
+          // state to swap in — committing it would delete rows that exist.
+          abandonResync();
+          onErrorRef.current?.(
+            `The event bridge fell behind and dropped ${event.payload} updates, so this list may be incomplete.`
+          );
+        });
+
         if (!active) {
           off();
+          offLagged();
           return;
         }
-        unlisten = off;
+        unlisten = () => {
+          off();
+          offLagged();
+        };
 
         // Listener installed — release the backend gate. Failure here
         // means the session was already torn down (race with cleanup);
@@ -164,39 +254,44 @@ export function useResourceWatch<
     // the key reference changes too, which is correct: the watch
     // belongs to that key and must re-subscribe.
   }, [enabled, subscribe, queryClient, queryKey]);
+
+  return { resyncing };
 }
 
-function applyEvent<T extends { name: string; namespace?: string | null }>(
-  queryClient: ReturnType<typeof useQueryClient>,
-  queryKey: QueryKey,
-  payload: ResourceEventPayload<T>
+/** Name plus namespace, which is what identifies a row in a list. */
+function identify<T extends { name: string; namespace?: string | null }>(
+  item: T
+): string {
+  return `${item.namespace ?? ""} ${item.name}`;
+}
+
+function stage<T extends { name: string; namespace?: string | null }>(
+  rows: Map<string, T>,
+  change: WatchChange<T>
 ) {
-  if (payload.op === "restarted") {
-    // The watcher resync drops everything before re-emitting. Clear
-    // the cache so the upcoming `applied` burst has a clean slate
-    // and stale entries don't linger.
-    queryClient.setQueryData<T[]>(queryKey, []);
-    return;
-  }
-
-  const incoming = payload.resource;
+  const incoming = change.resource;
   if (!incoming) return;
+  if (change.op === "deleted") rows.delete(identify(incoming));
+  else rows.set(identify(incoming), incoming);
+}
 
-  queryClient.setQueryData<T[]>(queryKey, (prev) => {
-    const list = prev ?? [];
-    const matches = (item: T) =>
-      item.name === incoming.name &&
-      (item.namespace ?? null) === (incoming.namespace ?? null);
-
-    if (payload.op === "deleted") {
-      return list.filter((item) => !matches(item));
-    }
-
-    // applied — replace existing or append.
-    const idx = list.findIndex(matches);
-    if (idx === -1) return [...list, incoming];
-    const next = list.slice();
-    next[idx] = incoming;
-    return next;
-  });
+/**
+ * The list with a batch of changes folded in.
+ *
+ * Keyed rather than scanned: `findIndex` per change is O(N) against a
+ * list the same burst is growing, so an init burst of a thousand objects
+ * cost half a million name comparisons and half a million copied array
+ * slots to arrive at a list it could have built in one pass.
+ *
+ * A `Map` keeps insertion order and leaves a replaced row where it was,
+ * so rows do not jump around under an update.
+ */
+function applyChanges<T extends { name: string; namespace?: string | null }>(
+  list: T[],
+  changes: Array<WatchChange<T>>
+): T[] {
+  const rows = new Map<string, T>();
+  for (const item of list) rows.set(identify(item), item);
+  for (const change of changes) stage(rows, change);
+  return [...rows.values()];
 }

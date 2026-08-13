@@ -10,8 +10,10 @@ import {
 import { ResourceRef } from "./ResourceRef";
 import { createResourceListPage } from "./createResourceListPage";
 
-const columns = (): ColumnDef<StorageClassInfo>[] => [
+export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
+    // The name plus the "default" marker that sits beside it.
+    size: 300,
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
@@ -30,6 +32,8 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     ),
   },
   {
+    // A CSI driver name in full: `pd.csi.storage.gke.io`, `rancher.io/local-path`.
+    size: 240,
     accessorKey: "provisioner",
     header: "Provisioner",
     cell: ({ row }) => (
@@ -37,6 +41,7 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     ),
   },
   {
+    size: 120,
     accessorKey: "reclaimPolicy",
     header: "Reclaim Policy",
     cell: ({ row }) => (
@@ -44,6 +49,8 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     ),
   },
   {
+    // "WaitForFirstConsumer" is one unbreakable word.
+    size: 170,
     accessorKey: "volumeBindingMode",
     header: "Binding Mode",
     cell: ({ row }) => (
@@ -51,6 +58,7 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     ),
   },
   {
+    size: 100,
     accessorKey: "allowVolumeExpansion",
     header: "Expansion",
     cell: ({ row }) => (
@@ -60,6 +68,8 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     ),
   },
   {
+    // "4 params", with the pairs themselves in the tooltip.
+    size: 110,
     accessorKey: "parameters",
     header: "Parameters",
     cell: ({ row }) => {
@@ -84,6 +94,7 @@ const columns = (): ColumnDef<StorageClassInfo>[] => [
     },
   },
   {
+    size: 80,
     accessorKey: "age",
     header: "Age",
   },

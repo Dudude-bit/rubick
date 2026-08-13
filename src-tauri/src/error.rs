@@ -26,7 +26,25 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     /// Kubernetes API errors
     #[error("Kubernetes API error: {0}")]
-    KubeApi(#[from] kube::Error),
+    // `#[source]` is explicit because the `#[from]` that used to imply it is
+    // gone: the conversion now branches on the status code, and the search
+    // fan-out walks this chain to find the sentence a reader can act on.
+    KubeApi(#[source] kube::Error),
+
+    /// The cluster no longer accepts the credentials this session holds.
+    ///
+    /// Its own variant rather than a `KubeApi` string, and deliberately not
+    /// `PermissionDenied`: a 403 is an answer about *one* request and the rest
+    /// of the session still works, while a 401 means the token the client was
+    /// built with is not accepted for anything. That is not a rare state — a
+    /// GKE token lasts about an hour, `prepare_kubeconfig_for_context` strips
+    /// the `exec` block that could renew it, and nothing renews it afterwards.
+    ///
+    /// Errors cross to the frontend as their `Display` string and nothing
+    /// else, so this sentence *is* the wire format: `CREDENTIALS_EXPIRED` is
+    /// matched on there. Changing the prefix changes an API.
+    #[error("CREDENTIALS_EXPIRED: the cluster rejected this session's credentials — {0}")]
+    CredentialsExpired(String),
 
     /// Configuration errors
     #[error("Configuration error: {0}")]
@@ -179,6 +197,7 @@ impl ErrorExt for Error {
     fn error_code(&self) -> &'static str {
         match self {
             Error::KubeApi(_) => "KUBE_API_ERROR",
+            Error::CredentialsExpired(_) => "CREDENTIALS_EXPIRED",
             Error::Config(_) => "CONFIG_ERROR",
             Error::Auth(_) => "AUTH_ERROR",
             Error::Connection(_) => "CONNECTION_ERROR",
@@ -245,6 +264,23 @@ impl Error {
             name: name.into(),
             namespace: namespace.into(),
         }
+    }
+}
+
+/// A 401 is the one API error that is about the session rather than the
+/// request, so it is the one that does not become `KubeApi`.
+///
+/// Everything else keeps the shape it always had. `reason` is checked as well
+/// as the code because a token the apiserver cannot verify at all comes back
+/// as `Unauthorized` with the code unset on some distributions.
+impl From<kube::Error> for Error {
+    fn from(err: kube::Error) -> Self {
+        if let kube::Error::Api(response) = &err {
+            if response.code == 401 || response.reason == "Unauthorized" {
+                return Error::CredentialsExpired(response.message.clone());
+            }
+        }
+        Error::KubeApi(err)
     }
 }
 
@@ -321,6 +357,38 @@ mod tests {
         assert!(json.contains("Resource not found"));
         assert!(json.contains("Pod"));
         assert!(json.contains("nginx"));
+    }
+
+    fn api_error(code: u16, reason: &str) -> kube::Error {
+        kube::Error::Api(kube::core::ErrorResponse {
+            status: "Failure".to_string(),
+            message: "the server has asked for the client to provide credentials".to_string(),
+            reason: reason.to_string(),
+            code,
+        })
+    }
+
+    /// Would send the reader back to a screen that says the cluster is empty.
+    /// A 401 is the session being over, not an answer about one request, and
+    /// the frontend can only tell from this sentence — errors cross the IPC
+    /// boundary as their `Display` string and nothing else.
+    #[test]
+    fn a_401_is_expired_credentials_and_says_so_on_the_wire() {
+        let err = Error::from(api_error(401, "Unauthorized"));
+        assert!(matches!(err, Error::CredentialsExpired(_)));
+        assert!(err.to_string().starts_with("CREDENTIALS_EXPIRED:"));
+        assert_eq!(err.error_code(), "CREDENTIALS_EXPIRED");
+    }
+
+    /// A 403 answers *this* request and leaves the session working. Folding it
+    /// in here would throw the reader out of a cluster they are still using
+    /// every time they opened one thing their token cannot read.
+    #[test]
+    fn a_403_is_not_expired_credentials() {
+        assert!(matches!(
+            Error::from(api_error(403, "Forbidden")),
+            Error::KubeApi(_)
+        ));
     }
 
     #[test]

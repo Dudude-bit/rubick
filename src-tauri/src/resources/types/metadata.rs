@@ -146,9 +146,87 @@ impl From<&Event> for EventInfo {
                 namespace: event.involved_object.namespace.clone(),
                 uid: event.involved_object.uid.clone(),
             },
-            count: event.count,
-            first_timestamp: event.first_timestamp.as_ref().map(|t| t.0),
-            last_timestamp: event.last_timestamp.as_ref().map(|t| t.0),
+            // Everything below has a second home on the `events.k8s.io`
+            // API, and a controller writing there leaves the core-v1
+            // fields unset: the time is in `event_time`, a repeat's
+            // latest occurrence and tally in `series`. Without the
+            // fallbacks those rows arrive undated, and undated sorts
+            // last — so the newest events from anything modern landed at
+            // the bottom of a feed whose whole promise is "newest first".
+            count: event
+                .count
+                .or_else(|| event.series.as_ref().and_then(|s| s.count)),
+            first_timestamp: event
+                .first_timestamp
+                .as_ref()
+                .map(|t| t.0)
+                .or_else(|| event.event_time.as_ref().map(|t| t.0)),
+            last_timestamp: event
+                .last_timestamp
+                .as_ref()
+                .map(|t| t.0)
+                .or_else(|| {
+                    event
+                        .series
+                        .as_ref()
+                        .and_then(|s| s.last_observed_time.as_ref())
+                        .map(|t| t.0)
+                })
+                .or_else(|| event.event_time.as_ref().map(|t| t.0)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::EventSeries;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{MicroTime, Time};
+
+    fn at(rfc3339: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(rfc3339).unwrap().into()
+    }
+
+    /// An event written through `events.k8s.io` carries its time in
+    /// `eventTime` and `series`, and nothing in the core-v1 fields. Read
+    /// without the fallback it is undated — and the events feed sorts
+    /// undated last, so the newest rows in a cluster whose controllers
+    /// use the current API sat at the bottom of a "newest first" list.
+    #[test]
+    fn a_new_api_event_is_dated_from_event_time_and_series() {
+        let event = Event {
+            event_time: Some(MicroTime(at("2026-08-13T10:00:00Z"))),
+            series: Some(EventSeries {
+                count: Some(7),
+                last_observed_time: Some(MicroTime(at("2026-08-13T10:05:00Z"))),
+            }),
+            ..Default::default()
+        };
+
+        let info = EventInfo::from(&event);
+        assert_eq!(info.first_timestamp, Some(at("2026-08-13T10:00:00Z")));
+        assert_eq!(
+            info.last_timestamp,
+            Some(at("2026-08-13T10:05:00Z")),
+            "a series' latest occurrence is newer than the first sighting"
+        );
+        assert_eq!(info.count, Some(7));
+    }
+
+    /// The core-v1 fields still win where a controller sets them.
+    #[test]
+    fn a_core_v1_event_keeps_its_own_timestamps() {
+        let event = Event {
+            first_timestamp: Some(Time(at("2026-08-13T09:00:00Z"))),
+            last_timestamp: Some(Time(at("2026-08-13T09:30:00Z"))),
+            count: Some(2),
+            event_time: Some(MicroTime(at("2026-08-13T10:00:00Z"))),
+            ..Default::default()
+        };
+
+        let info = EventInfo::from(&event);
+        assert_eq!(info.first_timestamp, Some(at("2026-08-13T09:00:00Z")));
+        assert_eq!(info.last_timestamp, Some(at("2026-08-13T09:30:00Z")));
+        assert_eq!(info.count, Some(2));
     }
 }

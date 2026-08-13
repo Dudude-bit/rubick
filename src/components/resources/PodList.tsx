@@ -27,6 +27,104 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
 
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// eslint-disable-next-line react-refresh/only-export-components
+export const columns: ColumnDef<PodWithMetrics>[] = [
+  createNameColumn<PodWithMetrics>(ResourceType.Pod),
+  createNamespaceColumn<PodWithMetrics>(),
+  {
+    // "CrashLoopBackOff" is the widest state this column ever shows, and it
+    // is the one nobody should have to guess at from a truncation.
+    size: 150,
+    id: "status",
+    header: "Status",
+    // The derived status, not the phase: a pod that has crashed 653
+    // times is in phase `Running` and nobody means that by "how is
+    // it". The phase rides along in the tooltip so it is not lost.
+    cell: ({ row }) => (
+      <StatusBadge
+        status={row.original.status.display}
+        title={`Phase ${row.original.status.phase}`}
+      />
+    ),
+  },
+  createCpuColumn<PodWithMetrics>(),
+  createMemoryColumn<PodWithMetrics>(),
+  {
+    size: 70,
+    id: "ready",
+    header: "Ready",
+    // The number people compare against `kubectl get pod` in the next
+    // window, so it is kubectl's number: sidecars in both halves,
+    // finished init containers in neither.
+    cell: ({ row }) => {
+      const { ready, total } = podReadiness(row.original);
+      return (
+        <span className="font-mono text-fg-mid">
+          {ready}/{total}
+        </span>
+      );
+    },
+  },
+  {
+    // The count and the age of the last one: "653 (2h ago)".
+    size: 130,
+    id: "restarts",
+    header: "Restarts",
+    // kubectl prints the count with the age of the last one, and it is
+    // the half that carries the news: 653 an hour ago and 653 last
+    // week are the same number and not the same pod.
+    cell: ({ row }) => (
+      <span
+        className={
+          row.original.restartCount > 5
+            ? "font-mono text-warn"
+            : "font-mono text-fg-mut"
+        }
+      >
+        {row.original.restartCount}
+        {row.original.restartCount > 0 && row.original.lastRestartAt && (
+          <span className="text-fg-fnt">
+            {" "}
+            ({formatAge(row.original.lastRestartAt)} ago)
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
+    size: 220,
+    id: "node",
+    header: "Node",
+    cell: ({ row }) =>
+      row.original.nodeName ? (
+        <ResourceRef
+          kind={ResourceType.Node}
+          name={row.original.nodeName}
+          showKind={false}
+        />
+      ) : (
+        <span className="text-fg-fnt">-</span>
+      ),
+  },
+  {
+    size: 130,
+    id: "ip",
+    header: "IP",
+    cell: ({ row }) => (
+      <CopyableAddress
+        value={row.original.podIp}
+        label="Pod IP"
+        fallback="-"
+        className="text-fg-mut"
+      />
+    ),
+  },
+  createAgeColumn<PodWithMetrics>(),
+];
+
 export function PodList() {
   const navigate = useNavigate();
   const {
@@ -35,96 +133,8 @@ export function PodList() {
     isLoading,
     dataUpdatedAt,
     watchLive,
+    resyncing,
   } = usePodsWithMetrics();
-
-  const columns = useMemo<ColumnDef<PodWithMetrics>[]>(
-    () => [
-      createNameColumn<PodWithMetrics>(ResourceType.Pod),
-      createNamespaceColumn<PodWithMetrics>(),
-      {
-        id: "status",
-        header: "Status",
-        // The derived status, not the phase: a pod that has crashed 653
-        // times is in phase `Running` and nobody means that by "how is
-        // it". The phase rides along in the tooltip so it is not lost.
-        cell: ({ row }) => (
-          <StatusBadge
-            status={row.original.status.display}
-            title={`Phase ${row.original.status.phase}`}
-          />
-        ),
-      },
-      createCpuColumn<PodWithMetrics>(),
-      createMemoryColumn<PodWithMetrics>(),
-      {
-        id: "ready",
-        header: "Ready",
-        // The number people compare against `kubectl get pod` in the next
-        // window, so it is kubectl's number: sidecars in both halves,
-        // finished init containers in neither.
-        cell: ({ row }) => {
-          const { ready, total } = podReadiness(row.original);
-          return (
-            <span className="font-mono text-fg-mid">
-              {ready}/{total}
-            </span>
-          );
-        },
-      },
-      {
-        id: "restarts",
-        header: "Restarts",
-        // kubectl prints the count with the age of the last one, and it is
-        // the half that carries the news: 653 an hour ago and 653 last
-        // week are the same number and not the same pod.
-        cell: ({ row }) => (
-          <span
-            className={
-              row.original.restartCount > 5
-                ? "font-mono text-warn"
-                : "font-mono text-fg-mut"
-            }
-          >
-            {row.original.restartCount}
-            {row.original.restartCount > 0 && row.original.lastRestartAt && (
-              <span className="text-fg-fnt">
-                {" "}
-                ({formatAge(row.original.lastRestartAt)} ago)
-              </span>
-            )}
-          </span>
-        ),
-      },
-      {
-        id: "node",
-        header: "Node",
-        cell: ({ row }) =>
-          row.original.nodeName ? (
-            <ResourceRef
-              kind={ResourceType.Node}
-              name={row.original.nodeName}
-              showKind={false}
-            />
-          ) : (
-            <span className="text-fg-fnt">-</span>
-          ),
-      },
-      {
-        id: "ip",
-        header: "IP",
-        cell: ({ row }) => (
-          <CopyableAddress
-            value={row.original.podIp}
-            label="Pod IP"
-            fallback="-"
-            className="text-fg-mut"
-          />
-        ),
-      },
-      createAgeColumn<PodWithMetrics>(),
-    ],
-    []
-  );
 
   const quickActions = useMemo<
     (
@@ -177,6 +187,7 @@ export function PodList() {
         isLoading={isLoading}
         dataUpdatedAt={dataUpdatedAt}
         live={watchLive}
+        resyncing={resyncing}
         getRowId={getResourceRowId}
         columns={columns}
         quickActions={quickActions}

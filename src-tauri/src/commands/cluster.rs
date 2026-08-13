@@ -123,7 +123,10 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
         })?;
     state
         .client_manager
-        .connect_with_kubeconfig(&context, prepared)
+        .set_credential_deadline(&context, prepared.expires_at);
+    state
+        .client_manager
+        .connect_with_kubeconfig(&context, prepared.kubeconfig)
         .await
         .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
 

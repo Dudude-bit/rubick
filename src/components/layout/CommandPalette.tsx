@@ -56,6 +56,7 @@ import {
   aliasOf,
   useClusterIdentityStore,
 } from "@/stores/clusterIdentityStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import type { RecentItem } from "@/generated/types";
@@ -236,6 +237,7 @@ export function CommandPalette() {
   const contexts = useClusterStore((s) => s.contexts);
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const namespaceScope = useNamespaceScope();
   const isConnected = useClusterStore((s) => s.isConnected);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const marks = useClusterIdentityStore((s) => s.marks);
@@ -294,14 +296,19 @@ export function CommandPalette() {
 
   const hitsByContext = useMemo(() => {
     const grouped = new Map<string, Map<string, SearchHit>>();
-    for (const hit of hits) {
+    // The unscoped search asks the cluster for one namespace or for all of
+    // them, so a window narrowed to several has to keep what it wants here —
+    // the same rule the lists follow, and for the same reason.
+    // A search that has deliberately left this cluster's scope keeps every
+    // hit: another cluster's namespaces are not this one's.
+    for (const hit of scoped ? hits : namespaceScope.narrow(hits)) {
       const key = `${hit.kind}/${hit.namespace ?? ""}/${hit.name}`;
       const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
       bucket.set(key, hit);
       grouped.set(hit.context, bucket);
     }
     return grouped;
-  }, [hits]);
+  }, [hits, scoped, namespaceScope]);
 
   const answered = shownClusters.filter(hasAnswered).length;
   /** At least one cluster is still connecting or listing, right now. */

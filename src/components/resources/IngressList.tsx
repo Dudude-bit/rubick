@@ -43,10 +43,15 @@ const getIngressOpenUrl = (ingress: IngressInfo): string | null => {
   return `${scheme}://${host}`;
 };
 
-const baseColumns: ColumnDef<IngressInfo>[] = [
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// eslint-disable-next-line react-refresh/only-export-components
+export const baseColumns: ColumnDef<IngressInfo>[] = [
   createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
   {
+    // An ingress class name: "nginx", "traefik", "alb".
+    size: 110,
     accessorKey: "className",
     header: "Class",
     cell: ({ row }) => (
@@ -54,6 +59,8 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     ),
   },
   {
+    // The column people came to this page to read, and a hostname is long.
+    size: 280,
     accessorKey: "rules",
     header: "Hosts",
     cell: ({ row }) => {
@@ -83,6 +90,8 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     },
   },
   {
+    // "12 paths", with the routes themselves in the tooltip.
+    size: 90,
     id: "paths",
     header: "Paths",
     cell: ({ row }) => {
@@ -105,6 +114,8 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     },
   },
   {
+    // An IPv4 address and a "+2 more" beside it.
+    size: 150,
     accessorKey: "loadBalancerIps",
     header: "Address",
     cell: ({ row }) => {
@@ -129,6 +140,7 @@ const baseColumns: ColumnDef<IngressInfo>[] = [
     },
   },
   {
+    size: 80,
     accessorKey: "tlsHosts",
     header: "TLS",
     cell: ({ row }) => (
@@ -167,7 +179,7 @@ export function IngressList() {
     },
     [toast, watchFailed]
   );
-  useResourceWatch<IngressInfo>({
+  const { resyncing } = useResourceWatch<IngressInfo>({
     enabled: true,
     subscribe,
     queryKey,
@@ -237,6 +249,7 @@ export function IngressList() {
       staleTime={STALE_TIMES.resourceList}
       refresh={watchFailed ? undefined : false}
       live={!watchFailed}
+      resyncing={resyncing}
       searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)

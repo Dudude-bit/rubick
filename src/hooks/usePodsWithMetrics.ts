@@ -84,7 +84,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     () => commands.subscribePodWatch(currentNamespace || null),
     [currentNamespace]
   );
-  useResourceWatch<PodInfo>({
+  const { resyncing } = useResourceWatch<PodInfo>({
     enabled,
     subscribe: subscribePods,
     queryKey,
@@ -100,7 +100,6 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     namespace: currentNamespace || null,
     enabled,
     includeNodes: false,
-    includeCluster: false,
   });
 
   // Merge pods with their metrics - memoized for performance
@@ -117,5 +116,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
     watchLive: !watchFailed,
+    /** It is re-listing: the pods here are the ones from before it started. */
+    resyncing,
   };
 }

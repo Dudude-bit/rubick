@@ -37,23 +37,28 @@ const ContextMenuPortal = ContextMenuPrimitive.Portal;
  * controlled `open`. It is dispatched at the trigger's own bottom-left,
  * because a keyboard event's zeroed coordinates would put the menu in the
  * corner of the window instead of under the control that owns it.
+ *
+ * `openOnClick` is for the trigger that is *only* a menu — a row whose left
+ * click has nothing else to do. Right-click-to-configure is a thing you have
+ * to already know, and a control that looks pressable and does nothing when
+ * pressed is worse than one that does not look pressable at all.
  */
 const ContextMenuTrigger = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger> & {
     /** Keys that open it, on top of the platform's own. */
     openKeys?: readonly string[];
+    /** Whether a plain left click opens it too. */
+    openOnClick?: boolean;
   }
->(({ onKeyDown, openKeys = ["ArrowDown"], ...props }, ref) => (
-  <ContextMenuPrimitive.Trigger
-    ref={ref}
-    aria-keyshortcuts={openKeys.join(" ")}
-    onKeyDown={(event) => {
-      onKeyDown?.(event);
-      if (event.defaultPrevented || !openKeys.includes(event.key)) return;
-      event.preventDefault();
-      const box = event.currentTarget.getBoundingClientRect();
-      event.currentTarget.dispatchEvent(
+>(
+  (
+    { onKeyDown, onClick, openKeys = ["ArrowDown"], openOnClick, ...props },
+    ref
+  ) => {
+    const openAtBottomLeft = (element: HTMLElement) => {
+      const box = element.getBoundingClientRect();
+      element.dispatchEvent(
         new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
@@ -61,10 +66,28 @@ const ContextMenuTrigger = React.forwardRef<
           clientY: box.bottom,
         })
       );
-    }}
-    {...props}
-  />
-));
+    };
+
+    return (
+      <ContextMenuPrimitive.Trigger
+        ref={ref}
+        aria-keyshortcuts={openKeys.join(" ")}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!openOnClick || event.defaultPrevented) return;
+          openAtBottomLeft(event.currentTarget);
+        }}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (event.defaultPrevented || !openKeys.includes(event.key)) return;
+          event.preventDefault();
+          openAtBottomLeft(event.currentTarget);
+        }}
+        {...props}
+      />
+    );
+  }
+);
 ContextMenuTrigger.displayName = ContextMenuPrimitive.Trigger.displayName;
 
 const ContextMenuContent = React.forwardRef<

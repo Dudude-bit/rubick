@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
@@ -24,17 +25,23 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 
-const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// eslint-disable-next-line react-refresh/only-export-components
+export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   createNameColumn<PersistentVolumeClaimInfo>(
     ResourceType.PersistentVolumeClaim
   ),
   createNamespaceColumn<PersistentVolumeClaimInfo>(),
   {
+    size: 110,
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
+    // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
+    size: 300,
     accessorKey: "volume",
     header: "Volume",
     cell: ({ row }) =>
@@ -51,6 +58,7 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   createCapacityColumn<PersistentVolumeClaimInfo>(),
   createAccessModesColumn<PersistentVolumeClaimInfo>(),
   {
+    size: 160,
     accessorKey: "storageClass",
     header: "Storage Class",
     cell: ({ row }) => (
@@ -58,6 +66,7 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     ),
   },
   {
+    size: 80,
     accessorKey: "age",
     header: "Age",
   },
@@ -65,6 +74,7 @@ const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
 
 export function PersistentVolumeClaimList() {
   const { currentNamespace } = useClusterStore();
+  const scope = useNamespaceScope();
   const navigate = useNavigate();
 
   const queryKey = useMemo(
@@ -90,7 +100,7 @@ export function PersistentVolumeClaimList() {
     },
     [toast, watchFailed]
   );
-  useResourceWatch<PersistentVolumeClaimInfo>({
+  const { resyncing } = useResourceWatch<PersistentVolumeClaimInfo>({
     enabled: true,
     subscribe,
     queryKey,
@@ -129,7 +139,7 @@ export function PersistentVolumeClaimList() {
   return (
     <ResourceList<PersistentVolumeClaimInfo>
       title="Persistent Volume Claims"
-      description={`Requests for storage by pods in ${currentNamespace || "all namespaces"}`}
+      description={`Requests for storage by pods in ${scope.inWords}`}
       queryKey={queryKeys.resources(
         ResourceType.PersistentVolumeClaim,
         currentNamespace
@@ -163,6 +173,7 @@ export function PersistentVolumeClaimList() {
       staleTime={STALE_TIMES.resourceList}
       refresh={watchFailed ? undefined : false}
       live={!watchFailed}
+      resyncing={resyncing}
       searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(

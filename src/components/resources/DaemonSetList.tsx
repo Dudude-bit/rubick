@@ -16,22 +16,26 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 
 type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;
 
-const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
+export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
   createNameColumn<DaemonSetInfoWithMetrics>(ResourceType.DaemonSet),
   createNamespaceColumn<DaemonSetInfoWithMetrics>(),
   createCpuColumn<DaemonSetInfoWithMetrics>(),
   createMemoryColumn<DaemonSetInfoWithMetrics>(),
+  // Three counts of nodes, so three columns as wide as their headers.
   {
+    size: 90,
     id: "desired",
     header: "Desired",
     cell: ({ row }) => row.original.desired,
   },
   {
+    size: 90,
     id: "current",
     header: "Current",
     cell: ({ row }) => row.original.current,
   },
   {
+    size: 80,
     id: "ready",
     header: "Ready",
     cell: ({ row }) => {

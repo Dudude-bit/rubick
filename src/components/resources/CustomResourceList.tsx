@@ -95,6 +95,7 @@ export function CustomResourceList({
     // the real anchor. An instance's path is built from the CRD, not from
     // kind and name, which is why this is not a ResourceRef.
     cols.push({
+      size: 320,
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
@@ -114,9 +115,16 @@ export function CustomResourceList({
 
     const vendorColumns = crdView?.columnsFor(crdKind);
 
+    // Neither a vendor's view nor a CRD's printer columns say how wide their
+    // values are, and this is the one table in the app whose shape is decided
+    // by whatever is installed on the cluster. An even share is the only
+    // honest answer; the name column above still gets its own.
+    const UNKNOWN_COLUMN_SIZE = 140;
+
     if (vendorColumns && vendorColumns.length > 0) {
       for (const pc of vendorColumns) {
         cols.push({
+          size: UNKNOWN_COLUMN_SIZE,
           id: pc.id,
           header: pc.header,
           cell: ({ row }) => {
@@ -142,6 +150,7 @@ export function CustomResourceList({
         if (pc.name === "NAME" || pc.name === "AGE") continue;
 
         cols.push({
+          size: UNKNOWN_COLUMN_SIZE,
           id: pc.name.toLowerCase().replace(/\s+/g, "-"),
           header: pc.name,
           cell: ({ row }) => {
@@ -191,7 +200,7 @@ export function CustomResourceList({
     },
     [toast, watchFailed, crdKind]
   );
-  useResourceWatch<CustomResourceListItem>({
+  const { resyncing } = useResourceWatch<CustomResourceListItem>({
     enabled: true,
     subscribe: subscribeCustomResource,
     queryKey: [...queryKey],
@@ -238,6 +247,7 @@ export function CustomResourceList({
       staleTime={STALE_TIMES.resourceList}
       refresh={watchFailed ? "resourceList" : false}
       live={!watchFailed}
+      resyncing={resyncing}
       searchKey="name"
       searchPlaceholder={`Search ${crdKind}...`}
       embedded={embedded}

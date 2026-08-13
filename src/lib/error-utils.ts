@@ -34,16 +34,25 @@ export const ERROR_CODES = {
 type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 /**
- * Determine if an error message indicates a retryable error
+ * Whether an error message says the request is worth making again.
+ *
+ * Matched on whole words, and `network` was the reason why: every Kubernetes
+ * error about an object in `networking.k8s.io` — every Ingress, every
+ * NetworkPolicy — contains the substring, so a flat `403 Forbidden` on an
+ * Ingress classified as a retryable network blip and was retried until it
+ * gave up. A verdict is not a blip: the API server has already decided, and
+ * asking again spends requests to be told the same thing.
  */
 function isRetryableError(message: string): boolean {
-  const lowerMessage = message.toLowerCase();
-  return (
-    lowerMessage.includes("timeout") ||
-    lowerMessage.includes("connection") ||
-    lowerMessage.includes("network") ||
-    lowerMessage.includes("token expired")
-  );
+  const lower = message.toLowerCase();
+  // A refusal wins over anything else in the sentence, including the API
+  // group's own name.
+  if (
+    /\b(forbidden|unauthorized|not found|invalid|already exists)\b/.test(lower)
+  ) {
+    return false;
+  }
+  return /\b(timeout|timed out|connection|network|token expired)\b/.test(lower);
 }
 
 /**

@@ -2,10 +2,10 @@
 //!
 //! Replaces the old 2-second polling model with a `kube::runtime::watcher`
 //! per (cluster, kind, namespace) tuple. The watcher streams `applied`
-//! / `deleted` / `restarted` events; we forward each to the frontend
-//! over the same broadcast channel as the rest of the app's events.
-//! The frontend updates the TanStack Query cache directly via
-//! `setQueryData` — no refetch round-trip.
+//! / `deleted` / `restarted` events; we collect them into ~50ms batches
+//! and forward those to the frontend over the same broadcast channel as
+//! the rest of the app's events. The frontend updates the TanStack
+//! Query cache directly via `setQueryData` — no refetch round-trip.
 //!
 //! Same deferred-start handshake as terminal-auth and log-stream lives
 //! here too: the spawned watcher task blocks on a oneshot gate until
@@ -16,7 +16,7 @@
 //! could land in the void.
 //!
 //! - `session`: WatchSession bookkeeping + RAII cleanup guard
-//! - `event`:   kube watcher Event → AppEvent::ResourceWatchEvent
+//! - `event`:   kube watcher Events → batched AppEvent::ResourceWatchEvent
 
 mod event;
 mod failure;
@@ -25,7 +25,7 @@ mod session;
 pub use session::WatchSession;
 
 use crate::error::{Error, Result};
-use crate::state::{AppEvent, WatchOp};
+use crate::state::AppEvent;
 use crate::utils::generate_id;
 use dashmap::DashMap;
 use futures::StreamExt;
@@ -37,8 +37,9 @@ use kube::{Api, Client};
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
+use tokio::time::{interval, MissedTickBehavior};
 
-use event::emit_event;
+use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
 use failure::FailureLatch;
 use session::WatchCleanup;
 
@@ -252,17 +253,32 @@ impl WatchManager {
             // tested state machine.
             let mut latch = FailureLatch::new();
 
+            // Changes are collected and flushed on a timer instead of
+            // being emitted one by one — see `event::FLUSH_INTERVAL`.
+            let mut batch = WatchBatch::new(stream_id_clone.clone());
+            let mut flush_timer = interval(FLUSH_INTERVAL);
+            // First tick fires immediately; skip it so an empty buffer
+            // doesn't emit right after subscribe.
+            flush_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            flush_timer.tick().await;
+
             loop {
                 tokio::select! {
+                    biased;
                     _ = &mut cancel_rx => {
                         tracing::debug!("Resource watch {} cancelled", stream_id_clone);
                         break;
+                    }
+                    _ = flush_timer.tick() => {
+                        batch.flush(&event_tx);
                     }
                     next = stream.next() => {
                         match next {
                             Some(Ok(event)) => {
                                 latch.record_success();
-                                emit_event(&event_tx, &stream_id_clone, event, &transform);
+                                if batch.push(event, &transform) {
+                                    batch.flush(&event_tx);
+                                }
                             }
                             Some(Err(e)) => {
                                 let should_emit = latch.record_error();
@@ -273,12 +289,12 @@ impl WatchManager {
                                     e
                                 );
                                 if should_emit {
-                                    let _ = event_tx.send(AppEvent::ResourceWatchEvent {
-                                        stream_id: stream_id_clone.clone(),
-                                        op: WatchOp::Failed,
-                                        resource: None,
-                                        error: Some(e.to_string()),
-                                    });
+                                    // Whatever is buffered was still true when
+                                    // it arrived; it goes out before the
+                                    // failure so the list the reader falls back
+                                    // on is not needlessly behind.
+                                    batch.flush(&event_tx);
+                                    emit_failure(&event_tx, &stream_id_clone, e.to_string());
                                 }
                             }
                             None => {
@@ -292,6 +308,10 @@ impl WatchManager {
                     }
                 }
             }
+
+            // Nothing is left to trigger a flush for what the last tick
+            // did not cover.
+            batch.flush(&event_tx);
         });
 
         stream_id

@@ -29,7 +29,6 @@ export const queryKeys = {
       namespace ?? "all",
     ],
     nodes: (): string[] => ["metrics", "nodes"],
-    cluster: (): string[] => ["metrics", "cluster"],
   },
 
   // Events
