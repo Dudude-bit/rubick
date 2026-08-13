@@ -167,8 +167,8 @@ export function ContainerRows(props: ContainerRowsProps) {
     // workload — and the reader has to be able to tell the two apart.
     return (
       <p className="text-xs text-fg-fnt">
-        No containers in this spec — nothing to inspect, and nothing an image
-        or a probe could be read from.
+        No containers in this spec — nothing to inspect, and nothing an image or
+        a probe could be read from.
       </p>
     );
   }

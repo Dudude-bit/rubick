@@ -3,10 +3,7 @@
 //! Tauri commands for fetching resource usage metrics from Kubernetes Metrics API
 
 use crate::error::Result;
-use crate::metrics::{
-    get_cluster_metrics as fetch_cluster_metrics, get_node_metrics, get_pod_metrics,
-    ClusterMetricsResponse, NodeMetricsResponse, PodMetricsResponse,
-};
+use crate::metrics::{get_node_metrics, get_pod_metrics, NodeMetricsResponse, PodMetricsResponse};
 use crate::state::AppState;
 use tauri::State;
 
@@ -23,10 +20,4 @@ pub async fn get_pods_metrics(
 #[tauri::command]
 pub async fn get_nodes_metrics(state: State<'_, AppState>) -> Result<NodeMetricsResponse> {
     get_node_metrics(&state).await
-}
-
-/// Get aggregated cluster metrics
-#[tauri::command]
-pub async fn get_cluster_metrics(state: State<'_, AppState>) -> Result<ClusterMetricsResponse> {
-    fetch_cluster_metrics(&state).await
 }

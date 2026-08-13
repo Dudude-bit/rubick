@@ -11,7 +11,8 @@ mod events;
 mod sessions;
 
 pub use events::{
-    is_missing_previous_run, readable_cause, AppEvent, LogLineEvent, StreamFailureKind, WatchOp,
+    is_missing_previous_run, readable_cause, AppEvent, LogLineEvent, StreamFailureKind,
+    WatchChange, WatchOp,
 };
 pub use sessions::{AuthSessionControl, LogStream, PortForwardSession, Session};
 

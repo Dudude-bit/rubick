@@ -33,6 +33,7 @@ import { describeStop } from "@/lib/connections";
 import type { ChainStop, CustomResourceInfo } from "@/generated/types";
 import { crdObjectPath, plural } from "../kit";
 import {
+  Chain,
   Cell,
   Column,
   FilterBox,
@@ -327,7 +328,7 @@ function HostRow({
       }
     >
       <Rules group={group} sources={sources} />
-      {sources && <Chain group={group} sources={sources} />}
+      {sources && <HostChain group={group} sources={sources} />}
       <Findings group={group} />
     </TroubleRow>
   );
@@ -417,7 +418,7 @@ function RuleRow({
 
 // --- the chain ----------------------------------------------------------
 
-function Chain({
+function HostChain({
   group,
   sources,
 }: {
@@ -450,7 +451,7 @@ function Chain({
             : describeMatch(route.matches[0])}
         </span>
       )}
-      <div className="grid grid-cols-5">
+      <Chain>
         <Column label="Gateway">
           {group.meshOnly ? (
             <Cell under="no edge listener">in-mesh only</Cell>
@@ -548,7 +549,7 @@ function Chain({
             </Cell>
           )}
         </Column>
-      </div>
+      </Chain>
       {unread.length > 0 && <RawMatches matches={unread} />}
     </div>
   );

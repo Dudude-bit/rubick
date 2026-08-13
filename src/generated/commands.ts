@@ -11,7 +11,6 @@ import type {
   CliAvailability,
   CliPathsConfig,
   ClusterInfo,
-  ClusterMetricsResponse,
   ClusterOverview,
   ClusterPreferences,
   ClusterStats,
@@ -84,8 +83,6 @@ import type {
   ReplicaSetInfo,
   ResourceConnections,
   ResourceFilters,
-  ResourceListItem,
-  ResourceQuery,
   ResourceReferences,
   RolloutStatus,
   SearchHandle,
@@ -400,10 +397,6 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
 }
 
-export async function getClusterMetrics(): Promise<ClusterMetricsResponse> {
-  return invoke<ClusterMetricsResponse>("get_cluster_metrics");
-}
-
 export async function getReplicaset(
   name: string,
   namespace: string | null
@@ -493,12 +486,6 @@ export async function getRolloutStatus(
   namespace: string | null
 ): Promise<RolloutStatus> {
   return invoke<RolloutStatus>("get_rollout_status", { name, namespace });
-}
-
-export async function listResources(
-  query: ResourceQuery
-): Promise<ResourceListItem[]> {
-  return invoke<ResourceListItem[]>("list_resources", { query });
 }
 
 export async function listStatefulsets(

@@ -16,7 +16,7 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 
 type StatefulSetInfoWithMetrics = StatefulSetInfo & ResourceMetrics;
 
-const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
+export const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
   createNameColumn<StatefulSetInfoWithMetrics>(ResourceType.StatefulSet),
   createNamespaceColumn<StatefulSetInfoWithMetrics>(),
   createCpuColumn<StatefulSetInfoWithMetrics>(),

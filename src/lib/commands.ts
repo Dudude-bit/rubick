@@ -1,5 +1,10 @@
 import * as generatedCommands from "@/generated/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import {
+  credentialsExpired,
+  expiryReason,
+  isCredentialsExpired,
+} from "@/lib/credentials";
 
 type AsyncFn = (...args: unknown[]) => Promise<unknown>;
 type Wrapped<T> = {
@@ -14,10 +19,18 @@ export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
       return await fn(...args);
     } catch (error) {
       const name = commandName ?? (fn.name || "unknown");
-      throw new Error(
-        `Tauri command '${name}' failed: ${normalizeTauriError(error)}`,
-        { cause: error }
-      );
+      const message = normalizeTauriError(error);
+      // Every call in the app comes through here, which is the whole reason
+      // the check is here: a 401 is not about the request that got it — the
+      // session is over and every other request is failing too. Noticing it
+      // once, centrally, is what stops each surface having to recognise it
+      // and stops the next command added from forgetting to.
+      if (isCredentialsExpired(message)) {
+        credentialsExpired(expiryReason(message));
+      }
+      throw new Error(`Tauri command '${name}' failed: ${message}`, {
+        cause: error,
+      });
     }
   }) as T;
 }

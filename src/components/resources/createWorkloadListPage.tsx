@@ -39,6 +39,7 @@ import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
 import {
   attachAggregatedPodMetrics,
+  type PodMatcher,
   type ResourceMetrics,
 } from "@/lib/metrics";
 import { MetricsStatusBanner } from "@/components/metrics";
@@ -49,7 +50,6 @@ import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
-import type { PodInfo } from "@/generated/types";
 
 type Workload = { name: string; namespace: string };
 
@@ -61,10 +61,11 @@ export interface WorkloadListPageConfig<T extends Workload> {
   /** Fetch the workload list (without metrics). */
   fetchList: (params: { namespace: string | null }) => Promise<T[]>;
   /**
-   * Predicate: does this pod belong to this workload? Used to aggregate
-   * pod CPU/memory up to the workload row.
+   * Which pods belong to a workload of this kind, used to aggregate pod
+   * CPU/memory up to the workload row. One of the `match*Pods` matchers
+   * in `@/lib/metrics`.
    */
-  matchPods: (workload: T, pod: PodInfo) => boolean;
+  matchPods: PodMatcher;
   /** Delete this workload. */
   deleter: (item: T) => Promise<unknown>;
   /** Build columns. T includes the attached `cpuMillicores` and `memoryBytes`. */
@@ -130,7 +131,7 @@ export function createWorkloadListPage<T extends Workload>(
       watchFactory && !watchFailed ? ({ refresh: false } as const) : undefined
     );
 
-    useResourceWatch<T>({
+    const { resyncing } = useResourceWatch<T>({
       enabled: !!watchFactory,
       subscribe,
       queryKey,
@@ -186,7 +187,16 @@ export function createWorkloadListPage<T extends Workload>(
         <ResourceList<T & ResourceMetrics>
           title={config.title}
           data={dataWithMetrics}
-          isLoading={listQuery.isLoading || isLoadingPods}
+          // A resync holds the rows it has until the new state is
+          // complete, so there is normally something to show. With
+          // nothing to show, "still finding out" is the skeleton — the
+          // empty state would be claiming the scope holds none of these
+          // while the answer is still arriving.
+          isLoading={
+            listQuery.isLoading ||
+            isLoadingPods ||
+            (resyncing && dataWithMetrics.length === 0)
+          }
           dataUpdatedAt={listQuery.dataUpdatedAt}
           live={!!watchFactory && !watchFailed}
           slowed={listQuery.freshness.slowed}

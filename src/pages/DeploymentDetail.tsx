@@ -140,7 +140,6 @@ export function DeploymentDetail() {
   const { podStatus } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
-    includeCluster: false,
     enabled: !!deployment,
   });
 

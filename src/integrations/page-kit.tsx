@@ -14,7 +14,14 @@
  * each vendor's own, because that is the whole of what the page is for.
  */
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ChevronRight, ExternalLink, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -239,12 +246,42 @@ export function Cell({
   );
 }
 
+/**
+ * A chain: labelled columns in the order a request crosses them.
+ *
+ * The columns used to be a bare `grid grid-cols-5` at each call site and the
+ * boxes sat in five unconnected stacks — a table of cells that the reader had
+ * to be told was a sequence. The join is what makes it read as one path, and
+ * it is drawn here so all five chains in the app agree about it rather than
+ * each page inventing its own.
+ */
+export function Chain({ children }: { children: ReactNode }) {
+  const columns = Children.toArray(children);
+  return (
+    <div
+      className="grid"
+      style={{
+        gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+      }}
+    >
+      {columns.map((column, index) =>
+        isValidElement<{ linked?: boolean }>(column)
+          ? cloneElement(column, { linked: index > 0 })
+          : column
+      )}
+    </div>
+  );
+}
+
 /** One labelled column of a chain. */
 export function Column({
   label,
+  linked,
   children,
 }: {
   label: string;
+  /** Set by {@link Chain} on every column after the first. */
+  linked?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -252,7 +289,20 @@ export function Column({
       <span className="mb-1.5 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
         {label}
       </span>
-      <div className="flex flex-col gap-1.5">{children}</div>
+      <div className="relative flex flex-col gap-1.5">
+        {/* Decorative: the columns are labelled and ordered, so the join says
+            nothing a screen reader is not already told. */}
+        {linked && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -left-3 top-[9px] flex w-3 items-center"
+          >
+            <span className="h-px flex-1 bg-hair" />
+            <ChevronRight className="-ml-[3px] size-2.5 flex-none text-fg-fnt" />
+          </span>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

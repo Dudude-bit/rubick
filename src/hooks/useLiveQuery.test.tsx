@@ -6,7 +6,7 @@
  * instead of sitting under a word that means "as it happens".
  */
 
-import { act } from "react";
+import { act, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -18,10 +18,11 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
 import { FileText, LayoutGrid } from "lucide-react";
-import { BACKOFF, REFRESH_INTERVALS } from "@/lib/refresh";
+import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import { BACKOFF, REFRESH_INTERVALS, type RefreshRate } from "@/lib/refresh";
 import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useLiveQuery } from "./useLiveQuery";
+import { useLiveQueries, useLiveQuery } from "./useLiveQuery";
 
 const RATE = REFRESH_INTERVALS.resourceList;
 
@@ -44,6 +45,71 @@ function Probe({ answer = "same" }: { answer?: string }) {
   return (
     <>
       <span data-testid="data">{data}</span>
+      <DataFreshness
+        dataUpdatedAt={freshness.dataUpdatedAt}
+        slowed={freshness.slowed}
+      />
+    </>
+  );
+}
+
+/**
+ * The same question asked of several namespaces at once — the shape a scoped
+ * overview and a scoped events feed take, and the one whose cost is
+ * multiplied by something the reader picked.
+ *
+ * `onInterval` records every rate the group settles on, including the ones it
+ * only holds for a task: a flicker between two intervals is invisible to an
+ * assertion made after the dust has settled, and it is the whole bug in the
+ * four-part case below.
+ */
+function Fanout({
+  parts = 2,
+  moving = false,
+  refresh = "resourceList",
+  stagger = 0,
+  onInterval,
+}: {
+  parts?: number;
+  moving?: boolean;
+  refresh?: RefreshRate;
+  /**
+   * How far apart the parts answer. Zero resolves them in one flush, which is
+   * a fan-out no real cluster produces: four IPC responses arrive in four
+   * separate tasks, and a rule that counts answers rather than rounds can only
+   * be caught in the gaps between them.
+   */
+  stagger?: number;
+  onInterval?: (everyMs: number | false) => void;
+}) {
+  const names = Array.from({ length: parts }, (_, index) =>
+    String.fromCharCode(97 + index)
+  );
+  const { data, freshness } = useLiveQueries<string>({
+    refresh,
+    queries: names.map((name, index) => ({
+      queryKey: [name],
+      queryFn: async () => {
+        if (stagger > 0) {
+          await new Promise((resolve) => setTimeout(resolve, index * stagger));
+        }
+        reads++;
+        // One part that answers differently every time, for the case where
+        // the group must not be allowed to go quiet.
+        return moving && name === names[names.length - 1]
+          ? String(reads)
+          : name;
+      },
+      staleTime: 0,
+    })),
+  });
+  const { everyMs } = freshness;
+  useEffect(() => {
+    onInterval?.(everyMs);
+  }, [everyMs, onInterval]);
+  return (
+    <>
+      <span data-testid="data">{data.map((part) => part ?? "").join("")}</span>
       <DataFreshness
         dataUpdatedAt={freshness.dataUpdatedAt}
         slowed={freshness.slowed}
@@ -227,6 +293,117 @@ describe("what a backed-off query says about itself", () => {
 
   it("comes back up to rate the moment the reader touches the window", async () => {
     wrap(<Probe />);
+    await settle();
+    for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
+      await advance(RATE * 2);
+    }
+    expect(screen.getByText("slowed")).toBeInTheDocument();
+
+    act(() => {
+      useWindowActivity.setState({ interactionAt: Date.now() });
+    });
+    await settle();
+    expect(screen.getByText("polling")).toBeInTheDocument();
+  });
+});
+
+describe("one question asked of several namespaces", () => {
+  /**
+   * Would put the fan-out's whole cost back. A page reading four namespaces
+   * at the fast rate is four requests a second, and the one rule that stops
+   * an idle screen paying it is the one a group had no way to apply.
+   */
+  it("goes quiet when every part has stopped changing", async () => {
+    wrap(<Fanout />);
+    await settle();
+    for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
+      await advance(RATE * 2);
+    }
+    expect(screen.getByText("slowed")).toBeInTheDocument();
+
+    const settled = reads;
+    // A minute of two queries at the base rate is sixty reads. Backed off,
+    // it is a handful — the interval is still climbing to the cap.
+    await advance(BACKOFF.cap * 2);
+    expect(reads - settled).toBeLessThan(10);
+  });
+
+  /**
+   * Would be the worse failure of the two: a scope where one namespace is
+   * quiet and one is on fire is exactly when the reader is watching, and the
+   * join is not steady while any part of it is still moving.
+   */
+  it("stays at full rate while one part is still moving", async () => {
+    wrap(<Fanout moving />);
+    await settle();
+    for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
+      await advance(RATE * 2);
+    }
+    expect(screen.getByText("polling")).toBeInTheDocument();
+    expect(screen.queryByText("slowed")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Would put back the one shape where counting arrivals rather than rounds
+   * shows: at the scope limit, three quiet parts reach `steadyAfter` on their
+   * own in the gap between two answers from a fourth that is changing every
+   * poll. The rate then flipped between 1s and 2s once a second and the badge
+   * over moving data flipped between "polling" and "slowed" with it — both
+   * invisible to an assertion made after the round has finished, which is why
+   * every interval the group holds is recorded.
+   */
+  it("never slows a group at the scope limit while one part keeps changing", async () => {
+    const held: Array<number | false> = [];
+    wrap(
+      <Fanout
+        parts={SCOPE_LIMIT}
+        moving
+        refresh="fast"
+        stagger={10}
+        onInterval={(everyMs) => {
+          held.push(everyMs);
+        }}
+      />
+    );
+    for (let round = 0; round <= BACKOFF.steadyAfter * 2; round++) {
+      await advance(REFRESH_INTERVALS.fast);
+    }
+
+    expect([...new Set(held)]).toEqual([REFRESH_INTERVALS.fast]);
+    expect(screen.queryByText("slowed")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The promise the whole licence to back off rests on, for the one shape
+   * that cannot keep it query by query: a fan-out switches React Query's own
+   * focus refetch off precisely because it is a fan-out, so nothing but the
+   * group is left to re-read it.
+   */
+  it("re-reads every part on the way back to the window", async () => {
+    wrap(<Fanout />);
+    await settle();
+
+    act(() => {
+      useWindowActivity.setState({ visible: false, focused: false });
+    });
+    await advance(RATE * 5);
+    const whileHidden = reads;
+
+    act(() => {
+      useWindowActivity.setState({ visible: true, focused: true });
+    });
+    await settle();
+    expect(reads).toBe(whileHidden + 2);
+  });
+
+  /**
+   * A group that has gone quiet is a conclusion about a still screen, and a
+   * reader clicking about in one is evidence against it. Without this, an
+   * events page fanned out over four namespaces stayed at the 30s cap for as
+   * long as the reader kept it open.
+   */
+  it("comes back up to rate the moment the reader touches the window", async () => {
+    wrap(<Fanout />);
     await settle();
     for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
       await advance(RATE * 2);

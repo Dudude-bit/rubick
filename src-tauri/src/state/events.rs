@@ -27,9 +27,19 @@ pub enum WatchOp {
     Applied,
     /// Resource was deleted.
     Deleted,
-    /// Watcher restarted (resync) — frontend should clear its cache
-    /// before the burst of `applied` events that follows.
+    /// A (re)sync started. What follows, up to the matching `synced`,
+    /// is the complete new state — but it is only complete once
+    /// `synced` arrives, so the frontend stages the burst instead of
+    /// clearing what it holds. Clearing here is what painted "no
+    /// resources in the current scope" over a healthy cluster for the
+    /// whole length of the burst: the list query is long since loaded,
+    /// so nothing renders a skeleton, and a resync is exactly when an
+    /// apiserver restart or a "too old resource version" makes a
+    /// reader look at their cluster.
     Restarted,
+    /// The resync is complete: what was staged since `restarted` is
+    /// the whole collection and can be swapped in as one update.
+    Synced,
     /// Watch failed N times in a row without recovery (typically RBAC
     /// `watch` verb missing, or kube-apiserver unreachable). The
     /// frontend should fall back to periodic refresh and tell the
@@ -38,6 +48,16 @@ pub enum WatchOp {
     /// state and a fresh `failed` would only be emitted after another
     /// streak of errors.
     Failed,
+}
+
+/// One change inside a `ResourceWatchEvent` batch.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WatchChange {
+    pub op: WatchOp,
+    /// The transformed resource on `applied`/`deleted`. `None` on the
+    /// resync markers and on `failed`, which say something about the
+    /// stream rather than about an object.
+    pub resource: Option<serde_json::Value>,
 }
 
 /// Why a long-lived stream stopped without the frontend asking it to.
@@ -176,18 +196,23 @@ pub enum AppEvent {
         stream_id: String,
         lines: Vec<LogLineEvent>,
     },
-    /// One Kubernetes watch event for a resource of a known kind.
-    /// Forwarded to the frontend so it can update the TanStack Query
-    /// cache directly, replacing the old 2s polling refresh model.
-    /// The `resource` JSON is the typed resource serialized via
-    /// the same path the existing list/get commands use.
+    /// A batch of Kubernetes watch changes for one stream. Forwarded
+    /// to the frontend so it can update the TanStack Query cache
+    /// directly, replacing the old 2s polling refresh model. Each
+    /// `resource` JSON is the typed resource serialized via the same
+    /// path the existing list/get commands use.
+    ///
+    /// Batched for the same reason as `LogBatch`: one Tauri event per
+    /// watch event is one JS task per watch event, which React cannot
+    /// batch across, so a thousand-object init burst cost a thousand
+    /// renders — each rebuilding the whole table — and a thousand
+    /// slots in a broadcast channel that holds a thousand.
+    ///
+    /// `changes` is in arrival order and never empty.
     ResourceWatchEvent {
         stream_id: String,
-        op: WatchOp,
-        /// Set on `applied`/`deleted`. None on `restarted` resyncs
-        /// and on `failed` events.
-        resource: Option<serde_json::Value>,
-        /// Set on `failed` events with the error string (RBAC
+        changes: Vec<WatchChange>,
+        /// Set on `failed` batches with the error string (RBAC
         /// denial, network error, etc.). None for every other op.
         error: Option<String>,
     },
@@ -341,13 +366,11 @@ impl AppEvent {
             }),
             AppEvent::ResourceWatchEvent {
                 stream_id,
-                op,
-                resource,
+                changes,
                 error,
             } => serde_json::json!({
                 "stream_id": stream_id,
-                "op": op,
-                "resource": resource,
+                "changes": changes,
                 "error": error,
             }),
             AppEvent::SearchHits {
@@ -542,6 +565,14 @@ mod tests {
                 matched: 0,
                 truncated: false,
             },
+            AppEvent::ResourceWatchEvent {
+                stream_id: "rw-1".into(),
+                changes: vec![WatchChange {
+                    op: WatchOp::Applied,
+                    resource: Some(serde_json::json!({ "name": "api-0" })),
+                }],
+                error: None,
+            },
         ];
 
         for event in &samples {
@@ -628,6 +659,47 @@ mod tests {
         for (event, expected) in cases {
             assert_eq!(event.channel(), expected);
         }
+    }
+
+    /// The frontend reads `changes` as a list and switches on each
+    /// `op` as a bare lowercase string. A batch arriving as anything
+    /// but an array — or an op serialized as `Synced` — means every
+    /// consumer silently applies nothing.
+    #[test]
+    fn resource_watch_payload_carries_an_ordered_list_of_ops() {
+        let payload = AppEvent::ResourceWatchEvent {
+            stream_id: "rw-1".into(),
+            changes: vec![
+                WatchChange {
+                    op: WatchOp::Restarted,
+                    resource: None,
+                },
+                WatchChange {
+                    op: WatchOp::Applied,
+                    resource: Some(serde_json::json!({ "name": "api-0" })),
+                },
+                WatchChange {
+                    op: WatchOp::Synced,
+                    resource: None,
+                },
+            ],
+            error: None,
+        }
+        .payload();
+
+        let changes = payload
+            .get("changes")
+            .and_then(|c| c.as_array())
+            .expect("changes must be a JSON array");
+        let ops: Vec<_> = changes
+            .iter()
+            .map(|c| c.get("op").and_then(|o| o.as_str()).unwrap())
+            .collect();
+        assert_eq!(ops, vec!["restarted", "applied", "synced"]);
+        assert_eq!(
+            changes[1].get("resource").and_then(|r| r.get("name")),
+            Some(&serde_json::json!("api-0")),
+        );
     }
 
     /// The frontend switches on `kind` as a bare lowercase string

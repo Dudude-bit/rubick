@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
@@ -29,6 +29,8 @@ import {
   detectProvider,
   providerLabel,
 } from "@/lib/cluster-identity";
+import { SCOPE_LIMIT, scopeLabel } from "@/lib/namespace-scope";
+import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import {
@@ -38,12 +40,11 @@ import {
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   tabRouteLabel,
+  tabScope,
   tabTitle,
   useScopeTabStore,
   type ScopeTab,
 } from "@/stores/scopeTabStore";
-
-const ALL_NAMESPACES = "all namespaces";
 
 /**
  * The window's tab strip. A tab is a route plus the scope it is read under,
@@ -73,6 +74,7 @@ const ALL_NAMESPACES = "all namespaces";
 export function ScopeTabs() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const namespaceScope = useClusterStore((s) => s.namespaceScope);
   const isConnected = useClusterStore((s) => s.isConnected);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
@@ -129,10 +131,15 @@ export function ScopeTabs() {
     () =>
       tabs.map((tab) =>
         tab.id === activeId && !tab.missing
-          ? { ...tab, context: currentContext, namespace: currentNamespace }
+          ? {
+              ...tab,
+              context: currentContext,
+              namespace: currentNamespace,
+              scope: namespaceScope,
+            }
           : tab
       ),
-    [tabs, activeId, currentContext, currentNamespace]
+    [tabs, activeId, currentContext, currentNamespace, namespaceScope]
   );
 
   const multiCluster =
@@ -271,9 +278,10 @@ function ScopeTabItem({
   /** The strip has somewhere to fall back to if this tab goes. */
   closable: boolean;
 }) {
-  const { context, namespace } = tab;
+  const { context } = tab;
+  const scope = tabScope(tab);
   const switchContext = useClusterStore((s) => s.switchContext);
-  const switchNamespace = useClusterStore((s) => s.switchNamespace);
+  const setNamespaceScope = useClusterStore((s) => s.setNamespaceScope);
   const connect = useClusterStore((s) => s.connect);
   const activateTab = useScopeTabStore((s) => s.activateTab);
   const closeTab = useScopeTabStore((s) => s.closeTab);
@@ -472,10 +480,10 @@ function ScopeTabItem({
           <NamespacePopover
             open={open === "ns"}
             onOpenChange={guard("ns")}
-            namespace={namespace}
-            onSelect={(next) => {
-              setOpen(null);
-              switchNamespace(next);
+            scope={scope}
+            onSelect={(next, keepOpen) => {
+              if (!keepOpen) setOpen(null);
+              setNamespaceScope(next);
             }}
           >
             <button
@@ -489,9 +497,7 @@ function ScopeTabItem({
                 "min-w-[3.5rem] [flex-shrink:6]"
               )}
             >
-              <span className="min-w-0 truncate">
-                {namespace || ALL_NAMESPACES}
-              </span>
+              <span className="min-w-0 truncate">{scopeLabel(scope)}</span>
               <span aria-hidden="true" className="flex-none text-[9px]">
                 ▾
               </span>
@@ -533,7 +539,7 @@ function ScopeTabItem({
       <TooltipContent side="bottom" align="start" className="max-w-[340px]">
         <p className="text-fg">{route}</p>
         <p className="truncate font-mono">
-          {context ?? "no cluster"} / {namespace || ALL_NAMESPACES}
+          {context ?? "no cluster"} / {scopeLabel(scope)}
         </p>
         {tab.missing && (
           <p className="mt-0.5">
@@ -623,71 +629,251 @@ function ContextPopover({
   );
 }
 
+/** One row of the namespace list, and everything the row is drawn from. */
+interface NamespaceOption {
+  /** `""` is "All namespaces", which is the absence of a selection. */
+  key: string;
+  label: string;
+  mono: boolean;
+  podCount: number;
+  problemCount: number;
+  selected: boolean;
+  /** The selection is full, so this row can only be opened on its own. */
+  closed: boolean;
+}
+
+/**
+ * One namespace, or several.
+ *
+ * A plain click *replaces* the selection and shuts the list, because that is
+ * what this control has always done and what it is used for dozens of times
+ * an hour. Holding the platform's multi-select key toggles instead and leaves
+ * the list open, which is the same gesture a file manager and every list in
+ * this app's tables already use — so the frequent job costs exactly what it
+ * used to and the new one costs a modifier.
+ *
+ * ## Why the rows are options with nothing inside them
+ *
+ * A row used to be a `role="option"` holding two buttons, a checkbox and a
+ * label. `option` carries *children presentational* in ARIA 1.2: assistive
+ * tech is specified to flatten whatever is inside it, so neither button was
+ * reachable through it and both their labels folded into one accessible name
+ * — including the explanation of why the checkbox had gone quiet at the
+ * ceiling, which was also `disabled` and therefore out of the tab order
+ * entirely. It cost two tab stops per row as well, which on a sixty-namespace
+ * cluster is a hundred and twenty presses to cross the list.
+ *
+ * So the list is a filtered listbox driven from the filter box — the shape
+ * `LogQuery` already uses. The caret never leaves the input, the rows are
+ * named by `aria-activedescendant`, and the whole popover is one tab stop.
+ * `Enter` replaces the selection and `mod+Enter` toggles: the keyboard
+ * spelling of the two gestures the mouse has, rather than a third vocabulary.
+ *
+ * The checkbox stays a hit target for the mouse, and only for the mouse: a
+ * modifier is not an affordance, and somebody who has never held one still
+ * has to be able to build a selection by clicking. It is not a control of its
+ * own — it cannot be, inside an option — and everything it does the keyboard
+ * does with the modifier.
+ *
+ * Only *adding* stops at `SCOPE_LIMIT`. Replacing the selection with one
+ * namespace is always allowed, so the ceiling never gets between a reader and
+ * the namespace they are trying to open. The footer is both the filter box's
+ * description and a live region, so the ceiling is spoken before it bites and
+ * the refusal is spoken when it does.
+ */
 function NamespacePopover({
   children,
   open,
   onOpenChange,
-  namespace,
+  scope,
   onSelect,
 }: {
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  namespace: string;
-  onSelect: (namespace: string) => void;
+  scope: string[];
+  onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
   const { namespaces, podCount } = useClusterSummary();
   const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(-1);
+  /** The namespace the ceiling has just turned down, until anything else
+   *  happens. A refusal nobody is told about is a control that broke. */
+  const [refused, setRefused] = useState<string | null>(null);
+  const listId = useId();
+  const noteId = `${listId}-note`;
 
   const needle = filter.trim().toLowerCase();
   const visible = needle
     ? namespaces.filter((ns) => ns.name.toLowerCase().includes(needle))
     : namespaces;
 
+  const full = scope.length >= SCOPE_LIMIT;
+
+  // One array, so the cursor is an index into what is actually on screen and
+  // "All namespaces" is arrowed onto like any other row.
+  const rows: NamespaceOption[] = [
+    {
+      key: "",
+      label: "All namespaces",
+      mono: false,
+      podCount,
+      problemCount: 0,
+      selected: scope.length === 0,
+      closed: false,
+    },
+    ...visible.map((ns) => ({
+      key: ns.name,
+      label: ns.name,
+      mono: true,
+      podCount: ns.podCount,
+      problemCount: ns.problemCount,
+      selected: scope.includes(ns.name),
+      closed: full && !scope.includes(ns.name),
+    })),
+  ];
+
+  // A cursor left pointing past a list the filter has shortened is not a row.
+  const at = cursor < rows.length ? cursor : -1;
+
+  // The caret stays in the input, so the browser will not bring the arrowed
+  // row into view. Optional call because jsdom does not implement it.
+  useEffect(() => {
+    if (at < 0) return;
+    document
+      .getElementById(`${listId}-${at}`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [at, listId]);
+
+  const replace = (row: NamespaceOption) => {
+    setRefused(null);
+    onSelect(row.key === "" ? [] : [row.key], false);
+  };
+
+  const toggle = (row: NamespaceOption) => {
+    // "All" is the absence of a selection, so it clears one rather than
+    // joining it — there is nothing for it to be added to.
+    if (row.key === "") {
+      replace(row);
+      return;
+    }
+    if (row.selected) {
+      setRefused(null);
+      onSelect(
+        scope.filter((entry) => entry !== row.key),
+        true
+      );
+      return;
+    }
+    // Adding past the ceiling refuses and says so. Replacing the selection
+    // instead would throw away four namespaces on a gesture that asked to
+    // keep them.
+    if (full) {
+      setRefused(row.key);
+      return;
+    }
+    setRefused(null);
+    onSelect([...scope, row.key], true);
+  };
+
+  const note = refused
+    ? `Cannot watch ${refused} as well — ${SCOPE_LIMIT} namespaces is the most one window reads at once. Open it on its own instead.`
+    : full
+      ? `${scope.length} namespaces — the most one window reads at once.`
+      : scope.length > 1
+        ? `${scope.length} of ${SCOPE_LIMIT} namespaces — every list is narrowed to them.`
+        : `${formatShortcut("mod")}-click or ${formatShortcut("mod+Enter")}, or the box, to watch up to ${SCOPE_LIMIT} at once.`;
+
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (!next) setFilter("");
+        if (!next) {
+          setFilter("");
+          setCursor(-1);
+          setRefused(null);
+        }
         onOpenChange(next);
       }}
     >
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-[268px] p-0">
         <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
-          <Search className="h-3 w-3 flex-none" />
+          <Search aria-hidden="true" className="h-3 w-3 flex-none" />
           <input
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setCursor(-1);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const step = event.key === "ArrowDown" ? 1 : -1;
+                const next = at + step;
+                setCursor(next < 0 ? rows.length - 1 : next % rows.length);
+                return;
+              }
+              if (event.key !== "Enter") return;
+              // Enter with nothing arrowed onto is the filter's own answer:
+              // type three letters, press it, and you are in that namespace —
+              // which is the frequent job done without touching the mouse.
+              const row =
+                at >= 0
+                  ? rows[at]
+                  : needle !== "" && visible.length > 0
+                    ? rows[1]
+                    : undefined;
+              if (!row) return;
+              event.preventDefault();
+              if (event.metaKey || event.ctrlKey) toggle(row);
+              else replace(row);
+            }}
             placeholder="Filter namespaces…"
             aria-label="Filter namespaces"
+            role="combobox"
+            aria-expanded
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={at >= 0 ? `${listId}-${at}` : undefined}
+            aria-describedby={noteId}
             className="w-full bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt"
           />
         </div>
-        <div
-          role="listbox"
-          aria-label="Namespace"
-          className="max-h-[260px] overflow-auto p-1"
-        >
-          <NamespaceRow
-            label="All namespaces"
-            selected={namespace === ""}
-            podCount={podCount}
-            problemCount={0}
-            onSelect={() => onSelect("")}
-          />
-          <div className="my-1 h-px bg-hair" />
-          {visible.map((ns) => (
-            <NamespaceRow
-              key={ns.name}
-              label={ns.name}
-              mono
-              selected={namespace === ns.name}
-              podCount={ns.podCount}
-              problemCount={ns.problemCount}
-              onSelect={() => onSelect(ns.name)}
-            />
-          ))}
+        <div className="max-h-[260px] overflow-auto p-1">
+          <div
+            id={listId}
+            role="listbox"
+            aria-label="Namespaces"
+            aria-multiselectable
+            // The caret belongs to the filter box for as long as the list is
+            // open — it is what names the arrowed row — and a press on a row
+            // would take it away. On the list rather than on the scroller, so
+            // the scrollbar is still draggable.
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            {rows.map((row, index) => (
+              <Fragment key={row.key}>
+                <NamespaceRow
+                  id={`${listId}-${index}`}
+                  row={row}
+                  active={index === at}
+                  noteId={noteId}
+                  onHover={() => setCursor(index)}
+                  onReplace={() => replace(row)}
+                  onToggle={() => toggle(row)}
+                />
+                {/* Presentational on purpose: a listbox's children are
+                    options, and a bare hairline among them is a child
+                    assistive tech has no name for. */}
+                {index === 0 && (
+                  <div role="presentation" className="my-1 h-px bg-hair" />
+                )}
+              </Fragment>
+            ))}
+          </div>
+          {/* Outside the listbox, because it is a sentence and not an option
+              nobody can pick. */}
           {visible.length === 0 && (
             <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
               {namespaces.length === 0
@@ -696,57 +882,112 @@ function NamespacePopover({
             </p>
           )}
         </div>
+        {/* The ceiling is stated as a cost, not as a rule: each namespace
+            past the first is a separate reading of the cluster, which is the
+            reason there is a number here at all. */}
+        <p
+          id={noteId}
+          aria-live="polite"
+          className={cn(
+            "border-t border-hair px-2.5 py-1.5 text-[10px] leading-[13px]",
+            refused ? "text-warn" : "text-fg-fnt"
+          )}
+        >
+          {note}
+        </p>
       </PopoverContent>
     </Popover>
   );
 }
 
 function NamespaceRow({
-  label,
-  mono,
-  selected,
-  podCount,
-  problemCount,
-  onSelect,
+  id,
+  row,
+  active,
+  noteId,
+  onHover,
+  onReplace,
+  onToggle,
 }: {
-  label: string;
-  mono?: boolean;
-  selected: boolean;
-  podCount: number;
-  problemCount: number;
-  onSelect: () => void;
+  id: string;
+  row: NamespaceOption;
+  /** The row the arrows are on, and the one Enter acts on. */
+  active: boolean;
+  /** The ceiling sentence, pointed at only by the rows it applies to. */
+  noteId: string;
+  onHover: () => void;
+  /** Replace the selection with this one. */
+  onReplace: () => void;
+  /** Add it to the selection, or take it out. */
+  onToggle: () => void;
 }) {
+  const pods = `${row.podCount} ${row.podCount === 1 ? "pod" : "pods"}`;
   return (
-    <button
-      type="button"
+    <div
+      id={id}
       role="option"
-      aria-selected={selected}
-      onClick={onSelect}
-      className="grid w-full grid-cols-[14px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors hover:bg-hover"
+      aria-selected={row.selected}
+      // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
+      aria-label={[
+        row.label,
+        pods,
+        row.problemCount > 0 ? `${row.problemCount} with a problem` : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
+      // The one thing about the row that cannot be read off the row itself:
+      // why its box has gone quiet.
+      aria-describedby={row.closed ? noteId : undefined}
+      // Hover and the arrows move the same cursor, so there is never a second
+      // highlight competing with the one Enter will act on.
+      onMouseEnter={onHover}
+      onClick={(event) =>
+        // The box is a target and the modifier is a gesture; both mean "add".
+        event.metaKey ||
+        event.ctrlKey ||
+        (event.target as HTMLElement).closest("[data-add]") !== null
+          ? onToggle()
+          : onReplace()
+      }
+      className={cn(
+        "grid w-full cursor-default select-none grid-cols-[14px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
+        active && "bg-hover",
+        row.selected && "text-fg"
+      )}
     >
       <span
-        className={cn(
-          "grid h-[13px] w-[13px] place-items-center rounded-[3px] border",
-          selected ? "border-info bg-info" : "border-fg-fnt"
-        )}
+        data-add
+        // The box is 13px and the target around it is not: a checkbox that
+        // has to be hit exactly is a checkbox nobody uses twice.
+        className="-m-[7px] grid h-[27px] w-[27px] place-items-center"
       >
-        {selected && (
-          <Check className="h-[9px] w-[9px] text-canvas" strokeWidth={4} />
-        )}
+        <span
+          className={cn(
+            "grid h-[13px] w-[13px] place-items-center rounded-[3px] border",
+            row.selected ? "border-info bg-info" : "border-fg-fnt",
+            // Not hidden: the row is still selectable on its own, and a box
+            // that vanished would read as a row that cannot be picked at all.
+            row.closed && "opacity-40"
+          )}
+        >
+          {row.selected && (
+            <Check className="h-[9px] w-[9px] text-canvas" strokeWidth={4} />
+          )}
+        </span>
       </span>
-      <span
-        className={cn("truncate", mono && "font-mono", selected && "text-fg")}
-      >
-        {label}
+      <span className={cn("truncate", row.mono && "font-mono")}>
+        {row.label}
       </span>
       <span
         className={cn(
           "font-mono text-[11px]",
-          problemCount > 0 ? "text-err" : "text-fg-fnt"
+          row.problemCount > 0 ? "text-err" : "text-fg-fnt"
         )}
       >
-        {problemCount > 0 ? `${podCount} · ${problemCount} bad` : podCount}
+        {row.problemCount > 0
+          ? `${row.podCount} · ${row.problemCount} bad`
+          : row.podCount}
       </span>
-    </button>
+    </div>
   );
 }

@@ -18,7 +18,6 @@ vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: vi.fn(() => ({
     nodeMetrics: [],
     podMetrics: [],
-    clusterMetrics: null,
     nodeStatus: { isLoading: false, error: null, available: true },
     podStatus: { isLoading: false, error: null, available: true },
   })),

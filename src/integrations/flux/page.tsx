@@ -31,6 +31,7 @@ import { formatAge } from "@/lib/utils";
 import { crdObjectPath, plural } from "../kit";
 import { gitRepoLink } from "../gitops";
 import {
+  Chain,
   Cell,
   Column,
   FilterBox,
@@ -274,7 +275,7 @@ function ReconcilerRow({
         ) : undefined
       }
     >
-      <div className="grid grid-cols-4">
+      <Chain>
         <Column label="Source">
           {reconciler.sourceRef ? (
             <Cell
@@ -339,7 +340,7 @@ function ReconcilerRow({
               : plural(reconciler.objects ?? 0, "object")}
           </Cell>
         </Column>
-      </div>
+      </Chain>
       <ObjectLinks reconciler={reconciler} />
       <Findings reconciler={reconciler} />
     </TroubleRow>

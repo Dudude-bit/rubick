@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { CredentialsExpired } from "@/components/cluster/CredentialsExpired";
+import { useExpiredCredentials } from "@/hooks/useExpiredCredentials";
 import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
@@ -16,6 +18,7 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
 export function Layout() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const { hue } = useClusterMark(currentContext);
+  const expired = useExpiredCredentials();
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   useScopeTabs();
 
@@ -50,7 +53,18 @@ export function Layout() {
                     ago. Holding the outlet shut until the tab's route has
                     landed and its scope is applied is what stops the reader
                     being handed those numbers as though they were live. */}
-                {catchingUp ? <PageSkeleton className="p-0" /> : <Outlet />}
+                {/* A refused session replaces the page rather than warning
+                    over it: nothing behind this is answerable, and every list
+                    under it would draw its empty state — which is how an
+                    expired token came to tell the reader their cluster had no
+                    pods. */}
+                {expired ? (
+                  <CredentialsExpired expired={expired} />
+                ) : catchingUp ? (
+                  <PageSkeleton className="p-0" />
+                ) : (
+                  <Outlet />
+                )}
               </Suspense>
             </div>
           </main>

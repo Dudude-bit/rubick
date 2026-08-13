@@ -321,7 +321,6 @@ export function PodDetail() {
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
-    includeCluster: false,
     enabled: !!pod,
   });
 

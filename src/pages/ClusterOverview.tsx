@@ -1,8 +1,9 @@
 import { AlertCircle } from "lucide-react";
 
+import { scopeLabel } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
 import { Section } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
@@ -26,15 +27,10 @@ import {
  * largest block on a screen whose first row is the point.
  */
 export function ClusterOverview() {
-  const { isConnected, currentNamespace } = useClusterStore();
+  const { isConnected, namespaceScope } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
-  const {
-    data: overview,
-    isLoading,
-    error,
-    refetch,
-  } = useClusterOverview(currentNamespace);
+  const { data: overview, isLoading, error, refetch } = useScopedOverview();
 
   // Not an empty overview but a different screen: with no cluster there
   // is no scope to be empty of anything, and the one thing the reader
@@ -73,7 +69,7 @@ export function ClusterOverview() {
 
   if (!overview) return null;
 
-  const scope = currentNamespace || "all namespaces";
+  const scope = scopeLabel(namespaceScope);
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">

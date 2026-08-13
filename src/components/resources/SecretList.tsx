@@ -10,10 +10,13 @@ import {
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
 
-const columns = (): ColumnDef<SecretInfo>[] => [
+export const columns = (): ColumnDef<SecretInfo>[] => [
   createNameColumn<SecretInfo>(ResourceType.Secret),
   createNamespaceColumn<SecretInfo>(),
   {
+    // `dockerconfigjson`, `service-account-token` — the longest of these is
+    // wider than the resource names beside it.
+    size: 180,
     id: "type",
     header: "Type",
     // A secret's type is a classification, not a state. The previous

@@ -29,6 +29,11 @@ pub struct K8sClientManager {
 
     /// Default kubeconfig path
     kubeconfig_path: RwLock<Option<PathBuf>>,
+
+    /// When each context's credentials stop being accepted, where the
+    /// credential plugin said so. Absent for a context that named no deadline
+    /// or uses none — see `ClusterInfo::credentials_expire_at`.
+    credential_deadlines: DashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
 impl K8sClientManager {
@@ -40,6 +45,7 @@ impl K8sClientManager {
             configs: DashMap::new(),
             kubeconfig: RwLock::new(None),
             kubeconfig_path: RwLock::new(None),
+            credential_deadlines: DashMap::new(),
         }
     }
 
@@ -246,6 +252,25 @@ impl K8sClientManager {
         self.clients.iter().map(|r| r.key().clone()).collect()
     }
 
+    /// Remember when this context's credentials stop working, where the
+    /// plugin that issued them said so.
+    pub fn set_credential_deadline(
+        &self,
+        context: &str,
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) {
+        match expires_at {
+            Some(at) => {
+                self.credential_deadlines.insert(context.to_string(), at);
+            }
+            None => {
+                // A reconnect that learned no deadline must not leave the
+                // previous one standing: it belonged to a token that is gone.
+                self.credential_deadlines.remove(context);
+            }
+        }
+    }
+
     /// Test connection to a cluster
     pub async fn test_connection(&self, context: &str) -> Result<ClusterInfo> {
         let client = self.connect(context).await?;
@@ -261,6 +286,10 @@ impl K8sClientManager {
             server_version: format!("{}.{}", version.major, version.minor),
             platform: version.platform,
             git_version: version.git_version,
+            credentials_expire_at: self
+                .credential_deadlines
+                .get(context)
+                .map(|at| at.to_rfc3339()),
         })
     }
 }
@@ -278,6 +307,15 @@ pub struct ClusterInfo {
     pub server_version: String,
     pub platform: String,
     pub git_version: String,
+    /// When the credentials this session was built with stop being accepted.
+    ///
+    /// `None` where the credential plugin named no deadline, or where the
+    /// context does not use one at all — a client certificate does not expire
+    /// on the hour. Nothing renews what the plugin gave: the `exec` block that
+    /// could is stripped when the session is prepared, so this is the moment
+    /// every request in the window starts failing, and a surface that has it
+    /// can say so before that happens rather than after.
+    pub credentials_expire_at: Option<String>,
 }
 
 /// The API server URL a context will dial, as the kubeconfig writes it.

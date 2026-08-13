@@ -20,7 +20,7 @@ import { createNameColumn } from "@/components/resources/columns";
 import { SpotMark } from "@/components/resources/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
-import type { NodeInfo } from "@/generated/types";
+import type { NodeInfo, NodeMetrics } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -51,6 +51,111 @@ const poolGrouping: RowGrouping<NodeInfo> = {
   },
 };
 
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// eslint-disable-next-line react-refresh/only-export-components
+export const columns = (
+  /** Keyed by node name; a node the metrics API missed gets an empty reading. */
+  nodeMetricsByName: Map<string, NodeMetrics>
+): ColumnDef<NodeInfo>[] => [
+  createNameColumn<NodeInfo>(ResourceType.Node),
+  {
+    size: 110,
+    id: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const ready = row.original.status.ready;
+      return <StatusBadge status={ready ? "Ready" : "NotReady"} />;
+    },
+  },
+  {
+    // "control-plane master etcd" on a single-node cluster.
+    size: 170,
+    accessorKey: "roles",
+    header: "Roles",
+    cell: ({ row }) => (
+      <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
+        {row.original.roles.length === 0 ? (
+          <span className="text-fg-fnt">—</span>
+        ) : (
+          row.original.roles.map((role) => <span key={role}>{role}</span>)
+        )}
+      </span>
+    ),
+  },
+  {
+    // A kubelet version with its distro suffix: `v1.31.4+k3s1`.
+    size: 120,
+    accessorKey: "version",
+    header: "Version",
+  },
+  {
+    size: 130,
+    id: "internal_ip",
+    header: "Internal IP",
+    cell: ({ row }) => {
+      const address = row.original.status.addresses.find(
+        (a) => a.type === "InternalIP"
+      );
+      return (
+        <CopyableAddress
+          value={address?.address}
+          label="Internal IP"
+          fallback="-"
+        />
+      );
+    },
+  },
+  // Wider than the pod table's CPU and Memory: these carry a usage bar
+  // against the node's whole capacity, under a two-word header.
+  {
+    size: 120,
+    id: "cpu",
+    header: "CPU Usage",
+    cell: ({ row }) => {
+      const metrics = nodeMetricsByName.get(row.original.name);
+      const capacity = row.original.capacity ? row.original.capacity.cpu : null;
+      return (
+        <MetricValue
+          used={metrics?.cpuMillicores ?? null}
+          limit={capacity ? parseCPU(capacity) : null}
+          type="cpu"
+        />
+      );
+    },
+  },
+  {
+    size: 140,
+    id: "memory",
+    header: "Memory Usage",
+    cell: ({ row }) => {
+      const metrics = nodeMetricsByName.get(row.original.name);
+      const capacity = row.original.capacity
+        ? row.original.capacity.memory
+        : null;
+      return (
+        <MetricValue
+          used={metrics?.memoryBytes ?? null}
+          limit={capacity ? parseMemory(capacity) : null}
+          type="memory"
+        />
+      );
+    },
+  },
+  {
+    size: 80,
+    id: "capacity_pods",
+    header: "Pod Cap",
+    cell: ({ row }) => row.original.capacity?.pods || "-",
+  },
+  {
+    size: 80,
+    id: "age",
+    header: "Age",
+    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
+  },
+];
+
 export function NodeList() {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
@@ -75,7 +180,7 @@ export function NodeList() {
     },
     [toast, watchFailed]
   );
-  useResourceWatch<NodeInfo>({
+  const { resyncing } = useResourceWatch<NodeInfo>({
     enabled: isConnected,
     subscribe: subscribeNodes,
     queryKey,
@@ -85,7 +190,6 @@ export function NodeList() {
 
   const { nodeMetrics, nodeStatus } = useMetrics({
     includePods: false,
-    includeCluster: false,
     enabled: isConnected,
   });
 
@@ -159,95 +263,8 @@ export function NodeList() {
 
   const [draining, setDraining] = useState<string | null>(null);
 
-  const columns: ColumnDef<NodeInfo>[] = useMemo(
-    () => [
-      createNameColumn<NodeInfo>(ResourceType.Node),
-      {
-        id: "status",
-        header: "Status",
-        cell: ({ row }) => {
-          const ready = row.original.status.ready;
-          return <StatusBadge status={ready ? "Ready" : "NotReady"} />;
-        },
-      },
-      {
-        accessorKey: "roles",
-        header: "Roles",
-        cell: ({ row }) => (
-          <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
-            {row.original.roles.length === 0 ? (
-              <span className="text-fg-fnt">—</span>
-            ) : (
-              row.original.roles.map((role) => <span key={role}>{role}</span>)
-            )}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "version",
-        header: "Version",
-      },
-      {
-        id: "internal_ip",
-        header: "Internal IP",
-        cell: ({ row }) => {
-          const address = row.original.status.addresses.find(
-            (a) => a.type === "InternalIP"
-          );
-          return (
-            <CopyableAddress
-              value={address?.address}
-              label="Internal IP"
-              fallback="-"
-            />
-          );
-        },
-      },
-      {
-        id: "cpu",
-        header: "CPU Usage",
-        cell: ({ row }) => {
-          const metrics = nodeMetricsByName.get(row.original.name);
-          const capacity = row.original.capacity
-            ? row.original.capacity.cpu
-            : null;
-          return (
-            <MetricValue
-              used={metrics?.cpuMillicores ?? null}
-              limit={capacity ? parseCPU(capacity) : null}
-              type="cpu"
-            />
-          );
-        },
-      },
-      {
-        id: "memory",
-        header: "Memory Usage",
-        cell: ({ row }) => {
-          const metrics = nodeMetricsByName.get(row.original.name);
-          const capacity = row.original.capacity
-            ? row.original.capacity.memory
-            : null;
-          return (
-            <MetricValue
-              used={metrics?.memoryBytes ?? null}
-              limit={capacity ? parseMemory(capacity) : null}
-              type="memory"
-            />
-          );
-        },
-      },
-      {
-        id: "capacity_pods",
-        header: "Pod Cap",
-        cell: ({ row }) => row.original.capacity?.pods || "-",
-      },
-      {
-        id: "age",
-        header: "Age",
-        cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
-      },
-    ],
+  const nodeColumns = useMemo(
+    () => columns(nodeMetricsByName),
     [nodeMetricsByName]
   );
 
@@ -289,13 +306,14 @@ export function NodeList() {
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
         queryFn={() => commands.listNodes(null)}
-        columns={columns}
+        columns={nodeColumns}
         quickActions={quickActions}
         grouping={poolGrouping}
         emptyStateLabel={toPlural(ResourceType.Node)}
         staleTime={STALE_TIMES.resourceList}
         refresh={watchFailed ? undefined : false}
         live={!watchFailed}
+        resyncing={resyncing}
         headerContent={
           nodeStatus?.status !== "available" ? (
             <MetricsStatusBanner status={nodeStatus} />

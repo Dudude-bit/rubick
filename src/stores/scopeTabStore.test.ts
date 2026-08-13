@@ -8,9 +8,11 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { useClusterStore } from "./clusterStore";
 import {
   tabRouteLabel,
+  tabScope,
   tabTitle,
   useScopeTabStore,
   type ScopeTab,
@@ -33,7 +35,17 @@ function live(context: string | null, namespace = "") {
   useClusterStore.setState({
     currentContext: context,
     currentNamespace: namespace,
+    namespaceScope: namespace === "" ? [] : [namespace],
     isConnected: !!context,
+  });
+}
+
+function liveScope(context: string, scope: string[]) {
+  useClusterStore.setState({
+    currentContext: context,
+    currentNamespace: scope.length === 1 ? scope[0] : "",
+    namespaceScope: scope,
+    isConnected: true,
   });
 }
 
@@ -277,6 +289,83 @@ describe("titles", () => {
   });
 });
 
+describe("a tab parked on several namespaces", () => {
+  it("carries the whole selection, and applies it on the way back", async () => {
+    liveScope("prod", ["web", "api"]);
+    seed([
+      tab({ id: "a", context: "prod" }),
+      tab({ id: "b", context: "prod" }),
+    ]);
+    await state().activateTab("b");
+    expect(state().tabs[0].scope).toEqual(["web", "api"]);
+
+    await state().activateTab("a");
+    expect(useClusterStore.getState().namespaceScope).toEqual(["web", "api"]);
+  });
+
+  /**
+   * Would break every screen of a build without this feature. A tab's
+   * `namespace` is read straight into `currentNamespace` there, so a joined
+   * list parked in it would ask for a namespace that does not exist — the
+   * selection rides in `scope`, which that build does not read.
+   */
+  it("parks a namespace an older build can still ask for", async () => {
+    liveScope("prod", ["web", "api"]);
+    seed([
+      tab({ id: "a", context: "prod" }),
+      tab({ id: "b", context: "prod" }),
+    ]);
+    await state().activateTab("b");
+    // Several has no namespace to name, and "all namespaces" is the one
+    // value that shows a superset rather than nothing at all.
+    expect(state().tabs[0]).toMatchObject({
+      namespace: "",
+      scope: ["web", "api"],
+    });
+
+    seed([
+      tab({ id: "c", context: "prod" }),
+      tab({ id: "d", context: "prod" }),
+    ]);
+    liveScope("prod", ["web"]);
+    await state().activateTab("d");
+    expect(state().tabs[0].namespace).toBe("web");
+  });
+
+  /**
+   * Would throw away the reader's last choice on a downgrade and back. The
+   * older build shows "All namespaces", writes where the reader went into
+   * `namespace`, and cannot touch `scope` — so a tab that comes back up with
+   * the two disagreeing is one that build moved, and reading `scope` anyway
+   * would restore a selection the reader had already left.
+   */
+  it("prefers the namespace a build without this feature parked over it", () => {
+    expect(
+      tabScope(tab({ namespace: "kube-system", scope: ["prod", "staging"] }))
+    ).toEqual(["kube-system"]);
+    // ...and "all namespaces" is a choice like any other.
+    expect(tabScope(tab({ namespace: "", scope: ["prod"] }))).toEqual([]);
+    // A pair this build wrote agrees, at every size of selection, and is
+    // taken as it stands.
+    expect(
+      tabScope(tab({ namespace: "", scope: ["prod", "staging"] }))
+    ).toEqual(["prod", "staging"]);
+    expect(tabScope(tab({ namespace: "prod", scope: ["prod"] }))).toEqual([
+      "prod",
+    ]);
+    expect(tabScope(tab({ namespace: "", scope: [] }))).toEqual([]);
+  });
+
+  it("opens a new tab on the selection the reader is already reading under", async () => {
+    liveScope("prod", ["web", "api"]);
+    await state().openTab();
+    expect(tabScope(state().tabs[1])).toEqual(["web", "api"]);
+    // ...and one opened *at* an object lands on that object's namespace.
+    await state().openTab({ href: "/pods/web/api-1", namespace: "web" });
+    expect(tabScope(state().tabs[2])).toEqual(["web"]);
+  });
+});
+
 describe("surviving a restart", () => {
   const migrate = (persisted: unknown, version: number) => {
     const fn = useScopeTabStore.persist.getOptions().migrate;
@@ -331,6 +420,62 @@ describe("surviving a restart", () => {
     expect(state().activeId).toBe("scope-2");
     // The window boots at "/", so the restored route has to be asked for.
     expect(state().pendingHref).toBe("/workloads/pods");
+  });
+
+  /**
+   * Would lose the namespace every tab was parked on the day `scope` shipped:
+   * a payload written before it carries the same version this build writes,
+   * so nothing but the field's absence says it has to be recovered.
+   */
+  it("reads a tab written before the selection had a field of its own", async () => {
+    localStorage.setItem(
+      "scope-tabs",
+      JSON.stringify({
+        state: {
+          tabs: [
+            {
+              id: "scope-1",
+              context: "prod",
+              namespace: "web",
+              href: "/nodes",
+              missing: false,
+            },
+          ],
+          activeId: "scope-1",
+        },
+        version: 1,
+      })
+    );
+    await useScopeTabStore.persist.rehydrate();
+    expect(state().tabs[0].scope).toEqual(["web"]);
+  });
+
+  /** A window must not name namespaces it is not going to read. */
+  it("cuts a restored selection to what this build watches at once", async () => {
+    localStorage.setItem(
+      "scope-tabs",
+      JSON.stringify({
+        state: {
+          tabs: [
+            {
+              id: "scope-1",
+              context: "prod",
+              namespace: "",
+              scope: Array.from(
+                { length: SCOPE_LIMIT + 2 },
+                (_, i) => `ns-${i}`
+              ),
+              href: "/",
+              missing: false,
+            },
+          ],
+          activeId: "scope-1",
+        },
+        version: 1,
+      })
+    );
+    await useScopeTabStore.persist.rehydrate();
+    expect(state().tabs[0].scope).toHaveLength(SCOPE_LIMIT);
   });
 
   it("recovers from an active id that no tab carries", async () => {

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -19,8 +19,9 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { EventFilters } from "@/generated/types";
+import type { EventFilters, EventInfo } from "@/generated/types";
 
 const TYPE_FILTERS = [
   { value: "all", label: "All" },
@@ -30,45 +31,112 @@ const TYPE_FILTERS = [
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
 
+async function read(filters: EventFilters) {
+  try {
+    return await commands.listEvents(filters);
+  } catch (err) {
+    throw normalizeTauriError(err);
+  }
+}
+
+function filtersFor(
+  namespace: string,
+  eventType: string,
+  limit: number | null
+): EventFilters {
+  return {
+    namespace,
+    event_type: eventType === "all" ? null : eventType,
+    limit,
+    involved_object_name: null,
+    involved_object_kind: null,
+    field_selector: null,
+  };
+}
+
 export function Events() {
   const { isConnected, currentNamespace } = useClusterStore();
+  const scope = useNamespaceScope();
   const [eventType, setEventType] = useState<string>("all");
   const [eventLimit, setEventLimit] = useState<string>("500");
 
-  const {
-    data: events = [],
-    isLoading,
-    dataUpdatedAt,
-    freshness,
-  } = useLiveQuery({
+  const limit = eventLimit === "all" ? null : Number(eventLimit);
+  const several = scope.several;
+
+  const single = useLiveQuery({
     queryKey: [
       toPlural(ResourceType.Event),
       currentNamespace,
       eventType,
       eventLimit,
     ],
-    queryFn: async () => {
-      const limit = eventLimit === "all" ? null : Number(eventLimit);
-      const filters: EventFilters = {
-        namespace: currentNamespace,
-        event_type: eventType === "all" ? null : eventType,
-        limit,
-        involved_object_name: null,
-        involved_object_kind: null,
-        field_selector: null,
-      };
-      try {
-        return await commands.listEvents(filters);
-      } catch (err) {
-        throw normalizeTauriError(err);
-      }
-    },
-    enabled: isConnected,
+    queryFn: () => read(filtersFor(currentNamespace, eventType, limit)),
+    enabled: isConnected && !several,
     refresh: "fast",
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.fast,
     refetchOnWindowFocus: false,
   });
+
+  // One request per selected namespace, rather than one cluster-wide request
+  // narrowed afterwards.
+  //
+  // The limit is a sentence about what is on screen — "latest 500" — so it
+  // has to be counted against the scope the reader chose, and only the API
+  // server can count it per namespace. Spent cluster-wide it goes to whoever
+  // is loudest: a busy kube-system fills all 500 rows and the page prints "No
+  // events in 2 namespaces yet" while prod is emitting. Each namespace is
+  // asked for the whole limit rather than a share of it, because a share
+  // would starve the noisy namespace and go unused in the quiet one; the
+  // join is cut back to the limit below. It costs one request per selected
+  // namespace, which is what `SCOPE_LIMIT` bounds.
+  const parts = useLiveQueries<EventInfo[]>({
+    refresh: "fast",
+    // `placeholderData: keepPreviousData` is not missing from these: it does
+    // nothing in a fan-out. `useQueries` matches observers by query hash, so
+    // changing the filter re-keys every part onto a brand-new `QueryObserver`,
+    // and the previous data it would keep lives on the observer that was just
+    // replaced. The feed draws its skeleton until every namespace has answered
+    // the question actually being asked, which is one fast read away.
+    queries: (several ? scope.scope : []).map((namespace) => ({
+      queryKey: [
+        toPlural(ResourceType.Event),
+        namespace,
+        eventType,
+        eventLimit,
+      ],
+      queryFn: () => read(filtersFor(namespace, eventType, limit)),
+      enabled: isConnected,
+      staleTime: STALE_TIMES.fast,
+      // The group re-reads every part on the way back on its own
+      // (`useLiveQueries`), which is the promise this cannot be switched off
+      // without. React Query's focus refetch on top of that is a second wave
+      // of one request per namespace for an answer already on its way.
+      refetchOnWindowFocus: false,
+    })),
+  });
+
+  const answers = parts.data;
+  const pool = useMemo(
+    () =>
+      several
+        ? // Newest first, the order each part arrived in and the one the cut
+          // below depends on. The timestamps are UTC RFC3339 from the same
+          // backend, so string order is time order — and an undated event
+          // sorts last rather than jumping the queue.
+          answers
+            .flatMap((part) => part ?? [])
+            .sort((a, b) => {
+              const mine = a.lastTimestamp ?? "";
+              const theirs = b.lastTimestamp ?? "";
+              return mine < theirs ? 1 : mine > theirs ? -1 : 0;
+            })
+        : (single.data ?? []),
+    [several, answers, single.data]
+  );
+
+  const isLoading = several ? parts.isLoading : single.isLoading;
+  const freshness = several ? parts.freshness : single.freshness;
 
   if (!isConnected) {
     return (
@@ -76,13 +144,14 @@ export function Events() {
     );
   }
 
+  // Everything the reader asked for exists, so anything past the limit is
+  // what the limit is hiding — whether the API server cut it or the join
+  // did. Saying so beats an honest-looking feed that silently ends.
+  const capped = limit !== null && pool.length >= limit;
+  const events = capped ? pool.slice(0, limit) : pool;
   const warningCount = events.filter((e) => e.type === "Warning").length;
   const normalCount = events.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
-  // The API returns the newest slice, so hitting the limit means older
-  // events exist and are not on screen. Saying so beats an honest-looking
-  // feed that silently ends.
-  const capped = eventLimit !== "all" && events.length >= Number(eventLimit);
 
   return (
     <div className="flex flex-col gap-2 animate-in fade-in duration-200">
@@ -129,7 +198,7 @@ export function Events() {
               </SelectContent>
             </Select>
             <DataFreshness
-              dataUpdatedAt={dataUpdatedAt}
+              dataUpdatedAt={freshness.dataUpdatedAt}
               slowed={freshness.slowed}
             />
           </>
@@ -141,10 +210,12 @@ export function Events() {
             <EventsSkeleton />
           ) : (
             <EventRows
+              // Not narrowed here: every row came back from a request for a
+              // namespace in scope, so there is nothing left to filter out.
               events={events}
               showObject
               showNamespace={!currentNamespace}
-              emptyMessage={`No events in ${currentNamespace || "any namespace"} yet.`}
+              emptyMessage={`No events in ${scope.inWords} yet.`}
             />
           )}
         </SectionBody>

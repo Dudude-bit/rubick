@@ -1,14 +1,37 @@
 /**
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
- * ## Why a chain and not a graph
+ * ## It opens on Routes, like every page in this tree
+ *
+ * cert-manager opens on Certificates, Flux on Reconcilers, Argo on
+ * Applications, ingress-nginx on its own Routes — every vendor page in this
+ * app lands the reader on the list ordered by trouble, because "what is
+ * broken" is the question somebody who opened an integration page is almost
+ * always asking, and that answer has to be on screen before a click, not
+ * behind one. Traefik is not a case for a different rule: Routes carries the
+ * same trouble-first ordering, the same auto-opened rows, the same one-line
+ * summary at the top. Map is a real screen and stays a click away — it earns
+ * that click by answering a different question than triage does — but it is
+ * never where the page opens.
+ *
+ * ## A map and a chain, and they answer different questions
  *
  * A force-directed blob of every route in the cluster is decoration — it
- * looks like insight and answers nothing. The routing layer is not a general
- * graph; it is a **chain in fixed order**: entry point → rule → middleware →
- * service → pods. So it is drawn as one, left to right, with the columns
- * labelled, **and only for the host the reader opened**. It never draws the
- * whole cluster, because the whole cluster is not a question anybody has.
+ * looks like insight and answers nothing. One request's journey is not a
+ * general graph either; it is a **chain in fixed order**: entry point → rule
+ * → middleware → service → pods. So that is drawn as a chain, left to right,
+ * with the columns labelled, and only for the host the reader opened.
+ *
+ * What the chain cannot show is the **shape across hosts** — which entry
+ * points carry which hostnames, and which of them land on the same Service —
+ * and that is a real question on any cluster with more than one host, which
+ * is nearly all of them. It used to have no answer here at all: every host
+ * was one collapsed line and the reader had to open them one at a time and
+ * hold the picture in their head. Map is that answer, and it is deliberately
+ * layered and deterministic rather than force-directed: fixed columns,
+ * trouble-first order, no rearranging when a pod restarts. That it exists at
+ * all is the whole of its claim on the reader's attention — it does not also
+ * need to be the first thing they see.
  *
  * ## Good with one host and with eighty
  *
@@ -31,9 +54,9 @@
  * leads to a connection error is worse than no button.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Box, Filter, Globe, Plug } from "lucide-react";
+import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -51,6 +74,7 @@ import { describeStop } from "@/lib/connections";
 import type { ChainStop } from "@/generated/types";
 import { crdObjectPath, plural } from "../kit";
 import {
+  Chain,
   Cell,
   Column,
   FilterBox,
@@ -58,6 +82,8 @@ import {
   TroubleRow,
   type Tone,
 } from "../page-kit";
+import { RoutingMap } from "../routing-map";
+import { routingMap } from "./map";
 import {
   servedGroupName,
   useBacking,
@@ -88,6 +114,17 @@ const AUTO_OPEN = 8;
 export default function TraefikPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
+  const filter = params.get("q") ?? "";
+
+  // In the URL rather than in a `useState`, so a node on the map can hand the
+  // Routes tab a host and land the reader on that host's chain — and so the
+  // narrowed view survives a reload and can be handed to somebody else.
+  const setFilter = (next: string) => {
+    const updated = new URLSearchParams(params);
+    if (next.trim() === "") updated.delete("q");
+    else updated.set("q", next);
+    setParams(updated, { replace: true });
+  };
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -154,6 +191,27 @@ export default function TraefikPage() {
       mark: routesMark(groups, troubled.length),
       content: (
         <RoutesTab
+          groups={groups}
+          sources={sources}
+          filter={filter}
+          onFilter={setFilter}
+          loading={routeSources.isPending}
+          backingLoading={backing.isPending}
+        />
+      ),
+    },
+    {
+      id: "map",
+      label: "Map",
+      glyph: viewGlyph(Network),
+      // A shape, not a verdict. The colour belongs on the tab the reader
+      // lands on and triages from; a red mark on the tab beside it would
+      // send them away from the list that says which host is broken. Nothing
+      // routed is no number either — every other mark on this page is absent
+      // at zero rather than printing one.
+      mark: groups.length > 0 ? countMark(groups.length) : undefined,
+      content: (
+        <MapTab
           groups={groups}
           sources={sources}
           loading={routeSources.isPending}
@@ -236,9 +294,17 @@ function routesMark(
     : countMark(groups.length);
 }
 
-// --- routes -------------------------------------------------------------
+// --- the map ------------------------------------------------------------
 
-function RoutesTab({
+/**
+ * The whole routing layer at once, ordered by trouble like everything else.
+ *
+ * No filter box of its own: the map *is* the overview, and narrowing it to
+ * one host would leave three boxes and a line — which is the chain the Routes
+ * tab already draws better. Clicking a host goes there with that host in the
+ * filter, which is the same gesture and lands somewhere that can answer.
+ */
+function MapTab({
   groups,
   sources,
   loading,
@@ -249,8 +315,72 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
-  const [filter, setFilter] = useState("");
+  const data = useMemo(
+    () => (sources ? routingMap(groups, sources) : null),
+    [groups, sources]
+  );
 
+  if (loading) {
+    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+  }
+  if (!data || groups.length === 0) return <NothingRoutes />;
+
+  const broken = groups.filter((group) => group.worst === "err").length;
+  const worthALook = groups.filter((group) => group.worst === "warn").length;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[11px] text-fg-fnt">
+        {broken > 0
+          ? `${broken} of ${groups.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+          : worthALook > 0
+            ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
+            : `${plural(groups.length, "host")}, none with a problem`}
+        {backingLoading && " · checking what is behind them…"}
+      </p>
+      <RoutingMap data={data} />
+      <p className="text-[11px] text-fg-fnt">
+        A host goes to its own paths and their chain; a Service goes to its
+        page. Nothing here is inferred — every line is one object naming
+        another.
+      </p>
+    </div>
+  );
+}
+
+/** The one thing both the map and the list say when there is no routing. */
+function NothingRoutes() {
+  return (
+    <div className="max-w-[64ch]">
+      <p className="text-xs text-fg-mut">
+        Traefik is running here and nothing routes to it.
+      </p>
+      <p className="mt-1.5 text-[11px] text-fg-fnt">
+        No IngressRoute exists, and no Ingress names an IngressClass this proxy
+        claims. An Ingress naming a class nothing serves is correct YAML with no
+        events and no error, and is simply never served.
+      </p>
+    </div>
+  );
+}
+
+// --- routes -------------------------------------------------------------
+
+function RoutesTab({
+  groups,
+  sources,
+  filter,
+  onFilter,
+  loading,
+  backingLoading,
+}: {
+  groups: HostGroup[];
+  sources: TraefikSources | null;
+  filter: string;
+  onFilter: (value: string) => void;
+  loading: boolean;
+  backingLoading: boolean;
+}) {
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     if (needle === "") return groups;
@@ -272,20 +402,7 @@ function RoutesTab({
     return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
   }
 
-  if (groups.length === 0) {
-    return (
-      <div className="max-w-[64ch]">
-        <p className="text-xs text-fg-mut">
-          Traefik is running here and nothing routes to it.
-        </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No IngressRoute exists, and no Ingress names an IngressClass this
-          proxy claims. An Ingress naming a class nothing serves is correct YAML
-          with no events and no error, and is simply never served.
-        </p>
-      </div>
-    );
-  }
+  if (groups.length === 0) return <NothingRoutes />;
 
   const broken = groups.filter((group) => group.worst === "err").length;
   const worthALook = groups.filter((group) => group.worst === "warn").length;
@@ -295,7 +412,7 @@ function RoutesTab({
       <div className="mb-1 flex items-center gap-3">
         <FilterBox
           value={filter}
-          onChange={setFilter}
+          onChange={onFilter}
           placeholder="Filter by host, service or object"
           label="Filter hosts"
         />
@@ -406,7 +523,7 @@ function HostRow({
       }
     >
       <Paths group={group} sources={sources} />
-      {sources && <Chain group={group} sources={sources} />}
+      {sources && <HostChain group={group} sources={sources} />}
       <Findings group={group} />
     </TroubleRow>
   );
@@ -547,7 +664,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
  * stopped. Which one it is drawn for is said above it, not left to be
  * guessed.
  */
-function Chain({
+function HostChain({
   group,
   sources,
 }: {
@@ -566,7 +683,7 @@ function Chain({
           the path through {describePath(route.clause.path)}
         </span>
       )}
-      <div className="grid grid-cols-5">
+      <Chain>
         <Column label="Entry point">
           {entryPoints.length === 0 ? (
             <Cell under="not read">unknown</Cell>
@@ -672,7 +789,7 @@ function Chain({
             </Cell>
           )}
         </Column>
-      </div>
+      </Chain>
       {tls && (
         <span className="text-[11px] text-fg-fnt">
           served under{" "}

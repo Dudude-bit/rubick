@@ -6,8 +6,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
-import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useIntegrationPages } from "@/integrations";
 import { detectProvider } from "@/lib/cluster-identity";
 import {
@@ -132,9 +133,8 @@ const TAIL: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const isConnected = useClusterStore((s) => s.isConnected);
-  const { data } = useClusterOverview(currentNamespace);
+  const { data } = useScopedOverview();
 
   // The overview query keeps its last answer as placeholder data across the
   // key change a disconnect causes, which is right while switching clusters
@@ -187,10 +187,18 @@ function GroupCaption({ children }: { children: string }) {
  * the app knows, installed or not, with what each one would give. "What
  * could this app do" has a screen built for it; the sidebar stays a list of
  * things you actually have.
+ *
+ * Every one of them, though. A row whose vendor owns no screen goes to that
+ * vendor's Settings row instead of being dropped — several of them share one
+ * route, which is why those rows decide their own highlight from the query
+ * string rather than letting `NavLink` light all of them at once.
  */
 function IntegrationsGroup() {
+  const { pathname, search } = useLocation();
   const pages = useIntegrationPages();
   if (pages.length === 0) return null;
+
+  const vendor = new URLSearchParams(search).get("vendor");
 
   return (
     <div>
@@ -201,6 +209,11 @@ function IntegrationsGroup() {
           item={{ label: page.name, path: page.path, icon: page.icon }}
           overview={undefined}
           value={page.count}
+          active={
+            page.own
+              ? undefined
+              : pathname === "/settings/integrations" && vendor === page.id
+          }
         />
       ))}
     </div>
@@ -220,6 +233,13 @@ function IntegrationsGroup() {
  * and is what somebody checks before they run something. So a renamed
  * cluster gets both lines here — the name they gave it, and under it, at
  * the faintest contrast the theme has, the context name itself.
+ *
+ * It is also where the rename is *made*. This row is the most permanent
+ * mention of the cluster in the app, so it is where somebody looks for what
+ * to call it and what colour it wears; the same menu hangs off the tab strip
+ * and the cluster list, and right-click alone was a gesture you had to
+ * already know about. Left click opens it here because the row has nothing
+ * else a click could mean — the cluster is already the one you are on.
  */
 function ClusterRow() {
   const currentContext = useClusterStore((s) => s.currentContext);
@@ -230,14 +250,14 @@ function ClusterRow() {
 
   const connecting = isLoading || isAuthenticating;
 
-  return (
-    <div className="flex h-[38px] flex-none items-center gap-2 px-2.5">
+  const body = (
+    <>
       <ProviderMark
         provider={detectProvider(currentContext ?? "")}
         className="h-[15px] w-[15px] flex-none"
         style={{ color: "var(--cluster)" }}
       />
-      <span className="flex min-w-0 flex-col">
+      <span className="flex min-w-0 flex-col text-left">
         <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
           {alias ?? currentContext ?? "no cluster"}
         </span>
@@ -274,7 +294,30 @@ function ClusterRow() {
             : undefined
         }
       />
-    </div>
+    </>
+  );
+
+  const row =
+    "flex h-[38px] w-full flex-none items-center gap-2 px-2.5 text-left";
+
+  // Nothing to configure about a cluster there is none of, and a menu that
+  // renamed `null` would write a mark under an empty key.
+  if (!currentContext) return <div className={row}>{body}</div>;
+
+  return (
+    <ClusterMenu context={currentContext} openOnClick>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-label={`${alias ?? currentContext} — rename or recolour`}
+        className={cn(
+          row,
+          "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none"
+        )}
+      >
+        {body}
+      </button>
+    </ClusterMenu>
   );
 }
 
@@ -282,11 +325,18 @@ function NavRow({
   item,
   overview,
   value,
+  active,
 }: {
   item: NavItem;
   overview: ClusterOverview | undefined;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
+  /**
+   * Whether this row is the open one, where the path alone cannot say. Left
+   * undefined the router decides, which is right for every row that owns its
+   * own route.
+   */
+  active?: boolean;
 }) {
   const { pathname } = useLocation();
   const updateAvailable = useUpdaterStore((state) => state.available);
@@ -302,6 +352,9 @@ function NavRow({
   const ownsRoute =
     item.section !== undefined && pathname.startsWith(item.section);
 
+  const isOpen = (routerSaysActive: boolean) =>
+    (active ?? routerSaysActive) || ownsRoute;
+
   return (
     <NavLink
       to={to}
@@ -309,7 +362,7 @@ function NavRow({
       className={({ isActive }) =>
         cn(
           "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
-          (isActive || ownsRoute) && "bg-sel font-medium text-fg"
+          isOpen(isActive) && "bg-sel font-medium text-fg"
         )
       }
     >
@@ -322,7 +375,7 @@ function NavRow({
                 // recognition without competing with it. Only the active row
                 // lifts it, which is what marks the row rather than the fill.
                 "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut",
-                (isActive || ownsRoute) && "text-info group-hover:text-info"
+                isOpen(isActive) && "text-info group-hover:text-info"
               )}
             />
             {badge && (

@@ -38,6 +38,7 @@ vi.mock("@/hooks/useClusterOverview", () => ({
   // `keepPreviousData` does: the hook goes on handing back the last cluster's
   // answer after a disconnect, which is the condition the rail must survive.
   useClusterOverview: () => ({ data: overview }),
+  useScopedOverview: () => ({ data: overview }),
 }));
 
 const { Sidebar } = await import("./Sidebar");
@@ -189,18 +190,42 @@ describe("the Integrations category", () => {
   });
 
   /**
-   * Would break if a detected vendor with no page of its own started
-   * appearing here. cert-manager is detected on plenty of clusters and has
-   * no page yet; a row leading nowhere is worse than no row.
+   * Would break if a detected vendor with no page of its own were dropped
+   * again. The category used to list only vendors declaring a page, so a
+   * cluster running one of these was told it had no integrations at all —
+   * the row goes to that vendor's Settings row, which is where what it gives
+   * and what it is doing are already written.
    */
-  it("leaves out a detected vendor that owns no page", async () => {
+  it("names a detected vendor that owns no page, and sends it to Settings", async () => {
     detectInClusterExtensions.mockResolvedValue([
-      { id: "cert-manager", installed: true, version: "v1.14.0" },
+      { id: "aws-load-balancer-controller", installed: true, version: null },
     ]);
 
     wrap(<Sidebar />);
 
-    expect(await screen.findByText("Settings")).toBeInTheDocument();
-    expect(screen.queryByText("Integrations")).not.toBeInTheDocument();
+    const link = await screen.findByRole("link", {
+      name: /AWS Load Balancer Controller/i,
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "/settings/integrations?vendor=aws-load-balancer-controller"
+    );
+  });
+
+  /**
+   * Would break if a vendor the cluster does not have started appearing.
+   * The category is a claim about what this cluster *has*, not about what
+   * the app knows how to read.
+   */
+  it("leaves out an extension this cluster does not have", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "traefik", installed: true, version: "v2.11.18" },
+      { id: "cert-manager", installed: false, version: null },
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Traefik/ });
+    expect(screen.queryByRole("link", { name: /cert-manager/ })).toBeNull();
   });
 });

@@ -3,7 +3,6 @@ import { commands } from "@/lib/commands";
 import type {
   PodMetricsResponse,
   NodeMetricsResponse,
-  ClusterMetricsResponse,
 } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
@@ -19,17 +18,14 @@ export interface UseMetricsOptions {
   enabled?: boolean;
   includePods?: boolean;
   includeNodes?: boolean;
-  includeCluster?: boolean;
   podQueryOptions?: MetricsQueryOptions<PodMetricsResponse>;
   nodeQueryOptions?: MetricsQueryOptions<NodeMetricsResponse>;
-  clusterQueryOptions?: MetricsQueryOptions<ClusterMetricsResponse>;
 }
 
 export function useMetrics(options?: UseMetricsOptions) {
   const enabled = options?.enabled ?? true;
   const includePods = options?.includePods ?? true;
   const includeNodes = options?.includeNodes ?? true;
-  const includeCluster = options?.includeCluster ?? true;
 
   const podMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.pods(options?.namespace),
@@ -55,18 +51,6 @@ export function useMetrics(options?: UseMetricsOptions) {
     ...options?.nodeQueryOptions,
   });
 
-  const clusterMetricsQuery = useLiveQuery({
-    queryKey: queryKeys.metrics.cluster(),
-    queryFn: async () => {
-      return await commands.getClusterMetrics();
-    },
-    enabled: enabled && includeCluster,
-    placeholderData: keepPreviousData,
-    staleTime: STALE_TIMES.metrics,
-    refresh: "metricsCluster",
-    ...options?.clusterQueryOptions,
-  });
-
   return {
     podMetrics: podMetricsQuery.data?.data ?? [],
     podStatus: podMetricsQuery.data?.status ?? null,
@@ -79,23 +63,11 @@ export function useMetrics(options?: UseMetricsOptions) {
     nodeSampledAt: nodeMetricsQuery.dataUpdatedAt,
     podFreshness: podMetricsQuery.freshness,
     nodeFreshness: nodeMetricsQuery.freshness,
-    clusterMetrics: clusterMetricsQuery.data?.data ?? null,
-    clusterStatus: clusterMetricsQuery.data?.status ?? null,
     podMetricsQuery,
     nodeMetricsQuery,
-    clusterMetricsQuery,
     // Combined loading states for easier consumption
-    isLoading:
-      podMetricsQuery.isLoading ||
-      nodeMetricsQuery.isLoading ||
-      clusterMetricsQuery.isLoading,
-    isFetching:
-      podMetricsQuery.isFetching ||
-      nodeMetricsQuery.isFetching ||
-      clusterMetricsQuery.isFetching,
-    isError:
-      podMetricsQuery.isError ||
-      nodeMetricsQuery.isError ||
-      clusterMetricsQuery.isError,
+    isLoading: podMetricsQuery.isLoading || nodeMetricsQuery.isLoading,
+    isFetching: podMetricsQuery.isFetching || nodeMetricsQuery.isFetching,
+    isError: podMetricsQuery.isError || nodeMetricsQuery.isError,
   };
 }

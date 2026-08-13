@@ -32,6 +32,10 @@ import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { ResourceList } from "./ResourceList";
+import {
+  useNamespaceScope,
+  type NamespaceScope,
+} from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/query-keys";
@@ -70,11 +74,12 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   /** Override the empty-state label (defaults to `title`). */
   emptyStateLabel?: string;
   /**
-   * Optional description rendered under the title. May be a string or a
-   * function that receives the resolved namespace (useful for namespace-
-   * aware lines like "in {namespace}").
+   * Optional description rendered under the title. The function form gets the
+   * namespace selection — which is a set, not a name: "in prod, staging" and
+   * "in 4 namespaces" are both scopes a reader can be in, and a line built
+   * from one namespace calls all of them "all namespaces".
    */
-  description?: string | ((deps: { namespace: string | null }) => string);
+  description?: string | ((deps: { scope: NamespaceScope }) => string);
   /** Search key (column accessor) for the in-page search box. */
   searchKey?: string;
   /**
@@ -94,6 +99,7 @@ export function createResourceListPage<T extends ListableResource>(
 ) {
   const ListPage = function ResourceListPage() {
     const currentNamespace = useClusterStore((s) => s.currentNamespace);
+    const scope = useNamespaceScope();
     const navigate = useNavigate();
     const namespace = config.scope === "cluster" ? null : currentNamespace;
 
@@ -162,7 +168,7 @@ export function createResourceListPage<T extends ListableResource>(
       [toast, watchFailed]
     );
 
-    useResourceWatch<T>({
+    const { resyncing } = useResourceWatch<T>({
       enabled: !!watchFactory,
       subscribe,
       queryKey,
@@ -176,7 +182,7 @@ export function createResourceListPage<T extends ListableResource>(
         title={config.title}
         description={
           typeof config.description === "function"
-            ? config.description({ namespace })
+            ? config.description({ scope })
             : config.description
         }
         searchKey={config.searchKey}
@@ -206,6 +212,7 @@ export function createResourceListPage<T extends ListableResource>(
         staleTime={STALE_TIMES.resourceList}
         refresh={watchFactory && !watchFailed ? false : undefined}
         live={!!watchFactory && !watchFailed}
+        resyncing={resyncing}
       />
     );
   };

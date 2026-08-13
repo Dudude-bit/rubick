@@ -15,6 +15,56 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { NamespaceInfo } from "@/generated/types";
 
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// eslint-disable-next-line react-refresh/only-export-components
+export const columns = (
+  currentNamespace: string,
+  podCounts: Map<string, number>
+): ColumnDef<NamespaceInfo>[] => [
+  {
+    // Four columns share this table, so the name takes the room the others
+    // do not need rather than a name column's usual share.
+    size: 420,
+    accessorKey: "name",
+    header: "Name",
+    cell: ({ row }) => (
+      <span className="flex items-baseline gap-2">
+        <ResourceRef
+          kind={ResourceType.Namespace}
+          name={row.original.name}
+          showKind={false}
+        />
+        {row.original.name === currentNamespace && (
+          <span className="text-[11px] text-fg-fnt">current scope</span>
+        )}
+      </span>
+    ),
+  },
+  {
+    size: 120,
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => <StatusBadge status={row.original.status} showDot />,
+  },
+  {
+    size: 80,
+    id: "pods",
+    header: "Pods",
+    cell: ({ row }) => (
+      <span className="font-mono text-fg-mut">
+        {podCounts.get(row.original.name) ?? 0}
+      </span>
+    ),
+  },
+  {
+    size: 80,
+    accessorKey: "createdAt",
+    header: "Age",
+    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
+  },
+];
+
 /**
  * Namespaces have no detail page and no delete action here — deleting one
  * takes everything inside it with it, which is not a hover-target decision.
@@ -30,44 +80,8 @@ export function NamespaceList() {
     [namespaces]
   );
 
-  const columns: ColumnDef<NamespaceInfo>[] = useMemo(
-    () => [
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row }) => (
-          <span className="flex items-baseline gap-2">
-            <ResourceRef
-              kind={ResourceType.Namespace}
-              name={row.original.name}
-              showKind={false}
-            />
-            {row.original.name === currentNamespace && (
-              <span className="text-[11px] text-fg-fnt">current scope</span>
-            )}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => <StatusBadge status={row.original.status} showDot />,
-      },
-      {
-        id: "pods",
-        header: "Pods",
-        cell: ({ row }) => (
-          <span className="font-mono text-fg-mut">
-            {podCounts.get(row.original.name) ?? 0}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "createdAt",
-        header: "Age",
-        cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
-      },
-    ],
+  const namespaceColumns = useMemo(
+    () => columns(currentNamespace, podCounts),
     [currentNamespace, podCounts]
   );
 
@@ -79,7 +93,7 @@ export function NamespaceList() {
       queryFn={() => commands.listNamespaces()}
       staleTime={STALE_TIMES.slow}
       getRowId={getResourceRowId}
-      columns={columns}
+      columns={namespaceColumns}
       emptyStateLabel="Namespaces"
       quickActions={[
         {

@@ -77,7 +77,6 @@ export function NodeDetail() {
 
   const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
-    includeCluster: false,
     enabled: !!node,
   });
   const nodeWithMetrics = useMemo(() => {

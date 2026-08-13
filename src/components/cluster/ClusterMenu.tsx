@@ -53,6 +53,8 @@ export const ClusterMenu = forwardRef<
     /** The trigger. Right-click, and `openKeys`, open the menu on it. */
     children: React.ReactNode;
     openKeys?: readonly string[];
+    /** Whether a plain left click opens it too, for a trigger that is only this. */
+    openOnClick?: boolean;
   }
   // Whatever wraps this — the tab's cluster segment is also a popover
   // trigger — clones it with a ref and its own handlers, and both have to

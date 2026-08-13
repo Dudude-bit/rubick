@@ -97,6 +97,7 @@ export function Crds() {
       {
         accessorKey: "kind",
         header: "Kind",
+        size: 220,
         cell: ({ row }) => (
           <RouteLink
             to={crdHref(row.original.name)}
@@ -109,6 +110,7 @@ export function Crds() {
       {
         accessorKey: "plural",
         header: "Plural",
+        size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.plural}</span>
         ),
@@ -116,6 +118,7 @@ export function Crds() {
       {
         accessorKey: "scope",
         header: "Scope",
+        size: 110,
         cell: ({ row }) => (
           <span className="text-fg-mut">{row.original.scope}</span>
         ),
@@ -123,6 +126,7 @@ export function Crds() {
       {
         accessorKey: "version",
         header: "Version",
+        size: 110,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.version}</span>
         ),
@@ -130,6 +134,7 @@ export function Crds() {
       {
         accessorKey: "shortNames",
         header: "Short names",
+        size: 160,
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;
           if (!shortNames || shortNames.length === 0) {
@@ -145,6 +150,10 @@ export function Crds() {
       createAgeColumn<CrdListItem>(),
       {
         id: "actions",
+        // One icon-sized menu, not the 150px a column gets by saying nothing:
+        // the table is `table-fixed`, so an unsized column takes a full share
+        // of the width away from the names beside it.
+        size: 60,
         cell: ({ row }) => (
           <ActionMenu>
             <DropdownMenuItem asChild>

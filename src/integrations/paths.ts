@@ -10,3 +10,16 @@
 export function integrationPagePath(vendorId: string): string {
   return `/integrations/${vendorId}`;
 }
+
+/**
+ * Where an extension that owns no screen is answered for instead.
+ *
+ * Not every extension earns a page — a controller that reads annotations has
+ * nothing to list, and `registry.ts` refuses Prometheus one on purpose. What
+ * they all have is a row in Settings → Integrations saying what they give,
+ * whether they are here, and what they are doing, so that is where the
+ * sidebar sends the reader rather than nowhere at all.
+ */
+export function integrationSettingsPath(vendorId: string): string {
+  return `/settings/integrations?vendor=${encodeURIComponent(vendorId)}`;
+}

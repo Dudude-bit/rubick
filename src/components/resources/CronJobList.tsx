@@ -17,12 +17,14 @@ import { createWorkloadListPage } from "./createWorkloadListPage";
 
 type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
 
-const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
+export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   createNameColumn<CronJobInfoWithMetrics>(ResourceType.CronJob),
   createNamespaceColumn<CronJobInfoWithMetrics>(),
   createCpuColumn<CronJobInfoWithMetrics>(),
   createMemoryColumn<CronJobInfoWithMetrics>(),
   {
+    // Five mono fields and their spaces: `0 */6 * * MON-FRI`.
+    size: 150,
     accessorKey: "schedule",
     header: "Schedule",
     cell: ({ row }) => (
@@ -30,6 +32,7 @@ const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     ),
   },
   {
+    size: 100,
     id: "suspend",
     header: "Suspend",
     // Suspended is the exception worth colouring; "No" is the resting
@@ -42,11 +45,14 @@ const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
       ),
   },
   {
+    size: 70,
     id: "active",
     header: "Active",
     cell: ({ row }) => row.original.active,
   },
   {
+    // "3d ago", under a header twice the width of its own values.
+    size: 130,
     id: "last_schedule",
     header: "Last Schedule",
     cell: ({ row }) => (

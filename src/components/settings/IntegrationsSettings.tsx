@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ConnectIntegration } from "@/components/settings/ConnectIntegration";
 import { SettingsGroup } from "@/components/settings/settings-row";
@@ -41,6 +41,11 @@ import { cn } from "@/lib/utils";
  */
 export function IntegrationsSettings({ active = true }: { active?: boolean }) {
   const { statuses, isPending, error } = useIntegrations({ facts: active });
+  // The sidebar sends an extension that owns no screen here rather than
+  // nowhere, and a pane of fourteen rows is not an answer to "show me
+  // Prometheus" unless it says which row that is.
+  const [params] = useSearchParams();
+  const asked = params.get("vendor");
 
   if (error) {
     return (
@@ -74,6 +79,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
               key={status.vendor.id}
               status={status}
               isPending={isPending}
+              asked={asked === status.vendor.id}
             />
           ))}
         </SettingsGroup>
@@ -87,6 +93,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
               key={status.vendor.id}
               status={status}
               isPending={isPending}
+              asked={asked === status.vendor.id}
             />
           ))}
         </SettingsGroup>
@@ -134,14 +141,25 @@ function sentenceList(names: readonly string[]): string {
 function ExtensionRow({
   status,
   isPending,
+  asked,
 }: {
   status: IntegrationStatus;
   isPending: boolean;
+  /** Whether the reader arrived here asking for this row by name. */
+  asked?: boolean;
 }) {
   const { vendor, extension, installed, version, facts, connection } = status;
   const Icon = extension.icon;
   const visible = useSettingSearchMatch(vendor.name, extension.gives);
   const [editing, setEditing] = React.useState(false);
+  const row = React.useRef<HTMLDivElement>(null);
+
+  // Scrolled to on arrival, and only then: doing it on every render would
+  // fight the reader every time they scrolled away from it.
+  React.useEffect(() => {
+    if (!asked || !visible) return;
+    row.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [asked, visible]);
 
   // A configured vendor is never "looking…": nothing is being detected, and
   // its own state says whether the address has been read yet.
@@ -154,11 +172,16 @@ function ExtensionRow({
 
   return (
     <div
+      ref={row}
       className={cn(
         "grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hair py-2.5",
         // Dimmed rather than hidden: the absent ones are the list of what
         // this cluster could gain, and that is worth reading once.
         !installed && !configured && !pending && "opacity-55",
+        // A ring rather than a fill, and it stays: the reader came here for
+        // this row and may sit on it for a while, so a flash that has already
+        // faded by the time the pane settles would have said nothing.
+        asked && "-mx-2 rounded-[5px] px-2 ring-1 ring-info",
         !visible && "hidden"
       )}
       hidden={!visible}

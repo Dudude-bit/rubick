@@ -112,7 +112,6 @@ export function WorkloadUsage({
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
-    includeCluster: false,
     enabled: running.length > 0,
   });
 

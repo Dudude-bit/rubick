@@ -204,6 +204,259 @@ describe("the traffic chain", () => {
     expect(hop.object.kind).toBe("Ingress");
     expect(hop.detail).toBe("log-demo.local/");
     expect(hop.via).toBe("over plain HTTP · nginx");
+    // The one line on this whole view somebody can act on.
+    expect(hop.urls).toEqual(["http://log-demo.local/"]);
+  });
+
+  it("says what serves the host and under which certificate", () => {
+    /** A workload page could always name the hostname that reached it and
+     *  never what answers on it or whether it is encrypted — the half people
+     *  actually ask about. Losing the two hops puts them back on the Ingress
+     *  page to find out. */
+    const deployment = ref("Deployment", "log-demo");
+    const svc = service("log-demo", "app=log-demo");
+    const ingress = ref("Ingress", "log-demo", {
+      kind: "ingress",
+      className: "traefik",
+    });
+    const path = trafficChains(
+      connections(deployment, [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=log-demo" },
+        },
+        {
+          from: ingress,
+          to: svc,
+          relation: {
+            verb: "routes",
+            host: "log-demo.local",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: true,
+          },
+        },
+      ]),
+      {
+        routing: new Map([
+          [
+            "Ingress/k8s-gui-test/log-demo",
+            {
+              tls: [{ secretName: "log-demo-tls", hosts: ["log-demo.local"] }],
+              addresses: ["203.0.113.10"],
+              binding: {
+                requested: "traefik",
+                resolved: "traefik",
+                controller: "traefik.io/ingress-controller",
+                viaDefault: false,
+                available: [],
+              },
+            },
+          ],
+        ]),
+      }
+    )[0];
+
+    expect(path.hops.map((hop) => hop.at)).toEqual([
+      "certificate",
+      "controller",
+      "object",
+      "object",
+      "object",
+    ]);
+    const certificate = path.hops[0];
+    if (certificate.at !== "certificate") throw new Error("expected TLS");
+    expect(certificate.secret.name).toBe("log-demo-tls");
+    const controller = path.hops[1];
+    if (controller.at !== "controller")
+      throw new Error("expected a controller");
+    expect(controller.binding.controller).toBe("traefik.io/ingress-controller");
+    const route = path.hops[2];
+    if (route.at !== "object") throw new Error("expected the Ingress hop");
+    expect(route.urls).toEqual(["https://log-demo.local/"]);
+    // The URL is half an address until the hostname resolves somewhere.
+    expect(route.publishedAt).toEqual(["203.0.113.10"]);
+  });
+
+  it("tells an unread address from one the controller never published", () => {
+    /** An Ingress with no address is never reached whatever its rules say,
+     *  and it is the most common reason a correct one "does not work". `null`
+     *  is a page that has not looked; `[]` is a finding. Collapsing the two
+     *  would make the chain either silent about a real outage or noisy on
+     *  every page that has not read the Ingress. */
+    const deployment = ref("Deployment", "log-demo");
+    const svc = service("log-demo", "app=log-demo");
+    const ingress = ref("Ingress", "log-demo", {
+      kind: "ingress",
+      className: null,
+    });
+    const edges: ConnectionEdge[] = [
+      {
+        from: svc,
+        to: deployment,
+        relation: { verb: "selects", selector: "app=log-demo" },
+      },
+      {
+        from: ingress,
+        to: svc,
+        relation: {
+          verb: "routes",
+          host: "log-demo.local",
+          path: "/",
+          pathType: "Prefix",
+          port: "80",
+          tls: false,
+        },
+      },
+    ];
+
+    const unread = trafficChains(connections(deployment, edges))[0];
+    const first = unread.hops[0];
+    if (first.at !== "object") throw new Error("expected the Ingress hop");
+    expect(first.publishedAt).toBeNull();
+
+    const read = trafficChains(connections(deployment, edges), {
+      routing: new Map([
+        [
+          "Ingress/k8s-gui-test/log-demo",
+          { tls: [], binding: null, addresses: [] },
+        ],
+      ]),
+    })[0];
+    const hop = read.hops[0];
+    if (hop.at !== "object") throw new Error("expected the Ingress hop");
+    expect(hop.publishedAt).toEqual([]);
+  });
+
+  it("draws no certificate hop for a host the Secret does not cover", () => {
+    /** A wildcard entry covers everything, a named one covers what it names.
+     *  Getting this wrong claims a host is served under a certificate that
+     *  every browser would refuse. */
+    const deployment = ref("Deployment", "log-demo");
+    const svc = service("log-demo", "app=log-demo");
+    const ingress = ref("Ingress", "log-demo", {
+      kind: "ingress",
+      className: null,
+    });
+    const path = trafficChains(
+      connections(deployment, [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=log-demo" },
+        },
+        {
+          from: ingress,
+          to: svc,
+          relation: {
+            verb: "routes",
+            host: "log-demo.local",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: false,
+          },
+        },
+      ]),
+      {
+        routing: new Map([
+          [
+            "Ingress/k8s-gui-test/log-demo",
+            {
+              tls: [{ secretName: "other-tls", hosts: ["shop.example.com"] }],
+              addresses: [],
+              binding: null,
+            },
+          ],
+        ]),
+      }
+    )[0];
+
+    expect(path.hops.some((hop) => hop.at === "certificate")).toBe(false);
+  });
+
+  /**
+   * A wildcard Secret is the ordinary shape, not the edge case — `*.example.com`
+   * covering `shop.example.com` is exactly `covers`'s rule from
+   * `certificates.ts`. If this regressed to exact string matching, the most
+   * common TLS setup in any real cluster would draw no certificate hop at all.
+   */
+  it("draws a certificate hop for a host a wildcard Secret covers", () => {
+    const chainFor = (tlsHosts: string[], routeHost: string) => {
+      const deployment = ref("Deployment", "log-demo");
+      const svc = service("log-demo", "app=log-demo");
+      const ingress = ref("Ingress", "log-demo", {
+        kind: "ingress",
+        className: null,
+      });
+      return trafficChains(
+        connections(deployment, [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=log-demo" },
+          },
+          {
+            from: ingress,
+            to: svc,
+            relation: {
+              verb: "routes",
+              host: routeHost,
+              path: "/",
+              pathType: "Prefix",
+              port: "80",
+              tls: true,
+            },
+          },
+        ]),
+        {
+          routing: new Map([
+            [
+              "Ingress/k8s-gui-test/log-demo",
+              {
+                tls: [{ secretName: "wildcard-tls", hosts: tlsHosts }],
+                addresses: [],
+                binding: null,
+              },
+            ],
+          ]),
+        }
+      )[0];
+    };
+
+    // Exact host: the ordinary case, and the one every prior version already
+    // handled.
+    expect(
+      chainFor(["shop.example.com"], "shop.example.com").hops.some(
+        (hop) => hop.at === "certificate"
+      )
+    ).toBe(true);
+
+    // One label of wildcard: the setup exact matching missed entirely.
+    expect(
+      chainFor(["*.example.com"], "shop.example.com").hops.some(
+        (hop) => hop.at === "certificate"
+      )
+    ).toBe(true);
+
+    // Two labels under a wildcard is what a browser refuses, so the app must
+    // refuse it too rather than draw a certificate hop that lies.
+    expect(
+      chainFor(["*.example.com"], "a.shop.example.com").hops.some(
+        (hop) => hop.at === "certificate"
+      )
+    ).toBe(false);
+
+    // No hosts on the `spec.tls` entry is the Ingress's own catch-all and
+    // must keep matching everything — this is not the wildcard rule and must
+    // not start going through it.
+    expect(
+      chainFor([], "anything.example.com").hops.some(
+        (hop) => hop.at === "certificate"
+      )
+    ).toBe(true);
   });
 
   it("marks a chain that stops, and says which pods are not ready", () => {

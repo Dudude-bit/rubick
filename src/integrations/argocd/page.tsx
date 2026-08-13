@@ -44,6 +44,7 @@ import {
 } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
+  Chain,
   Cell,
   Column,
   FilterBox,
@@ -311,7 +312,7 @@ function AppRow({
       }
     >
       <SourceLine app={app} />
-      <div className="grid grid-cols-4">
+      <Chain>
         <Column label="Source">
           {app.sources.length === 0 ? (
             <Cell under="no source declared">none</Cell>
@@ -364,7 +365,7 @@ function AppRow({
             {app.health.toLowerCase()}
           </Cell>
         </Column>
-      </div>
+      </Chain>
       {changed.length > 0 && <Differing app={app} resources={changed} />}
       {app.generatedBy && <GeneratedNote app={app} />}
       <Findings app={app} url={url} />

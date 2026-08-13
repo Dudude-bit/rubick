@@ -27,16 +27,25 @@ interface QuickActionsProps<T> {
   item: T;
   /** List of quick actions */
   actions: QuickAction<T>[];
-  /** Whether actions are visible */
-  visible: boolean;
   /** Additional class names */
   className?: string;
 }
 
+/**
+ * The actions at the end of a row.
+ *
+ * Shown on hover and on keyboard focus, and *in CSS* rather than in React
+ * state. The row is the `group`; a state-driven version re-rendered every
+ * cell in the table each time the pointer crossed a row boundary, which on a
+ * list that re-reads itself every two seconds is a layout recomputed under
+ * the pointer.
+ */
+const ROW_ACTIONS_REVEAL =
+  "opacity-0 pointer-events-none transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-data-[focused=true]:pointer-events-auto group-data-[focused=true]:opacity-100";
+
 export function QuickActions<T>({
   item,
   actions,
-  visible,
   className,
 }: QuickActionsProps<T>) {
   const visibleActions = actions.filter((action) => !action.hidden?.(item));
@@ -45,11 +54,7 @@ export function QuickActions<T>({
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-0.5 transition-opacity duration-150",
-        visible ? "opacity-100" : "opacity-0 pointer-events-none",
-        className
-      )}
+      className={cn("flex items-center gap-0.5", ROW_ACTIONS_REVEAL, className)}
       onClick={(e) => e.stopPropagation()}
     >
       {visibleActions.map((action) => {
