@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-08-13
+
+### Fixed — an expired session claimed the cluster was empty
+
+GKE tokens last about an hour and nothing here renews them. A list that
+came back 401 used to render its **empty** state, so an expired session
+told the reader, on every screen at once, that their cluster had no pods
+in it — the one failure mode that looks exactly like a working app
+reporting bad news.
+
+A 401 is now its own error rather than an absent result. `ResourceList`
+reads its query error, and a refused session replaces the page with a
+screen that names the cluster, quotes the API server, and offers a way
+back in.
+
+### Added — cert-manager page
+
+The Integrations category listed vendors that declared a `page` and
+silently dropped the rest, so cert-manager was detected on plenty of
+clusters and appeared nowhere. The category now lists every detected
+extension; the ones that own no screen go to their Settings row.
+
+The page walks Certificate → CertificateRequest → Order → Challenge and
+prints the sentence from whichever object actually failed.
+
+### Added — Traefik routing map
+
+Entry point → host → service, layered and deterministic, ordered by
+trouble like every other list here. `page-kit` now draws the joins
+between its columns, so the chain a single request travels stays a
+chain and all five vendor pages read as one path rather than five
+stacks of boxes.
+
+A workload's traffic chain reaches the controller, the certificate, a
+copyable URL, and the address the hostname has to resolve to — all from
+reads the app already made.
+
+### Changed — namespaces are a selection, not a value
+
+Lists are read once cluster-wide and narrowed on the client; aggregates
+are asked per namespace and joined, which is what `SCOPE_LIMIT` bounds.
+
+What gets persisted stays a single namespace, deliberately: an older
+build reading the new setting sees "all namespaces" rather than one that
+does not exist.
+
+### Changed — tables stopped moving
+
+`table-fixed` with widths as shares of the table, hover moved out of
+React state and into CSS, real virtualisation, and no pagination — a
+live list has no stable page two.
+
+Row actions came and went during this work: they duplicated the delete
+already on the row, behind a weaker confirmation.
+
+### Performance
+
+- **Watch events batch on the log streamer's 50 ms flush.** A
+  1000-object burst is 5 events and one render instead of 1000 and 1000.
+- **`count_of` reads one page** and trusts the apiserver's
+  `remainingItemCount` instead of pulling every Event's metadata every
+  ten seconds.
+- **Workload metrics are pre-indexed.** 200 deployments against 2000
+  pods went from 15.9 ms to 1.4 ms.
+- The frontend event bridge no longer dies permanently on a lagged
+  broadcast, and tells the window when it drops something.
+
+### Caught in review
+
+A second, adversarial pass found the two worst things in the branch,
+both fixed before merge:
+
+- `table-fixed` resolves `width: 100%` as max(100%, sum of widths), so a
+  Pods list came out 378 px wider than the default window with its
+  actions off-screen.
+- The overview merge drew every cluster-scoped problem once per selected
+  namespace.
+
+### Tooling
+
+Tests: 337 → 344 cargo (plus 10 ignored), 1437 → 1577 vitest across 123
+files.
+
 ## [3.0.1] - 2026-08-11
 
 ### Fixed — macOS refused to open the downloaded app
