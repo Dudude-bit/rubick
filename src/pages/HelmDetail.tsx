@@ -13,7 +13,7 @@ import {
   StickyNote,
   Trash2,
 } from "lucide-react";
-import yaml from "js-yaml";
+import { dump } from "js-yaml";
 
 import { fluxHelmReleasePath } from "@/integrations";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
@@ -75,7 +75,7 @@ function valuesAsYaml(values: unknown): string {
     return "# No values set — the chart's defaults apply.";
   }
   try {
-    return yaml.dump(values, { indent: 2, lineWidth: -1, noRefs: true });
+    return dump(values, { indent: 2, lineWidth: -1, noRefs: true });
   } catch {
     return String(values);
   }

@@ -1,4 +1,4 @@
-import yaml from "js-yaml";
+import { dump, loadAll } from "js-yaml";
 import { Edge, Node } from "reactflow";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
@@ -228,7 +228,7 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
   }
 
   try {
-    yaml.loadAll(text, (doc) => {
+    loadAll(text, (doc) => {
       if (!doc) {
         return;
       }
@@ -613,13 +613,11 @@ export const buildManifestYaml = (
 
   return docs
     .map((doc) =>
-      yaml
-        .dump(doc, {
-          lineWidth: -1,
-          noRefs: true,
-          sortKeys: false,
-        })
-        .trim()
+      dump(doc, {
+        lineWidth: -1,
+        noRefs: true,
+        sortKeys: false,
+      }).trim()
     )
     .filter(Boolean)
     .join("\n---\n");

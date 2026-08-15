@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import yaml from "js-yaml";
+import { dump, load } from "js-yaml";
 import { commands } from "@/lib/commands";
 import type { ManifestResult } from "@/generated/types";
 
@@ -243,8 +243,8 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   formatYaml: () => {
     const { editedContent } = get();
     try {
-      const parsed = yaml.load(editedContent);
-      const formatted = yaml.dump(parsed, {
+      const parsed = load(editedContent);
+      const formatted = dump(parsed, {
         indent: 2,
         lineWidth: -1, // No line wrapping
         noRefs: true,

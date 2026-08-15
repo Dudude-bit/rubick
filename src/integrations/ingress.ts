@@ -18,7 +18,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import yaml from "js-yaml";
+import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
 import { expiryOf, type Expiry } from "@/lib/certificates";
@@ -294,7 +294,7 @@ interface WorkloadManifest {
  * a container's arguments live.
  */
 export function workloadArgs(manifest: string): string[] {
-  const parsed = yaml.load(manifest) as WorkloadManifest | undefined;
+  const parsed = load(manifest) as WorkloadManifest | undefined;
   const containers = parsed?.spec?.template?.spec?.containers ?? [];
   return containers.flatMap((container) =>
     [...(container.command ?? []), ...(container.args ?? [])].map(String)
@@ -310,7 +310,7 @@ export function workloadArgs(manifest: string): string[] {
  * namespace called `$(POD_NAMESPACE)`, which does not exist.
  */
 export function workloadEnv(manifest: string): Record<string, string> {
-  const parsed = yaml.load(manifest) as WorkloadManifest | undefined;
+  const parsed = load(manifest) as WorkloadManifest | undefined;
   const containers = parsed?.spec?.template?.spec?.containers ?? [];
   const env: Record<string, string> = {};
   for (const container of containers) {

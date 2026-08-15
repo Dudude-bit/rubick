@@ -1,4 +1,4 @@
-import yaml from "js-yaml";
+import { loadAll } from "js-yaml";
 
 /** One object the release's stored manifest declares. */
 export interface InstalledObject {
@@ -30,7 +30,7 @@ export function installedObjects(
     // default schema rejects the whole *string* for it, so one duplicated
     // label lost every object in the release. JSON mode takes the last
     // occurrence, which is what the API server did when it applied this.
-    documents = yaml.loadAll(manifest, undefined, { json: true });
+    documents = loadAll(manifest, { json: true });
   } catch {
     return [];
   }
