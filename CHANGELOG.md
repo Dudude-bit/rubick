@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — Diagnostics
+
+A Settings section that opens with what is wrong in the environment and
+holds the whole of it underneath: the directories a spawned binary is
+looked for in, the tools and kubectl plugins that resolve on them, how
+each context authenticates, and where the kubeconfig, config and logs
+live.
+
+It exists because a missing `kubectl-oidc_login` surfaced as kubectl's
+own `unknown command "oidc-login" for "kubectl"` — a sentence that names
+neither the file kubectl wanted nor where it looked. The underscore
+spelling is not something a reader guesses.
+
+One button copies the report for a chat message or an issue. It is
+redacted by default: the home directory becomes `~` and context names
+become `context-1`, consistently across every block so the findings
+still point at rows the reader can find. The toggle beside it turns that
+off.
+
+### Fixed — a missing kubectl plugin is now named before the spawn
+
+An exec block reading `command: kubectl, args: [oidc-login, …]` needs
+`kubectl-oidc_login` on the path. The auth terminal used to relay
+kubectl's refusal verbatim; the check now runs first, against the same
+path the plugin would have been spawned with, and says which file is
+missing and where it was sought.
+
+Anything that is not a kubectl subcommand passes straight through:
+refusing a whole binary because its name looked like a plugin would
+break the commands that work today.
+
 ## [4.0.1] - 2026-08-15
 
 Nothing here changes what the app does. It is a dependency sweep — the

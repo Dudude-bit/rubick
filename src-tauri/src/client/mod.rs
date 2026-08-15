@@ -30,6 +30,14 @@ pub struct K8sClientManager {
     /// Default kubeconfig path
     kubeconfig_path: RwLock<Option<PathBuf>>,
 
+    /// The file the loaded kubeconfig actually came from.
+    ///
+    /// Distinct from `kubeconfig_path`, which records an *override* and
+    /// stays `None` for a default load. A screen reporting "where did this
+    /// come from" needs the file either way, and overloading the override
+    /// to carry it would quietly change what "no override" means.
+    kubeconfig_source: RwLock<Option<PathBuf>>,
+
     /// When each context's credentials stop being accepted, where the
     /// credential plugin said so. Absent for a context that named no deadline
     /// or uses none — see `ClusterInfo::credentials_expire_at`.
@@ -45,6 +53,7 @@ impl K8sClientManager {
             configs: DashMap::new(),
             kubeconfig: RwLock::new(None),
             kubeconfig_path: RwLock::new(None),
+            kubeconfig_source: RwLock::new(None),
             credential_deadlines: DashMap::new(),
         }
     }
@@ -57,8 +66,27 @@ impl K8sClientManager {
             )))
         })?;
 
+        // Record which file that was. `Kubeconfig::read` does not say, and a
+        // screen asking "where did this come from" cannot answer from the
+        // parsed contents. This mirrors kube's own resolution: `KUBECONFIG`
+        // when set, `~/.kube/config` otherwise. It goes to `kubeconfig_source`,
+        // not to the override — a default load has no override.
+        *self.kubeconfig_source.write().await = std::env::var_os("KUBECONFIG")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| dirs::home_dir().map(|h| h.join(".kube").join("config")));
+
         *self.kubeconfig.write().await = Some(kubeconfig);
         Ok(())
+    }
+
+    /// The kubeconfig this manager holds, as it was parsed.
+    ///
+    /// Exposed for screens that report on the configuration rather than use
+    /// it: re-reading the file would answer about a different moment, and
+    /// possibly a different file.
+    pub async fn kubeconfig(&self) -> Option<Kubeconfig> {
+        self.kubeconfig.read().await.clone()
     }
 
     /// Load kubeconfig from an explicit path if `override_path` is
@@ -95,7 +123,8 @@ impl K8sClientManager {
             )))
         })?;
 
-        *self.kubeconfig_path.write().await = Some(path);
+        *self.kubeconfig_path.write().await = Some(path.clone());
+        *self.kubeconfig_source.write().await = Some(path);
         *self.kubeconfig.write().await = Some(kubeconfig);
         Ok(())
     }
@@ -108,7 +137,7 @@ impl K8sClientManager {
     /// symlink is involved, which is the disagreement such a screen exists to
     /// prevent.
     pub async fn kubeconfig_path(&self) -> Option<PathBuf> {
-        self.kubeconfig_path.read().await.clone()
+        self.kubeconfig_source.read().await.clone()
     }
 
     /// Get list of available contexts

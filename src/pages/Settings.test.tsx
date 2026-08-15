@@ -58,6 +58,7 @@ const PANE_MARK: Record<string, RegExp> = {
   clusters: /clusters pane/,
   integrations: /integrations pane/,
   registries: /registries pane/,
+  diagnostics: /Nothing here needs attention|Search path/,
   about: /Automatic updates/,
 };
 

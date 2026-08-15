@@ -113,6 +113,7 @@ fn main() {
             commands::cluster::get_cluster_info,
             commands::cluster::get_kubeconfig_source,
             commands::binaries::locate_binaries,
+            commands::diagnostics::collect_diagnostics,
             // Namespace management
             commands::namespace::list_namespaces,
             // Cross-cluster search

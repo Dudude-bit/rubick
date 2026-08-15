@@ -8,8 +8,11 @@
 
 pub mod collect;
 pub mod findings;
+pub mod redact;
 
 pub use collect::{
-    collect, AppInfo, ContextAuth, Diagnostics, KubeconfigInfo, PluginStatus, SearchPathEntry,
+    collect, DiagnosticContext, Diagnostics, InstallationInfo, KubeconfigInfo, PluginStatus,
+    SearchPathEntry,
 };
 pub use findings::{missing_plugin_finding, Finding, Severity};
+pub use redact::redacted;

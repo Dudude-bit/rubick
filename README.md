@@ -28,6 +28,8 @@ Free and GPLv3. No account, no telemetry.
 
 **It warns before it obeys.** Scale, Restart, Delete and Edit YAML tell you who will undo the change and how fast — an autoscaler in seconds, Argo CD or Flux in minutes. Then it does what you asked, because a hand edit during an incident is legitimate.
 
+**It says what it cannot see.** A desktop app does not inherit your shell's `PATH`, so a credential plugin that works in your terminal can be invisible here. Settings → Diagnostics names the directories it actually searches, which plugins resolve in them, and what each context needs — and copies the lot, redacted, for when the machine with the problem is not yours.
+
 ![A path that stops, and why](docs/images/traffic-chain-stops.png)
 
 ## What you get

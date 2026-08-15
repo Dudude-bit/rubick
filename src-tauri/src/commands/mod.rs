@@ -14,6 +14,7 @@ pub mod connections;
 pub mod crds;
 pub mod debug;
 pub mod deployments;
+pub mod diagnostics;
 pub mod events;
 pub mod helm;
 pub mod kubectl;

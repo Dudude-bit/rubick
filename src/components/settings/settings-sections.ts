@@ -1,4 +1,11 @@
-import { Info, Package, Palette, Plug, Server } from "lucide-react";
+import {
+  Info,
+  Package,
+  Palette,
+  Plug,
+  Server,
+  Stethoscope,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface SettingsSectionDef {
@@ -18,13 +25,18 @@ export interface SettingsSectionDef {
 }
 
 /**
- * Five sections, split by what kind of decision each holds.
+ * Six sections, split by what kind of decision each holds.
  *
  * The page used to be one scroll of eight groups, and the groups were
  * three different kinds of thing wearing the same shirt: a preference, the
  * several ways of reaching a cluster, and live state. Splitting them by
  * kind is what gives a category like Integrations a home instead of a
  * ninth slot in the pile.
+ *
+ * Two of the six hold no decision at all — About and Diagnostics answer
+ * "what is this build" and "what can it see". They live here because that
+ * is where a reader looks for them, not because the rule stretched to
+ * cover them.
  */
 export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
   {
@@ -60,6 +72,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     description: "Where images are pulled from, and what reaches them.",
     keywords:
       "registries registry image pull credentials docker ecr gcr harbor auth token",
+  },
+  {
+    id: "diagnostics",
+    label: "Diagnostics",
+    icon: Stethoscope,
+    description: "What this app can see of the machine it runs on.",
+    keywords:
+      "diagnostics path plugin plugins kubectl krew oidc environment troubleshoot debug report copy",
   },
   {
     id: "about",

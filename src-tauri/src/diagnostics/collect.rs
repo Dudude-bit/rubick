@@ -37,7 +37,7 @@ pub struct PluginStatus {
 /// How one context authenticates, and whether that can work.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ContextAuth {
+pub struct DiagnosticContext {
     pub context: String,
     /// `exec`, `token`, `client-certificate`, `auth-provider` or `none`.
     pub method: String,
@@ -60,7 +60,7 @@ pub struct KubeconfigInfo {
 /// The installation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AppInfo {
+pub struct InstallationInfo {
     pub version: String,
     pub os: String,
     pub config_path: Option<String>,
@@ -70,7 +70,7 @@ pub struct AppInfo {
     pub log_destination: String,
 }
 
-impl AppInfo {
+impl InstallationInfo {
     pub fn collect() -> Self {
         Self {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -92,9 +92,9 @@ impl AppInfo {
 pub struct Diagnostics {
     pub search_path: Vec<SearchPathEntry>,
     pub plugins: Vec<PluginStatus>,
-    pub contexts: Vec<ContextAuth>,
+    pub contexts: Vec<DiagnosticContext>,
     pub kubeconfig: Option<KubeconfigInfo>,
-    pub app: AppInfo,
+    pub app: InstallationInfo,
     pub findings: Vec<super::Finding>,
 }
 
@@ -117,7 +117,7 @@ fn user_for(raw: &Kubeconfig, context: &str) -> Option<String> {
 }
 
 /// How each context authenticates.
-pub fn contexts_from(raw: &Kubeconfig) -> Vec<ContextAuth> {
+pub fn contexts_from(raw: &Kubeconfig) -> Vec<DiagnosticContext> {
     raw.contexts
         .iter()
         .map(|named| {
@@ -145,7 +145,7 @@ pub fn contexts_from(raw: &Kubeconfig) -> Vec<ContextAuth> {
                 _ => ("none".to_string(), None),
             };
 
-            ContextAuth {
+            DiagnosticContext {
                 context: named.name.clone(),
                 command_path: command.as_deref().and_then(locate_on_user_path),
                 method,
@@ -160,7 +160,7 @@ pub fn contexts_from(raw: &Kubeconfig) -> Vec<ContextAuth> {
 /// Keyed in name order: two reads of an unchanged machine must produce the
 /// same list in the same order, or the panel appears to change when nothing
 /// did.
-pub fn plugins_from(contexts: &[ContextAuth], raw: &Kubeconfig) -> Vec<PluginStatus> {
+pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<PluginStatus> {
     let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     for ctx in contexts {
@@ -198,10 +198,12 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         .into_iter()
         .map(SearchPathEntry::probe)
         .collect();
-    let app = AppInfo::collect();
+    let app = InstallationInfo::collect();
 
-    let Some(path) = client.kubeconfig_path().await else {
-        // Nothing loaded yet. Saying so beats naming a file never opened.
+    // The parsed config the app is already living on, not a fresh read of
+    // the file. A second read would answer about a different moment, and
+    // this panel exists because two answers about one machine is the bug.
+    let Some(raw) = client.kubeconfig().await else {
         return Diagnostics {
             search_path,
             plugins: Vec::new(),
@@ -212,60 +214,44 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
     };
 
-    let display_path = path.to_string_lossy().into_owned();
-    match Kubeconfig::read_from(&path) {
-        Ok(raw) => {
-            let contexts = contexts_from(&raw);
-            let plugins = plugins_from(&contexts, &raw);
+    let path = client
+        .kubeconfig_path()
+        .await
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "unknown — loaded before the path was recorded".to_string());
 
-            let mut findings: Vec<super::Finding> = contexts
-                .iter()
-                .filter_map(|ctx| {
-                    let user = user_for(&raw, &ctx.context)?;
-                    let exec = exec_for(&raw, &user)?;
-                    super::missing_plugin_finding(
-                        &ctx.context,
-                        exec.command.as_deref()?,
-                        exec.args.as_ref()?,
-                    )
-                })
-                .collect();
-            findings.sort_by(|a, b| {
-                a.severity
-                    .cmp(&b.severity)
-                    .then_with(|| a.subject.cmp(&b.subject))
-            });
+    let contexts = contexts_from(&raw);
+    let plugins = plugins_from(&contexts, &raw);
 
-            Diagnostics {
-                search_path,
-                plugins,
-                contexts,
-                kubeconfig: Some(KubeconfigInfo {
-                    path: display_path,
-                    parse_error: None,
-                    context_count: raw.contexts.len(),
-                }),
-                app,
-                findings,
-            }
-        }
-        Err(err) => Diagnostics {
-            search_path,
-            plugins: Vec::new(),
-            contexts: Vec::new(),
-            kubeconfig: Some(KubeconfigInfo {
-                path: display_path.clone(),
-                parse_error: Some(err.to_string()),
-                context_count: 0,
-            }),
-            app,
-            findings: vec![super::Finding {
-                severity: super::Severity::Blocking,
-                title: "The kubeconfig could not be read".to_string(),
-                detail: format!("{display_path}: {err}"),
-                subject: None,
-            }],
-        },
+    let mut findings: Vec<super::Finding> = contexts
+        .iter()
+        .filter_map(|ctx| {
+            let user = user_for(&raw, &ctx.context)?;
+            let exec = exec_for(&raw, &user)?;
+            super::missing_plugin_finding(
+                &ctx.context,
+                exec.command.as_deref()?,
+                exec.args.as_ref()?,
+            )
+        })
+        .collect();
+    findings.sort_by(|a, b| {
+        a.severity
+            .cmp(&b.severity)
+            .then_with(|| a.subject.cmp(&b.subject))
+    });
+
+    Diagnostics {
+        search_path,
+        plugins,
+        contexts,
+        kubeconfig: Some(KubeconfigInfo {
+            path,
+            parse_error: None,
+            context_count: raw.contexts.len(),
+        }),
+        app,
+        findings,
     }
 }
 
@@ -315,7 +301,7 @@ users:
 
     #[test]
     fn the_application_block_answers_without_a_cluster() {
-        let app = AppInfo::collect();
+        let app = InstallationInfo::collect();
         assert!(!app.version.is_empty(), "the app knows its own version");
         assert!(!app.os.is_empty(), "and the platform it runs on");
     }

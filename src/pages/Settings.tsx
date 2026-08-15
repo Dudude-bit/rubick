@@ -4,6 +4,7 @@ import { RegistrySettings } from "@/components/registry/RegistrySettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { ClustersSettings } from "@/components/settings/ClustersSettings";
+import { DiagnosticsSettings } from "@/components/settings/DiagnosticsSettings";
 import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { SettingsSearchable } from "@/components/settings/settings-row";
@@ -65,6 +66,8 @@ function sectionContent(id: string, connected: boolean, active: boolean) {
           <RegistrySettings />
         </SettingsSearchable>
       );
+    case "diagnostics":
+      return <DiagnosticsSettings />;
     case "about":
       return <AboutSettings />;
     default:

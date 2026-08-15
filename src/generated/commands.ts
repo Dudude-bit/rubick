@@ -33,6 +33,7 @@ import type {
   DebugStatus,
   DeploymentInfo,
   DetectedExtension,
+  Diagnostics,
   EndpointsInfo,
   EventFilters,
   EventInfo,
@@ -102,683 +103,130 @@ import type {
   YamlHistoryEntryDto,
 } from "./types";
 
-export async function listIngresses(
-  filters: ResourceFilters | null
-): Promise<IngressInfo[]> {
-  return invoke<IngressInfo[]>("list_ingresses", { filters });
+export async function getLokiConnection(): Promise<LokiConnection | null> {
+  return invoke<LokiConnection | null>("get_loki_connection");
 }
 
-export async function listEndpoints(
-  filters: ResourceFilters | null
-): Promise<EndpointsInfo[]> {
-  return invoke<EndpointsInfo[]>("list_endpoints", { filters });
-}
-
-export async function listServiceEndpoints(
-  namespace: string | null
-): Promise<ServicePublished[]> {
-  return invoke<ServicePublished[]>("list_service_endpoints", { namespace });
-}
-
-export async function getIngress(
-  name: string,
-  namespace: string | null
-): Promise<IngressInfo> {
-  return invoke<IngressInfo>("get_ingress", { name, namespace });
-}
-
-export async function resolveIngressClass(
-  className: string | null
-): Promise<IngressClassBinding> {
-  return invoke<IngressClassBinding>("resolve_ingress_class", { className });
-}
-
-export async function deleteIngress(
-  name: string,
-  namespace: string | null
+export async function saveLokiConnection(
+  url: string,
+  authType: string,
+  token: string | null,
+  insecureTls: boolean
 ): Promise<void> {
-  return invoke<void>("delete_ingress", { name, namespace });
-}
-
-export async function getEndpoints(
-  name: string,
-  namespace: string | null
-): Promise<EndpointsInfo> {
-  return invoke<EndpointsInfo>("get_endpoints", { name, namespace });
-}
-
-export async function deleteEndpoints(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_endpoints", { name, namespace });
-}
-
-export async function streamPodLogs(config: StreamLogConfig): Promise<string> {
-  return invoke<string>("stream_pod_logs", { config });
-}
-
-export async function logStreamSubscribed(streamId: string): Promise<void> {
-  return invoke<void>("log_stream_subscribed", { streamId });
-}
-
-export async function getPodLogs(
-  podName: string,
-  namespace: string | null,
-  container: string | null,
-  tailLines: number | null,
-  sinceSeconds: number | null,
-  previous: boolean
-): Promise<LogLine[]> {
-  return invoke<LogLine[]>("get_pod_logs", {
-    podName,
-    namespace,
-    container,
-    tailLines,
-    sinceSeconds,
-    previous,
+  return invoke<void>("save_loki_connection", {
+    url,
+    authType,
+    token,
+    insecureTls,
   });
 }
 
-export async function stopLogStream(streamId: string): Promise<void> {
-  return invoke<void>("stop_log_stream", { streamId });
+export async function forgetLokiConnection(): Promise<void> {
+  return invoke<void>("forget_loki_connection");
 }
 
-export async function searchRegistryImages(
-  request: RegistrySearchRequest
-): Promise<RegistryImageResult[]> {
-  return invoke<RegistryImageResult[]>("search_registry_images", { request });
+export async function probeLoki(
+  url: string | null,
+  authType: string | null,
+  token: string | null,
+  insecureTls: boolean | null
+): Promise<LokiProbe> {
+  return invoke<LokiProbe>("probe_loki", { url, authType, token, insecureTls });
 }
 
-export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
-  return invoke<RegistryImportEntry[]>("import_docker_config");
-}
-
-export async function setRegistryCredentials(
-  registryId: string,
-  auth: RegistryAuth
-): Promise<void> {
-  return invoke<void>("set_registry_credentials", { registryId, auth });
-}
-
-export async function deleteRegistryCredentials(
-  registryId: string
-): Promise<void> {
-  return invoke<void>("delete_registry_credentials", { registryId });
-}
-
-export async function getRegistryAuthStatus(
-  registryId: string
-): Promise<RegistryAuthStatus | null> {
-  return invoke<RegistryAuthStatus | null>("get_registry_auth_status", {
-    registryId,
-  });
-}
-
-export async function listEvents(
-  filters: EventFilters | null
-): Promise<EventInfo[]> {
-  return invoke<EventInfo[]>("list_events", { filters });
-}
-
-export async function deleteDebugPod(
-  podName: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_debug_pod", { podName, namespace });
-}
-
-export async function listDebugPods(
-  namespace: string | null
-): Promise<DebugResult[]> {
-  return invoke<DebugResult[]>("list_debug_pods", { namespace });
-}
-
-export async function getDebugStatus(
-  operationId: string
-): Promise<DebugStatus> {
-  return invoke<DebugStatus>("get_debug_status", { operationId });
-}
-
-export async function extendDebugTimeout(
-  operationId: string,
-  additionalSeconds: number | null
-): Promise<void> {
-  return invoke<void>("extend_debug_timeout", {
-    operationId,
-    additionalSeconds,
-  });
-}
-
-export async function cancelDebugOperation(operationId: string): Promise<void> {
-  return invoke<void>("cancel_debug_operation", { operationId });
-}
-
-export async function debugPodEphemeral(
-  podName: string,
-  namespace: string | null,
-  config: DebugConfig
-): Promise<DebugOperation> {
-  return invoke<DebugOperation>("debug_pod_ephemeral", {
-    podName,
-    namespace,
-    config,
-  });
-}
-
-export async function debugPodCopy(
-  podName: string,
-  namespace: string | null,
-  config: DebugConfig
-): Promise<DebugOperation> {
-  return invoke<DebugOperation>("debug_pod_copy", {
-    podName,
-    namespace,
-    config,
-  });
-}
-
-export async function debugNode(
-  nodeName: string,
-  namespace: string | null,
-  config: DebugConfig
-): Promise<DebugOperation> {
-  return invoke<DebugOperation>("debug_node", { nodeName, namespace, config });
-}
-
-export async function listNodes(
-  filters: NodeFilters | null
-): Promise<NodeInfo[]> {
-  return invoke<NodeInfo[]>("list_nodes", { filters });
-}
-
-export async function getNode(name: string): Promise<NodeInfo> {
-  return invoke<NodeInfo>("get_node", { name });
-}
-
-export async function cordonNode(name: string): Promise<void> {
-  return invoke<void>("cordon_node", { name });
-}
-
-export async function uncordonNode(name: string): Promise<void> {
-  return invoke<void>("uncordon_node", { name });
-}
-
-export async function drainNode(
-  name: string,
-  ignoreDaemonsets: boolean | null,
-  force: boolean | null
-): Promise<void> {
-  return invoke<void>("drain_node", { name, ignoreDaemonsets, force });
-}
-
-export async function getClusterOverview(
-  namespace: string | null
-): Promise<ClusterOverview> {
-  return invoke<ClusterOverview>("get_cluster_overview", { namespace });
-}
-
-export async function listCustomResources(
-  crdName: string,
-  namespace: string | null,
-  labelSelector: string | null,
-  limit: number | null
-): Promise<CustomResourceInfo[]> {
-  return invoke<CustomResourceInfo[]>("list_custom_resources", {
-    crdName,
-    namespace,
-    labelSelector,
+export async function lokiQueryRange(
+  selector: string,
+  startMs: number,
+  endMs: number,
+  limit: number,
+  before: string | null
+): Promise<LokiPage> {
+  return invoke<LokiPage>("loki_query_range", {
+    selector,
+    startMs,
+    endMs,
     limit,
+    before,
   });
 }
 
-export async function getCustomResource(
-  crdName: string,
-  name: string,
-  namespace: string | null
-): Promise<CustomResourceDetailInfo> {
-  return invoke<CustomResourceDetailInfo>("get_custom_resource", {
-    crdName,
-    name,
-    namespace,
-  });
-}
-
-export async function getCustomResourceYaml(
-  crdName: string,
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_custom_resource_yaml", {
-    crdName,
-    name,
-    namespace,
-  });
-}
-
-export async function deleteCustomResource(
-  crdName: string,
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_custom_resource", { crdName, name, namespace });
-}
-
-export async function listCrds(grouped: boolean | null): Promise<CrdGroup[]> {
-  return invoke<CrdGroup[]>("list_crds", { grouped });
-}
-
-export async function getCrd(name: string): Promise<CrdDetailInfo> {
-  return invoke<CrdDetailInfo>("get_crd", { name });
-}
-
-export async function getCrdYaml(name: string): Promise<string> {
-  return invoke<string>("get_crd_yaml", { name });
-}
-
-export async function deleteCrd(name: string): Promise<void> {
-  return invoke<void>("delete_crd", { name });
-}
-
-export async function getCrdSchema(
-  name: string,
-  version: string | null
-): Promise<unknown> {
-  return invoke<unknown>("get_crd_schema", { name, version });
-}
-
-export async function getPodsMetrics(
-  namespace: string | null
-): Promise<PodMetricsResponse> {
-  return invoke<PodMetricsResponse>("get_pods_metrics", { namespace });
-}
-
-export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
-  return invoke<NodeMetricsResponse>("get_nodes_metrics");
-}
-
-export async function getReplicaset(
-  name: string,
-  namespace: string | null
-): Promise<ReplicaSetInfo> {
-  return invoke<ReplicaSetInfo>("get_replicaset", { name, namespace });
-}
-
-export async function getReplicasetPods(
-  name: string,
-  namespace: string | null
-): Promise<PodInfo[]> {
-  return invoke<PodInfo[]>("get_replicaset_pods", { name, namespace });
-}
-
-export async function getDeploymentReplicasets(
-  name: string,
-  namespace: string | null
-): Promise<ReplicaSetInfo[]> {
-  return invoke<ReplicaSetInfo[]>("get_deployment_replicasets", {
-    name,
-    namespace,
-  });
-}
-
-export async function checkKubectlAvailability(): Promise<CliAvailability> {
-  return invoke<CliAvailability>("check_kubectl_availability");
-}
-
-export async function listDeployments(
-  filters: ResourceFilters | null
-): Promise<DeploymentInfo[]> {
-  return invoke<DeploymentInfo[]>("list_deployments", { filters });
-}
-
-export async function getDeployment(
-  name: string,
-  namespace: string | null
-): Promise<DeploymentInfo> {
-  return invoke<DeploymentInfo>("get_deployment", { name, namespace });
-}
-
-export async function deleteDeployment(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_deployment", { name, namespace });
-}
-
-export async function scaleDeployment(
-  name: string,
-  replicas: number,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("scale_deployment", { name, replicas, namespace });
-}
-
-export async function restartDeployment(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("restart_deployment", { name, namespace });
-}
-
-export async function updateDeploymentImage(
-  name: string,
-  containerName: string,
-  image: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("update_deployment_image", {
-    name,
-    containerName,
-    image,
-    namespace,
-  });
-}
-
-export async function getDeploymentPods(
-  name: string,
-  namespace: string | null
-): Promise<PodInfo[]> {
-  return invoke<PodInfo[]>("get_deployment_pods", { name, namespace });
-}
-
-export async function getRolloutStatus(
-  name: string,
-  namespace: string | null
-): Promise<RolloutStatus> {
-  return invoke<RolloutStatus>("get_rollout_status", { name, namespace });
-}
-
-export async function listStatefulsets(
-  filters: ResourceFilters | null
-): Promise<StatefulSetInfo[]> {
-  return invoke<StatefulSetInfo[]>("list_statefulsets", { filters });
-}
-
-export async function getStatefulset(
-  name: string,
-  namespace: string | null
-): Promise<StatefulSetDetailInfo> {
-  return invoke<StatefulSetDetailInfo>("get_statefulset", { name, namespace });
-}
-
-export async function getStatefulsetYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_statefulset_yaml", { name, namespace });
-}
-
-export async function scaleStatefulset(
-  name: string,
-  replicas: number,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("scale_statefulset", { name, replicas, namespace });
-}
-
-export async function deleteStatefulset(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_statefulset", { name, namespace });
-}
-
-export async function listDaemonsets(
-  filters: ResourceFilters | null
-): Promise<DaemonSetInfo[]> {
-  return invoke<DaemonSetInfo[]>("list_daemonsets", { filters });
-}
-
-export async function getDaemonset(
-  name: string,
-  namespace: string | null
-): Promise<DaemonSetDetailInfo> {
-  return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
-}
-
-export async function getDaemonsetYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_daemonset_yaml", { name, namespace });
-}
-
-export async function deleteDaemonset(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_daemonset", { name, namespace });
-}
-
-export async function listJobs(
-  filters: ResourceFilters | null
-): Promise<JobInfo[]> {
-  return invoke<JobInfo[]>("list_jobs", { filters });
-}
-
-export async function getJob(
-  name: string,
-  namespace: string | null
-): Promise<JobDetailInfo> {
-  return invoke<JobDetailInfo>("get_job", { name, namespace });
-}
-
-export async function getJobYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_job_yaml", { name, namespace });
-}
-
-export async function deleteJob(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_job", { name, namespace });
-}
-
-export async function listCronjobs(
-  filters: ResourceFilters | null
-): Promise<CronJobInfo[]> {
-  return invoke<CronJobInfo[]>("list_cronjobs", { filters });
-}
-
-export async function getCronjob(
-  name: string,
-  namespace: string | null
-): Promise<CronJobDetailInfo> {
-  return invoke<CronJobDetailInfo>("get_cronjob", { name, namespace });
-}
-
-export async function getCronjobYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_cronjob_yaml", { name, namespace });
-}
-
-export async function deleteCronjob(
-  name: string,
-  namespace: string | null
-): Promise<void> {
-  return invoke<void>("delete_cronjob", { name, namespace });
-}
-
-export async function listNamespaces(): Promise<NamespaceInfo[]> {
-  return invoke<NamespaceInfo[]>("list_namespaces");
-}
-
-export async function listContexts(): Promise<ContextInfo[]> {
-  return invoke<ContextInfo[]>("list_contexts");
-}
-
-export async function getCurrentContext(): Promise<string | null> {
-  return invoke<string | null>("get_current_context");
-}
-
-export async function switchContext(context: string): Promise<void> {
-  return invoke<void>("switch_context", { context });
-}
-
-export async function connectCluster(context: string): Promise<ClusterInfo> {
-  return invoke<ClusterInfo>("connect_cluster", { context });
-}
-
-export async function disconnectCluster(context: string): Promise<void> {
-  return invoke<void>("disconnect_cluster", { context });
-}
-
-export async function getClusterInfo(context: string): Promise<ClusterInfo> {
-  return invoke<ClusterInfo>("get_cluster_info", { context });
-}
-
-export async function getKubeconfigSource(): Promise<KubeconfigSource> {
-  return invoke<KubeconfigSource>("get_kubeconfig_source");
-}
-
-export async function debugKubectlPlugins(): Promise<unknown> {
-  return invoke<unknown>("debug_kubectl_plugins");
-}
-
-export async function listHelmReleasesNative(
-  namespace: string | null
-): Promise<HelmRelease[]> {
-  return invoke<HelmRelease[]>("list_helm_releases_native", { namespace });
-}
-
-export async function getHelmReleaseDetail(
-  name: string,
+export async function getCertificateIssuance(
   namespace: string,
-  revision: number | null
-): Promise<HelmReleaseDetail> {
-  return invoke<HelmReleaseDetail>("get_helm_release_detail", {
-    name,
+  secretName: string
+): Promise<IssuanceStory | null> {
+  return invoke<IssuanceStory | null>("get_certificate_issuance", {
     namespace,
-    revision,
+    secretName,
   });
 }
 
-export async function getHelmHistory(
-  name: string,
-  namespace: string
-): Promise<HelmRevision[]> {
-  return invoke<HelmRevision[]>("get_helm_history", { name, namespace });
+export async function detectInClusterExtensions(): Promise<
+  DetectedExtension[]
+> {
+  return invoke<DetectedExtension[]>("detect_in_cluster_extensions");
 }
 
-export async function checkHelmAvailability(): Promise<CliAvailability> {
-  return invoke<CliAvailability>("check_helm_availability");
+export async function getPrometheusConnection(): Promise<PrometheusConnection | null> {
+  return invoke<PrometheusConnection | null>("get_prometheus_connection");
 }
 
-export async function helmRollback(
-  name: string,
-  namespace: string,
-  revision: number
-): Promise<string> {
-  return invoke<string>("helm_rollback", { name, namespace, revision });
-}
-
-export async function helmUninstall(
-  name: string,
-  namespace: string
-): Promise<string> {
-  return invoke<string>("helm_uninstall", { name, namespace });
-}
-
-export async function listHelmRepos(): Promise<HelmRepository[]> {
-  return invoke<HelmRepository[]>("list_helm_repos");
-}
-
-export async function addHelmRepo(name: string, url: string): Promise<string> {
-  return invoke<string>("add_helm_repo", { name, url });
-}
-
-export async function removeHelmRepo(name: string): Promise<string> {
-  return invoke<string>("remove_helm_repo", { name });
-}
-
-export async function updateHelmRepos(): Promise<string> {
-  return invoke<string>("update_helm_repos");
-}
-
-export async function helmSearchCharts(
-  keyword: string
-): Promise<HelmChartSearchResult[]> {
-  return invoke<HelmChartSearchResult[]>("helm_search_charts", { keyword });
-}
-
-export async function helmInstall(
-  options: HelmInstallOptions
-): Promise<string> {
-  return invoke<string>("helm_install", { options });
-}
-
-export async function helmUpgrade(
-  options: HelmInstallOptions
-): Promise<string> {
-  return invoke<string>("helm_upgrade", { options });
-}
-
-export async function getClusterStats(
-  namespace: string | null
-): Promise<ClusterStats> {
-  return invoke<ClusterStats>("get_cluster_stats", { namespace });
-}
-
-export async function startResourceSearch(
-  request: SearchRequest
-): Promise<SearchHandle> {
-  return invoke<SearchHandle>("start_resource_search", { request });
-}
-
-export async function resourceSearchSubscribed(
-  searchId: string
+export async function savePrometheusConnection(
+  url: string,
+  authType: string,
+  token: string | null,
+  insecureTls: boolean
 ): Promise<void> {
-  return invoke<void>("resource_search_subscribed", { searchId });
+  return invoke<void>("save_prometheus_connection", {
+    url,
+    authType,
+    token,
+    insecureTls,
+  });
 }
 
-export async function cancelResourceSearch(searchId: string): Promise<void> {
-  return invoke<void>("cancel_resource_search", { searchId });
+export async function forgetPrometheusConnection(): Promise<void> {
+  return invoke<void>("forget_prometheus_connection");
 }
 
-export async function validateManifest(
-  manifest: string,
-  namespace: string | null
-): Promise<ManifestResult> {
-  return invoke<ManifestResult>("validate_manifest", { manifest, namespace });
+export async function probePrometheus(
+  url: string | null,
+  authType: string | null,
+  token: string | null,
+  insecureTls: boolean | null
+): Promise<PrometheusProbe> {
+  return invoke<PrometheusProbe>("probe_prometheus", {
+    url,
+    authType,
+    token,
+    insecureTls,
+  });
 }
 
-export async function applyManifest(
-  manifest: string,
-  namespace: string | null
-): Promise<ManifestResult> {
-  return invoke<ManifestResult>("apply_manifest", { manifest, namespace });
+export async function prometheusQuery(query: string): Promise<PromSeries[]> {
+  return invoke<PromSeries[]>("prometheus_query", { query });
 }
 
-export async function deleteManifest(
-  manifest: string,
-  namespace: string | null
-): Promise<ManifestResult> {
-  return invoke<ManifestResult>("delete_manifest", { manifest, namespace });
+export async function prometheusQueryRange(
+  query: string,
+  start: number,
+  end: number,
+  step: number
+): Promise<PromSeries[]> {
+  return invoke<PromSeries[]>("prometheus_query_range", {
+    query,
+    start,
+    end,
+    step,
+  });
 }
 
-export async function getManifest(
-  kind: string,
-  apiVersion: string,
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_manifest", { kind, apiVersion, name, namespace });
-}
-
-export async function getResourceConnections(
-  kind: string,
-  name: string,
-  namespace: string | null
-): Promise<ResourceConnections> {
-  return invoke<ResourceConnections>("get_resource_connections", {
-    kind,
-    name,
+export async function getTlsCertificates(
+  namespace: string,
+  secretNames: string[]
+): Promise<TlsCertificate[]> {
+  return invoke<TlsCertificate[]>("get_tls_certificates", {
     namespace,
+    secretNames,
   });
 }
 
@@ -970,6 +418,533 @@ export async function saveClusterPreferences(
   });
 }
 
+export async function listCustomResources(
+  crdName: string,
+  namespace: string | null,
+  labelSelector: string | null,
+  limit: number | null
+): Promise<CustomResourceInfo[]> {
+  return invoke<CustomResourceInfo[]>("list_custom_resources", {
+    crdName,
+    namespace,
+    labelSelector,
+    limit,
+  });
+}
+
+export async function getCustomResource(
+  crdName: string,
+  name: string,
+  namespace: string | null
+): Promise<CustomResourceDetailInfo> {
+  return invoke<CustomResourceDetailInfo>("get_custom_resource", {
+    crdName,
+    name,
+    namespace,
+  });
+}
+
+export async function getCustomResourceYaml(
+  crdName: string,
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_custom_resource_yaml", {
+    crdName,
+    name,
+    namespace,
+  });
+}
+
+export async function deleteCustomResource(
+  crdName: string,
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_custom_resource", { crdName, name, namespace });
+}
+
+export async function listCrds(grouped: boolean | null): Promise<CrdGroup[]> {
+  return invoke<CrdGroup[]>("list_crds", { grouped });
+}
+
+export async function getCrd(name: string): Promise<CrdDetailInfo> {
+  return invoke<CrdDetailInfo>("get_crd", { name });
+}
+
+export async function getCrdYaml(name: string): Promise<string> {
+  return invoke<string>("get_crd_yaml", { name });
+}
+
+export async function deleteCrd(name: string): Promise<void> {
+  return invoke<void>("delete_crd", { name });
+}
+
+export async function getCrdSchema(
+  name: string,
+  version: string | null
+): Promise<unknown> {
+  return invoke<unknown>("get_crd_schema", { name, version });
+}
+
+export async function listStatefulsets(
+  filters: ResourceFilters | null
+): Promise<StatefulSetInfo[]> {
+  return invoke<StatefulSetInfo[]>("list_statefulsets", { filters });
+}
+
+export async function getStatefulset(
+  name: string,
+  namespace: string | null
+): Promise<StatefulSetDetailInfo> {
+  return invoke<StatefulSetDetailInfo>("get_statefulset", { name, namespace });
+}
+
+export async function getStatefulsetYaml(
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_statefulset_yaml", { name, namespace });
+}
+
+export async function scaleStatefulset(
+  name: string,
+  replicas: number,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("scale_statefulset", { name, replicas, namespace });
+}
+
+export async function deleteStatefulset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_statefulset", { name, namespace });
+}
+
+export async function listDaemonsets(
+  filters: ResourceFilters | null
+): Promise<DaemonSetInfo[]> {
+  return invoke<DaemonSetInfo[]>("list_daemonsets", { filters });
+}
+
+export async function getDaemonset(
+  name: string,
+  namespace: string | null
+): Promise<DaemonSetDetailInfo> {
+  return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
+}
+
+export async function getDaemonsetYaml(
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_daemonset_yaml", { name, namespace });
+}
+
+export async function deleteDaemonset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_daemonset", { name, namespace });
+}
+
+export async function listJobs(
+  filters: ResourceFilters | null
+): Promise<JobInfo[]> {
+  return invoke<JobInfo[]>("list_jobs", { filters });
+}
+
+export async function getJob(
+  name: string,
+  namespace: string | null
+): Promise<JobDetailInfo> {
+  return invoke<JobDetailInfo>("get_job", { name, namespace });
+}
+
+export async function getJobYaml(
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_job_yaml", { name, namespace });
+}
+
+export async function deleteJob(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_job", { name, namespace });
+}
+
+export async function listCronjobs(
+  filters: ResourceFilters | null
+): Promise<CronJobInfo[]> {
+  return invoke<CronJobInfo[]>("list_cronjobs", { filters });
+}
+
+export async function getCronjob(
+  name: string,
+  namespace: string | null
+): Promise<CronJobDetailInfo> {
+  return invoke<CronJobDetailInfo>("get_cronjob", { name, namespace });
+}
+
+export async function getCronjobYaml(
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_cronjob_yaml", { name, namespace });
+}
+
+export async function deleteCronjob(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_cronjob", { name, namespace });
+}
+
+export async function collectDiagnostics(
+  redact: boolean
+): Promise<Diagnostics> {
+  return invoke<Diagnostics>("collect_diagnostics", { redact });
+}
+
+export async function listEvents(
+  filters: EventFilters | null
+): Promise<EventInfo[]> {
+  return invoke<EventInfo[]>("list_events", { filters });
+}
+
+export async function portForwardPod(
+  pod: string,
+  namespace: string | null,
+  config: PortForwardRequest
+): Promise<PortForwardSessionInfo> {
+  return invoke<PortForwardSessionInfo>("port_forward_pod", {
+    pod,
+    namespace,
+    config,
+  });
+}
+
+export async function stopPortForward(forwardId: string): Promise<void> {
+  return invoke<void>("stop_port_forward", { forwardId });
+}
+
+export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
+  return invoke<PortForwardSessionInfo[]>("list_port_forwards");
+}
+
+export async function listPortForwardConfigs(): Promise<
+  PortForwardConfigInfo[]
+> {
+  return invoke<PortForwardConfigInfo[]>("list_port_forward_configs");
+}
+
+export async function createPortForwardConfig(
+  payload: PortForwardConfigPayload
+): Promise<PortForwardConfigInfo> {
+  return invoke<PortForwardConfigInfo>("create_port_forward_config", {
+    payload,
+  });
+}
+
+export async function updatePortForwardConfig(
+  id: string,
+  payload: PortForwardConfigPayload
+): Promise<PortForwardConfigInfo> {
+  return invoke<PortForwardConfigInfo>("update_port_forward_config", {
+    id,
+    payload,
+  });
+}
+
+export async function deletePortForwardConfig(id: string): Promise<void> {
+  return invoke<void>("delete_port_forward_config", { id });
+}
+
+export async function getResourceConnections(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ResourceConnections> {
+  return invoke<ResourceConnections>("get_resource_connections", {
+    kind,
+    name,
+    namespace,
+  });
+}
+
+export async function terminalInput(
+  sessionId: string,
+  data: string
+): Promise<void> {
+  return invoke<void>("terminal_input", { sessionId, data });
+}
+
+export async function terminalResize(
+  sessionId: string,
+  cols: number,
+  rows: number
+): Promise<void> {
+  return invoke<void>("terminal_resize", { sessionId, cols, rows });
+}
+
+export async function closeTerminal(sessionId: string): Promise<void> {
+  return invoke<void>("close_terminal", { sessionId });
+}
+
+export async function terminalSubscribed(sessionId: string): Promise<void> {
+  return invoke<void>("terminal_subscribed", { sessionId });
+}
+
+export async function openPodShell(
+  namespace: string,
+  pod: string,
+  container: string | null,
+  shell: string | null
+): Promise<string> {
+  return invoke<string>("open_pod_shell", { namespace, pod, container, shell });
+}
+
+export async function openProcessShell(
+  command: string,
+  args: string[],
+  env: Record<string, string>
+): Promise<string> {
+  return invoke<string>("open_process_shell", { command, args, env });
+}
+
+export async function validateManifest(
+  manifest: string,
+  namespace: string | null
+): Promise<ManifestResult> {
+  return invoke<ManifestResult>("validate_manifest", { manifest, namespace });
+}
+
+export async function applyManifest(
+  manifest: string,
+  namespace: string | null
+): Promise<ManifestResult> {
+  return invoke<ManifestResult>("apply_manifest", { manifest, namespace });
+}
+
+export async function deleteManifest(
+  manifest: string,
+  namespace: string | null
+): Promise<ManifestResult> {
+  return invoke<ManifestResult>("delete_manifest", { manifest, namespace });
+}
+
+export async function getManifest(
+  kind: string,
+  apiVersion: string,
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_manifest", { kind, apiVersion, name, namespace });
+}
+
+export async function locateBinaries(
+  names: string[]
+): Promise<BinaryLocation[]> {
+  return invoke<BinaryLocation[]>("locate_binaries", { names });
+}
+
+export async function logFrontendEvent(
+  level: string,
+  message: string,
+  context: string | null,
+  data: unknown | null
+): Promise<void> {
+  return invoke<void>("log_frontend_event", { level, message, context, data });
+}
+
+export async function logFrontendEventsBatch(
+  entries: FrontendLogEntry[]
+): Promise<BatchLogResult> {
+  return invoke<BatchLogResult>("log_frontend_events_batch", { entries });
+}
+
+export async function cancelAuthSession(sessionId: string): Promise<void> {
+  return invoke<void>("cancel_auth_session", { sessionId });
+}
+
+export async function listServices(
+  filters: ServiceFilters | null
+): Promise<ServiceInfo[]> {
+  return invoke<ServiceInfo[]>("list_services", { filters });
+}
+
+export async function getService(
+  name: string,
+  namespace: string | null
+): Promise<ServiceInfo> {
+  return invoke<ServiceInfo>("get_service", { name, namespace });
+}
+
+export async function deleteService(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_service", { name, namespace });
+}
+
+export async function getReplicaset(
+  name: string,
+  namespace: string | null
+): Promise<ReplicaSetInfo> {
+  return invoke<ReplicaSetInfo>("get_replicaset", { name, namespace });
+}
+
+export async function getReplicasetPods(
+  name: string,
+  namespace: string | null
+): Promise<PodInfo[]> {
+  return invoke<PodInfo[]>("get_replicaset_pods", { name, namespace });
+}
+
+export async function getDeploymentReplicasets(
+  name: string,
+  namespace: string | null
+): Promise<ReplicaSetInfo[]> {
+  return invoke<ReplicaSetInfo[]>("get_deployment_replicasets", {
+    name,
+    namespace,
+  });
+}
+
+export async function getPodsMetrics(
+  namespace: string | null
+): Promise<PodMetricsResponse> {
+  return invoke<PodMetricsResponse>("get_pods_metrics", { namespace });
+}
+
+export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
+  return invoke<NodeMetricsResponse>("get_nodes_metrics");
+}
+
+export async function debugKubectlPlugins(): Promise<unknown> {
+  return invoke<unknown>("debug_kubectl_plugins");
+}
+
+export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
+  return invoke<PodInfo[]>("list_pods", { filters });
+}
+
+export async function getPod(
+  name: string,
+  namespace: string | null
+): Promise<PodInfo> {
+  return invoke<PodInfo>("get_pod", { name, namespace });
+}
+
+export async function deletePod(
+  name: string,
+  namespace: string | null,
+  force: boolean | null
+): Promise<void> {
+  return invoke<void>("delete_pod", { name, namespace, force });
+}
+
+export async function restartPod(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_pod", { name, namespace });
+}
+
+export async function checkKubectlAvailability(): Promise<CliAvailability> {
+  return invoke<CliAvailability>("check_kubectl_availability");
+}
+
+export async function subscribeCustomResourceWatch(
+  group: string,
+  version: string,
+  kind: string,
+  plural: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_custom_resource_watch", {
+    group,
+    version,
+    kind,
+    plural,
+    namespace,
+  });
+}
+
+export async function resourceWatchSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("resource_watch_subscribed", { streamId });
+}
+
+export async function unsubscribeResourceWatch(
+  streamId: string
+): Promise<void> {
+  return invoke<void>("unsubscribe_resource_watch", { streamId });
+}
+
+export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
+  return invoke<RegistryImportEntry[]>("import_docker_config");
+}
+
+export async function setRegistryCredentials(
+  registryId: string,
+  auth: RegistryAuth
+): Promise<void> {
+  return invoke<void>("set_registry_credentials", { registryId, auth });
+}
+
+export async function deleteRegistryCredentials(
+  registryId: string
+): Promise<void> {
+  return invoke<void>("delete_registry_credentials", { registryId });
+}
+
+export async function getRegistryAuthStatus(
+  registryId: string
+): Promise<RegistryAuthStatus | null> {
+  return invoke<RegistryAuthStatus | null>("get_registry_auth_status", {
+    registryId,
+  });
+}
+
+export async function searchRegistryImages(
+  request: RegistrySearchRequest
+): Promise<RegistryImageResult[]> {
+  return invoke<RegistryImageResult[]>("search_registry_images", { request });
+}
+
+export async function listNodes(
+  filters: NodeFilters | null
+): Promise<NodeInfo[]> {
+  return invoke<NodeInfo[]>("list_nodes", { filters });
+}
+
+export async function getNode(name: string): Promise<NodeInfo> {
+  return invoke<NodeInfo>("get_node", { name });
+}
+
+export async function cordonNode(name: string): Promise<void> {
+  return invoke<void>("cordon_node", { name });
+}
+
+export async function uncordonNode(name: string): Promise<void> {
+  return invoke<void>("uncordon_node", { name });
+}
+
+export async function drainNode(
+  name: string,
+  ignoreDaemonsets: boolean | null,
+  force: boolean | null
+): Promise<void> {
+  return invoke<void>("drain_node", { name, ignoreDaemonsets, force });
+}
+
+export async function listNamespaces(): Promise<NamespaceInfo[]> {
+  return invoke<NamespaceInfo[]>("list_namespaces");
+}
+
 export async function listPersistentVolumes(
   filters: ResourceFilters | null
 ): Promise<PersistentVolumeInfo[]> {
@@ -1025,204 +1000,141 @@ export async function deleteStorageClass(name: string): Promise<void> {
   return invoke<void>("delete_storage_class", { name });
 }
 
-export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
-  return invoke<PodInfo[]>("list_pods", { filters });
+export async function getClusterStats(
+  namespace: string | null
+): Promise<ClusterStats> {
+  return invoke<ClusterStats>("get_cluster_stats", { namespace });
 }
 
-export async function getPod(
+export async function startResourceSearch(
+  request: SearchRequest
+): Promise<SearchHandle> {
+  return invoke<SearchHandle>("start_resource_search", { request });
+}
+
+export async function resourceSearchSubscribed(
+  searchId: string
+): Promise<void> {
+  return invoke<void>("resource_search_subscribed", { searchId });
+}
+
+export async function cancelResourceSearch(searchId: string): Promise<void> {
+  return invoke<void>("cancel_resource_search", { searchId });
+}
+
+export async function listDeployments(
+  filters: ResourceFilters | null
+): Promise<DeploymentInfo[]> {
+  return invoke<DeploymentInfo[]>("list_deployments", { filters });
+}
+
+export async function getDeployment(
   name: string,
   namespace: string | null
-): Promise<PodInfo> {
-  return invoke<PodInfo>("get_pod", { name, namespace });
+): Promise<DeploymentInfo> {
+  return invoke<DeploymentInfo>("get_deployment", { name, namespace });
 }
 
-export async function deletePod(
-  name: string,
-  namespace: string | null,
-  force: boolean | null
-): Promise<void> {
-  return invoke<void>("delete_pod", { name, namespace, force });
-}
-
-export async function restartPod(
+export async function deleteDeployment(
   name: string,
   namespace: string | null
 ): Promise<void> {
-  return invoke<void>("restart_pod", { name, namespace });
+  return invoke<void>("delete_deployment", { name, namespace });
 }
 
-export async function locateBinaries(
-  names: string[]
-): Promise<BinaryLocation[]> {
-  return invoke<BinaryLocation[]>("locate_binaries", { names });
-}
-
-export async function cancelAuthSession(sessionId: string): Promise<void> {
-  return invoke<void>("cancel_auth_session", { sessionId });
-}
-
-export async function portForwardPod(
-  pod: string,
-  namespace: string | null,
-  config: PortForwardRequest
-): Promise<PortForwardSessionInfo> {
-  return invoke<PortForwardSessionInfo>("port_forward_pod", {
-    pod,
-    namespace,
-    config,
-  });
-}
-
-export async function stopPortForward(forwardId: string): Promise<void> {
-  return invoke<void>("stop_port_forward", { forwardId });
-}
-
-export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
-  return invoke<PortForwardSessionInfo[]>("list_port_forwards");
-}
-
-export async function listPortForwardConfigs(): Promise<
-  PortForwardConfigInfo[]
-> {
-  return invoke<PortForwardConfigInfo[]>("list_port_forward_configs");
-}
-
-export async function createPortForwardConfig(
-  payload: PortForwardConfigPayload
-): Promise<PortForwardConfigInfo> {
-  return invoke<PortForwardConfigInfo>("create_port_forward_config", {
-    payload,
-  });
-}
-
-export async function updatePortForwardConfig(
-  id: string,
-  payload: PortForwardConfigPayload
-): Promise<PortForwardConfigInfo> {
-  return invoke<PortForwardConfigInfo>("update_port_forward_config", {
-    id,
-    payload,
-  });
-}
-
-export async function deletePortForwardConfig(id: string): Promise<void> {
-  return invoke<void>("delete_port_forward_config", { id });
-}
-
-export async function terminalInput(
-  sessionId: string,
-  data: string
-): Promise<void> {
-  return invoke<void>("terminal_input", { sessionId, data });
-}
-
-export async function terminalResize(
-  sessionId: string,
-  cols: number,
-  rows: number
-): Promise<void> {
-  return invoke<void>("terminal_resize", { sessionId, cols, rows });
-}
-
-export async function closeTerminal(sessionId: string): Promise<void> {
-  return invoke<void>("close_terminal", { sessionId });
-}
-
-export async function terminalSubscribed(sessionId: string): Promise<void> {
-  return invoke<void>("terminal_subscribed", { sessionId });
-}
-
-export async function openPodShell(
-  namespace: string,
-  pod: string,
-  container: string | null,
-  shell: string | null
-): Promise<string> {
-  return invoke<string>("open_pod_shell", { namespace, pod, container, shell });
-}
-
-export async function openProcessShell(
-  command: string,
-  args: string[],
-  env: Record<string, string>
-): Promise<string> {
-  return invoke<string>("open_process_shell", { command, args, env });
-}
-
-export async function logFrontendEvent(
-  level: string,
-  message: string,
-  context: string | null,
-  data: unknown | null
-): Promise<void> {
-  return invoke<void>("log_frontend_event", { level, message, context, data });
-}
-
-export async function logFrontendEventsBatch(
-  entries: FrontendLogEntry[]
-): Promise<BatchLogResult> {
-  return invoke<BatchLogResult>("log_frontend_events_batch", { entries });
-}
-
-export async function subscribeCustomResourceWatch(
-  group: string,
-  version: string,
-  kind: string,
-  plural: string,
+export async function scaleDeployment(
+  name: string,
+  replicas: number,
   namespace: string | null
-): Promise<string> {
-  return invoke<string>("subscribe_custom_resource_watch", {
-    group,
-    version,
-    kind,
-    plural,
+): Promise<void> {
+  return invoke<void>("scale_deployment", { name, replicas, namespace });
+}
+
+export async function restartDeployment(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_deployment", { name, namespace });
+}
+
+export async function updateDeploymentImage(
+  name: string,
+  containerName: string,
+  image: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("update_deployment_image", {
+    name,
+    containerName,
+    image,
     namespace,
   });
 }
 
-export async function resourceWatchSubscribed(streamId: string): Promise<void> {
-  return invoke<void>("resource_watch_subscribed", { streamId });
+export async function getDeploymentPods(
+  name: string,
+  namespace: string | null
+): Promise<PodInfo[]> {
+  return invoke<PodInfo[]>("get_deployment_pods", { name, namespace });
 }
 
-export async function unsubscribeResourceWatch(
-  streamId: string
+export async function getRolloutStatus(
+  name: string,
+  namespace: string | null
+): Promise<RolloutStatus> {
+  return invoke<RolloutStatus>("get_rollout_status", { name, namespace });
+}
+
+export async function listIngresses(
+  filters: ResourceFilters | null
+): Promise<IngressInfo[]> {
+  return invoke<IngressInfo[]>("list_ingresses", { filters });
+}
+
+export async function listEndpoints(
+  filters: ResourceFilters | null
+): Promise<EndpointsInfo[]> {
+  return invoke<EndpointsInfo[]>("list_endpoints", { filters });
+}
+
+export async function listServiceEndpoints(
+  namespace: string | null
+): Promise<ServicePublished[]> {
+  return invoke<ServicePublished[]>("list_service_endpoints", { namespace });
+}
+
+export async function getIngress(
+  name: string,
+  namespace: string | null
+): Promise<IngressInfo> {
+  return invoke<IngressInfo>("get_ingress", { name, namespace });
+}
+
+export async function resolveIngressClass(
+  className: string | null
+): Promise<IngressClassBinding> {
+  return invoke<IngressClassBinding>("resolve_ingress_class", { className });
+}
+
+export async function deleteIngress(
+  name: string,
+  namespace: string | null
 ): Promise<void> {
-  return invoke<void>("unsubscribe_resource_watch", { streamId });
+  return invoke<void>("delete_ingress", { name, namespace });
 }
 
-export async function listSecrets(
-  filters: SecretFilters | null
-): Promise<SecretInfo[]> {
-  return invoke<SecretInfo[]>("list_secrets", { filters });
-}
-
-export async function getSecret(
+export async function getEndpoints(
   name: string,
   namespace: string | null
-): Promise<SecretInfo> {
-  return invoke<SecretInfo>("get_secret", { name, namespace });
+): Promise<EndpointsInfo> {
+  return invoke<EndpointsInfo>("get_endpoints", { name, namespace });
 }
 
-export async function getSecretData(
-  name: string,
-  namespace: string | null
-): Promise<ConfigData> {
-  return invoke<ConfigData>("get_secret_data", { name, namespace });
-}
-
-export async function getSecretYaml(
-  name: string,
-  namespace: string | null,
-  redact: boolean
-): Promise<string> {
-  return invoke<string>("get_secret_yaml", { name, namespace, redact });
-}
-
-export async function deleteSecret(
+export async function deleteEndpoints(
   name: string,
   namespace: string | null
 ): Promise<void> {
-  return invoke<void>("delete_secret", { name, namespace });
+  return invoke<void>("delete_endpoints", { name, namespace });
 }
 
 export async function getResourceReferences(
@@ -1264,151 +1176,246 @@ export async function deleteConfigmap(
   return invoke<void>("delete_configmap", { name, namespace });
 }
 
-export async function getTlsCertificates(
-  namespace: string,
-  secretNames: string[]
-): Promise<TlsCertificate[]> {
-  return invoke<TlsCertificate[]>("get_tls_certificates", {
-    namespace,
-    secretNames,
-  });
+export async function listSecrets(
+  filters: SecretFilters | null
+): Promise<SecretInfo[]> {
+  return invoke<SecretInfo[]>("list_secrets", { filters });
 }
 
-export async function listServices(
-  filters: ServiceFilters | null
-): Promise<ServiceInfo[]> {
-  return invoke<ServiceInfo[]>("list_services", { filters });
-}
-
-export async function getService(
+export async function getSecret(
   name: string,
   namespace: string | null
-): Promise<ServiceInfo> {
-  return invoke<ServiceInfo>("get_service", { name, namespace });
+): Promise<SecretInfo> {
+  return invoke<SecretInfo>("get_secret", { name, namespace });
 }
 
-export async function deleteService(
+export async function getSecretData(
+  name: string,
+  namespace: string | null
+): Promise<ConfigData> {
+  return invoke<ConfigData>("get_secret_data", { name, namespace });
+}
+
+export async function getSecretYaml(
+  name: string,
+  namespace: string | null,
+  redact: boolean
+): Promise<string> {
+  return invoke<string>("get_secret_yaml", { name, namespace, redact });
+}
+
+export async function deleteSecret(
   name: string,
   namespace: string | null
 ): Promise<void> {
-  return invoke<void>("delete_service", { name, namespace });
+  return invoke<void>("delete_secret", { name, namespace });
 }
 
-export async function getLokiConnection(): Promise<LokiConnection | null> {
-  return invoke<LokiConnection | null>("get_loki_connection");
+export async function getClusterOverview(
+  namespace: string | null
+): Promise<ClusterOverview> {
+  return invoke<ClusterOverview>("get_cluster_overview", { namespace });
 }
 
-export async function saveLokiConnection(
-  url: string,
-  authType: string,
-  token: string | null,
-  insecureTls: boolean
-): Promise<void> {
-  return invoke<void>("save_loki_connection", {
-    url,
-    authType,
-    token,
-    insecureTls,
-  });
+export async function listHelmReleasesNative(
+  namespace: string | null
+): Promise<HelmRelease[]> {
+  return invoke<HelmRelease[]>("list_helm_releases_native", { namespace });
 }
 
-export async function forgetLokiConnection(): Promise<void> {
-  return invoke<void>("forget_loki_connection");
-}
-
-export async function probeLoki(
-  url: string | null,
-  authType: string | null,
-  token: string | null,
-  insecureTls: boolean | null
-): Promise<LokiProbe> {
-  return invoke<LokiProbe>("probe_loki", { url, authType, token, insecureTls });
-}
-
-export async function lokiQueryRange(
-  selector: string,
-  startMs: number,
-  endMs: number,
-  limit: number,
-  before: string | null
-): Promise<LokiPage> {
-  return invoke<LokiPage>("loki_query_range", {
-    selector,
-    startMs,
-    endMs,
-    limit,
-    before,
-  });
-}
-
-export async function getPrometheusConnection(): Promise<PrometheusConnection | null> {
-  return invoke<PrometheusConnection | null>("get_prometheus_connection");
-}
-
-export async function savePrometheusConnection(
-  url: string,
-  authType: string,
-  token: string | null,
-  insecureTls: boolean
-): Promise<void> {
-  return invoke<void>("save_prometheus_connection", {
-    url,
-    authType,
-    token,
-    insecureTls,
-  });
-}
-
-export async function forgetPrometheusConnection(): Promise<void> {
-  return invoke<void>("forget_prometheus_connection");
-}
-
-export async function probePrometheus(
-  url: string | null,
-  authType: string | null,
-  token: string | null,
-  insecureTls: boolean | null
-): Promise<PrometheusProbe> {
-  return invoke<PrometheusProbe>("probe_prometheus", {
-    url,
-    authType,
-    token,
-    insecureTls,
-  });
-}
-
-export async function prometheusQuery(query: string): Promise<PromSeries[]> {
-  return invoke<PromSeries[]>("prometheus_query", { query });
-}
-
-export async function prometheusQueryRange(
-  query: string,
-  start: number,
-  end: number,
-  step: number
-): Promise<PromSeries[]> {
-  return invoke<PromSeries[]>("prometheus_query_range", {
-    query,
-    start,
-    end,
-    step,
-  });
-}
-
-export async function detectInClusterExtensions(): Promise<
-  DetectedExtension[]
-> {
-  return invoke<DetectedExtension[]>("detect_in_cluster_extensions");
-}
-
-export async function getCertificateIssuance(
+export async function getHelmReleaseDetail(
+  name: string,
   namespace: string,
-  secretName: string
-): Promise<IssuanceStory | null> {
-  return invoke<IssuanceStory | null>("get_certificate_issuance", {
+  revision: number | null
+): Promise<HelmReleaseDetail> {
+  return invoke<HelmReleaseDetail>("get_helm_release_detail", {
+    name,
     namespace,
-    secretName,
+    revision,
   });
+}
+
+export async function getHelmHistory(
+  name: string,
+  namespace: string
+): Promise<HelmRevision[]> {
+  return invoke<HelmRevision[]>("get_helm_history", { name, namespace });
+}
+
+export async function checkHelmAvailability(): Promise<CliAvailability> {
+  return invoke<CliAvailability>("check_helm_availability");
+}
+
+export async function helmRollback(
+  name: string,
+  namespace: string,
+  revision: number
+): Promise<string> {
+  return invoke<string>("helm_rollback", { name, namespace, revision });
+}
+
+export async function helmUninstall(
+  name: string,
+  namespace: string
+): Promise<string> {
+  return invoke<string>("helm_uninstall", { name, namespace });
+}
+
+export async function listHelmRepos(): Promise<HelmRepository[]> {
+  return invoke<HelmRepository[]>("list_helm_repos");
+}
+
+export async function addHelmRepo(name: string, url: string): Promise<string> {
+  return invoke<string>("add_helm_repo", { name, url });
+}
+
+export async function removeHelmRepo(name: string): Promise<string> {
+  return invoke<string>("remove_helm_repo", { name });
+}
+
+export async function updateHelmRepos(): Promise<string> {
+  return invoke<string>("update_helm_repos");
+}
+
+export async function helmSearchCharts(
+  keyword: string
+): Promise<HelmChartSearchResult[]> {
+  return invoke<HelmChartSearchResult[]>("helm_search_charts", { keyword });
+}
+
+export async function helmInstall(
+  options: HelmInstallOptions
+): Promise<string> {
+  return invoke<string>("helm_install", { options });
+}
+
+export async function helmUpgrade(
+  options: HelmInstallOptions
+): Promise<string> {
+  return invoke<string>("helm_upgrade", { options });
+}
+
+export async function listContexts(): Promise<ContextInfo[]> {
+  return invoke<ContextInfo[]>("list_contexts");
+}
+
+export async function getCurrentContext(): Promise<string | null> {
+  return invoke<string | null>("get_current_context");
+}
+
+export async function switchContext(context: string): Promise<void> {
+  return invoke<void>("switch_context", { context });
+}
+
+export async function connectCluster(context: string): Promise<ClusterInfo> {
+  return invoke<ClusterInfo>("connect_cluster", { context });
+}
+
+export async function disconnectCluster(context: string): Promise<void> {
+  return invoke<void>("disconnect_cluster", { context });
+}
+
+export async function getClusterInfo(context: string): Promise<ClusterInfo> {
+  return invoke<ClusterInfo>("get_cluster_info", { context });
+}
+
+export async function getKubeconfigSource(): Promise<KubeconfigSource> {
+  return invoke<KubeconfigSource>("get_kubeconfig_source");
+}
+
+export async function streamPodLogs(config: StreamLogConfig): Promise<string> {
+  return invoke<string>("stream_pod_logs", { config });
+}
+
+export async function logStreamSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("log_stream_subscribed", { streamId });
+}
+
+export async function getPodLogs(
+  podName: string,
+  namespace: string | null,
+  container: string | null,
+  tailLines: number | null,
+  sinceSeconds: number | null,
+  previous: boolean
+): Promise<LogLine[]> {
+  return invoke<LogLine[]>("get_pod_logs", {
+    podName,
+    namespace,
+    container,
+    tailLines,
+    sinceSeconds,
+    previous,
+  });
+}
+
+export async function stopLogStream(streamId: string): Promise<void> {
+  return invoke<void>("stop_log_stream", { streamId });
+}
+
+export async function debugPodEphemeral(
+  podName: string,
+  namespace: string | null,
+  config: DebugConfig
+): Promise<DebugOperation> {
+  return invoke<DebugOperation>("debug_pod_ephemeral", {
+    podName,
+    namespace,
+    config,
+  });
+}
+
+export async function debugPodCopy(
+  podName: string,
+  namespace: string | null,
+  config: DebugConfig
+): Promise<DebugOperation> {
+  return invoke<DebugOperation>("debug_pod_copy", {
+    podName,
+    namespace,
+    config,
+  });
+}
+
+export async function debugNode(
+  nodeName: string,
+  namespace: string | null,
+  config: DebugConfig
+): Promise<DebugOperation> {
+  return invoke<DebugOperation>("debug_node", { nodeName, namespace, config });
+}
+
+export async function deleteDebugPod(
+  podName: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_debug_pod", { podName, namespace });
+}
+
+export async function listDebugPods(
+  namespace: string | null
+): Promise<DebugResult[]> {
+  return invoke<DebugResult[]>("list_debug_pods", { namespace });
+}
+
+export async function getDebugStatus(
+  operationId: string
+): Promise<DebugStatus> {
+  return invoke<DebugStatus>("get_debug_status", { operationId });
+}
+
+export async function extendDebugTimeout(
+  operationId: string,
+  additionalSeconds: number | null
+): Promise<void> {
+  return invoke<void>("extend_debug_timeout", {
+    operationId,
+    additionalSeconds,
+  });
+}
+
+export async function cancelDebugOperation(operationId: string): Promise<void> {
+  return invoke<void>("cancel_debug_operation", { operationId });
 }
 
 export async function subscribeConfigmapWatch(
