@@ -275,10 +275,12 @@ impl OidcAuth {
 /// Generate a random code verifier for PKCE
 fn generate_code_verifier() -> String {
     use base64::Engine;
-    use rand::Rng;
 
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+    // `fill` draws from the same thread-local CSPRNG the old
+    // `thread_rng().gen()` loop did; rand 0.10 just exposes it as a free
+    // function that fills a slice, which says what this needs plainly.
+    let mut bytes = [0u8; 32];
+    rand::fill(&mut bytes);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
