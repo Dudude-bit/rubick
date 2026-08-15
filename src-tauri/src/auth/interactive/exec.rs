@@ -156,6 +156,17 @@ pub(super) async fn run_exec_auth(
             }
         };
 
+    // A missing kubectl plugin is caught here rather than left to
+    // kubectl, whose own message names neither the file it wanted nor
+    // where it looked.
+    if let Err(err) =
+        crate::commands::binaries::ensure_kubectl_plugin_present(&params.command, &params.args)
+    {
+        cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
+        state.remove_auth_session(&session_id);
+        return Err(err);
+    }
+
     // Subscribe to events BEFORE creating session to avoid race condition
     let mut event_rx = state.event_tx.subscribe();
 
