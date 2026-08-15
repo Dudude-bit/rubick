@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-08-15
+
+Not a line of code changed in this release. The major version is here
+because the terms did, and a major is the only version signal people
+reliably read.
+
+### Changed — the licence is now GPLv3
+
+Rubick was MIT through 3.1.0 and is GPL-3.0-or-later from here on, agreed by
+both copyright holders.
+
+A permissive licence allows a closed, rebranded fork of this work to be sold
+without its source. That is the outcome the project exists in reaction to,
+so the door is now shut: a modified version may still be forked and still be
+sold, but whoever distributes it ships the source under the same terms.
+
+Nothing changes for anyone running the app, including inside a company on
+any number of machines — use is not distribution and triggers no obligation.
+
+Releases up to 3.1.0 stay MIT; that grant cannot be withdrawn.
+[LICENSE-HISTORY.md](LICENSE-HISTORY.md) keeps the record.
+
 ## [3.1.0] - 2026-08-13
 
 ### Fixed — an expired session claimed the cluster was empty

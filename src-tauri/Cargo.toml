@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.91"
 authors = ["Rubick Team"]
 description = "A minimalist Kubernetes GUI client inspired by Lens"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [lib]
 name = "k8s_gui_lib"

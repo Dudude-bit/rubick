@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.91"
 authors = ["Rubick Team"]
 description = "Common utilities shared between k8s-gui projects"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 # Logging and tracing

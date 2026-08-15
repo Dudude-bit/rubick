@@ -14,7 +14,7 @@ Unlike them, it treats "I don't know" as an answer worth giving.
 [![Downloads](https://img.shields.io/github/downloads/Dudude-bit/rubick/total)](https://github.com/Dudude-bit/rubick/releases)
 [![License](https://img.shields.io/github/license/Dudude-bit/rubick)](LICENSE)
 
-Free and MIT. No account, no telemetry.
+Free and GPLv3. No account, no telemetry.
 
 </div>
 
@@ -130,4 +130,9 @@ Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minut
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+Fork it, change it, sell it if you like; ship the source with it. Running the
+app is not distribution, so using it — at home or across a company — carries
+no obligation at all. Releases up to 3.1.0 were MIT and stay MIT:
+[LICENSE-HISTORY.md](LICENSE-HISTORY.md) has the details.
