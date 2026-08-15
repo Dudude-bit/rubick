@@ -125,31 +125,16 @@ pub(crate) fn locate_on_user_path(name: &str) -> Option<String> {
 /// Ok for everything else, including plugins that are present and
 /// commands that are not kubectl at all.
 pub(crate) fn ensure_kubectl_plugin_present(command: &str, args: &[String]) -> Result<()> {
-    let Some(plugin) = kubectl_plugin_binary(command, args) else {
-        return Ok(());
-    };
-    if locate_on_user_path(&plugin).is_some() {
-        return Ok(());
-    }
-
-    let searched = search_directories()
-        .iter()
-        .map(|d| d.to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let subcommand = args
-        .iter()
-        .find(|a| !a.starts_with('-'))
-        .cloned()
-        .unwrap_or_default();
-
-    Err(crate::error::Error::Plugin(
-        crate::error::PluginError::NotFound(format!(
-            "{plugin} — kubectl needs it to run `{subcommand}`, and it is not on the \
-             path this app searches. Install it (for oidc-login: `kubectl krew install \
-             oidc-login`) or point the context at an absolute command. Searched: {searched}"
+    // The context name is not known at this depth — the auth flow already
+    // names the cluster in its own surroundings, and what was missing from
+    // kubectl's message is the file and the search path, both of which the
+    // finding carries.
+    match crate::diagnostics::missing_plugin_finding("this context", command, args) {
+        None => Ok(()),
+        Some(finding) => Err(crate::error::Error::Plugin(
+            crate::error::PluginError::NotFound(format!("{} — {}", finding.title, finding.detail)),
         )),
-    ))
+    }
 }
 
 /// Look up several binaries in one call.

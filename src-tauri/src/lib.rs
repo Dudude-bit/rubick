@@ -12,6 +12,7 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
+pub mod diagnostics;
 pub mod error;
 pub mod integrations;
 pub mod logs;
