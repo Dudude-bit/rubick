@@ -15,11 +15,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
-    "ignoreDeprecations": "5.0"
+    // TypeScript 6 no longer pulls every `@types` package in automatically.
+    // Only `node` is needed explicitly; the rest arrive through imports or
+    // the `vite/client` reference in `src/vite-env.d.ts`.
+    "types": ["node"]
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
