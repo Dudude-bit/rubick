@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-08-15
+
+Nothing here changes what the app does. It is a dependency sweep — the
+whole open queue, thirteen commits — kept as a patch release because a
+minor would promise features this does not have.
+
+### Changed — dependencies
+
+Four of these needed migration rather than a version bump, and none of
+the four builds from the bump alone:
+
+- **Tailwind 3 → 4.** The PostCSS plugin moved to its own package, the
+  `@tailwind` directives became an import, and theme config left JS.
+  The official codemod handled most of it and got one thing wrong: it
+  rewrote `outline` to `outline-solid` in four component _prop_ values,
+  which are not CSS classes. No visual change — the cluster picker
+  rendered from both builds differs by RMSE 0.0004 across the sidebar,
+  which is anti-aliasing.
+- **TypeScript 5.9 → 6.** It deprecated `baseUrl` and stopped pulling
+  every `@types` package in automatically, without which `node:fs` in
+  the tests stops resolving. Naming `types: ["node"]` fixes the second
+  and makes the first unnecessary: `paths` were already relative.
+  `baseUrl` and the `ignoreDeprecations` escape hatch are both gone
+  rather than bumped, so 7.0 will not need a second visit.
+- **js-yaml 4 → 5.** Dropped the default export and the iterator
+  overload of `loadAll`. Five files moved to named imports. `tsc` did
+  not catch the missing default — `esModuleInterop` types it fine and
+  it fails only at runtime.
+- **rand 0.8 → 0.10.** Two renames deep: `thread_rng` became `rng` in
+  0.9, and 0.10 moved generation to free functions. The PKCE verifier
+  fills a `[u8; 32]` through `rand::fill` now, on the same thread-local
+  CSPRNG as before.
+
+Merged as-is: `tokio-tungstenite` 0.24 → 0.30, `config` 0.14 → 0.15,
+`dirs` 5 → 6, `jsdom` 29 → 30, `@testing-library/jest-dom` 6 → 7,
+`actions/checkout` 7.0.1, `codeql-action` 4.37.6, and a group of 35
+patch and minor updates.
+
+### Fixed — CI
+
+`codeql-action/init` and `.../analyze` are bumped as separate
+dependencies, so updating one left the pair on different versions and
+CodeQL refused them: _"Loaded a configuration file for version '4.37.6',
+but running version '4.35.2'"_. They are pinned to one SHA now.
+
+### Deferred
+
+`k8s-openapi` and `azure_core` each have an open major that cannot move
+alone — the first is pinned by `kube`, the second by `azure_identity`.
+The Azure pair also has nothing to verify against without a live AKS
+cluster, and an auth change shipped blind is the thing this project
+declines to do.
+
 ## [4.0.0] - 2026-08-15
 
 Not a line of code changed in this release. The major version is here
