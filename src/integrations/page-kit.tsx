@@ -156,7 +156,7 @@ export function Finding({
     >
       <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
       {verbatim && (
-        <p className="mt-0.5 select-text break-words font-mono text-[11px] text-fg-mut">
+        <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
           {verbatim}
         </p>
       )}
@@ -298,7 +298,7 @@ export function Column({
             className="pointer-events-none absolute -left-3 top-[9px] flex w-3 items-center"
           >
             <span className="h-px flex-1 bg-hair" />
-            <ChevronRight className="-ml-[3px] size-2.5 flex-none text-fg-fnt" />
+            <ChevronRight className="ml-[-3px] size-2.5 flex-none text-fg-fnt" />
           </span>
         )}
         {children}

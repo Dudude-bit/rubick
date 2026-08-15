@@ -322,7 +322,7 @@ export function ResourceList<
           <p className="text-xs text-err">
             Could not read {emptyStateLabel} in this scope.
           </p>
-          <p className="mt-1.5 select-text break-words font-mono text-[11px] text-fg-fnt">
+          <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {verbatim(failed.message)}
           </p>
         </div>

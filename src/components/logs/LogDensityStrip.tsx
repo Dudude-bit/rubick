@@ -378,7 +378,7 @@ export function LogDensityStrip({
       data-testid="log-density-bars"
       // The baseline is what makes an idle stretch read as silence
       // rather than as a strip that failed to draw.
-      className={`flex flex-1 cursor-crosshair select-none items-stretch gap-px outline-none focus-visible:ring-1 focus-visible:ring-fg-fnt ${
+      className={`flex flex-1 cursor-crosshair select-none items-stretch gap-px outline-hidden focus-visible:ring-1 focus-visible:ring-fg-fnt ${
         band ? "" : "border-b border-hair"
       }`}
       style={{ height: band ? BAND_BARS_PX : BARS_PX }}
@@ -515,8 +515,8 @@ function StripToggle({
       onClick={() => onModeChange(band ? "full" : "band")}
       // Taller than the band it sits in, into the padding on either side:
       // the row is a ruler, and a nine pixel hit target is not a control.
-      className={`flex w-5 flex-none items-center justify-center rounded-[2px] text-fg-fnt hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg-fnt ${
-        band ? "-my-[3px] h-[18px]" : "h-4"
+      className={`flex w-5 flex-none items-center justify-center rounded-[2px] text-fg-fnt hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-fg-fnt ${
+        band ? "my-[-3px] h-[18px]" : "h-4"
       }`}
     >
       {band ? (

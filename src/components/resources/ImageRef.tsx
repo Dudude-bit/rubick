@@ -137,7 +137,7 @@ function RegistryLinkMark({
       className={cn(
         "inline-flex flex-none items-center justify-center overflow-hidden rounded-sm",
         "text-fg-fnt transition-[opacity,width] hover:text-info",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info",
+        "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
         "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         // Zero width rather than `hidden`, which would drop it out of the tab
         // order and leave the sentence's link unreachable without a mouse.

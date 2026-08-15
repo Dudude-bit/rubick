@@ -1,6 +1,169 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-canvas: hsl(var(--canvas));
+  --color-raise: hsl(var(--raise));
+  --color-hair: hsl(var(--hair));
+  --color-hover: hsl(var(--hover));
+  --color-sel: hsl(var(--sel));
+
+  --color-fg: hsl(var(--fg));
+  --color-fg-mid: hsl(var(--fg-mid));
+  --color-fg-mut: hsl(var(--fg-mut));
+  --color-fg-fnt: hsl(var(--fg-fnt));
+
+  --color-ok: hsl(var(--ok));
+  --color-warn: hsl(var(--warn));
+  --color-err: hsl(var(--err));
+  --color-info: hsl(var(--info));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-pulse-subtle: pulse-subtle 2s ease-in-out infinite;
+  --animate-fade-in: fade-in var(--animation-normal) ease-out;
+  --animate-slide-in: slide-in var(--animation-normal) ease-out;
+  --animate-scale-in: scale-in var(--animation-normal) ease-out;
+  --animate-fade-in-fast: fade-in var(--animation-fast) ease-out;
+  --animate-fade-in-slow: fade-in var(--animation-slow) ease-out;
+  --animate-tab-live: tab-live 2.4s ease-out infinite;
+
+  --font-sans: Inter Variable, Inter, system-ui, sans-serif;
+  --font-mono: JetBrains Mono Variable, JetBrains Mono, Consolas, monospace;
+
+  --shadow-pop: var(--pop-shadow);
+
+  --transition-duration-ds-fast: var(--animation-fast);
+  --transition-duration-ds-normal: var(--animation-normal);
+  --transition-duration-ds-slow: var(--animation-slow);
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes pulse-subtle {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes tab-live {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--ok) / 0.6);
+    }
+    70% {
+      box-shadow: 0 0 0 4px hsl(var(--ok) / 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--ok) / 0);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility scrollbar-thin {
+  /* Custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--sel)) transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: hsl(var(--sel));
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--fg-fnt));
+  }
+}
+
+@utility scrollbar-none {
+  /* A 38px strip has no room to spend 8px on a scrollbar, and it does not
+   * need one: a tab clipped by the edge is the overflow signal, and the
+   * active tab is scrolled into view whenever it changes. */
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 @layer base {
   :root {
@@ -164,43 +327,6 @@
       animation-iteration-count: 1 !important;
       scroll-behavior: auto !important;
     }
-  }
-}
-
-@layer utilities {
-  /* Custom scrollbar */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: hsl(var(--sel)) transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: hsl(var(--sel));
-    border-radius: 4px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--fg-fnt));
-  }
-
-  /* A 38px strip has no room to spend 8px on a scrollbar, and it does not
-   * need one: a tab clipped by the edge is the overflow signal, and the
-   * active tab is scrolled into view whenever it changes. */
-  .scrollbar-none {
-    scrollbar-width: none;
-  }
-
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
   }
 }
 

@@ -114,7 +114,7 @@ function Mounts({
     return <span className="text-[11px] text-warn">mounted by nothing</span>;
   }
   return (
-    <span className="min-w-0 break-words text-[11px] text-fg-fnt">
+    <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
       {groupMounts(volume.mounts).map(({ key, mount, containers }) => {
         const who = mountedBy(containers, containerCount);
         return (

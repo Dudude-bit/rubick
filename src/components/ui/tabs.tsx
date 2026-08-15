@@ -25,7 +25,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex h-6 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-40 data-[state=active]:bg-sel data-[state=active]:text-fg",
+      "inline-flex h-6 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs transition-colors hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-40 data-[state=active]:bg-sel data-[state=active]:text-fg",
       className
     )}
     {...props}
@@ -46,7 +46,7 @@ const TabsContent = React.forwardRef<
       // margin, and the selected tab is pushed down by the sum of the ones
       // declared before it. Saying it again as a variant puts the hiding back
       // out of reach of `flex` and `grid`.
-      "mt-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info data-[state=inactive]:hidden",
+      "mt-2 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info data-[state=inactive]:hidden",
       className
     )}
     {...props}

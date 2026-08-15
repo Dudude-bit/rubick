@@ -52,7 +52,7 @@ export function ClickablePort({
           <button
             type="button"
             className={cn(
-              "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info",
+              "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
               className
             )}
             onClick={(e) => {

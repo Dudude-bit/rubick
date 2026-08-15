@@ -224,7 +224,7 @@ export function ImageSearchInput({
               <span className="flex items-baseline gap-2 text-xs">
                 <span className="font-mono text-fg">{result.name}</span>
                 {result.isOfficial && (
-                  <span className="text-[10px] uppercase tracking-[0.05em] text-fg-fnt">
+                  <span className="text-[10px] uppercase tracking-wider text-fg-fnt">
                     official
                   </span>
                 )}

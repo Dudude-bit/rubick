@@ -786,7 +786,7 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="z-[60] max-w-[620px] gap-0 overflow-hidden p-0">
+      <DialogContent className="z-60 max-w-[620px] gap-0 overflow-hidden p-0">
         <DialogTitle className="sr-only">Command palette</DialogTitle>
 
         {/* One field on the raised surface. A bordered input inside an
@@ -822,7 +822,7 @@ export function CommandPalette() {
             value={text}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full bg-transparent text-[13px] text-fg outline-none placeholder:text-fg-fnt"
+            className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
 
@@ -912,7 +912,7 @@ function ScopeChip({
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex shrink-0 items-center rounded bg-info/[0.16] font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
+    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
       <span className="flex items-center gap-1 pl-1.5">
         <span aria-hidden="true">!</span>
         {label}

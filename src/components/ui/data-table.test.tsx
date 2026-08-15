@@ -594,7 +594,7 @@ describe("a list past the virtualisation threshold", () => {
    * drawn row matched it, and the table lost its focus ring and its only tab
    * stop until the reader pressed an arrow again.
    */
-  it("keeps a focus ring and a tab stop after a search narrows the list", async () => {
+  it("keeps a focus ring-3 and a tab stop after a search narrows the list", async () => {
     long();
     fireEvent.keyDown(rowAt(0)!, { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });

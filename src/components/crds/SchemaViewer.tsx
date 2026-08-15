@@ -155,7 +155,7 @@ function SchemaNode({
         style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
         {/* Expand/collapse icon */}
-        <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span className="w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">
           {hasChildren ? (
             expanded ? (
               <ChevronDown className="h-3 w-3" />
@@ -166,7 +166,7 @@ function SchemaNode({
         </span>
 
         {/* Type icon */}
-        <span className={cn("flex-shrink-0 mt-0.5", getTypeColor(schema.type))}>
+        <span className={cn("shrink-0 mt-0.5", getTypeColor(schema.type))}>
           {getTypeIcon(schema.type)}
         </span>
 

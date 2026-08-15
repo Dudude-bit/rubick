@@ -77,7 +77,7 @@ export function CredentialsExpired({
 
       {/* The server's own words, never paraphrased. Somebody is going to paste
           this into a search or a ticket. */}
-      <p className="select-text break-words font-mono text-[11px] text-fg-fnt">
+      <p className="select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
         {verbatim(expired.reason)}
       </p>
 

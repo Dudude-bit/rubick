@@ -312,7 +312,7 @@ function ClusterRow() {
         aria-label={`${alias ?? currentContext} — rename or recolour`}
         className={cn(
           row,
-          "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none"
+          "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden"
         )}
       >
         {body}

@@ -261,7 +261,7 @@ function Node({ at }: { at: Placed }) {
         {node.tag && (
           <span
             className={cn(
-              "flex-none text-[9.5px] uppercase tracking-[0.05em]",
+              "flex-none text-[9.5px] uppercase tracking-wider",
               TONE_TEXT[node.tag.tone]
             )}
           >
@@ -301,7 +301,7 @@ function Node({ at }: { at: Placed }) {
       to={node.to}
       className={cn(
         shell,
-        "transition-colors hover:border-info hover:bg-sel focus-visible:border-info focus-visible:outline-none"
+        "transition-colors hover:border-info hover:bg-sel focus-visible:border-info focus-visible:outline-hidden"
       )}
       style={box}
       title={node.label}

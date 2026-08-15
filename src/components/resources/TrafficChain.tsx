@@ -428,7 +428,7 @@ export function TrafficChain({
               {unread.what === "ingress"
                 ? `Could not read Ingress ${unread.ingress.name}, so nothing below is complete for it`
                 : `Could not read which controller serves Ingress ${unread.ingress.name}`}
-              <span className="block select-text break-words font-mono text-fg-mut">
+              <span className="block select-text wrap-break-word font-mono text-fg-mut">
                 {unread.reason}
               </span>
             </p>

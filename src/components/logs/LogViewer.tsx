@@ -171,7 +171,7 @@ function StreamFailureNotice({
           </p>
         )}
         {!unstarted && (
-          <p className="mt-0.5 break-words text-[11px] text-fg-mut">
+          <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
             {failure.message}
           </p>
         )}

@@ -69,14 +69,14 @@ export function SettingsNav({ activeId }: { activeId: string }) {
               setQuery("");
             }
           }}
-          className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt [&::-webkit-search-cancel-button]:hidden"
+          className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt [&::-webkit-search-cancel-button]:hidden"
         />
         {query && (
           <button
             type="button"
             aria-label="Clear search"
             onClick={() => setQuery("")}
-            className="rounded text-fg-fnt transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+            className="rounded text-fg-fnt transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >
             <X className="h-3 w-3" />
           </button>
@@ -111,7 +111,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
                   : section.label
               }
               className={cn(
-                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-xs text-fg-mut no-underline transition-colors hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
+                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-xs text-fg-mut no-underline transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
                 active && "border-l-fg bg-sel font-medium text-fg",
                 empty && "opacity-55"
               )}

@@ -655,7 +655,7 @@ export function InfrastructureBuilder() {
                       answered a question nobody asked and put more colour on
                       screen than the rest of the app has in total. */}
                   <MiniMap
-                    className="!bg-canvas rounded border border-hair"
+                    className="bg-canvas! rounded border border-hair"
                     nodeColor="hsl(var(--fg-fnt))"
                     maskColor="hsl(var(--canvas) / 0.6)"
                   />

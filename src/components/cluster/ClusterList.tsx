@@ -142,8 +142,8 @@ function ClusterListRow({
         data-cluster-row
         onClick={() => onSelect(context)}
         className={cn(
-          "group -mx-[7px] rounded-[5px] text-left transition-colors hover:bg-hover",
-          "focus:bg-sel focus:outline-none"
+          "group mx-[-7px] rounded-[5px] text-left transition-colors hover:bg-hover",
+          "focus:bg-sel focus:outline-hidden"
         )}
       >
         <ClusterRow

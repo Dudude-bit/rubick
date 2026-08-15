@@ -61,7 +61,7 @@ export function ResourcePalette({
                   onAdd(item.kind);
                 }
               }}
-              className="w-full cursor-grab touch-none select-none rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info active:cursor-grabbing"
+              className="w-full cursor-grab touch-none select-none rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info active:cursor-grabbing"
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-medium text-fg">{item.kind}</span>

@@ -102,7 +102,7 @@ export function startWindowActivity(): () => void {
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("focus", onFocus);
-    window.removeEventListener("blur", onBlur);
+    window.removeEventListener("blur-sm", onBlur);
     window.removeEventListener("pointerdown", onInteraction, {
       capture: true,
     });

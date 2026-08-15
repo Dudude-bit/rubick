@@ -13,7 +13,7 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      "fixed top-0 z-100 flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
       className
     )}
     {...props}
@@ -28,12 +28,12 @@ ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
  * fill, and the word in the toast already says what went wrong.
  */
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-lg border bg-raise p-3 pr-8 shadow-pop transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-lg border bg-raise p-3 pr-8 shadow-pop transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-(--radix-toast-swipe-end-x) data-[swipe=move]:translate-x-(--radix-toast-swipe-move-x) data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full sm:data-[state=open]:slide-in-from-bottom-full",
   {
     variants: {
       variant: {
         default: "border-hair text-fg-mid",
-        destructive: "destructive group border-err/[0.32] text-err",
+        destructive: "destructive group border-err/32 text-err",
       },
     },
     defaultVariants: {
@@ -64,7 +64,7 @@ const ToastAction = React.forwardRef<
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      "inline-flex h-6 shrink-0 items-center justify-center rounded-md border border-hair bg-transparent px-2 text-xs font-medium transition-colors hover:bg-hover hover:text-fg focus:outline-none focus:ring-1 focus:ring-info disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-err/[0.32] group-[.destructive]:text-err group-[.destructive]:hover:bg-err/[0.16] group-[.destructive]:hover:text-err group-[.destructive]:focus:ring-err",
+      "inline-flex h-6 shrink-0 items-center justify-center rounded-md border border-hair bg-transparent px-2 text-xs font-medium transition-colors hover:bg-hover hover:text-fg focus:outline-hidden focus:ring-1 focus:ring-info disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-err/32 group-[.destructive]:text-err hover:group-[.destructive]:bg-err/16 hover:group-[.destructive]:text-err focus:group-[.destructive]:ring-err",
       className
     )}
     {...props}
@@ -79,7 +79,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 rounded-md p-1 text-fg-fnt opacity-0 transition-opacity hover:text-fg focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-info group-hover:opacity-100 group-[.destructive]:text-err group-[.destructive]:hover:text-fg group-[.destructive]:focus:ring-err",
+      "absolute right-2 top-2 rounded-md p-1 text-fg-fnt opacity-0 transition-opacity hover:text-fg focus:opacity-100 focus:outline-hidden focus:ring-1 focus:ring-info group-hover:opacity-100 group-[.destructive]:text-err hover:group-[.destructive]:text-fg focus:group-[.destructive]:ring-err",
       className
     )}
     toast-close=""

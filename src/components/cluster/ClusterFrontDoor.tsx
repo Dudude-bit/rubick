@@ -170,7 +170,7 @@ function Act({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-sm text-fg-mut underline decoration-dotted underline-offset-2 transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:text-fg-fnt"
+      className="rounded-sm text-fg-mut underline decoration-dotted underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:text-fg-fnt"
     >
       {children}
     </button>

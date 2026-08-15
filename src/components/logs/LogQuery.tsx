@@ -266,7 +266,7 @@ export function LogQuery({
             out in the status bar. */}
         <div
           ref={boxRef}
-          className="flex h-6 min-w-[11rem] flex-1 items-center gap-1 overflow-x-auto rounded-md border border-hair px-1.5 [scrollbar-width:none] focus-within:border-fg-fnt [&::-webkit-scrollbar]:hidden"
+          className="flex h-6 min-w-44 flex-1 items-center gap-1 overflow-x-auto rounded-md border border-hair px-1.5 [scrollbar-width:none] focus-within:border-fg-fnt [&::-webkit-scrollbar]:hidden"
         >
           <Search
             aria-hidden="true"
@@ -308,7 +308,7 @@ export function LogQuery({
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={at >= 0 ? `${listId}-${at}` : undefined}
-            className="h-[22px] min-w-[7rem] flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt"
+            className="h-[22px] min-w-28 flex-1 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
       </PopoverAnchor>
@@ -500,7 +500,7 @@ function Chip({
     <span
       className={`inline-flex shrink-0 items-center rounded font-mono text-[11px] leading-[18px] ${
         intake
-          ? "bg-info/[0.16] text-info ring-1 ring-inset ring-info/45"
+          ? "bg-info/16 text-info ring-1 ring-inset ring-info/45"
           : "bg-sel text-fg"
       }`}
       // The chip's own name, so the mode is read out with the term rather

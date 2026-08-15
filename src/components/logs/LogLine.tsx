@@ -203,7 +203,7 @@ function LineDetail({
 }) {
   const level = log.level ?? "unknown";
   return (
-    <div className="ml-[4rem] mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-[11px]">
+    <div className="ml-16 mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-[11px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-fnt">
         <span className="tabular-nums text-fg-mut">
           {formatTimestampPrecise(log.timestamp)}
@@ -233,7 +233,7 @@ function LineDetail({
         </button>
         <span title={FORMAT_DESCRIPTIONS[log.format]}>{log.format}</span>
       </div>
-      <p className="mt-1 whitespace-pre-wrap break-words font-mono text-fg-mid">
+      <p className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-fg-mid">
         {log.message}
       </p>
       {fields.length > 0 && (
@@ -250,7 +250,7 @@ function LineDetail({
                   {key}
                 </button>
               </dt>
-              <dd className="break-words text-fg-fnt">{value}</dd>
+              <dd className="wrap-break-word text-fg-fnt">{value}</dd>
             </div>
           ))}
         </dl>
@@ -324,7 +324,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase() ? (
-          <mark key={i} className="rounded bg-warn/[0.24] px-0.5 text-fg">
+          <mark key={i} className="rounded bg-warn/24 px-0.5 text-fg">
             {part}
           </mark>
         ) : (

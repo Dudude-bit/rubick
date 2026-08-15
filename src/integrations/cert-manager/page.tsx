@@ -364,7 +364,7 @@ function Facts({ row }: { row: CertRow }) {
       </span>
 
       <span className="text-fg-fnt">Names</span>
-      <span className="min-w-0 break-words font-mono text-fg-mid">
+      <span className="min-w-0 wrap-break-word font-mono text-fg-mid">
         {row.dnsNames.length > 0 ? row.dnsNames.join(", ") : "none in the spec"}
       </span>
 
@@ -490,7 +490,7 @@ function Walk({ steps }: { steps: CertStep[] }) {
               </span>
             </span>
             {step.note && (
-              <p className="mt-0.5 select-text break-words font-mono text-[11px] text-fg-mut">
+              <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
                 {step.note}
               </p>
             )}

@@ -613,7 +613,7 @@ export function DataTable<TData, TValue>({
             placeholder={searchPlaceholder}
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            className="w-40 bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt"
+            className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
         <div className="flex items-center gap-2">

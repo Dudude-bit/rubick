@@ -98,7 +98,7 @@ const ContextMenuContent = React.forwardRef<
     <ContextMenuPrimitive.Content
       ref={ref}
       className={cn(
-        "z-50 min-w-[9rem] overflow-hidden rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        "z-50 min-w-36 overflow-hidden rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className
       )}
       {...props}
@@ -114,7 +114,7 @@ const ContextMenuItem = React.forwardRef<
   <ContextMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-[5px] px-[7px] py-[5px] text-xs outline-none transition-colors focus:bg-hover focus:text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex cursor-default select-none items-center rounded-[5px] px-[7px] py-[5px] text-xs outline-hidden transition-colors focus:bg-hover focus:text-fg data-disabled:pointer-events-none data-disabled:opacity-50",
       className
     )}
     {...props}

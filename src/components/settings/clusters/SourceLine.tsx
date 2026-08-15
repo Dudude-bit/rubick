@@ -93,7 +93,7 @@ export function SourceLine() {
               setEditing(false);
               void kubeconfig.choose();
             }}
-            className="flex-none rounded p-1 text-fg-fnt transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+            className="flex-none rounded p-1 text-fg-fnt transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >
             <FolderOpen className="size-3.5" />
           </button>
@@ -123,7 +123,7 @@ export function SourceLine() {
                 type="button"
                 onClick={() => kubeconfig.clearPath()}
                 disabled={busy}
-                className="text-fg-mut transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+                className="text-fg-mut transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
               >
                 Use the default lookup
               </button>
@@ -134,7 +134,7 @@ export function SourceLine() {
                 setTyped(kubeconfig.overridePath ?? "");
                 setEditing(true);
               }}
-              className="text-info hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+              className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               Use another file
             </button>

@@ -14,11 +14,11 @@ const badgeVariants = cva(
       variant: {
         default: "bg-sel text-fg",
         secondary: "bg-hover text-fg-mut",
-        destructive: "bg-err/[0.16] text-err",
+        destructive: "bg-err/16 text-err",
         outline: "border border-hair text-fg-mut",
-        success: "bg-ok/[0.16] text-ok",
-        warning: "bg-warn/[0.16] text-warn",
-        error: "bg-err/[0.16] text-err",
+        success: "bg-ok/16 text-ok",
+        warning: "bg-warn/16 text-warn",
+        error: "bg-err/16 text-err",
       },
     },
     defaultVariants: {

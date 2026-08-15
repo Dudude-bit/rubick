@@ -163,7 +163,7 @@ function AliasField({
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
           );
         }}
-        className="w-full rounded-[5px] border border-hair bg-canvas px-1.5 py-1 text-xs text-fg outline-none placeholder:text-fg-fnt focus:border-info"
+        className="w-full rounded-[5px] border border-hair bg-canvas px-1.5 py-1 text-xs text-fg outline-hidden placeholder:text-fg-fnt focus:border-info"
       />
       <p className="mt-1 break-all font-mono text-[10px] leading-[13px] text-fg-fnt">
         {context}

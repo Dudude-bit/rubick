@@ -85,7 +85,7 @@ export function ContextRow({
             <button
               type="button"
               onClick={() => onBind(context.name)}
-              className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-[10px] text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+              className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-[10px] text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               {VENDOR_LABEL[reading.bound.vendor]} profile{" "}
               <span className="font-mono">{reading.bound.profile}</span>
@@ -114,7 +114,7 @@ export function ContextRow({
             <button
               type="button"
               onClick={() => onBind(context.name)}
-              className="text-info hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+              className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               Bind one
             </button>

@@ -36,7 +36,7 @@ export function Layout() {
     >
       {/* 2px along the top edge: unmissable in peripheral vision, zero
           competition with the content below it. */}
-      <div className="h-0.5 flex-none bg-[var(--cluster)]" />
+      <div className="h-0.5 flex-none bg-(--cluster)" />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">

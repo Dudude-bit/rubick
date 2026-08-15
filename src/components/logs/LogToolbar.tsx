@@ -240,7 +240,7 @@ export function LogToolbar({
         onValueChange={(value) => onLimitChange(parseInt(value))}
       >
         <SelectTrigger
-          className="h-6 w-[6.5rem] px-2 text-xs"
+          className="h-6 w-26 px-2 text-xs"
           title="How many lines to backfill and then keep"
         >
           <SelectValue />

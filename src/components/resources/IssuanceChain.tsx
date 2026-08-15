@@ -159,7 +159,7 @@ export function IssuanceSection({
       {story.failure && (
         <p
           className={cn(
-            "mt-2 break-words font-mono text-[11px]",
+            "mt-2 wrap-break-word font-mono text-[11px]",
             failed ? "text-err" : "text-warn"
           )}
         >

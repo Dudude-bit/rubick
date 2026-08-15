@@ -106,7 +106,7 @@ function TabNote({
         {title}
       </p>
       {detail && (
-        <p className="mt-1 break-words text-[11px] text-fg-mut">{detail}</p>
+        <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">{detail}</p>
       )}
     </div>
   );
@@ -124,7 +124,7 @@ function TabError({
   return (
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">Could not read {what}.</p>
-      <p className="mt-1 break-words text-[11px] text-fg-mut">
+      <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
         {error.message}
       </p>
       <div className="mt-2">

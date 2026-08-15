@@ -13,7 +13,7 @@ const Checkbox = React.forwardRef<
       // Unchecked is a hairline box like every other input; checked inverts
       // to the foreground — the same "affirmative by contrast, not by hue"
       // move the default Button makes.
-      "peer h-3.5 w-3.5 shrink-0 rounded-[3px] border border-hair transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-canvas",
+      "peer h-3.5 w-3.5 shrink-0 rounded-[3px] border border-hair transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-canvas",
       className
     )}
     {...props}

@@ -79,11 +79,11 @@ const STEP_MARK: Record<
   StepMark,
   { icon: typeof Check | null; ring: string; text: string; dot?: string }
 > = {
-  done: { icon: Check, ring: "ring-ok/[0.5]", text: "text-ok" },
-  failed: { icon: X, ring: "ring-err/[0.6]", text: "text-err" },
+  done: { icon: Check, ring: "ring-ok/50", text: "text-ok" },
+  failed: { icon: X, ring: "ring-err/60", text: "text-err" },
   running: {
     icon: null,
-    ring: "ring-info/[0.5]",
+    ring: "ring-info/50",
     text: "text-info",
     dot: "bg-info",
   },

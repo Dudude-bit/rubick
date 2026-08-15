@@ -239,7 +239,7 @@ export function PodTerminal({
                 ? `No shell on ${podName}/${containerName}.`
                 : `${podName}/${containerName} is no longer available.`}
             </p>
-            <p className="mt-0.5 break-words text-[11px] text-fg-mut">
+            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
               {failureReason}
             </p>
           </div>

@@ -47,13 +47,13 @@ export function KeyValueRow({
         className
       )}
     >
-      {/* `min-w-0` lets the label shrink to its track and `break-words`
+      {/* `min-w-0` lets the label shrink to its track and `wrap-break-word`
        *  breaks inside it. Without both, a grid item keeps its content's
        *  intrinsic width, and an unhyphenated annotation key such as
        *  `deployment.kubernetes.io/revision` is drawn straight over the
        *  value column. */}
       <dt
-        className="min-w-0 break-words text-[11px] text-fg-fnt"
+        className="min-w-0 wrap-break-word text-[11px] text-fg-fnt"
         // Only a plain label can be its own tooltip; a rendered one carries
         // its own affordances and would announce them twice.
         title={typeof label === "string" ? label : undefined}
@@ -62,7 +62,7 @@ export function KeyValueRow({
       </dt>
       <dd
         className={cn(
-          "min-w-0 break-words text-xs",
+          "min-w-0 wrap-break-word text-xs",
           mono && "font-mono",
           tone ? TONE_CLASS[tone] : "text-fg"
         )}

@@ -87,7 +87,7 @@ export function CopyableValue({
       className={cn(
         "group -mx-1 inline-flex min-w-0 items-center gap-1 rounded-sm px-1 font-mono",
         "hover:underline hover:decoration-dotted hover:underline-offset-2",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info",
+        "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
         className
       )}
     >

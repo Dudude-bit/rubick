@@ -58,7 +58,9 @@ function JsonLeaf({ value }: { value: unknown }) {
   if (typeof value === "object") {
     return <span className="text-fg-fnt">empty object</span>;
   }
-  return <span className="break-words font-mono text-fg">{String(value)}</span>;
+  return (
+    <span className="wrap-break-word font-mono text-fg">{String(value)}</span>
+  );
 }
 
 function JsonEntries({ data, depth }: { data: unknown; depth: number }) {
@@ -87,7 +89,7 @@ function JsonRow({
   if (!isContainer(value)) {
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
-        <span className="break-words text-[11px] text-fg-fnt">{label}</span>
+        <span className="wrap-break-word text-[11px] text-fg-fnt">{label}</span>
         <span className="min-w-0 text-xs">
           <JsonLeaf value={value} />
         </span>
@@ -104,7 +106,7 @@ function JsonRow({
   return (
     <div className="border-b border-hair py-1 last:border-b-0">
       <div className="flex items-baseline gap-2">
-        <span className="break-words text-[11px] font-medium text-fg-mid">
+        <span className="wrap-break-word text-[11px] font-medium text-fg-mid">
           {label}
         </span>
         <span className="text-[11px] text-fg-fnt">{size}</span>

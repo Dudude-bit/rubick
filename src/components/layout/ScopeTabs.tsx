@@ -407,15 +407,11 @@ function ScopeTabItem({
             // reliably the sum of its children's, and a tab narrower than
             // its own parts is a tab with its label written over itself —
             // hence `overflow-hidden` as the backstop.
-            "flex max-w-[26rem] shrink items-center gap-[5px] overflow-hidden rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            "flex max-w-104 shrink items-center gap-[5px] overflow-hidden rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
             // A lost cluster needs room for the one fact only this tab still
             // holds — the name it was pointed at — and for the word that says
             // it is gone.
-            tab.missing
-              ? "min-w-[21rem]"
-              : showName
-                ? "min-w-[17.5rem]"
-                : "min-w-[13.5rem]",
+            tab.missing ? "min-w-84" : showName ? "min-w-70" : "min-w-54",
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
         >
@@ -434,8 +430,8 @@ function ScopeTabItem({
                 aria-haspopup="menu"
                 className={cn(
                   segClass(open === "ctx"),
-                  showName ? "min-w-[4rem] [flex-shrink:6]" : "flex-none",
-                  tab.missing && "min-w-[6.5rem]"
+                  showName ? "min-w-16 shrink-6" : "flex-none",
+                  tab.missing && "min-w-26"
                 )}
               >
                 {/* Only the dot carries the cluster colour here — the mark
@@ -468,7 +464,7 @@ function ScopeTabItem({
               cannot be made live and nothing about it is going to change
               until the kubeconfig does. */}
           {tab.missing && (
-            <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-[0.05em] text-fg-fnt">
+            <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
               missing
             </span>
           )}
@@ -492,10 +488,7 @@ function ScopeTabItem({
               // down to a bare chevron is not a shorter label, it is a
               // segment that has stopped saying anything and kept its
               // punctuation.
-              className={cn(
-                segClass(open === "ns"),
-                "min-w-[3.5rem] [flex-shrink:6]"
-              )}
+              className={cn(segClass(open === "ns"), "min-w-14 shrink-6")}
             >
               <span className="min-w-0 truncate">{scopeLabel(scope)}</span>
               <span aria-hidden="true" className="flex-none text-[9px]">
@@ -514,7 +507,7 @@ function ScopeTabItem({
               because it is the part that says which tab this is. */}
           <span
             className={cn(
-              "min-w-[4.5rem] truncate [flex-shrink:1]",
+              "min-w-18 truncate shrink",
               active ? "text-fg" : "text-fg-mut"
             )}
           >
@@ -615,7 +608,7 @@ function ContextPopover({
                   context={ctx.name}
                   selected={selected}
                   meta={
-                    <span className="text-[10px] uppercase tracking-[0.05em]">
+                    <span className="text-[10px] uppercase tracking-wider">
                       {providerLabel(detectProvider(ctx.name))}
                     </span>
                   }
@@ -837,7 +830,7 @@ function NamespacePopover({
             aria-autocomplete="list"
             aria-activedescendant={at >= 0 ? `${listId}-${at}` : undefined}
             aria-describedby={noteId}
-            className="w-full bg-transparent text-xs text-fg outline-none placeholder:text-fg-fnt"
+            className="w-full bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
         <div className="max-h-[260px] overflow-auto p-1">
@@ -959,7 +952,7 @@ function NamespaceRow({
         data-add
         // The box is 13px and the target around it is not: a checkbox that
         // has to be hit exactly is a checkbox nobody uses twice.
-        className="-m-[7px] grid h-[27px] w-[27px] place-items-center"
+        className="m-[-7px] grid h-[27px] w-[27px] place-items-center"
       >
         <span
           className={cn(

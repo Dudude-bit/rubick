@@ -79,7 +79,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t border-hair font-medium [&>tr]:last:border-b-0",
+      "border-t border-hair font-medium last:[&>tr]:border-b-0",
       className
     )}
     {...props}
@@ -113,7 +113,7 @@ const TableHead = React.forwardRef<
     // `whitespace-nowrap` stops two-word labels ("CPU Usage") from
     // wrapping and doubling the header's height.
     className={cn(
-      "whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt [&:has([role=checkbox])]:pr-0",
+      "whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
       className
     )}
     {...props}
@@ -128,7 +128,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "px-2.5 py-1 align-middle [&:has([role=checkbox])]:pr-0",
+      "px-2.5 py-1 align-middle has-[[role=checkbox]]:pr-0",
       className
     )}
     {...props}

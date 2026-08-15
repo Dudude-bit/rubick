@@ -154,8 +154,8 @@ export function YamlDiffViewer({
           key={idx}
           className={cn(
             "flex gap-2 px-2",
-            line.type === "added" && "bg-ok/[0.16] text-ok",
-            line.type === "removed" && "bg-err/[0.16] text-err",
+            line.type === "added" && "bg-ok/16 text-ok",
+            line.type === "removed" && "bg-err/16 text-err",
             line.type === "unchanged" && "text-fg-mid"
           )}
         >

@@ -50,7 +50,7 @@ export function ActionWarnings({
       // item defaults to `min-width: auto`, so one wide sibling — the apply
       // dialog's diff — stretches the whole column past the panel and takes
       // this sentence off the right of the screen with it.
-      <p className="min-w-0 break-words text-xs text-fg-mut">
+      <p className="min-w-0 wrap-break-word text-xs text-fg-mut">
         <span className="font-medium text-warn">{only.lead}</span>{" "}
         {only.description}
         {only.to && (
@@ -72,7 +72,7 @@ export function ActionWarnings({
         {headingFor(COUNT_WORD[warnings.length] ?? String(warnings.length))}
       </p>
       {warnings.map((warning) => (
-        <p key={warning.key} className="break-words text-xs text-fg-mut">
+        <p key={warning.key} className="wrap-break-word text-xs text-fg-mut">
           <span className="text-fg">{warning.subject}</span> —{" "}
           {warning.description}
           {warning.to && (

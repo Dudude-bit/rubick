@@ -12,7 +12,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           // Same shell as the Select trigger: 24px tall, hairline border,
           // no fill of its own. A filled input box is the card pattern at
           // control scale.
-          "flex h-7 w-full rounded-md border border-hair bg-transparent px-2 text-xs text-fg transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-fg-fnt hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-7 w-full rounded-md border border-hair bg-transparent px-2 text-xs text-fg transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-fg-fnt hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         autoComplete="off"

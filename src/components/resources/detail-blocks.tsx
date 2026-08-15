@@ -270,7 +270,7 @@ export function ProblemSummary({
           {headline}
         </p>
         {detail && (
-          <p className="mt-0.5 break-words text-xs text-fg-mut">{detail}</p>
+          <p className="mt-0.5 wrap-break-word text-xs text-fg-mut">{detail}</p>
         )}
         {/* Under its own sentence, not flushed to the far edge of a 1160px
          *  row: "See containers" a thousand pixels from the reason it
@@ -480,7 +480,7 @@ export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
       <div className="text-[11px] text-fg-mut">{label}</div>
       <div
         className={cn(
-          "mt-1 break-words text-[15px] font-semibold",
+          "mt-1 wrap-break-word text-[15px] font-semibold",
           mono && "font-mono",
           tone ? TONE_CLASS[tone] : "text-fg"
         )}

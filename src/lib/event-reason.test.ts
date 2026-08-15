@@ -72,7 +72,7 @@ describe("eventReasonMark", () => {
     }
   });
 
-  it("keeps the families apart on the ring", () => {
+  it("keeps the families apart on the ring-3", () => {
     const hues = FAMILIES.map((f) => hueOf(SAMPLES[f])).sort((a, b) => a - b);
     for (let i = 1; i < hues.length; i++) {
       expect(hues[i] - hues[i - 1]).toBeGreaterThanOrEqual(25);

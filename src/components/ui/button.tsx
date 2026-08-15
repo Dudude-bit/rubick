@@ -10,12 +10,12 @@ import { cn } from "@/lib/utils";
  * the button" — hue stays reserved for state.
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         default: "bg-fg text-canvas hover:bg-fg-mid",
-        destructive: "bg-err/[0.16] text-err hover:bg-err/[0.24]",
+        destructive: "bg-err/16 text-err hover:bg-err/24",
         outline: "border border-hair text-fg-mid hover:bg-hover hover:text-fg",
         secondary: "bg-sel text-fg-mid hover:bg-hover hover:text-fg",
         ghost: "text-fg-mut hover:bg-hover hover:text-fg",

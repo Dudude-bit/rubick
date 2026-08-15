@@ -120,7 +120,7 @@ function Foot({
       type="button"
       onClick={onClick}
       aria-expanded={expanded}
-      className="text-info hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-info"
+      className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
     >
       {children}
     </button>

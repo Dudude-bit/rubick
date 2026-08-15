@@ -100,7 +100,7 @@ function Row({ row }: { row: ConnRow }) {
   const inline = row.ways.length === 1 ? row.ways[0] : null;
   return (
     <div className="grid grid-cols-[minmax(0,148px)_minmax(0,1fr)] items-baseline gap-3 py-[3px]">
-      <span className="min-w-0 break-words text-[11px] text-fg-fnt">
+      <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
         {row.label}
       </span>
       <div className="min-w-0">
