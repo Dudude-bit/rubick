@@ -54,7 +54,7 @@ machines — triggers no obligation at all, because that is not distribution.
 The relicensing was agreed by everyone holding copyright in the code:
 
 - Kirill Inyakin (@Dudude-bit)
-- @belliel
+- Ruslan Kusherbayev (@belliel)
 
 Contributions are accepted under the same licence. There is no CLA; by
 opening a pull request you licence your work under GPL-3.0-or-later.
