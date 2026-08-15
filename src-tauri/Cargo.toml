@@ -62,7 +62,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["trace"] }
 
 # WebSocket for exec
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 
 # Security
 rustls = { version = "0.23", features = ["ring"] }
