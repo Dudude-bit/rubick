@@ -86,7 +86,7 @@ anyhow = "1.0"
 
 # Configuration
 dirs = "5.0"
-config = "0.14"
+config = "0.15"
 toml = "0.8"
 
 # Utilities
