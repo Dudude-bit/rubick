@@ -100,6 +100,17 @@ impl K8sClientManager {
         Ok(())
     }
 
+    /// The kubeconfig this manager loaded, already canonicalised.
+    ///
+    /// `None` before the first load. Exposed so a diagnostic screen can name
+    /// the file the app actually reads: re-deriving it from `KUBECONFIG` and
+    /// `~/.kube/config` would let the screen name a different file whenever a
+    /// symlink is involved, which is the disagreement such a screen exists to
+    /// prevent.
+    pub async fn kubeconfig_path(&self) -> Option<PathBuf> {
+        self.kubeconfig_path.read().await.clone()
+    }
+
     /// Get list of available contexts
     pub async fn list_contexts(&self) -> Result<Vec<ContextInfo>> {
         let kubeconfig = self.kubeconfig.read().await;

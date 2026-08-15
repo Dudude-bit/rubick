@@ -6,6 +6,10 @@
 //! environment — and because both have to say the same thing about the same
 //! machine, which two implementations cannot promise.
 
+pub mod collect;
 pub mod findings;
 
+pub use collect::{
+    collect, AppInfo, ContextAuth, Diagnostics, KubeconfigInfo, PluginStatus, SearchPathEntry,
+};
 pub use findings::{missing_plugin_finding, Finding, Severity};
