@@ -1,8 +1,7 @@
 //! Rubick - A minimalist Kubernetes GUI client
 //!
 //! This application provides a modern, Lens-inspired interface for managing
-//! Kubernetes clusters with support for multiple authentication methods
-//! and an extensible plugin system.
+//! Kubernetes clusters with support for multiple authentication methods.
 
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -17,7 +16,6 @@ pub mod error;
 pub mod integrations;
 pub mod logs;
 pub mod metrics;
-pub mod plugins;
 pub mod resources;
 pub mod search;
 pub mod shell;

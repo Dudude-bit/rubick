@@ -1,41 +1,6 @@
 //! Resource serialization helpers
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-
-/// Generic resource representation for frontend
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenericResource {
-    pub api_version: String,
-    pub kind: String,
-    pub metadata: ResourceMetadata,
-    #[serde(default)]
-    pub spec: serde_json::Value,
-    #[serde(default)]
-    pub status: serde_json::Value,
-}
-
-/// Resource metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceMetadata {
-    pub name: String,
-    #[serde(default)]
-    pub namespace: Option<String>,
-    #[serde(default)]
-    pub uid: Option<String>,
-    #[serde(default)]
-    pub resource_version: Option<String>,
-    #[serde(default)]
-    pub creation_timestamp: Option<String>,
-    #[serde(default)]
-    pub labels: BTreeMap<String, String>,
-    #[serde(default)]
-    pub annotations: BTreeMap<String, String>,
-    #[serde(default)]
-    pub owner_references: Vec<OwnerReference>,
-    #[serde(default)]
-    pub finalizers: Vec<String>,
-}
 
 /// Owner reference
 #[derive(Debug, Clone, Serialize, Deserialize)]

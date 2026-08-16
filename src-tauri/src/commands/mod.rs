@@ -73,13 +73,13 @@ pub use workloads::*;
 /// Debug command to check PATH and discovered plugins
 #[tauri::command]
 pub async fn debug_kubectl_plugins() -> std::result::Result<serde_json::Value, String> {
-    use crate::plugins::KubectlPluginManager;
+    use crate::cli::PluginDiscovery;
 
     let shell_path = crate::shell::get_user_path();
     let process_path = std::env::var("PATH").unwrap_or_default();
 
-    let mut manager = KubectlPluginManager::new();
-    let plugins = manager.discover().unwrap_or_default();
+    let mut discovery = PluginDiscovery::new("kubectl-");
+    let plugins = discovery.discover().unwrap_or_default();
 
     let plugin_names: Vec<String> = plugins.iter().map(|p| p.name.clone()).collect();
 

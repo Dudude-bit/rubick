@@ -33,11 +33,6 @@ async-trait = "0.1"
 kube = { version = "0.97", default-features = false, features = ["client", "config", "runtime", "ws", "oauth", "oidc", "rustls-tls"] }
 k8s-openapi = { version = "0.23", features = ["v1_31"] }
 
-# AWS EKS authentication
-aws-config = { version = "1.5", features = ["behavior-version-latest"] }
-aws-credential-types = "1.2"
-aws-sdk-sts = "1.51"
-
 # GCP GKE authentication
 gcp_auth = "0.12"
 

@@ -1,27 +1,21 @@
 //! Authentication module
 //!
-//! Provides support for multiple Kubernetes authentication methods including:
-//! - Kubeconfig-based authentication
-//! - Bearer token authentication
-//! - OIDC authentication
-//! - AWS EKS authentication
-//! - GCP GKE authentication
-//! - Azure AKS authentication
+//! Native providers for the clouds whose token endpoints this app talks to
+//! directly: OIDC, GCP GKE and Azure AKS.
+//!
+//! Everything else — EKS included — authenticates through the kubeconfig
+//! `exec` block, the same credential plugin `kubectl` runs. See
+//! `interactive` for that path, and Settings -> Diagnostics for what it
+//! reports when a plugin is missing.
 
-mod aws_eks;
 mod azure_aks;
-mod bearer;
 mod gcp_gke;
 mod interactive;
-mod kubeconfig;
 mod oidc;
 
-pub use aws_eks::AwsEksAuth;
 pub use azure_aks::{is_aks_exec_command, parse_aks_exec_args, AksClusterInfo, AzureAksAuth};
-pub use bearer::BearerTokenAuth;
 pub use gcp_gke::{is_gke_exec_command, GcpGkeAuth};
 pub use interactive::prepare_kubeconfig_for_context;
-pub use kubeconfig::KubeconfigAuth;
 pub use oidc::OidcAuth;
 
 use serde::{Deserialize, Serialize};

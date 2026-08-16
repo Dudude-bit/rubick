@@ -1,7 +1,7 @@
 //! Application state management.
 //!
-//! Holds active connections, cached data, plugin registry, and the
-//! event broadcast channel.
+//! Holds active connections, cached data, and the event broadcast
+//! channel.
 //!
 //! - `events`:   AppEvent enum + LogLineEvent + WatchOp
 //! - `sessions`: Session / PortForwardSession / AuthSessionControl /
@@ -19,7 +19,6 @@ pub use sessions::{AuthSessionControl, LogStream, PortForwardSession, Session};
 use crate::client::K8sClientManager;
 use crate::config::AppConfig;
 use crate::error::Result;
-use crate::plugins::PluginManager;
 use crate::terminal::TerminalManager;
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -35,9 +34,6 @@ pub struct AppState {
 
     /// Kubernetes client manager
     pub client_manager: Arc<K8sClientManager>,
-
-    /// Plugin manager
-    pub plugin_manager: Arc<PluginManager>,
 
     /// Active sessions by context
     pub sessions: DashMap<String, Session>,
@@ -87,7 +83,6 @@ impl AppState {
         let (event_tx, _) = broadcast::channel(1000);
 
         let client_manager = Arc::new(K8sClientManager::new());
-        let plugin_manager = Arc::new(PluginManager::new()?);
 
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
@@ -97,7 +92,6 @@ impl AppState {
         Ok(Self {
             config: Arc::new(RwLock::new(config)),
             client_manager,
-            plugin_manager,
             search_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
