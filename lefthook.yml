@@ -20,12 +20,24 @@ pre-commit:
 pre-push:
   parallel: true
   commands:
-    # `glob:` is REQUIRED on each command — lefthook's pre-push default
-    # is "skip if no matching files" and without a glob it treats the
-    # implicit filter as empty, silently skipping every command. This
-    # is exactly what masked the v2.1.0 release: 90 `__cmd__X not
-    # found` errors compiled clean in `cargo test --lib` but the bin
-    # build was never run pre-push because the hook itself skipped.
+    # TWO things make this hook skip silently, and it has done both.
+    #
+    # 1. `glob:` is REQUIRED on each command — lefthook's pre-push default
+    #    is "skip if no matching files" and without a glob it treats the
+    #    implicit filter as empty. This is what masked the v2.1.0 release:
+    #    90 `__cmd__X not found` errors compiled clean in `cargo test
+    #    --lib` but the bin build was never run pre-push.
+    #
+    # 2. The branch MUST track a remote. Lefthook builds the file list
+    #    with `git diff --name-only HEAD @{push}`; with no upstream that
+    #    errors and it falls back to `git diff HEAD <branch>` — the
+    #    branch against itself — so the list is empty and every command
+    #    below skips no matter what you are pushing. Check it with
+    #    `git rev-parse --abbrev-ref main@{upstream}`; fix it with
+    #    `git branch --set-upstream-to=origin/main main`. A fresh clone
+    #    gets this from `git clone`; a repo re-created or re-pointed by
+    #    hand does not, and then the whole gate is off with no output
+    #    beyond "(skip) no matching push files".
     frontend-tests:
       glob: "*.{ts,tsx}"
       run: bun run test
