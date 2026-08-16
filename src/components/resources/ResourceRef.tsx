@@ -40,6 +40,12 @@ export interface ResourceRefProps {
   /** Off where the surrounding column already says the kind. */
   showKind?: boolean;
   /**
+   * Draws the namespace as a dim prefix inside the reference — see
+   * {@link ResourceNameProps.namespace}. On for the surfaces where the
+   * namespace is what tells two same-named objects apart.
+   */
+  showNamespace?: boolean;
+  /**
    * Called before the peek opens on a plain left click, and before a
    * modified one opens a tab. Calling `preventDefault()` here keeps both
    * from happening; the anchor keeps its real destination either way.
@@ -194,12 +200,19 @@ export function ResourceRef({
   namespace,
   crd,
   showKind = true,
+  showNamespace = false,
   onClick,
   className,
   size,
 }: ResourceRefProps) {
   const body = (
-    <ResourceName kind={kind} name={name} showKind={showKind} size={size} />
+    <ResourceName
+      kind={kind}
+      name={name}
+      namespace={showNamespace ? namespace : undefined}
+      showKind={showKind}
+      size={size}
+    />
   );
 
   // No `max-w-full`: inside an inline parent that percentage resolves against

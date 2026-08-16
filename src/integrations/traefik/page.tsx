@@ -685,17 +685,13 @@ function PathRow({
             {route.service.kubernetes ? (
               <>
                 {/* Two Services wearing one name render as the same word;
-                    the namespace is printed for exactly those. */}
-                {duplicated.has(route.service.name) && (
-                  <span className="font-mono text-fg-fnt">
-                    {route.service.namespace}/
-                  </span>
-                )}
+                    the namespace is drawn for exactly those. */}
                 <ResourceRef
                   kind="Service"
                   name={route.service.name}
                   namespace={route.service.namespace}
                   showKind={false}
+                  showNamespace={duplicated.has(route.service.name)}
                 />
               </>
             ) : (
@@ -738,25 +734,27 @@ function SourceRef({ route }: { route: TraefikRoute }) {
   if (route.source.kind === "Ingress") {
     return (
       <span className="text-fg-fnt">
-        · <span className="font-mono">{route.source.namespace}/</span>
+        ·{" "}
         <ResourceRef
           kind="Ingress"
           name={route.source.name}
           namespace={route.source.namespace}
           showKind={false}
+          showNamespace
         />
       </span>
     );
   }
   return (
     <span className="text-fg-fnt">
-      · <span className="font-mono">{route.source.namespace}/</span>
+      ·{" "}
       <ResourceRef
         kind="IngressRoute"
         name={route.source.name}
         namespace={route.source.namespace}
         crd={`ingressroutes.${servedGroupName()}`}
         showKind={false}
+        showNamespace
       />
     </span>
   );
@@ -1043,7 +1041,6 @@ function objectRef(route: TraefikRoute): ReactNode {
   return (
     <span>
       {route.source.kind}{" "}
-      <span className="font-mono text-fg-fnt">{route.source.namespace}/</span>
       <ResourceRef
         kind={route.source.kind}
         name={route.source.name}
@@ -1054,6 +1051,7 @@ function objectRef(route: TraefikRoute): ReactNode {
             : undefined
         }
         showKind={false}
+        showNamespace
       />
     </span>
   );

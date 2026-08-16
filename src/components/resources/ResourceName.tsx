@@ -62,6 +62,14 @@ export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
 export interface ResourceNameProps {
   kind: string;
   name: string;
+  /**
+   * Drawn as a dim `namespace/` prefix inside the name's own box, so it
+   * truncates and highlights with the name instead of wrapping beside it
+   * as a loose word. For the surfaces where two objects wear one name and
+   * the namespace is the identity; most columns already say it and pass
+   * nothing.
+   */
+  namespace?: string | null;
   /** Off where the surrounding column, or the breadcrumb, already says it. */
   showKind?: boolean;
   /** Sized up where the name is a heading rather than a row. */
@@ -76,6 +84,7 @@ export const RESOURCE_NAME_SHELL =
 export function ResourceName({
   kind,
   name,
+  namespace,
   showKind = true,
   iconClassName,
   size = "row",
@@ -141,6 +150,11 @@ export function ResourceName({
         className={cn("truncate font-mono", RESOURCE_NAME_SIZE[size])}
         data-testid="resource-ref-name"
       >
+        {namespace && (
+          <span className="text-fg-fnt" data-testid="resource-ref-namespace">
+            {namespace}/
+          </span>
+        )}
         {/* The kind reaches a screen reader either way — when it is shown as
             an icon only, the text still has to name it. */}
         {showKind ? (

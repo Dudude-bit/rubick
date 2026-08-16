@@ -151,14 +151,12 @@ export default function GkeIngressPage() {
           {ignored.map((ingress, index) => (
             <span key={`${ingress.namespace}/${ingress.name}`}>
               {index > 0 && ", "}
-              <span className="font-mono text-fg-fnt">
-                {ingress.namespace}/
-              </span>
               <ResourceRef
                 kind={ResourceType.Ingress}
                 name={ingress.name}
                 namespace={ingress.namespace}
                 showKind={false}
+                showNamespace
               />
             </span>
           ))}
