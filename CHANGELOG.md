@@ -38,6 +38,40 @@ Anything that is not a kubectl subcommand passes straight through:
 refusing a whole binary because its name looked like a plugin would
 break the commands that work today.
 
+### Removed — a whole-project cleanup
+
+Roughly 4,900 lines, none of which the app ran. The largest pieces:
+
+- **The plugin subsystem.** Its registry was empty — nothing implemented
+  any of its three traits and `register_builtin_plugins` was a no-op —
+  and what remained live merely forwarded to `cli::PluginDiscovery`.
+- **Eighteen Tauri commands with no caller**, and the four typed
+  `*_yaml` wrappers among them, superseded by the generic `get_manifest`
+  the frontend actually calls.
+- **Three native auth providers** (`AwsEksAuth`, `BearerTokenAuth`,
+  `KubeconfigAuth`) that only their own tests ever constructed. EKS is
+  unaffected: it authenticates through the kubeconfig `exec` block, the
+  way `kubectl` does. Their removal drops 56 crates from `Cargo.lock`.
+- **`ErrorExt`.** An error reaches the frontend as its `Display` string
+  and nothing else, so `error_code`, `details` and `is_retryable` were
+  read by tests alone.
+- **Twenty-one dependencies** — twelve Rust crates, eight npm packages,
+  and `@radix-ui/react-separator` with the component that used it.
+
+### Fixed — five packages the code imported but never declared
+
+`@radix-ui/react-collapsible` and four `@codemirror`/`@lezer` packages
+resolved only through hoisting. The collapsible one was load-bearing:
+its sole supplier was `@radix-ui/react-accordion`, which looks unused.
+
+### Changed — the gates now cover the tree they claim to
+
+`cargo fmt` and `cargo test` were scoped to `src-tauri`, so
+`k8s-gui-common` was never format-checked and its tests ran nowhere.
+`.rustfmt.toml` carried seven nightly-only options that stable rustfmt
+discards on every run. The frontend lint step is required again — the
+warning backlog it was waived for is empty.
+
 ## [4.0.1] - 2026-08-15
 
 Nothing here changes what the app does. It is a dependency sweep — the
