@@ -130,11 +130,10 @@ Grab the build for your platform from [Releases](https://github.com/Dudude-bit/r
 ## Development
 
 ```bash
-mise install            # Bun, Node, Rust
-cargo install tauri-cli # once, if you have no `cargo tauri`
-bun install
-make dev                # run it
-make build              # package it
+mise install   # Bun, Node, Rust
+bun install    # the Tauri CLI comes with it
+make dev       # run it
+make build     # package it
 ```
 
 Needs [Bun](https://bun.sh) 1.3+, Rust 1.91+, and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform.
