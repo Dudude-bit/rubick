@@ -130,34 +130,59 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
       .reduce((sum, _, index) => sum + (WIDTHS[index] ?? 180) + GAP, 0);
 
   const y = new Map<string, number>();
-  data.columns[spine]?.nodes.forEach((node, index) => {
+  const spineNodes = data.columns[spine]?.nodes ?? [];
+  spineNodes.forEach((node, index) => {
     y.set(node.id, index * (NODE_H + NODE_GAP));
   });
 
-  for (let column = 0; column < data.columns.length; column++) {
-    if (column === spine) continue;
-    const wanted = data.columns[column].nodes.map((node) => {
-      const linked = data.edges
-        .filter((edge) => edge.from === node.id || edge.to === node.id)
-        .map((edge) => y.get(edge.from === node.id ? edge.to : edge.from))
-        .filter((value): value is number => value !== undefined);
-      return {
+  const meanOfLinked = (node: MapNode): number | null => {
+    const linked = data.edges
+      .filter((edge) => edge.from === node.id || edge.to === node.id)
+      .map((edge) => y.get(edge.from === node.id ? edge.to : edge.from))
+      .filter((value): value is number => value !== undefined);
+    return linked.length
+      ? linked.reduce((sum, value) => sum + value, 0) / linked.length
+      : null;
+  };
+
+  const placeOuterColumns = () => {
+    for (let column = 0; column < data.columns.length; column++) {
+      if (column === spine) continue;
+      const wanted = data.columns[column].nodes.map((node) => ({
         node,
-        at: linked.length
-          ? linked.reduce((sum, value) => sum + value, 0) / linked.length
-          : 0,
-      };
-    });
-    // Swept in the order they were handed over rather than by height, so a
-    // column never silently reorders itself between two renders of the same
-    // cluster.
-    let floor = 0;
-    for (const entry of wanted) {
-      const at = Math.max(entry.at, floor);
-      y.set(entry.node.id, at);
-      floor = at + NODE_H + NODE_GAP;
+        at: meanOfLinked(node) ?? 0,
+      }));
+      // Swept in the order they were handed over rather than by height, so a
+      // column never silently reorders itself between two renders of the same
+      // cluster.
+      let floor = 0;
+      for (const entry of wanted) {
+        const at = Math.max(entry.at, floor);
+        y.set(entry.node.id, at);
+        floor = at + NODE_H + NODE_GAP;
+      }
     }
-  }
+  };
+
+  placeOuterColumns();
+
+  // Second sweep: the spine re-sorted by the mean height of what it links
+  // to, so hosts sharing a backend sit beside each other instead of crossing
+  // half the board to reach it — the difference between a fan-out and a
+  // hairball at twenty hosts. Ties keep the handed (trouble-first) order,
+  // and both passes are deterministic: same cluster, same picture.
+  spineNodes
+    .map((node, index) => ({
+      node,
+      index,
+      at: meanOfLinked(node) ?? index * (NODE_H + NODE_GAP),
+    }))
+    .sort((left, right) => left.at - right.at || left.index - right.index)
+    .forEach((entry, order) => {
+      y.set(entry.node.id, order * (NODE_H + NODE_GAP));
+    });
+
+  placeOuterColumns();
 
   const placed = data.columns.flatMap((column, index) =>
     column.nodes.map((node): Placed => ({

@@ -23,12 +23,17 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import prometheus from "./index";
 import { FAMILIES, coverage, verdict } from "./coverage";
 
 export default function PrometheusPage() {
+  // The tunnel died with the last app instance; opening this page is as
+  // deliberate as pressing the sidebar row, so it wakes the saved forward.
+  useWakeOnVisit("prometheus");
+
   const found = useQuery({
     queryKey: ["prometheus", "coverage"],
     queryFn: coverage,
@@ -157,7 +162,15 @@ export default function PrometheusPage() {
                 return (
                   <Chain key={family.metric}>
                     <Column label="Metric">
-                      <Cell bad={absent} title={family.metric}>
+                      <Cell
+                        bad={absent}
+                        title={family.metric}
+                        under={
+                          typeof found.data.series[family.metric] === "number"
+                            ? `${found.data.series[family.metric]} series right now`
+                            : undefined
+                        }
+                      >
                         {graph(family.metric) ? (
                           <a
                             href={graph(family.metric)!}

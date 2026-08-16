@@ -74,6 +74,13 @@ export interface Coverage {
   clusterNodes: number;
   /** Families the app queries and this Prometheus has no series for. */
   missing: Array<(typeof FAMILIES)[number]>;
+  /**
+   * How many series each family answers with, by metric name — the row's
+   * own evidence, so "is it there" is read off the page rather than clicked
+   * into the graph UI. `null` where the count could not be read; a family
+   * that answered nothing at all is in {@link missing} instead.
+   */
+  series: Record<string, number | null>;
   /** Set where the comparison could not be made at all. */
   problem: string | null;
 }
@@ -109,6 +116,7 @@ export async function coverage(): Promise<Coverage> {
     matched: 0,
     clusterNodes: 0,
     missing: [],
+    series: {},
     problem: null,
   };
 
@@ -123,26 +131,35 @@ export async function coverage(): Promise<Coverage> {
 
   // One instant query per family, plus the node one. `up` is deliberately not
   // used: it is present on any Prometheus at all and would say nothing about
-  // whether this cluster is among what it scrapes.
-  const [seen, ...families] = await Promise.all([
+  // whether this cluster is among what it scrapes. The count is kept, not
+  // reduced to presence — it is the row's own evidence of what is there.
+  const [seen, ...counts] = await Promise.all([
     commands
       .prometheusQuery("count by (node) (kube_node_info)")
       .catch(() => null),
     ...FAMILIES.map((family) =>
       commands
         .prometheusQuery(`count(${family.metric})`)
-        .then((series) => series.length > 0)
-        .catch(() => true)
+        .then((answer): number | null =>
+          answer.length === 0 ? 0 : (answer[0].points[0]?.v ?? null)
+        )
+        // A failed read is unknown, never "missing": the difference between
+        // "install kube-state-metrics" and "the tunnel dropped".
+        .catch((): number | null => null)
     ),
   ]);
 
-  const missing = FAMILIES.filter((_, index) => families[index] === false);
+  const missing = FAMILIES.filter((_, index) => counts[index] === 0);
+  const series = Object.fromEntries(
+    FAMILIES.map((family, index) => [family.metric, counts[index]])
+  );
 
   if (seen === null) {
     return {
       ...empty,
       clusterNodes: nodes.length,
       missing,
+      series,
       problem:
         "kube_node_info returned nothing — kube-state-metrics is not among what this Prometheus scrapes, so which cluster it is watching cannot be established from here.",
     };
@@ -167,6 +184,7 @@ export async function coverage(): Promise<Coverage> {
     matched: nodes.length - unseen.length,
     clusterNodes: nodes.length,
     missing,
+    series,
     problem: null,
   };
 }
