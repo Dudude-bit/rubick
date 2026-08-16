@@ -31,6 +31,12 @@ export function usePrefetchCoreLists(): void {
     if (warmed.current === scope) return;
     warmed.current = scope;
 
+    // Everything asked before this connection stood was answered by nothing
+    // — a restored route fires its list the moment it mounts, caches the
+    // error, and sat on "No cluster connected" over a connected cluster.
+    // A connection landing is the one moment every cached answer is stale.
+    void queryClient.invalidateQueries();
+
     const namespace = currentNamespace || null;
     const base = { labelSelector: null, fieldSelector: null, limit: null };
 
