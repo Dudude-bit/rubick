@@ -3,7 +3,7 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::state::AppState;
-use kube::api::{DeleteParams, Patch, PatchParams};
+use kube::api::{Patch, PatchParams};
 use tauri::State;
 
 use super::parse::{api_resource_for, is_cluster_scoped, parse_all_documents};
@@ -74,47 +74,6 @@ pub async fn apply_manifest(
             Err(e) => {
                 return Ok(ManifestResult::error(format!(
                     "Failed to apply {}: {}",
-                    parsed.format_id(&ns, ""),
-                    e
-                )));
-            }
-        }
-    }
-
-    Ok(ManifestResult::success(results.join("\n")))
-}
-
-/// Delete resources defined in a manifest
-#[tauri::command]
-pub async fn delete_manifest(
-    manifest: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<ManifestResult> {
-    let parsed_docs = match parse_all_documents(&manifest) {
-        Ok(docs) => docs,
-        Err(e) => return Ok(ManifestResult::error(e.to_string())),
-    };
-
-    let mut results = Vec::new();
-
-    for parsed in parsed_docs {
-        let ns = parsed.effective_namespace(&namespace);
-        let name = match parsed.require_name() {
-            Ok(n) => n,
-            Err(e) => return Ok(ManifestResult::error(e.to_string())),
-        };
-        let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
-        let api = ctx.dynamic_api_for_resource(
-            &parsed.api_resource,
-            is_cluster_scoped(&parsed.api_resource.kind),
-        );
-
-        match api.delete(&name, &DeleteParams::default()).await {
-            Ok(_) => results.push(parsed.format_id(&ns, "deleted")),
-            Err(e) => {
-                return Ok(ManifestResult::error(format!(
-                    "Failed to delete {}: {}",
                     parsed.format_id(&ns, ""),
                     e
                 )));

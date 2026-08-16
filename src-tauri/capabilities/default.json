@@ -16,7 +16,6 @@
     "core:window:allow-destroy",
     "shell:allow-open",
     "dialog:default",
-    "fs:default",
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",

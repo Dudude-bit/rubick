@@ -33,16 +33,6 @@ pub async fn get_statefulset(
     get_resource_info::<StatefulSet, StatefulSetDetailInfo>(name, namespace, state).await
 }
 
-#[tauri::command]
-pub async fn get_statefulset_yaml(
-    name: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    crate::validation::validate_dns_label(&name)?;
-    crate::commands::helpers::get_resource_yaml::<StatefulSet>(name, namespace, state).await
-}
-
 /// Scale a `StatefulSet`
 #[tauri::command]
 pub async fn scale_statefulset(
@@ -86,16 +76,6 @@ pub async fn get_daemonset(
 }
 
 #[tauri::command]
-pub async fn get_daemonset_yaml(
-    name: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    crate::validation::validate_dns_label(&name)?;
-    crate::commands::helpers::get_resource_yaml::<DaemonSet>(name, namespace, state).await
-}
-
-#[tauri::command]
 pub async fn delete_daemonset(
     name: String,
     namespace: Option<String>,
@@ -126,16 +106,6 @@ pub async fn get_job(
 }
 
 #[tauri::command]
-pub async fn get_job_yaml(
-    name: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    crate::validation::validate_dns_label(&name)?;
-    crate::commands::helpers::get_resource_yaml::<Job>(name, namespace, state).await
-}
-
-#[tauri::command]
 pub async fn delete_job(
     name: String,
     namespace: Option<String>,
@@ -163,16 +133,6 @@ pub async fn get_cronjob(
 ) -> Result<CronJobDetailInfo> {
     crate::validation::validate_dns_label(&name)?;
     get_resource_info::<CronJob, CronJobDetailInfo>(name, namespace, state).await
-}
-
-#[tauri::command]
-pub async fn get_cronjob_yaml(
-    name: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    crate::validation::validate_dns_label(&name)?;
-    crate::commands::helpers::get_resource_yaml::<CronJob>(name, namespace, state).await
 }
 
 #[tauri::command]

@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::state::AppState;
 
 use super::status::{check_container_status, check_ephemeral_container_status};
-use super::types::{DebugOperationType, DebugResult, DebugStatus};
+use super::types::{DebugOperationType, DebugStatus};
 
 /// Delete a debug pod
 #[tauri::command]
@@ -41,54 +41,6 @@ pub async fn delete_debug_pod(
     api.delete(&pod_name, &Default::default()).await?;
 
     Ok(())
-}
-
-/// List debug pods in a namespace (or all namespaces)
-#[tauri::command]
-pub async fn list_debug_pods(
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<DebugResult>> {
-    let ctx = ResourceContext::for_list(&state, namespace)?;
-    let api: Api<Pod> = ctx.namespaced_or_cluster_api();
-
-    let list_params = kube::api::ListParams::default().labels("k8s-gui/debug-pod=true");
-
-    let pods = api.list(&list_params).await?;
-
-    let results: Vec<DebugResult> = pods
-        .items
-        .iter()
-        .filter_map(|pod| {
-            let name = pod.metadata.name.clone()?;
-            let ns = pod
-                .metadata
-                .namespace
-                .clone()
-                .unwrap_or_else(|| "default".to_string());
-            let labels = pod.metadata.labels.clone().unwrap_or_default();
-
-            // Find the debugger container name
-            let container_name = if labels.get("k8s-gui/debug-node").is_some() {
-                "debugger".to_string()
-            } else {
-                pod.spec
-                    .as_ref()
-                    .and_then(|s| s.containers.last())
-                    .map(|c| c.name.clone())
-                    .unwrap_or_else(|| "debugger".to_string())
-            };
-
-            Some(DebugResult {
-                pod_name: name,
-                container_name,
-                namespace: ns,
-                is_new_pod: true,
-            })
-        })
-        .collect();
-
-    Ok(results)
 }
 
 /// Get status of a debug operation

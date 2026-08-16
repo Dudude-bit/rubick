@@ -278,37 +278,6 @@ export interface ConfigMapInfo {
   createdAt: string | null;
 }
 
-export interface ResourceReferences {
-  envVars: ResourceReference[];
-  envFrom: ResourceReference[];
-  volumes: VolumeReference[];
-  imagePullSecrets: ResourceReference[];
-  tlsIngress: IngressReference[];
-}
-
-export interface IngressReference {
-  name: string;
-  namespace: string;
-  hosts: string[];
-}
-
-export interface VolumeReference {
-  kind: string;
-  name: string;
-  namespace: string;
-  containerName: string | null;
-  mountPath: string;
-  subPath: string | null;
-}
-
-export interface ResourceReference {
-  kind: string;
-  name: string;
-  namespace: string;
-  containerName: string | null;
-  key: string | null;
-}
-
 export interface IngressClassBinding {
   requested: string | null;
   resolved: string | null;
@@ -565,36 +534,6 @@ export interface SearchRequest {
   limitPerContext?: number;
 }
 
-export interface ClusterStats {
-  pods: PodStats;
-  deployments: DeploymentStats;
-  services: ServiceStats;
-  nodes: NodeStats;
-}
-
-export interface NodeStats {
-  total: number;
-  ready: number;
-}
-
-export interface ServiceStats {
-  total: number;
-}
-
-export interface DeploymentStats {
-  total: number;
-  available: number;
-  unavailable: number;
-}
-
-export interface PodStats {
-  total: number;
-  running: number;
-  pending: number;
-  failed: number;
-  succeeded: number;
-}
-
 export interface StorageClassInfo {
   name: string;
   provisioner: string;
@@ -705,6 +644,13 @@ export interface RegistrySearchRequest {
   useSavedAuth: boolean;
 }
 
+export interface RegistryAuth {
+  authType: string;
+  username: string | null;
+  password: string | null;
+  token: string | null;
+}
+
 export interface RegistryConfig {
   id: string;
   provider: string;
@@ -713,19 +659,6 @@ export interface RegistryConfig {
   project: string | null;
   accountId: string | null;
   region: string | null;
-}
-
-export interface RegistryAuthStatus {
-  authType: string;
-  username: string | null;
-  hasCredentials: boolean;
-}
-
-export interface RegistryAuth {
-  authType: string;
-  username: string | null;
-  password: string | null;
-  token: string | null;
 }
 
 export interface RegistryImportEntry {

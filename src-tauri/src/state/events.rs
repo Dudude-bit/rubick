@@ -168,8 +168,6 @@ pub fn readable_cause(error: &crate::error::Error) -> String {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum AppEvent {
-    /// Connection status changed
-    ConnectionStatusChanged { context: String, connected: bool },
     /// Batch of log lines for a single stream. The streamer flushes
     /// every ~50ms (or sooner if the buffer fills) so that verbose
     /// pods don't generate one Tauri round-trip per line. Always
@@ -306,7 +304,6 @@ impl AppEvent {
             AppEvent::TerminalOutput { .. } => "terminal-output",
             AppEvent::TerminalClosed { .. } => "terminal-closed",
             AppEvent::PortForwardStatus { .. } => "port-forward-status",
-            AppEvent::ConnectionStatusChanged { .. } => "connection-status",
             AppEvent::AuthUrlRequested { .. } => "auth-url-requested",
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
@@ -405,10 +402,6 @@ impl AppEvent {
                 "message": message,
                 "attempt": attempt,
             }),
-            AppEvent::ConnectionStatusChanged { context, connected } => serde_json::json!({
-                "context": context,
-                "connected": connected,
-            }),
             AppEvent::AuthUrlRequested {
                 context,
                 url,
@@ -492,10 +485,6 @@ mod tests {
                 context: "infra-nbg4".into(),
                 success: true,
                 message: None,
-            },
-            AppEvent::ConnectionStatusChanged {
-                context: "minikube".into(),
-                connected: true,
             },
             AppEvent::Error {
                 code: "X".into(),

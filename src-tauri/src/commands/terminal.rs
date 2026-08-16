@@ -94,18 +94,3 @@ pub async fn open_pod_shell(
 
     Ok(session_id)
 }
-
-/// Open a shell for a local process
-#[tauri::command]
-pub async fn open_process_shell(
-    command: String,
-    args: Vec<String>,
-    env: std::collections::HashMap<String, String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    let adapter = crate::terminal::LocalProcessAdapter::new(command, args, env);
-    state
-        .terminal_manager
-        .create_session(Box::new(adapter))
-        .await
-}

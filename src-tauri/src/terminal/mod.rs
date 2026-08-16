@@ -8,5 +8,5 @@ pub mod manager;
 pub mod session;
 
 pub use adapter::TerminalAdapter;
-pub use adapters::{AuthExecAdapter, LocalProcessAdapter, PodExecAdapter};
+pub use adapters::{AuthExecAdapter, PodExecAdapter};
 pub use manager::TerminalManager;

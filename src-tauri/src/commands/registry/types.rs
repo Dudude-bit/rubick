@@ -15,14 +15,6 @@ pub struct RegistryAuth {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RegistryAuthStatus {
-    pub auth_type: String,
-    pub username: Option<String>,
-    pub has_credentials: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RegistryConfig {
     pub id: String,
     pub provider: String,

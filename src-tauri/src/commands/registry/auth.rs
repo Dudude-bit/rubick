@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use super::types::{DockerConfigFile, RegistryAuth, RegistryAuthStatus, RegistryImportEntry};
+use super::types::{DockerConfigFile, RegistryAuth, RegistryImportEntry};
 
 pub(super) fn build_auth_header(auth: &RegistryAuth) -> Option<String> {
     match auth.auth_type.as_str() {
@@ -93,54 +93,6 @@ pub(super) fn load_saved_auth(registry_id: &str) -> Result<Option<RegistryAuth>>
     }
 }
 
-fn save_registry_auth(registry_id: &str, auth: &RegistryAuth) -> Result<()> {
-    let mut config = AppConfig::load()?;
-
-    if let Some(entry) = config.registries.registries.get_mut(registry_id) {
-        // Update existing entry
-        entry.auth_type = auth.auth_type.clone();
-        entry.username = auth.username.clone();
-        entry.password = auth.password.clone();
-        entry.token = auth.token.clone();
-    } else {
-        // Registry doesn't exist - this shouldn't happen normally
-        // but we handle it gracefully by creating a minimal entry
-        use crate::config::RegistryConfigEntry;
-        config.registries.registries.insert(
-            registry_id.to_string(),
-            RegistryConfigEntry {
-                label: registry_id.to_string(),
-                provider: "registry-v2".to_string(),
-                base_url: None,
-                host: None,
-                project: None,
-                account_id: None,
-                region: None,
-                auth_type: auth.auth_type.clone(),
-                username: auth.username.clone(),
-                password: auth.password.clone(),
-                token: auth.token.clone(),
-            },
-        );
-    }
-
-    crate::commands::settings::save_config(&config)
-}
-
-fn delete_registry_auth(registry_id: &str) -> Result<()> {
-    let mut config = AppConfig::load()?;
-
-    if let Some(entry) = config.registries.registries.get_mut(registry_id) {
-        // Just clear the auth, don't delete the registry config
-        entry.auth_type = "none".to_string();
-        entry.username = None;
-        entry.password = None;
-        entry.token = None;
-    }
-
-    crate::commands::settings::save_config(&config)
-}
-
 #[tauri::command]
 pub fn import_docker_config() -> Result<Vec<RegistryImportEntry>> {
     let path = docker_config_path()?;
@@ -202,34 +154,4 @@ pub fn import_docker_config() -> Result<Vec<RegistryImportEntry>> {
     }
 
     Ok(entries)
-}
-
-#[tauri::command]
-pub fn set_registry_credentials(registry_id: String, auth: RegistryAuth) -> Result<()> {
-    if auth.auth_type == "none" {
-        delete_registry_auth(&registry_id)?;
-        return Ok(());
-    }
-    save_registry_auth(&registry_id, &auth)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn delete_registry_credentials(registry_id: String) -> Result<()> {
-    delete_registry_auth(&registry_id)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_registry_auth_status(registry_id: String) -> Result<Option<RegistryAuthStatus>> {
-    let auth = load_saved_auth(&registry_id)?;
-    if let Some(auth) = auth {
-        Ok(Some(RegistryAuthStatus {
-            auth_type: auth.auth_type,
-            username: auth.username,
-            has_credentials: true,
-        }))
-    } else {
-        Ok(None)
-    }
 }

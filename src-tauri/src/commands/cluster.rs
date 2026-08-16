@@ -77,12 +77,6 @@ pub async fn switch_context(context: String, state: State<'_, AppState>) -> Resu
     state.set_current_context(Some(context.clone()));
     state.create_session(&context);
 
-    // Emit connection event
-    state.emit(crate::state::AppEvent::ConnectionStatusChanged {
-        context: context.clone(),
-        connected: true,
-    });
-
     tracing::info!("Switched to context: {}", context);
     Ok(())
 }
@@ -164,12 +158,6 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
     state.set_current_context(Some(context.clone()));
     state.create_session(&context);
 
-    // Emit connection event
-    state.emit(crate::state::AppEvent::ConnectionStatusChanged {
-        context: context.clone(),
-        connected: true,
-    });
-
     Ok(info)
 }
 
@@ -198,12 +186,6 @@ pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result
     if state.get_current_context().as_ref() == Some(&context) {
         state.set_current_context(None);
     }
-
-    // Emit connection event
-    state.emit(crate::state::AppEvent::ConnectionStatusChanged {
-        context: context.clone(),
-        connected: false,
-    });
 
     tracing::info!("Disconnected from cluster: {}", context);
     Ok(())

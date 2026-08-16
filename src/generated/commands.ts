@@ -13,7 +13,6 @@ import type {
   ClusterInfo,
   ClusterOverview,
   ClusterPreferences,
-  ClusterStats,
   ConfigData,
   ConfigMapInfo,
   ContextBinding,
@@ -29,7 +28,6 @@ import type {
   DaemonSetInfo,
   DebugConfig,
   DebugOperation,
-  DebugResult,
   DebugStatus,
   DeploymentInfo,
   DetectedExtension,
@@ -75,8 +73,6 @@ import type {
   PrometheusConnection,
   PrometheusProbe,
   RecentItem,
-  RegistryAuth,
-  RegistryAuthStatus,
   RegistryConfigInfo,
   RegistryImageResult,
   RegistryImportEntry,
@@ -84,7 +80,6 @@ import type {
   ReplicaSetInfo,
   ResourceConnections,
   ResourceFilters,
-  ResourceReferences,
   RolloutStatus,
   SearchHandle,
   SearchRequest,
@@ -249,10 +244,6 @@ export async function listGcpProfiles(): Promise<GcpProfileInfo[]> {
   return invoke<GcpProfileInfo[]>("list_gcp_profiles");
 }
 
-export async function getGcpProfile(name: string): Promise<GcpProfile | null> {
-  return invoke<GcpProfile | null>("get_gcp_profile", { name });
-}
-
 export async function saveGcpProfile(
   name: string,
   profile: GcpProfile
@@ -270,12 +261,6 @@ export async function testGcpProfile(name: string): Promise<string> {
 
 export async function listAzureProfiles(): Promise<AzureProfileInfo[]> {
   return invoke<AzureProfileInfo[]>("list_azure_profiles");
-}
-
-export async function getAzureProfile(
-  name: string
-): Promise<AzureProfile | null> {
-  return invoke<AzureProfile | null>("get_azure_profile", { name });
 }
 
 export async function saveAzureProfile(
@@ -480,13 +465,6 @@ export async function deleteCrd(name: string): Promise<void> {
   return invoke<void>("delete_crd", { name });
 }
 
-export async function getCrdSchema(
-  name: string,
-  version: string | null
-): Promise<unknown> {
-  return invoke<unknown>("get_crd_schema", { name, version });
-}
-
 export async function listStatefulsets(
   filters: ResourceFilters | null
 ): Promise<StatefulSetInfo[]> {
@@ -498,13 +476,6 @@ export async function getStatefulset(
   namespace: string | null
 ): Promise<StatefulSetDetailInfo> {
   return invoke<StatefulSetDetailInfo>("get_statefulset", { name, namespace });
-}
-
-export async function getStatefulsetYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_statefulset_yaml", { name, namespace });
 }
 
 export async function scaleStatefulset(
@@ -535,13 +506,6 @@ export async function getDaemonset(
   return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
 }
 
-export async function getDaemonsetYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_daemonset_yaml", { name, namespace });
-}
-
 export async function deleteDaemonset(
   name: string,
   namespace: string | null
@@ -562,13 +526,6 @@ export async function getJob(
   return invoke<JobDetailInfo>("get_job", { name, namespace });
 }
 
-export async function getJobYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_job_yaml", { name, namespace });
-}
-
 export async function deleteJob(
   name: string,
   namespace: string | null
@@ -587,13 +544,6 @@ export async function getCronjob(
   namespace: string | null
 ): Promise<CronJobDetailInfo> {
   return invoke<CronJobDetailInfo>("get_cronjob", { name, namespace });
-}
-
-export async function getCronjobYaml(
-  name: string,
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("get_cronjob_yaml", { name, namespace });
 }
 
 export async function deleteCronjob(
@@ -707,14 +657,6 @@ export async function openPodShell(
   return invoke<string>("open_pod_shell", { namespace, pod, container, shell });
 }
 
-export async function openProcessShell(
-  command: string,
-  args: string[],
-  env: Record<string, string>
-): Promise<string> {
-  return invoke<string>("open_process_shell", { command, args, env });
-}
-
 export async function validateManifest(
   manifest: string,
   namespace: string | null
@@ -727,13 +669,6 @@ export async function applyManifest(
   namespace: string | null
 ): Promise<ManifestResult> {
   return invoke<ManifestResult>("apply_manifest", { manifest, namespace });
-}
-
-export async function deleteManifest(
-  manifest: string,
-  namespace: string | null
-): Promise<ManifestResult> {
-  return invoke<ManifestResult>("delete_manifest", { manifest, namespace });
 }
 
 export async function getManifest(
@@ -749,15 +684,6 @@ export async function locateBinaries(
   names: string[]
 ): Promise<BinaryLocation[]> {
   return invoke<BinaryLocation[]>("locate_binaries", { names });
-}
-
-export async function logFrontendEvent(
-  level: string,
-  message: string,
-  context: string | null,
-  data: unknown | null
-): Promise<void> {
-  return invoke<void>("log_frontend_event", { level, message, context, data });
 }
 
 export async function logFrontendEventsBatch(
@@ -888,27 +814,6 @@ export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
   return invoke<RegistryImportEntry[]>("import_docker_config");
 }
 
-export async function setRegistryCredentials(
-  registryId: string,
-  auth: RegistryAuth
-): Promise<void> {
-  return invoke<void>("set_registry_credentials", { registryId, auth });
-}
-
-export async function deleteRegistryCredentials(
-  registryId: string
-): Promise<void> {
-  return invoke<void>("delete_registry_credentials", { registryId });
-}
-
-export async function getRegistryAuthStatus(
-  registryId: string
-): Promise<RegistryAuthStatus | null> {
-  return invoke<RegistryAuthStatus | null>("get_registry_auth_status", {
-    registryId,
-  });
-}
-
 export async function searchRegistryImages(
   request: RegistrySearchRequest
 ): Promise<RegistryImageResult[]> {
@@ -998,12 +903,6 @@ export async function getStorageClass(name: string): Promise<StorageClassInfo> {
 
 export async function deleteStorageClass(name: string): Promise<void> {
   return invoke<void>("delete_storage_class", { name });
-}
-
-export async function getClusterStats(
-  namespace: string | null
-): Promise<ClusterStats> {
-  return invoke<ClusterStats>("get_cluster_stats", { namespace });
 }
 
 export async function startResourceSearch(
@@ -1137,18 +1036,6 @@ export async function deleteEndpoints(
   return invoke<void>("delete_endpoints", { name, namespace });
 }
 
-export async function getResourceReferences(
-  resourceType: string,
-  name: string,
-  namespace: string | null
-): Promise<ResourceReferences> {
-  return invoke<ResourceReferences>("get_resource_references", {
-    resourceType,
-    name,
-    namespace,
-  });
-}
-
 export async function listConfigmaps(
   filters: ResourceFilters | null
 ): Promise<ConfigMapInfo[]> {
@@ -1194,14 +1081,6 @@ export async function getSecretData(
   namespace: string | null
 ): Promise<ConfigData> {
   return invoke<ConfigData>("get_secret_data", { name, namespace });
-}
-
-export async function getSecretYaml(
-  name: string,
-  namespace: string | null,
-  redact: boolean
-): Promise<string> {
-  return invoke<string>("get_secret_yaml", { name, namespace, redact });
 }
 
 export async function deleteSecret(
@@ -1390,12 +1269,6 @@ export async function deleteDebugPod(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_debug_pod", { podName, namespace });
-}
-
-export async function listDebugPods(
-  namespace: string | null
-): Promise<DebugResult[]> {
-  return invoke<DebugResult[]>("list_debug_pods", { namespace });
 }
 
 export async function getDebugStatus(

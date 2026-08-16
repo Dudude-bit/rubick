@@ -29,7 +29,6 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -125,7 +124,6 @@ fn main() {
             commands::crds::get_crd,
             commands::crds::get_crd_yaml,
             commands::crds::delete_crd,
-            commands::crds::get_crd_schema,
             commands::crds::list_custom_resources,
             commands::crds::get_custom_resource,
             commands::crds::get_custom_resource_yaml,
@@ -140,7 +138,6 @@ fn main() {
             commands::debug::debug_pod_copy,
             commands::debug::debug_node,
             commands::debug::delete_debug_pod,
-            commands::debug::list_debug_pods,
             commands::debug::get_debug_status,
             commands::debug::cancel_debug_operation,
             commands::debug::extend_debug_timeout,
@@ -179,7 +176,6 @@ fn main() {
             commands::config_resources::list_secrets,
             commands::config_resources::get_secret,
             commands::config_resources::get_secret_data,
-            commands::config_resources::get_secret_yaml,
             commands::config_resources::delete_secret,
             // TLS certificates — core, and readable without cert-manager
             commands::certificates::get_tls_certificates,
@@ -200,7 +196,6 @@ fn main() {
             integrations::loki::probe_loki,
             integrations::loki::loki_query_range,
             // Resource references command
-            commands::config_resources::get_resource_references,
             commands::connections::get_resource_connections,
             // Node commands
             commands::nodes::list_nodes,
@@ -221,7 +216,6 @@ fn main() {
             commands::terminal::close_terminal,
             commands::terminal::terminal_subscribed,
             commands::terminal::open_pod_shell,
-            commands::terminal::open_process_shell,
             // Resource watch (replaces 2s polling for migrated lists)
             commands::watch::subscribe_configmap_watch,
             commands::watch::subscribe_secret_watch,
@@ -263,13 +257,11 @@ fn main() {
             commands::settings::get_app_info,
             // GCP profiles
             commands::settings::list_gcp_profiles,
-            commands::settings::get_gcp_profile,
             commands::settings::save_gcp_profile,
             commands::settings::delete_gcp_profile,
             commands::settings::test_gcp_profile,
             // Azure profiles
             commands::settings::list_azure_profiles,
-            commands::settings::get_azure_profile,
             commands::settings::save_azure_profile,
             commands::settings::delete_azure_profile,
             commands::settings::test_azure_profile,
@@ -310,9 +302,6 @@ fn main() {
             commands::settings::get_cluster_preferences,
             commands::settings::save_cluster_preferences,
             // Registry commands
-            commands::registry::set_registry_credentials,
-            commands::registry::delete_registry_credentials,
-            commands::registry::get_registry_auth_status,
             commands::registry::import_docker_config,
             commands::registry::search_registry_images,
             // Authentication commands
@@ -337,7 +326,6 @@ fn main() {
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Stats commands
-            commands::stats::get_cluster_stats,
             commands::overview::get_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
@@ -345,28 +333,22 @@ fn main() {
             // Workloads commands
             commands::workloads::list_statefulsets,
             commands::workloads::get_statefulset,
-            commands::workloads::get_statefulset_yaml,
             commands::workloads::scale_statefulset,
             commands::workloads::delete_statefulset,
             commands::workloads::list_daemonsets,
             commands::workloads::get_daemonset,
-            commands::workloads::get_daemonset_yaml,
             commands::workloads::delete_daemonset,
             commands::workloads::list_jobs,
             commands::workloads::get_job,
-            commands::workloads::get_job_yaml,
             commands::workloads::delete_job,
             commands::workloads::list_cronjobs,
             commands::workloads::get_cronjob,
-            commands::workloads::get_cronjob_yaml,
             commands::workloads::delete_cronjob,
             // Manifest commands
             commands::manifest::validate_manifest,
             commands::manifest::apply_manifest,
-            commands::manifest::delete_manifest,
             commands::manifest::get_manifest,
             // Logging commands
-            commands::logging::log_frontend_event,
             commands::logging::log_frontend_events_batch,
         ])
         .run(tauri::generate_context!())

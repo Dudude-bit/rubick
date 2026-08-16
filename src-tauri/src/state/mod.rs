@@ -232,9 +232,9 @@ mod tests {
         let state = AppState::new().unwrap();
         let mut rx = state.subscribe();
 
-        state.emit(AppEvent::ConnectionStatusChanged {
-            context: "test".to_string(),
-            connected: true,
+        state.emit(AppEvent::Error {
+            code: "TEST".to_string(),
+            message: "test".to_string(),
         });
 
         // Event should be received

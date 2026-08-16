@@ -1,10 +1,11 @@
-//! Secret commands — list / get / get-data (decoded) / get-yaml
-//! (with redaction option) / delete.
+//! Secret commands — list / get / get-data (decoded) / delete.
+//! YAML goes through the generic `get_manifest`, which redacts
+//! private keys for every kind.
 
 use super::data::ConfigData;
 use crate::commands::filters::SecretFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
-use crate::error::{Error, Result};
+use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::error::Result;
 use crate::resources::SecretInfo;
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Secret;
@@ -71,37 +72,6 @@ pub async fn get_secret_data(
     }
 
     Ok(out)
-}
-
-/// Get Secret YAML (with data redacted)
-#[tauri::command]
-pub async fn get_secret_yaml(
-    name: String,
-    namespace: Option<String>,
-    redact: bool,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    crate::validation::validate_dns_subdomain(&name)?;
-    let ctx = ResourceContext::for_command(&state, namespace)?;
-    let api: kube::Api<Secret> = ctx.namespaced_api();
-    let mut secret = api.get(&name).await?;
-
-    if redact {
-        if let Some(data) = &mut secret.data {
-            for value in data.values_mut() {
-                *value = k8s_openapi::ByteString(b"[REDACTED]".to_vec());
-            }
-        }
-    }
-
-    // The private key goes whether or not the caller asked for redaction:
-    // `redact: false` means "show me the values", never "show me the key".
-    let mut object =
-        serde_json::to_value(&secret).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::resources::redact_private_keys(&mut object);
-
-    let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 
 /// Delete Secret

@@ -36,11 +36,6 @@ pub fn list_gcp_profiles() -> Result<Vec<GcpProfileInfo>> {
 }
 
 #[tauri::command]
-pub fn get_gcp_profile(name: String) -> Result<Option<GcpProfile>> {
-    read_config(|config| config.cloud.gcp_profiles.get(&name).cloned())
-}
-
-#[tauri::command]
 pub fn save_gcp_profile(name: String, profile: GcpProfile) -> Result<()> {
     with_config(|config| {
         config
@@ -115,11 +110,6 @@ pub fn list_azure_profiles() -> Result<Vec<AzureProfileInfo>> {
             })
             .collect()
     })
-}
-
-#[tauri::command]
-pub fn get_azure_profile(name: String) -> Result<Option<AzureProfile>> {
-    read_config(|config| config.cloud.azure_profiles.get(&name).cloned())
 }
 
 #[tauri::command]

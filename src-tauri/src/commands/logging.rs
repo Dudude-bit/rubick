@@ -67,22 +67,7 @@ fn log_frontend(level: &str, message: &str, context: Option<&str>, data: Option<
     }
 }
 
-/// Log a structured frontend event to the backend tracing system
-#[tauri::command]
-pub fn log_frontend_event(
-    level: String,
-    message: String,
-    context: Option<String>,
-    data: Option<Value>,
-) -> Result<()> {
-    log_frontend(&level, &message, context.as_deref(), data);
-    Ok(())
-}
-
-/// Log multiple frontend events in a single batch
-///
-/// This is more efficient than calling log_frontend_event multiple times,
-/// especially when the frontend has queued up multiple log entries.
+/// Log multiple frontend events in a single batch.
 #[tauri::command]
 pub fn log_frontend_events_batch(entries: Vec<FrontendLogEntry>) -> Result<BatchLogResult> {
     let total = entries.len();
