@@ -22,7 +22,7 @@ use k8s_openapi::api::core::v1::{
     Endpoints, Node, PersistentVolume, PersistentVolumeClaim, Pod, PodSpec, Service,
 };
 use k8s_openapi::api::discovery::v1::EndpointSlice;
-use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress};
+use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress, IngressBackend};
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
@@ -427,11 +427,34 @@ fn ingress_backends(ing: &Ingress) -> Vec<(Backend, Relation)> {
             }
         }
     }
+
+    // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+    // the whole object, the ordinary way a cloud load balancer fronts an
+    // in-cluster proxy. Without this edge the graph drew such an Ingress as
+    // touching nothing: an empty chain and an empty Connections tab.
+    if let Some(fallback) = spec.default_backend.as_ref() {
+        if let Some((backend, port)) = backend_of(fallback) {
+            out.push((
+                backend,
+                Relation::Routes {
+                    host: None,
+                    path: "*".to_string(),
+                    path_type: "DefaultBackend".to_string(),
+                    port,
+                    tls: tls_covers(ing, None),
+                },
+            ));
+        }
+    }
     out
 }
 
 fn path_backend(path: &HTTPIngressPath) -> Option<(Backend, Option<String>)> {
-    if let Some(svc) = &path.backend.service {
+    backend_of(&path.backend)
+}
+
+fn backend_of(backend: &IngressBackend) -> Option<(Backend, Option<String>)> {
+    if let Some(svc) = &backend.service {
         let port = svc.port.as_ref().and_then(|p| {
             p.name
                 .clone()
@@ -439,7 +462,7 @@ fn path_backend(path: &HTTPIngressPath) -> Option<(Backend, Option<String>)> {
         });
         return Some((Backend::Service(svc.name.clone()), port));
     }
-    let resource = path.backend.resource.as_ref()?;
+    let resource = backend.resource.as_ref()?;
     Some((
         Backend::Resource {
             kind: resource.kind.clone(),
@@ -1821,4 +1844,61 @@ async fn users_of(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod ingress_backend_tests {
+    use super::*;
+    use k8s_openapi::api::networking::v1::{
+        IngressBackend, IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
+    };
+
+    /// A defaultBackend-only Ingress is how a cloud load balancer fronts an
+    /// in-cluster proxy, and the connections graph used to draw it as
+    /// touching nothing — an empty chain and an empty tab on the one
+    /// Ingress the reported cluster has.
+    #[test]
+    fn default_backend_is_an_edge() {
+        let ingress = Ingress {
+            spec: Some(IngressSpec {
+                default_backend: Some(IngressBackend {
+                    service: Some(IngressServiceBackend {
+                        name: "traefik".into(),
+                        port: Some(ServiceBackendPort {
+                            number: Some(80),
+                            ..Default::default()
+                        }),
+                    }),
+                    resource: None,
+                }),
+                tls: Some(vec![IngressTLS {
+                    hosts: None,
+                    secret_name: Some("wildcard-tls".into()),
+                }]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let backends = ingress_backends(&ingress);
+        assert_eq!(backends.len(), 1);
+        let (backend, relation) = &backends[0];
+        assert!(matches!(backend, Backend::Service(name) if name == "traefik"));
+        match relation {
+            Relation::Routes {
+                host,
+                path,
+                path_type,
+                port,
+                tls,
+            } => {
+                assert_eq!(host.as_deref(), None);
+                assert_eq!(path, "*");
+                assert_eq!(path_type, "DefaultBackend");
+                assert_eq!(port.as_deref(), Some("80"));
+                assert!(*tls);
+            }
+            other => panic!("expected Routes, got {other:?}"),
+        }
+    }
 }
