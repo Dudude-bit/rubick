@@ -109,6 +109,7 @@ import type { IssuanceStory, LogFormat, LogLevel } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type { Delivery, DeliveryQuery } from "./gitops";
 import type { CrdColumn, CrdStatus } from "./kit";
+import type { InClusterHint } from "./forwarded";
 
 /**
  * The windows a history capability can be asked for.
@@ -558,6 +559,20 @@ export type CapabilityState<K extends CapabilityKey> =
 export interface Connect {
   /** Shown in the empty address field, so the expected shape is visible. */
   urlPlaceholder: string;
+  /**
+   * How this vendor's own Service is usually labelled, so the app can offer
+   * to forward a port to it instead of asking for an address.
+   *
+   * The observation behind it: a configured integration needs to know *which*
+   * server, and a Service in this cluster names one as exactly as a URL does
+   * — while being something the app can already reach. Without this the
+   * reader is asked for an address their machine can get to, and the obvious
+   * one, the in-cluster name, is the one that cannot work.
+   *
+   * Absent, the dialog asks for an address and nothing else, which is right
+   * for a vendor that does not run in the cluster at all.
+   */
+  inCluster?: InClusterHint;
   /** What this cluster has saved, or `null` where nobody configured one. */
   read: () => Promise<SavedConnection | null>;
   save: (draft: ConnectionDraft) => Promise<void>;

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { CustomResourceInfo } from "@/generated/types";
-import { appState, byTrouble, differing, readApplication } from "./model";
+import {
+  appState,
+  byKind,
+  byTrouble,
+  differing,
+  readApplication,
+  resourceTone,
+  type ArgoResource,
+} from "./model";
 
 const SHA = "eec06d1ea459af4cb4e10e806f8be7c7bd58b361";
 
@@ -280,5 +288,74 @@ describe("the list is ordered by trouble", () => {
       )
     );
     expect(appState(app)).toEqual({ text: "synced · healthy", tone: "ok" });
+  });
+});
+
+describe("what an Application manages", () => {
+  const resource = (
+    kind: string,
+    name: string,
+    overrides: Partial<ArgoResource> = {}
+  ): ArgoResource => ({
+    group: null,
+    kind,
+    namespace: "web",
+    name,
+    sync: "Synced",
+    health: "Healthy",
+    message: null,
+    outcome: null,
+    ...overrides,
+  });
+
+  /**
+   * The row used to draw "17 objects" and list only what differed, so a
+   * healthy Application said how many things it owned and never which — the
+   * wrong half of the question somebody opens it with.
+   */
+  it("groups every object by kind, not only the ones that differ", () => {
+    const groups = byKind([
+      resource("Service", "api"),
+      resource("Deployment", "api"),
+      resource("Deployment", "worker"),
+    ]);
+
+    expect(groups.map((group) => group.kind).sort()).toEqual([
+      "Deployment",
+      "Service",
+    ]);
+    expect(
+      groups.find((group) => group.kind === "Deployment")?.resources
+    ).toHaveLength(2);
+  });
+
+  /**
+   * A Helm release of a hundred objects is the ordinary case, so the two that
+   * are failing must not be somewhere in the middle of it.
+   */
+  it("puts the worst kind first and the worst object inside it first", () => {
+    const groups = byKind([
+      resource("Service", "api"),
+      resource("Deployment", "api"),
+      resource("Deployment", "broken", { outcome: "SyncFailed" }),
+    ]);
+
+    expect(groups[0].kind).toBe("Deployment");
+    expect(groups[0].resources[0].name).toBe("broken");
+    expect(groups[0].troubled).toBe(1);
+  });
+
+  /** Degraded is trouble even when Argo calls the object Synced. */
+  it("counts a synced but degraded object as worth looking at", () => {
+    const [group] = byKind([
+      resource("Deployment", "api", { health: "Degraded" }),
+    ]);
+    expect(group.troubled).toBe(1);
+    expect(resourceTone(group.resources[0])).toBe("err");
+  });
+
+  /** A healthy object earns no colour at all. */
+  it("leaves a synced, healthy object uncoloured", () => {
+    expect(resourceTone(resource("Service", "api"))).toBeNull();
   });
 });

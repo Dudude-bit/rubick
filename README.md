@@ -62,6 +62,15 @@ Detected ones need nothing from you — their CRDs are in the cluster or they ar
 
 Adding one costs a folder and a line — see [CONTRIBUTING](CONTRIBUTING.md).
 
+**Prometheus and Loki live in your cluster, and Rubick asks from your
+machine.** So `http://prometheus.monitoring:9090` — the address every chart's
+README gives you — resolves to nothing here: it is a name only the cluster
+answers. Press **Find it in this cluster** in the connect dialog and Rubick
+forwards a local port to the Service and fills the address in for you. It
+picks the component that can answer a query, not the write path, and moves
+the forward to a new pod when the old one is rolled. An Ingress hostname or a
+LoadBalancer address works too, if you have one.
+
 > **AWS and Azure are the least exercised paths here, and issues are very
 > welcome.** Rubick is developed against a GKE cluster running Traefik and
 > cert-manager, so those are the ones that get looked at every day. The EKS

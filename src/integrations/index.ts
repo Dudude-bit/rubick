@@ -57,6 +57,10 @@ import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
+import {
+  forwardsFor,
+  useClusterForwardStore,
+} from "@/stores/clusterForwardStore";
 import { integrationPagePath, integrationSettingsPath } from "./paths";
 import argocd from "./argocd";
 import aws, { awsLoadBalancerController } from "./aws";
@@ -730,6 +734,15 @@ export interface IntegrationPageEntry {
    * about the query string rather than about the path.
    */
   own: boolean;
+  /**
+   * Configured, and its connection is not up.
+   *
+   * Only ever true for a vendor the reader reached through a port-forward:
+   * the tunnel dies with the app, and a row that disappeared with it would be
+   * indistinguishable from one that was never set up. So the row stays and
+   * says it is asleep; pressing it is what wakes it.
+   */
+  asleep: boolean;
 }
 
 /**
@@ -752,11 +765,23 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
   const { data } = useDetected();
   const connections = useConnections();
 
+  const context = useClusterStore((state) => state.currentContext);
+  const saved = useClusterForwardStore((state) => state.forwards);
+  const forwarded = new Set(
+    forwardsFor(saved, context).map(([vendorId]) => vendorId)
+  );
+
   const here = EXTENSIONS.filter((vendor) => {
     const connection = connections.get(vendor.id);
     // A configured vendor is present because its address answered, never
     // because a CRD scan found it — it installs none.
-    if (connection) return connection.state === "connected";
+    //
+    // Unless this machine reaches it through a forward, which dies with the
+    // app: the address is saved, the tunnel is not, and dropping the row
+    // would say the integration was never configured.
+    if (connection) {
+      return connection.state === "connected" || forwarded.has(vendor.id);
+    }
     return data?.some((entry) => entry.id === vendor.id && entry.installed);
   });
 
@@ -798,6 +823,9 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
         index === -1
           ? integrationSettingsPath(vendor.id)
           : integrationPagePath(vendor.id),
+      asleep:
+        forwarded.has(vendor.id) &&
+        connections.get(vendor.id)?.state !== "connected",
       count:
         index === -1
           ? null
@@ -945,3 +973,33 @@ export function flavourOf(provider: ClusterProvider): Flavour | null {
  */
 export { helmReleasePath as fluxHelmReleasePath };
 export { integrationPagePath };
+
+/**
+ * Reaching a configured vendor that runs *in* the cluster.
+ *
+ * Through the seam like everything else: the settings form asks for a way to
+ * reach "this vendor" and is handed the machinery, never a vendor's folder.
+ */
+export {
+  candidates,
+  forward,
+  reestablish,
+  type Candidate,
+  type Forwarded,
+  type InClusterHint,
+} from "./forwarded";
+
+/**
+ * A configured vendor's connect record, outside React.
+ *
+ * For the one caller that needs it without a component: moving a forward's
+ * local port has to rewrite the address the connection was saved under, and
+ * that happens while a tunnel is being brought up rather than while a form is
+ * on screen. Still the seam — the caller passes an id and never names a
+ * vendor.
+ */
+export function connectOf(vendorId: string): Connect | null {
+  return (
+    CONNECTED.find((candidate) => candidate.id === vendorId)?.connect ?? null
+  );
+}

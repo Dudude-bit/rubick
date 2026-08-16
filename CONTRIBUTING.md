@@ -82,6 +82,50 @@ Which tier it belongs to decides its obligations, not where its files live:
 - **External service** — Prometheus, Loki. **Configured**, never detected. It
   needs an address, and the app does not go looking for one.
 
+### Connecting a configured integration
+
+Worth its own paragraphs, because everything about it follows from one fact
+that is easy to forget while writing the code:
+
+> **The request is made from the reader's machine, not from inside the
+> cluster.** `wire.rs` is a plain `reqwest` client in the app's own process.
+> Nothing is proxied through the API server and the kubeconfig is not involved.
+
+So the address has to be one the _desktop_ can resolve and reach. The obvious
+one — `http://prometheus.monitoring:9090` — is a name only CoreDNS answers,
+and it was this app's own placeholder for a while, which meant the field was
+suggesting the single value that cannot work. Two things exist because of
+that, and a new configured vendor should use both:
+
+- **`Connect.inCluster`** — declare how your vendor's Service is labelled and
+  which port it answers on, and the connect dialog grows a _Find it in this
+  cluster_ button. The app resolves the Service to a running pod, forwards a
+  local port and fills the address in. The reader is naming a server either
+  way; a Service names one the app can already reach.
+- **`unreachable()` in `src/integrations/reachability.ts`** — recognises a
+  cluster-internal address in a failed probe and appends the sentence that
+  explains it. Call it from your `probe`; keep the transport's own words in
+  front of it, because somebody searching for `Name or service not known` has
+  to find them.
+
+Two traps in `inCluster`, both learned from real charts:
+
+- **A chart installs several Services and most of them cannot answer your
+  query.** Loki's puts up a gateway, a read path, a write path, an ingester
+  and a compactor, all labelled `loki` and all answering HTTP; a connection to
+  the write path establishes and then returns nothing. Put the query path in
+  `prefer` and the rest in `avoid` — `avoid` **excludes**, it does not merely
+  sort, because offering a dead end is worse than offering nothing.
+- **Neighbours borrow the name.** `kube-prometheus-stack` calls its
+  Alertmanager, node-exporter and kube-state-metrics Services after
+  Prometheus. They belong in `avoid` too.
+
+The forward is re-resolved rather than pinned: `port_forward_pod` targets a
+**pod**, and `autoReconnect` retries that same pod, so a rollout would leave
+it chasing something that no longer exists behind a `localhost` URL that still
+looks fine. `forwarded.ts` looks the pod up from the Service every time and
+keeps the local port, so the saved address stays true.
+
 Two rules hold for both. An integration may only ever _add_ — the core answer
 is drawn first and stays drawn, so a page is never worse for having an
 integration that is down. And a capability whose absence has no good answer

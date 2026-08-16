@@ -388,6 +388,67 @@ export function differing(app: ArgoApp): ArgoResource[] {
   );
 }
 
+/** How much attention one managed object has earned, lower being worse. */
+function rankOf(resource: ArgoResource): number {
+  if (resource.outcome === "SyncFailed") return 0;
+  if (resource.sync === "Missing") return 1;
+  if (resource.health === "Degraded") return 2;
+  if (resource.sync !== null && resource.sync !== "Synced") return 3;
+  if (resource.health === "Progressing") return 4;
+  return 5;
+}
+
+export interface ResourceKindGroup {
+  kind: string;
+  resources: ArgoResource[];
+  /** How many of them are anything other than synced and healthy. */
+  troubled: number;
+}
+
+/**
+ * Everything an Application manages, grouped by kind.
+ *
+ * The page used to draw a count — "17 objects" — and then list only the ones
+ * that differed. A healthy Application therefore said how many things it
+ * owned and never which, which is the wrong half: *what is in this
+ * Application* is the question somebody opens it with, and the objects are
+ * already in `status.resources` with their own health beside them.
+ *
+ * Kinds are ordered by trouble and then alphabetically, and so are the
+ * objects inside each one, because a hundred-object Helm release is the
+ * ordinary case and the two that are failing must not be somewhere in the
+ * middle of it.
+ */
+export function byKind(resources: ArgoResource[]): ResourceKindGroup[] {
+  const groups = new Map<string, ArgoResource[]>();
+  for (const resource of resources) {
+    groups.set(resource.kind, [...(groups.get(resource.kind) ?? []), resource]);
+  }
+
+  return [...groups.entries()]
+    .map(([kind, list]): ResourceKindGroup => ({
+      kind,
+      resources: [...list].sort(
+        (left, right) =>
+          rankOf(left) - rankOf(right) || left.name.localeCompare(right.name)
+      ),
+      troubled: list.filter((resource) => rankOf(resource) < 5).length,
+    }))
+    .sort((left, right) => {
+      const worst = (group: ResourceKindGroup) =>
+        Math.min(...group.resources.map(rankOf));
+      return worst(left) - worst(right) || left.kind.localeCompare(right.kind);
+    });
+}
+
+/** Whether this object is worth colouring, and how. */
+export function resourceTone(resource: ArgoResource): "err" | "warn" | null {
+  const rank = rankOf(resource);
+  if (rank <= 2) return "err";
+  if (rank <= 4) return "warn";
+  return null;
+}
+
 /**
  * The word at the right of a row.
  *

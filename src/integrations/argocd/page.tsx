@@ -72,9 +72,11 @@ import {
 } from "./data";
 import {
   appState,
+  byKind,
   byTrouble,
   destinationOf,
   differing,
+  resourceTone,
   type ArgoApp,
   type ArgoFinding,
   type ArgoResource,
@@ -388,7 +390,7 @@ function AppRow({
           </Cell>
         </Column>
       </Chain>
-      {changed.length > 0 && <Differing app={app} resources={changed} />}
+      <Manages app={app} />
       {app.generatedBy && <GeneratedNote app={app} />}
       <Findings app={app} url={url} />
     </TroubleRow>
@@ -465,66 +467,118 @@ function RevisionRef({ app, source }: { app: ArgoApp; source: ArgoSource }) {
 }
 
 /**
- * Which objects differ, and why in Argo's own words.
+ * Everything the Application manages, grouped by kind.
  *
- * The *why* is `syncResult`'s message where the last sync could not apply the
- * object — usually the API server's own refusal, quoted exactly. Where Argo
- * only says `OutOfSync`, this says only that, and points at the diff: which
- * fields differ is in Argo's API behind a token, and inventing a sentence
- * about it would be this page guessing.
+ * The row used to say "17 objects" and then list only the ones that differed,
+ * so a healthy Application told the reader how many things it owned and never
+ * which. That is the wrong half of the answer: *what is in this Application*
+ * is the question somebody opens it with, the objects are already in
+ * `status.resources`, and every one of them is a link into its own page in
+ * this app — which is the whole reason to read Argo here rather than in Argo.
+ *
+ * Ordered by trouble inside each kind and across them, because a Helm release
+ * of a hundred objects is the ordinary case and the two that are failing must
+ * not be somewhere in the middle of it.
+ *
+ * The *why* is Argo's own sentence where it has one — `syncResult`'s message
+ * is usually the API server's own refusal, quoted exactly. Which *fields*
+ * differ is in Argo's API behind a token, and inventing a sentence about it
+ * would be this page guessing.
  */
-function Differing({
-  app,
-  resources,
-}: {
-  app: ArgoApp;
-  resources: ArgoResource[];
-}) {
+const SHOWN_PER_KIND = 12;
+
+function Manages({ app }: { app: ArgoApp }) {
+  const groups = byKind(app.resources);
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-[11px] text-fg-fnt">
+        Argo has not compared this Application yet, so it lists no objects.
+      </p>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
-        {resources.length === app.resources.length
-          ? `all ${resources.length} differ`
-          : `the ${resources.length} that ${resources.length === 1 ? "differs" : "differ"}`}
-      </span>
-      {resources.map((resource) => (
-        <div
-          key={`${resource.kind}/${resource.namespace}/${resource.name}`}
-          className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut"
-        >
-          <span className="truncate">
-            <ResourceRef
-              kind={resource.kind}
-              name={resource.name}
-              namespace={resource.namespace}
-              showKind={false}
-            />
-          </span>
-          <span className="min-w-0 truncate">
-            <span
-              className={
-                resource.sync === "Missing" || resource.outcome === "SyncFailed"
-                  ? "text-err"
-                  : "text-warn"
-              }
-            >
-              {resource.sync === "Missing"
-                ? "missing"
-                : resource.outcome === "SyncFailed"
-                  ? "failed to apply"
-                  : "out of sync"}
-            </span>{" "}
-            <span className="text-fg-fnt">
-              {resource.message
-                ? `— ${resource.message}`
-                : resource.sync === "Missing"
-                  ? "— in git, not in the cluster"
-                  : "— the fields that differ are in Argo's diff"}
+    <div className="flex flex-col gap-2">
+      {groups.map((group) => {
+        // Trouble is never hidden: the cap is measured past the ones worth
+        // looking at, and whatever it dropped is said out loud.
+        const shown = group.resources.slice(
+          0,
+          Math.max(SHOWN_PER_KIND, group.troubled)
+        );
+        const hidden = group.resources.length - shown.length;
+        return (
+          <div key={group.kind} className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
+              {group.kind}
+              <span className="ml-1.5 normal-case tracking-normal">
+                {group.resources.length}
+                {group.troubled > 0 && (
+                  <span className="text-warn">
+                    {" "}
+                    · {group.troubled} to look at
+                  </span>
+                )}
+              </span>
             </span>
+            {shown.map((resource) => (
+              <ResourceLine
+                key={`${resource.kind}/${resource.namespace}/${resource.name}`}
+                resource={resource}
+              />
+            ))}
+            {hidden > 0 && (
+              <span className="text-[11px] text-fg-fnt">
+                and {hidden} more Argo reports as synced
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One managed object: where it is in this app, and what Argo says about it. */
+function ResourceLine({ resource }: { resource: ArgoResource }) {
+  const tone = resourceTone(resource);
+  const said =
+    resource.sync === "Missing"
+      ? "missing"
+      : resource.outcome === "SyncFailed"
+        ? "failed to apply"
+        : resource.sync !== null && resource.sync !== "Synced"
+          ? "out of sync"
+          : resource.health === "Degraded"
+            ? "degraded"
+            : resource.health === "Progressing"
+              ? "progressing"
+              : null;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+      <span className="truncate">
+        <ResourceRef
+          kind={resource.kind}
+          name={resource.name}
+          namespace={resource.namespace}
+          showKind={false}
+        />
+      </span>
+      <span className="min-w-0 truncate">
+        {said && (
+          <span className={tone === "err" ? "text-err" : "text-warn"}>
+            {said}
           </span>
-          <span className="text-[11px] text-fg-fnt">{resource.kind}</span>
-        </div>
-      ))}
+        )}
+        {resource.message && (
+          <span className="text-fg-fnt">
+            {said ? " — " : ""}
+            {resource.message}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
