@@ -41,6 +41,7 @@ import {
   FRONTEND_CONFIG_CRD,
   MANAGED_CERTIFICATE_CRD,
   backendConfigSummary,
+  cdnOf,
   certificateTone,
   frontendConfigSummary,
   healthCheckTiming,
@@ -198,6 +199,7 @@ export default function GkeIngressPage() {
                 sources={joined}
                 openByDefault={host.worst === "err" && broken <= AUTO_OPEN}
                 last={index === shown.length - 1}
+                alone={shown.length === 1}
               />
             ))}
           </div>
@@ -228,18 +230,23 @@ function HostRow({
   sources,
   openByDefault,
   last,
+  alone,
 }: {
   host: GkeHost;
   sources: GkeSources | null;
   openByDefault: boolean;
   last: boolean;
+  /** The catch-all reads differently with nothing above it to match. */
+  alone: boolean;
 }) {
   const front = host.fronts[0];
   return (
     <TroubleRow
       title={
         host.host ?? (
-          <span className="text-fg-mut">any host not matched above</span>
+          <span className="text-fg-mut">
+            {alone ? "every host" : "any host not matched above"}
+          </span>
         )
       }
       copy={host.host ?? undefined}
@@ -439,7 +446,7 @@ function RouteChain({
                   crd={BACKEND_CONFIG_CRD}
                   className="text-fg underline-offset-2 hover:underline"
                 >
-                  {backendConfigSummary(config.found)}
+                  {backendConfigSummary(config.found, { cdn: false })}
                 </ObjectLink>
               ) : (
                 `${config.name} — absent`
@@ -448,6 +455,24 @@ function RouteChain({
           ))
         )}
       </Column>
+      {/* Its own hop, not a clause mid-line: the edge cache is the one
+          switch here that answers requests *instead of* the backend, and a
+          deployed fix hides behind it for `defaultTtl` seconds. */}
+      {route.configs.some(
+        (config) => config.found && cdnOf(config.found) !== null
+      ) && (
+        <Column label="Edge cache">
+          {route.configs.map((config) => {
+            const cdn = config.found ? cdnOf(config.found) : null;
+            if (!cdn) return null;
+            return (
+              <Cell key={config.name} under={cdn.detail ?? undefined}>
+                <span className="font-mono">{cdn.mode ?? "on"}</span>
+              </Cell>
+            );
+          })}
+        </Column>
+      )}
       <Column label="Taken out after">
         {route.configs.map((config) => {
           if (!config.found) return null;

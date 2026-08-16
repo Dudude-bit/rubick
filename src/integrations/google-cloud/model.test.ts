@@ -4,6 +4,7 @@ import type { CustomResourceInfo } from "@/generated/types";
 import {
   backendConfigRefs,
   backendConfigSummary,
+  cdnOf,
   certificateTone,
   failingDomains,
   healthCheckOf,
@@ -116,6 +117,28 @@ describe("what a BackendConfig configures", () => {
     ).toBe(
       "health check HTTP :8080/healthz · 30s timeout · CDN on · Cloud Armor block-bots"
     );
+  });
+
+  /**
+   * The edge cache is the one switch here that answers requests *instead of*
+   * the backend — a deployed fix hides behind it for `defaultTtl` seconds.
+   * Buried mid-line it truncated away on real configs, so the chain draws it
+   * as its own hop and asks for the line without it.
+   */
+  it("hands the edge cache over as its own cell and can keep it off the line", () => {
+    const config = resource({
+      healthCheck: { type: "HTTP", port: 8080, requestPath: "/healthz" },
+      cdn: { enabled: true, cacheMode: "CACHE_ALL_STATIC", defaultTtl: 3600 },
+    });
+
+    expect(cdnOf(config)).toEqual({
+      mode: "CACHE_ALL_STATIC",
+      detail: "default 3600s",
+    });
+    expect(backendConfigSummary(config, { cdn: false })).toBe(
+      "health check HTTP :8080/healthz"
+    );
+    expect(cdnOf(resource({}))).toBeNull();
   });
 });
 

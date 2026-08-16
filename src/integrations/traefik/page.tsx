@@ -54,7 +54,13 @@
  * leads to a connection error is worse than no button.
  */
 
-import { useCallback, useMemo } from "react";
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
@@ -388,9 +394,40 @@ function MapTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  // The namespaces the routed Services live in. Filtering by one cuts the
+  // fan-out to the slice somebody actually owns — "my namespace's hosts" is
+  // how this map is read on a cluster with twenty tenants.
+  const [namespace, setNamespace] = useState("");
+  const namespaces = useMemo(
+    () =>
+      [
+        ...new Set(
+          groups.flatMap((group) =>
+            group.routes.flatMap((route) =>
+              route.service?.kubernetes ? [route.service.namespace] : []
+            )
+          )
+        ),
+      ].sort(),
+    [groups]
+  );
+  const shown = useMemo(
+    () =>
+      namespace === ""
+        ? groups
+        : groups.filter((group) =>
+            group.routes.some(
+              (route) =>
+                route.service?.kubernetes &&
+                route.service.namespace === namespace
+            )
+          ),
+    [groups, namespace]
+  );
+
   const data = useMemo(
-    () => (sources ? routingMap(groups, sources) : null),
-    [groups, sources]
+    () => (sources ? routingMap(shown, sources) : null),
+    [shown, sources]
   );
 
   if (loading) {
@@ -398,24 +435,50 @@ function MapTab({
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
+  const broken = shown.filter((group) => group.worst === "err").length;
+  const worthALook = shown.filter((group) => group.worst === "warn").length;
 
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] text-fg-fnt">
+          {broken > 0
+            ? `${broken} of ${shown.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+            : worthALook > 0
+              ? `nothing broken · ${worthALook} of ${shown.length} worth a look`
+              : `${plural(shown.length, "host")}, none with a problem`}
+          {backingLoading && " · checking what is behind them…"}
+        </p>
+        {namespaces.length > 1 && (
+          <label className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
+            namespace
+            <select
+              value={namespace}
+              onChange={(event) => setNamespace(event.target.value)}
+              className="h-6 rounded border border-hair bg-canvas px-1.5 font-mono text-[11px] text-fg-mid focus-visible:border-info focus-visible:outline-hidden"
+            >
+              <option value="">all</option>
+              {namespaces.map((entry) => (
+                <option key={entry} value={entry}>
+                  {entry}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      {shown.length === 0 ? (
+        <p className="text-xs text-fg-fnt">
+          No host routes to a Service in{" "}
+          <span className="font-mono">{namespace}</span>.
+        </p>
+      ) : (
+        <RoutingMap data={data} />
+      )}
       <p className="text-[11px] text-fg-fnt">
-        {broken > 0
-          ? `${broken} of ${groups.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
-          : worthALook > 0
-            ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
-            : `${plural(groups.length, "host")}, none with a problem`}
-        {backingLoading && " · checking what is behind them…"}
-      </p>
-      <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">
-        A host goes to its own paths and their chain; a Service goes to its
-        page. Nothing here is inferred — every line is one object naming
-        another.
+        Rest on a node to light up everything one edge away. A host goes to its
+        own paths and their chain; a Service goes to its page — every line is
+        one object naming another.
       </p>
     </div>
   );
@@ -817,7 +880,13 @@ function HostChain({
                   middleware.namespace
                 )}
               >
-                {middleware.name}
+                <ResourceRef
+                  kind="Middleware"
+                  name={middleware.name}
+                  namespace={middleware.namespace}
+                  crd={`middlewares.${servedGroupName()}`}
+                  showKind={false}
+                />
               </Cell>
             ))
           )}
@@ -832,7 +901,16 @@ function HostChain({
                   : "Traefik's own, not a Service"
               }
             >
-              {route.service.name}
+              {route.service.kubernetes ? (
+                <ResourceRef
+                  kind="Service"
+                  name={route.service.name}
+                  namespace={route.service.namespace}
+                  showKind={false}
+                />
+              ) : (
+                route.service.name
+              )}
             </Cell>
           ) : route.resourceBackend ? (
             // An API object, not a Service. It has no endpoints by design
@@ -998,7 +1076,49 @@ const STOP_UNDER: Record<ChainStop["reason"], string> = {
   publishesNothing: "no port to send to",
 };
 
-function describeFinding(finding: Finding): { title: string; note: string } {
+/** One object, linked, the way the reader will go and edit it. */
+function objectRef(route: TraefikRoute): ReactNode {
+  return (
+    <span className="whitespace-nowrap">
+      {route.source.kind}{" "}
+      <span className="font-mono text-fg-fnt">{route.source.namespace}/</span>
+      <ResourceRef
+        kind={route.source.kind}
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={
+          route.source.kind === "IngressRoute"
+            ? `ingressroutes.${servedGroupName()}`
+            : undefined
+        }
+        showKind={false}
+      />
+    </span>
+  );
+}
+
+/** Each *object* once — two routers of one object are one thing to edit. */
+function objectRefs(routes: TraefikRoute[]): ReactNode {
+  const unique = [
+    ...new Map(
+      routes.map((route) => [
+        `${route.source.kind}/${route.source.namespace}/${route.source.name}`,
+        route,
+      ])
+    ).values(),
+  ];
+  return unique.map((route, index) => (
+    <Fragment key={`${route.source.namespace}/${route.source.name}`}>
+      {index > 0 && (index === unique.length - 1 ? " and " : ", ")}
+      {objectRef(route)}
+    </Fragment>
+  ));
+}
+
+function describeFinding(finding: Finding): {
+  title: string;
+  note: ReactNode;
+} {
   switch (finding.kind) {
     case "stop": {
       // The same three sentences the traffic chain uses, so "no pod carries
@@ -1024,9 +1144,29 @@ function describeFinding(finding: Finding): { title: string; note: string } {
     case "duplicate":
       return {
         title: `Two objects claim ${finding.path} on this host`,
-        note: finding.winner
-          ? `${describeRouteSource(finding.winner)} wins: it declares the higher priority. The other never fires.`
-          : `${finding.routes.map(describeRouteSource).join(" and ")} both match it. Traefik breaks the tie by router priority, and neither object states one — the default is the length of the rule Traefik itself generated, which this app never sees, so which of them serves the request is not something these objects settle.`,
+        note: finding.winner ? (
+          <>
+            {objectRef(finding.winner)} wins —{" "}
+            {finding.winner.priority !== null
+              ? `it declares priority ${finding.winner.priority}, above the others' declared or defaulted weight`
+              : "its rule is the longest, which is Traefik's default priority for a router that declares none"}{" "}
+            — and the rest never fire for this path.
+          </>
+        ) : finding.tied ? (
+          <>
+            {objectRefs(finding.routes)} carry the same priority, declared or
+            defaulted to their rule&rsquo;s length — Traefik&rsquo;s pick
+            between them is not something the objects state.
+          </>
+        ) : (
+          <>
+            {objectRefs(finding.routes)} both match it. Traefik breaks the tie
+            by router priority — declared, or defaulting to the length of the
+            router&rsquo;s rule — and for an Ingress that rule is one Traefik
+            generates and this app never sees, so which of them serves the
+            request is not settled from here.
+          </>
+        ),
       };
     case "certificate": {
       if (!finding.expiry) {
@@ -1043,10 +1183,6 @@ function describeFinding(finding: Finding): { title: string; note: string } {
       };
     }
   }
-}
-
-function describeRouteSource(route: TraefikRoute): string {
-  return `${route.source.kind} ${route.source.namespace}/${route.source.name}`;
 }
 
 // --- middlewares --------------------------------------------------------

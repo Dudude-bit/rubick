@@ -395,11 +395,18 @@ export interface EndpointTargetRef {
   namespace: string;
 }
 
+export interface IngressDefaultBackend {
+  backendService: string;
+  backendPort: string;
+  resourceBackend: string | null;
+}
+
 export interface IngressInfo {
   name: string;
   namespace: string;
   className: string | null;
   rules: IngressRule[];
+  defaultBackend: IngressDefaultBackend | null;
   loadBalancerIps: string[];
   tlsHosts: string[];
   tlsConfigs: IngressTlsConfig[];

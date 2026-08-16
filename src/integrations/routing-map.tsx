@@ -31,7 +31,7 @@
  * stops, amber is worth a look, and everything healthy is left alone.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
@@ -189,6 +189,20 @@ export function RoutingMap({
     () => new Map(placed.map((entry) => [entry.node.id, entry])),
     [placed]
   );
+  // The node under the pointer or the keyboard, and everything one edge
+  // away from it. Twenty hosts fanning into one Service is unreadable as
+  // drawn; resting on the Service is how "which of these is mine" gets
+  // answered without opening anything.
+  const [active, setActive] = useState<string | null>(null);
+  const related = useMemo(() => {
+    if (!active) return null;
+    const ids = new Set([active]);
+    for (const edge of data.edges) {
+      if (edge.from === active) ids.add(edge.to);
+      if (edge.to === active) ids.add(edge.from);
+    }
+    return ids;
+  }, [active, data.edges]);
 
   if (placed.length === 0) return <>{empty}</>;
 
@@ -234,19 +248,30 @@ export function RoutingMap({
               const x2 = to.x;
               const y2 = to.y + NODE_H / 2;
               const bend = (x2 - x1) / 2;
+              const touches =
+                active !== null && (edge.from === active || edge.to === active);
               return (
                 <path
                   key={`${edge.from}->${edge.to}`}
                   d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`}
-                  className={cn("fill-none", EDGE_TEXT[edge.tone])}
+                  className={cn(
+                    "fill-none transition-opacity duration-150",
+                    touches ? "text-info/70" : EDGE_TEXT[edge.tone],
+                    active !== null && !touches && "opacity-15"
+                  )}
                   stroke="currentColor"
-                  strokeWidth={edge.tone === "err" ? 1.5 : 1}
+                  strokeWidth={touches ? 1.5 : edge.tone === "err" ? 1.5 : 1}
                 />
               );
             })}
           </svg>
           {placed.map((entry) => (
-            <Node key={entry.node.id} at={entry} />
+            <Node
+              key={entry.node.id}
+              at={entry}
+              dimmed={related !== null && !related.has(entry.node.id)}
+              onActive={setActive}
+            />
           ))}
         </div>
       </div>
@@ -254,7 +279,16 @@ export function RoutingMap({
   );
 }
 
-function Node({ at }: { at: Placed }) {
+function Node({
+  at,
+  dimmed,
+  onActive,
+}: {
+  at: Placed;
+  /** Another node is being read and this one is not part of its story. */
+  dimmed: boolean;
+  onActive: (id: string | null) => void;
+}) {
   const { node } = at;
   const body = (
     <>
@@ -287,15 +321,9 @@ function Node({ at }: { at: Placed }) {
   );
 
   const shell = cn(
-    "absolute flex flex-col justify-center rounded-[5px] border bg-hover px-2 py-1 text-left",
+    "flex h-full w-full flex-col justify-center rounded-[5px] border bg-hover px-2 py-1 text-left",
     TONE_BORDER[node.tone]
   );
-  const box = {
-    left: at.x,
-    top: at.y,
-    width: at.width,
-    height: NODE_H,
-  } as const;
 
   const clickable = cn(
     shell,
@@ -305,34 +333,39 @@ function Node({ at }: { at: Placed }) {
   // Asked before the element is built: `ObjectLink` renders nothing for an
   // object it cannot address, and a node that vanished would leave an edge
   // pointing at empty space.
-  if (
+  const linked =
     node.object &&
     objectUrl(node.object.kind, node.object.name, node.object.namespace) !==
-      null
-  ) {
-    return (
-      <ObjectLink
-        {...node.object}
-        className={clickable}
-        style={box}
-        title={node.label}
-      >
-        {body}
-      </ObjectLink>
-    );
-  }
-
-  if (!node.to) {
-    return (
-      <div className={shell} style={box} title={node.label}>
-        {body}
-      </div>
-    );
-  }
+      null;
 
   return (
-    <Link to={node.to} className={clickable} style={box} title={node.label}>
-      {body}
-    </Link>
+    // The wrapper owns the position and the attention: pointer or keyboard
+    // resting here lights up everything one edge away, and the inner element
+    // stays a plain link.
+    <div
+      className={cn(
+        "absolute transition-opacity duration-150",
+        dimmed && "opacity-30"
+      )}
+      style={{ left: at.x, top: at.y, width: at.width, height: NODE_H }}
+      onMouseEnter={() => onActive(node.id)}
+      onMouseLeave={() => onActive(null)}
+      onFocus={() => onActive(node.id)}
+      onBlur={() => onActive(null)}
+    >
+      {linked ? (
+        <ObjectLink {...node.object!} className={clickable} title={node.label}>
+          {body}
+        </ObjectLink>
+      ) : node.to ? (
+        <Link to={node.to} className={clickable} title={node.label}>
+          {body}
+        </Link>
+      ) : (
+        <div className={shell} title={node.label}>
+          {body}
+        </div>
+      )}
+    </div>
   );
 }

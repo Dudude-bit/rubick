@@ -39,6 +39,7 @@ const ingress = (
   tlsHosts: [],
   tlsConfigs: [],
   hasCatchAllTls: false,
+  defaultBackend: null,
   labels: {},
   annotations: { "kubernetes.io/ingress.class": "alb", ...annotations },
   createdAt: null,

@@ -78,15 +78,49 @@ describe("what it refuses to paraphrase", () => {
   });
 
   /**
-   * Would break if grouped expressions started being flattened. Splitting
-   * `A && (B || C)` without implementing precedence produces a confidently
-   * wrong reading, which is worse than showing the reader the string.
+   * Would break if grouped expressions went back to being refused. Refusing
+   * them filed real hosts under "any host", where two such placeholders read
+   * as a phantom duplicate and the Map lost whole hostnames — `A && (B || C)`
+   * has one exact reading under Traefik's fixed precedence, and this is it.
    */
-  it("refuses a parenthesised group rather than guess at precedence", () => {
+  it("distributes a conjunction over a parenthesised group", () => {
     const reading = readRule(
       "Host(`a.example.com`) && (PathPrefix(`/x`) || PathPrefix(`/y`))"
     );
 
+    expect(fullyRead(reading)).toBe(true);
+    expect(reading.clauses).toEqual([
+      { host: "a.example.com", path: { kind: "prefix", value: "/x" } },
+      { host: "a.example.com", path: { kind: "prefix", value: "/y" } },
+    ]);
+  });
+
+  /** The other shape the cluster actually runs: a group as one alternative. */
+  it("reads a group standing as its own alternative", () => {
+    const reading = readRule(
+      "Host(`market.example.com`) || (Host(`market.example.com`) && PathPrefix(`/martians-`))"
+    );
+
+    expect(fullyRead(reading)).toBe(true);
+    expect(reading.clauses).toEqual([
+      { host: "market.example.com", path: null },
+      {
+        host: "market.example.com",
+        path: { kind: "prefix", value: "/martians-" },
+      },
+    ]);
+  });
+
+  /** Unbalanced brackets have no reading at all, however close they look. */
+  it("refuses an unbalanced group", () => {
+    const reading = readRule("Host(`a.example.com`) && (PathPrefix(`/x`)");
+    expect(reading.clauses).toEqual([]);
+    expect(reading.refused).toBeTruthy();
+  });
+
+  /** Negation stays refused wherever it hides. */
+  it("refuses a negated group", () => {
+    const reading = readRule("Host(`a.example.com`) && !(PathPrefix(`/x`))");
     expect(reading.clauses).toEqual([]);
     expect(reading.refused).toBeTruthy();
   });

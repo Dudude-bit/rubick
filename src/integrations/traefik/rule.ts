@@ -19,21 +19,18 @@
  * term it could not read is kept verbatim in {@link RuleReading.unread} and
  * the surface prints the whole rule beside it.
  *
- * Two things break that and are therefore refused outright, for the whole
- * rule:
+ * One thing breaks that and is therefore refused outright, for the whole
+ * rule: **negation**. `!Host(`a`)` matches everything *except* `a`, so
+ * treating the `Host` term as a requirement inverts the meaning.
  *
- * - **Negation.** `!Host(`a`)` matches everything *except* `a`, so treating
- *   the `Host` term as a requirement inverts the meaning.
- * - **A parenthesised group.** ``Host(`a`) && (PathPrefix(`/x`) ||
- *   PathPrefix(`/y`))`` cannot be split into alternatives without
- *   implementing precedence, and a half-implemented precedence is exactly the
- *   kind of confident wrongness this file exists to avoid.
- *
- * A top-level `||` *is* read, because it needs no precedence: `&&` binds
- * tighter than `||` in Traefik, so the rule is a list of alternatives and
- * each one is an independent set of requirements. ``Host(`a`) || Host(`b`)``
- * is two routes, exactly, and that is the most common non-trivial rule there
- * is.
+ * `||`, `&&` and parenthesised groups *are* read, because Traefik's
+ * precedence is fixed — `&&` binds tighter than `||`, parentheses group —
+ * so a rule has exactly one reading and it is computed rather than guessed:
+ * the expression is expanded into its alternatives, ``Host(`a`) &&
+ * (PathPrefix(`/x`) || PathPrefix(`/y`))`` becoming the two routes it is.
+ * Refusing groups was tried first and produced its own confident wrongness:
+ * the refused rule's host vanished from the page and its placeholder row
+ * collided with other placeholders as a phantom duplicate.
  */
 
 /** How a path term constrains the request. */
@@ -80,7 +77,9 @@ const EXACT = new Set(["path"]);
 
 type Token =
   | { kind: "term"; name: string; args: string[]; raw: string }
-  | { kind: "op"; op: "&&" | "||" | "!" };
+  | { kind: "op"; op: "&&" | "||" | "!" }
+  | { kind: "open" }
+  | { kind: "close" };
 
 /**
  * Split a rule into matcher calls and the operators between them, at the top
@@ -116,7 +115,16 @@ function tokenize(rule: string): Token[] | null {
 
     // A bare `(` here is a grouped expression rather than a matcher's own
     // argument list: a matcher is only ever reached through its name.
-    if (char === "(" || char === ")") return null;
+    if (char === "(") {
+      tokens.push({ kind: "open" });
+      index += 1;
+      continue;
+    }
+    if (char === ")") {
+      tokens.push({ kind: "close" });
+      index += 1;
+      continue;
+    }
 
     const name = /^[A-Za-z][A-Za-z0-9]*/.exec(rule.slice(index))?.[0];
     if (!name) return null;
@@ -250,7 +258,95 @@ function isPathTerm(token: Token): boolean {
 }
 
 function rawOf(token: Token): string {
-  return token.kind === "term" ? token.raw : token.op;
+  switch (token.kind) {
+    case "term":
+      return token.raw;
+    case "op":
+      return token.op;
+    case "open":
+      return "(";
+    case "close":
+      return ")";
+  }
+}
+
+/**
+ * The alternatives of one expression, expanded under Traefik's fixed
+ * precedence: `&&` over `||`, parentheses grouping.
+ *
+ * Each alternative is a flat list of the terms a request must satisfy —
+ * disjunctive normal form, which is what "one row per way in" needs. The
+ * expansion is a cross product, and rule strings are a line long, so the
+ * blow-up a textbook warns about cannot occur before the row limit renders
+ * it moot.
+ */
+function parseExpression(
+  tokens: Token[],
+  at: number
+): { alternatives: Token[][]; end: number } | null {
+  let cursor = at;
+  const alternatives: Token[][] = [];
+
+  for (;;) {
+    const conjunction = parseConjunction(tokens, cursor);
+    if (!conjunction) return null;
+    alternatives.push(...conjunction.alternatives);
+    cursor = conjunction.end;
+
+    const next = tokens[cursor];
+    if (next?.kind === "op" && next.op === "||") {
+      cursor += 1;
+      continue;
+    }
+    return { alternatives, end: cursor };
+  }
+}
+
+function parseConjunction(
+  tokens: Token[],
+  at: number
+): { alternatives: Token[][]; end: number } | null {
+  let cursor = at;
+  let alternatives: Token[][] | null = null;
+
+  for (;;) {
+    const atom = parseAtom(tokens, cursor);
+    if (!atom) return null;
+    cursor = atom.end;
+    // `A && (B || C)` distributes: every alternative so far is narrowed by
+    // every alternative of the group.
+    alternatives =
+      alternatives === null
+        ? atom.alternatives
+        : alternatives.flatMap((left) =>
+            atom.alternatives.map((right) => [...left, ...right])
+          );
+
+    const next = tokens[cursor];
+    if (next?.kind === "op" && next.op === "&&") {
+      cursor += 1;
+      continue;
+    }
+    return { alternatives, end: cursor };
+  }
+}
+
+function parseAtom(
+  tokens: Token[],
+  at: number
+): { alternatives: Token[][]; end: number } | null {
+  const token = tokens[at];
+  if (!token) return null;
+  if (token.kind === "term") {
+    return { alternatives: [[token]], end: at + 1 };
+  }
+  if (token.kind === "open") {
+    const inner = parseExpression(tokens, at + 1);
+    if (!inner) return null;
+    if (tokens[inner.end]?.kind !== "close") return null;
+    return { alternatives: inner.alternatives, end: inner.end + 1 };
+  }
+  return null;
 }
 
 /**
@@ -280,14 +376,16 @@ export function readRule(rule: string): RuleReading {
     };
   }
 
-  const alternatives: Token[][] = [[]];
-  for (const token of tokens) {
-    if (token.kind === "op" && token.op === "||") {
-      alternatives.push([]);
-      continue;
-    }
-    alternatives[alternatives.length - 1].push(token);
+  const parsed = parseExpression(tokens, 0);
+  if (!parsed || parsed.end !== tokens.length) {
+    return {
+      raw,
+      clauses: [],
+      unread: [],
+      refused: "it is not a plain list of matchers",
+    };
   }
+  const alternatives = parsed.alternatives;
 
   const clauses: RuleClause[] = [];
   const unread: string[] = [];

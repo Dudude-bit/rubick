@@ -249,30 +249,54 @@ function routesOf(ingress: IngressInfo, sources: GkeSources): GkeRoute[] {
       .map((service) => [service.name, service] as const)
   );
 
-  return ingress.rules.flatMap((rule, ruleIndex) =>
-    rule.paths.map((path, pathIndex): GkeRoute => {
-      const service = path.backendService
-        ? services.get(path.backendService)
-        : undefined;
-      const refs = service ? backendConfigRefs(service.annotations) : [];
-      return {
-        key: `${namespace}/${ingress.name}/${ruleIndex}/${pathIndex}`,
-        ingress: { name: ingress.name, namespace },
-        host: rule.host || null,
-        path: path.path || "/",
-        pathType: path.pathType,
-        backend: path.backendService
-          ? { name: path.backendService, port: path.backendPort }
-          : null,
-        resourceBackend: path.resourceBackend,
-        configs: refs.map((ref) => ({
-          ...ref,
-          found: byName(configs, ref.name),
-        })),
-        neg: service ? negForIngress(service.annotations) : false,
-      };
-    })
+  const joined = (backendService: string | null) => {
+    const service = backendService ? services.get(backendService) : undefined;
+    const refs = service ? backendConfigRefs(service.annotations) : [];
+    return {
+      configs: refs.map((ref) => ({
+        ...ref,
+        found: byName(configs, ref.name),
+      })),
+      neg: service ? negForIngress(service.annotations) : false,
+    };
+  };
+
+  const routes = ingress.rules.flatMap((rule, ruleIndex) =>
+    rule.paths.map((path, pathIndex): GkeRoute => ({
+      key: `${namespace}/${ingress.name}/${ruleIndex}/${pathIndex}`,
+      ingress: { name: ingress.name, namespace },
+      host: rule.host || null,
+      path: path.path || "/",
+      pathType: path.pathType,
+      backend: path.backendService
+        ? { name: path.backendService, port: path.backendPort }
+        : null,
+      resourceBackend: path.resourceBackend,
+      ...joined(path.backendService || null),
+    }))
   );
+
+  // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+  // the whole load balancer, the ordinary way a cloud LB fronts an
+  // in-cluster proxy. Reading only `rules` made such an Ingress serve
+  // nothing, and the page then denied the cluster had a GKE LB at all.
+  const fallback = ingress.defaultBackend;
+  if (fallback) {
+    routes.push({
+      key: `${namespace}/${ingress.name}/default`,
+      ingress: { name: ingress.name, namespace },
+      host: null,
+      path: "*",
+      pathType: "default backend",
+      backend: fallback.backendService
+        ? { name: fallback.backendService, port: fallback.backendPort }
+        : null,
+      resourceBackend: fallback.resourceBackend,
+      ...joined(fallback.backendService || null),
+    });
+  }
+
+  return routes;
 }
 
 /**
@@ -463,6 +487,7 @@ export function countHosts(ingresses: IngressInfo[]): number {
   const hosts = new Set<string>();
   for (const ingress of claimed(ingresses)) {
     for (const rule of ingress.rules) hosts.add(rule.host || "");
+    if (ingress.defaultBackend) hosts.add("");
   }
   return hosts.size;
 }

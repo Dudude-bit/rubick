@@ -44,6 +44,7 @@ function ingress(
       ? [{ hosts: [host], secretName: over.secretName, isCatchAll: false }]
       : [],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: {},
     createdAt: null,

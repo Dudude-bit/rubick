@@ -38,6 +38,7 @@ const ingress = (
     tlsHosts: [host],
     tlsConfigs: [{ hosts: [host], secretName: "shop-tls", isCatchAll: false }],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: {},
     createdAt: null,
