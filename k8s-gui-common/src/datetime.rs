@@ -227,5 +227,3 @@ mod tests {
         assert!(invalid.is_none());
     }
 }
-
-

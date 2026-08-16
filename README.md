@@ -123,7 +123,7 @@ Needs [Bun](https://bun.sh) 1.3+, Rust 1.91+, and the [Tauri prerequisites](http
 bunx tsc --noEmit                                     # types
 bun run lint                                          # eslint, zero warnings
 bun run test                                          # frontend tests
-cargo test --manifest-path src-tauri/Cargo.toml --lib # Rust tests
+cargo test --workspace                                # Rust tests
 ```
 
 Three lint rules keep the codebase from drifting back, and each fails the commit: colours must be role tokens, nothing outside `src/integrations/` may name a vendor, and polling rates go through `useLiveQuery` rather than a hand-written interval. [CONTRIBUTING](CONTRIBUTING.md) says why each exists.

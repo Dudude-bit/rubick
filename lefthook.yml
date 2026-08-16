@@ -9,13 +9,10 @@ pre-commit:
   commands:
     rust-fmt:
       glob: "*.rs"
-      run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      run: cargo fmt --all --check
     eslint:
       glob: "*.{ts,tsx}"
-      # Lint reports many warnings post-react-hooks@7 upgrade — allow them
-      # for now, fail only on errors. Tighten by removing this once the
-      # warnings backlog is triaged.
-      run: bunx eslint {staged_files}
+      run: bunx eslint --max-warnings 0 {staged_files}
     prettier:
       glob: "*.{ts,tsx,css,json,md}"
       run: bunx prettier --check {staged_files}
@@ -34,7 +31,7 @@ pre-push:
       run: bun run test
     rust-tests:
       glob: "*.rs"
-      run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      run: cargo test --workspace --lib
     # Catches `tauri::generate_handler!` macro expansion failures
     # (the v2.1.0 release CI failure) and any other bin-only compile
     # error. `cargo check` skips codegen + linking — ~3 s warm,

@@ -35,7 +35,7 @@ jobs:
           install_tauri_cli: 'false'
 
       - name: Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        run: cargo fmt --all --check
 
       - name: Build frontend
         # Required so `tauri::generate_context!()` can read ../dist during
@@ -52,7 +52,9 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --no-deps --all-targets -- -W clippy::all
 
       - name: Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        # --workspace, not just src-tauri: k8s-gui-common carries unit
+        # tests and doctests that a manifest-scoped run never reaches.
+        run: cargo test --workspace
 
       - name: Frontend type check
         run: bunx tsc --noEmit
@@ -61,8 +63,4 @@ jobs:
         run: bun run test
 
       - name: Frontend lint
-        # Informational while the react-hooks@7 upgrade rule set is being
-        # triaged. Flip to required once remaining violations are addressed
-        # or rules are explicitly dialled down in eslint.config.js.
-        continue-on-error: true
         run: bun run lint

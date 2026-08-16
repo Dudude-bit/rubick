@@ -29,7 +29,7 @@ test suites before each push. Skip them for a single commit with
 
 ## Code style
 
-- **Rust:** `cargo fmt` and `cargo clippy` must pass.
+- **Rust:** `cargo fmt` must pass; `cargo clippy` is advisory.
 - **TypeScript:** ESLint + Prettier (configs are in the repo).
 
 Three lint rules exist to stop the codebase drifting back to habits it has
@@ -50,16 +50,22 @@ already left. Each fails the commit, and each has a reason:
 Before committing:
 
 ```bash
-cargo fmt --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-bun run lint
+cargo fmt --all
+bun run lint          # required — zero warnings
+cargo clippy --workspace --all-targets   # advisory, see below
 ```
+
+Clippy is **advisory**, not a gate. The crate turns on `clippy::pedantic`
+(`src-tauri/src/lib.rs`), which currently reports several hundred warnings;
+CI runs it at warn level so a new pedantic lint cannot break every open PR.
+Read what it says about the code you touched, and don't add to the pile.
+`cargo fmt` and `bun run lint` are the two that actually fail CI.
 
 ## Tests
 
 ```bash
 bun run test                                          # frontend
-cargo test --manifest-path src-tauri/Cargo.toml       # Rust
+cargo test --workspace                                # Rust
 ```
 
 Tests here assert _behaviour_, not markup, and the house style is a doc comment

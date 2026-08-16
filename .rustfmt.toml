@@ -1,24 +1,19 @@
-# Rustfmt configuration for Rubick project
-# This ensures consistent code formatting across all Rust projects
+# Rustfmt configuration for Rubick.
+#
+# Stable options only. CI and the pre-commit hook both run the stable
+# rustfmt, which does not error on an unstable key — it prints a warning
+# and carries on formatting without it. Seven options used to sit here
+# (imports_granularity, group_imports, brace_style, empty_item_single_line,
+# format_code_in_doc_comments, format_strings, format_macro_matchers) and
+# every one was discarded on every run, so the policy they described was
+# enforced nowhere. Adding one back means moving the whole toolchain to
+# nightly, not just editing this file.
 
-# Basic formatting options
 edition = "2021"
 max_width = 100
 tab_spaces = 4
 newline_style = "Unix"
 
-# Import formatting
-imports_granularity = "Crate"
-group_imports = "StdExternalCrate"
 reorder_imports = true
-
-# Function formatting
 fn_params_layout = "Tall"
-brace_style = "SameLineWhere"
-empty_item_single_line = false
-
-# Other options
 use_small_heuristics = "Default"
-format_code_in_doc_comments = true
-format_strings = true
-format_macro_matchers = true

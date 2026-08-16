@@ -1,4 +1,17 @@
 //! Pod exec terminal adapter - uses kube API to exec into pods
+//!
+//! # Why `tty: true` and `stderr: false`
+//!
+//! The apiserver rejects an exec request that asks for both: **tty and
+//! stderr cannot both be true**. That is a Kubernetes API constraint, not
+//! a choice this adapter makes.
+//!
+//! It is also the right shape. Without a TTY a shell prints no prompt,
+//! echoes nothing back, buffers its output and loses line editing —
+//! arrows and backspace stop working. With one, the PTY merges every
+//! stream into stdout, so reading stdout alone is complete: zero bytes
+//! read means the connection closed, and no bytes available means
+//! nothing was typed, not that anything is wrong.
 
 use crate::error::Result;
 use crate::terminal::TerminalAdapter;
@@ -148,47 +161,5 @@ impl TerminalAdapter for PodExecAdapter {
 
     fn is_running(&self) -> bool {
         self.attached.is_some()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pod_exec_tty_requirement() {
-        // This test documents the TTY requirement for interactive shells
-        //
-        // With tty=false:
-        // - Shell won't show prompt
-        // - Input won't be echoed back
-        // - Output is buffered
-        // - No line editing (arrows, backspace, etc.)
-        //
-        // With tty=true:
-        // - Full interactive shell with prompt
-        // - Input echo
-        // - Line editing works
-        // - All output through stdout (pty behavior)
-        // - stderr MUST be false (Kubernetes API requirement!)
-
-        // CRITICAL Kubernetes API constraint:
-        // "tty and stderr cannot both be true"
-        // When tty=true, stderr must be false
-
-        assert!(true, "TTY must be enabled for interactive shells");
-    }
-
-    #[test]
-    fn test_stream_handling_with_tty() {
-        // When tty=true, all output goes through stdout
-        // stderr is not used (PTY merges all streams)
-        //
-        // The implementation should:
-        // 1. Only read from stdout when tty=true
-        // 2. Handle EOF (0 bytes read) as connection close
-        // 3. Handle timeout (no data) as normal condition
-
-        assert!(true, "With TTY, only stdout is used");
     }
 }

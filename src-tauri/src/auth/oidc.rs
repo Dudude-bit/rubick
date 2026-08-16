@@ -25,7 +25,6 @@ struct TokenResponse {
 
 /// OIDC discovery document
 #[derive(Debug, Deserialize)]
-#[allow(clippy::struct_field_names)]
 struct OidcDiscovery {
     token_endpoint: String,
     authorization_endpoint: String,

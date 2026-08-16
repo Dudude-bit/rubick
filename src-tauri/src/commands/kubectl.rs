@@ -55,19 +55,16 @@ mod tests {
         assert!(!availability.searched_paths.is_empty());
     }
 
+    /// Taking the singleton twice in a row must not deadlock. Reaching the
+    /// end of this test is the whole assertion — a second acquire that
+    /// blocked on the first would hang here instead of failing.
     #[tokio::test]
-    async fn test_kubectl_manager_singleton() {
-        // Test that we can acquire the manager lock multiple times
+    async fn the_manager_can_be_taken_twice() {
         {
-            let _manager1 = kubectl_manager().await;
-            // Manager lock is released here
+            let _first = kubectl_manager().await;
         }
         {
-            let _manager2 = kubectl_manager().await;
-            // Manager lock is released here
+            let _second = kubectl_manager().await;
         }
-
-        // Both calls should succeed without deadlock
-        assert!(true);
     }
 }
