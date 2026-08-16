@@ -21,65 +21,92 @@ function Skeleton({
 /**
  * Skeleton for table rows.
  *
- * Drawn to the real table's measurements — the compact/normal cell padding
- * pitch, a wide first column the way names are wide, varied widths the way
- * content varies — because a block of five uniform grey bars reads as a
- * placeholder for a *different* screen, and the swap to rows is a jolt.
- * Enough rows to fill a screen, so arriving data replaces the shape rather
- * than tripling the page height.
+ * Drawn from the same column model the table renders: each cell takes its
+ * column's declared pixel width, the bar inside it a believable fraction of
+ * that, staggered by row so the grid shimmers like content of uneven
+ * lengths. A generic run of same-width bars reads as a placeholder for a
+ * *different* screen, and the swap to rows is a jolt. Where the list will
+ * group its rows, caption stubs hold the group lines' room too.
  */
 interface TableSkeletonProps {
+  /** The real columns' declared pixel widths, in column order. */
+  widths?: number[];
   columns?: number;
   rows?: number;
   showSearch?: boolean;
   /** Match the density the table itself is drawn at. */
   compact?: boolean;
+  /** The list groups its rows, so the loading shape holds caption lines. */
+  grouped?: boolean;
 }
 
-/** The name column runs long; everything after it is chips and counts. */
-const CELL_WIDTHS = ["w-40", "w-16", "w-24", "w-20", "w-12", "w-28"];
+/** How full a cell's bar draws, cycled so columns read organically. */
+const BAR_FRACTIONS = [0.72, 0.45, 0.6, 0.38, 0.52];
 
 function TableSkeleton({
-  columns = 4,
+  widths,
+  columns = widths?.length ?? 4,
   rows = 14,
   showSearch = true,
   compact = false,
+  grouped = false,
 }: TableSkeletonProps) {
-  const cellPadding = compact ? "py-[3px] px-2.5" : "py-2 px-2.5";
+  // The px lives on the cells, as it does on the real table's cells.
+  const cellPadding = compact ? "py-[3px]" : "py-2";
+  const widthOf = (column: number) => widths?.[column] ?? 100;
+  const barWidth = (row: number, column: number) => {
+    // The name column runs long the way names do; the rest cycle.
+    const fraction =
+      column === 0
+        ? 0.55 + ((row * 7) % 4) * 0.08
+        : BAR_FRACTIONS[(row + column * 2) % BAR_FRACTIONS.length];
+    return Math.max(16, Math.round((widthOf(column) - 20) * fraction));
+  };
+
+  const caption = (key: string) => (
+    <div key={key} className="px-2.5 pb-1 pt-3">
+      <Skeleton className="h-2.5 w-24" />
+    </div>
+  );
+
   return (
     <div className="animate-in fade-in duration-200" aria-hidden>
       {showSearch && <Skeleton className="mb-2 h-7 w-40" />}
-      <div className="flex items-center gap-4 border-b border-hair px-2.5 py-1">
+      <div className="flex items-center border-b border-hair py-1">
         {Array.from({ length: columns }).map((_, column) => (
-          <Skeleton
+          <div
             key={column}
-            className={cn("h-2.5", column === 0 ? "w-32" : "w-14")}
-          />
+            className="px-2.5"
+            style={{ width: widthOf(column) }}
+          >
+            <Skeleton
+              className="h-2.5"
+              style={{ width: Math.min(56, barWidth(0, column)) }}
+            />
+          </div>
         ))}
       </div>
-      {Array.from({ length: rows }).map((_, row) => (
+      {Array.from({ length: rows }).flatMap((_, row) => [
+        // A caption every few rows, the rhythm the grouped list settles into.
+        ...(grouped && row % 5 === 0 ? [caption(`caption-${row}`)] : []),
         <div
           key={row}
-          className={cn(
-            "flex items-center gap-4 border-b border-hair",
-            cellPadding
-          )}
+          className={cn("flex items-center border-b border-hair", cellPadding)}
         >
           {Array.from({ length: columns }).map((_, column) => (
-            <div key={column} className="flex h-4 items-center">
+            <div
+              key={column}
+              className="flex h-4 items-center px-2.5"
+              style={{ width: widthOf(column) }}
+            >
               <Skeleton
-                className={cn(
-                  "h-2.5",
-                  // Staggered by row and column so the grid shimmers like
-                  // content of uneven lengths instead of a punch card.
-                  CELL_WIDTHS[(row + column * 2) % CELL_WIDTHS.length],
-                  column === 0 && "w-40"
-                )}
+                className="h-2.5"
+                style={{ width: barWidth(row, column) }}
               />
             </div>
           ))}
-        </div>
-      ))}
+        </div>,
+      ])}
     </div>
   );
 }
