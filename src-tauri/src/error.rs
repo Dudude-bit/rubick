@@ -3,10 +3,10 @@
 //! This module provides a comprehensive error type that covers all possible
 //! error scenarios in the application, with proper conversion from library errors.
 //!
-//! The `Error` type implements the `ErrorExt` trait from `k8s_gui_common` for
-//! consistent error handling across all Rubick projects.
+//! An `Error` reaches the frontend as its `Display` string and nothing else —
+//! see the custom `Serialize` impl below, and the wire-format note in
+//! `src/lib/credentials.ts`.
 
-use k8s_gui_common::ErrorExt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -104,10 +104,6 @@ pub enum Error {
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
-    /// Cache errors
-    #[error("Cache error: {0}")]
-    Cache(String),
-
     /// Timeout errors
     #[error("Operation timed out: {0}")]
     Timeout(String),
@@ -119,21 +115,11 @@ pub enum Error {
     /// Internal errors
     #[error("Internal error: {0}")]
     Internal(String),
-
-    /// AWS errors
-    #[error("AWS error: {0}")]
-    Aws(String),
 }
 
 /// Authentication-specific errors
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum AuthError {
-    #[error("Invalid credentials")]
-    InvalidCredentials,
-
-    #[error("Token expired")]
-    TokenExpired,
-
     #[error("Token refresh failed: {0}")]
     RefreshFailed(String),
 
@@ -154,9 +140,6 @@ pub enum AuthError {
 
     #[error("Certificate error: {0}")]
     Certificate(String),
-
-    #[error("Missing credentials")]
-    MissingCredentials,
 }
 
 /// Plugin-specific errors
@@ -165,20 +148,11 @@ pub enum PluginError {
     #[error("Plugin not found: {0}")]
     NotFound(String),
 
-    #[error("Plugin load failed: {0}")]
-    LoadFailed(String),
-
     #[error("Plugin execution failed: {0}")]
     ExecutionFailed(String),
 
     #[error("Plugin timeout")]
     Timeout,
-
-    #[error("Invalid plugin format: {0}")]
-    InvalidFormat(String),
-
-    #[error("Plugin permission denied: {0}")]
-    PermissionDenied(String),
 }
 
 impl Serialize for Error {
@@ -189,56 +163,6 @@ impl Serialize for Error {
         // Serialize as a string, not an object, so Tauri can properly convert it
         // This ensures errors are displayed correctly in the frontend
         serializer.serialize_str(&self.to_string())
-    }
-}
-
-/// Implement ErrorExt trait for unified error handling
-impl ErrorExt for Error {
-    fn error_code(&self) -> &'static str {
-        match self {
-            Error::KubeApi(_) => "KUBE_API_ERROR",
-            Error::CredentialsExpired(_) => "CREDENTIALS_EXPIRED",
-            Error::Config(_) => "CONFIG_ERROR",
-            Error::Auth(_) => "AUTH_ERROR",
-            Error::Connection(_) => "CONNECTION_ERROR",
-            Error::NotFound { .. } => "NOT_FOUND",
-            Error::PermissionDenied(_) => "PERMISSION_DENIED",
-            Error::InvalidInput(_) => "INVALID_INPUT",
-            Error::Serialization(_) => "SERIALIZATION_ERROR",
-            Error::Io(_) => "IO_ERROR",
-            Error::Plugin(_) => "PLUGIN_ERROR",
-            Error::Terminal(_) => "TERMINAL_ERROR",
-            Error::LogStream(_) => "LOG_STREAM_ERROR",
-            Error::NoPreviousRun { .. } => "NO_PREVIOUS_RUN",
-            Error::Cache(_) => "CACHE_ERROR",
-            Error::Timeout(_) => "TIMEOUT",
-            Error::WebSocket(_) => "WEBSOCKET_ERROR",
-            Error::Internal(_) => "INTERNAL_ERROR",
-            Error::Aws(_) => "AWS_ERROR",
-        }
-    }
-
-    fn details(&self) -> Option<String> {
-        match self {
-            Error::KubeApi(e) => Some(format!("{e:?}")),
-            Error::NotFound {
-                kind,
-                name,
-                namespace,
-            } => Some(format!(
-                "Kind: {kind}, Name: {name}, Namespace: {namespace}"
-            )),
-            Error::Auth(e) => Some(format!("{e:?}")),
-            Error::Plugin(e) => Some(format!("{e:?}")),
-            _ => None,
-        }
-    }
-
-    fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Error::Connection(_) | Error::Timeout(_) | Error::Auth(AuthError::TokenExpired)
-        )
     }
 }
 
@@ -377,7 +301,6 @@ mod tests {
         let err = Error::from(api_error(401, "Unauthorized"));
         assert!(matches!(err, Error::CredentialsExpired(_)));
         assert!(err.to_string().starts_with("CREDENTIALS_EXPIRED:"));
-        assert_eq!(err.error_code(), "CREDENTIALS_EXPIRED");
     }
 
     /// A 403 answers *this* request and leaves the session working. Folding it
@@ -389,22 +312,6 @@ mod tests {
             Error::from(api_error(403, "Forbidden")),
             Error::KubeApi(_)
         ));
-    }
-
-    #[test]
-    fn test_error_codes() {
-        assert_eq!(Error::Config("test".into()).error_code(), "CONFIG_ERROR");
-        assert_eq!(
-            Error::Connection("test".into()).error_code(),
-            "CONNECTION_ERROR"
-        );
-    }
-
-    #[test]
-    fn test_retryable() {
-        assert!(Error::Connection("test".into()).is_retryable());
-        assert!(Error::Timeout("test".into()).is_retryable());
-        assert!(!Error::Config("test".into()).is_retryable());
     }
 
     #[test]

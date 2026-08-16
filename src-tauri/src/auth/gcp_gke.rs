@@ -38,15 +38,6 @@ impl GcpGkeAuth {
         }
     }
 
-    /// Create a new GCP GKE auth provider with custom scopes
-    #[must_use]
-    pub fn with_scopes(service_account_key_path: Option<PathBuf>, scopes: Vec<String>) -> Self {
-        Self {
-            service_account_key_path,
-            scopes,
-        }
-    }
-
     /// Get an access token using gcp_auth
     async fn get_token(&self) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
         let provider = self.create_auth_provider().await?;
@@ -141,44 +132,6 @@ pub fn is_gke_exec_command(command: &str) -> bool {
         || (cmd_lower.contains("google") && cmd_lower.contains("auth"))
 }
 
-/// Extract GKE cluster info from exec args if present
-pub fn parse_gke_exec_args(_args: &[String]) -> Option<GkeClusterInfo> {
-    // gke-gcloud-auth-plugin doesn't take cluster name directly
-    // The cluster context is usually in the kubeconfig context name format:
-    // gke_PROJECT_ZONE_CLUSTER or gke_PROJECT_REGION_CLUSTER
-    None // GKE auth plugin doesn't need cluster info for token generation
-}
-
-/// GKE cluster information parsed from context or exec args
-#[derive(Debug, Clone)]
-pub struct GkeClusterInfo {
-    pub project_id: String,
-    pub location: String,
-    pub cluster_name: String,
-}
-
-impl GkeClusterInfo {
-    /// Parse GKE cluster info from a kubeconfig context name
-    ///
-    /// GKE contexts typically follow the format: gke_PROJECT_LOCATION_CLUSTER
-    pub fn from_context_name(context: &str) -> Option<Self> {
-        if !context.starts_with("gke_") {
-            return None;
-        }
-
-        let parts: Vec<&str> = context.splitn(4, '_').collect();
-        if parts.len() != 4 {
-            return None;
-        }
-
-        Some(Self {
-            project_id: parts[1].to_string(),
-            location: parts[2].to_string(),
-            cluster_name: parts[3].to_string(),
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,19 +156,5 @@ mod tests {
         assert!(is_gke_exec_command("gcloud"));
         assert!(!is_gke_exec_command("aws-iam-authenticator"));
         assert!(!is_gke_exec_command("kubelogin"));
-    }
-
-    #[test]
-    fn test_gke_cluster_info_from_context() {
-        let info = GkeClusterInfo::from_context_name("gke_my-project_us-central1-a_my-cluster");
-        assert!(info.is_some());
-        let info = info.unwrap();
-        assert_eq!(info.project_id, "my-project");
-        assert_eq!(info.location, "us-central1-a");
-        assert_eq!(info.cluster_name, "my-cluster");
-
-        // Invalid format
-        assert!(GkeClusterInfo::from_context_name("not-gke-context").is_none());
-        assert!(GkeClusterInfo::from_context_name("gke_only_two").is_none());
     }
 }

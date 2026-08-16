@@ -39,16 +39,6 @@ impl AzureAksAuth {
         }
     }
 
-    /// Create a new Azure AKS auth provider with a custom scope
-    #[must_use]
-    pub fn with_scope(use_cli_fallback: bool, tenant_id: Option<String>, scope: String) -> Self {
-        Self {
-            use_cli_fallback,
-            tenant_id,
-            scope,
-        }
-    }
-
     /// Get an access token using `azure_identity`
     async fn get_token(&self) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
         // Try DefaultAzureCredential first

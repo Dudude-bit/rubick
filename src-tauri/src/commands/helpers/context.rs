@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
 use kube::api::DynamicObject;
-use kube::discovery::{ApiCapabilities, ApiResource, Scope};
+use kube::discovery::ApiResource;
 use kube::Resource;
 use kube::{Api, Client};
 use tauri::State;
@@ -96,21 +96,6 @@ impl ResourceContext {
             self.namespaced_api()
         } else {
             self.cluster_api()
-        }
-    }
-
-    #[must_use]
-    pub fn dynamic_api(
-        &self,
-        api_resource: &ApiResource,
-        caps: &ApiCapabilities,
-    ) -> Api<DynamicObject> {
-        match caps.scope {
-            Scope::Namespaced => match self.namespace.as_deref() {
-                Some(ns) => Api::namespaced_with(self.client.clone(), ns, api_resource),
-                None => Api::all_with(self.client.clone(), api_resource),
-            },
-            Scope::Cluster => Api::all_with(self.client.clone(), api_resource),
         }
     }
 

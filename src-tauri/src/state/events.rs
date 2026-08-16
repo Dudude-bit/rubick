@@ -168,24 +168,6 @@ pub fn readable_cause(error: &crate::error::Error) -> String {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum AppEvent {
-    /// Resource was created
-    ResourceCreated {
-        kind: String,
-        name: String,
-        namespace: String,
-    },
-    /// Resource was updated
-    ResourceUpdated {
-        kind: String,
-        name: String,
-        namespace: String,
-    },
-    /// Resource was deleted
-    ResourceDeleted {
-        kind: String,
-        name: String,
-        namespace: String,
-    },
     /// Connection status changed
     ConnectionStatusChanged { context: String, connected: bool },
     /// Batch of log lines for a single stream. The streamer flushes
@@ -329,9 +311,6 @@ impl AppEvent {
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
-            AppEvent::ResourceCreated { .. } => "resource-created",
-            AppEvent::ResourceUpdated { .. } => "resource-updated",
-            AppEvent::ResourceDeleted { .. } => "resource-deleted",
             AppEvent::Error { .. } => "app-error",
         }
     }
@@ -472,25 +451,6 @@ impl AppEvent {
                 "context": context,
                 "command": command,
             }),
-            AppEvent::ResourceCreated {
-                kind,
-                name,
-                namespace,
-            }
-            | AppEvent::ResourceUpdated {
-                kind,
-                name,
-                namespace,
-            }
-            | AppEvent::ResourceDeleted {
-                kind,
-                name,
-                namespace,
-            } => serde_json::json!({
-                "kind": kind,
-                "name": name,
-                "namespace": namespace,
-            }),
             AppEvent::Error { code, message } => serde_json::json!({
                 "code": code,
                 "message": message,
@@ -536,11 +496,6 @@ mod tests {
             AppEvent::ConnectionStatusChanged {
                 context: "minikube".into(),
                 connected: true,
-            },
-            AppEvent::ResourceCreated {
-                kind: "Pod".into(),
-                name: "p".into(),
-                namespace: "default".into(),
             },
             AppEvent::Error {
                 code: "X".into(),

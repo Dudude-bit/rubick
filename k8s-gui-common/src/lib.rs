@@ -5,13 +5,11 @@
 //!
 //! - **Tracing**: Unified logging and tracing initialization
 //! - **Validation**: Input validation (pagination)
-//! - **Error handling**: Common error trait for consistent error handling
 //! - **DTOs**: Shared data transfer objects for API consistency
 //! - **DateTime**: Date and time formatting utilities
 
 pub mod datetime;
 pub mod dto;
-pub mod error;
 pub mod tracing;
 pub mod validation;
 
@@ -20,9 +18,6 @@ pub use tracing::init_tracing;
 
 // Re-export validation utilities
 pub use validation::{validate_pagination, ValidationResult};
-
-// Re-export error utilities
-pub use error::ErrorExt;
 
 // Re-export DTOs
 pub use dto::MessageResponse;

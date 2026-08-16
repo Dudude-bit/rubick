@@ -77,16 +77,6 @@ impl TerminalSession {
         }
     }
 
-    /// Get current state
-    pub async fn state(&self) -> TerminalState {
-        self.state.read().await.clone()
-    }
-
-    /// Set state
-    pub async fn set_state(&self, new_state: TerminalState) {
-        *self.state.write().await = new_state;
-    }
-
     /// Send data to terminal
     pub async fn send(&self, data: &str) -> Result<()> {
         self.input_tx

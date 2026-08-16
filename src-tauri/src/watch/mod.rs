@@ -58,7 +58,7 @@ impl WatchManager {
         }
     }
 
-    /// Number of active watch sessions. Used by `AppStats`.
+    /// Number of active watch sessions.
     #[must_use]
     pub fn session_count(&self) -> usize {
         self.sessions.len()

@@ -203,33 +203,6 @@ impl AppState {
     pub fn remove_session(&self, context: &str) {
         self.sessions.remove(context);
     }
-
-    /// Cancel all log streams
-    pub fn cancel_all_log_streams(&self) {
-        let keys: Vec<_> = self.log_streams.iter().map(|r| r.key().clone()).collect();
-        for key in keys {
-            if let Some((_, stream)) = self.log_streams.remove(&key) {
-                let _ = stream.cancel_tx.send(());
-            }
-        }
-    }
-
-    /// Get application statistics
-    pub fn stats(&self) -> AppStats {
-        AppStats {
-            active_sessions: self.sessions.len(),
-            active_terminal_sessions: self.terminal_manager.session_count(),
-            active_log_streams: self.log_streams.len(),
-        }
-    }
-}
-
-/// Application statistics
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct AppStats {
-    pub active_sessions: usize,
-    pub active_terminal_sessions: usize,
-    pub active_log_streams: usize,
 }
 
 impl Default for AppState {

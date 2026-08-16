@@ -4,18 +4,6 @@
 
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 
-/// Extension trait for converting Kubernetes Time to RFC3339 string
-pub trait TimeExt {
-    /// Convert to RFC3339 formatted string
-    fn to_rfc3339_string(&self) -> String;
-}
-
-impl TimeExt for Time {
-    fn to_rfc3339_string(&self) -> String {
-        self.0.to_rfc3339()
-    }
-}
-
 /// Extension trait for Option<Time> convenience
 pub trait OptionTimeExt {
     /// Convert Option<Time> to Option<String> in RFC3339 format

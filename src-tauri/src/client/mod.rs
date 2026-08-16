@@ -275,18 +275,6 @@ impl K8sClientManager {
         self.clients.get(context).map(|c| c.clone())
     }
 
-    /// Get configuration for a context
-    pub fn get_config(&self, context: &str) -> Option<Arc<Config>> {
-        self.configs
-            .get(context)
-            .map(|c| Arc::new(c.value().clone()))
-    }
-
-    /// Check if connected to a context
-    pub fn is_connected(&self, context: &str) -> bool {
-        self.clients.contains_key(context)
-    }
-
     /// Get list of connected contexts
     pub fn connected_contexts(&self) -> Vec<String> {
         self.clients.iter().map(|r| r.key().clone()).collect()

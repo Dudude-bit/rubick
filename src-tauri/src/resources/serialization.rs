@@ -50,35 +50,6 @@ pub struct OwnerReference {
     pub block_owner_deletion: Option<bool>,
 }
 
-/// Resource list for paginated responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceList<T> {
-    pub items: Vec<T>,
-    pub total: usize,
-    pub page: usize,
-    pub per_page: usize,
-    pub continue_token: Option<String>,
-}
-
-impl<T> ResourceList<T> {
-    #[must_use]
-    pub fn new(items: Vec<T>, total: usize, page: usize, per_page: usize) -> Self {
-        Self {
-            items,
-            total,
-            page,
-            per_page,
-            continue_token: None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_continue(mut self, token: Option<String>) -> Self {
-        self.continue_token = token;
-        self
-    }
-}
-
 /// Supported resource kinds
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -248,12 +219,5 @@ mod tests {
         assert!(ResourceKind::Pod.is_namespaced());
         assert!(!ResourceKind::Namespace.is_namespaced());
         assert!(!ResourceKind::Node.is_namespaced());
-    }
-
-    #[test]
-    fn test_resource_list() {
-        let list = ResourceList::new(vec!["a", "b", "c"], 10, 1, 3);
-        assert_eq!(list.items.len(), 3);
-        assert_eq!(list.total, 10);
     }
 }

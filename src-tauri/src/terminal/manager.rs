@@ -37,14 +37,6 @@ impl TerminalManager {
         }
     }
 
-    /// Get a session by ID
-    pub fn get_session(
-        &self,
-        id: &str,
-    ) -> Option<dashmap::mapref::one::Ref<'_, String, TerminalSession>> {
-        self.sessions.get(id)
-    }
-
     /// Send input to a session
     pub async fn send_input(&self, id: &str, data: &str) -> Result<()> {
         if let Some(session) = self.sessions.get(id) {

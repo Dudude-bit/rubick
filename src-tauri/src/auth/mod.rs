@@ -19,7 +19,7 @@ mod oidc;
 pub use aws_eks::AwsEksAuth;
 pub use azure_aks::{is_aks_exec_command, parse_aks_exec_args, AksClusterInfo, AzureAksAuth};
 pub use bearer::BearerTokenAuth;
-pub use gcp_gke::{is_gke_exec_command, parse_gke_exec_args, GcpGkeAuth, GkeClusterInfo};
+pub use gcp_gke::{is_gke_exec_command, GcpGkeAuth};
 pub use interactive::prepare_kubeconfig_for_context;
 pub use kubeconfig::KubeconfigAuth;
 pub use oidc::OidcAuth;
@@ -67,16 +67,6 @@ impl AuthResult {
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
             expires_at < chrono::Utc::now()
-        } else {
-            false
-        }
-    }
-
-    /// Check if the token will expire soon (within 5 minutes)
-    #[must_use]
-    pub fn expires_soon(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
-            expires_at < chrono::Utc::now() + chrono::Duration::minutes(5)
         } else {
             false
         }

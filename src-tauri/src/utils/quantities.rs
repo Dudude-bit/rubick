@@ -76,47 +76,6 @@ pub fn parse_memory(mem_str: &str) -> u64 {
     }
 }
 
-/// Parse a generic Kubernetes quantity to f64
-/// Handles both CPU and memory formats
-#[must_use]
-pub fn parse_quantity(value: &str) -> Option<f64> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // Try to extract number and unit
-    let mut num_end = 0;
-    for (i, c) in trimmed.char_indices() {
-        if c.is_numeric() || c == '.' || c == '-' {
-            num_end = i + c.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    let (num_str, unit) = trimmed.split_at(num_end);
-    let amount: f64 = num_str.parse().ok()?;
-
-    let multiplier = match unit {
-        "" => 1.0,
-        "n" => 1e-9,
-        "u" => 1e-6,
-        "m" => 1e-3,
-        "k" | "K" => 1e3,
-        "M" => 1e6,
-        "G" => 1e9,
-        "T" => 1e12,
-        "Ki" => 1024.0,
-        "Mi" => f64::from(1024 * 1024),
-        "Gi" => f64::from(1024 * 1024 * 1024),
-        "Ti" => (1024u64 * 1024 * 1024 * 1024) as f64,
-        _ => return None,
-    };
-
-    Some(amount * multiplier)
-}
-
 /// Format millicores to string representation
 /// Returns "500m" for < 1000 millicores, or "2" for >= 1000 millicores
 #[must_use]

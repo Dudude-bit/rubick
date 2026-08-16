@@ -3,19 +3,7 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
 use crate::state::AppState;
-use serde::{Deserialize, Serialize};
 use tauri::State;
-
-/// Terminal session info
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalSessionInfo {
-    pub id: String,
-    pub pod: String,
-    pub container: String,
-    pub namespace: String,
-    pub created_at: String,
-}
 
 /// Send input to terminal session
 #[tauri::command]
