@@ -5,7 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.1.0] - 2026-08-16
+
+Two lines of work. One stops the app stating absences it never checked —
+on a managed cluster it was calling every HTTPS site plaintext. The other
+is a whole-project cleanup that removed about 5,000 lines the app never
+ran.
+
+### Fixed — every HTTPS site on a managed cluster read as "no TLS"
+
+None of the three clouds keeps the certificate where the app looked.
+AWS's Load Balancer Controller does not read `spec.tls` at all, Azure's
+keeps it on the Application Gateway, and GKE's uses a
+`ManagedCertificate`. Everything that answered "is this served over TLS"
+read `spec.tls` and nothing else: the Ingress list column, the Ingress
+page, the peek, the `http://` link offered to open a site with, and —
+deepest — the traffic chain of every workload behind a cloud load
+balancer.
+
+Traefik and ingress-nginx made it worse by drawing the conclusion out
+loud. The ordinary managed shape is a load balancer holding the
+certificate and forwarding plaintext to `web:80`; read from `spec.tls`
+that becomes a warning about encryption which is wrong on every host at
+once, which is how a warning stops being read.
+
+A wildcard was not recognised either. `*.example.com` alongside
+`example.com` on one Secret is how people set this up once and forget
+it; compared literally, every subdomain behind it came back bare.
+
+Two new capabilities carry the answer instead: `ingress.tls` (does this
+vendor terminate TLS for this host) and `service.routes` (which
+hostnames reach this Service). `ingress.tls` takes a list and answers
+positionally, because the Ingress list is a table and a per-row
+capability could not have been used there — which is exactly where the
+wrong answer cost the most. Where the vendor cannot know, it says so
+rather than guessing: a `ManagedCertificate` that is not yet `Active`, a
+pre-shared certificate, an ALB with no ARN written down all return no
+opinion, and `spec.tls` keeps the last word.
+
+### Added — four screens for the question a connection test cannot answer
+
+GKE Ingress (host → what terminates it → what answers), the AWS Load
+Balancer Controller (**one row per ALB, not per Ingress** — `group.name`
+merges Ingresses across namespaces onto one listener, and no Ingress
+page can show its neighbour), AKS add-ons, and Prometheus/Loki. The last
+one answers _is this the right one_: the nodes it scrapes against the
+nodes this cluster has.
+
+Argo CD now names the objects it owns rather than counting them, and
+cert-manager can say which address goes dark when a certificate expires
+— the reference runs the other way round, so a row could report "Ready,
+30 days left" and not what it served.
+
+### Added — connecting an in-cluster Prometheus or Loki without a terminal
+
+The connect dialog can find the Service and forward a local port to it.
+Pinning the pod was rejected: `port_forward_pod` targets a pod by name
+and reconnects to _that_ pod, so one rollout would leave a `localhost`
+address that looks fine and answers nothing. The Service is what gets
+stored, the pod is resolved again every time.
 
 ### Added — Diagnostics
 
@@ -38,6 +96,25 @@ Anything that is not a kubectl subcommand passes straight through:
 refusing a whole binary because its name looked like a plugin would
 break the commands that work today.
 
+### Fixed — lists
+
+- **Row action buttons did nothing.** One click was swallowed, several
+  navigated instead. `flexRender` treats a cell renderer as a React
+  element _type_, the renderer was rebuilt on every render, and the list
+  re-reads itself every two seconds — so the button under the pointer
+  was a different DOM node between `mousedown` and `mouseup`, and no
+  click was ever raised.
+- **A list of 105 pods drew a 600px table** and left the rest of the
+  window blank, from a constant that never looked at the viewport. The
+  pane is a ceiling now, not a target: a twelve-row list still ends
+  where its rows end.
+- **A failed read looked like an empty cluster.** Pages that fetch their
+  own rows had no way to hand an error to `ResourceList`, so a 403 and
+  an empty namespace arrived identical and the table said "no pods in
+  the current scope" for both. A 403 was also retried three times, about
+  seven seconds of skeleton per failing list per poll.
+- The peek panel opens every object, custom resources included.
+
 ### Removed — a whole-project cleanup
 
 Roughly 5,000 lines of source, none of which the app ran. The largest
@@ -46,9 +123,9 @@ pieces:
 - **The plugin subsystem.** Its registry was empty — nothing implemented
   any of its three traits and `register_builtin_plugins` was a no-op —
   and what remained live merely forwarded to `cli::PluginDiscovery`.
-- **Seventeen Tauri commands with no caller**, and the four typed
-  `*_yaml` wrappers among them, superseded by the generic `get_manifest`
-  the frontend actually calls.
+- **Seventeen Tauri commands with no caller**, the four typed `*_yaml`
+  wrappers among them, superseded by the generic `get_manifest` the
+  frontend actually calls.
 - **Three native auth providers** (`AwsEksAuth`, `BearerTokenAuth`,
   `KubeconfigAuth`) that only their own tests ever constructed. EKS is
   unaffected: it authenticates through the kubeconfig `exec` block, the
@@ -67,11 +144,13 @@ its sole supplier was `@radix-ui/react-accordion`, which looks unused.
 
 ### Changed — the gates now cover the tree they claim to
 
-`cargo fmt` and `cargo test` were scoped to `src-tauri`, so
-`k8s-gui-common` was never format-checked and its tests ran nowhere.
+`cargo fmt`, `cargo test` and `cargo clippy` were scoped to `src-tauri`,
+so `k8s-gui-common` was never format-checked and its tests ran nowhere.
 `.rustfmt.toml` carried seven nightly-only options that stable rustfmt
 discards on every run. The frontend lint step is required again — the
-warning backlog it was waived for is empty.
+warning backlog it was waived for is empty. Nothing runs on push any
+more: the pre-push hook bought a slower push and no coverage, since CI
+runs a strict superset of it.
 
 ## [4.0.1] - 2026-08-15
 

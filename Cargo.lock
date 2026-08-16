@@ -2706,7 +2706,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "async-trait",
  "azure_core",
@@ -2756,7 +2756,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui-common"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "chrono",
  "serde",
