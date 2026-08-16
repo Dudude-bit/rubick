@@ -5,6 +5,93 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Three lines of work. The cluster's edge became a thing the app can see —
+a `defaultBackend` Ingress used to read as touching nothing, and every
+surface downstream of that mistake said "served in the clear" about an
+edge that terminates TLS at Google. The peek learned to walk the traffic
+path instead of dead-ending. And a day was spent on waits: fewer of them,
+started earlier, and drawn honestly while they last.
+
+### Added — the edge the cluster actually runs
+
+An Ingress with no `rules` and only `spec.defaultBackend` is the
+ordinary way a cloud load balancer fronts an in-cluster proxy — and the
+app read it as an Ingress touching nothing: an empty connections graph,
+an empty GKE page, and a "served in the clear" verdict about every host
+behind it. The default backend is now an edge like any rule, on every
+surface that reads one: the connections graph, the Ingress list, page
+and peek, and the traffic chains.
+
+Around it, the routing surfaces grew up: a routing map for every proxy
+(hover highlights the path, the namespace filter narrows it), vendor
+kinds open in the peek with the vendor's own reading of them, a
+certificate's issuer is named the way a person would recognise it, and
+the sidebar splits the cluster's own rows from the integrations'.
+
+### Added — the peek walks the traffic path
+
+A peeked Service, Endpoints, Pod or workload now draws its place in the
+request path on the same dot-and-rail the detail pages use: the ways in
+above it, the object itself haloed and tinted mid-chain, what answers
+below. One dot per level — two routes to one Service are two doors on
+one level, not a sequence — with the arrowheads running between levels,
+red into a stop. Every name on the rail is a reference: glyph, hue, a
+peek of its own, including the vendor's route objects, so the tangle
+unwinds hop by hop without leaving the panel. A Pod's ways in reach past
+its Service to the IngressRoute above it.
+
+References themselves learned to carry their namespace inside the pill —
+dim, truncating and highlighting with the name — instead of as a loose
+prefix printed beside it.
+
+### Fixed — "Sign in again" now works the first time
+
+The credentials-expired screen's one button did its job — the reconnect
+landed — and the banner stayed, because the refusal flag only cleared on
+a context _change_ and the button reconnects to the same context. A
+reconnect that lands now lifts it.
+
+The same class of bug sat behind three more faces, all fixed: every
+landing flushes the query cache, so answers collected while disconnected
+("no cluster connected" probes, "client not found" lists) do not survive
+onto a healthy session; a configured vendor's probe is never asked of a
+disconnected app; and the integrations rail forgets the old cluster's
+vendors the moment there is no cluster, instead of drawing them under
+"no cluster" — the detection scan is now cached per cluster, as its
+comment always claimed.
+
+### Fixed — quantities a person can read
+
+`268435456 → unlimited` in a pod's requests-and-limits is now
+`256Mi → unlimited`. Whatever unit the author wrote, the peek says it
+the way it is read.
+
+### Changed — loading looks like what loads
+
+The table skeleton borrows the real columns' declared widths, the
+table's own density, and — where the list groups its rows — the group
+captions' rhythm, so arriving data replaces the shape instead of
+repainting the screen. The peek's skeleton took the same lesson:
+grouped key/value runs under heading bars, uneven the way real values
+are.
+
+### Performance
+
+- The Kubernetes client asks for gzip; a 104-pod list dropped from ~5s
+  to ~1.2s, which is parity with `kubectl` on the same link.
+- A connection landing warms what every session opens — pods,
+  deployments, services, and now the overview, the most expensive query
+  in the app and the landing page's own.
+- The Helm list fetched every revision of every release whole, each one
+  carrying the release's full gzipped chart, then threw all but the
+  newest away. It now picks winners from metadata labels and fetches
+  only those; the reported cluster's page halved, histories ten deep
+  drop ninety percent of the transfer.
+- Every command slower than 500ms names itself in the log, which is how
+  the Helm one was caught and the next one will be.
+
 ## [4.1.0] - 2026-08-16
 
 Two lines of work. One stops the app stating absences it never checked —
