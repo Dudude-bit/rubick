@@ -28,13 +28,14 @@ pre-commit:
   commands:
     rust-fmt:
       glob: "*.rs"
-      run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      # --all, not just src-tauri: CI checks the whole workspace, so a
+      # narrower hook lets a commit pass here and fail there.
+      run: cargo fmt --all --check
     eslint:
       glob: "*.{ts,tsx}"
-      # Lint reports many warnings post-react-hooks@7 upgrade — allow them
-      # for now, fail only on errors. Tighten by removing this once the
-      # warnings backlog is triaged.
-      run: bunx eslint {staged_files}
+      # --max-warnings 0 matches `bun run lint`, which CI requires. The
+      # react-hooks@7 backlog this used to be waived for is empty.
+      run: bunx eslint --max-warnings 0 {staged_files}
     prettier:
       glob: "*.{ts,tsx,css,json,md}"
       run: bunx prettier --check {staged_files}
