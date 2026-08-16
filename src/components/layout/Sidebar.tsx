@@ -123,11 +123,14 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
 ];
 
 /**
- * After the Integrations category, which sits between the fixed nav and this
- * — everything above is what every cluster has, and Settings is the last row
- * on every screen the app has ever drawn.
+ * The app's own rows, pinned under the scroll rather than at the end of it.
+ *
+ * Everything above this line is about the connected cluster — its
+ * workloads, its network, what it has installed. These are about the app
+ * itself, and the split is drawn where it is felt: a fixed strip at the
+ * rail's foot, reachable without scrolling past eighty pods to find it.
  */
-const TAIL: NavItem[] = [
+const APP_ROWS: NavItem[] = [
   {
     label: "Settings",
     path: "/settings",
@@ -161,12 +164,15 @@ export function Sidebar() {
           </div>
         ))}
         <IntegrationsGroup />
-        <div>
-          {TAIL.map((item) => (
-            <NavRow key={item.path} item={item} overview={overview} />
-          ))}
-        </div>
       </nav>
+      {/* The app's own strip, outside the scroll: the rows above are the
+          cluster's and travel with it; these stay put on every screen. */}
+      <div className="border-t border-hair px-1.5 pb-2.5">
+        <GroupCaption>App</GroupCaption>
+        {APP_ROWS.map((item) => (
+          <NavRow key={item.path} item={item} overview={overview} />
+        ))}
+      </div>
     </aside>
   );
 }
