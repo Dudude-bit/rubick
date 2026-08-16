@@ -190,26 +190,31 @@ describe("the Integrations category", () => {
   });
 
   /**
-   * Would break if a detected vendor with no page of its own were dropped
-   * again. The category used to list only vendors declaring a page, so a
-   * cluster running one of these was told it had no integrations at all —
-   * the row goes to that vendor's Settings row, which is where what it gives
-   * and what it is doing are already written.
+   * Would break if a detected vendor were dropped from the rail again. The
+   * category used to list only vendors declaring a page, so a cluster running
+   * one that did not was told it had no integrations at all.
+   *
+   * It is asserted through a vendor that *has* a page because there is no
+   * longer a detected one without: every tier-2 record now owns a screen. The
+   * Settings fallback stays live for a *configured* vendor — Prometheus and
+   * Loki reach the rail by answering a probe rather than by a CRD scan, and
+   * neither declares a page — and that path is not reachable from here,
+   * because this file mocks the CRD scan and not the probe.
    */
-  it("names a detected vendor that owns no page, and sends it to Settings", async () => {
+  it("lists a detected vendor whether or not it is the one being looked for", async () => {
     detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
       { id: "aws-load-balancer-controller", installed: true, version: null },
     ]);
 
     wrap(<Sidebar />);
 
-    const link = await screen.findByRole("link", {
-      name: /AWS Load Balancer Controller/i,
-    });
-    expect(link).toHaveAttribute(
-      "href",
-      "/settings/integrations?vendor=aws-load-balancer-controller"
-    );
+    expect(
+      await screen.findByRole("link", { name: /cert-manager/i })
+    ).toHaveAttribute("href", "/integrations/cert-manager");
+    expect(
+      screen.getByRole("link", { name: /AWS Load Balancer Controller/i })
+    ).toHaveAttribute("href", "/integrations/aws-load-balancer-controller");
   });
 
   /**

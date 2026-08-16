@@ -20,8 +20,11 @@ import { DetailAction } from "./detail-blocks";
 import { JobRows } from "./child-rows";
 import { PodListCard } from "./PodListCard";
 import type { PeekTabId } from "./peek-tabs";
+import { RelatedPanel } from "./RelatedPanel";
+import { useRelatedObjects } from "@/hooks/useRelatedObjects";
 import type {
   ConfigMapInfo,
+  CustomResourceDetailInfo,
   DaemonSetDetailInfo,
   JobInfo,
   PodInfo,
@@ -80,6 +83,13 @@ export function PeekTabBody({
         <PeekJobsTab target={target} />
       ) : (
         <PeekPodsTab target={target} detail={detail} />
+      );
+    case "connections":
+      return (
+        <PeekRelatedTab
+          target={target}
+          detail={detail as CustomResourceDetailInfo | undefined}
+        />
       );
     case "yaml":
       return <PeekYamlTab target={target} />;
@@ -490,6 +500,40 @@ function ChildrenSection({
   );
 }
 
+/* ---------- Connections ---------- */
+
+/**
+ * Only ever reached for a custom resource — see `peekTabsFor`. The subject's
+ * group comes off the CRD name it was addressed by rather than off the
+ * object's `apiVersion`, so the tab can ask before the object has landed.
+ */
+function PeekRelatedTab({
+  target,
+  detail,
+}: {
+  target: PeekTarget;
+  detail: CustomResourceDetailInfo | undefined;
+}) {
+  const related = useRelatedObjects(
+    target.crd
+      ? {
+          // `<plural>.<group>` — everything after the first dot.
+          group: target.crd.slice(target.crd.indexOf(".") + 1),
+          kind: target.kind,
+          namespace: target.namespace ?? null,
+          name: target.name,
+        }
+      : null,
+    detail
+  );
+
+  return (
+    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+      <RelatedPanel query={related} kind={target.kind} />
+    </div>
+  );
+}
+
 /* ---------- YAML ---------- */
 
 function PeekYamlTab({ target }: { target: PeekTarget }) {
@@ -497,8 +541,20 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   const namespace = target.namespace ?? null;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
-    queryKey: ["peek-yaml", target.kind, namespace, target.name],
-    queryFn: () => fetchResourceYaml(target.kind, target.name, namespace),
+    queryKey: [
+      "peek-yaml",
+      target.crd ?? null,
+      target.kind,
+      namespace,
+      target.name,
+    ],
+    queryFn: () =>
+      // `fetchResourceYaml` resolves the apiVersion from the registry, which
+      // has never heard of this kind and answers `v1` — so a custom resource
+      // goes through the CRD instead, exactly as its detail page does.
+      target.crd
+        ? commands.getCustomResourceYaml(target.crd, target.name, namespace)
+        : fetchResourceYaml(target.kind, target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
     // Slower than the summary above it: a manifest is read to compare against
     // something, and a column that reflows under the reader is unusable.

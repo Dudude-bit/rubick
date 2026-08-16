@@ -1,6 +1,7 @@
 import { ScrollText } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { explain, unreachable } from "../reachability";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   defineVendor,
@@ -46,7 +47,29 @@ export default defineVendor({
     icon: ScrollText,
   },
   connect: {
-    urlPlaceholder: "http://loki.monitoring:3100",
+    // See the Prometheus record: the old `http://loki.monitoring:3100` is a
+    // cluster-internal name and this request is made from your machine.
+    urlPlaceholder: "https://loki.example.com",
+    // A Loki chart puts up five or six Services and only some of them can
+    // answer a query. The gateway is the front door in the distributed
+    // chart, the read path is the next best, and a single-binary install has
+    // just `loki`. The write path, the ingester and the compactor all answer
+    // HTTP and would give a connection that establishes and returns nothing.
+    inCluster: {
+      names: ["loki"],
+      ports: [3100, 80],
+      prefer: ["gateway", "query-frontend", "read"],
+      avoid: [
+        "write",
+        "ingester",
+        "distributor",
+        "compactor",
+        "index-gateway",
+        "ruler",
+        "memberlist",
+        "canary",
+      ],
+    },
     read: () => commands.getLokiConnection().then(asSaved),
     save: (draft: ConnectionDraft) =>
       commands.saveLokiConnection(
@@ -65,10 +88,15 @@ export default defineVendor({
           draft?.insecureTls ?? null
         );
         if (!answer.ok) {
+          const said = answer.reason ?? "it did not say why";
+          // The transport's own words stay — somebody searching for
+          // "Name or service not known" has to find it — and the shape of
+          // the address adds the half it cannot know. See `../reachability`.
+          const shape = unreachable(draft?.url ?? "", said);
           return {
             ok: false,
             at: answer.at,
-            reason: answer.reason ?? "it did not say why",
+            reason: shape ? `${said} — ${explain(shape)}` : said,
           };
         }
         return {
@@ -110,6 +138,13 @@ export default defineVendor({
         { text: `up to ${PAGE_LINES.toLocaleString()} lines a page` },
       ];
     },
+  },
+  // A page for the question a probe cannot answer: an address that speaks
+  // LogQL says nothing about *whose* logs are behind it, and a Loki holding
+  // another cluster's namespaces answers the history offer with an empty
+  // page — which reads as "the lines are gone".
+  page: {
+    load: () => import("./page"),
   },
   provides: {
     "logs.history": logHistory,

@@ -92,6 +92,56 @@ describe("ResourceRef", () => {
       expect(screen.getByText(/traefik/)).toBeInTheDocument();
     });
 
+    /**
+     * The same kind, told which CRD defines it. That one fact is the whole
+     * difference between an object nobody can open and one with a page and a
+     * peek — and every vendor page holds it already.
+     */
+    it("links a custom resource once it is told its CRD", () => {
+      wrap(
+        <ResourceRef
+          kind="HelmRelease"
+          name="traefik"
+          namespace="kube-system"
+          crd="helmreleases.helm.toolkit.fluxcd.io"
+        />
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/customresourcedefinitions/helmreleases.helm.toolkit.fluxcd.io/instances/kube-system/traefik"
+      );
+    });
+
+    it("opens a custom resource in the peek, not on its own page", async () => {
+      wrap(
+        <ResourceRef
+          kind="HelmRelease"
+          name="traefik"
+          namespace="kube-system"
+          crd="helmreleases.helm.toolkit.fluxcd.io"
+        />
+      );
+      await userEvent.click(screen.getByRole("link"));
+      expect(location()).toBe(
+        "/events?peek=helmreleases.helm.toolkit.fluxcd.io%2FHelmRelease%2Fkube-system%2Ftraefik"
+      );
+    });
+
+    /** A cluster-scoped custom resource has no namespace to leave out. */
+    it("links a cluster-scoped custom resource", () => {
+      wrap(
+        <ResourceRef
+          kind="ClusterIssuer"
+          name="letsencrypt"
+          crd="clusterissuers.cert-manager.io"
+        />
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/customresourcedefinitions/clusterissuers.cert-manager.io/instances/letsencrypt"
+      );
+    });
+
     it("renders text for a namespaced kind handed no namespace", () => {
       wrap(<ResourceRef kind="Pod" name="orphan" />);
       expect(screen.queryByRole("link")).toBeNull();

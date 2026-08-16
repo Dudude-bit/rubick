@@ -54,7 +54,9 @@
  * leads to a connection error is worse than no button.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useServiceRoutes } from "@/hooks/useServiceRoutes";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
@@ -94,10 +96,12 @@ import {
   type ControllerInfo,
 } from "./data";
 import {
+  frontingIngresses,
   allRoutes,
   backingOf,
   boundEntryPoints,
   hostGroups,
+  terminatedUpstream,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -144,13 +148,76 @@ export default function TraefikPage() {
   );
   const certificates = useRouteCertificates(routes);
 
+  // What is in front of the proxy. On a managed cluster the certificate is
+  // usually held by a cloud load balancer and named in an annotation, so no
+  // amount of reading `spec.tls` finds it — and every host then read as
+  // served in the clear. The proxy's own Service is the thing to ask about;
+  // asking about the first is enough, because a chart that installs two is
+  // installing one proxy behind both.
+  const proxy = useMemo(() => {
+    const services = backing.data?.services ?? [];
+    const found = services.find(
+      (service) => service.selector["app.kubernetes.io/name"] === "traefik"
+    );
+    return found ? { namespace: found.namespace, name: found.name } : null;
+  }, [backing.data]);
+  // Every Ingress whose backend is the proxy's own Service, which is what a
+  // cloud load balancer's Ingress looks like from in here.
+  const frontAsked = useMemo(
+    () =>
+      frontingIngresses({
+        ingresses: routeSources.data?.ingresses ?? [],
+        services: backing.data?.services ?? [],
+      } as never).map(
+        (ingress: {
+          namespace: string;
+          name: string;
+          rules: Array<{ host: string }>;
+        }) => ({
+          namespace: ingress.namespace,
+          name: ingress.name,
+          hosts: ingress.rules.flatMap((rule: { host: string }) =>
+            rule.host ? [rule.host] : []
+          ),
+        })
+      ),
+    [routeSources.data, backing.data]
+  );
+
+  const fronting = useServiceRoutes(proxy);
+  // The certificate may be an ACM ARN or one installed on an Application
+  // Gateway, neither of which is a route and neither of which `spec.tls`
+  // knows about — so the Ingresses standing in front of the proxy are asked
+  // directly. Without this the fix above worked on GKE and nowhere else.
+  const front = useIngressTls(frontAsked);
+  const frontTls = useCallback(
+    (host: string | null) =>
+      host !== null &&
+      frontAsked.some(
+        (ingress) => front.of(ingress, host)?.terminated === true
+      ),
+    [front, frontAsked]
+  );
+  const upstreamTls = useCallback(
+    (host: string | null) =>
+      frontTls(host) ||
+      (host !== null &&
+        fronting.routes.some(
+          (route) => route.tls === true && route.host === host
+        )),
+    [fronting.routes, frontTls]
+  );
+
   const sources: TraefikSources | null = routeSources.data
-    ? sourcesFrom(
-        routeSources.data,
-        backing.data,
-        controller.data,
-        certificates
-      )
+    ? {
+        ...sourcesFrom(
+          routeSources.data,
+          backing.data,
+          controller.data,
+          certificates
+        ),
+        upstreamTls,
+      }
     : null;
 
   const groups = useMemo(
@@ -158,7 +225,13 @@ export default function TraefikPage() {
     // `sources` is rebuilt every render; the inputs it is built from are what
     // actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [routeSources.data, backing.data, controller.data, certificates.size]
+    [
+      routeSources.data,
+      backing.data,
+      controller.data,
+      certificates.size,
+      upstreamTls,
+    ]
   );
 
   if (routeSources.error) {
@@ -488,6 +561,14 @@ function HostRow({
 }) {
   const state = hostState(group);
   const tls = group.tlsSecrets[0];
+  // Where the certificate is, when it is not here. Stated rather than merely
+  // not warned about: a reader who knows TLS ends at the load balancer learns
+  // nothing from silence, and a reader who does not is the one this line is
+  // for. `null` on every ordinary cluster, where the proxy holds its own.
+  const upstream =
+    sources && !tls ? terminatedUpstream(group.host, sources) : null;
+  const upstreamNamed =
+    upstream ?? (sources?.upstreamTls?.(group.host) ? "the edge" : null);
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -506,12 +587,17 @@ function HostRow({
   return (
     <TroubleRow
       title={group.host ?? "any host"}
+      copy={group.host ?? undefined}
       meta={
         <>
           {plural(group.routes.length, "path")}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? "every entry point" : summarise(entryPoints)}`}
-          {tls ? ` · TLS from ${tls.secretName}` : " · no TLS"}
+          {tls
+            ? ` · TLS from ${tls.secretName}`
+            : upstreamNamed
+              ? ` · TLS ends at ${typeof upstreamNamed === "string" ? upstreamNamed : upstreamNamed.name}`
+              : " · no TLS"}
         </>
       }
       state={state}
@@ -640,16 +726,13 @@ function SourceRef({ route }: { route: TraefikRoute }) {
   return (
     <span className="text-fg-fnt">
       ·{" "}
-      <Link
-        to={crdObjectPath(
-          `ingressroutes.${servedGroupName()}`,
-          route.source.namespace,
-          route.source.name
-        )}
-        className="font-mono text-info hover:underline"
-      >
-        {route.source.name}
-      </Link>
+      <ResourceRef
+        kind="IngressRoute"
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={`ingressroutes.${servedGroupName()}`}
+        showKind={false}
+      />
     </span>
   );
 }

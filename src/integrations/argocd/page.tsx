@@ -14,8 +14,11 @@
  * remote mechanically; `gitRepoLink` owns that judgement and an `ssh://`
  * remote simply gets no link. "Open in Argo CD" goes out to Argo, because the
  * line-by-line diff is the one thing Argo does better than this app could
- * without a credential — and it only appears when an Ingress in the cluster
- * says where Argo's UI actually answers.
+ * without a credential — and it only appears where the cluster says, in an
+ * object, how Argo's UI is actually reached. An `Ingress` is read directly;
+ * anything else routing `argocd-server` — a Traefik `IngressRoute`, and every
+ * cluster whose edge is entirely CRDs — answers through the `service.routes`
+ * capability rather than being invisible, which is what it used to be.
  */
 
 import { useMemo, useState } from "react";
@@ -24,6 +27,7 @@ import { Box, GitBranch, Layers, Shield } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
 import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
@@ -35,13 +39,7 @@ import {
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { formatAge } from "@/lib/utils";
-import {
-  conditionsOf,
-  crdObjectPath,
-  crdObjectsPath,
-  getValueByPath,
-  plural,
-} from "../kit";
+import { conditionsOf, crdObjectsPath, getValueByPath, plural } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -52,22 +50,28 @@ import {
   OutLink,
   TroubleRow,
 } from "../page-kit";
+import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
 import {
   APPLICATIONS_CRD,
   APPLICATIONSETS_CRD,
   PROJECTS_CRD,
+  SERVER_SERVICE,
   applicationUrl,
+  uiFromRoutes,
   useApplicationSets,
   useApplications,
   useController,
   useProjects,
   type ControllerInfo,
+  type RoutedUi,
 } from "./data";
 import {
   appState,
+  byKind,
   byTrouble,
   destinationOf,
   differing,
+  resourceTone,
   type ArgoApp,
   type ArgoFinding,
   type ArgoResource,
@@ -90,6 +94,18 @@ export default function ArgoCdPage() {
     () => byTrouble(applications.data ?? []),
     [applications.data]
   );
+
+  // An Ingress is not the only thing that can put Argo's UI on a hostname,
+  // and reading only Ingresses is what had this page telling readers of a
+  // Traefik cluster that nothing served `argocd-server`. The core reading
+  // stays first and unchanged; this is asked when it found nothing.
+  const routed = useServiceRoutes(
+    controller.data
+      ? { namespace: controller.data.namespace, name: SERVER_SERVICE }
+      : null
+  );
+  const viaRoutes = useMemo(() => uiFromRoutes(routed.routes), [routed.routes]);
+  const ui = controller.data?.ui ?? viaRoutes.url;
 
   if (applications.error) {
     return (
@@ -116,11 +132,7 @@ export default function ArgoCdPage() {
       glyph: viewGlyph(GitBranch),
       mark: applicationsMark(apps, troubled.length),
       content: (
-        <ApplicationsTab
-          apps={apps}
-          loading={applications.isPending}
-          ui={controller.data?.ui ?? null}
-        />
+        <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
       ),
     },
     {
@@ -147,7 +159,14 @@ export default function ArgoCdPage() {
       id: "controller",
       label: "Controller",
       glyph: viewGlyph(Box),
-      content: <ControllerTab controller={controller.data} />,
+      content: (
+        <ControllerTab
+          controller={controller.data}
+          ui={ui}
+          routed={viaRoutes}
+          routes={routed}
+        />
+      ),
     },
   ];
 
@@ -296,6 +315,12 @@ function AppRow({
   return (
     <TroubleRow
       title={app.name}
+      reference={{
+        kind: "Application",
+        name: app.name,
+        namespace: app.namespace,
+        crd: APPLICATIONS_CRD,
+      }}
       meta={
         <>
           project {app.project} → {destinationOf(app)}
@@ -366,7 +391,7 @@ function AppRow({
           </Cell>
         </Column>
       </Chain>
-      {changed.length > 0 && <Differing app={app} resources={changed} />}
+      <Manages app={app} />
       {app.generatedBy && <GeneratedNote app={app} />}
       <Findings app={app} url={url} />
     </TroubleRow>
@@ -443,66 +468,135 @@ function RevisionRef({ app, source }: { app: ArgoApp; source: ArgoSource }) {
 }
 
 /**
- * Which objects differ, and why in Argo's own words.
+ * Everything the Application manages, grouped by kind.
  *
- * The *why* is `syncResult`'s message where the last sync could not apply the
- * object — usually the API server's own refusal, quoted exactly. Where Argo
- * only says `OutOfSync`, this says only that, and points at the diff: which
- * fields differ is in Argo's API behind a token, and inventing a sentence
- * about it would be this page guessing.
+ * The row used to say "17 objects" and then list only the ones that differed,
+ * so a healthy Application told the reader how many things it owned and never
+ * which. That is the wrong half of the answer: *what is in this Application*
+ * is the question somebody opens it with, the objects are already in
+ * `status.resources`, and every one of them is a link into its own page in
+ * this app — which is the whole reason to read Argo here rather than in Argo.
+ *
+ * Ordered by trouble inside each kind and across them, because a Helm release
+ * of a hundred objects is the ordinary case and the two that are failing must
+ * not be somewhere in the middle of it.
+ *
+ * The *why* is Argo's own sentence where it has one — `syncResult`'s message
+ * is usually the API server's own refusal, quoted exactly. Which *fields*
+ * differ is in Argo's API behind a token, and inventing a sentence about it
+ * would be this page guessing.
  */
-function Differing({
-  app,
-  resources,
-}: {
-  app: ArgoApp;
-  resources: ArgoResource[];
-}) {
+const SHOWN_PER_KIND = 12;
+
+function Manages({ app }: { app: ArgoApp }) {
+  const groups = byKind(app.resources);
+  const { crdFor } = useCrdIndex();
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-[11px] text-fg-fnt">
+        Argo has not compared this Application yet, so it lists no objects.
+      </p>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
-        {resources.length === app.resources.length
-          ? `all ${resources.length} differ`
-          : `the ${resources.length} that ${resources.length === 1 ? "differs" : "differ"}`}
-      </span>
-      {resources.map((resource) => (
-        <div
-          key={`${resource.kind}/${resource.namespace}/${resource.name}`}
-          className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut"
-        >
-          <span className="truncate">
-            <ResourceRef
-              kind={resource.kind}
-              name={resource.name}
-              namespace={resource.namespace}
-              showKind={false}
-            />
-          </span>
-          <span className="min-w-0 truncate">
-            <span
-              className={
-                resource.sync === "Missing" || resource.outcome === "SyncFailed"
-                  ? "text-err"
-                  : "text-warn"
-              }
-            >
-              {resource.sync === "Missing"
-                ? "missing"
-                : resource.outcome === "SyncFailed"
-                  ? "failed to apply"
-                  : "out of sync"}
-            </span>{" "}
-            <span className="text-fg-fnt">
-              {resource.message
-                ? `— ${resource.message}`
-                : resource.sync === "Missing"
-                  ? "— in git, not in the cluster"
-                  : "— the fields that differ are in Argo's diff"}
+    <div className="flex flex-col gap-2">
+      {groups.map((group) => {
+        // Trouble is never hidden: the cap is measured past the ones worth
+        // looking at, and whatever it dropped is said out loud.
+        const shown = group.resources.slice(
+          0,
+          Math.max(SHOWN_PER_KIND, group.troubled)
+        );
+        const hidden = group.resources.length - shown.length;
+        return (
+          <div key={group.kind} className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
+              {group.kind}
+              <span className="ml-1.5 normal-case tracking-normal">
+                {group.resources.length}
+                {group.troubled > 0 && (
+                  <span className="text-warn">
+                    {" "}
+                    · {group.troubled} to look at
+                  </span>
+                )}
+              </span>
             </span>
+            {shown.map((resource) => (
+              <ResourceLine
+                key={`${resource.kind}/${resource.namespace}/${resource.name}`}
+                resource={resource}
+                crdFor={crdFor}
+              />
+            ))}
+            {hidden > 0 && (
+              <span className="text-[11px] text-fg-fnt">
+                and {hidden} more Argo reports as synced
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * One managed object: where it is in this app, and what Argo says about it.
+ *
+ * Half of a real Application's inventory is other operators' objects — a
+ * `Certificate`, an `IngressRoute`, a `ServiceMonitor` — and those were drawn
+ * as plain text, because a reference can only be made from a CRD's name and
+ * Argo reports a group and a kind. The cluster is asked which CRD that pair
+ * belongs to; a kind it has no CRD for is a core kind and needs none.
+ */
+function ResourceLine({
+  resource,
+  crdFor,
+}: {
+  resource: ArgoResource;
+  crdFor: CrdLookup;
+}) {
+  const tone = resourceTone(resource);
+  const said =
+    resource.sync === "Missing"
+      ? "missing"
+      : resource.outcome === "SyncFailed"
+        ? "failed to apply"
+        : resource.sync !== null && resource.sync !== "Synced"
+          ? "out of sync"
+          : resource.health === "Degraded"
+            ? "degraded"
+            : resource.health === "Progressing"
+              ? "progressing"
+              : null;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+      <span className="truncate">
+        <ResourceRef
+          kind={resource.kind}
+          name={resource.name}
+          namespace={resource.namespace}
+          crd={crdFor(resource.group, resource.kind) ?? undefined}
+          showKind={false}
+        />
+      </span>
+      <span className="min-w-0 truncate">
+        {said && (
+          <span className={tone === "err" ? "text-err" : "text-warn"}>
+            {said}
           </span>
-          <span className="text-[11px] text-fg-fnt">{resource.kind}</span>
-        </div>
-      ))}
+        )}
+        {resource.message && (
+          <span className="text-fg-fnt">
+            {said ? " — " : ""}
+            {resource.message}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
@@ -519,16 +613,13 @@ function GeneratedNote({ app }: { app: ArgoApp }) {
   return (
     <p className="text-[11px] text-fg-fnt">
       Generated by ApplicationSet{" "}
-      <Link
-        to={crdObjectPath(
-          APPLICATIONSETS_CRD,
-          app.namespace,
-          app.generatedBy.name
-        )}
-        className="font-mono text-info hover:underline"
-      >
-        {app.generatedBy.name}
-      </Link>
+      <ResourceRef
+        kind="ApplicationSet"
+        name={app.generatedBy.name}
+        namespace={app.namespace}
+        crd={APPLICATIONSETS_CRD}
+        showKind={false}
+      />
       . Editing this Application is undone the next time the generator runs —
       the file to change is the ApplicationSet.
     </p>
@@ -721,16 +812,15 @@ function AppSetsTab({
               className="border-b border-hair py-1.5"
             >
               <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px]">
-                <Link
-                  to={crdObjectPath(
-                    APPLICATIONSETS_CRD,
-                    set.namespace,
-                    set.name
-                  )}
-                  className="truncate font-mono text-info hover:underline"
-                >
-                  {set.name}
-                </Link>
+                <span className="min-w-0 truncate">
+                  <ResourceRef
+                    kind="ApplicationSet"
+                    name={set.name}
+                    namespace={set.namespace}
+                    crd={APPLICATIONSETS_CRD}
+                    showKind={false}
+                  />
+                </span>
                 <span className="truncate text-fg-mut">
                   {generated.length === 0
                     ? "generated nothing in this cluster"
@@ -792,16 +882,15 @@ function ProjectsTab({
               key={`${project.namespace}/${project.name}`}
               className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
             >
-              <Link
-                to={crdObjectPath(
-                  PROJECTS_CRD,
-                  project.namespace,
-                  project.name
-                )}
-                className="truncate font-mono text-info hover:underline"
-              >
-                {project.name}
-              </Link>
+              <span className="min-w-0 truncate">
+                <ResourceRef
+                  kind="AppProject"
+                  name={project.name}
+                  namespace={project.namespace}
+                  crd={PROJECTS_CRD}
+                  showKind={false}
+                />
+              </span>
               <span className="truncate text-fg-mut">
                 {repos.length === 0
                   ? "no repository allowed"
@@ -842,8 +931,16 @@ function ProjectsTab({
 
 function ControllerTab({
   controller,
+  ui,
+  routed,
+  routes,
 }: {
   controller: ControllerInfo | undefined;
+  /** The address, from an Ingress or from whatever else routes the Service. */
+  ui: string | null;
+  routed: RoutedUi;
+  /** What the routing capability answered, for the three sentences below. */
+  routes: ServiceRoutes;
 }) {
   if (!controller) {
     return (
@@ -901,25 +998,65 @@ function ControllerTab({
           title="Argo's own UI"
           description="Half of what Argo knows needs a credential this app does not hold — the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over."
         />
-        {controller.ui ? (
+        {ui ? (
           <p className="text-[11.5px] text-fg-mut">
-            An Ingress serves <span className="font-mono">argocd-server</span>{" "}
-            at{" "}
-            <OutLink href={controller.ui} site="Argo CD" className="font-mono">
-              {controller.ui}
+            {routed.via && !controller.ui ? (
+              <>
+                {routed.via.kind}{" "}
+                <span className="font-mono">{routed.via.name}</span> serves
+              </>
+            ) : (
+              <>An Ingress serves</>
+            )}{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
+            <OutLink href={ui} site="Argo CD" className="font-mono">
+              {ui}
             </OutLink>
             , so every Application above offers a way into it.
           </p>
+        ) : routes.isPending ? (
+          <p className="text-[11.5px] text-fg-fnt">
+            Reading what routes{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span>…
+          </p>
+        ) : routed.host ? (
+          // The middle state, and the whole reason `tls` may be `null`: the
+          // host is known and the scheme is not, so the host is named and the
+          // link withheld rather than guessed at.
+          <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
+            {routed.via?.kind ?? "Something"}{" "}
+            <span className="font-mono">{routed.via?.name}</span> serves{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
+            <span className="font-mono text-fg">{routed.host}</span>, but
+            nothing in the API server says whether that host is served over TLS
+            — the proxy&rsquo;s entry points are start-up flags and this app
+            could not read them. Rather than guess a scheme and hand you a link
+            that may refuse the connection, the host is stated and left to you.
+          </p>
         ) : (
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            No Ingress in this cluster serves{" "}
-            <span className="font-mono">argocd-server</span>.{" "}
-            <span className="font-mono">argocd-server</span> is a ClusterIP with
-            no route from this machine, so there is no address this app could
-            construct — and a link into a connection error is worse than no
+            {/* Says what was read, not what the cluster contains: this
+                sentence used to claim the whole cluster routed nothing to
+                argocd-server, from a reading of Ingresses alone, on clusters
+                whose entire edge is a routing CRD. */}
+            Nothing this app can read routes{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> to a hostname
+            {routes.available
+              ? ""
+              : " — no Ingress, and no routing controller installed that could be asked about its own objects"}
+            . <span className="font-mono">{SERVER_SERVICE}</span> is a ClusterIP
+            with no route from this machine, so there is no address this app
+            could construct, and a link into a connection error is worse than no
             link. Everything on this page is read from the{" "}
             <span className="font-mono">Application</span> objects themselves
             and needs no credential.
+            {routes.error && (
+              <>
+                {" "}
+                One routing controller was asked and did not answer:{" "}
+                <span className="font-mono">{routes.error.message}</span>
+              </>
+            )}
           </p>
         )}
       </Section>

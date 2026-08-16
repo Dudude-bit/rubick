@@ -16,7 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import {
+  getCustomResourceUrl,
+  getResourceDetailUrl,
+} from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
@@ -89,10 +92,13 @@ function PeekContent({
   const namespace = target.namespace ?? null;
   const { width, min, max, preview, commit } = usePeekWidth();
 
-  const source = useMemo(() => resolveSource(target.kind), [target.kind]);
+  const source = useMemo(() => resolveSource(target), [target]);
 
   const { data, error, isLoading } = useLiveQuery({
-    queryKey: ["peek", target.kind, namespace, target.name],
+    // The CRD is part of the identity, not decoration: two groups may declare
+    // the same kind, and a key without it would serve one of them from the
+    // other's cache entry.
+    queryKey: ["peek", target.crd ?? null, target.kind, namespace, target.name],
     queryFn: () => source.fetch(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
@@ -103,8 +109,8 @@ function PeekContent({
   // The Overview fetch is also what a tab is marked from, so the strip is
   // built after it rather than beside it.
   const tabs = useMemo(
-    () => peekTabsFor(target.kind, data),
-    [target.kind, data]
+    () => peekTabsFor(target.kind, data, target.crd),
+    [target.kind, data, target.crd]
   );
   const activeTab = resolvePeekTab(requestedTab, tabs);
 
@@ -129,9 +135,15 @@ function PeekContent({
         | undefined
     )
   );
-  const routable = isRoutableKind(target.kind, namespace);
+  // A custom resource has a page of its own too — the CRD's instance route —
+  // so it gets the same Open full page and the same Enter shortcut.
+  const routable = !!target.crd || isRoutableKind(target.kind, namespace);
   const openFullPage = () =>
-    navigate(getResourceDetailUrl(target.kind, target.name, namespace));
+    navigate(
+      target.crd
+        ? getCustomResourceUrl(target.crd, target.name, namespace)
+        : getResourceDetailUrl(target.kind, target.name, namespace)
+    );
 
   // Enter is the panel's shortcut, not the focused control's — once the
   // reader has tabbed onto a button, that button owns the key.
@@ -178,6 +190,7 @@ function PeekContent({
             kind={target.kind}
             name={target.name}
             namespace={namespace}
+            crd={target.crd}
             showKind={false}
             size="title"
             className="font-semibold"

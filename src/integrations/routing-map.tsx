@@ -34,6 +34,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { cn } from "@/lib/utils";
 
 export type MapTone = "ok" | "warn" | "err" | "mute";
@@ -45,6 +46,16 @@ export interface MapNode {
   /** One quieter line under it: an address, a namespace and port, a count. */
   sub?: string;
   tone: MapTone;
+  /**
+   * The object this node *is*, where it is one. Clicking it opens the peek
+   * beside the map rather than replacing the map — which is the whole reason
+   * to draw a map: comparing four hosts means opening four backends without
+   * losing the shape they share.
+   *
+   * Takes precedence over {@link to}. A node that is not an object — a host,
+   * an entry point — has no reference and keeps a plain destination.
+   */
+  object?: { kind: string; name: string; namespace?: string | null };
   /** Where clicking it goes, inside this app. Absent draws plain text. */
   to?: string;
   /** A word at the top right of the node — `TLS`, `0 ready`. */
@@ -149,15 +160,13 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
   }
 
   const placed = data.columns.flatMap((column, index) =>
-    column.nodes.map(
-      (node): Placed => ({
-        node,
-        column: index,
-        x: xOf(index),
-        y: y.get(node.id) ?? 0,
-        width: WIDTHS[index] ?? 180,
-      })
-    )
+    column.nodes.map((node): Placed => ({
+      node,
+      column: index,
+      x: xOf(index),
+      y: y.get(node.id) ?? 0,
+      width: WIDTHS[index] ?? 180,
+    }))
   );
 
   return {
@@ -288,6 +297,31 @@ function Node({ at }: { at: Placed }) {
     height: NODE_H,
   } as const;
 
+  const clickable = cn(
+    shell,
+    "transition-colors hover:border-info hover:bg-sel focus-visible:border-info focus-visible:outline-hidden"
+  );
+
+  // Asked before the element is built: `ObjectLink` renders nothing for an
+  // object it cannot address, and a node that vanished would leave an edge
+  // pointing at empty space.
+  if (
+    node.object &&
+    objectUrl(node.object.kind, node.object.name, node.object.namespace) !==
+      null
+  ) {
+    return (
+      <ObjectLink
+        {...node.object}
+        className={clickable}
+        style={box}
+        title={node.label}
+      >
+        {body}
+      </ObjectLink>
+    );
+  }
+
   if (!node.to) {
     return (
       <div className={shell} style={box} title={node.label}>
@@ -297,15 +331,7 @@ function Node({ at }: { at: Placed }) {
   }
 
   return (
-    <Link
-      to={node.to}
-      className={cn(
-        shell,
-        "transition-colors hover:border-info hover:bg-sel focus-visible:border-info focus-visible:outline-hidden"
-      )}
-      style={box}
-      title={node.label}
-    >
+    <Link to={node.to} className={clickable} style={box} title={node.label}>
       {body}
     </Link>
   );

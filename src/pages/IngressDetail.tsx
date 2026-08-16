@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Copy, ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
@@ -40,7 +41,8 @@ import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
-import { expiryOf } from "@/lib/certificates";
+import { covers, expiryOf } from "@/lib/certificates";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -64,14 +66,24 @@ interface AccessUrl {
 function generateAccessUrls(
   rules: IngressRule[],
   tlsHosts: string[],
-  hasCatchAllTls: boolean
+  hasCatchAllTls: boolean,
+  /**
+   * What a cloud controller says about a host `spec.tls` is silent on. All
+   * three managed clouds keep the certificate off the Ingress — an ACM ARN,
+   * a `ManagedCertificate`, one installed on an Application Gateway — so
+   * without this every HTTPS site on a managed cluster was offered as
+   * `http://`.
+   */
+  vendorTls: (host: string) => boolean | null = () => null
 ): AccessUrl[] {
   const urls: AccessUrl[] = [];
 
   for (const rule of rules) {
     const isWildcard = rule.host === "*" || !rule.host;
-    const explicit = tlsHosts.includes(rule.host);
-    const isHttps = explicit || hasCatchAllTls;
+    // A wildcard entry in `spec.tls` serves this host; comparing literally
+    // handed the reader an http:// URL for a host that refuses it.
+    const explicit = covers(tlsHosts, rule.host);
+    const isHttps = explicit || hasCatchAllTls || vendorTls(rule.host) === true;
     const scheme = isHttps ? "https" : "http";
     const actualHost = isWildcard ? "" : rule.host;
 
@@ -163,8 +175,42 @@ export function IngressDetail() {
   const tlsConfigs = ingress?.tlsConfigs ?? [];
   const loadBalancerIps = ingress?.loadBalancerIps ?? [];
   const hasCatchAllTls = ingress?.hasCatchAllTls ?? false;
-  const accessUrls = generateAccessUrls(rules, tlsHosts, hasCatchAllTls);
-  const hasTls = tlsHosts.length > 0 || tlsConfigs.length > 0;
+  const asked = useMemo(
+    () =>
+      ingress
+        ? [
+            {
+              namespace: ingress.namespace,
+              name: ingress.name,
+              hosts: ingress.rules.flatMap((rule) =>
+                rule.host ? [rule.host] : []
+              ),
+            },
+          ]
+        : [],
+    [ingress]
+  );
+  const vendorTls = useIngressTls(asked);
+  const terminatedByVendor = (host: string) =>
+    ingress
+      ? (vendorTls.of(
+          { namespace: ingress.namespace, name: ingress.name },
+          host
+        )?.terminated ?? null)
+      : null;
+  const accessUrls = generateAccessUrls(
+    rules,
+    tlsHosts,
+    hasCatchAllTls,
+    terminatedByVendor
+  );
+  // "no TLS" is a claim about the whole way in, and `spec.tls` is only part
+  // of it on every managed cloud.
+  const vendorTerminates = rules.some(
+    (rule) => rule.host && terminatedByVendor(rule.host) === true
+  );
+  const hasTls =
+    tlsHosts.length > 0 || tlsConfigs.length > 0 || vendorTerminates;
   const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
 
   const connections = useConnections(ResourceType.Ingress, name, namespace);
@@ -395,7 +441,9 @@ export function IngressDetail() {
                 {rules.map((rule, ruleIdx) => {
                   const isWildcard = rule.host === "*" || !rule.host;
                   const covered =
-                    tlsHosts.includes(rule.host) || hasCatchAllTls;
+                    covers(tlsHosts, rule.host) ||
+                    hasCatchAllTls ||
+                    terminatedByVendor(rule.host) === true;
                   return [
                     // The host is context for the paths under it, so it is
                     // said once above them instead of on every row.

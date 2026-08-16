@@ -16,6 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
+import { covers } from "@/lib/certificates";
+import type { ServiceRoute } from "../registry";
 import { readApplication, type ArgoApp } from "./model";
 
 export const GROUP = "argoproj.io";
@@ -84,6 +86,8 @@ export interface ControllerInfo {
   components: ArgoComponent[];
   /** Where Argo's own UI answers, or `null` — see {@link uiAddress}. */
   ui: string | null;
+  /** Where its workloads run, which is where `argocd-server` is too. */
+  namespace: string;
   problem: string | null;
 }
 
@@ -98,6 +102,45 @@ export interface ControllerInfo {
  * TLS. With no such Ingress there is no address to guess, and the page says
  * so rather than offering a link into a connection error.
  */
+/** The Service Argo's own UI answers on, wherever it is routed from. */
+export const SERVER_SERVICE = "argocd-server";
+
+/**
+ * The same address, from whatever routes `argocd-server` when no Ingress
+ * does — see the `service.routes` capability.
+ *
+ * Three outcomes rather than a URL or nothing, because the middle one is
+ * real and used to be invisible: a host this app can name but whose scheme
+ * it cannot settle. Linking that host would be guessing at `https://` for
+ * something that may only answer in the clear, and saying nothing about it
+ * would repeat the bug this exists to fix — the reader knows the host, and
+ * being told there is no address is what made the page wrong.
+ */
+export interface RoutedUi {
+  /** Safe to link, or `null` where the scheme is not settled. */
+  url: string | null;
+  /** The hostname, where anything routes the Service at all. */
+  host: string | null;
+  /** What routes it, so the sentence can name the object. */
+  via: ServiceRoute["source"] | null;
+}
+
+export function uiFromRoutes(routes: ServiceRoute[]): RoutedUi {
+  // A route whose scheme is settled can be linked; among those, TLS wins,
+  // because a host served both ways is one somebody should reach securely.
+  const settled = routes.filter((route) => route.tls !== null);
+  const best = settled.find((route) => route.tls) ?? settled[0] ?? routes[0];
+  if (!best) return { url: null, host: null, via: null };
+  return {
+    url:
+      best.tls === null
+        ? null
+        : `${best.tls ? "https" : "http"}://${best.host}${best.path === "/" ? "" : best.path}`,
+    host: best.host,
+    via: best.source,
+  };
+}
+
 export function uiAddress(
   ingresses: IngressInfo[],
   namespace: string
@@ -105,15 +148,18 @@ export function uiAddress(
   for (const ingress of ingresses) {
     if (ingress.namespace !== namespace) continue;
     const serves = ingress.rules.some((rule) =>
-      rule.paths.some((path) => path.backendService === "argocd-server")
+      rule.paths.some((path) => path.backendService === SERVER_SERVICE)
     );
     if (!serves) continue;
     const rule = ingress.rules.find((candidate) => candidate.host !== "");
     if (!rule) continue;
+    // `covers`, not equality: a wildcard Secret is how most people serve a
+    // subdomain, and read literally this returned `http://` for a host that
+    // only answers on 443.
     const secure =
       ingress.hasCatchAllTls ||
-      ingress.tlsHosts.includes(rule.host) ||
-      ingress.tlsConfigs.some((config) => config.hosts.includes(rule.host));
+      covers(ingress.tlsHosts, rule.host) ||
+      ingress.tlsConfigs.some((config) => covers(config.hosts, rule.host));
     return `${secure ? "https" : "http"}://${rule.host}`;
   }
   return null;
@@ -160,6 +206,7 @@ export function useController() {
       return {
         components,
         ui: uiAddress(ingresses, namespace),
+        namespace,
         problem:
           components.length === 0
             ? `Nothing in this cluster carries ${CONTROLLER_SELECTOR}, so Argo's own workloads could not be found. Its Applications are still read from the API server.`

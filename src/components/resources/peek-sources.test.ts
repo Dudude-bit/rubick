@@ -31,7 +31,7 @@ function node(labels: Record<string, string> = {}): NodeInfo {
 const target: PeekTarget = { kind: "Node", name: "k3d-k8s-gui-dev-agent-0" };
 
 const summarise = (labels: Record<string, string> = {}): PeekSummary =>
-  resolveSource("Node").summarise(node(labels), target);
+  resolveSource(target).summarise(node(labels), target);
 
 const group = (summary: PeekSummary, title: string) =>
   summary.groups.find((entry) => entry.title === title);

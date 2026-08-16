@@ -26,8 +26,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useConnectionEditor } from "@/integrations";
-import type { ConnectionDraft, ProbeResult } from "@/integrations";
+import { candidates, forward, useConnectionEditor } from "@/integrations";
+import { useClusterStore } from "@/stores/clusterStore";
+import {
+  useClusterForwardStore,
+  useForwardPreference,
+} from "@/stores/clusterForwardStore";
+import type {
+  Candidate,
+  ConnectionDraft,
+  Forwarded,
+  InClusterHint,
+  ProbeResult,
+} from "@/integrations";
 
 export function ConnectIntegration({
   vendorId,
@@ -54,6 +65,7 @@ export function ConnectIntegration({
           <ConnectForm
             key={`${editor.saved?.url ?? ""}|${editor.saved?.authType ?? ""}`}
             editor={editor}
+            vendorId={vendorId}
             vendorName={vendorName}
             gives={gives}
             onDone={() => onOpenChange(false)}
@@ -66,15 +78,21 @@ export function ConnectIntegration({
 
 function ConnectForm({
   editor,
+  vendorId,
   vendorName,
   gives,
   onDone,
 }: {
   editor: ReturnType<typeof useConnectionEditor>;
+  vendorId: string;
   vendorName: string;
   gives: string;
   onDone: () => void;
 }) {
+  const context = useClusterStore((state) => state.currentContext);
+  const remember = useClusterForwardStore((state) => state.remember);
+  const setAutoStart = useClusterForwardStore((state) => state.setAutoStart);
+  const saved = useForwardPreference(context, vendorId);
   const [url, setUrl] = React.useState(editor.saved?.url ?? "");
   const [token, setToken] = React.useState("");
   const [bearer, setBearer] = React.useState(
@@ -131,7 +149,67 @@ function ConnectForm({
             onChange={(event) => setUrl(event.target.value)}
             className="font-mono text-xs"
           />
+          {/* The question every failed connection here turns out to be. The
+              request is made by this app, on this machine — so a Service name
+              that works from inside the cluster resolves to nothing here, and
+              that is the commonest way to get this field wrong. */}
+          <p className="text-[11px] text-fg-fnt">
+            Asked from this machine, not from inside the cluster — so a
+            cluster-internal name like{" "}
+            <span className="font-mono">prometheus.monitoring</span> will not
+            resolve. Give an address that reaches it from here, or let the app
+            forward a port to it.
+          </p>
         </div>
+
+        {editor.connect?.inCluster && (
+          <InCluster
+            hint={editor.connect.inCluster}
+            vendorName={vendorName}
+            onPicked={(picked) => {
+              setUrl(picked.url);
+              setTested(null);
+              if (context) {
+                remember(context, vendorId, {
+                  namespace: picked.namespace,
+                  service: picked.service,
+                  remotePort: picked.remotePort,
+                  localPort: picked.localPort,
+                  // Off until asked for: a forward is a socket on this
+                  // machine and a connection into the cluster, and neither is
+                  // started on somebody's behalf because they pressed a
+                  // button once.
+                  autoStart: false,
+                });
+              }
+            }}
+          />
+        )}
+
+        {saved && (
+          <label className="flex items-start gap-2 text-xs text-fg-mut">
+            <Checkbox
+              checked={saved.autoStart}
+              onCheckedChange={(value) =>
+                context && setAutoStart(context, vendorId, value === true)
+              }
+              className="mt-0.5"
+            />
+            <span>
+              Open the tunnel when I switch to this cluster
+              <span className="mt-0.5 block text-[11px] text-fg-fnt">
+                Forwarding{" "}
+                <span className="font-mono">
+                  {saved.namespace}/{saved.service}:{saved.remotePort}
+                </span>{" "}
+                to{" "}
+                <span className="font-mono">localhost:{saved.localPort}</span>.
+                Left off, the row stays in the sidebar and pressing it opens the
+                tunnel — kept per cluster, on this machine only.
+              </span>
+            </span>
+          </label>
+        )}
 
         <label className="flex items-center gap-2 text-xs text-fg-mut">
           <Checkbox
@@ -219,6 +297,104 @@ function ConnectForm({
 }
 
 /** Its own words, never a paraphrase — the two failures go two places. */
+/**
+ * Find this vendor's Service in the cluster and forward a port to it.
+ *
+ * The offer exists because the reader is naming a server either way, and a
+ * Service names one the app can already reach — where the address they would
+ * otherwise type, the in-cluster name, is the one thing that cannot work from
+ * here.
+ *
+ * Candidates are listed rather than chosen. Two Prometheuses is an ordinary
+ * cluster — the operator's and the one somebody's chart brought — and picking
+ * for the reader would be this app guessing which of their monitoring stacks
+ * they meant.
+ */
+function InCluster({
+  hint,
+  vendorName,
+  onPicked,
+}: {
+  hint: InClusterHint;
+  vendorName: string;
+  onPicked: (forwarded: Forwarded) => void;
+}) {
+  const [looking, setLooking] = React.useState(false);
+  const [found, setFound] = React.useState<Candidate[] | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState<string | null>(null);
+
+  const look = async () => {
+    setLooking(true);
+    setFailed(null);
+    try {
+      setFound(await candidates(hint));
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLooking(false);
+    }
+  };
+
+  const pick = async (candidate: Candidate) => {
+    const key = `${candidate.service.namespace}/${candidate.service.name}`;
+    setBusy(key);
+    setFailed(null);
+    try {
+      onPicked(await forward(candidate.service, hint.ports));
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={look}
+        disabled={looking}
+        className="self-start text-xs"
+      >
+        {looking ? "Looking…" : `Find ${vendorName} in this cluster`}
+      </Button>
+
+      {found !== null && found.length === 0 && (
+        <p className="text-[11px] text-fg-fnt">
+          No Service in this cluster is labelled or named for {vendorName}. If
+          it is here under another name, forward it yourself and give the
+          address above.
+        </p>
+      )}
+
+      {found?.map((candidate) => {
+        const key = `${candidate.service.namespace}/${candidate.service.name}`;
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={busy !== null}
+            onClick={() => pick(candidate)}
+            className="flex items-baseline justify-between gap-3 rounded border border-hair px-2 py-1.5 text-left text-xs hover:bg-hover disabled:opacity-60"
+          >
+            <span className="min-w-0 truncate font-mono text-fg">
+              {candidate.service.namespace}/{candidate.service.name}
+              <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
+            </span>
+            <span className="flex-none text-[11px] text-fg-fnt">
+              {busy === key ? "forwarding…" : candidate.because}
+            </span>
+          </button>
+        );
+      })}
+
+      {failed && <p className="text-[11px] text-err">{failed}</p>}
+    </div>
+  );
+}
+
 function TestResult({ result }: { result: ProbeResult }) {
   if (result.ok) {
     return (

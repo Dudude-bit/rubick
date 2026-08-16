@@ -1,6 +1,7 @@
 import { Flame } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { explain, unreachable } from "../reachability";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   defineVendor,
@@ -47,7 +48,29 @@ export default defineVendor({
     icon: Flame,
   },
   connect: {
-    urlPlaceholder: "http://prometheus.monitoring:9090",
+    // Reachable from a desktop, because that is where the request comes
+    // from. It used to read `http://prometheus.monitoring:9090` — a name only
+    // the cluster resolves, so the field was teaching the one address that
+    // cannot work.
+    urlPlaceholder: "https://prometheus.example.com",
+    // `kube-prometheus-stack` names Alertmanager, node-exporter and
+    // kube-state-metrics after Prometheus too, and every one of them answers
+    // HTTP on a port. Offering them would hand the reader a connection that
+    // works and a page that stays empty.
+    inCluster: {
+      names: ["prometheus", "thanos-query", "thanos-querier"],
+      ports: [9090, 10902],
+      prefer: ["thanos-query", "operated", "server"],
+      avoid: [
+        "alertmanager",
+        "node-exporter",
+        "kube-state-metrics",
+        "operator",
+        "pushgateway",
+        "adapter",
+        "blackbox",
+      ],
+    },
     read: () => commands.getPrometheusConnection().then(asSaved),
     save: (draft: ConnectionDraft) =>
       commands.savePrometheusConnection(
@@ -66,10 +89,15 @@ export default defineVendor({
           draft?.insecureTls ?? null
         );
         if (!answer.ok) {
+          const said = answer.reason ?? "it did not say why";
+          // The transport's own words stay — somebody searching for
+          // "Name or service not known" has to find it — and the shape of
+          // the address adds the half it cannot know. See `../reachability`.
+          const shape = unreachable(draft?.url ?? "", said);
           return {
             ok: false,
             at: answer.at,
-            reason: answer.reason ?? "it did not say why",
+            reason: shape ? `${said} — ${explain(shape)}` : said,
           };
         }
         return {
@@ -106,6 +134,14 @@ export default defineVendor({
         { text: `1h in ${RANGE_SPECS["1h"].resolution}` },
       ];
     },
+  },
+  // A page, and it took a while to earn one. Prometheus supplies powers
+  // rather than objects, and a page repeating its numbers would be a worse
+  // copy of the chart the reader already has. What it owns is a question
+  // about the connection: a probe proves the address speaks PromQL, and
+  // cannot tell you the Prometheus you reached is scraping *this* cluster.
+  page: {
+    load: () => import("./page"),
   },
   provides: {
     "usage.history": usageHistory,

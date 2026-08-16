@@ -1,10 +1,15 @@
 import { ShieldCheck } from "lucide-react";
 
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
+import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
+import { fetchIngressSources, INGRESS_SOURCES_KEY } from "./data";
 import { facts } from "./facts";
 import { serviceEdge } from "./edge";
+import { serviceRoutes } from "./service-routes";
+import { ingressTls } from "./ingress-tls";
 import { mark } from "./mark";
+import { countHosts } from "./routes";
 
 /**
  * GKE's Ingress stack — tier two, and a second record on purpose.
@@ -23,11 +28,16 @@ import { mark } from "./mark";
  * owns `ManagedCertificate`. Same folder as the tier-one record, because
  * "where does GKE's knowledge live" must have exactly one answer.
  *
- * No page, and that is a decision rather than an omission. A page earns
- * itself by owning a topology no core object can host — which is what
- * Traefik's and Istio's hosts are. A list of BackendConfigs is not a
- * topology; every one of these objects is a property of a Service or an
- * Ingress that already has a page, and the two facets below put them there.
+ * It earns a page on the same grounds Traefik does, and this record used to
+ * argue the opposite: that a list of BackendConfigs is not a topology and
+ * every one of these objects is a property of something that already has a
+ * page. That was written without looking at how they are attached. Each one
+ * is joined to the routing table by an *annotation* — `FrontendConfig` and
+ * `ManagedCertificate` to the Ingress, `BackendConfig` and the NEG opt-in to
+ * the Service — and **host → what terminates it → what answers it** is not a
+ * property of any single object. The consequence of not drawing it was
+ * concrete: a `ManagedCertificate` stuck on `FailedNotVisible` sat on a list
+ * page with no way of saying which hostname it was for.
  */
 export const gkeIngress = defineVendor({
   id: "gke-ingress",
@@ -38,7 +48,24 @@ export const gkeIngress = defineVendor({
     icon: ShieldCheck,
     facts,
   },
-  provides: { "service.edge": serviceEdge },
+  // The second one is asked *about GKE by somebody else*: an in-cluster
+  // proxy checking whether the load balancer in front of it already holds the
+  // certificate. Its answer lives in an annotation, so no amount of reading
+  // `spec.tls` finds it — see `./service-routes`.
+  provides: {
+    "service.edge": serviceEdge,
+    "service.routes": serviceRoutes,
+    "ingress.tls": ingressTls,
+  },
+  page: {
+    count: pageCount({
+      queryKey: INGRESS_SOURCES_KEY,
+      queryFn: fetchIngressSources,
+      select: (sources) => countHosts(sources.ingresses),
+      staleTime: ROUTING_STALE,
+    }),
+    load: () => import("./page"),
+  },
   crd,
 });
 

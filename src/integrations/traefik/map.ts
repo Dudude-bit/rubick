@@ -13,7 +13,6 @@
  * rides on the Service node as its tag.
  */
 
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
 
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
@@ -112,11 +111,11 @@ export function routingMap(
           label: service.name,
           sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
           tone: backing.stop ? "err" : "ok",
-          to: getResourceDetailUrl(
-            ResourceType.Service,
-            service.name,
-            service.namespace
-          ),
+          object: {
+            kind: ResourceType.Service,
+            name: service.name,
+            namespace: service.namespace,
+          },
           tag: !backing.known
             ? undefined
             : backing.stop

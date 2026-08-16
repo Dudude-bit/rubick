@@ -20,10 +20,11 @@
  */
 
 import { expiryOf, type Expiry } from "@/lib/certificates";
-import type { CustomResourceInfo } from "@/generated/types";
+import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 import { conditionOf, getValueByPath, type VendorCondition } from "../kit";
 import type { Tone } from "../page-kit";
+import { certificateUse, type CertificateUse } from "./serves";
 
 export const CERTIFICATES_CRD = "certificates.cert-manager.io";
 export const REQUESTS_CRD = "certificaterequests.cert-manager.io";
@@ -70,6 +71,15 @@ export interface CertRow {
   failure: string | null;
   steps: CertStep[];
   state: { text: string; tone: Tone };
+  /**
+   * The hostnames this certificate is actually serving, through whatever
+   * mounts its Secret — see `./serves`.
+   *
+   * The half a `Certificate` never states about itself, and the half
+   * somebody is asking about: "thirty days left" is not actionable until you
+   * know which address stops working.
+   */
+  use: CertificateUse;
   /** Sort rank: lower is more urgent. */
   rank: number;
 }
@@ -312,7 +322,11 @@ export function certificateRows(
   certificates: CustomResourceInfo[],
   requests: CustomResourceInfo[],
   orders: CustomResourceInfo[],
-  challenges: CustomResourceInfo[]
+  challenges: CustomResourceInfo[],
+  /** What mounts the Secrets, for the hosts each certificate serves. */
+  ingresses: IngressInfo[] = [],
+  /** False where a routing CRD this file cannot read may also mount them. */
+  unusedIsCertain = false
 ): CertRow[] {
   return certificates
     .map((certificate): CertRow => {
@@ -340,18 +354,25 @@ export function certificateRows(
       const state = stateOfCertificate(row);
       const issuerName = text(certificate, "spec.issuerRef.name");
 
+      const namespace = certificate.namespace ?? "";
+      const secretName = text(certificate, "spec.secretName");
+      const dnsNames = strings(certificate, "spec.dnsNames");
+
       return {
-        key: `${certificate.namespace ?? ""}/${certificate.name}`,
+        key: `${namespace}/${certificate.name}`,
         name: certificate.name,
-        namespace: certificate.namespace ?? "",
-        secretName: text(certificate, "spec.secretName"),
+        namespace,
+        secretName,
+        use: certificateUse({ secretName, namespace, dnsNames }, ingresses, {
+          unusedIsCertain,
+        }),
         issuer: issuerName
           ? {
               name: issuerName,
               kind: text(certificate, "spec.issuerRef.kind") ?? "Issuer",
             }
           : null,
-        dnsNames: strings(certificate, "spec.dnsNames"),
+        dnsNames,
         renewalTime: text(certificate, "status.renewalTime"),
         failedAttempts:
           typeof getValueByPath(

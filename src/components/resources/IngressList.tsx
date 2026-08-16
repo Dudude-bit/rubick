@@ -1,11 +1,20 @@
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ColumnDef } from "@tanstack/react-table";
-import { useCallback, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
+import { covers } from "@/lib/certificates";
+import { useResourceList } from "@/hooks/useResource";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   Tooltip,
@@ -28,7 +37,36 @@ import type { IngressInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 
-const getIngressOpenUrl = (ingress: IngressInfo): string | null => {
+/**
+ * What a cloud controller says about these rows' TLS, handed to the cells
+ * through a context.
+ *
+ * The same shape the Delivery column uses, and for the same reason: the
+ * answer is one read for the whole page, and a cell that asked on its own
+ * behalf would turn it into one call per row. The column's own default is
+ * `spec.tls`, which is right on a self-managed cluster and empty on all three
+ * managed clouds.
+ */
+const VendorTls = createContext<
+  ((ingress: IngressInfo) => { hosts: string[]; by: string } | null) | null
+>(null);
+
+function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
+  const of = useContext(VendorTls);
+  return (
+    <TlsBadge
+      tlsHosts={ingress.tlsHosts}
+      hasCatchAllTls={ingress.hasCatchAllTls}
+      vendor={of?.(ingress) ?? null}
+    />
+  );
+}
+
+const getIngressOpenUrl = (
+  ingress: IngressInfo,
+  /** Hosts a controller terminates that `spec.tls` never mentions. */
+  vendorHosts: string[] = []
+): string | null => {
   const host =
     ingress.rules.find((rule) => rule.host && rule.host !== "*")?.host ||
     ingress.loadBalancerIps[0];
@@ -37,8 +75,13 @@ const getIngressOpenUrl = (ingress: IngressInfo): string | null => {
     return null;
   }
 
-  // Check both explicit TLS hosts and catch-all TLS
-  const usesTls = ingress.tlsHosts.includes(host) || ingress.hasCatchAllTls;
+  // `covers` rather than equality: `*.example.com` is how a wildcard Secret
+  // serves `shop.example.com`, and a literal comparison offered http:// for
+  // every subdomain behind one.
+  const usesTls =
+    covers(ingress.tlsHosts, host) ||
+    ingress.hasCatchAllTls ||
+    vendorHosts.includes(host);
   const scheme = usesTls ? "https" : "http";
   return `${scheme}://${host}`;
 };
@@ -143,12 +186,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     size: 80,
     accessorKey: "tlsHosts",
     header: "TLS",
-    cell: ({ row }) => (
-      <TlsBadge
-        tlsHosts={row.original.tlsHosts}
-        hasCatchAllTls={row.original.hasCatchAllTls}
-      />
-    ),
+    cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
   },
   createAgeColumn<IngressInfo>(),
 ];
@@ -187,6 +225,41 @@ export function IngressList() {
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
 
+  // A second observer on the list's own cache entry, so the rows cost one
+  // request and not two — the same trick the sidebar counts use.
+  const listed = useResourceList<IngressInfo[]>(queryKey, () =>
+    commands.listIngresses({
+      namespace: currentNamespace || null,
+      labelSelector: null,
+      fieldSelector: null,
+      limit: null,
+    })
+  );
+  const asked = useMemo(
+    () =>
+      (listed.data ?? []).map((ingress) => ({
+        namespace: ingress.namespace,
+        name: ingress.name,
+        hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
+      })),
+    [listed.data]
+  );
+  const vendorTls = useIngressTls(asked);
+  const vendorFor = useCallback(
+    (ingress: IngressInfo) => {
+      const hosts = ingress.rules.flatMap((rule) =>
+        rule.host && vendorTls.of(ingress, rule.host)?.terminated
+          ? [rule.host]
+          : []
+      );
+      if (hosts.length === 0) return null;
+      const by =
+        vendorTls.of(ingress, hosts[0])?.by ?? "the load balancer in front";
+      return { hosts, by };
+    },
+    [vendorTls]
+  );
+
   const quickActions = useMemo<
     (setDeleteTarget: (item: IngressInfo) => void) => QuickAction<IngressInfo>[]
   >(
@@ -207,7 +280,7 @@ export function IngressList() {
         icon: ExternalLink,
         label: "Open in Browser",
         onClick: (item) => {
-          const url = getIngressOpenUrl(item);
+          const url = getIngressOpenUrl(item, vendorFor(item)?.hosts ?? []);
           if (url) window.open(url, "_blank", "noreferrer");
         },
         hidden: (item) => !getIngressOpenUrl(item),
@@ -219,41 +292,43 @@ export function IngressList() {
         variant: "destructive",
       },
     ],
-    [navigate]
+    [navigate, vendorFor]
   );
 
   return (
-    <ResourceList<IngressInfo>
-      title="Ingresses"
-      queryKey={queryKeys.resources(ResourceType.Ingress, currentNamespace)}
-      getRowId={getResourceRowId}
-      queryFn={() =>
-        commands.listIngresses({
-          namespace: currentNamespace || null,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-        })
-      }
-      columns={baseColumns}
-      quickActions={quickActions}
-      emptyStateLabel={toPlural(ResourceType.Ingress)}
-      deleteConfig={{
-        mutationFn: (item) =>
-          commands.deleteIngress(item.name, item.namespace ?? null),
-        invalidateQueryKeys: [
-          queryKeys.resources(ResourceType.Ingress, currentNamespace),
-        ],
-        resourceType: ResourceType.Ingress,
-      }}
-      staleTime={STALE_TIMES.resourceList}
-      refresh={watchFailed ? undefined : false}
-      live={!watchFailed}
-      resyncing={resyncing}
-      searchKey="name"
-      getRowHref={(row) =>
-        getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)
-      }
-    />
+    <VendorTls.Provider value={vendorFor}>
+      <ResourceList<IngressInfo>
+        title="Ingresses"
+        queryKey={queryKeys.resources(ResourceType.Ingress, currentNamespace)}
+        getRowId={getResourceRowId}
+        queryFn={() =>
+          commands.listIngresses({
+            namespace: currentNamespace || null,
+            labelSelector: null,
+            fieldSelector: null,
+            limit: null,
+          })
+        }
+        columns={baseColumns}
+        quickActions={quickActions}
+        emptyStateLabel={toPlural(ResourceType.Ingress)}
+        deleteConfig={{
+          mutationFn: (item) =>
+            commands.deleteIngress(item.name, item.namespace ?? null),
+          invalidateQueryKeys: [
+            queryKeys.resources(ResourceType.Ingress, currentNamespace),
+          ],
+          resourceType: ResourceType.Ingress,
+        }}
+        staleTime={STALE_TIMES.resourceList}
+        refresh={watchFailed ? undefined : false}
+        live={!watchFailed}
+        resyncing={resyncing}
+        searchKey="name"
+        getRowHref={(row) =>
+          getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)
+        }
+      />
+    </VendorTls.Provider>
   );
 }

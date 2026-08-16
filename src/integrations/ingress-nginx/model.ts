@@ -34,7 +34,7 @@ import type {
   ServicePublished,
   TlsCertificate,
 } from "@/generated/types";
-import type { Expiry } from "@/lib/certificates";
+import { covers, type Expiry } from "@/lib/certificates";
 import {
   backingOf as backingOfBackend,
   certificateProblems,
@@ -153,6 +153,69 @@ export interface NginxSources {
   published: ServicePublished[];
   backingKnown?: boolean;
   certificates?: Map<string, TlsCertificate>;
+  /**
+   * Whether something in front of this nginx terminates TLS for a host —
+   * a cloud load balancer holding the certificate and forwarding plaintext
+   * to port 80, which is the ordinary shape of a managed cluster.
+   *
+   * Answered by the page from the `service.routes` capability, because that
+   * certificate usually lives in an annotation no reading of `spec.tls`
+   * finds. Absent on a cluster with no such vendor, where
+   * {@link terminatedUpstream} is the whole answer.
+   */
+  upstreamTls?: (host: string | null) => boolean;
+}
+
+/** The label an ingress-nginx chart puts on its own pods. */
+const PROXY_LABEL = ["app.kubernetes.io/name", "ingress-nginx"] as const;
+
+/**
+ * What terminates TLS for this host before it reaches nginx.
+ *
+ * The same evidence Traefik's page looks for, and needed more often: "cloud
+ * load balancer in front, nginx on port 80" is how most managed clusters are
+ * built, and the finding below called every host on one of them served in
+ * the clear. An Ingress whose backend is a Service selecting nginx's own
+ * pods, whose `spec.tls` covers this host — nothing looser, or the warning
+ * would go quiet on a cluster where nothing terminates anything.
+ */
+export function frontingIngresses(sources: NginxSources): IngressInfo[] {
+  const proxies = sources.services.filter(
+    (service) => service.selector[PROXY_LABEL[0]] === PROXY_LABEL[1]
+  );
+  if (proxies.length === 0) return [];
+  return sources.ingresses.filter((ingress) =>
+    ingress.rules.some((rule) =>
+      rule.paths.some((path) =>
+        proxies.some(
+          (service) =>
+            service.name === path.backendService &&
+            service.namespace === ingress.namespace
+        )
+      )
+    )
+  );
+}
+
+export function terminatedUpstream(
+  host: string | null,
+  sources: NginxSources
+): { kind: "Ingress"; name: string; namespace: string } | null {
+  if (host === null) return null;
+
+  for (const ingress of frontingIngresses(sources)) {
+    const terminates =
+      ingress.hasCatchAllTls ||
+      covers(ingress.tlsHosts, host) ||
+      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
+    if (!terminates) continue;
+    return {
+      kind: "Ingress",
+      name: ingress.name,
+      namespace: ingress.namespace,
+    };
+  }
+  return null;
 }
 
 /** The IngressClasses whose controller is this nginx. */
@@ -294,8 +357,16 @@ function duplicateFindings(routes: NginxRoute[]): Finding[] {
  * redirect *to*. An Ingress carrying `ssl-redirect: "true"` and no `tls:`
  * looks secured and is served entirely in the clear.
  */
-function clearFinding(routes: NginxRoute[]): Finding | null {
+function clearFinding(
+  routes: NginxRoute[],
+  sources: NginxSources,
+  host: string | null
+): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
+  // Something in front holds the certificate; the hop into the cluster is
+  // plaintext by design and is not a fault to report per host.
+  if (terminatedUpstream(host, sources)) return null;
+  if (sources.upstreamTls?.(host)) return null;
   const redirectAnyway = routes.some((route) =>
     route.annotations.some(
       (reading) =>
@@ -408,7 +479,7 @@ export function hostGroups(sources: NginxSources): NginxHostGroup[] {
             }))
         : [];
 
-    const clear = clearFinding(own);
+    const clear = clearFinding(own, sources, host === "" ? null : host);
     const findings: Finding[] = [
       ...stops,
       ...certificateProblems(tlsSecrets, sources.certificates).map(

@@ -4,7 +4,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ConfigMapInfo, EventInfo, PodInfo } from "@/generated/types";
+import type {
+  ConfigMapInfo,
+  CustomResourceDetailInfo,
+  EventInfo,
+  PodInfo,
+} from "@/generated/types";
 
 // CodeMirror is loaded behind React.lazy and has nothing to prove here; the
 // panel's job is to hand it a manifest.
@@ -31,6 +36,8 @@ vi.mock("@/lib/commands", () => ({
     getEndpoints: vi.fn(),
     deletePod: vi.fn(),
     restartPod: vi.fn(),
+    getCustomResource: vi.fn(),
+    getCustomResourceYaml: vi.fn(),
   },
 }));
 
@@ -125,6 +132,33 @@ function buildEvent(): EventInfo {
   } as EventInfo;
 }
 
+const APPLICATION_MANIFEST = `apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+`;
+
+function buildApplication(): CustomResourceDetailInfo {
+  return {
+    name: "shop",
+    namespace: "argocd",
+    uid: "app-uid",
+    apiVersion: "argoproj.io/v1alpha1",
+    kind: "Application",
+    spec: { project: "default", destination: { namespace: "shop" } },
+    status: {
+      health: { status: "Degraded" },
+      conditions: [{ type: "Ready", status: "False" }],
+    },
+    labels: { "app.kubernetes.io/part-of": "storefront" },
+    annotations: {},
+    createdAt: "2026-08-01T09:00:00Z",
+    ownerReferences: [],
+    finalizers: [],
+    resourceVersion: "41",
+  };
+}
+
 function buildConfigMap(): ConfigMapInfo {
   return {
     name: "app-config",
@@ -205,6 +239,12 @@ function mockCluster() {
     .mockResolvedValue(undefined);
   vi.mocked(commands.deletePod).mockReset().mockResolvedValue(undefined);
   vi.mocked(commands.restartPod).mockReset().mockResolvedValue(undefined);
+  vi.mocked(commands.getCustomResource)
+    .mockReset()
+    .mockResolvedValue(buildApplication());
+  vi.mocked(commands.getCustomResourceYaml)
+    .mockReset()
+    .mockResolvedValue(APPLICATION_MANIFEST);
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
 
@@ -461,6 +501,82 @@ describe("PeekPanel tabs", () => {
       await screen.findByText(/configmaps is forbidden/)
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
+  });
+});
+
+/**
+ * The peek used to stop at the registry: `open` was a no-op for a kind it
+ * could not spell, and the panel's fetch would have asked the core API for
+ * `/api/v1/applications` even if it had opened. Both halves are the CRD.
+ */
+describe("PeekPanel on a custom resource", () => {
+  beforeEach(mockCluster);
+
+  const APP_PEEK =
+    "/events?peek=applications.argoproj.io/Application/argocd/shop";
+
+  it("reads it through its CRD rather than the core API", async () => {
+    wrap(APP_PEEK);
+    await waitFor(() =>
+      expect(commands.getCustomResource).toHaveBeenCalledWith(
+        "applications.argoproj.io",
+        "shop",
+        "argocd"
+      )
+    );
+    expect(commands.getManifest).not.toHaveBeenCalled();
+  });
+
+  it("names the object and its kind in the header", async () => {
+    wrap(APP_PEEK);
+    expect(await screen.findByText("shop")).toBeInTheDocument();
+    // Twice by design: the reference announces the kind to a screen reader
+    // because it draws it as a glyph, and the line under it prints it.
+    expect(screen.getAllByText("Application").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("link", { name: "Application shop" })
+    ).toHaveAttribute(
+      "href",
+      "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
+    );
+  });
+
+  /**
+   * Nothing here knows what Argo is. `status.health.status` is drawn because
+   * every scalar under `status` is, not because this file recognises it.
+   */
+  it("draws the operator's status without understanding it", async () => {
+    wrap(APP_PEEK);
+    expect(await screen.findByText("health.status")).toBeInTheDocument();
+    expect(screen.getByText("Degraded")).toBeInTheDocument();
+  });
+
+  /** A `Ready` condition is the nearest thing to a universal verdict. */
+  it("badges it from a Ready condition where there is no phase", async () => {
+    wrap(APP_PEEK);
+    expect(await screen.findByText("Not ready")).toBeInTheDocument();
+  });
+
+  it("offers its own page, which for a custom resource is the CRD's", async () => {
+    wrap(APP_PEEK);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open full page/ })
+    );
+    expect(location()).toBe(
+      "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
+    );
+  });
+
+  it("reads the manifest through the CRD too", async () => {
+    wrap(APP_PEEK);
+    await openTab("YAML");
+    await waitFor(() =>
+      expect(commands.getCustomResourceYaml).toHaveBeenCalledWith(
+        "applications.argoproj.io",
+        "shop",
+        "argocd"
+      )
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -10,6 +11,8 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useIntegrationPages } from "@/integrations";
+import { wake } from "@/hooks/useClusterForwards";
+import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { detectProvider } from "@/lib/cluster-identity";
 import {
   ResourceType,
@@ -196,9 +199,29 @@ function GroupCaption({ children }: { children: string }) {
 function IntegrationsGroup() {
   const { pathname, search } = useLocation();
   const pages = useIntegrationPages();
+  const context = useClusterStore((state) => state.currentContext);
+  const saved = useClusterForwardStore((state) => state.forwards);
+  const [waking, setWaking] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState<string | null>(null);
+
   if (pages.length === 0) return null;
 
   const vendor = new URLSearchParams(search).get("vendor");
+
+  // Pressing a sleeping row is what opens its tunnel. The navigation is not
+  // held up for it — the page has its own pending and error states, and a
+  // sidebar row that swallowed a click for two seconds would read as broken.
+  const press = (id: string) => {
+    const preference = context ? saved[context]?.[id] : undefined;
+    if (!preference) return;
+    setWaking(id);
+    setFailed(null);
+    void wake(id, preference)
+      .catch((error: unknown) =>
+        setFailed(error instanceof Error ? error.message : String(error))
+      )
+      .finally(() => setWaking(null));
+  };
 
   return (
     <div>
@@ -209,6 +232,16 @@ function IntegrationsGroup() {
           item={{ label: page.name, path: page.path, icon: page.icon }}
           overview={undefined}
           value={page.count}
+          // A tunnel that is down is not a count and not a fault: it is a
+          // thing this row can do something about, and says so.
+          note={
+            page.asleep
+              ? waking === page.id
+                ? "connecting…"
+                : "asleep"
+              : undefined
+          }
+          onPress={page.asleep ? () => press(page.id) : undefined}
           active={
             page.own
               ? undefined
@@ -216,6 +249,9 @@ function IntegrationsGroup() {
           }
         />
       ))}
+      {failed && (
+        <p className="px-2 pb-1 text-[10px] leading-snug text-err">{failed}</p>
+      )}
     </div>
   );
 }
@@ -325,12 +361,26 @@ function NavRow({
   item,
   overview,
   value,
+  note,
+  onPress,
   active,
 }: {
   item: NavItem;
   overview: ClusterOverview | undefined;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
+  /**
+   * A word at the end of the row instead of a count — for a state that is
+   * neither a number nor a fault. A port-forward that is down is the case
+   * this exists for: it is something the row can do something about.
+   */
+  note?: string;
+  /**
+   * Something to do *besides* navigating, run on the way. The row is still a
+   * link and still goes where it says; this does not replace the navigation
+   * and must never wait for anything before it.
+   */
+  onPress?: () => void;
   /**
    * Whether this row is the open one, where the path alone cannot say. Left
    * undefined the router decides, which is right for every row that owns its
@@ -359,6 +409,7 @@ function NavRow({
     <NavLink
       to={to}
       end={item.path === "/"}
+      onClick={onPress}
       className={({ isActive }) =>
         cn(
           "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
@@ -383,7 +434,9 @@ function NavRow({
             )}
           </div>
           {item.label}
-          {value === undefined ? (
+          {note !== undefined ? (
+            <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
+          ) : value === undefined ? (
             <NavCount item={item} overview={overview} />
           ) : (
             value !== null && (

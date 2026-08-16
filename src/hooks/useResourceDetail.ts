@@ -118,7 +118,8 @@ export function useResourceDetail<T>(
   const {
     data: resource,
     isLoading,
-    error,
+    isPlaceholderData,
+    error: readError,
     refetch,
     freshness,
   } = useLiveQuery<T, Error, T, string[]>({
@@ -134,6 +135,22 @@ export function useResourceDetail<T>(
     staleTime,
     refresh,
   });
+
+  // A failed re-read of the object already on screen is not a page.
+  //
+  // `ResourceDetailLayout` replaces the whole page with "Could not read this
+  // pod" for any error, so one dropped poll — an expiring token, a blip
+  // between the app and the API server — threw away a page the reader was
+  // working in, and the next poll two seconds later brought it back. The rule
+  // is the list's: an error only speaks when there is nothing left to show,
+  // and the header's freshness reading is what says the page is going stale.
+  //
+  // `isPlaceholderData` is the whole distinction. It marks data belonging to
+  // the *previous* name — the reader has navigated, and holding a pod's fields
+  // under another pod's URL because the new one 404'd is the one thing this
+  // must never do. Then the error is the page.
+  const holdsThisObject = resource !== undefined && !isPlaceholderData;
+  const error = holdsThisObject ? null : readError;
 
   // Always use useResourceYaml for YAML fetching
   const {
@@ -188,7 +205,7 @@ export function useResourceDetail<T>(
     namespace,
     resource,
     isLoading,
-    error: error as Error | null,
+    error,
     refetch,
     freshness,
     yaml,

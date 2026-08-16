@@ -14,7 +14,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -28,7 +28,7 @@ import {
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { formatAge } from "@/lib/utils";
-import { crdObjectPath, plural } from "../kit";
+import { plural } from "../kit";
 import { gitRepoLink } from "../gitops";
 import {
   Chain,
@@ -355,24 +355,20 @@ function ObjectLinks({ reconciler }: { reconciler: FluxReconciler }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
       {crd && (
-        <Link
-          to={crdObjectPath(crd, reconciler.namespace, reconciler.name)}
-          className="font-mono text-info hover:underline"
-        >
-          {reconciler.kind.toLowerCase()}/{reconciler.name}
-        </Link>
+        <ResourceRef
+          kind={reconciler.kind}
+          name={reconciler.name}
+          namespace={reconciler.namespace}
+          crd={crd}
+        />
       )}
       {sourceCrd && reconciler.sourceRef && (
-        <Link
-          to={crdObjectPath(
-            sourceCrd,
-            reconciler.sourceRef.namespace,
-            reconciler.sourceRef.name
-          )}
-          className="font-mono text-info hover:underline"
-        >
-          {reconciler.sourceRef.kind.toLowerCase()}/{reconciler.sourceRef.name}
-        </Link>
+        <ResourceRef
+          kind={reconciler.sourceRef.kind}
+          name={reconciler.sourceRef.name}
+          namespace={reconciler.sourceRef.namespace}
+          crd={sourceCrd}
+        />
       )}
       {reconciler.dependsOn.length > 0 && (
         <span>
@@ -629,12 +625,12 @@ function SourceRow({
         </span>
       </div>
       {crd && (
-        <Link
-          to={crdObjectPath(crd, source.namespace, source.name)}
-          className="font-mono text-[11px] text-info hover:underline"
-        >
-          {source.kind.toLowerCase()}/{source.name}
-        </Link>
+        <ResourceRef
+          kind={source.kind}
+          name={source.name}
+          namespace={source.namespace}
+          crd={crd}
+        />
       )}
       {source.findings.map((finding, index) => (
         <SourceFinding key={index} source={source} finding={finding} />

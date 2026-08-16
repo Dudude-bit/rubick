@@ -9,6 +9,7 @@ import {
   fetchCertificates,
 } from "./data";
 import { facts } from "./facts";
+import { relatedTo } from "./related";
 
 /**
  * cert-manager.
@@ -47,6 +48,7 @@ export default defineVendor({
   provides: {
     "certificate.issuance": ({ namespace, secretName }) =>
       commands.getCertificateIssuance(namespace, secretName),
+    "object.related": relatedTo,
   },
   page: {
     // The certificates list only, not the whole picture — see `data.ts` for

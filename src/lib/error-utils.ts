@@ -56,6 +56,23 @@ function isRetryableError(message: string): boolean {
 }
 
 /**
+ * The same verdict, on a thrown value rather than a message — which is the
+ * query client's entire retry policy.
+ *
+ * Without one, React Query's default applies to every query in the app: three
+ * further requests and about seven seconds of skeleton before a `Forbidden`
+ * the API server had already decided reaches the screen. On a token that
+ * cannot see Secrets that is four requests per failing list, per poll, and the
+ * reader waits the seven seconds to be told the same thing.
+ *
+ * It is also why a *number* of retries matters so little here: a polled query
+ * re-asks on its own interval, so its retry is the next poll.
+ */
+export function isWorthRetrying(error: unknown): boolean {
+  return isRetryableError(normalizeTauriError(error));
+}
+
+/**
  * Extract error code from error message or structure
  */
 function extractErrorCode(error: unknown): ErrorCode {

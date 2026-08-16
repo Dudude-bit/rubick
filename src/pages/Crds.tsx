@@ -188,7 +188,7 @@ export function Crds() {
   }
 
   return (
-    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+    <div className="flex h-full min-h-0 flex-col gap-2 animate-in fade-in duration-200">
       <ResourceListHeader
         title="Custom Resource Definitions"
         count={
@@ -206,6 +206,7 @@ export function Crds() {
       <DataTable
         columns={columns}
         data={crds}
+        fill
         isLoading={isLoading}
         searchKey="kind"
         searchPlaceholder="Search CRDs..."

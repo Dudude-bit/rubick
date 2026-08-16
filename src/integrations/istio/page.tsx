@@ -16,7 +16,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { DoorOpen, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -31,7 +31,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { describeStop } from "@/lib/connections";
 import type { ChainStop, CustomResourceInfo } from "@/generated/types";
-import { crdObjectPath, plural } from "../kit";
+import { plural } from "../kit";
 import {
   Chain,
   Cell,
@@ -399,16 +399,13 @@ function RuleRow({
         )}
         <span className="text-fg-fnt">
           ·{" "}
-          <Link
-            to={crdObjectPath(
-              KINDS.virtualServices,
-              route.source.namespace,
-              route.source.name
-            )}
-            className="font-mono text-info hover:underline"
-          >
-            {route.source.name}
-          </Link>
+          <ResourceRef
+            kind="VirtualService"
+            name={route.source.name}
+            namespace={route.source.namespace}
+            crd={KINDS.virtualServices}
+            showKind={false}
+          />
         </span>
         {sources === null && <span className="text-fg-fnt">…</span>}
       </span>
@@ -739,16 +736,15 @@ function GatewaysTab({
               key={`${gateway.namespace}/${gateway.name}`}
               className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_minmax(0,200px)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
             >
-              <Link
-                to={crdObjectPath(
-                  KINDS.gateways,
-                  gateway.namespace,
-                  gateway.name
-                )}
-                className="truncate font-mono text-info hover:underline"
-              >
-                {gateway.name}
-              </Link>
+              <span className="min-w-0 truncate">
+                <ResourceRef
+                  kind="Gateway"
+                  name={gateway.name}
+                  namespace={gateway.namespace}
+                  crd={KINDS.gateways}
+                  showKind={false}
+                />
+              </span>
               <span className="truncate font-mono text-fg-mut">
                 {servers
                   .map(
@@ -878,16 +874,15 @@ function SubsetsTab({
                 key={`${rule.namespace}/${rule.name}`}
                 className="grid grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
               >
-                <Link
-                  to={crdObjectPath(
-                    KINDS.destinationRules,
-                    rule.namespace,
-                    rule.name
-                  )}
-                  className="truncate font-mono text-info hover:underline"
-                >
-                  {rule.name}
-                </Link>
+                <span className="min-w-0 truncate">
+                  <ResourceRef
+                    kind="DestinationRule"
+                    name={rule.name}
+                    namespace={rule.namespace}
+                    crd={KINDS.destinationRules}
+                    showKind={false}
+                  />
+                </span>
                 <span className="truncate font-mono text-fg-mut">
                   {spec.host ?? "—"}
                 </span>

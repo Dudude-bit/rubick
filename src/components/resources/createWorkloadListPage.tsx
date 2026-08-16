@@ -92,11 +92,9 @@ export function createWorkloadListPage<T extends Workload>(
     const currentNamespace = useClusterStore((s) => s.currentNamespace);
     const navigate = useNavigate();
 
-    const {
-      data: pods,
-      podStatus,
-      isLoading: isLoadingPods,
-    } = usePodsWithMetrics();
+    // Read for the aggregated CPU and memory columns only. The workloads are
+    // this page's subject and do not wait on them — see `usePodsWithMetrics`.
+    const { data: pods, podStatus } = usePodsWithMetrics();
 
     const queryKey = useMemo(
       () => queryKeys.resources(config.resourceType, currentNamespace),
@@ -180,47 +178,46 @@ export function createWorkloadListPage<T extends Workload>(
     );
 
     return (
-      <div className="space-y-4">
-        {podStatus?.status !== "available" && (
-          <MetricsStatusBanner status={podStatus} />
-        )}
-        <ResourceList<T & ResourceMetrics>
-          title={config.title}
-          data={dataWithMetrics}
-          // A resync holds the rows it has until the new state is
-          // complete, so there is normally something to show. With
-          // nothing to show, "still finding out" is the skeleton — the
-          // empty state would be claiming the scope holds none of these
-          // while the answer is still arriving.
-          isLoading={
-            listQuery.isLoading ||
-            isLoadingPods ||
-            (resyncing && dataWithMetrics.length === 0)
-          }
-          dataUpdatedAt={listQuery.dataUpdatedAt}
-          live={!!watchFactory && !watchFailed}
-          slowed={listQuery.freshness.slowed}
-          getRowId={getResourceRowId}
-          delivery={deliveryScopeOf(config.resourceType)}
-          columns={columns}
-          quickActions={quickActions}
-          emptyStateLabel={
-            config.emptyStateLabel ?? toPlural(config.resourceType)
-          }
-          getRowHref={(row) =>
-            getResourceDetailUrl(config.resourceType, row.name, row.namespace)
-          }
-          deleteConfig={{
-            mutationFn: async (item) => {
-              await config.deleter(item);
-            },
-            invalidateQueryKeys: [
-              queryKeys.resources(config.resourceType, currentNamespace),
-            ],
-            resourceType: config.resourceType,
-          }}
-        />
-      </div>
+      <ResourceList<T & ResourceMetrics>
+        title={config.title}
+        data={dataWithMetrics}
+        // A resync holds the rows it has until the new state is complete, so
+        // there is normally something to show. With nothing to show, "still
+        // finding out" is the skeleton — the empty state would be claiming the
+        // scope holds none of these while the answer is still arriving.
+        isLoading={
+          listQuery.isLoading || (resyncing && dataWithMetrics.length === 0)
+        }
+        error={listQuery.error}
+        dataUpdatedAt={listQuery.dataUpdatedAt}
+        live={!!watchFactory && !watchFailed}
+        slowed={listQuery.freshness.slowed}
+        getRowId={getResourceRowId}
+        delivery={deliveryScopeOf(config.resourceType)}
+        columns={columns}
+        quickActions={quickActions}
+        emptyStateLabel={
+          config.emptyStateLabel ?? toPlural(config.resourceType)
+        }
+        // Inside the list, as the Nodes page has it — see `PodList`.
+        headerContent={
+          podStatus?.status !== "available" ? (
+            <MetricsStatusBanner status={podStatus} />
+          ) : null
+        }
+        getRowHref={(row) =>
+          getResourceDetailUrl(config.resourceType, row.name, row.namespace)
+        }
+        deleteConfig={{
+          mutationFn: async (item) => {
+            await config.deleter(item);
+          },
+          invalidateQueryKeys: [
+            queryKeys.resources(config.resourceType, currentNamespace),
+          ],
+          resourceType: config.resourceType,
+        }}
+      />
     );
   };
   ListPage.displayName = `${config.resourceType}List`;
