@@ -131,6 +131,12 @@ const withClaim = (): ResourceConnections => {
   return { subject, edges: [edge], stops: [], published: [], notLookedAt: [] };
 };
 
+// The detection scan is gated on a standing connection now — these tests
+// exercise what detection hands out, so the gate is opened for them.
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true, currentContext: "test" });
+});
+
 describe("UsageBlock when metrics-server is missing", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 

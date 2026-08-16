@@ -139,6 +139,14 @@ beforeEach(() => {
   listCustomResources.mockResolvedValue([application(true)]);
 });
 
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+// The detection scan is gated on a standing connection now — these tests
+// exercise what detection hands out, so the gate is opened for them.
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true, currentContext: "test" });
+});
+
 describe("applying an edited manifest", () => {
   /**
    * The load-bearing one. Most objects on most clusters are delivered by
