@@ -19,7 +19,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
-import { Box, FileCode2, Globe, SlidersHorizontal } from "lucide-react";
+import {
+  Box,
+  FileCode2,
+  Globe,
+  Network,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -35,6 +41,8 @@ import {
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import { useSearchParams } from "react-router-dom";
+import { RoutingMap } from "../routing-map";
+import { routingMap } from "./map";
 import type { ChainStop } from "@/generated/types";
 import { plural } from "../kit";
 import {
@@ -196,6 +204,18 @@ export default function IngressNginxPage() {
       ),
     },
     {
+      id: "map",
+      label: "Map",
+      glyph: viewGlyph(Network),
+      content: (
+        <MapTab
+          groups={groups}
+          sources={sources}
+          loading={routeSources.isPending}
+        />
+      ),
+    },
+    {
       id: "annotations",
       label: "Annotations",
       glyph: viewGlyph(FileCode2),
@@ -237,6 +257,47 @@ export default function IngressNginxPage() {
           setParams(updated, { replace: true });
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * The shape across hosts: which hostnames land on the same Service. The
+ * namespace filter and the rest-on-a-node highlight live in the map itself.
+ */
+function MapTab({
+  groups,
+  sources,
+  loading,
+}: {
+  groups: NginxHostGroup[];
+  sources: NginxSources | null;
+  loading: boolean;
+}) {
+  const data = useMemo(
+    () => (sources ? routingMap(groups, sources) : null),
+    [groups, sources]
+  );
+
+  if (loading) {
+    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+  }
+  if (!data || groups.length === 0) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        Nothing routes through this controller, so there is no shape to draw.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <RoutingMap data={data} />
+      <p className="text-[11px] text-fg-fnt">
+        Rest on a node to light up everything one edge away. A host goes to its
+        own routes; a Service goes to its page — every line is one object naming
+        another.
+      </p>
     </div>
   );
 }

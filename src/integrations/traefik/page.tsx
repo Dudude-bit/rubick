@@ -54,13 +54,7 @@
  * leads to a connection error is worse than no button.
  */
 
-import {
-  Fragment,
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
@@ -394,40 +388,9 @@ function MapTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
-  // The namespaces the routed Services live in. Filtering by one cuts the
-  // fan-out to the slice somebody actually owns — "my namespace's hosts" is
-  // how this map is read on a cluster with twenty tenants.
-  const [namespace, setNamespace] = useState("");
-  const namespaces = useMemo(
-    () =>
-      [
-        ...new Set(
-          groups.flatMap((group) =>
-            group.routes.flatMap((route) =>
-              route.service?.kubernetes ? [route.service.namespace] : []
-            )
-          )
-        ),
-      ].sort(),
-    [groups]
-  );
-  const shown = useMemo(
-    () =>
-      namespace === ""
-        ? groups
-        : groups.filter((group) =>
-            group.routes.some(
-              (route) =>
-                route.service?.kubernetes &&
-                route.service.namespace === namespace
-            )
-          ),
-    [groups, namespace]
-  );
-
   const data = useMemo(
-    () => (sources ? routingMap(shown, sources) : null),
-    [shown, sources]
+    () => (sources ? routingMap(groups, sources) : null),
+    [groups, sources]
   );
 
   if (loading) {
@@ -435,46 +398,20 @@ function MapTab({
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
-  const broken = shown.filter((group) => group.worst === "err").length;
-  const worthALook = shown.filter((group) => group.worst === "warn").length;
+  const broken = groups.filter((group) => group.worst === "err").length;
+  const worthALook = groups.filter((group) => group.worst === "warn").length;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] text-fg-fnt">
-          {broken > 0
-            ? `${broken} of ${shown.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
-            : worthALook > 0
-              ? `nothing broken · ${worthALook} of ${shown.length} worth a look`
-              : `${plural(shown.length, "host")}, none with a problem`}
-          {backingLoading && " · checking what is behind them…"}
-        </p>
-        {namespaces.length > 1 && (
-          <label className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
-            namespace
-            <select
-              value={namespace}
-              onChange={(event) => setNamespace(event.target.value)}
-              className="h-6 rounded border border-hair bg-canvas px-1.5 font-mono text-[11px] text-fg-mid focus-visible:border-info focus-visible:outline-hidden"
-            >
-              <option value="">all</option>
-              {namespaces.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-      {shown.length === 0 ? (
-        <p className="text-xs text-fg-fnt">
-          No host routes to a Service in{" "}
-          <span className="font-mono">{namespace}</span>.
-        </p>
-      ) : (
-        <RoutingMap data={data} />
-      )}
+      <p className="text-[11px] text-fg-fnt">
+        {broken > 0
+          ? `${broken} of ${groups.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+          : worthALook > 0
+            ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
+            : `${plural(groups.length, "host")}, none with a problem`}
+        {backingLoading && " · checking what is behind them…"}
+      </p>
+      <RoutingMap data={data} />
       <p className="text-[11px] text-fg-fnt">
         Rest on a node to light up everything one edge away. A host goes to its
         own paths and their chain; a Service goes to its page — every line is

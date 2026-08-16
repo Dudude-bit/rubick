@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { DoorOpen, Split, Waypoints } from "lucide-react";
+import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -30,6 +30,8 @@ import {
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { describeStop } from "@/lib/connections";
+import { RoutingMap } from "../routing-map";
+import { routingMap } from "./map";
 import type { ChainStop, CustomResourceInfo } from "@/generated/types";
 import { plural } from "../kit";
 import {
@@ -104,6 +106,14 @@ export default function IstioPage() {
           loading={mesh.isPending}
           backingLoading={backing.isPending}
         />
+      ),
+    },
+    {
+      id: "map",
+      label: "Map",
+      glyph: viewGlyph(Network),
+      content: (
+        <MapTab groups={groups} sources={sources} loading={mesh.isPending} />
       ),
     },
     {
@@ -186,6 +196,48 @@ function subsetsMark(groups: IstioHostGroup[]): DetailTabMark | undefined {
 }
 
 // --- routes -------------------------------------------------------------
+
+/**
+ * The shape across hosts: which gateways carry which hostnames, and which
+ * of them land on the same Service. The namespace filter and the
+ * rest-on-a-node highlight live in the map itself.
+ */
+function MapTab({
+  groups,
+  sources,
+  loading,
+}: {
+  groups: IstioHostGroup[];
+  sources: IstioSources | null;
+  loading: boolean;
+}) {
+  const data = useMemo(
+    () => (sources ? routingMap(groups, sources) : null),
+    [groups, sources]
+  );
+
+  if (loading) {
+    return <p className="text-xs text-fg-fnt">Reading the mesh…</p>;
+  }
+  if (!data || groups.length === 0) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        No VirtualService routes anything here, so there is no shape to draw.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <RoutingMap data={data} />
+      <p className="text-[11px] text-fg-fnt">
+        Rest on a node to light up everything one edge away. A host goes to its
+        own routes; a Service goes to its page — every line is one object naming
+        another.
+      </p>
+    </div>
+  );
+}
 
 function RoutesTab({
   groups,

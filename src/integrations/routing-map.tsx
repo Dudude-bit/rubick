@@ -71,6 +71,8 @@ export interface MapEdge {
 export interface MapColumn {
   label: string;
   nodes: MapNode[];
+  /** Overrides the positional default — a host column needs hostname width. */
+  width?: number;
 }
 
 export interface RoutingMapData {
@@ -127,7 +129,11 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
   const xOf = (column: number) =>
     data.columns
       .slice(0, column)
-      .reduce((sum, _, index) => sum + (WIDTHS[index] ?? 180) + GAP, 0);
+      .reduce(
+        (sum, _, index) =>
+          sum + (data.columns[index].width ?? WIDTHS[index] ?? 180) + GAP,
+        0
+      );
 
   const y = new Map<string, number>();
   const spineNodes = data.columns[spine]?.nodes ?? [];
@@ -190,7 +196,7 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
       column: index,
       x: xOf(index),
       y: y.get(node.id) ?? 0,
-      width: WIDTHS[index] ?? 180,
+      width: column.width ?? WIDTHS[index] ?? 180,
     }))
   );
 
@@ -198,6 +204,40 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
     placed,
     height:
       placed.reduce((tallest, entry) => Math.max(tallest, entry.y), 0) + NODE_H,
+  };
+}
+
+/**
+ * The slice of the map one namespace owns.
+ *
+ * Kept: every node whose object lives there, then everything that leads to
+ * one — the edges walked leftward twice, host and then entry point — so the
+ * slice keeps its whole path in rather than a column of orphans.
+ */
+function sliceByNamespace(
+  data: RoutingMapData,
+  namespace: string
+): RoutingMapData {
+  const keep = new Set(
+    data.columns.flatMap((column) =>
+      column.nodes
+        .filter((node) => node.object?.namespace === namespace)
+        .map((node) => node.id)
+    )
+  );
+  for (let sweep = 0; sweep < data.columns.length - 1; sweep++) {
+    for (const edge of data.edges) {
+      if (keep.has(edge.to)) keep.add(edge.from);
+    }
+  }
+  return {
+    columns: data.columns.map((column) => ({
+      ...column,
+      nodes: column.nodes.filter((node) => keep.has(node.id)),
+    })),
+    edges: data.edges.filter(
+      (edge) => keep.has(edge.from) && keep.has(edge.to)
+    ),
   };
 }
 
@@ -209,7 +249,32 @@ export function RoutingMap({
   /** What to say instead when there is nothing to draw. */
   empty?: ReactNode;
 }) {
-  const { placed, height } = useMemo(() => place(data), [data]);
+  // The namespaces the drawn objects live in — one select, every vendor's
+  // map, because "my namespace's slice" is how a twenty-tenant cluster is
+  // actually read.
+  const namespaces = useMemo(
+    () =>
+      [
+        ...new Set(
+          data.columns.flatMap((column) =>
+            column.nodes.flatMap((node) =>
+              node.object?.namespace ? [node.object.namespace] : []
+            )
+          )
+        ),
+      ].sort(),
+    [data]
+  );
+  const [namespace, setNamespace] = useState("");
+  const view = useMemo(
+    () =>
+      namespace !== "" && namespaces.includes(namespace)
+        ? sliceByNamespace(data, namespace)
+        : data,
+    [data, namespace, namespaces]
+  );
+
+  const { placed, height } = useMemo(() => place(view), [view]);
   const byId = useMemo(
     () => new Map(placed.map((entry) => [entry.node.id, entry])),
     [placed]
@@ -222,17 +287,20 @@ export function RoutingMap({
   const related = useMemo(() => {
     if (!active) return null;
     const ids = new Set([active]);
-    for (const edge of data.edges) {
+    for (const edge of view.edges) {
       if (edge.from === active) ids.add(edge.to);
       if (edge.to === active) ids.add(edge.from);
     }
     return ids;
-  }, [active, data.edges]);
+  }, [active, view.edges]);
 
-  if (placed.length === 0) return <>{empty}</>;
+  if (placed.length === 0 && namespace === "") return <>{empty}</>;
 
   const width =
-    data.columns.reduce((sum, _, index) => sum + (WIDTHS[index] ?? 180), 0) +
+    view.columns.reduce(
+      (sum, column, index) => sum + (column.width ?? WIDTHS[index] ?? 180),
+      0
+    ) +
     GAP * Math.max(0, data.columns.length - 1);
 
   return (
@@ -240,12 +308,32 @@ export function RoutingMap({
     // and a namespace, and a narrow window is a reason to pan, not a reason
     // to clip every name on the screen.
     <div className="overflow-x-auto pb-1">
+      {namespaces.length > 1 && (
+        <label className="mb-2 flex items-center justify-end gap-1.5 text-[11px] text-fg-fnt">
+          namespace
+          <select
+            value={namespace}
+            onChange={(event) => {
+              setNamespace(event.target.value);
+              setActive(null);
+            }}
+            className="h-6 rounded border border-hair bg-canvas px-1.5 font-mono text-[11px] text-fg-mid focus-visible:border-info focus-visible:outline-hidden"
+          >
+            <option value="">all namespaces</option>
+            {namespaces.map((entry) => (
+              <option key={entry} value={entry}>
+                {entry}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div style={{ width }}>
         <div className="flex" style={{ gap: GAP }}>
-          {data.columns.map((column, index) => (
+          {view.columns.map((column, index) => (
             <span
               key={column.label}
-              style={{ width: WIDTHS[index] ?? 180 }}
+              style={{ width: column.width ?? WIDTHS[index] ?? 180 }}
               className="text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt"
             >
               {column.label}
@@ -264,7 +352,7 @@ export function RoutingMap({
             width={width}
             height={height}
           >
-            {data.edges.map((edge) => {
+            {view.edges.map((edge) => {
               const from = byId.get(edge.from);
               const to = byId.get(edge.to);
               if (!from || !to) return null;
