@@ -234,7 +234,7 @@ function EdgeNote({
  * the core does not draw: a route the capability read off a plain Ingress is
  * the same way in the chain already shows as a hop, said twice.
  */
-function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
+export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
   const vendors = (routes ?? []).filter(
     (route) => route.source.kind !== "Ingress"
   );

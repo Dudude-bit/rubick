@@ -14,6 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { useConnections } from "@/hooks/useConnections";
+import { useServicesRoutes } from "@/hooks/useServiceRoutes";
+import { RoutesNote } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import {
@@ -377,8 +380,99 @@ function PeekOverview({
           </div>
         ))
       )}
+      {(target.kind === "Service" || target.kind === "Endpoints") && (
+        <PeekTraffic target={target} />
+      )}
       <PeekEvents target={target} />
     </div>
+  );
+}
+
+/**
+ * The level above and the level below, so a peek is a place to walk the
+ * chain from rather than a dead end: an Endpoints names its Service, a
+ * Service names its Endpoints, and both name every way traffic reaches
+ * them from outside — each one a peek of its own.
+ *
+ * A Service and its Endpoints share a name by contract, which is what lets
+ * both directions be stated without another read.
+ */
+function PeekTraffic({ target }: { target: PeekTarget }) {
+  const namespace = target.namespace ?? "";
+  const service = { namespace, name: target.name };
+
+  // The core's own edges — an Ingress routing here — and the vendors' —
+  // an IngressRoute. Both cached by the same keys their pages use.
+  const conns = useConnections("Service", target.name, namespace);
+  const routed = useServicesRoutes([service]);
+  const vendorRoutes = routed.routes.get(`${namespace}/${target.name}`) ?? [];
+
+  const ingresses = [
+    ...new Map(
+      (conns.data?.edges ?? [])
+        .filter(
+          (edge) =>
+            edge.relation.verb === "routes" && edge.from.kind === "Ingress"
+        )
+        .map((edge) => [`${edge.from.namespace}/${edge.from.name}`, edge.from])
+    ).values(),
+  ];
+
+  const up =
+    ingresses.length > 0 ||
+    vendorRoutes.some((route) => route.source.kind !== "Ingress") ||
+    target.kind === "Endpoints";
+
+  return (
+    <>
+      {up && (
+        <div>
+          <PeekHeading title="Reached through" />
+          <div className="flex flex-col gap-1 pb-1">
+            {target.kind === "Endpoints" && (
+              <p className="text-[11px] text-fg-fnt">
+                <ResourceRef
+                  kind="Service"
+                  name={target.name}
+                  namespace={namespace}
+                  showKind={false}
+                />{" "}
+                — the Service these endpoints publish
+              </p>
+            )}
+            {ingresses.map((ingress) => (
+              <p
+                key={`${ingress.namespace}/${ingress.name}`}
+                className="text-[11px] text-fg-fnt"
+              >
+                <ResourceRef
+                  kind="Ingress"
+                  name={ingress.name}
+                  namespace={ingress.namespace}
+                  showKind={false}
+                />{" "}
+                — Ingress
+              </p>
+            ))}
+            <RoutesNote routes={vendorRoutes} />
+          </div>
+        </div>
+      )}
+      {target.kind === "Service" && (
+        <div>
+          <PeekHeading title="Behind it" />
+          <p className="pb-1 text-[11px] text-fg-fnt">
+            <ResourceRef
+              kind="Endpoints"
+              name={target.name}
+              namespace={namespace}
+              showKind={false}
+            />{" "}
+            — the addresses actually answering, pod by pod
+          </p>
+        </div>
+      )}
+    </>
   );
 }
 
