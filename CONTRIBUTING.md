@@ -10,6 +10,7 @@ Thanks for your interest in contributing.
 - Node.js 24 LTS (or newer)
 - Bun 1.3+ (<https://bun.sh> — the package manager for this repo)
 - Tauri platform dependencies: <https://v2.tauri.app/start/prerequisites/>
+- Tauri CLI (`cargo install tauri-cli`) — `make dev` and `make build` shell out to it
 
 ### Setup
 
@@ -18,7 +19,7 @@ git clone https://github.com/Dudude-bit/rubick.git
 cd rubick
 bun install
 bunx lefthook install   # one-time: enables pre-commit + pre-push hooks
-bun run tauri dev
+make dev
 ```
 
 The hooks (defined in `lefthook.yml`) run `cargo fmt --check`, `eslint`,

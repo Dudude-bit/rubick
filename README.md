@@ -99,9 +99,9 @@ Every name you can go to is a link, with the gestures you expect: click to peek,
 
 Grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). There is no Homebrew or winget package yet.
 
-- **macOS** — the app is not signed or notarised yet, so Gatekeeper will refuse the first launch. Right-click the app → **Open**, or `xattr -dr com.apple.quarantine /Applications/Rubick.app`.
-- **Windows** — SmartScreen will warn for the same reason. **More info → Run anyway**.
-- **Linux** — AppImage and `.deb`.
+- **macOS** — signed with a Developer ID certificate and notarised by Apple, so it opens on a double-click.
+- **Windows** — not signed, so SmartScreen will warn on the first launch. **More info → Run anyway**.
+- **Linux** — `.deb` and `.rpm`.
 
 **What it talks to.** Your clusters, and GitHub for update checks. Nothing else: there is no analytics, no account and no crash reporting, and any integration you connect is an address you typed yourself.
 
@@ -110,12 +110,14 @@ Grab the build for your platform from [Releases](https://github.com/Dudude-bit/r
 ## Development
 
 ```bash
+mise install            # Bun, Node, Rust
+cargo install tauri-cli # once, if you have no `cargo tauri`
 bun install
-bun run tauri dev      # run it
-bun run tauri build    # package it
+make dev                # run it
+make build              # package it
 ```
 
-Needs [Bun](https://bun.sh) 1.2+, Rust 1.91+, and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform.
+Needs [Bun](https://bun.sh) 1.3+, Rust 1.91+, and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform.
 
 ```bash
 bunx tsc --noEmit                                     # types

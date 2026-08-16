@@ -110,8 +110,6 @@ flate2 = "1.0"
 # `term.ReadPassword` / `getpass` which require isatty(stdin).
 portable-pty = "0.9"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-
 [dev-dependencies]
 tempfile = "3"
 

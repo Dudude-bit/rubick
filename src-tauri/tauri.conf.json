@@ -43,7 +43,7 @@
     ],
     "resources": [],
     "externalBin": [],
-    "copyright": "\u00a9 2024 Rubick",
+    "copyright": "\u00a9 2026 Kirill Inyakin, Ruslan Kusherbayev",
     "category": "DeveloperTool",
     "shortDescription": "Kubernetes GUI Client",
     "longDescription": "A modern, cross-platform Kubernetes GUI client built with Tauri and Rust",
@@ -61,9 +61,6 @@
       "timestampUrl": ""
     },
     "linux": {
-      "appimage": {
-        "bundleMediaFramework": false
-      },
       "deb": {
         "depends": []
       },

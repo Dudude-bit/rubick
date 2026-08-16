@@ -21,7 +21,7 @@ What you expected to happen.
 **Environment**
 
 - OS: [e.g. macOS 14.5 / Ubuntu 24.04 / Windows 11]
-- k8s-gui version: [e.g. 2.0.0 — see Settings > About]
+- Rubick version: [e.g. 4.0.1 — see Settings > About]
 - Kubernetes version: [e.g. 1.30]
 - Cluster provider: [EKS / GKE / AKS / local / OIDC]
 

@@ -48,9 +48,10 @@ dev:
 build:
 	$(MISE_EXEC) cargo tauri build
 
-# Run tests
+# Run tests — both suites, matching what pre-push enforces.
 test:
 	$(MISE_EXEC) cargo test
+	$(MISE_EXEC) bun run test
 
 # Clean build artifacts
 clean:
