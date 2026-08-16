@@ -1,4 +1,4 @@
-.PHONY: gen-entities-tauri gen-icons dev build test clean help apply-test-manifests
+.PHONY: gen-entities-tauri gen-icons dev build test clean help apply-test-manifests dist
 
 MISE := $(shell command -v mise 2>/dev/null)
 MISE_EXEC := $(if $(MISE),$(MISE) exec --,)
@@ -49,9 +49,17 @@ build:
 	$(MISE_EXEC) cargo tauri build
 
 # Run tests — both suites, matching what pre-push enforces.
-test:
+#
+# `cargo test` from the workspace root builds the bin, and
+# `tauri::generate_context!()` reads ../dist at compile time. dist/ is
+# gitignored, so a clean checkout has none and the macro panics. CI adds
+# an explicit frontend build for the same reason (ci.yml).
+test: dist
 	$(MISE_EXEC) cargo test
 	$(MISE_EXEC) bun run test
+
+dist:
+	$(MISE_EXEC) bun run build
 
 # Clean build artifacts
 clean:
