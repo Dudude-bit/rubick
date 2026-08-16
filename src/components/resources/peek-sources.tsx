@@ -940,7 +940,7 @@ function asText(value: unknown): string | undefined {
 }
 
 /** Scalar leaves, dotted, so a nested `status.conditions` does not explode. */
-function flatten(value: unknown, limit: number): KeyValue[] {
+export function flatten(value: unknown, limit: number): KeyValue[] {
   const rows: KeyValue[] = [];
   walk(value, "", rows, limit);
   return rows;
@@ -955,13 +955,17 @@ function walk(
   if (rows.length >= limit || value === null || value === undefined) return;
   if (Array.isArray(value)) {
     const scalars = value.filter((entry) => typeof entry !== "object");
-    rows.push({
-      label: path,
-      value:
-        scalars.length === value.length
-          ? scalars.join(" · ")
-          : `${value.length} entries`,
-      mono: true,
+    if (scalars.length === value.length) {
+      rows.push({ label: path, value: scalars.join(" · "), mono: true });
+      return;
+    }
+    // An array of objects is where a custom resource keeps the part anybody
+    // opens it for — an IngressRoute's `routes` holds the match rule, the
+    // service, the priority. Printed as "1 entries" the peek said nothing;
+    // descended with indexed paths it says the thing itself, and the row
+    // limit still caps how far that goes.
+    value.forEach((child, index) => {
+      walk(child, path ? `${path}.${index}` : String(index), rows, limit);
     });
     return;
   }
