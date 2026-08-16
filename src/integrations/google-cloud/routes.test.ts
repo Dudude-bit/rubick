@@ -22,6 +22,7 @@ import {
 } from "./model";
 import {
   claimed,
+  countHosts,
   hostsOf,
   ignoredByClassName,
   type GkeSources,
@@ -53,6 +54,7 @@ const ingress = (
     tlsHosts: [],
     tlsConfigs: [],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: { "kubernetes.io/ingress.class": "gce" },
     createdAt: null,
@@ -125,6 +127,38 @@ describe("which Ingresses GKE serves", () => {
   /** An Ingress with the annotation is not "ignored" whatever the field says. */
   it("does not report an annotated Ingress as ignored", () => {
     expect(ignoredByClassName([ingress({ className: "gce" })])).toEqual([]);
+  });
+
+  /**
+   * A claimed Ingress with no rules at all — `spec.defaultBackend` sends
+   * everything to one Service, the ordinary way a Google load balancer
+   * fronts an in-cluster proxy. Read through `rules` alone it produced zero
+   * hosts, and the page then told a cluster with a live, TLS-terminating
+   * GKE load balancer that GKE serves nothing here.
+   */
+  it("draws a defaultBackend-only Ingress as the catch-all host", () => {
+    const edge = ingress({
+      rules: [],
+      defaultBackend: {
+        backendService: "storefront",
+        backendPort: "80",
+        resourceBackend: null,
+      },
+    });
+
+    const hosts = hostsOf(sources({ ingresses: [edge] }));
+
+    expect(hosts).toHaveLength(1);
+    expect(hosts[0].host).toBeNull();
+    expect(hosts[0].routes).toHaveLength(1);
+    expect(hosts[0].routes[0].backend).toEqual({
+      name: "storefront",
+      port: "80",
+    });
+    expect(hosts[0].fronts.map((front) => front.ingress.name)).toEqual([
+      "shop",
+    ]);
+    expect(countHosts([edge])).toBe(1);
   });
 });
 

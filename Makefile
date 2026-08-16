@@ -44,15 +44,19 @@ gen-entities-tauri:
 # replaced the real icon with the old one and rebuilt all sixteen sizes from
 # it.
 gen-icons:
-	$(MISE_EXEC) cargo tauri icon src-tauri/icons/base.png
+	$(MISE_EXEC) bun run tauri icon src-tauri/icons/base.png
 
-# Run Tauri development server
+# Run Tauri development server: vite HMR for the frontend, incremental
+# debug builds for Rust. The CLI comes from devDependencies so this works
+# with nothing global installed; RUST_LOG defaults on because a dev run
+# with no logs answers no questions.
+RUST_LOG ?= info
 dev:
-	$(MISE_EXEC) cargo tauri dev
+	RUST_LOG=$(RUST_LOG) $(MISE_EXEC) bun run tauri dev
 
 # Build all packages
 build:
-	$(MISE_EXEC) cargo tauri build
+	$(MISE_EXEC) bun run tauri build
 
 # Run tests — both suites, matching what pre-push enforces.
 #

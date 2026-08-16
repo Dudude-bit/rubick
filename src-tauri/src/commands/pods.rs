@@ -41,8 +41,19 @@ pub async fn list_pods(
         lp = lp.limit(limit.try_into().unwrap_or(u32::MAX));
     }
 
+    let started = std::time::Instant::now();
     let pod_list = api.list(&lp).await?;
+    let fetched_ms = started.elapsed().as_millis() as u64;
     let mut pods: Vec<PodInfo> = pod_list.items.iter().map(PodInfo::from).collect();
+    // The reported cost of this page is seconds on a hundred pods, and the
+    // split between the API round-trip and everything after it is the whole
+    // diagnosis — visible under RUST_LOG=info without a profiler in hand.
+    tracing::info!(
+        count = pods.len(),
+        fetch_ms = fetched_ms,
+        total_ms = started.elapsed().as_millis() as u64,
+        "list_pods"
+    );
 
     // Client-side, and against both readings of "status": the caller may
     // be naming the phase (`Running`) or the status the app shows

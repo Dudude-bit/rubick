@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -32,6 +32,14 @@ function wrapper() {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
 }
+
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+// The detection scan is gated on a standing connection now — these tests
+// exercise what detection hands out, so the gate is opened for them.
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true, currentContext: "test" });
+});
 
 describe("useCapability", () => {
   /**

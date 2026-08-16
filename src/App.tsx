@@ -134,6 +134,11 @@ const ConfigMapDetail = lazy(() =>
 const SecretDetail = lazy(() =>
   import("@/pages/SecretDetail").then((m) => ({ default: m.SecretDetail }))
 );
+const IntegrationsList = lazy(() =>
+  import("@/pages/IntegrationsList").then((m) => ({
+    default: m.IntegrationsList,
+  }))
+);
 const IntegrationPage = lazy(() =>
   import("@/pages/IntegrationPage").then((m) => ({
     default: m.IntegrationPage,
@@ -245,6 +250,9 @@ export default function App() {
                 through the integrations registry and never names a vendor.
                 Which tab is open is a query parameter, so a scope tab parks
                 and restores the whole screen. */}
+            {/* The catalog first: the inventory of what this cluster has,
+                which used to hide inside Settings. */}
+            <Route path="integrations" element={<IntegrationsList />} />
             <Route path="integrations/:slug" element={<IntegrationPage />} />
             <Route
               path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}

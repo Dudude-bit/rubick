@@ -57,6 +57,7 @@ function ingress(
       ? [{ hosts: [host], secretName: options.secretName, isCatchAll: false }]
       : [],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: options.annotations ?? {},
     createdAt: options.createdAt ?? null,
@@ -115,6 +116,28 @@ const canary = (weight: string, extra: Record<string, string> = {}) => ({
   [`${PREFIX}canary`]: "true",
   [`${PREFIX}canary-weight`]: weight,
   ...extra,
+});
+
+describe("what a defaultBackend Ingress serves", () => {
+  it("serves a defaultBackend-only Ingress as its catch-all route", () => {
+    const routes = allRoutes(
+      sources([
+        {
+          ...ingress("edge", "unused.example.com"),
+          rules: [],
+          defaultBackend: {
+            backendService: "front-proxy",
+            backendPort: "80",
+            resourceBackend: null,
+          },
+        },
+      ])
+    );
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].host).toBeNull();
+    expect(routes[0].service?.name).toBe("front-proxy");
+  });
 });
 
 describe("which Ingresses are this controller's", () => {

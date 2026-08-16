@@ -12,6 +12,8 @@ import {
   PHASE_LABEL,
   type ContainerLists,
 } from "@/lib/container-sequence";
+import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
+import { formatQuantity } from "@/lib/metric-format";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
@@ -20,6 +22,7 @@ import {
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import { vendorPeek } from "@/integrations";
 import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import { ClaimRef } from "./storage-refs";
@@ -128,6 +131,23 @@ function images(
       })),
     },
   ];
+}
+
+/**
+ * A requests/limits value the way a person reads it: "268435456" is a
+ * manifest's spelling, "256Mi" is an answer. Anything unparseable is shown
+ * as written — the author's words beat a guess.
+ */
+function prettyQuantity(
+  value: string | null,
+  kind: "cpu" | "memory"
+): string | null {
+  if (!value) return null;
+  if (parseQuantity(value) === null) return value;
+  return formatQuantity(
+    kind === "cpu" ? parseCPU(value) : parseMemory(value),
+    kind
+  );
 }
 
 const list = (values: string[], empty = "—") =>
@@ -246,12 +266,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             {
               label: "CPU",
-              value: `${pod.cpuRequests || "—"} → ${pod.cpuLimits || "unlimited"}`,
+              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? "unlimited"}`,
               mono: true,
             },
             {
               label: "Memory",
-              value: `${pod.memoryRequests || "—"} → ${pod.memoryLimits || "unlimited"}`,
+              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? "unlimited"}`,
               mono: true,
             },
           ],
@@ -516,25 +536,49 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
       },
       {
         title: "Rules",
-        count: ingress.rules.length,
-        items: ingress.rules.flatMap((rule) =>
-          rule.paths.map((path) => ({
-            label: `${rule.host || "*"}${path.path}`,
-            // The path is the label; the value is where it goes, and where
-            // it goes is a Service in this ingress's own namespace.
-            value: path.backendService ? (
-              <>
-                {ref("Service", path.backendService, target.namespace)}
-                <span className="font-mono text-fg-fnt">
-                  :{path.backendPort}
-                </span>
-              </>
-            ) : (
-              "no backend"
-            ),
-          }))
-        ),
-        emptyMessage: "No rules",
+        count: ingress.rules.length || undefined,
+        items: [
+          ...ingress.rules.flatMap((rule) =>
+            rule.paths.map((path) => ({
+              label: `${rule.host || "*"}${path.path}`,
+              // The path is the label; the value is where it goes, and where
+              // it goes is a Service in this ingress's own namespace.
+              value: path.backendService ? (
+                <>
+                  {ref("Service", path.backendService, target.namespace)}
+                  <span className="font-mono text-fg-fnt">
+                    :{path.backendPort}
+                  </span>
+                </>
+              ) : (
+                "no backend"
+              ),
+            }))
+          ),
+          // The fallback is a rule too — for a rules-less Ingress it is the
+          // whole object, and "No rules" over it was the peek calling a
+          // working edge dead.
+          ...(ingress.defaultBackend?.backendService
+            ? [
+                {
+                  label: "anything unmatched",
+                  value: (
+                    <>
+                      {ref(
+                        "Service",
+                        ingress.defaultBackend.backendService,
+                        target.namespace
+                      )}
+                      <span className="font-mono text-fg-fnt">
+                        :{ingress.defaultBackend.backendPort}
+                      </span>
+                    </>
+                  ),
+                },
+              ]
+            : []),
+        ],
+        emptyMessage: "No rules and no default backend",
       },
     ],
   })),
@@ -815,25 +859,32 @@ export function resolveSource(target: PeekTarget): PeekSource {
  * the core, which is what the integrations seam exists to prevent.
  */
 function customResourceSource(crdName: string): PeekSource {
+  // A kind the vendor tree owns gets the vendor's own reading — the same
+  // parser its routing page trusts — in place of the flattened spec. The
+  // shell rows stay core either way: what controls it, and its labels.
+  const vendor = vendorPeek(crdName);
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
     (resource: CustomResourceDetailInfo) => {
       const status = resource.status as Record<string, unknown> | null;
+      const body = vendor?.(resource);
       return {
-        status: customResourceState(status),
+        status: body?.status ?? customResourceState(status),
         createdAt: resource.createdAt,
         groups: [
           ...controlledBy(resource.ownerReferences, resource.namespace),
-          {
-            title: "Status",
-            items: flatten(status, MANIFEST_ROW_LIMIT),
-            emptyMessage: "Nothing reported yet",
-          },
-          {
-            title: "Spec",
-            items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
-            emptyMessage: "No spec",
-          },
+          ...(body?.groups ?? [
+            {
+              title: "Status",
+              items: flatten(status, MANIFEST_ROW_LIMIT),
+              emptyMessage: "Nothing reported yet",
+            },
+            {
+              title: "Spec",
+              items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
+              emptyMessage: "No spec",
+            },
+          ]),
           {
             title: "Labels",
             count: Object.keys(resource.labels).length || undefined,
@@ -940,7 +991,7 @@ function asText(value: unknown): string | undefined {
 }
 
 /** Scalar leaves, dotted, so a nested `status.conditions` does not explode. */
-function flatten(value: unknown, limit: number): KeyValue[] {
+export function flatten(value: unknown, limit: number): KeyValue[] {
   const rows: KeyValue[] = [];
   walk(value, "", rows, limit);
   return rows;
@@ -955,13 +1006,17 @@ function walk(
   if (rows.length >= limit || value === null || value === undefined) return;
   if (Array.isArray(value)) {
     const scalars = value.filter((entry) => typeof entry !== "object");
-    rows.push({
-      label: path,
-      value:
-        scalars.length === value.length
-          ? scalars.join(" · ")
-          : `${value.length} entries`,
-      mono: true,
+    if (scalars.length === value.length) {
+      rows.push({ label: path, value: scalars.join(" · "), mono: true });
+      return;
+    }
+    // An array of objects is where a custom resource keeps the part anybody
+    // opens it for — an IngressRoute's `routes` holds the match rule, the
+    // service, the priority. Printed as "1 entries" the peek said nothing;
+    // descended with indexed paths it says the thing itself, and the row
+    // limit still caps how far that goes.
+    value.forEach((child, index) => {
+      walk(child, path ? `${path}.${index}` : String(index), rows, limit);
     });
     return;
   }

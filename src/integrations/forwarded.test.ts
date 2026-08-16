@@ -226,7 +226,7 @@ describe("choosing between the Services one chart installs", () => {
       "loki-gateway",
       "loki-read",
     ]);
-    expect(found[0].because).toBe("its gateway");
+    expect(found[0].because).toBe('its "gateway" component');
   });
 
   /** An `index-gateway` is not a gateway, and `avoid` is checked first. */
@@ -267,6 +267,43 @@ describe("choosing between the Services one chart installs", () => {
     expect(found.map((entry) => entry.service.name)).toEqual([
       "prometheus-operated",
     ]);
+  });
+
+  /**
+   * The same chart also wraps the control plane's own metrics endpoints in
+   * Services named for it — coredns, etcd, kube-proxy, the scheduler — and
+   * every one answers `/metrics` and cannot answer a PromQL query. No
+   * `avoid` list can keep up with that family, but none of them carries the
+   * vendor's own port: a name-substring match without it is a row that
+   * connects and then answers nothing.
+   */
+  it("does not offer scrape targets that merely carry the vendor's name", async () => {
+    vi.mocked(commands.listServices).mockResolvedValue([
+      service("stack-kube-prometheus-stac-coredns", "kube-system", [9153]),
+      service("stack-kube-prometheus-stac-kube-etcd", "kube-system", [2381]),
+      service("stack-kube-prometheus-stac-kube-proxy", "kube-system", [10249]),
+      service("stack-kube-prometheus-stac-prometheus", "mon", [9090]),
+    ]);
+
+    const found = await candidates({ names: ["prometheus"], ports: [9090] });
+    expect(found.map((entry) => entry.service.name)).toEqual([
+      "stack-kube-prometheus-stac-prometheus",
+    ]);
+  });
+
+  /**
+   * A label is the chart's own word and outranks the port heuristic: a
+   * Prometheus published on a nonstandard port is still a Prometheus.
+   */
+  it("keeps a labelled Service on a nonstandard port", async () => {
+    vi.mocked(commands.listServices).mockResolvedValue([
+      service("prom-custom", "mon", [8481], {
+        "app.kubernetes.io/name": "prometheus",
+      }),
+    ]);
+
+    const found = await candidates({ names: ["prometheus"], ports: [9090] });
+    expect(found.map((entry) => entry.service.name)).toEqual(["prom-custom"]);
   });
 });
 

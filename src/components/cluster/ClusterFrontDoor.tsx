@@ -1,4 +1,5 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
+import { Spinner } from "@/components/ui/spinner";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -29,6 +30,7 @@ export function ClusterFrontDoor() {
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connectStartedAt = useClusterStore((s) => s.connectStartedAt);
+  const isLoading = useClusterStore((s) => s.isLoading);
   const error = useClusterStore((s) => s.error);
   const errorContext = useClusterStore((s) => s.errorContext);
   const connect = useClusterStore((s) => s.connect);
@@ -60,6 +62,20 @@ export function ClusterFrontDoor() {
           <ClusterList onSelect={connect} failedContext={errorContext} />
         </div>
         <SourceLine kubeconfig={kubeconfig} />
+      </Door>
+    );
+  }
+
+  // Initialising: the kubeconfig is being read and the saved cluster is a
+  // beat from auto-connecting. A static screen here reads as "nothing is
+  // happening", which is the opposite of what is true.
+  if (contexts.length === 0 && isLoading) {
+    return (
+      <Door>
+        <div className="flex items-center gap-2.5 text-xs text-fg-mut">
+          <Spinner size="sm" aria-hidden />
+          Reading your kubeconfig…
+        </div>
       </Door>
     );
   }
@@ -332,14 +348,19 @@ function Connecting({
 
   return (
     <>
-      <Heading
-        title={`Connecting to ${context}…`}
-        sub={
-          info?.exec_command
-            ? "Your cluster is asking who you are. This can open a browser window."
-            : "Waiting for the cluster's API server to answer."
-        }
-      />
+      <div className="flex items-start gap-2.5">
+        {/* The one screen whose whole message is "something is happening":
+            it says so with motion, not just with an ellipsis. */}
+        <Spinner size="sm" aria-hidden className="mt-0.5 text-fg-fnt" />
+        <Heading
+          title={`Connecting to ${context}…`}
+          sub={
+            info?.exec_command
+              ? "Your cluster is asking who you are. This can open a browser window."
+              : "Waiting for the cluster's API server to answer."
+          }
+        />
+      </div>
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
         <Act onClick={onCancel}>Cancel</Act>
         {startedAt && <span className="font-mono">{elapsed}</span>}

@@ -110,7 +110,14 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
       const hosts = row.original.rules
         .map((rule) => rule.host)
         .filter((host): host is string => Boolean(host));
-      if (hosts.length === 0) return <span className="text-fg-mut">*</span>;
+      if (hosts.length === 0) {
+        const fallback = row.original.defaultBackend?.backendService;
+        return (
+          <span className="font-mono text-fg-mut">
+            *{fallback && <span className="text-fg-fnt"> → {fallback}</span>}
+          </span>
+        );
+      }
       return (
         <Tooltip>
           <TooltipTrigger className="flex flex-wrap items-baseline gap-x-2 font-mono text-fg-mid">

@@ -13,6 +13,7 @@ import { create } from "zustand";
 import type { ContextInfo } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
+import { credentialsRestored } from "@/lib/credentials";
 import { clampScope, decodeScope, wireNamespace } from "@/lib/namespace-scope";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
 
@@ -209,6 +210,12 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         pendingContext: null,
         connectStartedAt: null,
       });
+      // A connect that landed is a session the cluster accepts, and it is
+      // the only proof that lifts the refusal banner: "Sign in again"
+      // reconnects to the same context, so the context-change clearing in
+      // useExpiredCredentials never fires for exactly the button built to
+      // recover from it.
+      credentialsRestored();
       // Only a connection that landed counts as "used": ordering the
       // front door by clusters the reader failed to reach would put the
       // broken ones on top.

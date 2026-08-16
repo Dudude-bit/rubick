@@ -1,7 +1,7 @@
 //! Network resource types
 
 use k8s_openapi::api::core::v1::Endpoints;
-use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::api::networking::v1::{Ingress, IngressBackend};
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +36,22 @@ pub struct IngressTlsConfig {
     pub is_catch_all: bool,
 }
 
+/// The Ingress's `spec.defaultBackend`, where one is set.
+///
+/// A defaultBackend-only Ingress is how a cloud load balancer fronts an
+/// in-cluster proxy — no `rules` at all, everything to one Service. Read
+/// only through `rules`, such an Ingress looks like it serves nothing,
+/// which is how two routing pages came to call an edge-terminated cluster
+/// "served in the clear" on every host.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngressDefaultBackend {
+    pub backend_service: String,
+    pub backend_port: String,
+    /// `Kind/name` where it routes to an API object rather than a Service.
+    pub resource_backend: Option<String>,
+}
+
 /// Information about an Ingress
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +60,7 @@ pub struct IngressInfo {
     pub namespace: String,
     pub class_name: Option<String>,
     pub rules: Vec<IngressRule>,
+    pub default_backend: Option<IngressDefaultBackend>,
     pub load_balancer_ips: Vec<String>,
     pub tls_hosts: Vec<String>,
     pub tls_configs: Vec<IngressTlsConfig>,
@@ -51,6 +68,33 @@ pub struct IngressInfo {
     pub labels: std::collections::BTreeMap<String, String>,
     pub annotations: std::collections::BTreeMap<String, String>,
     pub created_at: Option<String>,
+}
+
+/// A backend's three spellings, shared by `rules[].paths[]` and
+/// `spec.defaultBackend` — the same `IngressBackend` object in both places.
+fn read_backend(backend: &IngressBackend) -> (String, String, Option<String>) {
+    let resource_backend = backend
+        .resource
+        .as_ref()
+        .map(|r| format!("{}/{}", r.kind, r.name));
+
+    let backend_service = backend
+        .service
+        .as_ref()
+        .map_or_else(String::new, |s| s.name.clone());
+
+    let backend_port = backend
+        .service
+        .as_ref()
+        .and_then(|s| s.port.as_ref())
+        .map(|p| {
+            p.name
+                .clone()
+                .unwrap_or_else(|| p.number.map_or_else(|| "?".to_string(), |n| n.to_string()))
+        })
+        .unwrap_or_else(|| "?".to_string());
+
+    (backend_service, backend_port, resource_backend)
 }
 
 impl From<&Ingress> for IngressInfo {
@@ -73,33 +117,8 @@ impl From<&Ingress> for IngressInfo {
                                 http.paths
                                     .iter()
                                     .map(|path| {
-                                        // Check for resource backend first
-                                        let resource_backend = path
-                                            .backend
-                                            .resource
-                                            .as_ref()
-                                            .map(|r| format!("{}/{}", r.kind, r.name));
-
-                                        let backend_service = path
-                                            .backend
-                                            .service
-                                            .as_ref()
-                                            .map_or_else(|| String::new(), |s| s.name.clone());
-
-                                        let backend_port = path
-                                            .backend
-                                            .service
-                                            .as_ref()
-                                            .and_then(|s| s.port.as_ref())
-                                            .map(|p| {
-                                                p.name.clone().unwrap_or_else(|| {
-                                                    p.number.map_or_else(
-                                                        || "?".to_string(),
-                                                        |n| n.to_string(),
-                                                    )
-                                                })
-                                            })
-                                            .unwrap_or_else(|| "?".to_string());
+                                        let (backend_service, backend_port, resource_backend) =
+                                            read_backend(&path.backend);
 
                                         IngressPath {
                                             path: path
@@ -164,6 +183,17 @@ impl From<&Ingress> for IngressInfo {
 
         let has_catch_all_tls = tls_configs.iter().any(|c| c.is_catch_all);
 
+        let default_backend = spec
+            .and_then(|s| s.default_backend.as_ref())
+            .map(|backend| {
+                let (backend_service, backend_port, resource_backend) = read_backend(backend);
+                IngressDefaultBackend {
+                    backend_service,
+                    backend_port,
+                    resource_backend,
+                }
+            });
+
         // Extract labels and annotations
         let labels = ingress.metadata.labels.clone().unwrap_or_default();
         let annotations = ingress.metadata.annotations.clone().unwrap_or_default();
@@ -173,6 +203,7 @@ impl From<&Ingress> for IngressInfo {
             namespace: ingress.namespace().unwrap_or_default(),
             class_name: spec.and_then(|s| s.ingress_class_name.clone()),
             rules,
+            default_backend,
             load_balancer_ips,
             tls_hosts,
             tls_configs,
@@ -238,6 +269,55 @@ pub struct EndpointsInfo {
     /// the answer and a page drawing it as one is showing 1000 of however
     /// many there really are.
     pub over_capacity: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::networking::v1::{
+        IngressBackend, IngressServiceBackend, IngressSpec, ServiceBackendPort,
+    };
+    use kube::core::ObjectMeta;
+
+    fn ingress_with_default_backend() -> Ingress {
+        Ingress {
+            metadata: ObjectMeta {
+                name: Some("traefik-ingress".into()),
+                namespace: Some("traefik".into()),
+                ..Default::default()
+            },
+            spec: Some(IngressSpec {
+                default_backend: Some(IngressBackend {
+                    service: Some(IngressServiceBackend {
+                        name: "traefik".into(),
+                        port: Some(ServiceBackendPort {
+                            number: Some(80),
+                            ..Default::default()
+                        }),
+                    }),
+                    resource: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn default_backend_is_read() {
+        let info = IngressInfo::from(&ingress_with_default_backend());
+        let backend = info.default_backend.expect("spec.defaultBackend was set");
+        assert_eq!(backend.backend_service, "traefik");
+        assert_eq!(backend.backend_port, "80");
+        assert_eq!(backend.resource_backend, None);
+    }
+
+    #[test]
+    fn missing_default_backend_is_none() {
+        assert!(IngressInfo::from(&Ingress::default())
+            .default_backend
+            .is_none());
+    }
 }
 
 impl From<&Endpoints> for EndpointsInfo {

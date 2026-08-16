@@ -19,6 +19,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listIngresses: vi.fn(async () => []),
     listCustomResources: vi.fn(async () => []),
+    listServices: vi.fn(async () => []),
     resolveIngressClass: vi.fn(async () => ({ available: [] })),
     listDeployments: vi.fn(async () => []),
     listDaemonsets: vi.fn(async () => []),
@@ -27,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { servedGroupName } from "./data";
 import { routeIsSecure, serviceRoutes } from "./routes";
 
 const WEB: EntryPoint = {
@@ -148,14 +150,106 @@ describe("which hosts reach a Service", () => {
 
     expect(found).toHaveLength(1);
     expect(found[0].host).toBe("argocd.example.com");
+    // The CRD rides on the source so a consumer can draw a real reference —
+    // peek, glyph and hue — instead of a bare text link.
     expect(found[0].source).toEqual({
       kind: "IngressRoute",
       name: "argocd-server",
       namespace: "argocd",
+      crd: `ingressroutes.${servedGroupName()}`,
     });
     // The proxy's flags were not read here, so the scheme is unsettled — and
     // saying so is the point.
     expect(found[0].tls).toBeNull();
+  });
+
+  /** A route that pins `scheme: h2c` is a gRPC way in, and is marked so. */
+  it("marks an h2c route so nothing links a browser into it", async () => {
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        routes: [
+          {
+            match: "Host(`argocd-grpc.example.com`)",
+            services: [{ name: "argocd-server", port: 80, scheme: "h2c" }],
+          },
+        ],
+      }),
+    ]);
+
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found).toHaveLength(1);
+    expect(found[0].h2c).toBe(true);
+  });
+
+  /**
+   * The edge shape the reported cluster actually runs: TLS ends at a cloud
+   * load balancer whose Ingress fronts the proxy through
+   * `spec.defaultBackend` with a catch-all certificate, and the route itself
+   * binds plain `web`. The client-facing scheme is still https, and printing
+   * `http://` for it sent readers to a host that redirects them anyway.
+   */
+  it("settles https from an edge terminating in front of the proxy", async () => {
+    vi.mocked(commands.listIngresses).mockResolvedValue([
+      {
+        name: "edge",
+        namespace: "edge",
+        className: "gce",
+        rules: [],
+        defaultBackend: {
+          backendService: "traefik",
+          backendPort: "80",
+          resourceBackend: null,
+        },
+        loadBalancerIps: ["34.1.2.3"],
+        tlsHosts: [],
+        tlsConfigs: [
+          { hosts: [], secretName: "wildcard-tls", isCatchAll: true },
+        ],
+        hasCatchAllTls: true,
+        labels: {},
+        annotations: {},
+        createdAt: null,
+      },
+    ]);
+    vi.mocked(commands.listServices).mockResolvedValue([
+      {
+        name: "traefik",
+        namespace: "edge",
+        uid: "proxy",
+        type: "LoadBalancer",
+        sessionAffinity: "None",
+        clusterIp: "10.0.0.9",
+        externalIps: [],
+        loadBalancerIps: [],
+        ports: [],
+        selector: { "app.kubernetes.io/name": "traefik" },
+        labels: {},
+        annotations: {},
+        createdAt: null,
+      },
+    ]);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        entryPoints: ["web"],
+        routes: [
+          {
+            match: "Host(`argocd.example.com`)",
+            services: [{ name: "argocd-server", port: 80 }],
+          },
+        ],
+      }),
+    ]);
+
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found[0].tls).toBe(true);
   });
 
   it("ignores a route to a different Service", async () => {

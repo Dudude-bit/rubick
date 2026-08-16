@@ -7,8 +7,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ConfigMapInfo,
   CustomResourceDetailInfo,
+  EndpointsInfo,
   EventInfo,
+  ObjectRef,
   PodInfo,
+  ResourceConnections,
+  ServiceInfo,
 } from "@/generated/types";
 
 // CodeMirror is loaded behind React.lazy and has nothing to prove here; the
@@ -17,6 +21,26 @@ vi.mock("@/components/yaml", () => ({
   YamlEditor: ({ value }: { value: string }) => (
     <pre data-testid="yaml-editor">{value}</pre>
   ),
+}));
+
+// The vendors' answers, controllable per test: the default is the shape the
+// real hooks answer on a cluster with nothing installed, so every other test
+// reads exactly as before.
+const servicesRoutesSpy = vi.fn();
+vi.mock("@/hooks/useServiceRoutes", () => ({
+  useServiceRoutes: () => ({
+    available: false,
+    routes: [],
+    isPending: false,
+    error: null,
+  }),
+  useServicesRoutes: (services: unknown) =>
+    servicesRoutesSpy(services) ?? {
+      available: false,
+      routes: new Map(),
+      isPending: false,
+    },
+  useProxyBehind: () => null,
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -38,6 +62,8 @@ vi.mock("@/lib/commands", () => ({
     restartPod: vi.fn(),
     getCustomResource: vi.fn(),
     getCustomResourceYaml: vi.fn(),
+    getService: vi.fn(),
+    getResourceConnections: vi.fn(),
   },
 }));
 
@@ -171,6 +197,62 @@ function buildConfigMap(): ConfigMapInfo {
   };
 }
 
+function buildServiceInfo(): ServiceInfo {
+  return {
+    name: "frontend",
+    namespace: "storefront",
+    uid: "svc-uid",
+    type: "ClusterIP",
+    sessionAffinity: "None",
+    clusterIp: "10.10.19.25",
+    externalIps: [],
+    loadBalancerIps: [],
+    ports: [
+      {
+        name: null,
+        port: 3000,
+        targetPort: "3000",
+        nodePort: null,
+        protocol: "TCP",
+      },
+    ],
+    selector: { app: "frontend" },
+    labels: {},
+    annotations: {},
+    createdAt: "2026-08-01T00:00:00Z",
+  };
+}
+
+function buildEndpointsInfo(): EndpointsInfo {
+  return {
+    name: "frontend",
+    namespace: "storefront",
+    subsets: [],
+    createdAt: "2026-08-01T00:00:00Z",
+    overCapacity: false,
+  };
+}
+
+const objRef = (kind: string, name: string, namespace: string): ObjectRef => ({
+  kind,
+  name,
+  namespace,
+  existence: "present",
+  facts: null,
+});
+
+function buildConnections(
+  edges: ResourceConnections["edges"] = []
+): ResourceConnections {
+  return {
+    subject: objRef("Service", "frontend", "storefront"),
+    edges,
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  };
+}
+
 function Probe() {
   const { pathname, search } = useLocation();
   return <span data-testid="location">{`${pathname}${search}`}</span>;
@@ -245,6 +327,16 @@ function mockCluster() {
   vi.mocked(commands.getCustomResourceYaml)
     .mockReset()
     .mockResolvedValue(APPLICATION_MANIFEST);
+  vi.mocked(commands.getService)
+    .mockReset()
+    .mockResolvedValue(buildServiceInfo());
+  vi.mocked(commands.getEndpoints)
+    .mockReset()
+    .mockResolvedValue(buildEndpointsInfo());
+  vi.mocked(commands.getResourceConnections)
+    .mockReset()
+    .mockResolvedValue(buildConnections());
+  servicesRoutesSpy.mockReset();
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
 
@@ -287,6 +379,24 @@ describe("PeekPanel", () => {
         namespace: "k8s-gui-test",
       })
     );
+  });
+
+  /**
+   * "268435456" is a manifest's spelling; "256Mi" is an answer. The peek
+   * prints whatever unit the author used unless it can say it better.
+   */
+  it("prints requests and limits in humane units, not raw bytes", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({
+        cpuRequests: "0.5",
+        cpuLimits: null,
+        memoryRequests: "268435456",
+        memoryLimits: "1Gi",
+      } as Partial<PodInfo>)
+    );
+    wrap(POD_PEEK);
+    expect(await screen.findByText("500m → unlimited")).toBeInTheDocument();
+    expect(screen.getByText("256Mi → 1Gi")).toBeInTheDocument();
   });
 
   it("says what failed and keeps offering the full page", async () => {
@@ -900,5 +1010,217 @@ describe("PeekPanel width", () => {
     wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(panelWidth()).toBe("784px");
+  });
+});
+
+/**
+ * One chain, read top to bottom: the ways in above the object, the object
+ * itself in the middle, what answers below it. The two flat headings this
+ * replaced said the same order in words and looked like leftover prose.
+ */
+describe("PeekPanel traffic chain", () => {
+  beforeEach(mockCluster);
+
+  const SERVICE_PEEK = "/events?peek=services/storefront/frontend";
+
+  /** Passes when `above` sits earlier in the document than `below`. */
+  const expectAbove = (above: Element, below: Element) =>
+    expect(
+      above.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+  it("hangs a Service between its way in and its addresses", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Ingress", "frontend-ing", "storefront"),
+          to: objRef("Service", "frontend", "storefront"),
+          relation: {
+            verb: "routes",
+            host: "storefront.example.com",
+            path: "/",
+            pathType: "Prefix",
+            port: "3000",
+            tls: true,
+          },
+        },
+      ])
+    );
+    wrap(SERVICE_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    const ingress = await screen.findByRole("link", {
+      name: "Ingress frontend-ing",
+    });
+    const self = screen.getByText(/this Service/);
+    const endpoints = screen.getByRole("link", { name: "Endpoints frontend" });
+    expectAbove(ingress, self);
+    expectAbove(self, endpoints);
+    // One dot in the chain is haloed: the one the reader is standing on.
+    expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
+    // Every segment ends in an arrowhead — three hops, two arrows, all down.
+    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
+    // The rule's host rides on the hop, so it says which door this is.
+    expect(screen.getByText("storefront.example.com")).toBeInTheDocument();
+    // The words the chain replaced stay gone.
+    expect(screen.queryByText("Reached through")).toBeNull();
+    expect(screen.queryByText("Behind it")).toBeNull();
+  });
+
+  it("puts the Service in front above a Pod, and nothing below it", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    wrap(POD_PEEK);
+
+    const service = await screen.findByRole("link", {
+      name: "Service crash-svc",
+    });
+    const self = screen.getByText(/this Pod/);
+    expectAbove(service, self);
+    expect(screen.getByText(/the Service in front/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Endpoints/ })).toBeNull();
+  });
+
+  /**
+   * The level above the Service in front: a Pod behind a Service that an
+   * IngressRoute serves used to show the Service as the top of the world,
+   * because the vendors were only ever asked about a peeked Service itself.
+   */
+  it("asks the vendors about the Services in front of a Pod", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    servicesRoutesSpy.mockImplementation((services: unknown[]) =>
+      services.length === 0
+        ? undefined
+        : {
+            available: true,
+            isPending: false,
+            routes: new Map([
+              [
+                "k8s-gui-test/crash-svc",
+                [
+                  {
+                    host: "crash.example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-route",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                ],
+              ],
+            ]),
+          }
+    );
+    wrap(POD_PEEK);
+
+    const route = await screen.findByRole("link", {
+      name: "IngressRoute crash-route",
+    });
+    const service = screen.getByRole("link", { name: "Service crash-svc" });
+    expectAbove(route, service);
+    expectAbove(service, screen.getByText(/this Pod/));
+    expect(servicesRoutesSpy).toHaveBeenCalledWith([
+      { namespace: "k8s-gui-test", name: "crash-svc" },
+    ]);
+  });
+
+  /**
+   * Two routes to one Service are two doors on one level, not two levels:
+   * drawn as a sequence they read as admin.example.com flowing INTO
+   * example.com. One dot per level; the arrows run between levels only.
+   */
+  it("stacks parallel ways in at one level rather than chaining them", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    servicesRoutesSpy.mockImplementation((services: unknown[]) =>
+      services.length === 0
+        ? undefined
+        : {
+            available: true,
+            isPending: false,
+            routes: new Map([
+              [
+                "k8s-gui-test/crash-svc",
+                [
+                  {
+                    host: "admin.example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-admin",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                  {
+                    host: "example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-front",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                ],
+              ],
+            ]),
+          }
+    );
+    wrap(POD_PEEK);
+
+    await screen.findByRole("link", { name: "IngressRoute crash-admin" });
+    expect(
+      screen.getByRole("link", { name: "IngressRoute crash-front" })
+    ).toBeInTheDocument();
+    // Three levels — the doors, the Service, this Pod — so two arrows,
+    // however many doors there are.
+    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
+  });
+
+  it("names the Service an Endpoints publishes for, above it", async () => {
+    wrap("/events?peek=endpoints/storefront/frontend");
+
+    const service = await screen.findByRole("link", {
+      name: "Service frontend",
+    });
+    const self = screen.getByText(/this Endpoints/);
+    expectAbove(service, self);
+    expect(
+      screen.getByText(/the Service these endpoints publish/)
+    ).toBeInTheDocument();
+  });
+
+  it("stays silent for a pod nothing routes", async () => {
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    expect(screen.queryByText("Traffic path")).toBeNull();
   });
 });

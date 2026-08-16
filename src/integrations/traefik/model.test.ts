@@ -9,6 +9,7 @@ import type {
 } from "@/generated/types";
 import {
   allRoutes,
+  duplicatedServiceNames,
   hostGroups,
   middlewareUses,
   readEntryPoints,
@@ -62,6 +63,7 @@ function ingress(
       ? [{ hosts: [host], secretName: options.secretName, isCatchAll: false }]
       : [],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: options.annotations ?? {},
     createdAt: null,
@@ -217,6 +219,35 @@ describe("which objects are this Traefik's", () => {
     );
 
     expect(routes).toHaveLength(1);
+  });
+});
+
+describe("what a defaultBackend Ingress serves", () => {
+  /**
+   * The fourth surface the same blind spot reached: the routing table
+   * itself. A rules-less Ingress sends everything to one Service, and a
+   * table built from rules alone drew it as serving nothing.
+   */
+  it("serves a defaultBackend-only Ingress as its catch-all route", () => {
+    const routes = allRoutes(
+      sources({
+        ingresses: [
+          {
+            ...ingress("edge", "unused.example.com"),
+            rules: [],
+            defaultBackend: {
+              backendService: "front-proxy",
+              backendPort: "80",
+              resourceBackend: null,
+            },
+          },
+        ],
+      })
+    );
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].clause).toEqual({ host: null, path: null });
+    expect(routes[0].service?.name).toBe("front-proxy");
   });
 });
 
@@ -497,6 +528,247 @@ describe("the findings", () => {
       duplicate?.kind === "duplicate" && duplicate.winner?.source.name
     ).toBe("high");
   });
+
+  /**
+   * Would break if an unset priority went back to being unknowable for an
+   * IngressRoute. Traefik's default priority is the length of the router's
+   * rule — which for an IngressRoute is the match string held here verbatim.
+   * A migration leaves exactly this pair behind, and "which one serves
+   * production" is the question the reader opened the page with.
+   */
+  it("settles a declared priority against Traefik's length default", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("legacy", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`)",
+                services: [{ name: "a", port: 80 }],
+              },
+            ],
+          }),
+          ingressRoute("current", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`)",
+                priority: 250,
+                services: [{ name: "b", port: 80 }],
+              },
+            ],
+          }),
+        ],
+      })
+    );
+
+    const duplicate = group.findings.find(
+      (finding) => finding.kind === "duplicate"
+    );
+    expect(
+      duplicate?.kind === "duplicate" && duplicate.winner?.source.name
+    ).toBe("current");
+  });
+
+  /** Two defaults settle by rule length alone — Traefik's own tie-break. */
+  it("settles two defaulted priorities by rule length", () => {
+    const groups = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("short", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`)",
+                services: [{ name: "a", port: 80 }],
+              },
+            ],
+          }),
+          ingressRoute("long", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`, `other.example.com`)",
+                services: [{ name: "b", port: 80 }],
+              },
+            ],
+          }),
+        ],
+      })
+    );
+
+    const shop = groups.find((group) => group.host === "shop.example.com");
+    const duplicate = shop?.findings.find(
+      (finding) => finding.kind === "duplicate"
+    );
+    expect(
+      duplicate?.kind === "duplicate" && duplicate.winner?.source.name
+    ).toBe("long");
+  });
+
+  /**
+   * Two routes of one object sharing the top weight is not a tie — the
+   * object wins whichever of its routers fires. Reported as "carry the same
+   * priority" it told a reader their migration was unsettled when the new
+   * object had in fact won on both of its routes.
+   */
+  it("does not call one object's two routes a tie", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("legacy", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`)",
+                services: [{ name: "a", port: 80 }],
+              },
+            ],
+          }),
+          ingressRoute("optin", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`) && Headers(`X-A`, `1`)",
+                priority: 200,
+                services: [{ name: "b", port: 80 }],
+              },
+              {
+                match: "Host(`shop.example.com`) && Headers(`X-B`, `1`)",
+                priority: 200,
+                services: [{ name: "b", port: 80 }],
+              },
+            ],
+          }),
+        ],
+      })
+    );
+
+    const duplicate = group.findings.find(
+      (finding) => finding.kind === "duplicate"
+    );
+    expect(duplicate?.kind === "duplicate" && duplicate.tied).toBe(false);
+    expect(
+      duplicate?.kind === "duplicate" && duplicate.winner?.source.name
+    ).toBe("optin");
+  });
+
+  /**
+   * An Ingress's generated rule is still Traefik's own and unseen, so a
+   * pair with one Ingress in it stays honestly unsettled.
+   */
+  it("still refuses a winner when an Ingress is one of the two", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("old", "shop.example.com", { path: "/" })],
+        ingressRoutes: [
+          ingressRoute("new", {
+            routes: [
+              {
+                match: "Host(`shop.example.com`) && PathPrefix(`/`)",
+                services: [{ name: "b", port: 80 }],
+              },
+            ],
+          }),
+        ],
+      })
+    );
+
+    const duplicate = group.findings.find(
+      (finding) => finding.kind === "duplicate"
+    );
+    expect(duplicate).toBeDefined();
+    expect(duplicate?.kind === "duplicate" && duplicate.winner).toBeNull();
+  });
+
+  /**
+   * Would break if parse-refused rules went back to being treated as claims.
+   * A parenthesised rule is filed under no host because it could not be
+   * read; two of those placeholders are not "two objects claiming every
+   * path" — that collision exists only in the parser, and warning about it
+   * buries the real duplicates under a phantom.
+   */
+  it("does not build a duplicate out of rules it refused to read", () => {
+    const negated = (name: string, host: string) =>
+      ingressRoute(name, {
+        routes: [
+          {
+            match: `!Host(\`${host}\`)`,
+            services: [{ name: "web", port: 80 }],
+          },
+        ],
+      });
+
+    const groups = hostGroups(
+      sources({
+        ingressRoutes: [
+          negated("market", "market.example.com"),
+          negated("mp", "mp.example.com"),
+        ],
+      })
+    );
+
+    const catchAll = groups.find((group) => group.host === null);
+    expect(catchAll).toBeDefined();
+    expect(
+      catchAll?.findings.filter((finding) => finding.kind === "duplicate")
+    ).toEqual([]);
+  });
+
+  /**
+   * The same placeholder must not read as reachable unencrypted either: the
+   * rule's real host is unknown, so which entry points serve "it" is too.
+   */
+  it("does not call a refused rule served in the clear", () => {
+    const groups = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("market", {
+            routes: [
+              {
+                match: "!Host(`market.example.com`)",
+                services: [{ name: "web", port: 80 }],
+              },
+            ],
+          }),
+        ],
+        entryPoints: [
+          { name: "web", address: ":8000", tls: false, redirectTo: null },
+        ],
+      })
+    );
+
+    const catchAll = groups.find((group) => group.host === null);
+    expect(
+      catchAll?.findings.filter((finding) => finding.kind === "clear")
+    ).toEqual([]);
+  });
+});
+
+describe("which service names need their namespace beside them", () => {
+  /**
+   * Two Services named `frontend` in two namespaces render as the same
+   * word on every row, and a reader migrating between them cannot tell
+   * which row is the old one — the exact moment they are looking.
+   */
+  it("names only the collisions", () => {
+    const route = (namespace: string, service: string) =>
+      ingressRoute(`${namespace}-${service}`, {
+        routes: [
+          {
+            match: `Host(\`${namespace}.example.com\`)`,
+            services: [{ name: service, namespace, port: 80 }],
+          },
+        ],
+      });
+
+    const groups = hostGroups(
+      sources({
+        ingressRoutes: [
+          route("shop", "frontend"),
+          route("frontend", "frontend"),
+          route("api", "api"),
+        ],
+      })
+    );
+
+    expect(duplicatedServiceNames(groups)).toEqual(new Set(["frontend"]));
+  });
 });
 
 describe("what it refuses to claim before it knows", () => {
@@ -678,6 +950,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
     tlsHosts: ["shop.example.com"],
     tlsConfigs: [],
     hasCatchAllTls: false,
+    defaultBackend: null,
     labels: {},
     annotations: {},
     createdAt: null,
@@ -716,6 +989,36 @@ describe("a host whose TLS ends in front of the proxy", () => {
    */
   it("is not served in the clear when an Ingress in front holds the certificate", () => {
     const [group] = hostGroups(base({ ingresses: [edge()] }));
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /**
+   * The defaultBackend spelling of the same cluster: the cloud LB names no
+   * rules at all — `spec.defaultBackend` sends everything to the proxy and a
+   * catch-all `spec.tls` holds one certificate for every host behind it.
+   * Read through `rules` alone such an Ingress fronts nothing, and the page
+   * went back to warning on every host of an edge-terminated cluster.
+   */
+  it("is not served in the clear behind a defaultBackend edge with catch-all TLS", () => {
+    const [group] = hostGroups(
+      base({
+        ingresses: [
+          edge({
+            rules: [],
+            tlsHosts: [],
+            tlsConfigs: [
+              { hosts: [], secretName: "wildcard-tls", isCatchAll: true },
+            ],
+            hasCatchAllTls: true,
+            defaultBackend: {
+              backendService: "traefik",
+              backendPort: "80",
+              resourceBackend: null,
+            },
+          }),
+        ],
+      })
+    );
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
   });
 

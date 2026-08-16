@@ -54,7 +54,7 @@
  * leads to a connection error is worse than no button.
  */
 
-import { useCallback, useMemo } from "react";
+import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
@@ -100,6 +100,7 @@ import {
   allRoutes,
   backingOf,
   boundEntryPoints,
+  duplicatedServiceNames,
   hostGroups,
   terminatedUpstream,
   middlewareType,
@@ -413,9 +414,9 @@ function MapTab({
       </p>
       <RoutingMap data={data} />
       <p className="text-[11px] text-fg-fnt">
-        A host goes to its own paths and their chain; a Service goes to its
-        page. Nothing here is inferred — every line is one object naming
-        another.
+        Rest on a node to light up everything one edge away. A host goes to its
+        own paths and their chain; a Service goes to its page — every line is
+        one object naming another.
       </p>
     </div>
   );
@@ -454,6 +455,9 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  // Once per table, not per row: the same set decides every row's spelling.
+  const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
+
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     if (needle === "") return groups;
@@ -514,6 +518,7 @@ function RoutesTab({
             key={group.host ?? `catch-all-${index}`}
             group={group}
             sources={sources}
+            duplicated={duplicated}
             // Only an outage opens itself, and only while there are few
             // enough of them to read: a screen where everything is expanded
             // is a screen where nothing is emphasised.
@@ -554,10 +559,12 @@ function HostRow({
   group,
   sources,
   openByDefault,
+  duplicated,
 }: {
   group: HostGroup;
   sources: TraefikSources | null;
   openByDefault: boolean;
+  duplicated: Set<string>;
 }) {
   const state = hostState(group);
   const tls = group.tlsSecrets[0];
@@ -608,7 +615,7 @@ function HostRow({
         group.findings.length > 0 ? <Findings group={group} brief /> : undefined
       }
     >
-      <Paths group={group} sources={sources} />
+      <Paths group={group} sources={sources} duplicated={duplicated} />
       {sources && <HostChain group={group} sources={sources} />}
       <Findings group={group} />
     </TroubleRow>
@@ -624,14 +631,21 @@ function summarise(names: string[]): string {
 function Paths({
   group,
   sources,
+  duplicated,
 }: {
   group: HostGroup;
   sources: TraefikSources | null;
+  duplicated: Set<string>;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
       {group.routes.map((route) => (
-        <PathRow key={route.key} route={route} sources={sources} />
+        <PathRow
+          key={route.key}
+          route={route}
+          sources={sources}
+          duplicated={duplicated}
+        />
       ))}
     </div>
   );
@@ -640,9 +654,11 @@ function Paths({
 function PathRow({
   route,
   sources,
+  duplicated,
 }: {
   route: TraefikRoute;
   sources: TraefikSources | null;
+  duplicated: Set<string>;
 }) {
   const backing = sources ? backingOf(route, sources) : null;
 
@@ -667,12 +683,17 @@ function PathRow({
         {route.service ? (
           <>
             {route.service.kubernetes ? (
-              <ResourceRef
-                kind="Service"
-                name={route.service.name}
-                namespace={route.service.namespace}
-                showKind={false}
-              />
+              <>
+                {/* Two Services wearing one name render as the same word;
+                    the namespace is drawn for exactly those. */}
+                <ResourceRef
+                  kind="Service"
+                  name={route.service.name}
+                  namespace={route.service.namespace}
+                  showKind={false}
+                  showNamespace={duplicated.has(route.service.name)}
+                />
+              </>
             ) : (
               // Traefik's own internals have no page in this app, and a link
               // to a Service that does not exist is a second dead end.
@@ -719,6 +740,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
           name={route.source.name}
           namespace={route.source.namespace}
           showKind={false}
+          showNamespace
         />
       </span>
     );
@@ -732,6 +754,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
         namespace={route.source.namespace}
         crd={`ingressroutes.${servedGroupName()}`}
         showKind={false}
+        showNamespace
       />
     </span>
   );
@@ -817,7 +840,13 @@ function HostChain({
                   middleware.namespace
                 )}
               >
-                {middleware.name}
+                <ResourceRef
+                  kind="Middleware"
+                  name={middleware.name}
+                  namespace={middleware.namespace}
+                  crd={`middlewares.${servedGroupName()}`}
+                  showKind={false}
+                />
               </Cell>
             ))
           )}
@@ -832,7 +861,16 @@ function HostChain({
                   : "Traefik's own, not a Service"
               }
             >
-              {route.service.name}
+              {route.service.kubernetes ? (
+                <ResourceRef
+                  kind="Service"
+                  name={route.service.name}
+                  namespace={route.service.namespace}
+                  showKind={false}
+                />
+              ) : (
+                route.service.name
+              )}
             </Cell>
           ) : route.resourceBackend ? (
             // An API object, not a Service. It has no endpoints by design
@@ -998,7 +1036,49 @@ const STOP_UNDER: Record<ChainStop["reason"], string> = {
   publishesNothing: "no port to send to",
 };
 
-function describeFinding(finding: Finding): { title: string; note: string } {
+/** One object, linked, the way the reader will go and edit it. */
+function objectRef(route: TraefikRoute): ReactNode {
+  return (
+    <span>
+      {route.source.kind}{" "}
+      <ResourceRef
+        kind={route.source.kind}
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={
+          route.source.kind === "IngressRoute"
+            ? `ingressroutes.${servedGroupName()}`
+            : undefined
+        }
+        showKind={false}
+        showNamespace
+      />
+    </span>
+  );
+}
+
+/** Each *object* once — two routers of one object are one thing to edit. */
+function objectRefs(routes: TraefikRoute[]): ReactNode {
+  const unique = [
+    ...new Map(
+      routes.map((route) => [
+        `${route.source.kind}/${route.source.namespace}/${route.source.name}`,
+        route,
+      ])
+    ).values(),
+  ];
+  return unique.map((route, index) => (
+    <Fragment key={`${route.source.namespace}/${route.source.name}`}>
+      {index > 0 && (index === unique.length - 1 ? " and " : ", ")}
+      {objectRef(route)}
+    </Fragment>
+  ));
+}
+
+function describeFinding(finding: Finding): {
+  title: string;
+  note: ReactNode;
+} {
   switch (finding.kind) {
     case "stop": {
       // The same three sentences the traffic chain uses, so "no pod carries
@@ -1024,9 +1104,29 @@ function describeFinding(finding: Finding): { title: string; note: string } {
     case "duplicate":
       return {
         title: `Two objects claim ${finding.path} on this host`,
-        note: finding.winner
-          ? `${describeRouteSource(finding.winner)} wins: it declares the higher priority. The other never fires.`
-          : `${finding.routes.map(describeRouteSource).join(" and ")} both match it. Traefik breaks the tie by router priority, and neither object states one — the default is the length of the rule Traefik itself generated, which this app never sees, so which of them serves the request is not something these objects settle.`,
+        note: finding.winner ? (
+          <>
+            {objectRef(finding.winner)} wins —{" "}
+            {finding.winner.priority !== null
+              ? `it declares priority ${finding.winner.priority}, above the others' declared or defaulted weight`
+              : "its rule is the longest, which is Traefik's default priority for a router that declares none"}{" "}
+            — and the rest never fire for this path.
+          </>
+        ) : finding.tied ? (
+          <>
+            {objectRefs(finding.routes)} carry the same priority, declared or
+            defaulted to their rule&rsquo;s length — Traefik&rsquo;s pick
+            between them is not something the objects state.
+          </>
+        ) : (
+          <>
+            {objectRefs(finding.routes)} both match it. Traefik breaks the tie
+            by router priority — declared, or defaulting to the length of the
+            router&rsquo;s rule — and for an Ingress that rule is one Traefik
+            generates and this app never sees, so which of them serves the
+            request is not settled from here.
+          </>
+        ),
       };
     case "certificate": {
       if (!finding.expiry) {
@@ -1043,10 +1143,6 @@ function describeFinding(finding: Finding): { title: string; note: string } {
       };
     }
   }
-}
-
-function describeRouteSource(route: TraefikRoute): string {
-  return `${route.source.kind} ${route.source.namespace}/${route.source.name}`;
 }
 
 // --- middlewares --------------------------------------------------------

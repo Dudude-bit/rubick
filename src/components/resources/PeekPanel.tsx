@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -14,16 +14,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { useConnections } from "@/hooks/useConnections";
+import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
+import { CopyableAddress } from "@/components/ui/copyable-value";
+import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
+import { cn } from "@/lib/utils";
 import {
   getCustomResourceUrl,
   getResourceDetailUrl,
 } from "@/lib/navigation-utils";
+import type { ObjectRef } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
+import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
 import { DeliveryMarks } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
@@ -377,7 +384,264 @@ function PeekOverview({
           </div>
         ))
       )}
+      {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
       <PeekEvents target={target} />
+    </div>
+  );
+}
+
+/** The kinds a request travels through, each owed its up and its down. */
+const TRAFFIC_KINDS = new Set([
+  "Service",
+  "Endpoints",
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "ReplicaSet",
+  "Job",
+  "CronJob",
+]);
+
+/**
+ * The level above and the level below, so a peek is a place to walk the
+ * chain from rather than a dead end. An Endpoints names its Service, a
+ * Service names its Endpoints and every way traffic reaches it from
+ * outside, a Pod and a workload name the Services in front of them — and
+ * every name is a peek of its own, so the tangle unwinds hop by hop
+ * without leaving the panel. Ownership already walks through Controlled
+ * by; this is the traffic direction.
+ *
+ * Drawn as one chain on the detail pages' rail, the peeked object mid-rope:
+ * what is above it is how traffic arrives, what is below is what answers.
+ * Two flat headings used to say that order in words, and read as prose.
+ */
+function PeekTraffic({ target }: { target: PeekTarget }) {
+  const namespace = target.namespace ?? "";
+  const service = { namespace, name: target.name };
+  const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
+
+  // The core's own edges and the vendors' routes, cached by the same keys
+  // their pages use. A Service and its Endpoints share a name by contract,
+  // which is what lets the Endpoints panel ask about its Service.
+  const conns = useConnections(
+    isServiceish ? "Service" : target.kind,
+    target.name,
+    namespace
+  );
+  const behind = useProxyBehind(target.kind === "Service" ? service : null);
+
+  const edges = conns.data?.edges ?? [];
+  // An Ingress hop keeps the hosts its rules name, so the hop says which
+  // door it is rather than only that a door exists.
+  const ingresses = new Map<string, { object: ObjectRef; hosts: string[] }>();
+  for (const edge of edges) {
+    if (edge.relation.verb !== "routes" || edge.from.kind !== "Ingress")
+      continue;
+    const key = `${edge.from.namespace}/${edge.from.name}`;
+    const entry = ingresses.get(key) ?? { object: edge.from, hosts: [] };
+    if (edge.relation.host && !entry.hosts.includes(edge.relation.host)) {
+      entry.hosts.push(edge.relation.host);
+    }
+    ingresses.set(key, entry);
+  }
+  // For a Pod or a workload, the level above is whichever Services stand in
+  // front of it — the graph names them from either end of an edge.
+  const services = isServiceish
+    ? []
+    : [
+        ...new Map(
+          edges
+            .flatMap((edge) => [edge.from, edge.to])
+            .filter((object) => object.kind === "Service")
+            .map((object) => [`${object.namespace}/${object.name}`, object])
+        ).values(),
+      ];
+
+  // The vendors are asked about the peeked Service itself — or, from a Pod
+  // or a workload, about the Services in front of it: an IngressRoute over
+  // that Service is this pod's way in just the same, and without this the
+  // Service drew as the top of the world.
+  const routed = useServicesRoutes(
+    isServiceish
+      ? [service]
+      : services.map((entry) => ({
+          namespace: entry.namespace ?? "",
+          name: entry.name,
+        }))
+  );
+  const vendorRoutes = [
+    ...new Map(
+      (isServiceish ? [service] : services)
+        .flatMap(
+          (entry) =>
+            routed.routes.get(`${entry.namespace ?? ""}/${entry.name}`) ?? []
+        )
+        .filter((route) => route.source.kind !== "Ingress")
+        .map((route) => [`${route.host}${route.path}`, route] as const)
+    ).values(),
+  ];
+
+  // One dot per LEVEL of the path, not per object: two routes to one
+  // Service are two doors on one level, and drawing them in sequence read
+  // as one hostname flowing into the other. Within a level the entries
+  // stack; the arrows run between levels only.
+  const shownRoutes = vendorRoutes.slice(0, 6);
+  const waysIn: ReactNode[] = [
+    ...[...ingresses.values()].map(({ object, hosts }) => (
+      <p
+        key={`ingress/${object.namespace}/${object.name}`}
+        className="text-[11px] text-fg-fnt"
+      >
+        <ResourceRef
+          kind="Ingress"
+          name={object.name}
+          namespace={object.namespace}
+          showKind={false}
+        />{" "}
+        {hosts.length > 0 && (
+          <span className="font-mono text-xs text-fg-mid">
+            {hosts.join(", ")}{" "}
+          </span>
+        )}
+        — Ingress
+      </p>
+    )),
+    // Object first and the address under it, the order every other entry
+    // reads in — this line is the router, not its hostname.
+    ...shownRoutes.map((route) => (
+      <div key={`route/${route.host}${route.path}`}>
+        <p className="text-[11px] text-fg-fnt">
+          <RouteSource route={route} /> — {route.source.kind}
+        </p>
+        <p className="text-[11px] text-fg-fnt">
+          <CopyableAddress value={routeAddress(route)} label="Address" />
+          {route.h2c ? " (gRPC)" : ""}
+        </p>
+      </div>
+    )),
+    ...(vendorRoutes.length > shownRoutes.length
+      ? [
+          <p key="more" className="text-[11px] text-fg-fnt">
+            and {vendorRoutes.length - shownRoutes.length} more
+          </p>,
+        ]
+      : []),
+  ];
+
+  const levels: { key: string; entries: ReactNode[] }[] = [];
+  if (waysIn.length > 0) levels.push({ key: "ways-in", entries: waysIn });
+  if (services.length > 0) {
+    levels.push({
+      key: "in-front",
+      entries: services.map((entry) => (
+        <p
+          key={`${entry.namespace}/${entry.name}`}
+          className="text-[11px] text-fg-fnt"
+        >
+          <ResourceRef
+            kind="Service"
+            name={entry.name}
+            namespace={entry.namespace}
+            showKind={false}
+          />{" "}
+          — the Service in front
+        </p>
+      )),
+    });
+  }
+  if (target.kind === "Endpoints") {
+    levels.push({
+      key: "publishes",
+      entries: [
+        <p key="publishes" className="text-[11px] text-fg-fnt">
+          <ResourceRef
+            kind="Service"
+            name={target.name}
+            namespace={namespace}
+            showKind={false}
+          />{" "}
+          — the Service these endpoints publish
+        </p>,
+      ],
+    });
+  }
+  levels.push({
+    key: "self",
+    entries: [
+      <p key="self" className="text-[11px] text-fg-fnt">
+        {/* The selection tint the app already means "current" by. */}
+        <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
+          <ResourceName
+            kind={target.kind}
+            name={target.name}
+            showKind={false}
+          />
+        </span>{" "}
+        — this {target.kind}
+      </p>,
+    ],
+  });
+  if (target.kind === "Service") {
+    levels.push({
+      key: "behind",
+      entries: [
+        <p key="endpoints" className="text-[11px] text-fg-fnt">
+          <ResourceRef
+            kind="Endpoints"
+            name={target.name}
+            namespace={namespace}
+            showKind={false}
+          />{" "}
+          — the addresses actually answering, pod by pod
+        </p>,
+        ...(behind
+          ? [
+              <p key="proxy" className="text-[11px] text-fg-fnt">
+                {behind.vendor}&rsquo;s own proxy — the {behind.hosts} host
+                {behind.hosts === 1 ? "" : "s"} it serves are on{" "}
+                <Link
+                  to={behind.to}
+                  className="text-info underline-offset-2 hover:underline"
+                >
+                  its page
+                </Link>
+              </p>,
+            ]
+          : []),
+      ],
+    });
+  }
+
+  // The object alone is not a chain; a Pod nothing routes stays quiet.
+  if (levels.length === 1) return null;
+
+  return (
+    <div>
+      <PeekHeading title="Traffic path" />
+      <div className="pb-1">
+        {levels.map((level, index) => {
+          const last = index === levels.length - 1;
+          return (
+            <div
+              key={level.key}
+              className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5"
+            >
+              <Rail
+                tone="on"
+                into={last ? null : "on"}
+                entering={index > 0}
+                here={level.key === "self"}
+              />
+              <div
+                className={cn("flex min-w-0 flex-col gap-1", !last && "pb-2")}
+              >
+                {level.entries}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -393,17 +657,42 @@ function PeekHeading({ title, count }: { title: string; count?: ReactNode }) {
   );
 }
 
+/**
+ * The overview's own shape while it loads: grouped key/value runs under
+ * heading-sized bars, labels short and values uneven — the way the real
+ * groups read. Five identical full-width rows promised a different screen,
+ * and the swap to content was a jolt instead of a fill-in.
+ */
+const SKELETON_LABELS = ["w-10", "w-16", "w-12", "w-20"];
+const SKELETON_VALUES = ["w-24", "w-40", "w-16", "w-32"];
+
 function PeekSkeleton() {
   return (
     <div aria-hidden="true" data-testid="peek-skeleton">
-      <PeekHeading title="Loading" />
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div
-          key={index}
-          className="grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-[7px]"
-        >
-          <Skeleton className="h-2.5 w-16" />
-          <Skeleton className="h-2.5 w-full" />
+      {[4, 3].map((rows, group) => (
+        <div key={group}>
+          <div className="flex items-center pb-1 pt-4">
+            <Skeleton className="h-2.5 w-24" />
+          </div>
+          {Array.from({ length: rows }).map((_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-[7px]"
+            >
+              <Skeleton
+                className={cn(
+                  "h-2.5",
+                  SKELETON_LABELS[(group + index) % SKELETON_LABELS.length]
+                )}
+              />
+              <Skeleton
+                className={cn(
+                  "h-2.5",
+                  SKELETON_VALUES[(group * 2 + index) % SKELETON_VALUES.length]
+                )}
+              />
+            </div>
+          ))}
         </div>
       ))}
     </div>

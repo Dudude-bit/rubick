@@ -252,7 +252,7 @@ function routesFrom(ingress: IngressInfo, index: number): NginxRoute[] {
   const annotations = readAnnotations(ingress.annotations);
   const canary = canaryOf(ingress.annotations);
 
-  return ingress.rules.flatMap((rule, ruleIndex) =>
+  const routes = ingress.rules.flatMap((rule, ruleIndex) =>
     rule.paths.map((path, pathIndex) => {
       const host = rule.host || null;
       return {
@@ -280,6 +280,35 @@ function routesFrom(ingress: IngressInfo, index: number): NginxRoute[] {
       };
     })
   );
+
+  // The same fallback Traefik's table reads: everything unmatched, one
+  // Service, and an edge that otherwise served nothing on this page.
+  const fallback = ingress.defaultBackend;
+  if (fallback?.backendService) {
+    routes.push({
+      key: `${ingress.namespace}/${ingress.name}/default/${index}`,
+      source: {
+        kind: "Ingress" as const,
+        name: ingress.name,
+        namespace: ingress.namespace,
+      },
+      host: null,
+      path: "*",
+      pathType: "DefaultBackend",
+      service: {
+        name: fallback.backendService,
+        namespace: ingress.namespace,
+        port: fallback.backendPort,
+      },
+      resourceBackend: fallback.resourceBackend,
+      tlsSecret: tlsSecretFor(ingress, null),
+      annotations,
+      canary,
+      createdAt: ingress.createdAt,
+    });
+  }
+
+  return routes;
 }
 
 /** Every route this nginx serves. */

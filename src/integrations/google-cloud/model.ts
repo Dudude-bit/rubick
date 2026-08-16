@@ -273,11 +273,11 @@ export function customHeaders(config: CustomResourceInfo): {
  * difference between caching images and caching an authenticated response
  * for everybody.
  */
-export function cdnSummary(config: CustomResourceInfo): string | null {
+export function cdnOf(
+  config: CustomResourceInfo
+): { mode: string | null; detail: string | null } | null {
   if (!flag(config, "spec.cdn.enabled")) return null;
-  const mode = text(config, "spec.cdn.cacheMode");
-  const parts = [
-    mode,
+  const details = [
     number(config, "spec.cdn.defaultTtl") === null
       ? null
       : `default ${number(config, "spec.cdn.defaultTtl")}s`,
@@ -287,6 +287,16 @@ export function cdnSummary(config: CustomResourceInfo): string | null {
     flag(config, "spec.cdn.negativeCaching") ? "caches errors" : null,
     flag(config, "spec.cdn.requestCoalescing") ? "coalesces" : null,
   ].filter(Boolean);
+  return {
+    mode: text(config, "spec.cdn.cacheMode"),
+    detail: details.length > 0 ? details.join(" · ") : null,
+  };
+}
+
+export function cdnSummary(config: CustomResourceInfo): string | null {
+  const cdn = cdnOf(config);
+  if (!cdn) return null;
+  const parts = [cdn.mode, cdn.detail].filter(Boolean);
   return parts.length > 0 ? `CDN ${parts.join(" · ")}` : "CDN on";
 }
 
@@ -297,7 +307,12 @@ export function cdnSummary(config: CustomResourceInfo): string | null {
  * order of the spec: a failing health check takes the backend out, a
  * timeout ends a request, and CDN and IAP change who is answered.
  */
-export function backendConfigSummary(config: CustomResourceInfo): string {
+export function backendConfigSummary(
+  config: CustomResourceInfo,
+  // `cdn: false` is for the chain, where the edge cache is its own hop and
+  // saying it twice would bury the rest of the line again.
+  options: { cdn?: boolean } = {}
+): string {
   const timeout = number(config, "spec.timeoutSec");
   const draining = number(config, "spec.connectionDraining.drainingTimeoutSec");
   const affinity = text(config, "spec.sessionAffinity.affinityType");
@@ -308,7 +323,7 @@ export function backendConfigSummary(config: CustomResourceInfo): string {
     healthCheckOf(config),
     timeout === null ? null : `${timeout}s timeout`,
     draining === null ? null : `${draining}s draining`,
-    cdnSummary(config),
+    options.cdn === false ? null : cdnSummary(config),
     flag(config, "spec.iap.enabled") ? "IAP on" : null,
     policy === null ? null : `Cloud Armor ${policy}`,
     affinity === null ? null : `${affinity} affinity`,

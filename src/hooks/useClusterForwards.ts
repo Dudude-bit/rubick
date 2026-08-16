@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { connectOf, forward, type Forwarded } from "@/integrations";
@@ -155,6 +156,37 @@ async function moveAddress(
 }
 
 /**
+ * Wake a vendor's saved forward because the reader opened its page.
+ *
+ * Tunnels die with the app, so after a relaunch the page behind one opens
+ * onto "could not ask it anything" — a dead end whose repair is one press
+ * away in the sidebar. Navigating here *is* that press: the reader has
+ * named the vendor as plainly as the row would have. One attempt per
+ * mount, nothing when the tunnel is already up, and the row stays the
+ * retry for an attempt that failed.
+ */
+export function useWakeOnVisit(vendorId: string): void {
+  const context = useClusterStore((state) => state.currentContext);
+  const forwards = useClusterForwardStore((state) => state.forwards);
+  const queryClient = useQueryClient();
+  const tried = useRef(false);
+
+  useEffect(() => {
+    if (tried.current || context === null) return;
+    const preference = forwards[context]?.[vendorId];
+    if (!preference) return;
+    tried.current = true;
+    void (async () => {
+      if (await alreadyUp(preference.localPort)) return;
+      await wake(vendorId, preference);
+      // Everything asked before the tunnel came up was answered by a dead
+      // socket — including the verdict this page opened onto.
+      await queryClient.invalidateQueries();
+    })().catch(() => undefined);
+  }, [context, forwards, vendorId, queryClient]);
+}
+
+/**
  * Wake every forward this cluster asked to have up.
  *
  * Mounted once, beside the other shell-level hooks. Runs per context and only
@@ -164,6 +196,7 @@ export function useClusterForwards(): void {
   const context = useClusterStore((state) => state.currentContext);
   const isConnected = useClusterStore((state) => state.isConnected);
   const forwards = useClusterForwardStore((state) => state.forwards);
+  const queryClient = useQueryClient();
   // One attempt per cluster per session. A forward that could not come up is
   // not retried in a loop behind the reader's back — the row is there and
   // pressing it tries again, which is a person deciding rather than a timer.
@@ -176,7 +209,12 @@ export function useClusterForwards(): void {
       const key = `${context}/${vendorId}`;
       if (tried.current.has(key)) continue;
       tried.current.add(key);
-      void wake(vendorId, preference).catch(() => undefined);
+      void wake(vendorId, preference)
+        // Anything asked before the tunnel came up was answered by a dead
+        // socket and cached as such; the probe and every page verdict have
+        // to be asked again now that there is somewhere to ask.
+        .then(() => queryClient.invalidateQueries())
+        .catch(() => undefined);
     }
-  }, [context, isConnected, forwards]);
+  }, [context, isConnected, forwards, queryClient]);
 }

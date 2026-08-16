@@ -18,7 +18,10 @@
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { CopyableAddresses } from "@/components/ui/copyable-value";
+import {
+  CopyableAddress,
+  CopyableAddresses,
+} from "@/components/ui/copyable-value";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
@@ -30,6 +33,11 @@ import {
   useServiceEdge,
   type ServiceEdges,
 } from "@/hooks/useServiceEdge";
+import {
+  useServicesRoutes,
+  type ServicesRoutes,
+} from "@/hooks/useServiceRoutes";
+import type { ServiceRoute } from "@/integrations";
 import { CertificateLine } from "./CertificateFacts";
 import { RenewalNote } from "./IssuanceChain";
 import { ResourceRef } from "./ResourceRef";
@@ -71,21 +79,57 @@ const NODE_TONE: Record<HopTone, string> = {
   bad: "border-err",
 };
 
-function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
+/**
+ * The dot and the run of line under it — the chain's spine. Shared with the
+ * peek's chain, so a hop reads the same wherever it is drawn.
+ */
+export function Rail({
+  tone,
+  into,
+  entering = false,
+  here = false,
+}: {
+  tone: HopTone;
+  into: HopTone | null;
+  /**
+   * A hop stands above this one, so the rail arrives here — drawn as an
+   * arrowhead flush over the dot, where the incoming line ends. At the
+   * bottom of the segment it floated between two dots and read as clutter;
+   * against the dot it reads as one connector: line, tip, stop.
+   */
+  entering?: boolean;
+  /** The chain's own subject — a halo says "you are standing here". */
+  here?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center">
+      {entering && (
+        <span
+          aria-hidden="true"
+          data-testid="rail-arrow"
+          className={cn(
+            "mb-[1px] h-0 w-0 flex-none border-x-[3px] border-t-[4px] border-x-transparent",
+            tone === "bad" ? "border-t-err" : "border-t-info"
+          )}
+        />
+      )}
       <span
         aria-hidden="true"
+        data-testid={here ? "rail-here" : undefined}
         className={cn(
-          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
-          NODE_TONE[tone]
+          "h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
+          // The arrow spends the same 5px the first dot spends on margin,
+          // so every dot sits on its line of text regardless.
+          entering || "mt-[5px]",
+          NODE_TONE[tone],
+          here && "ring-[3px] ring-fg/20"
         )}
       />
       {into && (
         <span
           aria-hidden="true"
           className={cn(
-            "min-h-[14px] w-px flex-1",
+            "min-h-[10px] w-px flex-1",
             into === "bad" ? "bg-err/40" : "bg-hair"
           )}
         />
@@ -218,29 +262,126 @@ function EdgeNote({
   );
 }
 
+/**
+ * The ways in that live in a vendor's own objects — an IngressRoute, and
+ * nothing the backend's Ingress-only connection graph can see.
+ *
+ * Under the Service hop, beside the cloud's note, and filtered to sources
+ * the core does not draw: a route the capability read off a plain Ingress is
+ * the same way in the chain already shows as a hop, said twice.
+ */
+export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
+  const vendors = (routes ?? []).filter(
+    (route) => route.source.kind !== "Ingress"
+  );
+  if (vendors.length === 0) return null;
+  const shown = vendors.slice(0, 6);
+
+  return (
+    <>
+      {shown.map((route) => (
+        <p
+          key={`${route.host}${route.path}`}
+          className="text-[11px] text-fg-fnt"
+        >
+          <RouteLine route={route} />
+        </p>
+      ))}
+      {vendors.length > shown.length && (
+        <p className="text-[11px] text-fg-fnt">
+          and {vendors.length - shown.length} more
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The address a client types for this route, scheme included where known. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function routeAddress(route: ServiceRoute): string {
+  const tail = route.path === "/" ? "" : route.path;
+  return route.tls === null
+    ? `${route.host}${tail}`
+    : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
+}
+
+/**
+ * The object a route came from. A source that names its CRD is a real
+ * reference — glyph, hue, peek — the same element every other object on
+ * the line gets. The bare link is only the fallback for a vendor that
+ * handed a path and nothing more.
+ */
+export function RouteSource({ route }: { route: ServiceRoute }) {
+  if (route.source.crd) {
+    return (
+      <ResourceRef
+        kind={route.source.kind}
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={route.source.crd}
+        showKind={false}
+      />
+    );
+  }
+  if (route.to) {
+    return (
+      <Link to={route.to} className="font-mono text-info hover:underline">
+        {route.source.name}
+      </Link>
+    );
+  }
+  return <span className="font-mono">{route.source.name}</span>;
+}
+
+/**
+ * One route as a line: the address, then the object that states it. The
+ * note above stacks these under a Service hop; the peek's chain draws the
+ * same parts object-first, because there a route is a hop of its own.
+ */
+export function RouteLine({ route }: { route: ServiceRoute }) {
+  return (
+    <>
+      <CopyableAddress value={routeAddress(route)} label="Address" />
+      {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
+      <RouteSource route={route} />
+    </>
+  );
+}
+
 function Hop({
   hop,
   next,
+  first,
   issuance,
   edge,
+  routed,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
+  first: boolean;
   issuance: Issuance | undefined;
   edge: ServiceEdges | undefined;
+  routed: ServicesRoutes | undefined;
 }) {
   const last = next === undefined;
   return (
     <div className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5">
       {/* The run of line below a hop carries the colour of what comes next,
           so the segment leading into a stop is the part that turns red. */}
-      <Rail tone={toneOf(hop)} into={next ? toneOf(next) : null} />
+      <Rail
+        tone={toneOf(hop)}
+        into={next ? toneOf(next) : null}
+        entering={!first}
+        here={hop.at === "object" && hop.self}
+      />
       <div className={cn("min-w-0", last ? "" : "pb-3")}>
         {hop.at === "object" && (
           <>
             <span className="flex flex-wrap items-baseline gap-x-2">
               {hop.self ? (
-                <span className={RESOURCE_NAME_SHELL}>
+                // The selection tint the app already means "current" by —
+                // the pill is the "you are here", the halo on its dot agrees.
+                <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
                   <ResourceName
                     kind={hop.object.kind}
                     name={hop.object.name}
@@ -290,7 +431,14 @@ function Hop({
                 </p>
               ))}
             {hop.object.kind === "Service" && (
-              <EdgeNote edge={edge} object={hop.object} />
+              <>
+                <EdgeNote edge={edge} object={hop.object} />
+                <RoutesNote
+                  routes={routed?.routes.get(
+                    `${hop.object.namespace ?? ""}/${hop.object.name}`
+                  )}
+                />
+              </>
             )}
           </>
         )}
@@ -377,15 +525,16 @@ export function TrafficChain({
         routing: routed.routing,
       })
     : [];
-  const edge = useServiceEdge(
-    paths.flatMap((path) =>
-      path.hops.flatMap((hop) =>
-        hop.at === "object" && hop.object.kind === "Service"
-          ? [{ namespace: hop.object.namespace ?? "", name: hop.object.name }]
-          : []
-      )
+  const serviceHops = paths.flatMap((path) =>
+    path.hops.flatMap((hop) =>
+      hop.at === "object" && hop.object.kind === "Service"
+        ? [{ namespace: hop.object.namespace ?? "", name: hop.object.name }]
+        : []
     )
   );
+  const edge = useServiceEdge(serviceHops);
+  // The ways in a vendor's objects state — see `service.routes`.
+  const routed2 = useServicesRoutes(serviceHops);
 
   if (isPending) {
     return <p className="text-xs text-fg-fnt">Following the path in…</p>;
@@ -443,8 +592,10 @@ export function TrafficChain({
                 key={index}
                 hop={hop}
                 next={path.hops[index + 1]}
+                first={index === 0}
                 issuance={issuance ?? routed.issuance}
                 edge={edge}
+                routed={routed2}
               />
             ))}
           </div>

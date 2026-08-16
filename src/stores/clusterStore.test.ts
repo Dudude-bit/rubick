@@ -9,6 +9,11 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import {
+  credentialsExpired,
+  credentialsRestored,
+  readExpiredCredentials,
+} from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { useClusterStore } from "./clusterStore";
 
@@ -79,5 +84,33 @@ describe("what is written to disk", () => {
     useClusterStore.setState({ currentContext: null });
     await state().setNamespaceScope(["web"]);
     expect(saveClusterPreferences).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The refusal flag is raised at the commands choke point; the only thing
+ * that may lower it is a session the cluster actually accepted. "Sign in
+ * again" reconnects to the *same* context, so clearing must ride on the
+ * connect that worked — the context-change effect never fires for it, and
+ * the reader was left staring at the banner over a healthy session.
+ */
+describe("an expired session and the reconnect", () => {
+  beforeEach(() => credentialsRestored());
+
+  it("clears the refusal when the same context connects again", async () => {
+    credentialsExpired("Unauthorized");
+    await state().connect("prod-eu");
+    expect(readExpiredCredentials()).toBeNull();
+    expect(state().isConnected).toBe(true);
+  });
+
+  it("keeps the refusal when the reconnect fails too", async () => {
+    credentialsExpired("Unauthorized");
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error("still refused")
+    );
+    await state().connect("prod-eu");
+    expect(readExpiredCredentials()).not.toBeNull();
+    expect(state().isConnected).toBe(false);
   });
 });
