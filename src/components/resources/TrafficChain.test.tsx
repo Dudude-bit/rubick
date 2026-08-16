@@ -367,6 +367,48 @@ describe("TrafficChain", () => {
     });
 
     /**
+     * A source that names its CRD is drawn as a real reference — glyph, hue,
+     * peek — landing on the same instance page the vendor's own `to` named.
+     * The bare blue text link is only the fallback for a vendor that said
+     * nothing more.
+     */
+    it("draws a crd-bearing source as a reference, not bare text", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "api.example.com",
+                path: "/",
+                tls: true,
+                source: {
+                  kind: "IngressRoute",
+                  name: "api",
+                  namespace: "backend",
+                  crd: "ingressroutes.traefik.io",
+                },
+                to: "/x/ingressroutes/api",
+              },
+            ],
+          ],
+        ]),
+      });
+      wrap(<Chain query={query(chain)} />);
+
+      expect(
+        screen.getByRole("link", { name: "IngressRoute api" })
+      ).toHaveAttribute(
+        "href",
+        "/customresourcedefinitions/ingressroutes.traefik.io/instances/backend/api"
+      );
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+
+    /**
      * The core graph already draws Ingress hops with their addresses — a
      * route the capability reports off the same Ingress is the same way in
      * said twice, and the second time claims the cluster has two.

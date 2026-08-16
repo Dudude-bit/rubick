@@ -28,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { servedGroupName } from "./data";
 import { routeIsSecure, serviceRoutes } from "./routes";
 
 const WEB: EntryPoint = {
@@ -149,10 +150,13 @@ describe("which hosts reach a Service", () => {
 
     expect(found).toHaveLength(1);
     expect(found[0].host).toBe("argocd.example.com");
+    // The CRD rides on the source so a consumer can draw a real reference —
+    // peek, glyph and hue — instead of a bare text link.
     expect(found[0].source).toEqual({
       kind: "IngressRoute",
       name: "argocd-server",
       namespace: "argocd",
+      crd: `ingressroutes.${servedGroupName()}`,
     });
     // The proxy's flags were not read here, so the scheme is unsettled — and
     // saying so is the point.

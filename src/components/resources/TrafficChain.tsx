@@ -105,13 +105,25 @@ export function Rail({
         )}
       />
       {into && (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "min-h-[14px] w-px flex-1",
-            into === "bad" ? "bg-err/40" : "bg-hair"
-          )}
-        />
+        <>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "min-h-[10px] w-px flex-1",
+              into === "bad" ? "bg-err/40" : "bg-hair"
+            )}
+          />
+          {/* The direction, said out loud: traffic runs down this rail, and
+              the segment into a stop keeps its red all the way to the tip. */}
+          <span
+            aria-hidden="true"
+            data-testid="rail-arrow"
+            className={cn(
+              "h-0 w-0 flex-none border-x-[3px] border-t-[4px] border-x-transparent",
+              into === "bad" ? "border-t-err" : "border-t-info"
+            )}
+          />
+        </>
       )}
     </div>
   );
@@ -279,6 +291,10 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
  * One route as a line: the address, then the object that states it. The
  * note above stacks these under a Service hop; the peek's chain gives each
  * one a hop of its own.
+ *
+ * A source that names its CRD is a real reference — glyph, hue, peek — the
+ * same element every other object on the line gets. The bare link is only
+ * the fallback for a vendor that handed a path and nothing more.
  */
 export function RouteLine({ route }: { route: ServiceRoute }) {
   const tail = route.path === "/" ? "" : route.path;
@@ -290,7 +306,15 @@ export function RouteLine({ route }: { route: ServiceRoute }) {
     <>
       <CopyableAddress value={address} label="Address" />
       {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
-      {route.to ? (
+      {route.source.crd ? (
+        <ResourceRef
+          kind={route.source.kind}
+          name={route.source.name}
+          namespace={route.source.namespace}
+          crd={route.source.crd}
+          showKind={false}
+        />
+      ) : route.to ? (
         <Link to={route.to} className="font-mono text-info hover:underline">
           {route.source.name}
         </Link>

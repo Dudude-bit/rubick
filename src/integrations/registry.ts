@@ -387,8 +387,13 @@ export interface ServiceRoute {
    * known to be", which consumes the same as false.
    */
   h2c?: boolean;
-  /** The object that routes it, so the reader can go and read it. */
-  source: { kind: string; name: string; namespace: string };
+  /**
+   * The object that routes it, so the reader can go and read it. `crd` is
+   * the definition that serves the kind — `<plural>.<group>` — so a consumer
+   * can draw the source as a real reference, peek and all; absent for a core
+   * kind, or where the vendor cannot say.
+   */
+  source: { kind: string; name: string; namespace: string; crd?: string };
   /**
    * Where that object's page is, supplied by the vendor because only the
    * vendor knows its CRD's group. Absent for a core kind, which the consumer

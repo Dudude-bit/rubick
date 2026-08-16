@@ -98,12 +98,20 @@ export async function serviceRoutes(input: {
         ? true
         : routeIsSecure(route, entryPoints);
     const h2c = service.scheme === "h2c";
+    // Only this file knows which API group serves the CRD; a core kind
+    // names itself. On the source so a consumer can draw a real reference,
+    // and in `to` for the ones that only want a path.
+    const crd =
+      route.source.kind === "IngressRoute"
+        ? `ingressroutes.${servedGroupName()}`
+        : undefined;
+    const source = crd ? { ...route.source, crd } : route.source;
     const already = found.get(key);
     if (already) {
       // Two objects disagreeing about the scheme means one of them serves it
       // over TLS, and a client that asks for TLS gets it.
       if (already.tls !== true && secure === true) {
-        found.set(key, { ...already, tls: true, source: route.source });
+        found.set(key, { ...already, tls: true, source });
       }
       continue;
     }
@@ -112,17 +120,10 @@ export async function serviceRoutes(input: {
       path,
       tls: secure,
       h2c,
-      source: route.source,
-      // Only this file knows which API group serves the CRD; a core kind
-      // links itself.
-      to:
-        route.source.kind === "IngressRoute"
-          ? crdObjectPath(
-              `ingressroutes.${servedGroupName()}`,
-              route.source.namespace,
-              route.source.name
-            )
-          : undefined,
+      source,
+      to: crd
+        ? crdObjectPath(crd, route.source.namespace, route.source.name)
+        : undefined,
     });
   }
 

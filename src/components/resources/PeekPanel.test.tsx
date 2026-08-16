@@ -1019,6 +1019,8 @@ describe("PeekPanel traffic chain", () => {
     expectAbove(self, endpoints);
     // One dot in the chain is haloed: the one the reader is standing on.
     expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
+    // Every segment ends in an arrowhead — three hops, two arrows, all down.
+    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
     // The rule's host rides on the hop, so it says which door this is.
     expect(screen.getByText("ambassadors.sketchar.io")).toBeInTheDocument();
     // The words the chain replaced stay gone.
