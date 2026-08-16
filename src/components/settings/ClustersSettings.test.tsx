@@ -80,7 +80,7 @@ const CONTEXTS: ContextInfo[] = [
     user: "gke-shop",
     namespace: null,
     is_current: false,
-    server: "https://34.76.11.208",
+    server: "https://203.0.113.42",
     exec_command: "gke-gcloud-auth-plugin",
     auth: { kind: "exec" },
   },
