@@ -21,7 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
-import { expiryOf, type Expiry } from "@/lib/certificates";
+import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   ChainStop,
   IngressClassSummary,
@@ -63,13 +63,23 @@ export function claimsIngress(
   return mine.some((entry) => entry.isDefault);
 }
 
-/** The Secret an Ingress serves that host under, where it names one. */
+/**
+ * The Secret an Ingress serves that host under, where it names one.
+ *
+ * Matched with {@link covers} rather than by equality, because a wildcard in
+ * `spec.tls[].hosts` is the ordinary way to write this: a pair of
+ * `*.example.com` and `example.com` on one Secret is what somebody sets up so
+ * they never have to think about it again. Compared literally, every
+ * subdomain that pair exists to serve came back with no Secret — and the
+ * surfaces above this then said the host was served in the clear, which is
+ * the app claiming an outage and a security problem that are not there.
+ */
 export function tlsSecretFor(
   ingress: IngressInfo,
   host: string | null
 ): string | null {
   for (const config of ingress.tlsConfigs) {
-    if (config.isCatchAll || (host !== null && config.hosts.includes(host))) {
+    if (config.isCatchAll || (host !== null && covers(config.hosts, host))) {
       return config.secretName;
     }
   }

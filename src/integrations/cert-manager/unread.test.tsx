@@ -15,6 +15,10 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listCustomResources: (crd: string) =>
       (answers.get(crd) ?? (() => Promise.resolve([])))(),
+    // Read for the hosts each certificate serves. Nothing here is about
+    // Ingresses, but the page reads them, and a mock that omits it makes
+    // every one of these look like an unread-CRD bug.
+    listIngresses: () => Promise.resolve([]),
   },
 }));
 

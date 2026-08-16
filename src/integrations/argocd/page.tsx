@@ -14,8 +14,11 @@
  * remote mechanically; `gitRepoLink` owns that judgement and an `ssh://`
  * remote simply gets no link. "Open in Argo CD" goes out to Argo, because the
  * line-by-line diff is the one thing Argo does better than this app could
- * without a credential — and it only appears when an Ingress in the cluster
- * says where Argo's UI actually answers.
+ * without a credential — and it only appears where the cluster says, in an
+ * object, how Argo's UI is actually reached. An `Ingress` is read directly;
+ * anything else routing `argocd-server` — a Traefik `IngressRoute`, and every
+ * cluster whose edge is entirely CRDs — answers through the `service.routes`
+ * capability rather than being invisible, which is what it used to be.
  */
 
 import { useMemo, useState } from "react";
@@ -52,16 +55,20 @@ import {
   OutLink,
   TroubleRow,
 } from "../page-kit";
+import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
 import {
   APPLICATIONS_CRD,
   APPLICATIONSETS_CRD,
   PROJECTS_CRD,
+  SERVER_SERVICE,
   applicationUrl,
+  uiFromRoutes,
   useApplicationSets,
   useApplications,
   useController,
   useProjects,
   type ControllerInfo,
+  type RoutedUi,
 } from "./data";
 import {
   appState,
@@ -91,6 +98,18 @@ export default function ArgoCdPage() {
     [applications.data]
   );
 
+  // An Ingress is not the only thing that can put Argo's UI on a hostname,
+  // and reading only Ingresses is what had this page telling readers of a
+  // Traefik cluster that nothing served `argocd-server`. The core reading
+  // stays first and unchanged; this is asked when it found nothing.
+  const routed = useServiceRoutes(
+    controller.data
+      ? { namespace: controller.data.namespace, name: SERVER_SERVICE }
+      : null
+  );
+  const viaRoutes = useMemo(() => uiFromRoutes(routed.routes), [routed.routes]);
+  const ui = controller.data?.ui ?? viaRoutes.url;
+
   if (applications.error) {
     return (
       <Section className="max-w-[64ch] py-8">
@@ -116,11 +135,7 @@ export default function ArgoCdPage() {
       glyph: viewGlyph(GitBranch),
       mark: applicationsMark(apps, troubled.length),
       content: (
-        <ApplicationsTab
-          apps={apps}
-          loading={applications.isPending}
-          ui={controller.data?.ui ?? null}
-        />
+        <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
       ),
     },
     {
@@ -147,7 +162,14 @@ export default function ArgoCdPage() {
       id: "controller",
       label: "Controller",
       glyph: viewGlyph(Box),
-      content: <ControllerTab controller={controller.data} />,
+      content: (
+        <ControllerTab
+          controller={controller.data}
+          ui={ui}
+          routed={viaRoutes}
+          routes={routed}
+        />
+      ),
     },
   ];
 
@@ -842,8 +864,16 @@ function ProjectsTab({
 
 function ControllerTab({
   controller,
+  ui,
+  routed,
+  routes,
 }: {
   controller: ControllerInfo | undefined;
+  /** The address, from an Ingress or from whatever else routes the Service. */
+  ui: string | null;
+  routed: RoutedUi;
+  /** What the routing capability answered, for the three sentences below. */
+  routes: ServiceRoutes;
 }) {
   if (!controller) {
     return (
@@ -901,25 +931,65 @@ function ControllerTab({
           title="Argo's own UI"
           description="Half of what Argo knows needs a credential this app does not hold — the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over."
         />
-        {controller.ui ? (
+        {ui ? (
           <p className="text-[11.5px] text-fg-mut">
-            An Ingress serves <span className="font-mono">argocd-server</span>{" "}
-            at{" "}
-            <OutLink href={controller.ui} site="Argo CD" className="font-mono">
-              {controller.ui}
+            {routed.via && !controller.ui ? (
+              <>
+                {routed.via.kind}{" "}
+                <span className="font-mono">{routed.via.name}</span> serves
+              </>
+            ) : (
+              <>An Ingress serves</>
+            )}{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
+            <OutLink href={ui} site="Argo CD" className="font-mono">
+              {ui}
             </OutLink>
             , so every Application above offers a way into it.
           </p>
+        ) : routes.isPending ? (
+          <p className="text-[11.5px] text-fg-fnt">
+            Reading what routes{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span>…
+          </p>
+        ) : routed.host ? (
+          // The middle state, and the whole reason `tls` may be `null`: the
+          // host is known and the scheme is not, so the host is named and the
+          // link withheld rather than guessed at.
+          <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
+            {routed.via?.kind ?? "Something"}{" "}
+            <span className="font-mono">{routed.via?.name}</span> serves{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
+            <span className="font-mono text-fg">{routed.host}</span>, but
+            nothing in the API server says whether that host is served over TLS
+            — the proxy&rsquo;s entry points are start-up flags and this app
+            could not read them. Rather than guess a scheme and hand you a link
+            that may refuse the connection, the host is stated and left to you.
+          </p>
         ) : (
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            No Ingress in this cluster serves{" "}
-            <span className="font-mono">argocd-server</span>.{" "}
-            <span className="font-mono">argocd-server</span> is a ClusterIP with
-            no route from this machine, so there is no address this app could
-            construct — and a link into a connection error is worse than no
+            {/* Says what was read, not what the cluster contains: this
+                sentence used to claim the whole cluster routed nothing to
+                argocd-server, from a reading of Ingresses alone, on clusters
+                whose entire edge is a routing CRD. */}
+            Nothing this app can read routes{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span> to a hostname
+            {routes.available
+              ? ""
+              : " — no Ingress, and no routing controller installed that could be asked about its own objects"}
+            . <span className="font-mono">{SERVER_SERVICE}</span> is a ClusterIP
+            with no route from this machine, so there is no address this app
+            could construct, and a link into a connection error is worse than no
             link. Everything on this page is read from the{" "}
             <span className="font-mono">Application</span> objects themselves
             and needs no credential.
+            {routes.error && (
+              <>
+                {" "}
+                One routing controller was asked and did not answer:{" "}
+                <span className="font-mono">{routes.error.message}</span>
+              </>
+            )}
           </p>
         )}
       </Section>

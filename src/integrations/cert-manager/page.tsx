@@ -46,9 +46,13 @@ import {
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
 
+import { cn } from "@/lib/utils";
+import { ResourceType } from "@/lib/resource-registry";
+import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { crdObjectPath, plural } from "../kit";
 import { FilterBox, Finding, TroubleRow } from "../page-kit";
 import { usePicture } from "./data";
+import { uncovered } from "./serves";
 import {
   CERTIFICATES_CRD,
   CLUSTER_ISSUERS_CRD,
@@ -327,6 +331,10 @@ function CertificateRow({
         <>
           {row.namespace}
           {row.dnsNames.length > 0 && ` · ${summarise(row.dnsNames)}`}
+          {row.use.hosts.length > 0 &&
+            ` · serving ${summarise([
+              ...new Set(row.use.hosts.map((entry) => entry.host)),
+            ])}`}
           {row.issuer && ` · ${row.issuer.name}`}
         </>
       }
@@ -337,9 +345,95 @@ function CertificateRow({
       brief={row.failure ? <FailureLine row={row} brief /> : undefined}
     >
       <Facts row={row} />
+      <ServingLine row={row} />
       {row.steps.length > 0 && <Walk steps={row.steps} />}
       {row.failure && <FailureLine row={row} />}
     </TroubleRow>
+  );
+}
+
+/**
+ * What this certificate is actually serving, which the object never says.
+ *
+ * The reference runs the other way — an Ingress names the Secret, the
+ * Certificate names nothing — so until now a row could say `Ready`, thirty
+ * days left, and leave the reader to work out which address stops answering
+ * when it does not renew.
+ */
+function ServingLine({ row }: { row: CertRow }) {
+  const wrong = uncovered(row.use);
+
+  if (row.use.hosts.length === 0) {
+    return (
+      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+        No Ingress in <span className="font-mono">{row.namespace}</span> mounts{" "}
+        <span className="font-mono">{row.secretName ?? "its Secret"}</span>.
+        {row.use.unusedIsCertain
+          ? " Nothing is serving this certificate, and it is renewed on schedule regardless."
+          : " A routing CRD may still be mounting it — this app reads Ingresses, and a Traefik IngressRoute or an Istio Gateway is not one — so this is what was checked rather than a verdict."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
+        <span className="text-fg-fnt">Serving</span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          {row.use.hosts.map((entry) => (
+            <span
+              key={`${entry.ingress.name}/${entry.host}`}
+              className="min-w-0"
+            >
+              <span
+                className={cn(
+                  "font-mono",
+                  entry.covered ? "text-fg-mid" : "text-err"
+                )}
+              >
+                {entry.host}
+              </span>
+              <span className="ml-2 text-fg-fnt">
+                from{" "}
+                <Link
+                  to={getResourceDetailUrl(
+                    ResourceType.Ingress,
+                    entry.ingress.name,
+                    entry.ingress.namespace
+                  )}
+                  className="hover:underline"
+                >
+                  {entry.ingress.name}
+                </Link>
+              </span>
+            </span>
+          ))}
+        </span>
+      </div>
+      {wrong.length > 0 && (
+        <Finding
+          tone="err"
+          title={
+            <>
+              Served on{" "}
+              {wrong.length === 1 ? "a name" : `${wrong.length} names`} this
+              certificate does not carry
+            </>
+          }
+        >
+          <span className="font-mono">
+            {[
+              ...new Set(wrong.map((entry: { host: string }) => entry.host)),
+            ].join(", ")}
+          </span>{" "}
+          {wrong.length === 1 ? "is" : "are"} served from this Secret and not in
+          its <span className="font-mono">spec.dnsNames</span>. Every other
+          surface reads this as healthy — the Secret is populated, the
+          certificate is valid, the Ingress is serving — and a browser refuses
+          the connection outright.
+        </Finding>
+      )}
+    </div>
   );
 }
 

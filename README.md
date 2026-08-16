@@ -50,16 +50,27 @@ Free and GPLv3. No account, no telemetry.
 
 Detected ones need nothing from you — their CRDs are in the cluster or they are not. Configured ones need an address, and Rubick never goes looking for one.
 
-| Integration      | What it gives you                                                                                                                                                                                               |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Routing**      | Traefik, ingress-nginx, Istio — hosts, rules and middleware read as routing. nginx annotations become sentences with the raw key beside each; a `configuration-snippet` is shown verbatim and never paraphrased |
-| **Certificates** | cert-manager — expiry wherever TLS is named, and the issuance chain when renewal fails                                                                                                                          |
-| **Delivery**     | Argo CD and Flux — every object says whether it is delivered, from which revision, and whether your edit will survive                                                                                           |
-| **Metrics**      | Prometheus — real history, disk fullness and network traffic, none of which `metrics.k8s.io` can answer                                                                                                         |
-| **Logs**         | Loki — so a crashed pod's logs outlive the pod                                                                                                                                                                  |
-| **Clouds**       | GKE, EKS, AKS node pools, machine types, zones and spot status, read from labels with no cloud account                                                                                                          |
+| Integration       | What it gives you                                                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Routing**       | Traefik, ingress-nginx, Istio — hosts, rules and middleware read as routing. nginx annotations become sentences with the raw key beside each; a `configuration-snippet` is shown verbatim and never paraphrased |
+| **Certificates**  | cert-manager — expiry wherever TLS is named, and the issuance chain when renewal fails                                                                                                                          |
+| **Delivery**      | Argo CD and Flux — every object says whether it is delivered, from which revision, and whether your edit will survive                                                                                           |
+| **Metrics**       | Prometheus — real history, disk fullness and network traffic, none of which `metrics.k8s.io` can answer                                                                                                         |
+| **Logs**          | Loki — so a crashed pod's logs outlive the pod                                                                                                                                                                  |
+| **Clouds**        | GKE, EKS, AKS node pools, machine types, zones and spot status, read from labels with no cloud account                                                                                                          |
+| **Cloud ingress** | GKE Ingress, the AWS Load Balancer Controller and AGIC — the certificate none of them keeps in `spec.tls`, and one row per ALB rather than per Ingress, because `group.name` puts several namespaces on one     |
 
 Adding one costs a folder and a line — see [CONTRIBUTING](CONTRIBUTING.md).
+
+> **AWS and Azure are the least exercised paths here, and issues are very
+> welcome.** Rubick is developed against a GKE cluster running Traefik and
+> cert-manager, so those are the ones that get looked at every day. The EKS
+> and AKS halves — ALB groups, `IngressClassParams`, ACM certificates, AGIC
+> annotations, Workload ID — were built from the controllers' documented
+> behaviour and covered with unit tests, not against a live cluster of either
+> kind. If something reads wrong on yours, that is worth an issue even without
+> a diagnosis: paste the objects and say what you expected. Being wrong about
+> your cluster is the one thing this app is not allowed to be.
 
 ![Integrations, with what each is doing](docs/images/integrations-settings.png)
 

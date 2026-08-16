@@ -9,6 +9,7 @@ import {
   ROUTE_STALE,
 } from "./data";
 import { facts } from "./facts";
+import { serviceRoutes } from "./routes";
 
 /**
  * Traefik.
@@ -32,6 +33,10 @@ export default defineVendor({
     icon: Router,
     facts,
   },
+  // What the backend's connection graph cannot know: its `Routes` edges come
+  // from `Ingress` objects, and this cluster's edge may be entirely
+  // IngressRoutes. See `service.routes`.
+  provides: { "service.routes": serviceRoutes },
   page: {
     count: pageCount({
       queryKey: ROUTE_SOURCES,

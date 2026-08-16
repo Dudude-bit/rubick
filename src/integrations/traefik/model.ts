@@ -27,7 +27,7 @@
  * Deployment or from a hostname.
  */
 
-import type { Expiry } from "@/lib/certificates";
+import { covers, type Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
   ServicePublished,
@@ -108,6 +108,17 @@ export interface TraefikRoute {
    */
   resourceBackend: string | null;
   tlsSecret: string | null;
+  /**
+   * Whether the object asks for TLS on this host at all, which is not the
+   * same question as {@link tlsSecret}.
+   *
+   * An IngressRoute may write `tls: {}` and mean "serve this over TLS with
+   * whatever certificate you have" — Traefik's own default. Read through
+   * `tlsSecret` alone that is indistinguishable from an object that never
+   * mentioned TLS, and anything constructing a URL from it prints `http://`
+   * for a host that only answers on 443.
+   */
+  declaresTls: boolean;
   /** An Ingress's `pathType` verbatim: Traefik's reading of it is Traefik's. */
   pathType: string | null;
   /** An IngressRoute may state one; an Ingress never does. */
@@ -183,6 +194,17 @@ export interface TraefikSources {
   entryPoints: EntryPoint[];
   /** Certificates already read off the TLS Secrets, by `namespace/name`. */
   certificates?: Map<string, TlsCertificate>;
+  /**
+   * Whether something outside these objects terminates TLS for a host before
+   * it reaches the proxy — a cloud load balancer holding the certificate in
+   * an annotation rather than in `spec.tls`.
+   *
+   * A function rather than a list because the page answers it from the
+   * `service.routes` capability, which is asked per Service and knows nothing
+   * about this model. Absent on a cluster with no such vendor, which is the
+   * ordinary case and where {@link terminatedUpstream} is the whole answer.
+   */
+  upstreamTls?: (host: string | null) => boolean;
 }
 
 // --- which Ingresses are this Traefik's ---------------------------------
@@ -292,6 +314,13 @@ function routesFromIngress(
           : null,
         resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
+        // An Ingress cannot ask for TLS without naming a Secret, so its
+        // `spec.tls` covering this host is the whole answer.
+        declaresTls:
+          ingress.hasCatchAllTls ||
+          (host !== null &&
+            (covers(ingress.tlsHosts, host) ||
+              ingress.tlsConfigs.some((config) => covers(config.hosts, host)))),
         pathType: path.pathType,
         priority: null,
       };
@@ -320,6 +349,9 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
   const namespace = object.namespace ?? "";
   const entryPoints = spec.entryPoints?.length ? spec.entryPoints : null;
   const tlsSecret = spec.tls?.secretName ?? null;
+  // The block's presence, not its contents: `tls: {}` is Traefik's "serve
+  // this over TLS with the default certificate" and names no Secret.
+  const declaresTls = spec.tls !== undefined && spec.tls !== null;
 
   return (spec.routes ?? []).flatMap((route, routeIndex) => {
     const reading = readRule(route.match ?? "");
@@ -356,6 +388,7 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
       // Only an Ingress can name one; an IngressRoute has no such field.
       resourceBackend: null,
       tlsSecret,
+      declaresTls,
       pathType: null,
       priority: route.priority ?? null,
     };
@@ -594,6 +627,78 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
 }
 
 /**
+ * The label every Traefik chart puts on its own pods, which is how its own
+ * Service is recognised without asking the cluster anything extra.
+ */
+const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
+
+/** The Services that send traffic to this Traefik's own pods. */
+export function proxyServices(sources: TraefikSources): ServiceInfo[] {
+  return sources.services.filter(
+    (service) => service.selector[PROXY_LABEL[0]] === PROXY_LABEL[1]
+  );
+}
+
+/**
+ * What terminates TLS for this host *before* it reaches Traefik.
+ *
+ * The case this exists for is the ordinary one on a managed cluster and the
+ * page used to call it a fault on every single row: a cloud load balancer
+ * holds the certificate, and forwards plaintext to the proxy's `web` entry
+ * point on purpose. Traefik is the second hop, the client-facing hop is
+ * encrypted, and "served in the clear" was both wrong and — worse for a
+ * warning about encryption — wrong on every host at once, which is how a
+ * reader learns to stop reading it.
+ *
+ * Evidence rather than inference: an Ingress in this cluster whose backend is
+ * a Service that selects Traefik's own pods, and whose `spec.tls` covers this
+ * host. Anything less specific would silence the finding on a cluster where
+ * nothing terminates anything.
+ *
+ * TLS held in an *annotation* rather than in `spec.tls` — GKE's
+ * `ManagedCertificate`, a pre-shared certificate — is not visible from here
+ * and is not meant to be: that is the `service.routes` capability's job, and
+ * the page asks it separately. This returns what the core objects state.
+ */
+export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
+  const proxies = proxyServices(sources);
+  if (proxies.length === 0) return [];
+  return sources.ingresses.filter((ingress) =>
+    ingress.rules.some((rule) =>
+      rule.paths.some((path) =>
+        proxies.some(
+          (service) =>
+            service.name === path.backendService &&
+            service.namespace === ingress.namespace
+        )
+      )
+    )
+  );
+}
+
+export function terminatedUpstream(
+  host: string | null,
+  sources: TraefikSources
+): { kind: "Ingress"; name: string; namespace: string } | null {
+  if (host === null) return null;
+
+  for (const ingress of frontingIngresses(sources)) {
+    // It has to terminate TLS *for this host*, not merely somewhere.
+    const terminates =
+      ingress.hasCatchAllTls ||
+      covers(ingress.tlsHosts, host) ||
+      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
+    if (!terminates) continue;
+    return {
+      kind: "Ingress",
+      name: ingress.name,
+      namespace: ingress.namespace,
+    };
+  }
+  return null;
+}
+
+/**
  * A host served with no encryption at all.
  *
  * Narrower than "reachable over plain HTTP", deliberately. Traefik's Ingress
@@ -604,14 +709,20 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
  * tab and is stated there once.
  *
  * What is a finding about *this* host is that nothing serves it over TLS at
- * all: no route under it carries a certificate, so there is no encrypted way
- * to reach it even for a client that asks for one.
+ * all: no route under it carries a certificate, **and nothing in front of the
+ * proxy holds one either** — so there is no encrypted way to reach it even
+ * for a client that asks for one.
  */
 function clearFinding(
   routes: TraefikRoute[],
-  sources: TraefikSources
+  sources: TraefikSources,
+  host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
+  // Something in front of the proxy holds the certificate. The inside hop is
+  // plaintext by design and is drawn as the fact it is, not as a fault.
+  if (terminatedUpstream(host, sources)) return null;
+  if (sources.upstreamTls?.(host)) return null;
   // Nothing is claimed about entry points the controller never told us about:
   // an empty list means the workload could not be read, not that it listens
   // on nothing.
@@ -701,7 +812,7 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       ).values(),
     ];
 
-    const clear = clearFinding(own, sources);
+    const clear = clearFinding(own, sources, host === "" ? null : host);
     const findings = [
       ...stops,
       ...certificateFindings(tlsSecrets, sources.certificates),

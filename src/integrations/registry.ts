@@ -298,6 +298,45 @@ export interface EdgeConfig {
   problem: { text: string; tone: "warn" | "err" } | null;
 }
 
+/** What terminates TLS for one host, where `spec.tls` does not. */
+export interface IngressTls {
+  host: string;
+  /**
+   * Whether the host is served over TLS. `false` is a real answer — a vendor
+   * that owns this Ingress and finds no certificate for the host is stating
+   * that it serves plain HTTP, which is worth more than silence.
+   */
+  terminated: boolean;
+  /**
+   * What holds it, for the sentence: "an ACM certificate", "shop-cert". Never
+   * branched on — the surface prints it.
+   */
+  by: string;
+}
+
+/** One way in to a Service, as the object that routes it states it. */
+export interface ServiceRoute {
+  /** The hostname a client types. */
+  host: string;
+  /** The path it reaches the Service on; `/` where the route names none. */
+  path: string;
+  /**
+   * Whether that host is served over TLS — and `null` where the vendor could
+   * not read enough to say.
+   *
+   * Three answers rather than a boolean, because the second-worst thing this
+   * capability could do is replace a wrong sentence with a wrong scheme.
+   * Traefik binds a router to entry points that live only in the proxy's
+   * start-up flags: with those unread, an IngressRoute naming no Secret is
+   * *either* plain HTTP or a TLS entry point serving the default certificate,
+   * and nothing in the API server distinguishes them. A consumer offers no
+   * link for `null` and names the host instead.
+   */
+  tls: boolean | null;
+  /** The object that routes it, so the reader can go and read it. */
+  source: { kind: string; name: string; namespace: string };
+}
+
 /**
  * Every capability the app knows how to consume, and its contract.
  *
@@ -416,6 +455,66 @@ export interface Capabilities {
     namespace: string;
     name: string;
   }) => Promise<EdgeConfig[]>;
+  /**
+   * Which hostnames from outside the cluster reach this Service, when the
+   * thing that routes them is the vendor's own object rather than an Ingress.
+   *
+   * The app's connection graph is built in the backend from `Ingress` and
+   * nothing else, which is correct — a `Routes` edge out of a Traefik
+   * `IngressRoute` would be vendor knowledge in the core, and the core has
+   * no business knowing what an IngressRoute is. The consequence, though, was
+   * a cluster whose entire edge is CRDs being told *by the app* that nothing
+   * routes to anything: the Argo CD page said "no Ingress in this cluster
+   * serves argocd-server" over a cluster where `argocd.example.com` had been
+   * serving it through Traefik for months. Saying nothing would have been
+   * fine; that sentence was a claim, and it was false.
+   *
+   * So the vendor answers for its own objects, in the same shape a core
+   * Ingress would have given.
+   *
+   * Absent means every surface draws what it drew before: the Ingresses the
+   * core found, and a sentence about *those* rather than about the cluster.
+   * A consumer must phrase its empty case accordingly — "no Ingress serves
+   * this" is only ever a statement about Ingresses.
+   */
+  "service.routes": (input: {
+    namespace: string;
+    name: string;
+  }) => Promise<ServiceRoute[]>;
+  /**
+   * Whether this Ingress is served over TLS, when the certificate is not in
+   * `spec.tls`.
+   *
+   * The single widest hole this seam has had, and it was not on a vendor page
+   * — it was on the core Ingress list, the core Ingress page, the peek, and
+   * the traffic chain of every workload behind one. All of them answer "is
+   * this served over TLS" by reading `spec.tls`, which is correct on a
+   * self-managed cluster and empty on all three managed clouds:
+   *
+   * - AWS's controller does not read `spec.tls` **at all** — the certificate
+   *   is `alb.ingress.kubernetes.io/certificate-arn`, or discovered from the
+   *   host
+   * - Azure's serves it from a certificate installed on the Application
+   *   Gateway and named in `appgw.ingress.kubernetes.io/appgw-ssl-certificate`
+   * - GKE's is a `ManagedCertificate` or a pre-shared name, both annotations
+   *
+   * So every managed cluster was told its HTTPS sites were plain HTTP, and
+   * handed `http://` links to open them with.
+   *
+   * Answered per host and only for the hosts the vendor can speak for: a host
+   * missing from the answer is not a denial, and the caller keeps whatever
+   * `spec.tls` told it. Absent, every surface reads exactly as it did before.
+   *
+   * **Takes a list and answers positionally**, the same contract
+   * {@link Capabilities."delivery.source"} has and for the same reason: the
+   * Ingress list is a table, and a capability asked once per row would have
+   * made the column impossible — which is where the wrong answer is most
+   * visible, because the list is what hands out the `http://` link somebody
+   * clicks.
+   */
+  "ingress.tls": (
+    ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
+  ) => Promise<IngressTls[][]>;
 }
 
 export type CapabilityKey = keyof Capabilities;
@@ -642,8 +741,16 @@ export function pageCount<T>(count: {
 }
 
 export interface VendorPage {
-  /** The number at the end of the sidebar row. See {@link PageCount}. */
-  count: PageCount;
+  /**
+   * The number at the end of the sidebar row. See {@link PageCount}.
+   *
+   * Optional, because a page's subject is not always countable. Prometheus is
+   * the first: its page answers *whether the Prometheus you connected is
+   * watching this cluster*, and there is no honest integer for that — a row
+   * reading "4" beside it would be counting something the page is not about.
+   * The row then carries the vendor's name and nothing after it.
+   */
+  count?: PageCount;
   /**
    * The page, imported when the reader opens it. A vendor page is a whole
    * screen with its own parsing and its own queries; keeping it out of the
@@ -703,13 +810,7 @@ export interface NodeLabels {
  * vendor claims the name.
  */
 export type ClusterProvider =
-  | "k3d"
-  | "k3s"
-  | "eks"
-  | "gke"
-  | "aks"
-  | "minikube"
-  | "generic";
+  "k3d" | "k3s" | "eks" | "gke" | "aks" | "minikube" | "generic";
 
 /**
  * What a vendor's kubeconfig context looks like, and the mark it wears —

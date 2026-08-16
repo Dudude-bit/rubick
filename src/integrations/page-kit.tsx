@@ -219,6 +219,7 @@ export function Cell({
   bad,
   warn,
   under,
+  title,
 }: {
   children: ReactNode;
   bad?: boolean;
@@ -227,6 +228,17 @@ export function Cell({
    *  calling a rolling restart an outage. */
   warn?: boolean;
   under?: ReactNode;
+  /**
+   * The whole of what the cell says, for the ones that truncate.
+   *
+   * A chain column is a fifth of the width whatever is in it, and a
+   * `BackendConfig` summarised as "health check HTTP :8080/healthz · 60s
+   * timeout · CDN CACHE_ALL_STATIC · Cloud Armor edge-armor" is four times
+   * that. Truncating it is right; truncating it with no way to read the rest
+   * is the reader having to go and open the object to see what they were
+   * being shown.
+   */
+  title?: string;
 }) {
   return (
     <div
@@ -236,7 +248,9 @@ export function Cell({
         bad && "border-err/50 text-err"
       )}
     >
-      <span className="block truncate">{children}</span>
+      <span className="block truncate" title={title}>
+        {children}
+      </span>
       {under != null && (
         <span className="mt-0.5 block truncate font-sans text-[10px] text-fg-fnt">
           {under}

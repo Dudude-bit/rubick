@@ -13,6 +13,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import type { QuickAction } from "@/components/ui/quick-actions";
 import type { NamespaceInfo } from "@/generated/types";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
@@ -85,6 +86,19 @@ export function NamespaceList() {
     [currentNamespace, podCounts]
   );
 
+  // Held still like every other page's, so a watch tick does not rebuild the
+  // table's column model under the pointer.
+  const quickActions = useMemo<QuickAction<NamespaceInfo>[]>(
+    () => [
+      {
+        icon: Crosshair,
+        label: "Scope this window to it",
+        onClick: (item) => switchNamespace(item.name),
+      },
+    ],
+    [switchNamespace]
+  );
+
   return (
     <ResourceList<NamespaceInfo>
       title="Namespaces"
@@ -95,13 +109,7 @@ export function NamespaceList() {
       getRowId={getResourceRowId}
       columns={namespaceColumns}
       emptyStateLabel="Namespaces"
-      quickActions={[
-        {
-          icon: Crosshair,
-          label: "Scope this window to it",
-          onClick: (item) => switchNamespace(item.name),
-        },
-      ]}
+      quickActions={quickActions}
     />
   );
 }

@@ -107,6 +107,14 @@ export default defineVendor({
       ];
     },
   },
+  // A page, and it took a while to earn one. Prometheus supplies powers
+  // rather than objects, and a page repeating its numbers would be a worse
+  // copy of the chart the reader already has. What it owns is a question
+  // about the connection: a probe proves the address speaks PromQL, and
+  // cannot tell you the Prometheus you reached is scraping *this* cluster.
+  page: {
+    load: () => import("./page"),
+  },
   provides: {
     "usage.history": usageHistory,
     "volume.fullness": volumeFullness,

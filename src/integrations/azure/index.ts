@@ -1,7 +1,11 @@
 import { KeyRound } from "lucide-react";
 
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
+import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
+import { AKS_PICTURE_KEY, countIdentities, fetchAksPicture } from "./data";
+import { serviceEdge } from "./edge";
+import { ingressTls } from "./ingress-tls";
 import { facts } from "./facts";
 import { mark } from "./mark";
 
@@ -20,8 +24,14 @@ import { mark } from "./mark";
  * thing would blind it exactly where the cluster is oldest.
  *
  * Separate from the Azure record below, because only a vendor declaring an
- * extension gets a row and a cluster cannot fail to be on Azure. No page: a
- * pod identity belongs on the pod that asks for it.
+ * extension gets a row and a cluster cannot fail to be on Azure.
+ *
+ * It earns a page because the sentence a reader wants — *which pods can
+ * become which Azure identity* — is spread across two objects that neither
+ * page can join: an annotation on a ServiceAccount and a label on a pod.
+ * Each half is silent without the other, and the dangerous combination
+ * (a labelled pod whose ServiceAccount names no identity) produces a 401
+ * from Azure and no Kubernetes symptom whatsoever.
  */
 export const aksAddons = defineVendor({
   id: "aks-addons",
@@ -31,6 +41,19 @@ export const aksAddons = defineVendor({
       "which pod identity binds which pods, and what an App Gateway ingress is told to leave alone",
     icon: KeyRound,
     facts,
+  },
+  // AGIC keeps its certificate on the Application Gateway and names it in an
+  // annotation, so `spec.tls` is empty on the ordinary AGIC Ingress and every
+  // core surface read it as plain HTTP.
+  provides: { "ingress.tls": ingressTls, "service.edge": serviceEdge },
+  page: {
+    count: pageCount({
+      queryKey: AKS_PICTURE_KEY,
+      queryFn: fetchAksPicture,
+      select: countIdentities,
+      staleTime: ROUTING_STALE,
+    }),
+    load: () => import("./page"),
   },
   crd,
 });

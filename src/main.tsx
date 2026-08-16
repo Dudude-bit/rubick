@@ -19,6 +19,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import { logDebug, logError, logInfo } from "@/lib/logger";
 import { STALE_TIMES } from "@/lib/refresh";
+import { isWorthRetrying } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { setHostOs } from "@/lib/platform";
 
@@ -75,7 +76,15 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: STALE_TIMES.slow,
+      // Focus and visibility are `useLiveQuery`'s to decide — it refetches on
+      // both, and for a group of queries at once. React Query's own listener
+      // would fire underneath that.
       refetchOnWindowFocus: false,
+      // One policy for the whole app, from the classifier the app already
+      // owns: a blip is worth asking again, a verdict never is. See
+      // `isWorthRetrying`.
+      retry: (failureCount, error) =>
+        failureCount < 2 && isWorthRetrying(error),
     },
   },
 });

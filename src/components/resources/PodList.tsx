@@ -131,6 +131,7 @@ export function PodList() {
     data: podsWithMetrics,
     podStatus,
     isLoading,
+    error,
     dataUpdatedAt,
     watchLive,
     resyncing,
@@ -177,31 +178,35 @@ export function PodList() {
   );
 
   return (
-    <div className="space-y-4">
-      {podStatus?.status !== "available" && (
-        <MetricsStatusBanner status={podStatus} />
-      )}
-      <ResourceList<PodWithMetrics>
-        title="Pods"
-        data={podsWithMetrics}
-        isLoading={isLoading}
-        dataUpdatedAt={dataUpdatedAt}
-        live={watchLive}
-        resyncing={resyncing}
-        getRowId={getResourceRowId}
-        columns={columns}
-        quickActions={quickActions}
-        emptyStateLabel={toPlural(ResourceType.Pod)}
-        getRowHref={(row) =>
-          getResourceDetailUrl(ResourceType.Pod, row.name, row.namespace)
-        }
-        deleteConfig={{
-          mutationFn: (item) =>
-            commands.deletePod(item.name, item.namespace, false),
-          invalidateQueryKeys: [queryKeys.pods()],
-          resourceType: ResourceType.Pod,
-        }}
-      />
-    </div>
+    <ResourceList<PodWithMetrics>
+      title="Pods"
+      data={podsWithMetrics}
+      isLoading={isLoading}
+      error={error}
+      dataUpdatedAt={dataUpdatedAt}
+      live={watchLive}
+      resyncing={resyncing}
+      getRowId={getResourceRowId}
+      columns={columns}
+      quickActions={quickActions}
+      emptyStateLabel={toPlural(ResourceType.Pod)}
+      // Inside the list rather than above it, as the Nodes page has it: the
+      // list owns the window's height now, and a banner outside it is one more
+      // box the height has to be threaded through.
+      headerContent={
+        podStatus?.status !== "available" ? (
+          <MetricsStatusBanner status={podStatus} />
+        ) : null
+      }
+      getRowHref={(row) =>
+        getResourceDetailUrl(ResourceType.Pod, row.name, row.namespace)
+      }
+      deleteConfig={{
+        mutationFn: (item) =>
+          commands.deletePod(item.name, item.namespace, false),
+        invalidateQueryKeys: [queryKeys.pods()],
+        resourceType: ResourceType.Pod,
+      }}
+    />
   );
 }

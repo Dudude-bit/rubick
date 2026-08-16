@@ -45,7 +45,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
-import type { CustomResourceInfo } from "@/generated/types";
+import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 import {
   CERTIFICATES_CRD,
@@ -126,18 +126,28 @@ interface WalkSources {
   challenges: KindRead;
   issuers: KindRead;
   clusterIssuers: KindRead;
+  /**
+   * What mounts the Secrets these certificates write, so a row can say which
+   * hostnames it is serving. A `Certificate` names nothing that uses it — the
+   * reference runs the other way — and without this the page could say thirty
+   * days were left and not which address would stop working.
+   */
+  ingresses: IngressInfo[];
 }
 
 async function fetchWalkSources(): Promise<WalkSources> {
-  const [requests, orders, challenges, issuers, clusterIssuers] =
+  const [requests, orders, challenges, issuers, clusterIssuers, ingresses] =
     await Promise.all([
       readKind("CertificateRequest", REQUESTS_CRD),
       readKind("Order", ORDERS_CRD),
       readKind("Challenge", CHALLENGES_CRD),
       readKind("Issuer", ISSUERS_CRD),
       readKind("ClusterIssuer", CLUSTER_ISSUERS_CRD),
+      // A failure here costs the page the hosts column and nothing else, so
+      // it is not allowed to take the certificates down with it.
+      commands.listIngresses(null).catch((): IngressInfo[] => []),
     ]);
-  return { requests, orders, challenges, issuers, clusterIssuers };
+  return { requests, orders, challenges, issuers, clusterIssuers, ingresses };
 }
 
 export function usePicture(): {
@@ -163,7 +173,13 @@ export function usePicture(): {
       certificates.data,
       requests.items,
       orders.items,
-      challenges.items
+      challenges.items,
+      walk.data.ingresses,
+      // Only a cluster with no routing CRDs at all may be told a certificate
+      // is used by nothing: a Traefik `IngressRoute` mounts Secrets too, and
+      // this page must not import Traefik to find out. Left false, the row
+      // says "no Ingress mounts it" — which is exactly what was checked.
+      false
     );
     return {
       certificates: rows,

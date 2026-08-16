@@ -637,3 +637,107 @@ describe("entry points, read off the proxy's own flags", () => {
     ]);
   });
 });
+
+describe("a host whose TLS ends in front of the proxy", () => {
+  const proxyService = (): ServiceInfo =>
+    ({
+      name: "traefik",
+      namespace: "shop",
+      uid: "traefik",
+      type: "LoadBalancer",
+      sessionAffinity: "None",
+      clusterIp: "10.0.0.9",
+      externalIps: [],
+      loadBalancerIps: [],
+      ports: [],
+      selector: { "app.kubernetes.io/name": "traefik" },
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    }) as ServiceInfo;
+
+  const edge = (overrides: Partial<IngressInfo> = {}): IngressInfo => ({
+    name: "edge",
+    namespace: "shop",
+    className: "gce",
+    rules: [
+      {
+        host: "shop.example.com",
+        paths: [
+          {
+            path: "/",
+            pathType: "Prefix",
+            backendService: "traefik",
+            backendPort: "80",
+            resourceBackend: null,
+          },
+        ],
+      },
+    ],
+    loadBalancerIps: ["34.1.2.3"],
+    tlsHosts: ["shop.example.com"],
+    tlsConfigs: [],
+    hasCatchAllTls: false,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ...overrides,
+  });
+
+  const base = (extra: Partial<TraefikSources> = {}): TraefikSources => ({
+    ingresses: [],
+    ingressRoutes: [
+      ingressRoute("shop", {
+        entryPoints: ["web"],
+        routes: [
+          {
+            match: "Host(`shop.example.com`)",
+            services: [{ name: "storefront", port: 80 }],
+          },
+        ],
+      }),
+    ],
+    middlewares: [],
+    classes: [TRAEFIK_CLASS],
+    services: [proxyService()],
+    published: [],
+    backingKnown: false,
+    entryPoints: [
+      { name: "web", address: ":8000", tls: false, redirectTo: null },
+    ],
+    ...extra,
+  });
+
+  /**
+   * The reported case, and the ordinary shape of a managed cluster: the cloud
+   * load balancer holds the certificate and forwards plaintext to `web:80`.
+   * The page called that "served in the clear" on every single host, which is
+   * how a warning about encryption stops being read.
+   */
+  it("is not served in the clear when an Ingress in front holds the certificate", () => {
+    const [group] = hostGroups(base({ ingresses: [edge()] }));
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /** Evidence, not inference: without a terminator the warning stands. */
+  it("still warns when nothing in front terminates it", () => {
+    const [group] = hostGroups(base());
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
+  });
+
+  /** An Ingress in front that terminates a *different* host proves nothing. */
+  it("does not accept a terminator for another host", () => {
+    const [group] = hostGroups(
+      base({ ingresses: [edge({ tlsHosts: ["other.example.com"] })] })
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
+  });
+
+  /** The certificate may be in an annotation, which only a vendor can read. */
+  it("takes the capability's word for a certificate it cannot see", () => {
+    const [group] = hostGroups(
+      base({ upstreamTls: (host) => host === "shop.example.com" })
+    );
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+});

@@ -56,6 +56,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const {
     data: pods = [],
     isLoading: isLoadingPods,
+    error: podsError,
     dataUpdatedAt,
   } = useLiveQuery({
     queryKey,
@@ -92,11 +93,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
 
-  const {
-    podMetrics,
-    podStatus,
-    podMetricsQuery: { isLoading: isLoadingMetrics },
-  } = useMetrics({
+  const { podMetrics, podStatus } = useMetrics({
     namespace: currentNamespace || null,
     enabled,
     includeNodes: false,
@@ -112,7 +109,14 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     pods,
     podMetrics,
     podStatus,
-    isLoading: isLoadingPods || isLoadingMetrics,
+    // The pods, and only the pods. Metrics are an optional column pair on a
+    // cluster that may not even run metrics-server, and waiting for them held
+    // the whole list behind a skeleton on every cluster that does: the rows
+    // arrive, CPU and Memory fill in behind them, and a cluster without the
+    // API says so in its own banner instead of stalling the page.
+    isLoading: isLoadingPods,
+    /** Why there are no pods, when there are none because the read failed. */
+    error: podsError,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
     watchLive: !watchFailed,

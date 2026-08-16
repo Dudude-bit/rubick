@@ -178,7 +178,7 @@ export interface ControllerInfo {
  * and why "what does this listen on" is a question no other screen in this
  * app can answer.
  */
-async function fetchController(): Promise<ControllerInfo> {
+export async function fetchController(): Promise<ControllerInfo> {
   const none = (problem: string): ControllerInfo => ({
     workload: null,
     args: [],

@@ -111,6 +111,13 @@ export default defineVendor({
       ];
     },
   },
+  // A page for the question a probe cannot answer: an address that speaks
+  // LogQL says nothing about *whose* logs are behind it, and a Loki holding
+  // another cluster's namespaces answers the history offer with an empty
+  // page — which reads as "the lines are gone".
+  page: {
+    load: () => import("./page"),
+  },
   provides: {
     "logs.history": logHistory,
   },

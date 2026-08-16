@@ -333,3 +333,54 @@ describe("the findings", () => {
     expect(groups[0].host).toBe("zzz.test");
   });
 });
+
+/** nginx's own Service, which is what an edge Ingress points at. */
+const proxyService = (): ServiceInfo => ({
+  ...service("ingress-nginx-controller"),
+  selector: { "app.kubernetes.io/name": "ingress-nginx" },
+});
+
+/** The Ingress the cloud load balancer is built from, terminating TLS. */
+const edgeIngress = (): IngressInfo => ({
+  ...ingress("edge", "shop.example.com", {
+    service: "ingress-nginx-controller",
+    secretName: "edge-tls",
+  }),
+  className: "gce",
+});
+
+const plainIngress = (): IngressInfo => ({
+  ...ingress("edge", "shop.example.com", {
+    service: "ingress-nginx-controller",
+  }),
+  className: "gce",
+});
+
+const fronted = (): NginxSources => ({
+  ...sources([ingress("shop", "shop.example.com"), edgeIngress()]),
+  services: [service("web"), proxyService()],
+  published: [published("web", 2)],
+});
+
+describe("a host whose TLS ends in front of nginx", () => {
+  /**
+   * The commonest managed-cluster shape there is: a cloud load balancer
+   * holds the certificate and forwards plaintext to nginx on port 80. Read
+   * from `spec.tls` alone, every host on such a cluster was reported as
+   * served in the clear — a warning about encryption that is wrong on all of
+   * them at once, which is how it stops being read.
+   */
+  it("is not served in the clear when something in front holds the certificate", () => {
+    const [group] = hostGroups(fronted());
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /** Evidence, not inference. */
+  it("still warns when nothing in front terminates it", () => {
+    const [group] = hostGroups({
+      ...fronted(),
+      ingresses: [ingress("shop", "shop.example.com"), plainIngress()],
+    });
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
+  });
+});

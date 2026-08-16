@@ -27,18 +27,20 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 
 /**
- * The column, built here because it is not a component and every list that
- * has one gets exactly this one.
+ * The column, built once because every list that has one gets exactly this one
+ * — and because `flexRender` treats a cell renderer as a React element type.
+ * A renderer rebuilt per render remounts its cell on every watch tick; see
+ * `RowActions` in `data-table.tsx` for what that cost the row's buttons.
  */
-function deliveryColumn<T>(): ColumnDef<T> {
-  return {
-    size: 150,
-    id: "delivery",
-    header: "Delivery",
-    enableSorting: false,
-    cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
-  };
-}
+const DELIVERY_COLUMN: ColumnDef<never> = {
+  size: 150,
+  id: "delivery",
+  header: "Delivery",
+  enableSorting: false,
+  cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
+};
+
+const deliveryColumn = <T,>() => DELIVERY_COLUMN as ColumnDef<T>;
 
 export interface ResourceDeleteConfig<T> {
   /** Function to delete a resource */
@@ -64,6 +66,17 @@ export interface ResourceListProps<
   data?: T[];
   /** Optional loading state when using data override */
   isLoading?: boolean;
+  /**
+   * What went wrong reading the list, when the rows come from outside.
+   *
+   * The one thing a page passing `data` could not previously hand over, and
+   * the reason every such page told the reader their scope was empty when the
+   * read had in fact failed: `data` is an array either way, so a failed list
+   * and a genuinely empty one arrived here identical. Follows the same rule as
+   * the internal query's error — it only replaces the table when there is
+   * nothing left to show.
+   */
+  error?: Error | null;
   /** Optional dataUpdatedAt when using data override (for the freshness reading) */
   dataUpdatedAt?: number;
   /** A watch stream feeds this list and has not failed. */
@@ -82,8 +95,7 @@ export interface ResourceListProps<
   slowed?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
-    | ColumnDef<T>[]
-    | ((setDeleteTarget: (item: T) => void) => ColumnDef<T>[]);
+    ColumnDef<T>[] | ((setDeleteTarget: (item: T) => void) => ColumnDef<T>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
   /** Overrides the table's message for "the scope genuinely has none of
@@ -145,6 +157,7 @@ export function ResourceList<
   queryFn,
   data,
   isLoading,
+  error: externalError,
   dataUpdatedAt: externalDataUpdatedAt,
   live,
   resyncing,
@@ -201,7 +214,8 @@ export function ResourceList<
   // the app was empty. The error only replaces the table when there is nothing
   // to show: a refetch that fails keeps the rows it already had, the same rule
   // a resync follows.
-  const failed = data === undefined ? queryResult.error : null;
+  const failed =
+    (data === undefined ? queryResult.error : externalError) ?? null;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
@@ -261,26 +275,30 @@ export function ResourceList<
     },
   });
 
-  // Resolve columns - can be a function that receives setDeleteTarget
-  const baseColumns =
-    typeof columns === "function"
-      ? columns(setDeleteTarget as (item: T) => void)
-      : columns;
-  // Second from the end, so it lands where the other qualifiers already sit
-  // and never displaces Age from the right edge of the table.
-  const resolvedColumns = showDelivery
-    ? [
-        ...baseColumns.slice(0, -1),
-        deliveryColumn<T>(),
-        ...baseColumns.slice(-1),
-      ]
-    : baseColumns;
+  // Both memoised, and both had to be: a fresh array on every render rebuilds
+  // TanStack's whole column model on every watch tick, and the table re-reads
+  // itself every two seconds. `setDeleteTarget` is a setState and holds still,
+  // so the only thing either depends on is what the page passed in.
+  //
+  // Second from the end, so Delivery lands where the other qualifiers already
+  // sit and never displaces Age from the right edge of the table.
+  const resolvedColumns = useMemo(() => {
+    const base =
+      typeof columns === "function"
+        ? columns(setDeleteTarget as (item: T) => void)
+        : columns;
+    return showDelivery
+      ? [...base.slice(0, -1), deliveryColumn<T>(), ...base.slice(-1)]
+      : base;
+  }, [columns, showDelivery]);
 
-  // Resolve quick actions - can be a function that receives setDeleteTarget
-  const resolvedQuickActions =
-    typeof quickActions === "function"
-      ? quickActions(setDeleteTarget as (item: T) => void)
-      : quickActions;
+  const resolvedQuickActions = useMemo(
+    () =>
+      typeof quickActions === "function"
+        ? quickActions(setDeleteTarget as (item: T) => void)
+        : quickActions,
+    [quickActions]
+  );
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
@@ -330,6 +348,9 @@ export function ResourceList<
         <DataTable
           columns={resolvedColumns}
           data={rows}
+          // Embedded, the surrounding flow owns the scroll and there is no
+          // height to take; on its own page the table is the page.
+          fill={!embedded}
           isLoading={showSkeleton}
           searchKey={searchKey}
           searchPlaceholder={searchPlaceholder}
@@ -378,7 +399,12 @@ export function ResourceList<
     return wrapped;
   }
 
+  // A column with a height, so the table below the header can take what is
+  // left of the window instead of a fixed 600px box with the rest of the pane
+  // blank under it.
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">{wrapped}</div>
+    <div className="flex h-full min-h-0 flex-col gap-4 animate-in fade-in duration-200">
+      {wrapped}
+    </div>
   );
 }

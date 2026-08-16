@@ -16,7 +16,9 @@
  * own voice rather than going quiet.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useServiceRoutes } from "@/hooks/useServiceRoutes";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { Box, FileCode2, Globe, SlidersHorizontal } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -55,6 +57,7 @@ import {
   type ControllerInfo,
 } from "./data";
 import {
+  frontingIngresses,
   allRoutes,
   backingOf,
   hostGroups,
@@ -85,8 +88,68 @@ export default function IngressNginxPage() {
   );
   const certificates = useRouteCertificates(routes);
 
+  // What is in front of nginx. The certificate is usually held by a cloud
+  // load balancer and named in an annotation, so `spec.tls` never sees it and
+  // every host read as served in the clear.
+  const proxy = useMemo(() => {
+    const found = (backing.data?.services ?? []).find(
+      (service) =>
+        service.selector["app.kubernetes.io/name"] === "ingress-nginx"
+    );
+    return found ? { namespace: found.namespace, name: found.name } : null;
+  }, [backing.data]);
+  // Every Ingress whose backend is the proxy's own Service, which is what a
+  // cloud load balancer's Ingress looks like from in here.
+  const frontAsked = useMemo(
+    () =>
+      frontingIngresses({
+        ingresses: routeSources.data?.ingresses ?? [],
+        services: backing.data?.services ?? [],
+      } as never).map(
+        (ingress: {
+          namespace: string;
+          name: string;
+          rules: Array<{ host: string }>;
+        }) => ({
+          namespace: ingress.namespace,
+          name: ingress.name,
+          hosts: ingress.rules.flatMap((rule: { host: string }) =>
+            rule.host ? [rule.host] : []
+          ),
+        })
+      ),
+    [routeSources.data, backing.data]
+  );
+
+  const fronting = useServiceRoutes(proxy);
+  // The certificate may be an ACM ARN or one installed on an Application
+  // Gateway, neither of which is a route and neither of which `spec.tls`
+  // knows about — so the Ingresses standing in front of the proxy are asked
+  // directly. Without this the fix above worked on GKE and nowhere else.
+  const front = useIngressTls(frontAsked);
+  const frontTls = useCallback(
+    (host: string | null) =>
+      host !== null &&
+      frontAsked.some(
+        (ingress) => front.of(ingress, host)?.terminated === true
+      ),
+    [front, frontAsked]
+  );
+  const upstreamTls = useCallback(
+    (host: string | null) =>
+      frontTls(host) ||
+      (host !== null &&
+        fronting.routes.some(
+          (route) => route.tls === true && route.host === host
+        )),
+    [fronting.routes, frontTls]
+  );
+
   const sources: NginxSources | null = routeSources.data
-    ? sourcesFrom(routeSources.data, backing.data, certificates)
+    ? {
+        ...sourcesFrom(routeSources.data, backing.data, certificates),
+        upstreamTls,
+      }
     : null;
 
   const groups = useMemo(
@@ -94,7 +157,7 @@ export default function IngressNginxPage() {
     // `sources` is rebuilt every render; the inputs it is built from are what
     // actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [routeSources.data, backing.data, certificates.size]
+    [routeSources.data, backing.data, certificates.size, upstreamTls]
   );
 
   if (routeSources.error) {

@@ -37,6 +37,103 @@ export const BACKEND_CONFIG_ANNOTATIONS = [
   "beta.cloud.google.com/backend-config",
 ] as const;
 
+/**
+ * The Ingress annotations GKE reads, and the reason this vendor has a page.
+ *
+ * Each one is an edge from the routing table to an object that is otherwise
+ * an anonymous row on a list page. GKE is also explicit that it reads
+ * `kubernetes.io/ingress.class` and **ignores `spec.ingressClassName`** — the
+ * opposite of every other controller in this tree, and the difference
+ * between an Ingress that is served and one that is silently not.
+ */
+export const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
+export const FRONTEND_CONFIG_ANNOTATION =
+  "networking.gke.io/v1beta1.FrontendConfig";
+export const MANAGED_CERTIFICATES_ANNOTATION =
+  "networking.gke.io/managed-certificates";
+export const PRE_SHARED_CERT_ANNOTATION =
+  "ingress.gcp.kubernetes.io/pre-shared-cert";
+export const STATIC_IP_ANNOTATION =
+  "kubernetes.io/ingress.global-static-ip-name";
+export const ALLOW_HTTP_ANNOTATION = "kubernetes.io/ingress.allow-http";
+export const NEG_ANNOTATION = "cloud.google.com/neg";
+
+/** The classes GKE's own controller answers to. */
+const GCE_CLASSES = new Set(["gce", "gce-internal", "gce-regional-external"]);
+
+/** Which GKE load balancer this Ingress asks for, or `null` for somebody else's. */
+export function gceClassOf(annotations: Record<string, string>): string | null {
+  const value = annotations[INGRESS_CLASS_ANNOTATION];
+  return value !== undefined && GCE_CLASSES.has(value) ? value : null;
+}
+
+export function frontendConfigRef(
+  annotations: Record<string, string>
+): string | null {
+  const value = annotations[FRONTEND_CONFIG_ANNOTATION];
+  return value !== undefined && value !== "" ? value : null;
+}
+
+const commaList = (value: string | undefined): string[] =>
+  value === undefined
+    ? []
+    : value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "");
+
+export function managedCertificateRefs(
+  annotations: Record<string, string>
+): string[] {
+  return commaList(annotations[MANAGED_CERTIFICATES_ANNOTATION]);
+}
+
+export function preSharedCerts(annotations: Record<string, string>): string[] {
+  return commaList(annotations[PRE_SHARED_CERT_ANNOTATION]);
+}
+
+export function staticIpName(
+  annotations: Record<string, string>
+): string | null {
+  const value = annotations[STATIC_IP_ANNOTATION];
+  return value !== undefined && value !== "" ? value : null;
+}
+
+/**
+ * Whether GKE gives this Ingress an HTTP listener at all.
+ *
+ * Defaults to true, and the `"false"` case is the point: GKE then creates no
+ * port-80 forwarding rule whatsoever. "Why does http:// time out while
+ * https:// works" has no symptom anywhere in the cluster — the Ingress is
+ * healthy, the Service is healthy, and one line of metadata deleted the
+ * listener.
+ */
+export function allowsHttp(annotations: Record<string, string>): boolean {
+  return annotations[ALLOW_HTTP_ANNOTATION] !== "false";
+}
+
+/**
+ * Whether a Service asked for container-native load balancing for Ingress.
+ *
+ * `'{"ingress": true}'`. Worth showing because the alternative is GKE routing
+ * through the node's kube-proxy — a second hop, and health checks that report
+ * on the node rather than on the pod.
+ */
+export function negForIngress(annotations: Record<string, string>): boolean {
+  const raw = annotations[NEG_ANNOTATION];
+  if (raw === undefined) return false;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { ingress?: unknown }).ingress === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** One `BackendConfig` a Service asks for, and what it asked for it by. */
 export interface BackendConfigRef {
   name: string;
@@ -116,6 +213,84 @@ export function healthCheckOf(config: CustomResourceInfo): string | null {
 }
 
 /**
+ * How fast a failing backend is taken out, and how fast it comes back.
+ *
+ * The four numbers people actually open a `BackendConfig` for, and the
+ * summary line has never carried them: an interval of 5s with an unhealthy
+ * threshold of 2 takes a backend out in ten seconds, and 60s with a
+ * threshold of 10 takes ten minutes. Both read as "health check HTTP /" in
+ * one line.
+ *
+ * `null` per field where the object does not set it — GKE then fills in its
+ * own default, and printing that default here would attribute a number to an
+ * object that never stated one.
+ */
+export interface HealthCheckTiming {
+  intervalSec: number | null;
+  timeoutSec: number | null;
+  healthyThreshold: number | null;
+  unhealthyThreshold: number | null;
+}
+
+export function healthCheckTiming(
+  config: CustomResourceInfo
+): HealthCheckTiming {
+  return {
+    intervalSec: number(config, "spec.healthCheck.checkIntervalSec"),
+    timeoutSec: number(config, "spec.healthCheck.timeoutSec"),
+    healthyThreshold: number(config, "spec.healthCheck.healthyThreshold"),
+    unhealthyThreshold: number(config, "spec.healthCheck.unhealthyThreshold"),
+  };
+}
+
+/** The Secret an IAP-protected backend reads its OAuth client from. */
+export function iapSecretName(config: CustomResourceInfo): string | null {
+  return text(config, "spec.iap.oauthclientCredentials.secretName");
+}
+
+/** Headers this backend injects, which are otherwise invisible anywhere. */
+export function customHeaders(config: CustomResourceInfo): {
+  request: string[];
+  response: string[];
+} {
+  const list = (path: string): string[] => {
+    const value = getValueByPath(config, path);
+    return Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  };
+  return {
+    request: list("spec.customRequestHeaders.headers"),
+    response: list("spec.customResponseHeaders.headers"),
+  };
+}
+
+/**
+ * What Cloud CDN was actually told, when it is on.
+ *
+ * `cdn.enabled: true` alone says nothing about what is cached or for how
+ * long, and `cacheMode: CACHE_ALL_STATIC` versus `FORCE_CACHE_ALL` is the
+ * difference between caching images and caching an authenticated response
+ * for everybody.
+ */
+export function cdnSummary(config: CustomResourceInfo): string | null {
+  if (!flag(config, "spec.cdn.enabled")) return null;
+  const mode = text(config, "spec.cdn.cacheMode");
+  const parts = [
+    mode,
+    number(config, "spec.cdn.defaultTtl") === null
+      ? null
+      : `default ${number(config, "spec.cdn.defaultTtl")}s`,
+    number(config, "spec.cdn.maxTtl") === null
+      ? null
+      : `max ${number(config, "spec.cdn.maxTtl")}s`,
+    flag(config, "spec.cdn.negativeCaching") ? "caches errors" : null,
+    flag(config, "spec.cdn.requestCoalescing") ? "coalesces" : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? `CDN ${parts.join(" · ")}` : "CDN on";
+}
+
+/**
  * Everything a `BackendConfig` turns on, in one line for a chain hop.
  *
  * Ordered by how much it changes what a request does rather than by the
@@ -127,15 +302,29 @@ export function backendConfigSummary(config: CustomResourceInfo): string {
   const draining = number(config, "spec.connectionDraining.drainingTimeoutSec");
   const affinity = text(config, "spec.sessionAffinity.affinityType");
   const policy = text(config, "spec.securityPolicy.name");
+  const sample = number(config, "spec.logging.sampleRate");
+  const headers = customHeaders(config);
   const parts = [
     healthCheckOf(config),
     timeout === null ? null : `${timeout}s timeout`,
     draining === null ? null : `${draining}s draining`,
-    flag(config, "spec.cdn.enabled") ? "CDN on" : null,
+    cdnSummary(config),
     flag(config, "spec.iap.enabled") ? "IAP on" : null,
     policy === null ? null : `Cloud Armor ${policy}`,
     affinity === null ? null : `${affinity} affinity`,
-    flag(config, "spec.logging.enable") ? "access logs on" : null,
+    // The rate matters as much as the switch: logging at 1% and at 100% are
+    // different products when somebody is looking for one request.
+    flag(config, "spec.logging.enable")
+      ? sample === null || sample === 1
+        ? "access logs on"
+        : `access logs at ${Math.round(sample * 100)}%`
+      : null,
+    headers.request.length === 0
+      ? null
+      : `${headers.request.length} request header${headers.request.length === 1 ? "" : "s"}`,
+    headers.response.length === 0
+      ? null
+      : `${headers.response.length} response header${headers.response.length === 1 ? "" : "s"}`,
   ].filter(Boolean);
   // A BackendConfig that sets nothing is a real object and a real answer:
   // it exists, it is attached, and it changes nothing about the backend.

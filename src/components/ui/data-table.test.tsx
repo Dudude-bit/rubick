@@ -490,6 +490,41 @@ describe("the row's quick actions", () => {
       "group-data-[focused=true]:opacity-100"
     );
   });
+
+  /**
+   * The bug this is about: on the Pods page the buttons did nothing to a
+   * single click, and a few clicks anywhere in the row opened the pod.
+   *
+   * `flexRender` calls a cell renderer *as a component*, so a renderer built
+   * fresh on each render is a new element type and React unmounts and remounts
+   * the whole cell. The list re-reads itself every two seconds — metrics alone
+   * differ on every read — so the button under the pointer was replaced by a
+   * different DOM node between `mousedown` and `mouseup`, and no `click` was
+   * ever raised. The row's own handler, bound to a `tr` that does survive,
+   * kept working, which is why pressing repeatedly navigated instead.
+   */
+  it("keeps the same button across a re-render", () => {
+    const table = () => (
+      <MemoryRouter initialEntries={["/pods"]}>
+        <TooltipProvider>
+          <DataTable<Item, unknown>
+            columns={columns}
+            data={DATA}
+            getRowHref={href}
+            // A fresh array every render, exactly as `ResourceList` builds it
+            // from the page's `quickActions` factory.
+            quickActions={[{ icon: Eye, label: "View", onClick: () => {} }]}
+          />
+        </TooltipProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(table());
+    const before = screen.getAllByLabelText("View")[0];
+
+    rerender(table());
+
+    expect(screen.getAllByLabelText("View")[0]).toBe(before);
+  });
 });
 
 describe("a list past the virtualisation threshold", () => {
@@ -718,5 +753,64 @@ describe("the size band the layout switches on", () => {
     // Genuinely a short list now, not a long one breathing.
     rerender(table(40));
     expect(scrollPort()).toBeNull();
+  });
+});
+
+/**
+ * The bug this is about: a Pods page at 105 rows drew a 600px table and left
+ * the rest of a 1000px window blank under it, count row and all. The number
+ * was a constant, so the taller the display the more of it was nothing.
+ */
+describe("a table given the page's height", () => {
+  beforeEach(layOutRows);
+  afterEach(stopLayingOutRows);
+
+  const filled = (count: number) =>
+    wrap(
+      <DataTable<Item, unknown>
+        columns={columns}
+        data={pods(count)}
+        fill
+        rowLabel="pods"
+        grouping={null}
+      />
+    );
+
+  /** A filled table's scroll port carries no inline height to find it by. */
+  const port = () => document.querySelector("table")!.parentElement!;
+
+  /** The pane it is in, not a number written here. */
+  it("takes no fixed height of its own", () => {
+    filled(500);
+
+    expect(document.querySelector('[style*="max-height"]')).toBeNull();
+    // What lets the port shrink past its own content when the pane runs out.
+    // Without it a flex child stops at its content and the list grows the page
+    // scroll instead of scrolling itself.
+    expect(port().className).toContain("min-h-0");
+    // And not `flex-1`, which would make the pane's height a target: a
+    // twelve-row list would then hold the whole window open with its count
+    // line stranded at the bottom.
+    expect(port().className).not.toContain("flex-1");
+  });
+
+  /**
+   * A filled table's port scrolls at any length, so the header has to hold at
+   * any length too. Sticky used to arrive with the windowing, which meant a
+   * 40-row list scrolled its own column labels away.
+   */
+  it("holds the column labels over a list too short to window", () => {
+    filled(40);
+
+    expect(document.querySelector("thead")!.className).toContain("sticky");
+  });
+
+  /** Search above, count below: neither scrolls with the rows. */
+  it("leaves the search row and the count outside the scroll", () => {
+    filled(500);
+
+    const scrolled = port();
+    expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
+    expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
   });
 });

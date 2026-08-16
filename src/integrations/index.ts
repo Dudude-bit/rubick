@@ -90,6 +90,8 @@ import type {
   LogScope,
   ProbeResult,
   SavedConnection,
+  IngressTls,
+  ServiceRoute,
   TrafficWindow,
   UsageRange,
   UsageScope,
@@ -117,6 +119,8 @@ export type {
   LogScope,
   ProbeResult,
   SavedConnection,
+  IngressTls,
+  ServiceRoute,
   TrafficWindow,
   UsageRange,
   UsageScope,
@@ -761,6 +765,10 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
       vendor.page !== undefined
   );
 
+  // Only the pages whose subject is countable — a page may own no number at
+  // all, and asking for one would run a query to display nothing.
+  const withCounts = withPages.filter((vendor) => vendor.page.count);
+
   // The page's own query, verbatim. Two observers on one cache entry, so a
   // reader who opens the page finds it already answered and the app makes
   // one set of reads instead of two.
@@ -768,7 +776,7 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     // `select` is declared over the payload the vendor's own query returns and
     // erased at the registry boundary, so the list can hold every vendor's
     // count without this file knowing what any of them reads.
-    queries: withPages.map(
+    queries: withCounts.map(
       (vendor) =>
         vendor.page.count as unknown as UseQueryOptions<
           unknown,
@@ -790,7 +798,12 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
         index === -1
           ? integrationSettingsPath(vendor.id)
           : integrationPagePath(vendor.id),
-      count: index === -1 ? null : (counts[index]?.data ?? null),
+      count:
+        index === -1
+          ? null
+          : (counts[
+              withCounts.findIndex((candidate) => candidate.id === vendor.id)
+            ]?.data ?? null),
       own: index !== -1,
     };
   });
