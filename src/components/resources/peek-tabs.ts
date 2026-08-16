@@ -1,4 +1,4 @@
-import { AlignLeft, Braces, Info, Table2 } from "lucide-react";
+import { AlignLeft, Braces, Info, Link2, Table2 } from "lucide-react";
 
 import { podContainers } from "@/lib/container-sequence";
 import { ResourceType, toKind } from "@/lib/resource-registry";
@@ -36,6 +36,7 @@ export type PeekTabId =
   | "containers"
   | "data"
   | "children"
+  | "connections"
   | "yaml";
 
 export interface PeekTabDefinition {
@@ -76,10 +77,29 @@ const CHILDREN_LABEL = {
 export function peekTabsFor(
   kind: string,
   /** What the Overview fetch returned, when it has returned. */
-  detail?: unknown
+  detail?: unknown,
+  /**
+   * Set for a custom resource, which is the only kind that gets Connections
+   * here.
+   *
+   * Not because a Pod's connections are uninteresting in a peek — they are —
+   * but because a Pod has a Connections tab on its own page already, and a
+   * custom resource had one nowhere at all. Widening this to every kind is a
+   * separate decision about how much a peek should hold, and making it by
+   * accident while closing a gap would be the wrong way to take it.
+   */
+  crd?: string
 ): PeekTabDefinition[] {
   const resolved = toKind(kind);
   const middle: PeekTabDefinition[] = [];
+
+  if (crd) {
+    return [
+      OVERVIEW,
+      { id: "connections", label: "Connections", glyph: viewGlyph(Link2) },
+      YAML,
+    ];
+  }
 
   if (resolved === "Pod") {
     const pod = detail as PodInfo | undefined;

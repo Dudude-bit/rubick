@@ -12,6 +12,7 @@ import {
 } from "./data";
 import { facts } from "./facts";
 import { ownerOf } from "./owner";
+import { relatedTo } from "./related";
 
 /**
  * Flux CD.
@@ -37,6 +38,7 @@ export default defineVendor({
   name: "Flux",
   provides: {
     "delivery.source": (objects) => ownerOf(objects),
+    "object.related": relatedTo,
   },
   extension: {
     gives:

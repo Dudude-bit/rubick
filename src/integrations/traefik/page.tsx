@@ -587,6 +587,7 @@ function HostRow({
   return (
     <TroubleRow
       title={group.host ?? "any host"}
+      copy={group.host ?? undefined}
       meta={
         <>
           {plural(group.routes.length, "path")}
@@ -725,16 +726,13 @@ function SourceRef({ route }: { route: TraefikRoute }) {
   return (
     <span className="text-fg-fnt">
       ·{" "}
-      <Link
-        to={crdObjectPath(
-          `ingressroutes.${servedGroupName()}`,
-          route.source.namespace,
-          route.source.name
-        )}
-        className="font-mono text-info hover:underline"
-      >
-        {route.source.name}
-      </Link>
+      <ResourceRef
+        kind="IngressRoute"
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={`ingressroutes.${servedGroupName()}`}
+        showKind={false}
+      />
     </span>
   );
 }

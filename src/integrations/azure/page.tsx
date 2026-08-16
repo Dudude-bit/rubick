@@ -16,12 +16,11 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { crdObjectPath, plural } from "../kit";
+import { plural } from "../kit";
 import {
   Cell,
   Chain,
@@ -175,16 +174,13 @@ export default function AksAddonsPage() {
               <Chain key={`${binding.namespace}/${binding.name}`}>
                 <Column label="Binding">
                   <Cell under={binding.namespace ?? undefined}>
-                    <Link
-                      className="font-mono text-fg underline-offset-2 hover:underline"
-                      to={crdObjectPath(
-                        AZURE_IDENTITY_BINDING_CRD,
-                        binding.namespace,
-                        binding.name
-                      )}
-                    >
-                      {binding.name}
-                    </Link>
+                    <ResourceRef
+                      kind="AzureIdentityBinding"
+                      name={binding.name}
+                      namespace={binding.namespace}
+                      crd={AZURE_IDENTITY_BINDING_CRD}
+                      showKind={false}
+                    />
                   </Cell>
                 </Column>
                 <Column label="Says">
@@ -198,16 +194,13 @@ export default function AksAddonsPage() {
                 <Column label="Identity">
                   <Cell bad={dangling.includes(binding)}>
                     {bindingIdentity(binding) ? (
-                      <Link
-                        className="font-mono text-fg underline-offset-2 hover:underline"
-                        to={crdObjectPath(
-                          AZURE_IDENTITY_CRD,
-                          binding.namespace,
-                          bindingIdentity(binding)!
-                        )}
-                      >
-                        {bindingIdentity(binding)}
-                      </Link>
+                      <ResourceRef
+                        kind="AzureIdentity"
+                        name={bindingIdentity(binding)!}
+                        namespace={binding.namespace}
+                        crd={AZURE_IDENTITY_CRD}
+                        showKind={false}
+                      />
                     ) : (
                       "names none"
                     )}
@@ -270,16 +263,12 @@ function AccountRow({
           ) : (
             account.pods.map((pod) => (
               <Cell key={`${pod.namespace}/${pod.name}`} under={pod.namespace}>
-                <Link
-                  className="font-mono text-fg underline-offset-2 hover:underline"
-                  to={getResourceDetailUrl(
-                    ResourceType.Pod,
-                    pod.name,
-                    pod.namespace
-                  )}
-                >
-                  {pod.name}
-                </Link>
+                <ResourceRef
+                  kind={ResourceType.Pod}
+                  name={pod.name}
+                  namespace={pod.namespace}
+                  showKind={false}
+                />
               </Cell>
             ))
           )}

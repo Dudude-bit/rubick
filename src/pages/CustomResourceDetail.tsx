@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Activity, Info, ListTree, Tag, Trash2 } from "lucide-react";
+import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -12,6 +12,9 @@ import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { RelatedPanel } from "@/components/resources/RelatedPanel";
+import { countMark } from "@/components/resources/detail-tab";
+import { useRelatedObjects } from "@/hooks/useRelatedObjects";
 import {
   KeyValueSection,
   type KeyValue,
@@ -285,6 +288,20 @@ export function CustomResourceDetail() {
     ? deliveryOf(crdInfo.group, crdInfo.kind, resource)
     : null;
 
+  // The group is the CRD's, never the object's `apiVersion`: a CRD may serve
+  // several versions and the group is the half that identifies the API.
+  const related = useRelatedObjects(
+    crdInfo && name
+      ? {
+          group: crdInfo.group,
+          kind: crdInfo.kind,
+          namespace: namespace ?? null,
+          name,
+        }
+      : null,
+    resource
+  );
+
   const tabs: DetailTab[] = [
     {
       id: "overview",
@@ -366,6 +383,17 @@ export function CustomResourceDetail() {
           />
         </>
       ),
+    },
+    {
+      id: "connections",
+      label: "Connections",
+      // A view rather than a kind, the same as every other Connections tab:
+      // it opens onto whatever kinds this object happens to name.
+      glyph: viewGlyph(Link2),
+      mark: related.related.length
+        ? countMark(related.related.length)
+        : undefined,
+      content: <RelatedPanel query={related} kind={crdInfo?.kind ?? "these"} />,
     },
     yamlTab({
       title: `${resource?.kind || "Resource"} YAML`,

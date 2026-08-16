@@ -430,6 +430,7 @@ function HostRow({
   return (
     <TroubleRow
       title={group.host ?? "any host"}
+      copy={group.host ?? undefined}
       meta={
         <>
           {plural(group.routes.length, "path")}

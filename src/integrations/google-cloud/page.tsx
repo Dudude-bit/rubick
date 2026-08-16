@@ -21,14 +21,11 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { describeStop } from "@/lib/connections";
-import { crdObjectPath } from "../kit";
 import {
   Cell,
   Chain,
@@ -153,16 +150,15 @@ export default function GkeIngressPage() {
           {ignored.map((ingress, index) => (
             <span key={`${ingress.namespace}/${ingress.name}`}>
               {index > 0 && ", "}
-              <Link
-                className="font-mono text-fg underline-offset-2 hover:underline"
-                to={getResourceDetailUrl(
-                  ResourceType.Ingress,
-                  ingress.name,
-                  ingress.namespace
-                )}
-              >
-                {ingress.namespace}/{ingress.name}
-              </Link>
+              <span className="font-mono text-fg-fnt">
+                {ingress.namespace}/
+              </span>
+              <ResourceRef
+                kind={ResourceType.Ingress}
+                name={ingress.name}
+                namespace={ingress.namespace}
+                showKind={false}
+              />
             </span>
           ))}
           .
@@ -246,6 +242,7 @@ function HostRow({
           <span className="text-fg-mut">any host not matched above</span>
         )
       }
+      copy={host.host ?? undefined}
       meta={
         <>
           {host.routes.length} {host.routes.length === 1 ? "path" : "paths"}
@@ -292,16 +289,12 @@ function FrontBlock({ front }: { front: GkeFront }) {
               : "no address yet"
           }
         >
-          <Link
-            className="font-mono text-fg underline-offset-2 hover:underline"
-            to={getResourceDetailUrl(
-              ResourceType.Ingress,
-              front.ingress.name,
-              front.ingress.namespace
-            )}
-          >
-            {front.ingress.name}
-          </Link>
+          <ResourceRef
+            kind={ResourceType.Ingress}
+            name={front.ingress.name}
+            namespace={front.ingress.namespace}
+            showKind={false}
+          />
         </Cell>
       </Column>
       <Column label="Listeners">
@@ -323,16 +316,15 @@ function FrontBlock({ front }: { front: GkeFront }) {
             }
           >
             {front.frontendConfig.found ? (
-              <Link
-                className="font-mono text-fg underline-offset-2 hover:underline"
-                to={crdObjectPath(
-                  FRONTEND_CONFIG_CRD,
-                  front.ingress.namespace,
-                  front.frontendConfig.name
-                )}
+              <ObjectLink
+                kind="FrontendConfig"
+                name={front.frontendConfig.name}
+                namespace={front.ingress.namespace}
+                crd={FRONTEND_CONFIG_CRD}
+                className="text-fg underline-offset-2 hover:underline"
               >
                 {frontendConfigSummary(front.frontendConfig.found)}
-              </Link>
+              </ObjectLink>
             ) : (
               `${front.frontendConfig.name} — absent`
             )}
@@ -357,16 +349,13 @@ function FrontBlock({ front }: { front: GkeFront }) {
               under={certificate.status ?? "no status yet"}
             >
               {certificate.found ? (
-                <Link
-                  className="font-mono text-fg underline-offset-2 hover:underline"
-                  to={crdObjectPath(
-                    MANAGED_CERTIFICATE_CRD,
-                    front.ingress.namespace,
-                    certificate.name
-                  )}
-                >
-                  {certificate.name}
-                </Link>
+                <ResourceRef
+                  kind="ManagedCertificate"
+                  name={certificate.name}
+                  namespace={front.ingress.namespace}
+                  crd={MANAGED_CERTIFICATE_CRD}
+                  showKind={false}
+                />
               ) : (
                 `${certificate.name} — absent`
               )}
@@ -443,16 +432,15 @@ function RouteChain({
               }
             >
               {config.found ? (
-                <Link
+                <ObjectLink
+                  kind="BackendConfig"
+                  name={config.name}
+                  namespace={route.ingress.namespace}
+                  crd={BACKEND_CONFIG_CRD}
                   className="text-fg underline-offset-2 hover:underline"
-                  to={crdObjectPath(
-                    BACKEND_CONFIG_CRD,
-                    route.ingress.namespace,
-                    config.name
-                  )}
                 >
                   {backendConfigSummary(config.found)}
-                </Link>
+                </ObjectLink>
               ) : (
                 `${config.name} — absent`
               )}

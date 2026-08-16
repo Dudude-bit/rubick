@@ -27,8 +27,8 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue } from "./key-values";
 import type {
   ContainerPhase,
+  CustomResourceDetailInfo,
   NodeInfo,
-  OwnerReference,
 } from "@/generated/types";
 
 /**
@@ -71,8 +71,14 @@ const ref = (kind: string, name: string, namespace?: string | null) => (
   <ResourceRef kind={kind} name={name} namespace={namespace} showKind={false} />
 );
 
+/**
+ * Typed by what it reads rather than by either owner-reference shape: the
+ * generated `OwnerReference` spells its fields with underscores and
+ * `OwnerReferenceInfo` spells them in camel case, and this needs neither of
+ * the two fields they disagree about.
+ */
 function controlledBy(
-  owners: OwnerReference[] | undefined,
+  owners: ReadonlyArray<{ kind: string; name: string }> | undefined,
   namespace: string | null
 ): PeekGroup[] {
   if (!owners?.length) return [];
@@ -781,10 +787,94 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   ),
 };
 
-export function resolveSource(kind: string): PeekSource {
-  const resolved = toKind(kind);
+export function resolveSource(target: PeekTarget): PeekSource {
+  // A custom resource first, and never by kind: two CRDs may declare the same
+  // kind in different groups, and the object being looked at is the one whose
+  // CRD the reference named.
+  if (target.crd) return customResourceSource(target.crd);
+  const resolved = toKind(target.kind);
   const known = resolved ? SOURCES[resolved] : undefined;
-  return known ?? manifestSource(resolved ?? kind);
+  return known ?? manifestSource(resolved ?? target.kind);
+}
+
+/**
+ * A custom resource, read through the CRD that defines it.
+ *
+ * The reason this is not {@link manifestSource} with a different argument:
+ * `getManifest` is given an `apiVersion`, and the only one available for a
+ * kind outside the registry is `getApiVersion`'s fallback of `v1`. That asks
+ * the core API for an Argo Application and gets a 404 — the peek would have
+ * been an error panel for every custom resource in the cluster. The backend
+ * already resolves a CRD's real group and version from its name, which is
+ * what the detail page has always used.
+ *
+ * `spec` and `status` are drawn the same way an unrecognised manifest's are:
+ * scalars, dotted, capped. Nothing here reads a field by name, because the
+ * whole population of this source is kinds this app has no schema for — and a
+ * peek that understood Argo's `status.health` would be vendor knowledge in
+ * the core, which is what the integrations seam exists to prevent.
+ */
+function customResourceSource(crdName: string): PeekSource {
+  return source(
+    (name, namespace) => commands.getCustomResource(crdName, name, namespace),
+    (resource: CustomResourceDetailInfo) => {
+      const status = resource.status as Record<string, unknown> | null;
+      return {
+        status: customResourceState(status),
+        createdAt: resource.createdAt,
+        groups: [
+          ...controlledBy(resource.ownerReferences, resource.namespace),
+          {
+            title: "Status",
+            items: flatten(status, MANIFEST_ROW_LIMIT),
+            emptyMessage: "Nothing reported yet",
+          },
+          {
+            title: "Spec",
+            items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
+            emptyMessage: "No spec",
+          },
+          {
+            title: "Labels",
+            count: Object.keys(resource.labels).length || undefined,
+            items: Object.entries(resource.labels)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([label, value]) => ({ label, value, mono: true })),
+            emptyMessage: "No labels",
+          },
+        ],
+      };
+    }
+  );
+}
+
+/**
+ * The one word for the header badge, from the two places an operator is
+ * likely to have put one.
+ *
+ * `phase` and `state` are the conventional free-form fields; `conditions` is
+ * the upstream `metav1.Condition` shape, and a `Ready` condition is the
+ * nearest thing to a universal verdict a custom resource has. Anything else
+ * is left unsaid rather than guessed — an operator that reports health under
+ * a name of its own gets no badge, and the flattened status underneath is
+ * where the reader finds it.
+ */
+function customResourceState(
+  status: Record<string, unknown> | null
+): string | undefined {
+  if (!status) return undefined;
+  const said = asText(status.phase) ?? asText(status.state);
+  if (said) return said;
+
+  const conditions = Array.isArray(status.conditions) ? status.conditions : [];
+  const ready = conditions.find(
+    (condition): condition is { type: string; status: string } =>
+      typeof condition === "object" &&
+      condition !== null &&
+      (condition as { type?: unknown }).type === "Ready"
+  );
+  if (!ready) return undefined;
+  return ready.status === "True" ? "Ready" : "Not ready";
 }
 
 /**

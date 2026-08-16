@@ -27,6 +27,8 @@ import { ChevronRight, ExternalLink, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
+import { CopyableValue } from "@/components/ui/copyable-value";
+import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -75,6 +77,8 @@ const toneText = (tone: Tone) =>
  */
 export function TroubleRow({
   title,
+  copy,
+  reference,
   meta,
   state,
   openByDefault = false,
@@ -83,6 +87,38 @@ export function TroubleRow({
   last,
 }: {
   title: ReactNode;
+  /**
+   * The title as a string, when it is something worth putting on the
+   * clipboard — a hostname, on every page whose rows are hosts.
+   *
+   * It changes the row's shape rather than decorating it, and has to: the
+   * title normally sits *inside* the disclosure button, and a button nested
+   * in a button is neither valid nor operable. Given this, the title moves
+   * out and becomes its own control, the rest of the row goes on toggling,
+   * and a screen reader hears the two as the two things they are.
+   */
+  copy?: string;
+  /**
+   * The object the title names, where the row is *about* one — an Argo
+   * Application, a Flux Kustomization, a cert-manager Certificate.
+   *
+   * The other half of the same problem `copy` solves, and the reason the
+   * shape is worth having twice: on those pages the row's subject is an
+   * object with a page and a peek of its own, and it was the one thing on the
+   * screen a reader could not open, because it was drawn inside the
+   * disclosure button. `crd` is what makes a custom resource addressable at
+   * all — see `ResourceRef`.
+   *
+   * Never set together with `copy`: a title is either an address to paste or
+   * an object to open, and offering both from one word would make neither
+   * predictable.
+   */
+  reference?: {
+    kind: string;
+    name: string;
+    namespace?: string | null;
+    crd?: string;
+  };
   meta?: ReactNode;
   state: { text: string; tone: Tone };
   openByDefault?: boolean;
@@ -93,31 +129,93 @@ export function TroubleRow({
   const [chosen, setChosen] = useState<boolean | null>(null);
   const open = chosen ?? openByDefault;
 
+  const chevron = (
+    <ChevronRight
+      aria-hidden
+      className={cn(
+        "size-3 flex-none translate-y-0.5 text-fg-fnt transition-transform",
+        open && "rotate-90"
+      )}
+    />
+  );
+  const rest = (
+    <>
+      <span className="min-w-0 flex-1 truncate text-[11px] text-fg-fnt">
+        {meta}
+      </span>
+      <span className={cn("flex-none text-[11px]", toneText(state.tone))}>
+        {state.text}
+      </span>
+    </>
+  );
+
+  const lead =
+    copy !== undefined ? (
+      <CopyableValue
+        value={copy}
+        label={copy}
+        className="truncate font-mono text-[12.5px] text-fg"
+      >
+        {title}
+      </CopyableValue>
+    ) : reference &&
+      objectUrl(
+        reference.kind,
+        reference.name,
+        reference.namespace,
+        reference.crd
+      ) !== null ? (
+      // Asked before the element is built: a row whose object turns out not
+      // to be addressable keeps its plain title rather than losing it to a
+      // link that renders nothing.
+      <ObjectLink
+        {...reference}
+        className="min-w-0 truncate rounded-[3px] font-mono text-[12.5px] text-fg hover:bg-hover"
+      >
+        {title}
+      </ObjectLink>
+    ) : null;
+
   return (
     <div className={cn("py-2", !last && "border-b border-hair")}>
-      <button
-        type="button"
-        onClick={() => setChosen(!open)}
-        aria-expanded={open}
-        className="flex w-full items-baseline gap-2 text-left"
-      >
-        <ChevronRight
-          aria-hidden
-          className={cn(
-            "size-3 flex-none translate-y-0.5 text-fg-fnt transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        <span className="truncate font-mono text-[12.5px] text-fg">
-          {title}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[11px] text-fg-fnt">
-          {meta}
-        </span>
-        <span className={cn("flex-none text-[11px]", toneText(state.tone))}>
-          {state.text}
-        </span>
-      </button>
+      {lead ? (
+        <div className="flex w-full items-baseline gap-2">
+          <button
+            type="button"
+            onClick={() => setChosen(!open)}
+            aria-expanded={open}
+            aria-label={`${copy ?? reference?.name} — expand`}
+            className="flex-none"
+          >
+            {chevron}
+          </button>
+          {lead}
+          {/* The rest of the row still toggles, so the whole line stays a
+              target and only the name itself does something else. */}
+          <button
+            type="button"
+            onClick={() => setChosen(!open)}
+            tabIndex={-1}
+            aria-hidden
+            className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
+          >
+            {rest}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setChosen(!open)}
+          aria-expanded={open}
+          className="flex w-full items-baseline gap-2 text-left"
+        >
+          {chevron}
+          <span className="truncate font-mono text-[12.5px] text-fg">
+            {title}
+          </span>
+          {rest}
+        </button>
+      )}
 
       {open ? (
         <div className="ml-5 mt-2 flex flex-col gap-3">{children}</div>

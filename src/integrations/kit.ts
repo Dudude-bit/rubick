@@ -12,6 +12,7 @@ import type {
   CustomResourceInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
+import { getCustomResourceUrl } from "@/lib/navigation-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { CrdView } from "./registry";
 
@@ -28,13 +29,18 @@ export function crdObjectsPath(crdName: string): string {
   return `/${CRDS}/${encodeURIComponent(crdName)}?tab=instances`;
 }
 
+/**
+ * Kept as the vendor tree's spelling of it — the argument order reads
+ * `where, then which` at every call site here — over the core function that
+ * now owns the route, because `ResourceRef` needs the same path and cannot
+ * import from this tree.
+ */
 export function crdObjectPath(
   crdName: string,
   namespace: string | null,
   name: string
 ): string {
-  const base = `/${CRDS}/${encodeURIComponent(crdName)}/instances`;
-  return namespace ? `${base}/${namespace}/${name}` : `${base}/${name}`;
+  return getCustomResourceUrl(crdName, name, namespace);
 }
 
 /** "1 certificate", "7 certificates". */
@@ -181,8 +187,7 @@ export function conditionStatus(conditionType: string = "Ready"): CrdStatus {
   return {
     getStatus: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return null;
 

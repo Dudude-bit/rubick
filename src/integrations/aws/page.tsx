@@ -19,12 +19,10 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { crdObjectPath } from "../kit";
 import {
   Cell,
   Chain,
@@ -203,6 +201,7 @@ function GroupRow({
           </span>
         )
       }
+      copy={group.name ?? undefined}
       meta={
         <>
           {group.members.length}{" "}
@@ -236,12 +235,12 @@ function ParamsBlock({ group }: { group: AlbGroup }) {
     <Chain>
       <Column label="Class params">
         <Cell under={params.loadBalancerName ?? undefined}>
-          <Link
-            className="font-mono text-fg underline-offset-2 hover:underline"
-            to={crdObjectPath(INGRESS_CLASS_PARAMS_CRD, null, params.name)}
-          >
-            {params.name}
-          </Link>
+          <ResourceRef
+            kind="IngressClassParams"
+            name={params.name}
+            crd={INGRESS_CLASS_PARAMS_CRD}
+            showKind={false}
+          />
         </Cell>
       </Column>
       <Column label="Facing">
@@ -298,16 +297,12 @@ function MembersBlock({
           <Chain key={`${member.ingress.namespace}/${member.ingress.name}`}>
             <Column label="Ingress">
               <Cell under={member.ingress.namespace}>
-                <Link
-                  className="font-mono text-fg underline-offset-2 hover:underline"
-                  to={getResourceDetailUrl(
-                    ResourceType.Ingress,
-                    member.ingress.name,
-                    member.ingress.namespace
-                  )}
-                >
-                  {member.ingress.name}
-                </Link>
+                <ResourceRef
+                  kind={ResourceType.Ingress}
+                  name={member.ingress.name}
+                  namespace={member.ingress.namespace}
+                  showKind={false}
+                />
               </Cell>
             </Column>
             <Column label="Order">
@@ -319,6 +314,27 @@ function MembersBlock({
               <Cell title={member.hosts.join(", ") || undefined}>
                 {member.hosts.length > 0 ? member.hosts.join(", ") : "any host"}
               </Cell>
+            </Column>
+            {/* The Service used to be the `under` line of the target group,
+                which made the one object on this row a reader is most likely
+                to want the only one they could not open. */}
+            <Column label="Service">
+              {backends.length === 0 ? (
+                <Cell>
+                  <span className="text-fg-fnt">no backend</span>
+                </Cell>
+              ) : (
+                backends.map((backend) => (
+                  <Cell key={backend}>
+                    <ResourceRef
+                      kind={ResourceType.Service}
+                      name={backend}
+                      namespace={member.ingress.namespace}
+                      showKind={false}
+                    />
+                  </Cell>
+                ))
+              )}
             </Column>
             <Column label="Target groups">
               {backends.length === 0 ? (
@@ -337,20 +353,18 @@ function MembersBlock({
                     <Cell
                       key={backend}
                       bad={failure !== null}
-                      under={backend}
                       title={bound ? bindingSummary(bound) : undefined}
                     >
                       {bound ? (
-                        <Link
+                        <ObjectLink
+                          kind="TargetGroupBinding"
+                          name={bound.name}
+                          namespace={bound.namespace}
+                          crd={TARGET_GROUP_BINDING_CRD}
                           className="text-fg underline-offset-2 hover:underline"
-                          to={crdObjectPath(
-                            TARGET_GROUP_BINDING_CRD,
-                            bound.namespace,
-                            bound.name
-                          )}
                         >
                           {bindingSummary(bound)}
-                        </Link>
+                        </ObjectLink>
                       ) : (
                         <span className="text-fg-fnt">
                           no TargetGroupBinding

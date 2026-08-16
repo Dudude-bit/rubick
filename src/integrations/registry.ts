@@ -315,6 +315,52 @@ export interface IngressTls {
   by: string;
 }
 
+/**
+ * One object a custom resource points at, and what the pointing means.
+ *
+ * The core's connection graph is built in the backend from selectors, volumes,
+ * owner references and Ingress rules — the joins that are the same on every
+ * cluster. A custom resource has none of them. What an Argo `Application` is
+ * connected to is whatever its controller *wrote down*: the inventory in
+ * `status.resources`, the project in `spec.project`. A Flux `Kustomization`'s
+ * is its `sourceRef`. Those are not a shape the core can compute and must not
+ * be — the core has no business knowing what an Application is — so the vendor
+ * that owns the kind answers for it.
+ *
+ * @see Capabilities."object.related"
+ */
+export interface RelatedObject {
+  /**
+   * What this object does with that one, in the operator's own terms:
+   * "manages", "issues into", "reads from", "waits for". Printed as the row's
+   * label and never branched on.
+   */
+  relation: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  /**
+   * The API group of the far end — `""` for a core object.
+   *
+   * A group and not a CRD name, because a group is what an operator actually
+   * records (`status.resources[].group`, an `apiVersion`) and a CRD name is
+   * an address. Turning one into the other needs the cluster's CRD list,
+   * which is core knowledge every reference in the app already resolves
+   * through; making each vendor carry it would put the same lookup in three
+   * folders and let them disagree.
+   */
+  group: string | null;
+  /**
+   * The controller's own sentence about *this* link — why it could not be
+   * applied, why it is out of sync. Verbatim, and absent where the controller
+   * said nothing. Never a sentence this app composed: a paraphrase of
+   * somebody else's failure is a second guess at it.
+   */
+  note?: string | null;
+  /** Only where the controller reported a problem with the link itself. */
+  tone?: "warn" | "err";
+}
+
 /** One way in to a Service, as the object that routes it states it. */
 export interface ServiceRoute {
   /** The hostname a client types. */
@@ -516,6 +562,41 @@ export interface Capabilities {
   "ingress.tls": (
     ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
   ) => Promise<IngressTls[][]>;
+  /**
+   * What one custom resource is connected to, as its own controller states it.
+   *
+   * The gap this closes is a whole surface rather than a field. Every core
+   * object in this app has a Connections tab; a custom resource had none and
+   * could not — `get_resource_connections` answers for nine kinds and refuses
+   * the rest, correctly, because the joins it computes do not exist for a kind
+   * it has never heard of. So the object with the most connections in a
+   * GitOps cluster, an Argo `Application` naming forty objects it manages, was
+   * the one object in the app that showed none.
+   *
+   * Asked per object rather than for a list: a Connections tab is opened for
+   * one object at a time, and there is no table of custom resources this would
+   * have to fill a column of.
+   *
+   * **`null` and `[]` are different answers, and that is the contract.**
+   * `null` is "this kind is not mine" — every vendor says it about every other
+   * vendor's CRDs, which is most calls. `[]` is a vendor that owns the kind
+   * looking and finding nothing, which is a real state: an Application Argo
+   * has not compared yet genuinely lists no resources. Collapsing the two
+   * would make "no integration understands this object" and "this object is
+   * connected to nothing" the same sentence, and only one of them is a fact
+   * about the cluster.
+   *
+   * Absent altogether means no integration in the app answers at all; the
+   * surface still draws the owner reference, which is upstream Kubernetes and
+   * needs nobody.
+   */
+  "object.related": (input: {
+    /** The API group of the subject, so a vendor can decline another's kind. */
+    group: string;
+    kind: string;
+    namespace: string | null;
+    name: string;
+  }) => Promise<RelatedObject[] | null>;
 }
 
 export type CapabilityKey = keyof Capabilities;

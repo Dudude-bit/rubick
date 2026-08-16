@@ -32,7 +32,6 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Link } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -48,8 +47,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { crdObjectPath, plural } from "../kit";
+import { plural } from "../kit";
 import { FilterBox, Finding, TroubleRow } from "../page-kit";
 import { usePicture } from "./data";
 import { uncovered } from "./serves";
@@ -322,11 +320,18 @@ function CertificateRow({
   openByDefault: boolean;
 }) {
   return (
-    // The name is not a link. It sits inside the disclosure button, and an
-    // anchor nested in a button is neither valid nor operable — the object's
-    // own page is one row down under "Certificate", where it can be one.
+    // The name *is* a link now. It used to be plain text with a note saying
+    // why — an anchor nested in the disclosure button is neither valid nor
+    // operable — and `reference` is that constraint solved rather than
+    // documented: the title leaves the button and becomes its own control.
     <TroubleRow
       title={row.name}
+      reference={{
+        kind: "Certificate",
+        name: row.name,
+        namespace: row.namespace,
+        crd: CERTIFICATES_CRD,
+      }}
       meta={
         <>
           {row.namespace}
@@ -395,16 +400,12 @@ function ServingLine({ row }: { row: CertRow }) {
               </span>
               <span className="ml-2 text-fg-fnt">
                 from{" "}
-                <Link
-                  to={getResourceDetailUrl(
-                    ResourceType.Ingress,
-                    entry.ingress.name,
-                    entry.ingress.namespace
-                  )}
-                  className="hover:underline"
-                >
-                  {entry.ingress.name}
-                </Link>
+                <ResourceRef
+                  kind={ResourceType.Ingress}
+                  name={entry.ingress.name}
+                  namespace={entry.ingress.namespace}
+                  showKind={false}
+                />
               </span>
             </span>
           ))}
@@ -448,12 +449,13 @@ function Facts({ row }: { row: CertRow }) {
     <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
       <span className="text-fg-fnt">Certificate</span>
       <span className="min-w-0">
-        <Link
-          to={crdObjectPath(CERTIFICATES_CRD, row.namespace, row.name)}
-          className="font-mono text-info hover:underline"
-        >
-          {row.name}
-        </Link>
+        <ResourceRef
+          kind="Certificate"
+          name={row.name}
+          namespace={row.namespace}
+          crd={CERTIFICATES_CRD}
+          showKind={false}
+        />
         <span className="ml-2 text-fg-fnt">{row.namespace}</span>
       </span>
 
@@ -484,18 +486,19 @@ function Facts({ row }: { row: CertRow }) {
       <span className="text-fg-fnt">Issuer</span>
       <span className="min-w-0">
         {row.issuer ? (
-          <Link
-            to={crdObjectPath(
+          <ResourceRef
+            kind={row.issuer.kind}
+            name={row.issuer.name}
+            namespace={
+              row.issuer.kind === "ClusterIssuer" ? null : row.namespace
+            }
+            crd={
               row.issuer.kind === "ClusterIssuer"
                 ? CLUSTER_ISSUERS_CRD
-                : ISSUERS_CRD,
-              row.issuer.kind === "ClusterIssuer" ? null : row.namespace,
-              row.issuer.name
-            )}
-            className="font-mono text-info hover:underline"
-          >
-            {row.issuer.name}
-          </Link>
+                : ISSUERS_CRD
+            }
+            showKind={false}
+          />
         ) : (
           <span className="text-err">none named</span>
         )}
@@ -571,12 +574,15 @@ function Walk({ steps }: { steps: CertStep[] }) {
               <span className="text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
                 {step.kind}
               </span>
-              <Link
-                to={crdObjectPath(step.crd, step.namespace, step.name)}
-                className="min-w-0 truncate font-mono text-[11.5px] text-info hover:underline"
-              >
-                {step.name}
-              </Link>
+              <span className="min-w-0 truncate">
+                <ResourceRef
+                  kind={step.kind}
+                  name={step.name}
+                  namespace={step.namespace}
+                  crd={step.crd}
+                  showKind={false}
+                />
+              </span>
               <span
                 className={`text-[11px] ${step.failed ? "text-err" : "text-fg-mut"}`}
               >
@@ -697,6 +703,12 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
   return (
     <TroubleRow
       title={row.name}
+      reference={{
+        kind: row.kind,
+        name: row.name,
+        namespace: row.namespace,
+        crd: row.crd,
+      }}
       meta={
         <>
           {row.kind === "ClusterIssuer"
@@ -716,12 +728,13 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
       last={last}
     >
       <p className="text-[11.5px]">
-        <Link
-          to={crdObjectPath(row.crd, row.namespace, row.name)}
-          className="font-mono text-info hover:underline"
-        >
-          {row.name}
-        </Link>
+        <ResourceRef
+          kind={row.kind}
+          name={row.name}
+          namespace={row.namespace}
+          crd={row.crd}
+          showKind={false}
+        />
         <span className="ml-2 text-fg-fnt">{row.kind}</span>
       </p>
       {row.message ? (
