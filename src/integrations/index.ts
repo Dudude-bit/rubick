@@ -267,7 +267,12 @@ function useConnections(): Map<string, ConnectionState> {
     queries: CONNECTED.map((vendor, index) => ({
       queryKey: ["integration-probe", vendor.id, context],
       queryFn: () => vendor.connect.probe(),
-      enabled: context !== null && Boolean(saved[index]?.data),
+      // The same connected gate the read above has, and it matters more
+      // here: a probe fired between sessions comes back as an *answer* —
+      // "did not answer, no cluster is connected" — and a failure that is
+      // data rather than an error sits on the row until something happens
+      // to ask again.
+      enabled: context !== null && isConnected && Boolean(saved[index]?.data),
       staleTime: CONNECTION_STALE_TIME,
       // A Prometheus that has gone away should stop being retried behind the
       // reader's back; the row and the chart both say so, and there is a

@@ -26,7 +26,15 @@ export function usePrefetchCoreLists(): void {
   const warmed = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isConnected || context === null) return;
+    if (!isConnected || context === null) {
+      // Between sessions the ref forgets: the next landing must flush and
+      // warm again even for the same cluster and scope, because everything
+      // asked while disconnected — a probe, a list, a count — was answered
+      // by nothing, and "once per scope" kept those answers on screen over
+      // the reconnected session.
+      warmed.current = null;
+      return;
+    }
     const scope = `${context}/${currentNamespace || "all"}`;
     if (warmed.current === scope) return;
     warmed.current = scope;
