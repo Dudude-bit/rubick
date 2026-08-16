@@ -23,6 +23,26 @@ vi.mock("@/components/yaml", () => ({
   ),
 }));
 
+// The vendors' answers, controllable per test: the default is the shape the
+// real hooks answer on a cluster with nothing installed, so every other test
+// reads exactly as before.
+const servicesRoutesSpy = vi.fn();
+vi.mock("@/hooks/useServiceRoutes", () => ({
+  useServiceRoutes: () => ({
+    available: false,
+    routes: [],
+    isPending: false,
+    error: null,
+  }),
+  useServicesRoutes: (services: unknown) =>
+    servicesRoutesSpy(services) ?? {
+      available: false,
+      routes: new Map(),
+      isPending: false,
+    },
+  useProxyBehind: () => null,
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getPod: vi.fn(),
@@ -316,6 +336,7 @@ function mockCluster() {
   vi.mocked(commands.getResourceConnections)
     .mockReset()
     .mockResolvedValue(buildConnections());
+  servicesRoutesSpy.mockReset();
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
 
@@ -1047,6 +1068,60 @@ describe("PeekPanel traffic chain", () => {
     expectAbove(service, self);
     expect(screen.getByText(/the Service in front/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Endpoints/ })).toBeNull();
+  });
+
+  /**
+   * The level above the Service in front: a Pod behind a Service that an
+   * IngressRoute serves used to show the Service as the top of the world,
+   * because the vendors were only ever asked about a peeked Service itself.
+   */
+  it("asks the vendors about the Services in front of a Pod", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    servicesRoutesSpy.mockImplementation((services: unknown[]) =>
+      services.length === 0
+        ? undefined
+        : {
+            available: true,
+            isPending: false,
+            routes: new Map([
+              [
+                "k8s-gui-test/crash-svc",
+                [
+                  {
+                    host: "crash.example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-route",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                ],
+              ],
+            ]),
+          }
+    );
+    wrap(POD_PEEK);
+
+    const route = await screen.findByRole("link", {
+      name: "IngressRoute crash-route",
+    });
+    const service = screen.getByRole("link", { name: "Service crash-svc" });
+    expectAbove(route, service);
+    expectAbove(service, screen.getByText(/this Pod/));
+    expect(servicesRoutesSpy).toHaveBeenCalledWith([
+      { namespace: "k8s-gui-test", name: "crash-svc" },
+    ]);
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {

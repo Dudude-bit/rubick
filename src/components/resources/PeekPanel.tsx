@@ -429,10 +429,6 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     target.name,
     namespace
   );
-  const routed = useServicesRoutes(isServiceish ? [service] : []);
-  const vendorRoutes = (
-    routed.routes.get(`${namespace}/${target.name}`) ?? []
-  ).filter((route) => route.source.kind !== "Ingress");
   const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];
@@ -461,6 +457,30 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             .map((object) => [`${object.namespace}/${object.name}`, object])
         ).values(),
       ];
+
+  // The vendors are asked about the peeked Service itself — or, from a Pod
+  // or a workload, about the Services in front of it: an IngressRoute over
+  // that Service is this pod's way in just the same, and without this the
+  // Service drew as the top of the world.
+  const routed = useServicesRoutes(
+    isServiceish
+      ? [service]
+      : services.map((entry) => ({
+          namespace: entry.namespace ?? "",
+          name: entry.name,
+        }))
+  );
+  const vendorRoutes = [
+    ...new Map(
+      (isServiceish ? [service] : services)
+        .flatMap(
+          (entry) =>
+            routed.routes.get(`${entry.namespace ?? ""}/${entry.name}`) ?? []
+        )
+        .filter((route) => route.source.kind !== "Ingress")
+        .map((route) => [`${route.host}${route.path}`, route] as const)
+    ).values(),
+  ];
 
   // Outermost first, the order a request travels: the doors in, then the
   // Service in front, then the object itself, then what answers behind it.
