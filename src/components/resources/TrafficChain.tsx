@@ -79,7 +79,11 @@ const NODE_TONE: Record<HopTone, string> = {
   bad: "border-err",
 };
 
-function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
+/**
+ * The dot and the run of line under it — the chain's spine. Shared with the
+ * peek's chain, so a hop reads the same wherever it is drawn.
+ */
+export function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
   return (
     <div className="flex flex-col items-center">
       <span
@@ -243,36 +247,44 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
 
   return (
     <>
-      {shown.map((route) => {
-        const tail = route.path === "/" ? "" : route.path;
-        const address =
-          route.tls === null
-            ? `${route.host}${tail}`
-            : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
-        return (
-          <p
-            key={`${route.host}${route.path}`}
-            className="text-[11px] text-fg-fnt"
-          >
-            <CopyableAddress value={address} label="Address" />
-            {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
-            {route.to ? (
-              <Link
-                to={route.to}
-                className="font-mono text-info hover:underline"
-              >
-                {route.source.name}
-              </Link>
-            ) : (
-              <span className="font-mono">{route.source.name}</span>
-            )}
-          </p>
-        );
-      })}
+      {shown.map((route) => (
+        <p
+          key={`${route.host}${route.path}`}
+          className="text-[11px] text-fg-fnt"
+        >
+          <RouteLine route={route} />
+        </p>
+      ))}
       {vendors.length > shown.length && (
         <p className="text-[11px] text-fg-fnt">
           and {vendors.length - shown.length} more
         </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * One route as a line: the address, then the object that states it. The
+ * note above stacks these under a Service hop; the peek's chain gives each
+ * one a hop of its own.
+ */
+export function RouteLine({ route }: { route: ServiceRoute }) {
+  const tail = route.path === "/" ? "" : route.path;
+  const address =
+    route.tls === null
+      ? `${route.host}${tail}`
+      : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
+  return (
+    <>
+      <CopyableAddress value={address} label="Address" />
+      {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
+      {route.to ? (
+        <Link to={route.to} className="font-mono text-info hover:underline">
+          {route.source.name}
+        </Link>
+      ) : (
+        <span className="font-mono">{route.source.name}</span>
       )}
     </>
   );

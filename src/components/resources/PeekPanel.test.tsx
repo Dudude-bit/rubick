@@ -7,8 +7,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ConfigMapInfo,
   CustomResourceDetailInfo,
+  EndpointsInfo,
   EventInfo,
+  ObjectRef,
   PodInfo,
+  ResourceConnections,
+  ServiceInfo,
 } from "@/generated/types";
 
 // CodeMirror is loaded behind React.lazy and has nothing to prove here; the
@@ -38,6 +42,8 @@ vi.mock("@/lib/commands", () => ({
     restartPod: vi.fn(),
     getCustomResource: vi.fn(),
     getCustomResourceYaml: vi.fn(),
+    getService: vi.fn(),
+    getResourceConnections: vi.fn(),
   },
 }));
 
@@ -171,6 +177,62 @@ function buildConfigMap(): ConfigMapInfo {
   };
 }
 
+function buildServiceInfo(): ServiceInfo {
+  return {
+    name: "frontend",
+    namespace: "ambassadors",
+    uid: "svc-uid",
+    type: "ClusterIP",
+    sessionAffinity: "None",
+    clusterIp: "10.10.19.25",
+    externalIps: [],
+    loadBalancerIps: [],
+    ports: [
+      {
+        name: null,
+        port: 3000,
+        targetPort: "3000",
+        nodePort: null,
+        protocol: "TCP",
+      },
+    ],
+    selector: { app: "frontend" },
+    labels: {},
+    annotations: {},
+    createdAt: "2026-08-01T00:00:00Z",
+  };
+}
+
+function buildEndpointsInfo(): EndpointsInfo {
+  return {
+    name: "frontend",
+    namespace: "ambassadors",
+    subsets: [],
+    createdAt: "2026-08-01T00:00:00Z",
+    overCapacity: false,
+  };
+}
+
+const objRef = (kind: string, name: string, namespace: string): ObjectRef => ({
+  kind,
+  name,
+  namespace,
+  existence: "present",
+  facts: null,
+});
+
+function buildConnections(
+  edges: ResourceConnections["edges"] = []
+): ResourceConnections {
+  return {
+    subject: objRef("Service", "frontend", "ambassadors"),
+    edges,
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  };
+}
+
 function Probe() {
   const { pathname, search } = useLocation();
   return <span data-testid="location">{`${pathname}${search}`}</span>;
@@ -245,6 +307,15 @@ function mockCluster() {
   vi.mocked(commands.getCustomResourceYaml)
     .mockReset()
     .mockResolvedValue(APPLICATION_MANIFEST);
+  vi.mocked(commands.getService)
+    .mockReset()
+    .mockResolvedValue(buildServiceInfo());
+  vi.mocked(commands.getEndpoints)
+    .mockReset()
+    .mockResolvedValue(buildEndpointsInfo());
+  vi.mocked(commands.getResourceConnections)
+    .mockReset()
+    .mockResolvedValue(buildConnections());
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
 
@@ -900,5 +971,96 @@ describe("PeekPanel width", () => {
     wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(panelWidth()).toBe("784px");
+  });
+});
+
+/**
+ * One chain, read top to bottom: the ways in above the object, the object
+ * itself in the middle, what answers below it. The two flat headings this
+ * replaced said the same order in words and looked like leftover prose.
+ */
+describe("PeekPanel traffic chain", () => {
+  beforeEach(mockCluster);
+
+  const SERVICE_PEEK = "/events?peek=services/ambassadors/frontend";
+
+  /** Passes when `above` sits earlier in the document than `below`. */
+  const expectAbove = (above: Element, below: Element) =>
+    expect(
+      above.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+  it("hangs a Service between its way in and its addresses", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Ingress", "frontend-ing", "ambassadors"),
+          to: objRef("Service", "frontend", "ambassadors"),
+          relation: {
+            verb: "routes",
+            host: "ambassadors.sketchar.io",
+            path: "/",
+            pathType: "Prefix",
+            port: "3000",
+            tls: true,
+          },
+        },
+      ])
+    );
+    wrap(SERVICE_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    const ingress = await screen.findByRole("link", {
+      name: "Ingress frontend-ing",
+    });
+    const self = screen.getByText(/this Service/);
+    const endpoints = screen.getByRole("link", { name: "Endpoints frontend" });
+    expectAbove(ingress, self);
+    expectAbove(self, endpoints);
+    // The rule's host rides on the hop, so it says which door this is.
+    expect(screen.getByText("ambassadors.sketchar.io")).toBeInTheDocument();
+    // The words the chain replaced stay gone.
+    expect(screen.queryByText("Reached through")).toBeNull();
+    expect(screen.queryByText("Behind it")).toBeNull();
+  });
+
+  it("puts the Service in front above a Pod, and nothing below it", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    wrap(POD_PEEK);
+
+    const service = await screen.findByRole("link", {
+      name: "Service crash-svc",
+    });
+    const self = screen.getByText(/this Pod/);
+    expectAbove(service, self);
+    expect(screen.getByText(/the Service in front/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Endpoints/ })).toBeNull();
+  });
+
+  it("names the Service an Endpoints publishes for, above it", async () => {
+    wrap("/events?peek=endpoints/ambassadors/frontend");
+
+    const service = await screen.findByRole("link", {
+      name: "Service frontend",
+    });
+    const self = screen.getByText(/this Endpoints/);
+    expectAbove(service, self);
+    expect(
+      screen.getByText(/the Service these endpoints publish/)
+    ).toBeInTheDocument();
+  });
+
+  it("stays silent for a pod nothing routes", async () => {
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    expect(screen.queryByText("Traffic path")).toBeNull();
   });
 });
