@@ -35,9 +35,15 @@ gen-entities-tauri:
 	fi; \
 	echo "generated $$after commands"
 
-# Generate base icon and all Tauri icon assets
+# Regenerate every platform's icon from src-tauri/icons/base.png.
+#
+# `base.png` is drawn by hand and committed — edit that, then run this. There
+# used to be a `scripts/gen_icon.py` on the line above that generated it, and
+# it was deleted rather than fixed: it drew the letters "K8", from before the
+# product was called Rubick, so running this target would have quietly
+# replaced the real icon with the old one and rebuilt all sixteen sizes from
+# it.
 gen-icons:
-	$(MISE_EXEC) python3 scripts/gen_icon.py
 	$(MISE_EXEC) cargo tauri icon src-tauri/icons/base.png
 
 # Run Tauri development server
