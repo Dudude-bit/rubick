@@ -1,5 +1,6 @@
 import * as generatedCommands from "@/generated/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { logInfo } from "@/lib/logger";
 import {
   credentialsExpired,
   expiryReason,
@@ -13,7 +14,31 @@ type Wrapped<T> = {
     : T[K];
 };
 
+/**
+ * A command slower than this names itself in the log. The threshold is the
+ * point where a wait starts being felt; everything under it would be noise
+ * on a log every command in the app passes through.
+ */
+const SLOW_COMMAND_MS = 500;
+
 export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
+  const withErrors = wrapErrors(fn, commandName);
+  return (async (...args: Parameters<T>) => {
+    const startedAt = performance.now();
+    try {
+      return await withErrors(...args);
+    } finally {
+      const ms = Math.round(performance.now() - startedAt);
+      if (ms >= SLOW_COMMAND_MS) {
+        logInfo(`${commandName ?? fn.name} took ${ms}ms`, {
+          context: "slow-command",
+        });
+      }
+    }
+  }) as T;
+}
+
+function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
   return (async (...args: Parameters<T>) => {
     try {
       return await fn(...args);

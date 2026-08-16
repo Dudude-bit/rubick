@@ -48,6 +48,17 @@ export function usePrefetchCoreLists(): void {
     const namespace = currentNamespace || null;
     const base = { labelSelector: null, fieldSelector: null, limit: null };
 
+    // The landing page's own read, and the most expensive one in the app —
+    // it was the only first-screen query NOT warmed here, so Overview spent
+    // its first second asking what the connect beat could already have
+    // started. Same key as `useClusterOverview`, so the page mounts onto an
+    // answer already in flight.
+    void queryClient.prefetchQuery({
+      queryKey: ["cluster-overview", context, currentNamespace || ""],
+      queryFn: () => commands.getClusterOverview(namespace),
+      staleTime: STALE_TIMES.overview,
+    });
+
     void queryClient.prefetchQuery({
       queryKey: queryKeys.pods(namespace),
       queryFn: () =>
