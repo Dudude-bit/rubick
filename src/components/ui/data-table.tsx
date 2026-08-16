@@ -669,7 +669,7 @@ export function DataTable<TData, TValue>({
     : items.map((item, line) => renderItem(item, line));
 
   if (isLoading) {
-    return <TableSkeleton columns={columns.length} rows={5} />;
+    return <TableSkeleton columns={columns.length} compact={isCompact} />;
   }
 
   // `min-h-0` and nothing else, at every level down to the port: a flex item

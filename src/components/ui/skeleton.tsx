@@ -19,34 +19,64 @@ function Skeleton({
 }
 
 /**
- * Skeleton for table rows
+ * Skeleton for table rows.
+ *
+ * Drawn to the real table's measurements — the compact/normal cell padding
+ * pitch, a wide first column the way names are wide, varied widths the way
+ * content varies — because a block of five uniform grey bars reads as a
+ * placeholder for a *different* screen, and the swap to rows is a jolt.
+ * Enough rows to fill a screen, so arriving data replaces the shape rather
+ * than tripling the page height.
  */
 interface TableSkeletonProps {
   columns?: number;
   rows?: number;
   showSearch?: boolean;
+  /** Match the density the table itself is drawn at. */
+  compact?: boolean;
 }
+
+/** The name column runs long; everything after it is chips and counts. */
+const CELL_WIDTHS = ["w-40", "w-16", "w-24", "w-20", "w-12", "w-28"];
 
 function TableSkeleton({
   columns = 4,
-  rows = 5,
+  rows = 14,
   showSearch = true,
+  compact = false,
 }: TableSkeletonProps) {
+  const cellPadding = compact ? "py-[3px] px-2.5" : "py-2 px-2.5";
   return (
-    <div className="space-y-2 animate-in fade-in duration-200" aria-hidden>
-      {showSearch && <Skeleton className="h-7 w-40" />}
-      <div className="flex h-6 items-center gap-4 border-b border-hair px-2.5">
-        {Array.from({ length: columns }).map((_, i) => (
-          <Skeleton key={i} className="h-2.5 w-20" />
+    <div className="animate-in fade-in duration-200" aria-hidden>
+      {showSearch && <Skeleton className="mb-2 h-7 w-40" />}
+      <div className="flex items-center gap-4 border-b border-hair px-2.5 py-1">
+        {Array.from({ length: columns }).map((_, column) => (
+          <Skeleton
+            key={column}
+            className={cn("h-2.5", column === 0 ? "w-32" : "w-14")}
+          />
         ))}
       </div>
-      {Array.from({ length: rows }).map((_, i) => (
+      {Array.from({ length: rows }).map((_, row) => (
         <div
-          key={i}
-          className="flex h-6 items-center gap-4 border-b border-hair px-2.5"
+          key={row}
+          className={cn(
+            "flex items-center gap-4 border-b border-hair",
+            cellPadding
+          )}
         >
-          {Array.from({ length: columns }).map((_, j) => (
-            <Skeleton key={j} className="h-2.5 w-24" />
+          {Array.from({ length: columns }).map((_, column) => (
+            <div key={column} className="flex h-4 items-center">
+              <Skeleton
+                className={cn(
+                  "h-2.5",
+                  // Staggered by row and column so the grid shimmers like
+                  // content of uneven lengths instead of a punch card.
+                  CELL_WIDTHS[(row + column * 2) % CELL_WIDTHS.length],
+                  column === 0 && "w-40"
+                )}
+              />
+            </div>
           ))}
         </div>
       ))}
