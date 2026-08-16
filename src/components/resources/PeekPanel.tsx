@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
-import { Rail, RouteLine } from "./TrafficChain";
+import { CopyableAddress } from "@/components/ui/copyable-value";
+import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
@@ -486,10 +487,16 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     })),
     ...shownRoutes.map((route, index) => ({
       key: `route/${route.host}${route.path}`,
+      // Object first and the address under it, the order every other hop
+      // reads in — as a hop this is the router, not its hostname.
       content: (
         <>
           <p className="text-[11px] text-fg-fnt">
-            <RouteLine route={route} />
+            <RouteSource route={route} /> — {route.source.kind}
+          </p>
+          <p className="text-[11px] text-fg-fnt">
+            <CopyableAddress value={routeAddress(route)} label="Address" />
+            {route.h2c ? " (gRPC)" : ""}
           </p>
           {index === shownRoutes.length - 1 &&
             vendorRoutes.length > shownRoutes.length && (
@@ -583,7 +590,8 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
       key: "self",
       content: (
         <p className="text-[11px] text-fg-fnt">
-          <span className={RESOURCE_NAME_SHELL}>
+          {/* The selection tint the app already means "current" by. */}
+          <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
             <ResourceName
               kind={target.kind}
               name={target.name}
@@ -611,9 +619,10 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
               <Rail
                 tone="on"
                 into={last ? null : "on"}
+                entering={index > 0}
                 here={hop.key === "self"}
               />
-              <div className={cn("min-w-0", !last && "pb-1.5")}>
+              <div className={cn("min-w-0", !last && "pb-2")}>
                 {hop.content}
               </div>
             </div>

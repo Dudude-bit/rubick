@@ -86,44 +86,53 @@ const NODE_TONE: Record<HopTone, string> = {
 export function Rail({
   tone,
   into,
+  entering = false,
   here = false,
 }: {
   tone: HopTone;
   into: HopTone | null;
+  /**
+   * A hop stands above this one, so the rail arrives here — drawn as an
+   * arrowhead flush over the dot, where the incoming line ends. At the
+   * bottom of the segment it floated between two dots and read as clutter;
+   * against the dot it reads as one connector: line, tip, stop.
+   */
+  entering?: boolean;
   /** The chain's own subject — a halo says "you are standing here". */
   here?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center">
+      {entering && (
+        <span
+          aria-hidden="true"
+          data-testid="rail-arrow"
+          className={cn(
+            "mb-[1px] h-0 w-0 flex-none border-x-[3px] border-t-[4px] border-x-transparent",
+            tone === "bad" ? "border-t-err" : "border-t-info"
+          )}
+        />
+      )}
       <span
         aria-hidden="true"
         data-testid={here ? "rail-here" : undefined}
         className={cn(
-          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
+          "h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
+          // The arrow spends the same 5px the first dot spends on margin,
+          // so every dot sits on its line of text regardless.
+          entering || "mt-[5px]",
           NODE_TONE[tone],
           here && "ring-[3px] ring-fg/20"
         )}
       />
       {into && (
-        <>
-          <span
-            aria-hidden="true"
-            className={cn(
-              "min-h-[10px] w-px flex-1",
-              into === "bad" ? "bg-err/40" : "bg-hair"
-            )}
-          />
-          {/* The direction, said out loud: traffic runs down this rail, and
-              the segment into a stop keeps its red all the way to the tip. */}
-          <span
-            aria-hidden="true"
-            data-testid="rail-arrow"
-            className={cn(
-              "h-0 w-0 flex-none border-x-[3px] border-t-[4px] border-x-transparent",
-              into === "bad" ? "border-t-err" : "border-t-info"
-            )}
-          />
-        </>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "min-h-[10px] w-px flex-1",
+            into === "bad" ? "bg-err/40" : "bg-hair"
+          )}
+        />
       )}
     </div>
   );
@@ -287,40 +296,54 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
   );
 }
 
+/** The address a client types for this route, scheme included where known. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function routeAddress(route: ServiceRoute): string {
+  const tail = route.path === "/" ? "" : route.path;
+  return route.tls === null
+    ? `${route.host}${tail}`
+    : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
+}
+
+/**
+ * The object a route came from. A source that names its CRD is a real
+ * reference — glyph, hue, peek — the same element every other object on
+ * the line gets. The bare link is only the fallback for a vendor that
+ * handed a path and nothing more.
+ */
+export function RouteSource({ route }: { route: ServiceRoute }) {
+  if (route.source.crd) {
+    return (
+      <ResourceRef
+        kind={route.source.kind}
+        name={route.source.name}
+        namespace={route.source.namespace}
+        crd={route.source.crd}
+        showKind={false}
+      />
+    );
+  }
+  if (route.to) {
+    return (
+      <Link to={route.to} className="font-mono text-info hover:underline">
+        {route.source.name}
+      </Link>
+    );
+  }
+  return <span className="font-mono">{route.source.name}</span>;
+}
+
 /**
  * One route as a line: the address, then the object that states it. The
- * note above stacks these under a Service hop; the peek's chain gives each
- * one a hop of its own.
- *
- * A source that names its CRD is a real reference — glyph, hue, peek — the
- * same element every other object on the line gets. The bare link is only
- * the fallback for a vendor that handed a path and nothing more.
+ * note above stacks these under a Service hop; the peek's chain draws the
+ * same parts object-first, because there a route is a hop of its own.
  */
 export function RouteLine({ route }: { route: ServiceRoute }) {
-  const tail = route.path === "/" ? "" : route.path;
-  const address =
-    route.tls === null
-      ? `${route.host}${tail}`
-      : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
   return (
     <>
-      <CopyableAddress value={address} label="Address" />
+      <CopyableAddress value={routeAddress(route)} label="Address" />
       {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
-      {route.source.crd ? (
-        <ResourceRef
-          kind={route.source.kind}
-          name={route.source.name}
-          namespace={route.source.namespace}
-          crd={route.source.crd}
-          showKind={false}
-        />
-      ) : route.to ? (
-        <Link to={route.to} className="font-mono text-info hover:underline">
-          {route.source.name}
-        </Link>
-      ) : (
-        <span className="font-mono">{route.source.name}</span>
-      )}
+      <RouteSource route={route} />
     </>
   );
 }
@@ -328,12 +351,14 @@ export function RouteLine({ route }: { route: ServiceRoute }) {
 function Hop({
   hop,
   next,
+  first,
   issuance,
   edge,
   routed,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
+  first: boolean;
   issuance: Issuance | undefined;
   edge: ServiceEdges | undefined;
   routed: ServicesRoutes | undefined;
@@ -346,6 +371,7 @@ function Hop({
       <Rail
         tone={toneOf(hop)}
         into={next ? toneOf(next) : null}
+        entering={!first}
         here={hop.at === "object" && hop.self}
       />
       <div className={cn("min-w-0", last ? "" : "pb-3")}>
@@ -353,7 +379,9 @@ function Hop({
           <>
             <span className="flex flex-wrap items-baseline gap-x-2">
               {hop.self ? (
-                <span className={RESOURCE_NAME_SHELL}>
+                // The selection tint the app already means "current" by —
+                // the pill is the "you are here", the halo on its dot agrees.
+                <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
                   <ResourceName
                     kind={hop.object.kind}
                     name={hop.object.name}
@@ -564,6 +592,7 @@ export function TrafficChain({
                 key={index}
                 hop={hop}
                 next={path.hops[index + 1]}
+                first={index === 0}
                 issuance={issuance ?? routed.issuance}
                 edge={edge}
                 routed={routed2}
