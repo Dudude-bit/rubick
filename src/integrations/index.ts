@@ -203,10 +203,16 @@ const VENDORS: Vendor[] = [
  * reader who has just done one can switch context or reopen.
  */
 function useDetected() {
+  // Gated on the connection actually standing, not on a context being
+  // named: at startup the context is known from the kubeconfig a beat
+  // before the client exists, and firing then buys four errored queries
+  // and their retry backoff on every launch.
+  const isConnected = useClusterStore((state) => state.isConnected);
   return useQuery({
     queryKey: ["in-cluster-extensions"],
     queryFn: commands.detectInClusterExtensions,
     staleTime: 5 * 60_000,
+    enabled: isConnected,
   });
 }
 
@@ -243,12 +249,14 @@ export type ConnectionState =
  */
 function useConnections(): Map<string, ConnectionState> {
   const context = useClusterStore((state) => state.currentContext);
+  // The same gate as detection, for the same launch-time beat.
+  const isConnected = useClusterStore((state) => state.isConnected);
 
   const saved = useQueries({
     queries: CONNECTED.map((vendor) => ({
       queryKey: ["integration-connection", vendor.id, context],
       queryFn: () => vendor.connect.read(),
-      enabled: context !== null,
+      enabled: context !== null && isConnected,
       staleTime: CONNECTION_STALE_TIME,
     })),
   });
