@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { connectOf, forward, type Forwarded } from "@/integrations";
@@ -164,6 +165,7 @@ export function useClusterForwards(): void {
   const context = useClusterStore((state) => state.currentContext);
   const isConnected = useClusterStore((state) => state.isConnected);
   const forwards = useClusterForwardStore((state) => state.forwards);
+  const queryClient = useQueryClient();
   // One attempt per cluster per session. A forward that could not come up is
   // not retried in a loop behind the reader's back — the row is there and
   // pressing it tries again, which is a person deciding rather than a timer.
@@ -176,7 +178,12 @@ export function useClusterForwards(): void {
       const key = `${context}/${vendorId}`;
       if (tried.current.has(key)) continue;
       tried.current.add(key);
-      void wake(vendorId, preference).catch(() => undefined);
+      void wake(vendorId, preference)
+        // Anything asked before the tunnel came up was answered by a dead
+        // socket and cached as such; the probe and every page verdict have
+        // to be asked again now that there is somewhere to ask.
+        .then(() => queryClient.invalidateQueries())
+        .catch(() => undefined);
     }
-  }, [context, isConnected, forwards]);
+  }, [context, isConnected, forwards, queryClient]);
 }

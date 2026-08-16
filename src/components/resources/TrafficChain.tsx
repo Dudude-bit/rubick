@@ -30,6 +30,11 @@ import {
   useServiceEdge,
   type ServiceEdges,
 } from "@/hooks/useServiceEdge";
+import {
+  useServicesRoutes,
+  type ServicesRoutes,
+} from "@/hooks/useServiceRoutes";
+import type { ServiceRoute } from "@/integrations";
 import { CertificateLine } from "./CertificateFacts";
 import { RenewalNote } from "./IssuanceChain";
 import { ResourceRef } from "./ResourceRef";
@@ -218,16 +223,70 @@ function EdgeNote({
   );
 }
 
+/**
+ * The ways in that live in a vendor's own objects — an IngressRoute, and
+ * nothing the backend's Ingress-only connection graph can see.
+ *
+ * Under the Service hop, beside the cloud's note, and filtered to sources
+ * the core does not draw: a route the capability read off a plain Ingress is
+ * the same way in the chain already shows as a hop, said twice.
+ */
+function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
+  const vendors = (routes ?? []).filter(
+    (route) => route.source.kind !== "Ingress"
+  );
+  if (vendors.length === 0) return null;
+  const shown = vendors.slice(0, 6);
+
+  return (
+    <>
+      {shown.map((route) => {
+        const tail = route.path === "/" ? "" : route.path;
+        const address =
+          route.tls === null
+            ? `${route.host}${tail}`
+            : `${route.tls ? "https" : "http"}://${route.host}${tail}`;
+        return (
+          <p
+            key={`${route.host}${route.path}`}
+            className="text-[11px] text-fg-fnt"
+          >
+            <span className="select-text font-mono text-fg-mid">{address}</span>
+            {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
+            {route.to ? (
+              <Link
+                to={route.to}
+                className="font-mono text-info hover:underline"
+              >
+                {route.source.name}
+              </Link>
+            ) : (
+              <span className="font-mono">{route.source.name}</span>
+            )}
+          </p>
+        );
+      })}
+      {vendors.length > shown.length && (
+        <p className="text-[11px] text-fg-fnt">
+          and {vendors.length - shown.length} more
+        </p>
+      )}
+    </>
+  );
+}
+
 function Hop({
   hop,
   next,
   issuance,
   edge,
+  routed,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
   issuance: Issuance | undefined;
   edge: ServiceEdges | undefined;
+  routed: ServicesRoutes | undefined;
 }) {
   const last = next === undefined;
   return (
@@ -290,7 +349,14 @@ function Hop({
                 </p>
               ))}
             {hop.object.kind === "Service" && (
-              <EdgeNote edge={edge} object={hop.object} />
+              <>
+                <EdgeNote edge={edge} object={hop.object} />
+                <RoutesNote
+                  routes={routed?.routes.get(
+                    `${hop.object.namespace ?? ""}/${hop.object.name}`
+                  )}
+                />
+              </>
             )}
           </>
         )}
@@ -377,15 +443,16 @@ export function TrafficChain({
         routing: routed.routing,
       })
     : [];
-  const edge = useServiceEdge(
-    paths.flatMap((path) =>
-      path.hops.flatMap((hop) =>
-        hop.at === "object" && hop.object.kind === "Service"
-          ? [{ namespace: hop.object.namespace ?? "", name: hop.object.name }]
-          : []
-      )
+  const serviceHops = paths.flatMap((path) =>
+    path.hops.flatMap((hop) =>
+      hop.at === "object" && hop.object.kind === "Service"
+        ? [{ namespace: hop.object.namespace ?? "", name: hop.object.name }]
+        : []
     )
   );
+  const edge = useServiceEdge(serviceHops);
+  // The ways in a vendor's objects state — see `service.routes`.
+  const routed2 = useServicesRoutes(serviceHops);
 
   if (isPending) {
     return <p className="text-xs text-fg-fnt">Following the path in…</p>;
@@ -445,6 +512,7 @@ export function TrafficChain({
                 next={path.hops[index + 1]}
                 issuance={issuance ?? routed.issuance}
                 edge={edge}
+                routed={routed2}
               />
             ))}
           </div>

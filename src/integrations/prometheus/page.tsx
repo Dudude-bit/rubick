@@ -25,6 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
+import prometheus from "./index";
 import { FAMILIES, coverage, verdict } from "./coverage";
 
 export default function PrometheusPage() {
@@ -35,6 +36,19 @@ export default function PrometheusPage() {
     // this is a diagnosis rather than a reading.
     staleTime: ROUTING_STALE,
   });
+
+  // The saved address, so every metric on this page is a doorway into the
+  // Prometheus graph UI rather than a wall of names to retype there.
+  const saved = useQuery({
+    queryKey: ["prometheus", "page-address"],
+    queryFn: () => prometheus.connect!.read(),
+    staleTime: ROUTING_STALE,
+  });
+  const base = saved.data?.url?.replace(/\/+$/, "") ?? null;
+  const graph = (expression: string) =>
+    base === null
+      ? null
+      : `${base}/graph?g0.expr=${encodeURIComponent(expression)}&g0.tab=0`;
 
   if (found.error) {
     return (
@@ -144,7 +158,18 @@ export default function PrometheusPage() {
                   <Chain key={family.metric}>
                     <Column label="Metric">
                       <Cell bad={absent} title={family.metric}>
-                        <span className="font-mono">{family.metric}</span>
+                        {graph(family.metric) ? (
+                          <a
+                            href={graph(family.metric)!}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono text-info underline-offset-2 hover:underline"
+                          >
+                            {family.metric}
+                          </a>
+                        ) : (
+                          <span className="font-mono">{family.metric}</span>
+                        )}
                       </Cell>
                     </Column>
                     <Column label="Powers">

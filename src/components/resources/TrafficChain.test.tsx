@@ -296,6 +296,94 @@ describe("TrafficChain", () => {
     expect(screen.getByText("Following the path in…")).toBeInTheDocument();
   });
 
+  describe("which hostnames reach the Service through a vendor's objects", () => {
+    const chain = answered([
+      { reason: "selectsNothing", service, selector: "app=demo" },
+    ]);
+
+    const drawWithRoutes = (value: {
+      available: boolean;
+      isPending: boolean;
+      routes: Map<string, unknown[]>;
+    }) => {
+      vi.doMock("@/hooks/useServiceRoutes", async (original) => ({
+        ...(await original<typeof import("@/hooks/useServiceRoutes")>()),
+        useServicesRoutes: () => value,
+      }));
+      return import("./TrafficChain");
+    };
+
+    /**
+     * The whole reason the integrations exist, finally on the page every
+     * reader actually opens: a cluster whose edge is IngressRoutes used to
+     * draw this chain starting at the Service, as though nothing from
+     * outside ever reached it.
+     */
+    it("names the host, scheme and object that route the Service", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "api.example.com",
+                path: "/",
+                tls: true,
+                source: {
+                  kind: "IngressRoute",
+                  name: "api",
+                  namespace: "backend",
+                },
+                to: "/x/ingressroutes/api",
+              },
+            ],
+          ],
+        ]),
+      });
+      wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText("https://api.example.com")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "api" })).toHaveAttribute(
+        "href",
+        "/x/ingressroutes/api"
+      );
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+
+    /**
+     * The core graph already draws Ingress hops with their addresses — a
+     * route the capability reports off the same Ingress is the same way in
+     * said twice, and the second time claims the cluster has two.
+     */
+    it("does not repeat a way in the core already draws", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "shop.example.com",
+                path: "/",
+                tls: true,
+                source: { kind: "Ingress", name: "shop", namespace: "shop" },
+              },
+            ],
+          ],
+        ]),
+      });
+      wrap(<Chain query={query(chain)} />);
+
+      expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+  });
+
   describe("what a cloud says about the Service", () => {
     const edges = (edge: Partial<ServiceEdges>): ServiceEdges => ({
       available: true,

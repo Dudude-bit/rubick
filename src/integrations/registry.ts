@@ -380,8 +380,21 @@ export interface ServiceRoute {
    * link for `null` and names the host instead.
    */
   tls: boolean | null;
+  /**
+   * The route pins an h2c (gRPC) scheme on its backend, so a browser sent
+   * to this host gets no page — it is a way in for a CLI, not for a link.
+   * Optional because most vendors cannot state it and absence means "not
+   * known to be", which consumes the same as false.
+   */
+  h2c?: boolean;
   /** The object that routes it, so the reader can go and read it. */
   source: { kind: string; name: string; namespace: string };
+  /**
+   * Where that object's page is, supplied by the vendor because only the
+   * vendor knows its CRD's group. Absent for a core kind, which the consumer
+   * can link on its own.
+   */
+  to?: string;
 }
 
 /**

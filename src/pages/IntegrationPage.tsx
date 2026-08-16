@@ -44,6 +44,17 @@ export function IntegrationPage() {
     );
   }
 
+  // A configured-only vendor installs nothing, so "not installed" and its
+  // talk of CRDs would both be false — the address is the whole setup.
+  if (page.state === "notConfigured") {
+    return (
+      <Missing
+        title={`${page.name} is not connected`}
+        body={`It installs nothing in a cluster, so there is nothing to detect — it works from an address you give this app, kept per cluster. Give it one and this page comes alive.`}
+      />
+    );
+  }
+
   const { Page } = page;
   return <Page />;
 }

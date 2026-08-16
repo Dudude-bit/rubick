@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -169,7 +169,12 @@ describe("the Integrations category", () => {
 
     // Settings is the last row on every screen, and proves the rail rendered.
     expect(await screen.findByText("Settings")).toBeInTheDocument();
-    expect(screen.queryByText("Integrations")).not.toBeInTheDocument();
+    // While the scan runs the group holds its place with a skeleton; the
+    // claim under test is about what it does once the answer is in: an
+    // empty result removes the group, caption and all.
+    await waitFor(() =>
+      expect(screen.queryByText("Integrations")).not.toBeInTheDocument()
+    );
     expect(screen.queryByRole("link", { name: /Traefik/ })).toBeNull();
   });
 

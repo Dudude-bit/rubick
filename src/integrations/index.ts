@@ -62,6 +62,7 @@ import {
   useClusterForwardStore,
 } from "@/stores/clusterForwardStore";
 import { integrationPagePath, integrationSettingsPath } from "./paths";
+import { pageDecision } from "./page-state";
 import argocd from "./argocd";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
@@ -763,8 +764,16 @@ export interface IntegrationPageEntry {
  * hidden by that: with no extension installed there is no row to hide, and
  * Settings → Integrations names every extension the app knows either way.
  */
-export function useIntegrationPages(): IntegrationPageEntry[] {
-  const { data } = useDetected();
+export function useIntegrationPages(): {
+  pages: IntegrationPageEntry[];
+  /**
+   * Detection or the connection reads still running. A rail that drew
+   * nothing during that window would be claiming the cluster has no
+   * integrations — the one state this list must never claim by accident.
+   */
+  pending: boolean;
+} {
+  const { data, isPending } = useDetected();
   const connections = useConnections();
 
   const context = useClusterStore((state) => state.currentContext);
@@ -813,7 +822,7 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     ),
   });
 
-  return here.map((vendor): IntegrationPageEntry => {
+  const pages = here.map((vendor): IntegrationPageEntry => {
     const index = withPages.findIndex(
       (candidate) => candidate.id === vendor.id
     );
@@ -837,21 +846,29 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
       own: index !== -1,
     };
   });
+
+  // Detection alone: once the scan has answered, an empty list is the real
+  // "this cluster has none" and the group must vanish rather than shimmer.
+  // A configured-only row still pops in when its connection read lands.
+  return { pages, pending: isPending };
 }
 
 /**
  * What is at `/integrations/<slug>`.
  *
- * Four answers rather than a component or `null`, because the three
- * not-a-page cases read differently to somebody who arrived by a stale link,
- * a restored tab or a cluster switch: a slug no vendor claims is a typo, a
- * vendor the cluster does not have is a cluster answer, and detection still
- * running is neither.
+ * Five answers rather than a component or `null`, because the not-a-page
+ * cases read differently to somebody who arrived by a stale link, a
+ * restored tab or a cluster switch: a slug no vendor claims is a typo, a
+ * vendor the cluster does not have is a cluster answer, a configured-only
+ * vendor nobody gave an address is a settings answer, and detection still
+ * running is none of the three. The decision itself lives in
+ * {@link pageDecision}, where it can be tested without the three hooks.
  */
 export type IntegrationPageState =
   | { state: "detecting" }
   | { state: "unknown" }
   | { state: "absent"; name: string; icon: LucideIcon }
+  | { state: "notConfigured"; name: string; icon: LucideIcon }
   | {
       state: "ready";
       name: string;
@@ -862,24 +879,36 @@ export type IntegrationPageState =
 export function useIntegrationPage(
   slug: string | undefined
 ): IntegrationPageState {
-  const { data, isPending } = useDetected();
+  const { data } = useDetected();
+  const connections = useConnections();
   const vendor = PAGES.find((candidate) => candidate.id === slug);
 
-  if (!vendor) return { state: "unknown" };
-  if (isPending || !data) return { state: "detecting" };
-
-  const installed = data.some(
-    (entry) => entry.id === vendor.id && entry.installed
+  const decision = pageDecision(
+    vendor && { id: vendor.id, configured: vendor.connect !== undefined },
+    data,
+    vendor && connections.get(vendor.id)
   );
-  if (!installed) {
-    return { state: "absent", name: vendor.name, icon: vendor.extension.icon };
+
+  switch (decision) {
+    case "unknown":
+      return { state: "unknown" };
+    case "detecting":
+      return { state: "detecting" };
+    case "absent":
+    case "notConfigured":
+      return {
+        state: decision,
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+      };
+    case "ready":
+      return {
+        state: "ready",
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+        Page: lazyPageOf(vendor!.id, vendor!.page),
+      };
   }
-  return {
-    state: "ready",
-    name: vendor.name,
-    icon: vendor.extension.icon,
-    Page: lazyPageOf(vendor.id, vendor.page),
-  };
 }
 
 /**

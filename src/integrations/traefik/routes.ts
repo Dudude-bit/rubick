@@ -15,9 +15,16 @@
  * reader who has opened it pays for neither.
  */
 
+import { commands } from "@/lib/commands";
+import { crdObjectPath } from "../kit";
 import type { ServiceRoute } from "../registry";
-import { fetchController, fetchRouteSources } from "./data";
-import { allRoutes, type EntryPoint, type TraefikRoute } from "./model";
+import { fetchController, fetchRouteSources, servedGroupName } from "./data";
+import {
+  allRoutes,
+  terminatedUpstream,
+  type EntryPoint,
+  type TraefikRoute,
+} from "./model";
 
 /**
  * Whether this route is served over TLS, or `null` where the objects do not
@@ -50,22 +57,24 @@ export async function serviceRoutes(input: {
   namespace: string;
   name: string;
 }): Promise<ServiceRoute[]> {
-  // The controller's flags are the softer of the two: without them every
-  // answer below is still a real host, only with `tls: null` on it. So a
-  // failure there costs the scheme rather than the whole answer.
-  const [sources, controller] = await Promise.all([
+  // The controller's flags and the Service list are the softer reads:
+  // without them every answer below is still a real host, only with
+  // `tls: null` on it. So a failure there costs the scheme, not the answer.
+  const [sources, controller, services] = await Promise.all([
     fetchRouteSources(),
     fetchController().catch(() => null),
+    commands.listServices(null).catch(() => []),
   ]);
   const entryPoints = controller?.entryPoints ?? [];
-
-  const found = new Map<string, ServiceRoute>();
-  for (const route of allRoutes({
+  const withServices = {
     ...sources,
-    services: [],
+    services,
     published: [],
     entryPoints,
-  })) {
+  };
+
+  const found = new Map<string, ServiceRoute>();
+  for (const route of allRoutes(withServices)) {
     const service = route.service;
     if (!service?.kubernetes) continue;
     if (service.name !== input.name || service.namespace !== input.namespace) {
@@ -80,7 +89,14 @@ export async function serviceRoutes(input: {
     // One entry per host and path: the same pair reached through two objects
     // is one way in, and printing it twice says there are two.
     const key = `${host}${path}`;
-    const secure = routeIsSecure(route, entryPoints);
+    // The client-facing scheme first: a cloud load balancer terminating in
+    // front of the proxy serves this host over TLS whatever entry point the
+    // route itself binds — the inside hop is plaintext by arrangement.
+    const secure =
+      terminatedUpstream(host, withServices) !== null
+        ? true
+        : routeIsSecure(route, entryPoints);
+    const h2c = service.scheme === "h2c";
     const already = found.get(key);
     if (already) {
       // Two objects disagreeing about the scheme means one of them serves it
@@ -90,7 +106,23 @@ export async function serviceRoutes(input: {
       }
       continue;
     }
-    found.set(key, { host, path, tls: secure, source: route.source });
+    found.set(key, {
+      host,
+      path,
+      tls: secure,
+      h2c,
+      source: route.source,
+      // Only this file knows which API group serves the CRD; a core kind
+      // links itself.
+      to:
+        route.source.kind === "IngressRoute"
+          ? crdObjectPath(
+              `ingressroutes.${servedGroupName()}`,
+              route.source.namespace,
+              route.source.name
+            )
+          : undefined,
+    });
   }
 
   return [...found.values()].sort(

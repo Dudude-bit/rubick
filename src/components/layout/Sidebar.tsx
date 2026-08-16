@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -198,11 +199,28 @@ function GroupCaption({ children }: { children: string }) {
  */
 function IntegrationsGroup() {
   const { pathname, search } = useLocation();
-  const pages = useIntegrationPages();
+  const { pages, pending } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
+  const queryClient = useQueryClient();
   const [waking, setWaking] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState<string | null>(null);
+
+  // Detection still running is not "no integrations" — the rail holds the
+  // group's shape instead of popping it in a second later.
+  if (pages.length === 0 && pending) {
+    return (
+      <div aria-hidden>
+        <GroupCaption>Integrations</GroupCaption>
+        {[0, 1].map((row) => (
+          <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
+            <div className="size-3.5 animate-pulse rounded bg-hover" />
+            <div className="h-2.5 w-20 animate-pulse rounded bg-hover" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (pages.length === 0) return null;
 
@@ -217,6 +235,11 @@ function IntegrationsGroup() {
     setWaking(id);
     setFailed(null);
     void wake(id, preference)
+      // Everything cached was read while the tunnel was down — the probe
+      // that said unreachable, the page verdicts built on a dead socket,
+      // the address itself if the forward moved ports. A row that stayed
+      // "asleep" after a successful wake is this cache, not the tunnel.
+      .then(() => queryClient.invalidateQueries())
       .catch((error: unknown) =>
         setFailed(error instanceof Error ? error.message : String(error))
       )
