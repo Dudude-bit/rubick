@@ -18,7 +18,10 @@
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { CopyableAddresses } from "@/components/ui/copyable-value";
+import {
+  CopyableAddress,
+  CopyableAddresses,
+} from "@/components/ui/copyable-value";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
@@ -251,7 +254,7 @@ function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
             key={`${route.host}${route.path}`}
             className="text-[11px] text-fg-fnt"
           >
-            <span className="select-text font-mono text-fg-mid">{address}</span>
+            <CopyableAddress value={address} label="Address" />
             {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
             {route.to ? (
               <Link

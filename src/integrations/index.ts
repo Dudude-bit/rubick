@@ -929,6 +929,12 @@ function crdViewFor(group: string, kind: string): CrdView | null {
   );
 }
 
+// The peek a vendor owns for one of its kinds — the same facet rule as
+// `useCrdView`, one level deeper: the panel asks by CRD name and falls back
+// to the generic flatten for the thousands of kinds nobody here claims.
+export { vendorPeek } from "./peek";
+export type { VendorPeekBody, VendorPeekGroup } from "./peek";
+
 /**
  * Every label a vendor uses to name the pool a node was made by, in
  * registry order, so the first hit is the more specific vendor's.

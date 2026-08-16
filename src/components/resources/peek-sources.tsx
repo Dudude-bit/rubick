@@ -20,6 +20,7 @@ import {
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import { vendorPeek } from "@/integrations";
 import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import { ClaimRef } from "./storage-refs";
@@ -815,25 +816,32 @@ export function resolveSource(target: PeekTarget): PeekSource {
  * the core, which is what the integrations seam exists to prevent.
  */
 function customResourceSource(crdName: string): PeekSource {
+  // A kind the vendor tree owns gets the vendor's own reading — the same
+  // parser its routing page trusts — in place of the flattened spec. The
+  // shell rows stay core either way: what controls it, and its labels.
+  const vendor = vendorPeek(crdName);
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
     (resource: CustomResourceDetailInfo) => {
       const status = resource.status as Record<string, unknown> | null;
+      const body = vendor?.(resource);
       return {
-        status: customResourceState(status),
+        status: body?.status ?? customResourceState(status),
         createdAt: resource.createdAt,
         groups: [
           ...controlledBy(resource.ownerReferences, resource.namespace),
-          {
-            title: "Status",
-            items: flatten(status, MANIFEST_ROW_LIMIT),
-            emptyMessage: "Nothing reported yet",
-          },
-          {
-            title: "Spec",
-            items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
-            emptyMessage: "No spec",
-          },
+          ...(body?.groups ?? [
+            {
+              title: "Status",
+              items: flatten(status, MANIFEST_ROW_LIMIT),
+              emptyMessage: "Nothing reported yet",
+            },
+            {
+              title: "Spec",
+              items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
+              emptyMessage: "No spec",
+            },
+          ]),
           {
             title: "Labels",
             count: Object.keys(resource.labels).length || undefined,
