@@ -1718,9 +1718,9 @@ async fn volume_connections(
 
 /// Everything in the namespace whose pod spec names this object.
 ///
-/// The same six workload kinds `get_resource_references` walks, plus the
-/// pods themselves, and — for a Secret — the Ingresses that serve it as a
-/// certificate. Six concurrent lists, one per kind, whatever the answer
+/// Deployments, StatefulSets, DaemonSets, Jobs and CronJobs, plus the pods
+/// themselves, and — for a Secret — the Ingresses that serve it as a
+/// certificate. Seven concurrent lists, one per kind, whatever the answer
 /// turns out to be.
 async fn users_of(
     ctx: &ResourceContext,

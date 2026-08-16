@@ -22,10 +22,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type ResourceScope = "namespaced" | "cluster";
-export type ResourceCategory =
-  "workloads" | "network" | "storage" | "configuration" | null;
-
 export const RESOURCE_REGISTRY = [
   {
     kind: "Pod",

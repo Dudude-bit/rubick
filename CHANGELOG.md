@@ -40,12 +40,13 @@ break the commands that work today.
 
 ### Removed — a whole-project cleanup
 
-Roughly 4,900 lines, none of which the app ran. The largest pieces:
+Roughly 5,000 lines of source, none of which the app ran. The largest
+pieces:
 
 - **The plugin subsystem.** Its registry was empty — nothing implemented
   any of its three traits and `register_builtin_plugins` was a no-op —
   and what remained live merely forwarded to `cli::PluginDiscovery`.
-- **Eighteen Tauri commands with no caller**, and the four typed
+- **Seventeen Tauri commands with no caller**, and the four typed
   `*_yaml` wrappers among them, superseded by the generic `get_manifest`
   the frontend actually calls.
 - **Three native auth providers** (`AwsEksAuth`, `BearerTokenAuth`,
@@ -55,7 +56,7 @@ Roughly 4,900 lines, none of which the app ran. The largest pieces:
 - **`ErrorExt`.** An error reaches the frontend as its `Display` string
   and nothing else, so `error_code`, `details` and `is_retryable` were
   read by tests alone.
-- **Twenty-one dependencies** — twelve Rust crates, eight npm packages,
+- **Twenty-five dependencies** — sixteen Rust crates, eight npm packages,
   and `@radix-ui/react-separator` with the component that used it.
 
 ### Fixed — five packages the code imported but never declared

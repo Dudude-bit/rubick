@@ -126,9 +126,6 @@ pub enum AuthError {
     #[error("OIDC error: {0}")]
     Oidc(String),
 
-    #[error("AWS authentication failed: {0}")]
-    AwsAuth(String),
-
     #[error("GCP authentication failed: {0}")]
     GcpAuth(String),
 
@@ -137,9 +134,6 @@ pub enum AuthError {
 
     #[error("Kubeconfig error: {0}")]
     Kubeconfig(String),
-
-    #[error("Certificate error: {0}")]
-    Certificate(String),
 }
 
 /// Plugin-specific errors
@@ -150,9 +144,6 @@ pub enum PluginError {
 
     #[error("Plugin execution failed: {0}")]
     ExecutionFailed(String),
-
-    #[error("Plugin timeout")]
-    Timeout,
 }
 
 impl Serialize for Error {

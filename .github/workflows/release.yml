@@ -93,8 +93,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           is_linux: ${{ matrix.is_linux || false }}
-          is_macos: ${{ matrix.is_macos || false }}
-          is_windows: ${{ matrix.is_windows || false }}
           # tauri-action bundles its own CLI, don't install again
           install_tauri_cli: 'false'
 

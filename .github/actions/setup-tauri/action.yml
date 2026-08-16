@@ -9,14 +9,6 @@ inputs:
     description: 'Set to "true" when the matrix job is a Linux build'
     required: false
     default: 'false'
-  is_macos:
-    description: 'Set to "true" when the matrix job is a macOS build'
-    required: false
-    default: 'false'
-  is_windows:
-    description: 'Set to "true" when the matrix job is a Windows build'
-    required: false
-    default: 'false'
   install_tauri_cli:
     description: 'Install the `tauri` CLI binary. Not needed when using tauri-action (which bundles it).'
     required: false

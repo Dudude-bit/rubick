@@ -49,7 +49,7 @@ jobs:
         # contributors is too strict until we've settled into clippy's
         # current preferences. Promote to `-D warnings` once the tree is
         # quiet again.
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --no-deps --all-targets -- -W clippy::all
+        run: cargo clippy --workspace --all-targets --no-deps -- -W clippy::all
 
       - name: Rust tests
         # --workspace, not just src-tauri: k8s-gui-common carries unit

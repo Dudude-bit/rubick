@@ -1,7 +1,7 @@
 //! Cluster overview — the "do I need to do something right now?" query.
 //!
-//! Deliberately not a stats endpoint. `get_cluster_stats` answers "how
-//! many objects exist", which nobody acts on; this one answers "what is
+//! Deliberately not a count-the-objects endpoint: how many of each kind
+//! exist is not something anyone acts on. This one answers "what is
 //! broken, how tight is the scheduler, and what is this cluster" in a
 //! single round trip.
 //!
