@@ -405,6 +405,16 @@ export interface ServiceRoute {
  * decision across the seam, and a surface can call one inside its own
  * `useQuery` without any rules-of-hooks trouble.
  */
+/** What stands behind a Service that is a proxy's own front door. */
+export interface ProxyBehind {
+  /** The vendor's display name — "Traefik". */
+  vendor: string;
+  /** Where the hosts it serves are drawn. */
+  to: string;
+  /** How many hostnames it currently serves. */
+  hosts: number;
+}
+
 export interface Capabilities {
   /**
    * How the certificate in a TLS Secret came to be, and what is stopping it
@@ -415,6 +425,17 @@ export interface Capabilities {
     namespace: string;
     secretName: string;
   }) => Promise<IssuanceStory | null>;
+  /**
+   * Whether this Service is a proxy the vendor owns — and what stands
+   * behind it, for the surface looking at the object in front of it. A
+   * defaultBackend Ingress sending everything to Traefik is not a routing
+   * dead end; it is a door, and this is the sign on it. `null` for any
+   * Service that is not the vendor's own.
+   */
+  "proxy.behind": (input: {
+    namespace: string;
+    name: string;
+  }) => Promise<ProxyBehind | null>;
   /**
    * Who applied these objects, and whether a hand edit here survives.
    *

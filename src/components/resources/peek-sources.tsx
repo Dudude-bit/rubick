@@ -517,25 +517,49 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
       },
       {
         title: "Rules",
-        count: ingress.rules.length,
-        items: ingress.rules.flatMap((rule) =>
-          rule.paths.map((path) => ({
-            label: `${rule.host || "*"}${path.path}`,
-            // The path is the label; the value is where it goes, and where
-            // it goes is a Service in this ingress's own namespace.
-            value: path.backendService ? (
-              <>
-                {ref("Service", path.backendService, target.namespace)}
-                <span className="font-mono text-fg-fnt">
-                  :{path.backendPort}
-                </span>
-              </>
-            ) : (
-              "no backend"
-            ),
-          }))
-        ),
-        emptyMessage: "No rules",
+        count: ingress.rules.length || undefined,
+        items: [
+          ...ingress.rules.flatMap((rule) =>
+            rule.paths.map((path) => ({
+              label: `${rule.host || "*"}${path.path}`,
+              // The path is the label; the value is where it goes, and where
+              // it goes is a Service in this ingress's own namespace.
+              value: path.backendService ? (
+                <>
+                  {ref("Service", path.backendService, target.namespace)}
+                  <span className="font-mono text-fg-fnt">
+                    :{path.backendPort}
+                  </span>
+                </>
+              ) : (
+                "no backend"
+              ),
+            }))
+          ),
+          // The fallback is a rule too — for a rules-less Ingress it is the
+          // whole object, and "No rules" over it was the peek calling a
+          // working edge dead.
+          ...(ingress.defaultBackend?.backendService
+            ? [
+                {
+                  label: "anything unmatched",
+                  value: (
+                    <>
+                      {ref(
+                        "Service",
+                        ingress.defaultBackend.backendService,
+                        target.namespace
+                      )}
+                      <span className="font-mono text-fg-fnt">
+                        :{ingress.defaultBackend.backendPort}
+                      </span>
+                    </>
+                  ),
+                },
+              ]
+            : []),
+        ],
+        emptyMessage: "No rules and no default backend",
       },
     ],
   })),

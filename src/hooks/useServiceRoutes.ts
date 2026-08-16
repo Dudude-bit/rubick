@@ -8,7 +8,11 @@
 
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import { useCapabilities, type ServiceRoute } from "@/integrations";
+import {
+  useCapabilities,
+  type ProxyBehind,
+  type ServiceRoute,
+} from "@/integrations";
 
 export interface ServiceRoutes {
   /**
@@ -119,4 +123,42 @@ export function useServicesRoutes(
     routes,
     isPending: enabled && queries.some((query) => query.isPending),
   };
+}
+
+/**
+ * Whether a Service is some vendor's own proxy, and what stands behind it.
+ *
+ * For the surface looking at the object in front — a defaultBackend
+ * Ingress sending everything to Traefik is a door, not a dead end, and
+ * this is the sign on it. `null` where no vendor claims the Service, which
+ * is every ordinary backend.
+ */
+export function useProxyBehind(
+  service: { namespace: string; name: string } | null
+): ProxyBehind | null {
+  const suppliers = useCapabilities("proxy.behind");
+  const enabled = suppliers.length > 0 && service !== null;
+
+  const query = useQuery({
+    queryKey: [
+      "proxy-behind",
+      service?.namespace ?? "",
+      service?.name ?? "",
+      suppliers.length,
+    ],
+    queryFn: async () => {
+      for (const ask of suppliers) {
+        const found = await ask({
+          namespace: service!.namespace,
+          name: service!.name,
+        });
+        if (found) return found;
+      }
+      return null;
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+
+  return query.data ?? null;
 }

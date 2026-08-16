@@ -285,7 +285,7 @@ function routesFromIngress(
     known
   );
 
-  return ingress.rules.flatMap((rule, ruleIndex) =>
+  const routes = ingress.rules.flatMap((rule, ruleIndex) =>
     rule.paths.map((path, pathIndex) => {
       const host = rule.host || null;
       const clause: RuleClause = {
@@ -339,6 +339,44 @@ function routesFromIngress(
       };
     })
   );
+
+  // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+  // the whole object. Read through `rules` alone, the ordinary cloud edge
+  // served nothing on every surface this table feeds.
+  const fallback = ingress.defaultBackend;
+  if (fallback?.backendService) {
+    routes.push({
+      key: `ingress/${ingress.namespace}/${ingress.name}/default/${index}`,
+      source: {
+        kind: "Ingress" as const,
+        name: ingress.name,
+        namespace: ingress.namespace,
+      },
+      rule: {
+        raw: null,
+        clauses: [{ host: null, path: null }],
+        unread: [],
+        refused: null,
+      },
+      clause: { host: null, path: null },
+      entryPoints,
+      middlewares,
+      service: {
+        name: fallback.backendService,
+        namespace: ingress.namespace,
+        port: fallback.backendPort,
+        kubernetes: true,
+        scheme: null,
+      },
+      resourceBackend: fallback.resourceBackend,
+      tlsSecret: tlsSecretFor(ingress, null),
+      declaresTls: ingress.hasCatchAllTls,
+      pathType: "DefaultBackend",
+      priority: null,
+    });
+  }
+
+  return routes;
 }
 
 interface IngressRouteSpec {

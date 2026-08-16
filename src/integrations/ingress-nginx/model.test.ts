@@ -118,6 +118,28 @@ const canary = (weight: string, extra: Record<string, string> = {}) => ({
   ...extra,
 });
 
+describe("what a defaultBackend Ingress serves", () => {
+  it("serves a defaultBackend-only Ingress as its catch-all route", () => {
+    const routes = allRoutes(
+      sources([
+        {
+          ...ingress("edge", "unused.example.com"),
+          rules: [],
+          defaultBackend: {
+            backendService: "front-proxy",
+            backendPort: "80",
+            resourceBackend: null,
+          },
+        },
+      ])
+    );
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].host).toBeNull();
+    expect(routes[0].service?.name).toBe("front-proxy");
+  });
+});
+
 describe("which Ingresses are this controller's", () => {
   /**
    * Would break if the page started drawing the whole cluster's routing.

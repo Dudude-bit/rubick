@@ -222,6 +222,35 @@ describe("which objects are this Traefik's", () => {
   });
 });
 
+describe("what a defaultBackend Ingress serves", () => {
+  /**
+   * The fourth surface the same blind spot reached: the routing table
+   * itself. A rules-less Ingress sends everything to one Service, and a
+   * table built from rules alone drew it as serving nothing.
+   */
+  it("serves a defaultBackend-only Ingress as its catch-all route", () => {
+    const routes = allRoutes(
+      sources({
+        ingresses: [
+          {
+            ...ingress("edge", "unused.example.com"),
+            rules: [],
+            defaultBackend: {
+              backendService: "front-proxy",
+              backendPort: "80",
+              resourceBackend: null,
+            },
+          },
+        ],
+      })
+    );
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].clause).toEqual({ host: null, path: null });
+    expect(routes[0].service?.name).toBe("front-proxy");
+  });
+});
+
 describe("the findings", () => {
   /**
    * Would break if the page invented a second vocabulary for a stopped path.

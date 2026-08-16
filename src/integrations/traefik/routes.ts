@@ -17,7 +17,8 @@
 
 import { commands } from "@/lib/commands";
 import { crdObjectPath } from "../kit";
-import type { ServiceRoute } from "../registry";
+import { integrationPagePath } from "../paths";
+import type { ProxyBehind, ServiceRoute } from "../registry";
 import { fetchController, fetchRouteSources, servedGroupName } from "./data";
 import {
   allRoutes,
@@ -129,4 +130,36 @@ export async function serviceRoutes(input: {
     (left, right) =>
       left.host.localeCompare(right.host) || left.path.localeCompare(right.path)
   );
+}
+
+/**
+ * Whether this Service is Traefik's own front door — and what stands
+ * behind it. Recognised the same way the routing page recognises its
+ * proxy: the label every Traefik chart puts on its own pods.
+ */
+export async function proxyBehind(input: {
+  namespace: string;
+  name: string;
+}): Promise<ProxyBehind | null> {
+  const services = await commands.listServices(null).catch(() => []);
+  const named = services.find(
+    (service) =>
+      service.name === input.name && service.namespace === input.namespace
+  );
+  if (named?.selector["app.kubernetes.io/name"] !== "traefik") return null;
+
+  const sources = await fetchRouteSources();
+  const hosts = new Set(
+    allRoutes({
+      ...sources,
+      services: [],
+      published: [],
+      entryPoints: [],
+    }).flatMap((route) => (route.clause.host ? [route.clause.host] : []))
+  );
+  return {
+    vendor: "Traefik",
+    to: integrationPagePath("traefik"),
+    hosts: hosts.size,
+  };
 }

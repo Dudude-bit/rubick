@@ -38,7 +38,9 @@ import { TrafficChain } from "@/components/resources/TrafficChain";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
+import { Link } from "react-router-dom";
 import { useConnections } from "@/hooks/useConnections";
+import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { covers, expiryOf } from "@/lib/certificates";
@@ -171,6 +173,14 @@ export function IngressDetail() {
   });
 
   const rules = ingress?.rules ?? [];
+  const fallback = ingress?.defaultBackend ?? null;
+  // Whether the default backend is some vendor's own proxy — a door, not a
+  // dead end, and the sign on it comes from whichever vendor owns it.
+  const behind = useProxyBehind(
+    ingress && fallback?.backendService
+      ? { namespace: ingress.namespace, name: fallback.backendService }
+      : null
+  );
   const tlsHosts = ingress?.tlsHosts ?? [];
   const tlsConfigs = ingress?.tlsConfigs ?? [];
   const loadBalancerIps = ingress?.loadBalancerIps ?? [];
@@ -424,10 +434,42 @@ export function IngressDetail() {
         <Section>
           <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
           {rules.length === 0 ? (
-            <p className="text-xs text-fg-fnt">
-              No rules, so this ingress routes nothing — every request reaching
-              the controller falls through to its default backend.
-            </p>
+            fallback?.backendService ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs text-fg-mut">
+                  No rules — every request reaching this load balancer goes to
+                  the default backend:{" "}
+                  <ResourceRef
+                    kind={ResourceType.Service}
+                    name={fallback.backendService}
+                    namespace={ingress?.namespace}
+                    showKind={false}
+                  />
+                  <span className="font-mono text-fg-fnt">
+                    :{fallback.backendPort}
+                  </span>
+                </p>
+                {behind && (
+                  <p className="max-w-[80ch] text-[11px] text-fg-fnt">
+                    That Service is {behind.vendor}&rsquo;s own proxy — this
+                    Ingress is its front door, and the{" "}
+                    {countOf(behind.hosts, "host")} it serves{" "}
+                    {behind.hosts === 1 ? "is" : "are"} on{" "}
+                    <Link
+                      to={behind.to}
+                      className="text-info underline-offset-2 hover:underline"
+                    >
+                      its page
+                    </Link>
+                    .
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-fg-fnt">
+                No rules and no default backend, so this ingress routes nothing.
+              </p>
+            )
           ) : (
             <Table>
               <TableHeader>
