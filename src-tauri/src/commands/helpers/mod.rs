@@ -24,4 +24,4 @@ pub use namespaced::{
     scale_resource,
 };
 pub use params::{build_label_selector, build_list_params};
-pub use yaml::{clean_yaml_for_editor, get_resource_yaml};
+pub use yaml::clean_yaml_for_editor;

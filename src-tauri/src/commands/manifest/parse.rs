@@ -34,15 +34,6 @@ impl ParsedManifest {
             .unwrap_or_else(|| "<unnamed>".to_string())
     }
 
-    /// Get the resource name, returning error if missing
-    pub fn require_name(&self) -> Result<String> {
-        self.object
-            .metadata
-            .name
-            .clone()
-            .ok_or_else(|| Error::InvalidInput("Resource name is required".to_string()))
-    }
-
     /// Format resource identifier for messages (e.g., "deployment/default nginx")
     pub fn format_id(&self, namespace: &str, action: &str) -> String {
         format!(
