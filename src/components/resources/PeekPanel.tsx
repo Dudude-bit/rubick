@@ -482,55 +482,63 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     ).values(),
   ];
 
-  // Outermost first, the order a request travels: the doors in, then the
-  // Service in front, then the object itself, then what answers behind it.
+  // One dot per LEVEL of the path, not per object: two routes to one
+  // Service are two doors on one level, and drawing them in sequence read
+  // as one hostname flowing into the other. Within a level the entries
+  // stack; the arrows run between levels only.
   const shownRoutes = vendorRoutes.slice(0, 6);
-  const above: { key: string; content: ReactNode }[] = [
-    ...[...ingresses.values()].map(({ object, hosts }) => ({
-      key: `ingress/${object.namespace}/${object.name}`,
-      content: (
+  const waysIn: ReactNode[] = [
+    ...[...ingresses.values()].map(({ object, hosts }) => (
+      <p
+        key={`ingress/${object.namespace}/${object.name}`}
+        className="text-[11px] text-fg-fnt"
+      >
+        <ResourceRef
+          kind="Ingress"
+          name={object.name}
+          namespace={object.namespace}
+          showKind={false}
+        />{" "}
+        {hosts.length > 0 && (
+          <span className="font-mono text-xs text-fg-mid">
+            {hosts.join(", ")}{" "}
+          </span>
+        )}
+        — Ingress
+      </p>
+    )),
+    // Object first and the address under it, the order every other entry
+    // reads in — this line is the router, not its hostname.
+    ...shownRoutes.map((route) => (
+      <div key={`route/${route.host}${route.path}`}>
         <p className="text-[11px] text-fg-fnt">
-          <ResourceRef
-            kind="Ingress"
-            name={object.name}
-            namespace={object.namespace}
-            showKind={false}
-          />{" "}
-          {hosts.length > 0 && (
-            <span className="font-mono text-xs text-fg-mid">
-              {hosts.join(", ")}{" "}
-            </span>
-          )}
-          — Ingress
+          <RouteSource route={route} /> — {route.source.kind}
         </p>
-      ),
-    })),
-    ...shownRoutes.map((route, index) => ({
-      key: `route/${route.host}${route.path}`,
-      // Object first and the address under it, the order every other hop
-      // reads in — as a hop this is the router, not its hostname.
-      content: (
-        <>
-          <p className="text-[11px] text-fg-fnt">
-            <RouteSource route={route} /> — {route.source.kind}
-          </p>
-          <p className="text-[11px] text-fg-fnt">
-            <CopyableAddress value={routeAddress(route)} label="Address" />
-            {route.h2c ? " (gRPC)" : ""}
-          </p>
-          {index === shownRoutes.length - 1 &&
-            vendorRoutes.length > shownRoutes.length && (
-              <p className="text-[11px] text-fg-fnt">
-                and {vendorRoutes.length - shownRoutes.length} more
-              </p>
-            )}
-        </>
-      ),
-    })),
-    ...services.map((entry) => ({
-      key: `service/${entry.namespace}/${entry.name}`,
-      content: (
         <p className="text-[11px] text-fg-fnt">
+          <CopyableAddress value={routeAddress(route)} label="Address" />
+          {route.h2c ? " (gRPC)" : ""}
+        </p>
+      </div>
+    )),
+    ...(vendorRoutes.length > shownRoutes.length
+      ? [
+          <p key="more" className="text-[11px] text-fg-fnt">
+            and {vendorRoutes.length - shownRoutes.length} more
+          </p>,
+        ]
+      : []),
+  ];
+
+  const levels: { key: string; entries: ReactNode[] }[] = [];
+  if (waysIn.length > 0) levels.push({ key: "ways-in", entries: waysIn });
+  if (services.length > 0) {
+    levels.push({
+      key: "in-front",
+      entries: services.map((entry) => (
+        <p
+          key={`${entry.namespace}/${entry.name}`}
+          className="text-[11px] text-fg-fnt"
+        >
           <ResourceRef
             kind="Service"
             name={entry.name}
@@ -539,111 +547,96 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           />{" "}
           — the Service in front
         </p>
-      ),
-    })),
-    ...(target.kind === "Endpoints"
-      ? [
-          {
-            key: "publishes",
-            content: (
-              <p className="text-[11px] text-fg-fnt">
-                <ResourceRef
-                  kind="Service"
-                  name={target.name}
-                  namespace={namespace}
-                  showKind={false}
-                />{" "}
-                — the Service these endpoints publish
-              </p>
-            ),
-          },
-        ]
-      : []),
-  ];
-
-  const below: { key: string; content: ReactNode }[] =
-    target.kind === "Service"
-      ? [
-          {
-            key: "endpoints",
-            content: (
-              <p className="text-[11px] text-fg-fnt">
-                <ResourceRef
-                  kind="Endpoints"
-                  name={target.name}
-                  namespace={namespace}
-                  showKind={false}
-                />{" "}
-                — the addresses actually answering, pod by pod
-              </p>
-            ),
-          },
-          ...(behind
-            ? [
-                {
-                  key: "behind",
-                  content: (
-                    <p className="text-[11px] text-fg-fnt">
-                      {behind.vendor}&rsquo;s own proxy — the {behind.hosts}{" "}
-                      host
-                      {behind.hosts === 1 ? "" : "s"} it serves are on{" "}
-                      <Link
-                        to={behind.to}
-                        className="text-info underline-offset-2 hover:underline"
-                      >
-                        its page
-                      </Link>
-                    </p>
-                  ),
-                },
-              ]
-            : []),
-        ]
-      : [];
+      )),
+    });
+  }
+  if (target.kind === "Endpoints") {
+    levels.push({
+      key: "publishes",
+      entries: [
+        <p key="publishes" className="text-[11px] text-fg-fnt">
+          <ResourceRef
+            kind="Service"
+            name={target.name}
+            namespace={namespace}
+            showKind={false}
+          />{" "}
+          — the Service these endpoints publish
+        </p>,
+      ],
+    });
+  }
+  levels.push({
+    key: "self",
+    entries: [
+      <p key="self" className="text-[11px] text-fg-fnt">
+        {/* The selection tint the app already means "current" by. */}
+        <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
+          <ResourceName
+            kind={target.kind}
+            name={target.name}
+            showKind={false}
+          />
+        </span>{" "}
+        — this {target.kind}
+      </p>,
+    ],
+  });
+  if (target.kind === "Service") {
+    levels.push({
+      key: "behind",
+      entries: [
+        <p key="endpoints" className="text-[11px] text-fg-fnt">
+          <ResourceRef
+            kind="Endpoints"
+            name={target.name}
+            namespace={namespace}
+            showKind={false}
+          />{" "}
+          — the addresses actually answering, pod by pod
+        </p>,
+        ...(behind
+          ? [
+              <p key="proxy" className="text-[11px] text-fg-fnt">
+                {behind.vendor}&rsquo;s own proxy — the {behind.hosts} host
+                {behind.hosts === 1 ? "" : "s"} it serves are on{" "}
+                <Link
+                  to={behind.to}
+                  className="text-info underline-offset-2 hover:underline"
+                >
+                  its page
+                </Link>
+              </p>,
+            ]
+          : []),
+      ],
+    });
+  }
 
   // The object alone is not a chain; a Pod nothing routes stays quiet.
-  if (above.length === 0 && below.length === 0) return null;
-
-  const hops = [
-    ...above,
-    {
-      key: "self",
-      content: (
-        <p className="text-[11px] text-fg-fnt">
-          {/* The selection tint the app already means "current" by. */}
-          <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
-            <ResourceName
-              kind={target.kind}
-              name={target.name}
-              showKind={false}
-            />
-          </span>{" "}
-          — this {target.kind}
-        </p>
-      ),
-    },
-    ...below,
-  ];
+  if (levels.length === 1) return null;
 
   return (
     <div>
       <PeekHeading title="Traffic path" />
       <div className="pb-1">
-        {hops.map((hop, index) => {
-          const last = index === hops.length - 1;
+        {levels.map((level, index) => {
+          const last = index === levels.length - 1;
           return (
             <div
-              key={hop.key}
+              key={level.key}
               className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5"
             >
               <Rail
                 tone="on"
                 into={last ? null : "on"}
                 entering={index > 0}
-                here={hop.key === "self"}
+                here={level.key === "self"}
               />
-              <div className={cn("min-w-0", !last && "pb-2")}>
-                {hop.content}
+              <div
+                className={cn("flex min-w-0 flex-col gap-1", !last && "pb-2")}
+              >
+                {level.entries}
               </div>
             </div>
           );

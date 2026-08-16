@@ -1124,6 +1124,69 @@ describe("PeekPanel traffic chain", () => {
     ]);
   });
 
+  /**
+   * Two routes to one Service are two doors on one level, not two levels:
+   * drawn as a sequence they read as admin.example.com flowing INTO
+   * example.com. One dot per level; the arrows run between levels only.
+   */
+  it("stacks parallel ways in at one level rather than chaining them", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("Service", "crash-svc", "k8s-gui-test"),
+          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+          relation: { verb: "selects", selector: "app=crash" },
+        },
+      ])
+    );
+    servicesRoutesSpy.mockImplementation((services: unknown[]) =>
+      services.length === 0
+        ? undefined
+        : {
+            available: true,
+            isPending: false,
+            routes: new Map([
+              [
+                "k8s-gui-test/crash-svc",
+                [
+                  {
+                    host: "admin.example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-admin",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                  {
+                    host: "example.com",
+                    path: "/",
+                    tls: true,
+                    source: {
+                      kind: "IngressRoute",
+                      name: "crash-front",
+                      namespace: "k8s-gui-test",
+                      crd: "ingressroutes.traefik.io",
+                    },
+                  },
+                ],
+              ],
+            ]),
+          }
+    );
+    wrap(POD_PEEK);
+
+    await screen.findByRole("link", { name: "IngressRoute crash-admin" });
+    expect(
+      screen.getByRole("link", { name: "IngressRoute crash-front" })
+    ).toBeInTheDocument();
+    // Three levels — the doors, the Service, this Pod — so two arrows,
+    // however many doors there are.
+    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
+  });
+
   it("names the Service an Endpoints publishes for, above it", async () => {
     wrap("/events?peek=endpoints/ambassadors/frontend");
 
