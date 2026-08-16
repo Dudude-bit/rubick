@@ -72,13 +72,13 @@ mod tests {
             plugins: Vec::new(),
             contexts: vec![
                 DiagnosticContext {
-                    context: "mts-docs-stage".into(),
+                    context: "orders-stage".into(),
                     method: "exec".into(),
                     command: Some("kubectl".into()),
                     command_path: Some("/Users/someone/bin/kubectl".into()),
                 },
                 DiagnosticContext {
-                    context: "mts-docs-prod".into(),
+                    context: "orders-prod".into(),
                     method: "exec".into(),
                     command: Some("kubectl".into()),
                     command_path: None,
@@ -94,8 +94,8 @@ mod tests {
             findings: vec![Finding {
                 severity: Severity::Blocking,
                 title: "kubectl-oidc_login is not installed".into(),
-                detail: "The context mts-docs-stage authenticates with kubectl oidc-login.".into(),
-                subject: Some("mts-docs-stage".into()),
+                detail: "The context orders-stage authenticates with kubectl oidc-login.".into(),
+                subject: Some("orders-stage".into()),
             }],
         }
     }
@@ -106,13 +106,10 @@ mod tests {
         let all = serde_json::to_string(&out).expect("serialises");
 
         assert!(
-            !all.contains("mts-docs-stage"),
+            !all.contains("orders-stage"),
             "a real context name survived"
         );
-        assert!(
-            !all.contains("mts-docs-prod"),
-            "a real context name survived"
-        );
+        assert!(!all.contains("orders-prod"), "a real context name survived");
 
         // The same context has to keep one name, or a finding stops pointing
         // at a row the reader can find.

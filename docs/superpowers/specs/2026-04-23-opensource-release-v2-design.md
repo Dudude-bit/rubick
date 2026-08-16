@@ -83,7 +83,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 npm run build
 rg -E '(AIza|sk_|sk-|xox[pbar]|ghp_|gho_|github_pat_|AKIA|ASIA|SG\.|ya29\.)' \
    --glob='!node_modules' --glob='!dist' --glob='!src-tauri/target' .
-rg -n 'kirillinakin|harry57651' src/ src-tauri/ k8s-gui-common/ docs/ || true
+rg -n 'kirillinakin|<old-author-email>' src/ src-tauri/ k8s-gui-common/ docs/ || true
 
 # --- Backup ---
 git add -A
@@ -186,7 +186,7 @@ Four files, value `2.0.0`:
 | `updater.pubkey` in `tauri.conf.json` is a private key | False — the field name `pubkey` indicates a public key (minisign format, base64-encoded). The matching private key is kept outside the repo (locally or in CI secrets) and is not in tree. Implementation step: grep for `untrusted comment: minisign secret` / `RWR` prefixes to double-confirm no private key leaked before push. |
 | YC bucket URL still appears in `build.py` | Resolved by deleting `build.py` entirely during Task 4 (user confirmed 2026-04-24 that YC bucket is being retired). No YC URLs remain in the tree after cleanup; updater endpoint now points at GitHub Releases. |
 | New updater endpoint requires a valid `latest.json` at the GitHub Releases URL | Until the first 2.0.0 release is published to GitHub Releases with a `latest.json` asset, new 2.0.0 installs will fail silently during update checks (not a crash — just "no update available"). Mitigation: publish the first release immediately after force-push, OR accept the gap because no users have 2.0.0 yet. |
-| Author email becomes public | Email `harry57651@outlook.com` will be visible in the orphan commit. Acceptable per user's current config — if later we want a noreply email, amend the orphan commit with `GIT_AUTHOR_EMAIL`. |
+| Author email becomes public | Email `maintainer@example.com` will be visible in the orphan commit. Acceptable per user's current config — if later we want a noreply email, amend the orphan commit with `GIT_AUTHOR_EMAIL`. |
 
 ## 8. Verification (pre- and post-push)
 
@@ -194,7 +194,7 @@ Pre-push preflight (before the backup commit):
 1. `cargo check` on `src-tauri/Cargo.toml` — Rust compiles. Also refreshes `Cargo.lock` with new version.
 2. `npm run build` — frontend builds.
 3. Secret-pattern scan across repo — no hits.
-4. `kirillinakin|harry57651` grep across `src/ src-tauri/ k8s-gui-common/ docs/` — MUST be zero hits after legacy plans deletion. If any remain, delete or sanitize the file.
+4. `kirillinakin|<old-author-email>` grep across `src/ src-tauri/ k8s-gui-common/ docs/` — MUST be zero hits after legacy plans deletion. If any remain, delete or sanitize the file.
 5. `grep 'minisign secret\|RWR' src-tauri/ .github/` — confirm no private updater key leaked into the repo (public `pubkey` is expected; private is not).
 6. Verify YC bucket `k8s-gui-releases` has list-unauthorized ACL (manual step — check via YC console or `aws s3api get-bucket-acl --endpoint-url https://storage.yandexcloud.net`).
 

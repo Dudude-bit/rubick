@@ -103,7 +103,7 @@ Expected: zero hits. Only `untrusted comment: minisign public key` should exist 
 
 Run:
 ```bash
-rg -n 'kirillinakin|harry57651' src/ src-tauri/ k8s-gui-common/ scripts/ build.py Makefile
+rg -n 'kirillinakin|<old-author-email>' src/ src-tauri/ k8s-gui-common/ scripts/ build.py Makefile
 ```
 
 Expected: zero hits. (The `docs/plans/*.md` files DO contain personal paths — those will be deleted in Task 5, so do not scan `docs/` here.)
@@ -289,7 +289,7 @@ Expected: `empty dir removed`. If it reports remaining files, list them with `ls
 
 Run:
 ```bash
-rg -n 'kirillinakin|harry57651|/Users/' \
+rg -n 'kirillinakin|<old-author-email>|/Users/' \
    --glob='!node_modules' --glob='!src-tauri/target' --glob='!dist' --glob='!artifacts' \
    --glob='!docs/superpowers/specs/**' --glob='!docs/superpowers/plans/**' \
    .

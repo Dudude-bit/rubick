@@ -45,7 +45,7 @@ const baseProps = {
   onClose: vi.fn(),
   authSessionId: "auth-1",
   terminalSessionId: "term-1",
-  context: "mts-docs-dev",
+  context: "orders-dev",
   command: "kubectl-oidc_login --server https://example",
 };
 

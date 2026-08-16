@@ -471,18 +471,18 @@ mod tests {
             AppEvent::AuthTerminalSessionCreated {
                 auth_session_id: "auth-1".into(),
                 terminal_session_id: "term-1".into(),
-                context: "infra-nbg4".into(),
+                context: "infra-eu1".into(),
                 command: "kubectl oidc-login".into(),
             },
             AppEvent::AuthUrlRequested {
-                context: "infra-nbg4".into(),
+                context: "infra-eu1".into(),
                 url: "https://example".into(),
                 flow: "exec".into(),
                 session_id: Some("auth-1".into()),
             },
             AppEvent::AuthFlowCompleted {
                 session_id: "auth-1".into(),
-                context: "infra-nbg4".into(),
+                context: "infra-eu1".into(),
                 success: true,
                 message: None,
             },
@@ -545,7 +545,7 @@ mod tests {
         let event = AppEvent::AuthTerminalSessionCreated {
             auth_session_id: "auth-1".into(),
             terminal_session_id: "term-1".into(),
-            context: "infra-nbg4".into(),
+            context: "infra-eu1".into(),
             command: "kubectl oidc-login get-token".into(),
         };
         let payload = event.payload();
@@ -560,7 +560,7 @@ mod tests {
         );
         assert_eq!(
             payload.get("context").and_then(|v| v.as_str()),
-            Some("infra-nbg4"),
+            Some("infra-eu1"),
         );
         assert_eq!(
             payload.get("command").and_then(|v| v.as_str()),

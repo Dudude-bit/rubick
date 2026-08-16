@@ -176,7 +176,7 @@ mod tests {
         // serde_json::from_slice on the raw buffer fails with
         // "expected value at line 2 column 1" — exactly the user's
         // production error.
-        let buf = b"Please visit the following URL to authenticate: https://sso.example.io/realms/tsp\n\n{\"kind\":\"ExecCredential\",\"status\":{\"token\":\"tok-after-prompt\"}}";
+        let buf = b"Please visit the following URL to authenticate: https://sso.example.com/realms/demo\n\n{\"kind\":\"ExecCredential\",\"status\":{\"token\":\"tok-after-prompt\"}}";
         let cred = extract_exec_credential(buf).expect("must extract JSON past prompt");
         assert_eq!(
             cred.status.unwrap().token.as_deref(),

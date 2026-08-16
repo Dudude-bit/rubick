@@ -127,7 +127,7 @@ Each PR is small and ships value. PR4 is the largest (touches Cargo deps if `por
 
 ## Success criteria
 
-- Manual test: connect to an OIDC cluster (mts-docs-dev). Dialog opens, kubelogin prompts visible, user types password, login completes.
+- Manual test: connect to an OIDC cluster (orders-dev). Dialog opens, kubelogin prompts visible, user types password, login completes.
 - `npm test` total goes from 70 → ~85 tests. `cargo test` from 113+6 → ~117+6.
 - Build green on CI for all 4 platforms (build.yml).
 - Two follow-up commits update `MEMORY.md` with the new pattern (deferred-start) so future terminal additions follow it.

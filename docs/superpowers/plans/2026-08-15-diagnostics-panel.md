@@ -54,7 +54,7 @@ mod tests {
     #[test]
     fn a_missing_plugin_names_the_file_and_the_context_that_needs_it() {
         let finding = missing_plugin_finding(
-            "mts-docs-stage",
+            "orders-stage",
             "kubectl",
             &args(&["surely-no-such-credential-plugin", "get-token"]),
         )
@@ -67,11 +67,11 @@ mod tests {
             finding.title
         );
         assert!(
-            finding.detail.contains("mts-docs-stage"),
+            finding.detail.contains("orders-stage"),
             "detail should name the context that needs it, got: {}",
             finding.detail
         );
-        assert_eq!(finding.subject.as_deref(), Some("mts-docs-stage"));
+        assert_eq!(finding.subject.as_deref(), Some("orders-stage"));
     }
 
     #[test]
@@ -443,11 +443,11 @@ clusters:
     cluster:
       server: https://api.example.internal
 contexts:
-  - name: mts-docs-stage
+  - name: orders-stage
     context:
       cluster: c1
       user: u1
-current-context: mts-docs-stage
+current-context: orders-stage
 users:
   - name: u1
     user:
@@ -464,7 +464,7 @@ users:
     fn a_context_reports_how_it_authenticates() {
         let contexts = contexts_from(&kubeconfig_with_exec());
         assert_eq!(contexts.len(), 1);
-        assert_eq!(contexts[0].context, "mts-docs-stage");
+        assert_eq!(contexts[0].context, "orders-stage");
         assert_eq!(contexts[0].method, "exec");
         assert_eq!(contexts[0].command.as_deref(), Some("kubectl"));
     }
@@ -475,7 +475,7 @@ users:
         let plugins = plugins_from(&contexts_from(&raw), &raw);
         assert_eq!(plugins.len(), 1);
         assert_eq!(plugins[0].name, "kubectl-oidc_login");
-        assert_eq!(plugins[0].required_by, vec!["mts-docs-stage".to_string()]);
+        assert_eq!(plugins[0].required_by, vec!["orders-stage".to_string()]);
     }
 ```
 
@@ -738,13 +738,13 @@ mod tests {
             plugins: Vec::new(),
             contexts: vec![
                 ContextAuth {
-                    context: "mts-docs-stage".into(),
+                    context: "orders-stage".into(),
                     method: "exec".into(),
                     command: Some("kubectl".into()),
                     command_path: Some("/Users/someone/bin/kubectl".into()),
                 },
                 ContextAuth {
-                    context: "mts-docs-prod".into(),
+                    context: "orders-prod".into(),
                     method: "exec".into(),
                     command: Some("kubectl".into()),
                     command_path: None,
@@ -760,8 +760,8 @@ mod tests {
             findings: vec![Finding {
                 severity: Severity::Blocking,
                 title: "kubectl-oidc_login is not installed".into(),
-                detail: "The context mts-docs-stage authenticates with…".into(),
-                subject: Some("mts-docs-stage".into()),
+                detail: "The context orders-stage authenticates with…".into(),
+                subject: Some("orders-stage".into()),
             }],
         }
     }
@@ -771,8 +771,8 @@ mod tests {
         let out = redacted(sample());
         let all = serde_json::to_string(&out).expect("serialises");
 
-        assert!(!all.contains("mts-docs-stage"), "a real context name survived");
-        assert!(!all.contains("mts-docs-prod"), "a real context name survived");
+        assert!(!all.contains("orders-stage"), "a real context name survived");
+        assert!(!all.contains("orders-prod"), "a real context name survived");
 
         // The same context has to keep one name, or a finding stops
         // pointing at a row the reader can find.

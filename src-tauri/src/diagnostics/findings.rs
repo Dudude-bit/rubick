@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn a_missing_plugin_names_the_file_and_the_context_that_needs_it() {
         let finding = missing_plugin_finding(
-            "mts-docs-stage",
+            "orders-stage",
             "kubectl",
             &args(&["surely-no-such-credential-plugin", "get-token"]),
         )
@@ -93,11 +93,11 @@ mod tests {
             finding.title
         );
         assert!(
-            finding.detail.contains("mts-docs-stage"),
+            finding.detail.contains("orders-stage"),
             "detail should name the context that needs it, got: {}",
             finding.detail
         );
-        assert_eq!(finding.subject.as_deref(), Some("mts-docs-stage"));
+        assert_eq!(finding.subject.as_deref(), Some("orders-stage"));
     }
 
     #[test]

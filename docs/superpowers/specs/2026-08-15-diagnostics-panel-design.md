@@ -50,7 +50,7 @@ The top of the page is a list of findings, worst first, each one
 sentence naming the problem and what to do about it:
 
 > **`kubectl-oidc_login` is not installed.** The context
-> `mts-docs-stage` authenticates with `kubectl oidc-login`, and kubectl
+> `orders-stage` authenticates with `kubectl oidc-login`, and kubectl
 > looks for a binary of that name. Install it with
 > `kubectl krew install oidc-login`, or point the context at an absolute
 > command.
