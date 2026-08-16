@@ -9,7 +9,6 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 # Logging and tracing
-tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Serialization
