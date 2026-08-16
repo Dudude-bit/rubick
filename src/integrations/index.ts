@@ -210,11 +210,16 @@ function useDetected() {
   // before the client exists, and firing then buys four errored queries
   // and their retry backoff on every launch.
   const isConnected = useClusterStore((state) => state.isConnected);
+  // Keyed on the context, as "one CRD list per cluster" always claimed:
+  // cluster B must never read cluster A's scan, and a window with no
+  // cluster — context null — reads nothing, so the rail forgets the old
+  // cluster's vendors the moment the reader leaves it.
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["in-cluster-extensions"],
+    queryKey: ["in-cluster-extensions", context],
     queryFn: commands.detectInClusterExtensions,
     staleTime: 5 * 60_000,
-    enabled: isConnected,
+    enabled: isConnected && context !== null,
   });
 }
 
@@ -865,7 +870,9 @@ export function useIntegrationPages(): {
   // Detection alone: once the scan has answered, an empty list is the real
   // "this cluster has none" and the group must vanish rather than shimmer.
   // A configured-only row still pops in when its connection read lands.
-  return { pages, pending: isPending };
+  // No cluster is not "still detecting" — a disabled query is pending
+  // forever, and the front door would shimmer an answer that cannot come.
+  return { pages, pending: context !== null && isPending };
 }
 
 /**

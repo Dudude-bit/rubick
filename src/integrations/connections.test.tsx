@@ -25,7 +25,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useIntegrations } from "./index";
+import { useIntegrationPages, useIntegrations } from "./index";
 
 /**
  * A probe is a question to the cluster's tunnel, and it must only be asked
@@ -54,6 +54,30 @@ describe("the configured vendors' probe", () => {
 
   afterEach(() => {
     useClusterStore.setState({ isConnected: false, currentContext: null });
+  });
+
+  /**
+   * "no cluster" must mean no integrations: the detection scan's answer
+   * belongs to the cluster that gave it, and a window the reader has
+   * disconnected kept drawing the old cluster's vendors and counts in the
+   * rail as though they were still standing behind it.
+   */
+  it("forgets the old cluster's rail the moment there is no cluster", async () => {
+    vi.mocked(commands.detectInClusterExtensions).mockResolvedValue([
+      { id: "traefik", installed: true, version: "3.1" },
+    ]);
+    const { result } = renderHook(() => useIntegrationPages(), { wrapper });
+    await waitFor(() =>
+      expect(result.current.pages.map((page) => page.id)).toContain("traefik")
+    );
+
+    act(() =>
+      useClusterStore.setState({ currentContext: null, isConnected: false })
+    );
+    expect(result.current.pages).toEqual([]);
+    // And not a shimmer either: a window with no cluster is not "still
+    // detecting", it has nothing to detect.
+    expect(result.current.pending).toBe(false);
   });
 
   it("asks only while connected, and asks again once the next session lands", async () => {
