@@ -83,14 +83,25 @@ const NODE_TONE: Record<HopTone, string> = {
  * The dot and the run of line under it — the chain's spine. Shared with the
  * peek's chain, so a hop reads the same wherever it is drawn.
  */
-export function Rail({ tone, into }: { tone: HopTone; into: HopTone | null }) {
+export function Rail({
+  tone,
+  into,
+  here = false,
+}: {
+  tone: HopTone;
+  into: HopTone | null;
+  /** The chain's own subject — a halo says "you are standing here". */
+  here?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center">
       <span
         aria-hidden="true"
+        data-testid={here ? "rail-here" : undefined}
         className={cn(
           "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
-          NODE_TONE[tone]
+          NODE_TONE[tone],
+          here && "ring-[3px] ring-fg/20"
         )}
       />
       {into && (
@@ -308,7 +319,11 @@ function Hop({
     <div className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5">
       {/* The run of line below a hop carries the colour of what comes next,
           so the segment leading into a stop is the part that turns red. */}
-      <Rail tone={toneOf(hop)} into={next ? toneOf(next) : null} />
+      <Rail
+        tone={toneOf(hop)}
+        into={next ? toneOf(next) : null}
+        here={hop.at === "object" && hop.self}
+      />
       <div className={cn("min-w-0", last ? "" : "pb-3")}>
         {hop.at === "object" && (
           <>

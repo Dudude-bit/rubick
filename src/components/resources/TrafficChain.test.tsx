@@ -289,6 +289,19 @@ describe("TrafficChain", () => {
     expect(screen.getByText(/This cluster has traefik\./)).toBeInTheDocument();
   });
 
+  it("marks the dot the reader is standing on, and only that one", () => {
+    wrap(
+      <TrafficChain
+        query={query(
+          answered([
+            { reason: "selectsNothing", service, selector: "app=demo" },
+          ])
+        )}
+      />
+    );
+    expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
+  });
+
   it("does not draw a chain it has not read yet", () => {
     /** Loading is its own screen. A blank space where the chain will be
      *  reads as "nothing routes here", which is the one wrong answer. */

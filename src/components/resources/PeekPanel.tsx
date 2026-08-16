@@ -608,7 +608,11 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
               key={hop.key}
               className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5"
             >
-              <Rail tone="on" into={last ? null : "on"} />
+              <Rail
+                tone="on"
+                into={last ? null : "on"}
+                here={hop.key === "self"}
+              />
               <div className={cn("min-w-0", !last && "pb-1.5")}>
                 {hop.content}
               </div>
