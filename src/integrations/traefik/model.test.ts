@@ -760,7 +760,7 @@ describe("which service names need their namespace beside them", () => {
     const groups = hostGroups(
       sources({
         ingressRoutes: [
-          route("sketchar", "frontend"),
+          route("shop", "frontend"),
           route("frontend", "frontend"),
           route("api", "api"),
         ],

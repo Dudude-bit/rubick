@@ -41,8 +41,8 @@ describe("what an IngressRoute peek says", () => {
         routes: [
           {
             kind: "Rule",
-            match: "Host(`api.sketchar.io`, `api.sketchar.tech`)",
-            middlewares: [{ name: "tech-to-host" }, { name: "compress" }],
+            match: "Host(`api.example.com`, `api.example.org`)",
+            middlewares: [{ name: "canonical-host" }, { name: "compress" }],
             priority: 120,
             services: [{ name: "api", port: 8080 }],
           },
@@ -55,11 +55,11 @@ describe("what an IngressRoute peek says", () => {
     const route = rows(summary, "Route");
     expect(route).toContainEqual([
       "Match",
-      "Host(`api.sketchar.io`, `api.sketchar.tech`)",
+      "Host(`api.example.com`, `api.example.org`)",
     ]);
     expect(route).toContainEqual([
       "Hosts",
-      "api.sketchar.io · api.sketchar.tech",
+      "api.example.com · api.example.org",
     ]);
     expect(route).toContainEqual(["Priority", "120"]);
     // The Service and the middlewares are links now — the next hops down —

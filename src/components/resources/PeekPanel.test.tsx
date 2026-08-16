@@ -200,7 +200,7 @@ function buildConfigMap(): ConfigMapInfo {
 function buildServiceInfo(): ServiceInfo {
   return {
     name: "frontend",
-    namespace: "ambassadors",
+    namespace: "storefront",
     uid: "svc-uid",
     type: "ClusterIP",
     sessionAffinity: "None",
@@ -226,7 +226,7 @@ function buildServiceInfo(): ServiceInfo {
 function buildEndpointsInfo(): EndpointsInfo {
   return {
     name: "frontend",
-    namespace: "ambassadors",
+    namespace: "storefront",
     subsets: [],
     createdAt: "2026-08-01T00:00:00Z",
     overCapacity: false,
@@ -245,7 +245,7 @@ function buildConnections(
   edges: ResourceConnections["edges"] = []
 ): ResourceConnections {
   return {
-    subject: objRef("Service", "frontend", "ambassadors"),
+    subject: objRef("Service", "frontend", "storefront"),
     edges,
     stops: [],
     published: [],
@@ -1021,7 +1021,7 @@ describe("PeekPanel width", () => {
 describe("PeekPanel traffic chain", () => {
   beforeEach(mockCluster);
 
-  const SERVICE_PEEK = "/events?peek=services/ambassadors/frontend";
+  const SERVICE_PEEK = "/events?peek=services/storefront/frontend";
 
   /** Passes when `above` sits earlier in the document than `below`. */
   const expectAbove = (above: Element, below: Element) =>
@@ -1033,11 +1033,11 @@ describe("PeekPanel traffic chain", () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections([
         {
-          from: objRef("Ingress", "frontend-ing", "ambassadors"),
-          to: objRef("Service", "frontend", "ambassadors"),
+          from: objRef("Ingress", "frontend-ing", "storefront"),
+          to: objRef("Service", "frontend", "storefront"),
           relation: {
             verb: "routes",
-            host: "ambassadors.sketchar.io",
+            host: "storefront.example.com",
             path: "/",
             pathType: "Prefix",
             port: "3000",
@@ -1061,7 +1061,7 @@ describe("PeekPanel traffic chain", () => {
     // Every segment ends in an arrowhead — three hops, two arrows, all down.
     expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
     // The rule's host rides on the hop, so it says which door this is.
-    expect(screen.getByText("ambassadors.sketchar.io")).toBeInTheDocument();
+    expect(screen.getByText("storefront.example.com")).toBeInTheDocument();
     // The words the chain replaced stay gone.
     expect(screen.queryByText("Reached through")).toBeNull();
     expect(screen.queryByText("Behind it")).toBeNull();
@@ -1206,7 +1206,7 @@ describe("PeekPanel traffic chain", () => {
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {
-    wrap("/events?peek=endpoints/ambassadors/frontend");
+    wrap("/events?peek=endpoints/storefront/frontend");
 
     const service = await screen.findByRole("link", {
       name: "Service frontend",
