@@ -8,8 +8,10 @@
  * pointed at the one object under the cursor.
  */
 
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import type { KeyValue } from "@/components/resources/key-values";
 import type { CustomResourceDetailInfo } from "@/generated/types";
+import { servedGroupName } from "./data";
 import { readRule } from "./rule";
 
 export interface VendorPeekGroup {
@@ -58,7 +60,12 @@ function tlsRow(spec: IngressRouteSpec): KeyValue {
   return { label: "TLS", value: "the proxy's default certificate" };
 }
 
-function routeGroup(route: RouteSpec, index: number, total: number) {
+function routeGroup(
+  route: RouteSpec,
+  index: number,
+  total: number,
+  namespace: string | null
+) {
   const raw = route.match ?? "";
   const reading = readRule(raw);
   const hosts = [
@@ -89,31 +96,62 @@ function routeGroup(route: RouteSpec, index: number, total: number) {
   });
   for (const service of route.services ?? []) {
     if (!service.name) continue;
+    // A real Service is the next hop down and links to its own peek;
+    // Traefik's internals have nowhere to go and stay words.
+    const kubernetes =
+      service.kind !== "TraefikService" && !service.name.includes("@");
+    const detail = [
+      service.port === undefined ? null : `:${service.port}`,
+      service.kind === "TraefikService" ? "TraefikService" : null,
+      service.scheme === "h2c" ? "h2c — gRPC, not a browser's way in" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     items.push({
       label: "Service",
-      value: [
-        `${service.name}${service.port === undefined ? "" : ` :${service.port}`}`,
-        service.kind === "TraefikService" ? "TraefikService" : null,
-        service.scheme === "h2c" ? "h2c — gRPC, not a browser's way in" : null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      value: kubernetes ? (
+        <>
+          <ResourceRef
+            kind="Service"
+            name={service.name}
+            namespace={namespace}
+            showKind={false}
+          />
+          {detail && <span className="ml-1.5 text-fg-fnt">{detail}</span>}
+        </>
+      ) : (
+        [service.name, detail].filter(Boolean).join(" ")
+      ),
       mono: true,
     });
   }
+  const middlewares = (route.middlewares ?? []).flatMap((middleware) =>
+    middleware.name
+      ? [{ name: middleware.name, namespace: middleware.namespace ?? null }]
+      : []
+  );
   items.push({
     label: "Middlewares",
     value:
-      (route.middlewares ?? []).flatMap((middleware) =>
-        middleware.name ? [middleware.name] : []
-      ).length > 0
-        ? join(
-            (route.middlewares ?? []).flatMap((middleware) =>
-              middleware.name ? [middleware.name] : []
-            )
-          )
-        : "none",
-    mono: (route.middlewares ?? []).length > 0,
+      middlewares.length > 0 ? (
+        <span className="flex flex-wrap gap-x-1.5">
+          {middlewares.map((middleware, at) => (
+            <span key={`${middleware.namespace}/${middleware.name}`}>
+              {at > 0 && <span className="text-fg-fnt">· </span>}
+              <ResourceRef
+                kind="Middleware"
+                name={middleware.name}
+                namespace={middleware.namespace ?? namespace}
+                crd={`middlewares.${servedGroupName()}`}
+                showKind={false}
+              />
+            </span>
+          ))}
+        </span>
+      ) : (
+        "none"
+      ),
+    mono: middlewares.length > 0,
   });
 
   return {
@@ -143,7 +181,9 @@ export function peekIngressRoute(
           tlsRow(spec),
         ],
       },
-      ...routes.map((route, index) => routeGroup(route, index, routes.length)),
+      ...routes.map((route, index) =>
+        routeGroup(route, index, routes.length, resource.namespace)
+      ),
     ],
   };
 }

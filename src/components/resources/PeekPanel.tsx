@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -15,7 +15,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
-import { useServicesRoutes } from "@/hooks/useServiceRoutes";
+import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { RoutesNote } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
@@ -380,36 +380,55 @@ function PeekOverview({
           </div>
         ))
       )}
-      {(target.kind === "Service" || target.kind === "Endpoints") && (
-        <PeekTraffic target={target} />
-      )}
+      {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
       <PeekEvents target={target} />
     </div>
   );
 }
 
+/** The kinds a request travels through, each owed its up and its down. */
+const TRAFFIC_KINDS = new Set([
+  "Service",
+  "Endpoints",
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "ReplicaSet",
+  "Job",
+  "CronJob",
+]);
+
 /**
  * The level above and the level below, so a peek is a place to walk the
- * chain from rather than a dead end: an Endpoints names its Service, a
- * Service names its Endpoints, and both name every way traffic reaches
- * them from outside — each one a peek of its own.
- *
- * A Service and its Endpoints share a name by contract, which is what lets
- * both directions be stated without another read.
+ * chain from rather than a dead end. An Endpoints names its Service, a
+ * Service names its Endpoints and every way traffic reaches it from
+ * outside, a Pod and a workload name the Services in front of them — and
+ * every name is a peek of its own, so the tangle unwinds hop by hop
+ * without leaving the panel. Ownership already walks through Controlled
+ * by; this is the traffic direction.
  */
 function PeekTraffic({ target }: { target: PeekTarget }) {
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
+  const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
 
-  // The core's own edges — an Ingress routing here — and the vendors' —
-  // an IngressRoute. Both cached by the same keys their pages use.
-  const conns = useConnections("Service", target.name, namespace);
-  const routed = useServicesRoutes([service]);
+  // The core's own edges and the vendors' routes, cached by the same keys
+  // their pages use. A Service and its Endpoints share a name by contract,
+  // which is what lets the Endpoints panel ask about its Service.
+  const conns = useConnections(
+    isServiceish ? "Service" : target.kind,
+    target.name,
+    namespace
+  );
+  const routed = useServicesRoutes(isServiceish ? [service] : []);
   const vendorRoutes = routed.routes.get(`${namespace}/${target.name}`) ?? [];
+  const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
+  const edges = conns.data?.edges ?? [];
   const ingresses = [
     ...new Map(
-      (conns.data?.edges ?? [])
+      edges
         .filter(
           (edge) =>
             edge.relation.verb === "routes" && edge.from.kind === "Ingress"
@@ -417,9 +436,22 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
         .map((edge) => [`${edge.from.namespace}/${edge.from.name}`, edge.from])
     ).values(),
   ];
+  // For a Pod or a workload, the level above is whichever Services stand in
+  // front of it — the graph names them from either end of an edge.
+  const services = isServiceish
+    ? []
+    : [
+        ...new Map(
+          edges
+            .flatMap((edge) => [edge.from, edge.to])
+            .filter((object) => object.kind === "Service")
+            .map((object) => [`${object.namespace}/${object.name}`, object])
+        ).values(),
+      ];
 
   const up =
     ingresses.length > 0 ||
+    services.length > 0 ||
     vendorRoutes.some((route) => route.source.kind !== "Ingress") ||
     target.kind === "Endpoints";
 
@@ -440,6 +472,20 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
                 — the Service these endpoints publish
               </p>
             )}
+            {services.map((entry) => (
+              <p
+                key={`${entry.namespace}/${entry.name}`}
+                className="text-[11px] text-fg-fnt"
+              >
+                <ResourceRef
+                  kind="Service"
+                  name={entry.name}
+                  namespace={entry.namespace}
+                  showKind={false}
+                />{" "}
+                — the Service in front
+              </p>
+            ))}
             {ingresses.map((ingress) => (
               <p
                 key={`${ingress.namespace}/${ingress.name}`}
@@ -461,15 +507,29 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
       {target.kind === "Service" && (
         <div>
           <PeekHeading title="Behind it" />
-          <p className="pb-1 text-[11px] text-fg-fnt">
-            <ResourceRef
-              kind="Endpoints"
-              name={target.name}
-              namespace={namespace}
-              showKind={false}
-            />{" "}
-            — the addresses actually answering, pod by pod
-          </p>
+          <div className="flex flex-col gap-1 pb-1">
+            <p className="text-[11px] text-fg-fnt">
+              <ResourceRef
+                kind="Endpoints"
+                name={target.name}
+                namespace={namespace}
+                showKind={false}
+              />{" "}
+              — the addresses actually answering, pod by pod
+            </p>
+            {behind && (
+              <p className="text-[11px] text-fg-fnt">
+                {behind.vendor}&rsquo;s own proxy — the {behind.hosts} host
+                {behind.hosts === 1 ? "" : "s"} it serves are on{" "}
+                <Link
+                  to={behind.to}
+                  className="text-info underline-offset-2 hover:underline"
+                >
+                  its page
+                </Link>
+              </p>
+            )}
+          </div>
         </div>
       )}
     </>

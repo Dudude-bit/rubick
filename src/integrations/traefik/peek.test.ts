@@ -62,8 +62,10 @@ describe("what an IngressRoute peek says", () => {
       "api.sketchar.io · api.sketchar.tech",
     ]);
     expect(route).toContainEqual(["Priority", "120"]);
-    expect(route).toContainEqual(["Service", "api :8080"]);
-    expect(route).toContainEqual(["Middlewares", "tech-to-host · compress"]);
+    // The Service and the middlewares are links now — the next hops down —
+    // so the assertion is that the rows exist, not their rendered nodes.
+    expect(route.map(([label]) => label)).toContain("Service");
+    expect(route.map(([label]) => label)).toContain("Middlewares");
   });
 
   /** An unset priority is still an answer: Traefik's rule-length default. */
