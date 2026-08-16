@@ -21,5 +21,5 @@ export function integrationPagePath(vendorId: string): string {
  * sidebar sends the reader rather than nowhere at all.
  */
 export function integrationSettingsPath(vendorId: string): string {
-  return `/settings/integrations?vendor=${encodeURIComponent(vendorId)}`;
+  return `/integrations?vendor=${encodeURIComponent(vendorId)}`;
 }

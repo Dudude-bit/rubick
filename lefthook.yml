@@ -35,7 +35,10 @@ pre-commit:
       glob: "*.{ts,tsx}"
       # --max-warnings 0 matches `bun run lint`, which CI requires. The
       # react-hooks@7 backlog this used to be waived for is empty.
-      run: bunx eslint --max-warnings 0 {staged_files}
+      # --no-warn-ignored because staged-file mode hands eslint files its
+      # config ignores — src/generated — and the "file ignored" warning
+      # would fail the zero-warning gate that project-mode lint never sees.
+      run: bunx eslint --max-warnings 0 --no-warn-ignored {staged_files}
     prettier:
       glob: "*.{ts,tsx,css,json,md}"
       run: bunx prettier --check {staged_files}

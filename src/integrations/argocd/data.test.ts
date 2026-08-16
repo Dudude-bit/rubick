@@ -40,6 +40,20 @@ describe("the address Argo's UI answers on", () => {
     expect(answer.via?.name).toBe("argocd");
   });
 
+  /**
+   * The gRPC way in serves the same Service and no browser: Argo's CLI
+   * ingress pins `scheme: h2c`, and a link into it answers a browser with
+   * nothing. It is the UI's address only when there is no other.
+   */
+  it("prefers the browser route over the h2c one", () => {
+    expect(
+      uiFromRoutes([
+        route({ host: "argocd-grpc.example.com", h2c: true }),
+        route({ host: "argocd.example.com" }),
+      ]).url
+    ).toBe("https://argocd.example.com");
+  });
+
   /** A host reachable both ways is one the reader should reach securely. */
   it("prefers a route that is served over TLS", () => {
     expect(
@@ -87,6 +101,7 @@ const serving = (overrides: Partial<IngressInfo>): IngressInfo => ({
   tlsHosts: [],
   tlsConfigs: [],
   hasCatchAllTls: false,
+  defaultBackend: null,
   labels: {},
   annotations: {},
   createdAt: null,

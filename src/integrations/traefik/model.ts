@@ -81,6 +81,12 @@ export interface RouteService {
    * this cluster ships with is the page inventing an outage.
    */
   kubernetes: boolean;
+  /**
+   * The `scheme` the route pins for talking to the backend — `h2c` is the
+   * one that matters, because it marks a gRPC way in that no browser can
+   * use. Only an IngressRoute can state one.
+   */
+  scheme: string | null;
 }
 
 export interface TraefikRoute {
@@ -151,6 +157,12 @@ export type Finding =
       routes: TraefikRoute[];
       /** `null` where the objects do not settle it, which is said out loud. */
       winner: TraefikRoute | null;
+      /**
+       * Every priority was computable and the top one is shared — the one
+       * no-winner case where the objects were read and still do not settle
+       * it, which reads differently from "this app cannot see the rule".
+       */
+      tied: boolean;
     }
   /** The certificate this host is served under is running out, or unreadable. */
   | {
@@ -273,7 +285,7 @@ function routesFromIngress(
     known
   );
 
-  return ingress.rules.flatMap((rule, ruleIndex) =>
+  const routes = ingress.rules.flatMap((rule, ruleIndex) =>
     rule.paths.map((path, pathIndex) => {
       const host = rule.host || null;
       const clause: RuleClause = {
@@ -310,6 +322,7 @@ function routesFromIngress(
               namespace: ingress.namespace,
               port: path.backendPort,
               kubernetes: true,
+              scheme: null,
             }
           : null,
         resourceBackend: path.resourceBackend,
@@ -326,6 +339,44 @@ function routesFromIngress(
       };
     })
   );
+
+  // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+  // the whole object. Read through `rules` alone, the ordinary cloud edge
+  // served nothing on every surface this table feeds.
+  const fallback = ingress.defaultBackend;
+  if (fallback?.backendService) {
+    routes.push({
+      key: `ingress/${ingress.namespace}/${ingress.name}/default/${index}`,
+      source: {
+        kind: "Ingress" as const,
+        name: ingress.name,
+        namespace: ingress.namespace,
+      },
+      rule: {
+        raw: null,
+        clauses: [{ host: null, path: null }],
+        unread: [],
+        refused: null,
+      },
+      clause: { host: null, path: null },
+      entryPoints,
+      middlewares,
+      service: {
+        name: fallback.backendService,
+        namespace: ingress.namespace,
+        port: fallback.backendPort,
+        kubernetes: true,
+        scheme: null,
+      },
+      resourceBackend: fallback.resourceBackend,
+      tlsSecret: tlsSecretFor(ingress, null),
+      declaresTls: ingress.hasCatchAllTls,
+      pathType: "DefaultBackend",
+      priority: null,
+    });
+  }
+
+  return routes;
 }
 
 interface IngressRouteSpec {
@@ -338,6 +389,7 @@ interface IngressRouteSpec {
       namespace?: string;
       port?: unknown;
       kind?: string;
+      scheme?: string;
     }>;
     middlewares?: Array<{ name?: string; namespace?: string }>;
   }>;
@@ -383,6 +435,7 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
             // a Kubernetes object name, so it is an unambiguous marker.
             kubernetes:
               service.kind !== "TraefikService" && !service.name.includes("@"),
+            scheme: service.scheme ?? null,
           }
         : null,
       // Only an Ingress can name one; an IngressRoute has no such field.
@@ -578,15 +631,30 @@ export function allRoutes(sources: TraefikSources): TraefikRoute[] {
  * — that is how a route is made more specific — and calling it a finding
  * would bury the real one under every well-configured site in the cluster.
  *
- * Who wins is stated only when the objects settle it. Traefik orders routers
- * by priority, and an unset priority defaults to the length of the rule
- * *Traefik generated*, which for an Ingress this app never sees. So an
- * explicit `priority` on both IngressRoutes gives an answer, and anything
- * else is reported as ambiguous rather than guessed.
+ * Who wins is stated whenever the objects settle it. Traefik orders routers
+ * by priority; an unset priority defaults to the length of the router's
+ * rule. For an IngressRoute that rule is the match string held here
+ * verbatim, so a declared priority against a defaulted one is still an
+ * answer — the pair every migration leaves behind. For an Ingress the rule
+ * is one *Traefik generated* and this app never sees, so any pair with an
+ * Ingress in it is reported as ambiguous rather than guessed.
  */
+function effectivePriority(route: TraefikRoute): number | null {
+  if (route.priority !== null) return route.priority;
+  if (route.source.kind === "IngressRoute" && route.rule.raw !== null) {
+    return route.rule.raw.length;
+  }
+  return null;
+}
+
 function duplicateFindings(routes: TraefikRoute[]): Finding[] {
   const byPath = new Map<string, TraefikRoute[]>();
   for (const route of routes) {
+    // A row born from a reading the parser refused is not a claim. Its real
+    // host and path are unknown — filing it under "every path" and warning
+    // that it collides with another such row is a collision that exists
+    // only in the parser.
+    if (route.rule.refused !== null) continue;
     const path = route.clause.path
       ? `${route.clause.path.kind}:${route.clause.path.value}`
       : "any";
@@ -603,13 +671,22 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
     );
     if (objects.size < 2) continue;
 
-    const priorities = sharing.filter((route) => route.priority !== null);
-    const winner =
-      priorities.length === sharing.length
-        ? sharing.reduce((best, route) =>
-            (route.priority ?? 0) > (best.priority ?? 0) ? route : best
-          )
-        : null;
+    const scores = sharing.map(effectivePriority);
+    const top = scores.every((score) => score !== null)
+      ? Math.max(...(scores as number[]))
+      : null;
+    // A tie is between *objects*: two routers of one object sharing the top
+    // weight is that object winning either way, not an open question.
+    const holders = new Set(
+      sharing
+        .filter((_, index) => scores[index] === top)
+        .map(
+          (route) =>
+            `${route.source.kind}/${route.source.namespace}/${route.source.name}`
+        )
+    );
+    const tied = top !== null && holders.size > 1;
+    const winner = top !== null && !tied ? sharing[scores.indexOf(top)] : null;
 
     findings.push({
       kind: "duplicate",
@@ -621,6 +698,7 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
           : path.slice(7),
       routes: sharing,
       winner,
+      tied,
     });
   }
   return findings;
@@ -664,14 +742,16 @@ export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
   const proxies = proxyServices(sources);
   if (proxies.length === 0) return [];
   return sources.ingresses.filter((ingress) =>
-    ingress.rules.some((rule) =>
-      rule.paths.some((path) =>
-        proxies.some(
-          (service) =>
-            service.name === path.backendService &&
-            service.namespace === ingress.namespace
-        )
-      )
+    proxies.some(
+      (service) =>
+        service.namespace === ingress.namespace &&
+        // `spec.defaultBackend` is the ordinary spelling on a managed
+        // cluster: the load balancer names no rules and sends everything
+        // to the proxy. Read through `rules` alone it fronts nothing.
+        (service.name === ingress.defaultBackend?.backendService ||
+          ingress.rules.some((rule) =>
+            rule.paths.some((path) => service.name === path.backendService)
+          ))
     )
   );
 }
@@ -730,6 +810,9 @@ function clearFinding(
 
   const bound = new Map<string, EntryPoint>();
   for (const route of routes) {
+    // A refused reading's host is unknown, so which entry points serve "this
+    // host" through it is unknown too — it proves nothing about encryption.
+    if (route.rule.refused !== null) continue;
     for (const entry of boundEntryPoints(route, sources.entryPoints)) {
       bound.set(entry.name, entry);
     }
@@ -842,6 +925,32 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
   });
 
   return groups.sort(compareGroups);
+}
+
+/**
+ * Service names that appear in more than one namespace across the table.
+ *
+ * Two Services named `frontend` render as the same word on every row, and
+ * the reader mid-migration cannot tell the old one from the new — the exact
+ * moment they are looking. The rows print the namespace for these names
+ * only, so the common case stays one word wide.
+ */
+export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
+  const namespaces = new Map<string, Set<string>>();
+  for (const group of groups) {
+    for (const route of group.routes) {
+      const service = route.service;
+      if (!service?.kubernetes) continue;
+      const seen = namespaces.get(service.name) ?? new Set<string>();
+      seen.add(service.namespace);
+      namespaces.set(service.name, seen);
+    }
+  }
+  return new Set(
+    [...namespaces]
+      .filter(([, spread]) => spread.size > 1)
+      .map(([name]) => name)
+  );
 }
 
 function compareGroups(a: HostGroup, b: HostGroup): number {

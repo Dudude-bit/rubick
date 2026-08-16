@@ -9,7 +9,7 @@ import {
   ROUTE_STALE,
 } from "./data";
 import { facts } from "./facts";
-import { serviceRoutes } from "./routes";
+import { proxyBehind, serviceRoutes } from "./routes";
 
 /**
  * Traefik.
@@ -36,7 +36,7 @@ export default defineVendor({
   // What the backend's connection graph cannot know: its `Routes` edges come
   // from `Ingress` objects, and this cluster's edge may be entirely
   // IngressRoutes. See `service.routes`.
-  provides: { "service.routes": serviceRoutes },
+  provides: { "service.routes": serviceRoutes, "proxy.behind": proxyBehind },
   page: {
     count: pageCount({
       queryKey: ROUTE_SOURCES,

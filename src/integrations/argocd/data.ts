@@ -126,10 +126,15 @@ export interface RoutedUi {
 }
 
 export function uiFromRoutes(routes: ServiceRoute[]): RoutedUi {
+  // The gRPC way in serves the same Service and no browser — Argo's CLI
+  // ingress pins `h2c` — so it is the UI's address only when there is no
+  // other route at all.
+  const browsable = routes.filter((route) => !route.h2c);
+  const pool = browsable.length > 0 ? browsable : routes;
   // A route whose scheme is settled can be linked; among those, TLS wins,
   // because a host served both ways is one somebody should reach securely.
-  const settled = routes.filter((route) => route.tls !== null);
-  const best = settled.find((route) => route.tls) ?? settled[0] ?? routes[0];
+  const settled = pool.filter((route) => route.tls !== null);
+  const best = settled.find((route) => route.tls) ?? settled[0] ?? pool[0];
   if (!best) return { url: null, host: null, via: null };
   return {
     url:

@@ -62,6 +62,7 @@ import {
   useClusterForwardStore,
 } from "@/stores/clusterForwardStore";
 import { integrationPagePath, integrationSettingsPath } from "./paths";
+import { pageDecision } from "./page-state";
 import argocd from "./argocd";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
@@ -93,6 +94,7 @@ import type {
   LogHistoryPage,
   LogScope,
   ProbeResult,
+  ProxyBehind,
   RelatedObject,
   SavedConnection,
   IngressTls,
@@ -123,6 +125,7 @@ export type {
   LogHistoryPage,
   LogScope,
   ProbeResult,
+  ProxyBehind,
   RelatedObject,
   SavedConnection,
   IngressTls,
@@ -202,10 +205,21 @@ const VENDORS: Vendor[] = [
  * reader who has just done one can switch context or reopen.
  */
 function useDetected() {
+  // Gated on the connection actually standing, not on a context being
+  // named: at startup the context is known from the kubeconfig a beat
+  // before the client exists, and firing then buys four errored queries
+  // and their retry backoff on every launch.
+  const isConnected = useClusterStore((state) => state.isConnected);
+  // Keyed on the context, as "one CRD list per cluster" always claimed:
+  // cluster B must never read cluster A's scan, and a window with no
+  // cluster — context null — reads nothing, so the rail forgets the old
+  // cluster's vendors the moment the reader leaves it.
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["in-cluster-extensions"],
+    queryKey: ["in-cluster-extensions", context],
     queryFn: commands.detectInClusterExtensions,
     staleTime: 5 * 60_000,
+    enabled: isConnected && context !== null,
   });
 }
 
@@ -242,12 +256,14 @@ export type ConnectionState =
  */
 function useConnections(): Map<string, ConnectionState> {
   const context = useClusterStore((state) => state.currentContext);
+  // The same gate as detection, for the same launch-time beat.
+  const isConnected = useClusterStore((state) => state.isConnected);
 
   const saved = useQueries({
     queries: CONNECTED.map((vendor) => ({
       queryKey: ["integration-connection", vendor.id, context],
       queryFn: () => vendor.connect.read(),
-      enabled: context !== null,
+      enabled: context !== null && isConnected,
       staleTime: CONNECTION_STALE_TIME,
     })),
   });
@@ -256,7 +272,12 @@ function useConnections(): Map<string, ConnectionState> {
     queries: CONNECTED.map((vendor, index) => ({
       queryKey: ["integration-probe", vendor.id, context],
       queryFn: () => vendor.connect.probe(),
-      enabled: context !== null && Boolean(saved[index]?.data),
+      // The same connected gate the read above has, and it matters more
+      // here: a probe fired between sessions comes back as an *answer* —
+      // "did not answer, no cluster is connected" — and a failure that is
+      // data rather than an error sits on the row until something happens
+      // to ask again.
+      enabled: context !== null && isConnected && Boolean(saved[index]?.data),
       staleTime: CONNECTION_STALE_TIME,
       // A Prometheus that has gone away should stop being retried behind the
       // reader's back; the row and the chart both say so, and there is a
@@ -763,8 +784,16 @@ export interface IntegrationPageEntry {
  * hidden by that: with no extension installed there is no row to hide, and
  * Settings → Integrations names every extension the app knows either way.
  */
-export function useIntegrationPages(): IntegrationPageEntry[] {
-  const { data } = useDetected();
+export function useIntegrationPages(): {
+  pages: IntegrationPageEntry[];
+  /**
+   * Detection or the connection reads still running. A rail that drew
+   * nothing during that window would be claiming the cluster has no
+   * integrations — the one state this list must never claim by accident.
+   */
+  pending: boolean;
+} {
+  const { data, isPending } = useDetected();
   const connections = useConnections();
 
   const context = useClusterStore((state) => state.currentContext);
@@ -813,7 +842,7 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
     ),
   });
 
-  return here.map((vendor): IntegrationPageEntry => {
+  const pages = here.map((vendor): IntegrationPageEntry => {
     const index = withPages.findIndex(
       (candidate) => candidate.id === vendor.id
     );
@@ -837,21 +866,31 @@ export function useIntegrationPages(): IntegrationPageEntry[] {
       own: index !== -1,
     };
   });
+
+  // Detection alone: once the scan has answered, an empty list is the real
+  // "this cluster has none" and the group must vanish rather than shimmer.
+  // A configured-only row still pops in when its connection read lands.
+  // No cluster is not "still detecting" — a disabled query is pending
+  // forever, and the front door would shimmer an answer that cannot come.
+  return { pages, pending: context !== null && isPending };
 }
 
 /**
  * What is at `/integrations/<slug>`.
  *
- * Four answers rather than a component or `null`, because the three
- * not-a-page cases read differently to somebody who arrived by a stale link,
- * a restored tab or a cluster switch: a slug no vendor claims is a typo, a
- * vendor the cluster does not have is a cluster answer, and detection still
- * running is neither.
+ * Five answers rather than a component or `null`, because the not-a-page
+ * cases read differently to somebody who arrived by a stale link, a
+ * restored tab or a cluster switch: a slug no vendor claims is a typo, a
+ * vendor the cluster does not have is a cluster answer, a configured-only
+ * vendor nobody gave an address is a settings answer, and detection still
+ * running is none of the three. The decision itself lives in
+ * {@link pageDecision}, where it can be tested without the three hooks.
  */
 export type IntegrationPageState =
   | { state: "detecting" }
   | { state: "unknown" }
   | { state: "absent"; name: string; icon: LucideIcon }
+  | { state: "notConfigured"; name: string; icon: LucideIcon }
   | {
       state: "ready";
       name: string;
@@ -862,24 +901,36 @@ export type IntegrationPageState =
 export function useIntegrationPage(
   slug: string | undefined
 ): IntegrationPageState {
-  const { data, isPending } = useDetected();
+  const { data } = useDetected();
+  const connections = useConnections();
   const vendor = PAGES.find((candidate) => candidate.id === slug);
 
-  if (!vendor) return { state: "unknown" };
-  if (isPending || !data) return { state: "detecting" };
-
-  const installed = data.some(
-    (entry) => entry.id === vendor.id && entry.installed
+  const decision = pageDecision(
+    vendor && { id: vendor.id, configured: vendor.connect !== undefined },
+    data,
+    vendor && connections.get(vendor.id)
   );
-  if (!installed) {
-    return { state: "absent", name: vendor.name, icon: vendor.extension.icon };
+
+  switch (decision) {
+    case "unknown":
+      return { state: "unknown" };
+    case "detecting":
+      return { state: "detecting" };
+    case "absent":
+    case "notConfigured":
+      return {
+        state: decision,
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+      };
+    case "ready":
+      return {
+        state: "ready",
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+        Page: lazyPageOf(vendor!.id, vendor!.page),
+      };
   }
-  return {
-    state: "ready",
-    name: vendor.name,
-    icon: vendor.extension.icon,
-    Page: lazyPageOf(vendor.id, vendor.page),
-  };
 }
 
 /**
@@ -899,6 +950,12 @@ function crdViewFor(group: string, kind: string): CrdView | null {
     VENDORS.find((vendor) => vendor.crd?.matches(group, kind))?.crd ?? null
   );
 }
+
+// The peek a vendor owns for one of its kinds — the same facet rule as
+// `useCrdView`, one level deeper: the panel asks by CRD name and falls back
+// to the generic flatten for the thousands of kinds nobody here claims.
+export { vendorPeek } from "./peek";
+export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 
 /**
  * Every label a vendor uses to name the pool a node was made by, in

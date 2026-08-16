@@ -76,6 +76,27 @@ describe("whether this Prometheus is watching this cluster", () => {
     expect((await coverage()).matched).toBe(1);
   });
 
+  /**
+   * The row answers "what is actually there" without a click into the graph
+   * UI: each family carries its own series count, read off the same
+   * `count()` query that already decided presence.
+   */
+  it("hands each family's series count to the row", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("n1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? series(["n1"])
+        : query.includes("container_cpu_usage_seconds_total")
+          ? [{ labels: {}, points: [{ t: 0, v: 1234 }] }]
+          : [{ labels: {}, points: [{ t: 0, v: 7 }] }]
+    );
+
+    const found = await coverage();
+    expect(found.series["container_cpu_usage_seconds_total"]).toBe(1234);
+    expect(found.series["kubelet_volume_stats_used_bytes"]).toBe(7);
+    expect(found.missing).toEqual([]);
+  });
+
   /** Scraping more than this cluster is normal, not a fault. */
   it("does not call a shared Prometheus broken", async () => {
     vi.mocked(commands.listNodes).mockResolvedValue([node("n1")]);

@@ -86,6 +86,7 @@ const info = (className: string | null): IngressInfo => ({
   tlsHosts: [],
   tlsConfigs: [],
   hasCatchAllTls: false,
+  defaultBackend: null,
   labels: {},
   annotations: {},
   createdAt: null,

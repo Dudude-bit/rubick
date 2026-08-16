@@ -369,6 +369,30 @@ describe("ResourceRef", () => {
       expect(onClick).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * Where two objects wear one name, the namespace is the identity — and it
+   * belongs inside the reference, truncating and hover-highlighting with the
+   * name, not printed beside it as a loose prefix that wraps on its own.
+   */
+  describe("showNamespace", () => {
+    it("draws the namespace inside the reference, dim and mono", () => {
+      wrap(
+        <ResourceRef kind="Pod" name="a-1" namespace="backend" showNamespace />
+      );
+      const prefix = screen.getByTestId("resource-ref-namespace");
+      expect(prefix).toHaveTextContent("backend/");
+      // Inside the link, so the whole thing is one hover target.
+      expect(screen.getByRole("link", { name: "Pod a-1" })).toContainElement(
+        prefix
+      );
+    });
+
+    it("prints nothing extra unasked", () => {
+      wrap(<ResourceRef kind="Pod" name="a-1" namespace="backend" />);
+      expect(screen.queryByTestId("resource-ref-namespace")).toBeNull();
+    });
+  });
 });
 
 // `ROUTABLE` restates what `App.tsx` serves, and a set that drifts from the

@@ -12,6 +12,7 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "@/hooks/useScopeTabs";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
+import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
@@ -25,6 +26,9 @@ export function Layout() {
   // Opens the tunnels this cluster asked to have up. Only the ones marked
   // for it — everything else waits to be pressed in the rail.
   useClusterForwards();
+  // Warms the three lists every session opens, so their pages open from
+  // cache instead of spending their first second asking.
+  usePrefetchCoreLists();
 
   return (
     <div

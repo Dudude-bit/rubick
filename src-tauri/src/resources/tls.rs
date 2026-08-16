@@ -21,8 +21,10 @@ pub struct CertificateFacts {
     /// The subject common name, where there is one. Modern certificates
     /// often have none and say everything in the SANs instead.
     pub subject: Option<String>,
-    /// The issuer's common name — "Let's Encrypt R3", or the CA's own name
-    /// for an in-cluster issuer.
+    /// The issuer as a person recognises it: the organisation with the
+    /// intermediate's code beside it — "Google Trust Services (WR1)" — or
+    /// whichever half the certificate carries. A public CA's issuer CN is a
+    /// cryptic code on its own, and "issued by WR1" answered nothing.
     pub issuer: Option<String>,
     /// Every name this certificate is valid for, from the SAN extension.
     pub dns_names: Vec<String>,
@@ -69,7 +71,7 @@ pub fn read_certificate(pem_bytes: &[u8]) -> Result<CertificateFacts, Certificat
         .map_err(|err| format!("tls.crt is not a certificate the app can read: {err}"))?;
 
     let subject = first_common_name(cert.subject());
-    let issuer = first_common_name(cert.issuer());
+    let issuer = issuer_name(cert.issuer());
     let dns_names = cert
         .subject_alternative_name()
         .ok()
@@ -108,6 +110,24 @@ fn rfc3339(seconds: i64) -> String {
     chrono::DateTime::from_timestamp(seconds, 0)
         .unwrap_or_default()
         .to_rfc3339()
+}
+
+/// The organisation with the CN's code beside it, or whichever half exists.
+fn issuer_name(name: &X509Name) -> Option<String> {
+    let organisation = name
+        .iter_organization()
+        .next()
+        .and_then(|entry| entry.as_str().ok())
+        .map(str::to_string)
+        .filter(|value| !value.is_empty());
+    let code = first_common_name(name);
+    match (organisation, code) {
+        (Some(organisation), Some(code)) if organisation != code => {
+            Some(format!("{organisation} ({code})"))
+        }
+        (Some(organisation), _) => Some(organisation),
+        (None, code) => code,
+    }
 }
 
 fn first_common_name(name: &X509Name) -> Option<String> {
@@ -318,6 +338,21 @@ mod tests {
         assert!(facts.not_after.starts_with("2036-"));
         assert!(facts.self_signed);
         assert_eq!(facts.chain_length, 1);
+    }
+
+    /// The issuer a public CA actually writes: a cryptic intermediate CN —
+    /// WR1, R11, E5 — beside the organisation a person recognises. Would
+    /// break if the row went back to printing the code alone, which is what
+    /// "issued by WR1" was.
+    const ORG_ISSUER_PEM: &str = include_str!("../../tests/fixtures/issuer-org.crt.pem");
+
+    #[test]
+    fn an_issuer_names_its_organisation_over_its_code() {
+        let facts = read_certificate(ORG_ISSUER_PEM.as_bytes()).expect("parse");
+        assert_eq!(
+            facts.issuer.as_deref(),
+            Some("Example Trust Services (XR1)")
+        );
     }
 
     /// Would break if a Secret whose `tls.crt` is something else were

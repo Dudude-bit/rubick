@@ -189,6 +189,12 @@ function connected() {
  * checks that **the live line is still on screen**: the core answer draws
  * first and stays drawn, whatever the integration is doing.
  */
+// The detection scan is gated on a standing connection now — these tests
+// exercise what detection hands out, so the gate is opened for them.
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true, currentContext: "test" });
+});
+
 describe("a pod whose log the API server can no longer serve", () => {
   beforeEach(() => {
     for (const key of Object.keys(listeners)) delete listeners[key];

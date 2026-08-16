@@ -289,6 +289,13 @@ export async function candidates(hint: InClusterHint): Promise<Candidate[]> {
       // would press it and get a sentence about ports, not a connection.
       if (port === null) return [];
 
+      // A name-substring alone is weak evidence — kube-prometheus-stack
+      // names the control plane's scrape targets after the vendor too, and
+      // every one answers /metrics and cannot answer a query. Weak evidence
+      // must carry the vendor's own port; a label is the chart's word and
+      // may sit on any port it likes.
+      if (!labelled && !hint.ports.includes(port)) return [];
+
       const prefers =
         hint.prefer?.findIndex((part) => lower.includes(part)) ?? -1;
 
@@ -299,7 +306,7 @@ export async function candidates(hint: InClusterHint): Promise<Candidate[]> {
           rank: prefers >= 0 ? prefers : (hint.prefer?.length ?? 0),
           because:
             prefers >= 0
-              ? `its ${hint.prefer![prefers]}`
+              ? `its "${hint.prefer![prefers]}" component`
               : labelled
                 ? `labelled ${service.labels["app.kubernetes.io/name"] ?? service.labels["app"]}`
                 : "named for it",

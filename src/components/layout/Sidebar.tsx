@@ -1,8 +1,10 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
+  Plug,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -121,11 +123,14 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
 ];
 
 /**
- * After the Integrations category, which sits between the fixed nav and this
- * — everything above is what every cluster has, and Settings is the last row
- * on every screen the app has ever drawn.
+ * The app's own rows, pinned under the scroll rather than at the end of it.
+ *
+ * Everything above this line is about the connected cluster — its
+ * workloads, its network, what it has installed. These are about the app
+ * itself, and the split is drawn where it is felt: a fixed strip at the
+ * rail's foot, reachable without scrolling past eighty pods to find it.
  */
-const TAIL: NavItem[] = [
+const APP_ROWS: NavItem[] = [
   {
     label: "Settings",
     path: "/settings",
@@ -159,12 +164,15 @@ export function Sidebar() {
           </div>
         ))}
         <IntegrationsGroup />
-        <div>
-          {TAIL.map((item) => (
-            <NavRow key={item.path} item={item} overview={overview} />
-          ))}
-        </div>
       </nav>
+      {/* The app's own strip, outside the scroll: the rows above are the
+          cluster's and travel with it; these stay put on every screen. */}
+      <div className="border-t border-hair px-1.5 pb-2.5">
+        <GroupCaption>App</GroupCaption>
+        {APP_ROWS.map((item) => (
+          <NavRow key={item.path} item={item} overview={overview} />
+        ))}
+      </div>
     </aside>
   );
 }
@@ -178,35 +186,69 @@ function GroupCaption({ children }: { children: string }) {
 }
 
 /**
- * The one group that is absent rather than empty.
+ * The cluster's own category: what it has, then the door to the catalog.
  *
- * Every other caption in this rail names something every cluster has. This
- * one names what *this* cluster happens to have installed, and on most
- * clusters that is nothing — so it draws nothing at all, not a caption over
- * a gap.
+ * The vendor rows name what *this* cluster happens to have installed or
+ * connected; the last row is the Integrations page itself — the inventory
+ * of everything the app knows, installed or not — which used to hide
+ * inside Settings and is the one row here that never disappears.
  *
- * Hiding a feature is normally the wrong answer, and it is the right one
- * here only because Settings → Integrations already names every extension
- * the app knows, installed or not, with what each one would give. "What
- * could this app do" has a screen built for it; the sidebar stays a list of
- * things you actually have.
- *
- * Every one of them, though. A row whose vendor owns no screen goes to that
- * vendor's Settings row instead of being dropped — several of them share one
- * route, which is why those rows decide their own highlight from the query
- * string rather than letting `NavLink` light all of them at once.
+ * A row whose vendor owns no screen goes to its catalog row instead of
+ * being dropped — several of them share one route, which is why those rows
+ * decide their own highlight from the query string rather than letting
+ * `NavLink` light all of them at once.
  */
 function IntegrationsGroup() {
   const { pathname, search } = useLocation();
-  const pages = useIntegrationPages();
+  const { pages, pending } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
+  const queryClient = useQueryClient();
   const [waking, setWaking] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState<string | null>(null);
 
-  if (pages.length === 0) return null;
-
   const vendor = new URLSearchParams(search).get("vendor");
+
+  // The catalog is the category's own door — the inventory of everything
+  // the app knows, installed or not — so the group always draws, even on a
+  // cluster with nothing detected: "this cluster has none of these" is an
+  // answer that page owns, not a reason to hide the way to it.
+  const catalog = (
+    <NavRow
+      item={{ label: "All integrations", path: "/integrations", icon: Plug }}
+      overview={undefined}
+      value={null}
+      active={pathname === "/integrations" && vendor === null}
+    />
+  );
+
+  // Detection still running is not "no integrations" — the rail holds the
+  // group's shape instead of popping it in a second later.
+  if (pages.length === 0 && pending) {
+    return (
+      <div>
+        <GroupCaption>Integrations</GroupCaption>
+        <div aria-hidden>
+          {[0, 1].map((row) => (
+            <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
+              <div className="size-3.5 animate-pulse rounded bg-hover" />
+              <div className="h-2.5 w-20 animate-pulse rounded bg-hover" />
+            </div>
+          ))}
+        </div>
+        {catalog}
+      </div>
+    );
+  }
+
+  if (pages.length === 0) {
+    return (
+      <div>
+        <GroupCaption>Integrations</GroupCaption>
+        {catalog}
+      </div>
+    );
+  }
 
   // Pressing a sleeping row is what opens its tunnel. The navigation is not
   // held up for it — the page has its own pending and error states, and a
@@ -217,6 +259,11 @@ function IntegrationsGroup() {
     setWaking(id);
     setFailed(null);
     void wake(id, preference)
+      // Everything cached was read while the tunnel was down — the probe
+      // that said unreachable, the page verdicts built on a dead socket,
+      // the address itself if the forward moved ports. A row that stayed
+      // "asleep" after a successful wake is this cache, not the tunnel.
+      .then(() => queryClient.invalidateQueries())
       .catch((error: unknown) =>
         setFailed(error instanceof Error ? error.message : String(error))
       )
@@ -245,13 +292,14 @@ function IntegrationsGroup() {
           active={
             page.own
               ? undefined
-              : pathname === "/settings/integrations" && vendor === page.id
+              : pathname === "/integrations" && vendor === page.id
           }
         />
       ))}
       {failed && (
         <p className="px-2 pb-1 text-[10px] leading-snug text-err">{failed}</p>
       )}
+      {catalog}
     </div>
   );
 }

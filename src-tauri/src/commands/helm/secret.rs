@@ -9,6 +9,7 @@ use crate::error::{Error, PluginError, Result};
 use crate::state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use flate2::read::GzDecoder;
+use futures::StreamExt;
 use k8s_openapi::api::core::v1::Secret;
 use kube::api::ListParams;
 use kube::Api;
@@ -50,6 +51,46 @@ fn decode_helm_release(data: &[u8]) -> Result<HelmSecretRelease> {
     })
 }
 
+/// The newest revision of each release, picked from metadata alone.
+///
+/// Helm labels every release Secret with `name` and `version`, so the
+/// winners are known before a single payload is transferred — and the
+/// payloads are the whole cost: each revision carries the release's full
+/// gzipped chart, so listing them whole transfers a history of blobs to
+/// throw all but one of each away. Versions compare as numbers, because
+/// `"10"` loses to `"9"` as a string.
+fn latest_release_secrets<'a>(
+    entries: impl Iterator<
+        Item = (
+            &'a str,
+            &'a str,
+            Option<&'a std::collections::BTreeMap<String, String>>,
+        ),
+    >,
+) -> Vec<(String, String)> {
+    let mut best: HashMap<(String, String), (i64, String)> = HashMap::new();
+    for (namespace, secret_name, labels) in entries {
+        let Some(labels) = labels else { continue };
+        let Some(release) = labels.get("name") else {
+            continue;
+        };
+        let version = labels
+            .get("version")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+        let key = (namespace.to_string(), release.clone());
+        match best.get(&key) {
+            Some((seen, _)) if *seen >= version => {}
+            _ => {
+                best.insert(key, (version, secret_name.to_string()));
+            }
+        }
+    }
+    best.into_iter()
+        .map(|((namespace, _), (_, secret_name))| (namespace, secret_name))
+        .collect()
+}
+
 /// List Helm releases using native Kubernetes API (reads Helm secrets directly)
 #[tauri::command]
 pub async fn list_helm_releases_native(
@@ -60,13 +101,45 @@ pub async fn list_helm_releases_native(
 
     let secrets: Api<Secret> = ctx.namespaced_or_cluster_api();
 
-    // List secrets with helm label
+    // Metadata first, payloads for the winners only: this list used to
+    // fetch every revision of every release whole — on the reported
+    // cluster half the transfer was superseded blobs decoded and thrown
+    // away, and the page took seven seconds to say five names.
     let lp = ListParams::default().labels("owner=helm");
-    let secret_list = secrets.list(&lp).await?;
+    let metas = secrets.list_metadata(&lp).await?;
+    let winners = latest_release_secrets(metas.items.iter().filter_map(|meta| {
+        Some((
+            meta.metadata.namespace.as_deref()?,
+            meta.metadata.name.as_deref()?,
+            meta.metadata.labels.as_ref(),
+        ))
+    }));
+
+    let client = ctx.client.clone();
+    let fetched = futures::stream::iter(winners)
+        .map(|(namespace, name)| {
+            let client = client.clone();
+            async move {
+                Api::<Secret>::namespaced(client, &namespace)
+                    .get(&name)
+                    .await
+            }
+        })
+        .buffer_unordered(6)
+        .collect::<Vec<_>>()
+        .await;
 
     let mut releases_map: HashMap<(String, String), HelmRelease> = HashMap::new();
 
-    for secret in secret_list {
+    for secret in fetched.into_iter().filter_map(|result| match result {
+        Ok(secret) => Some(secret),
+        Err(error) => {
+            // A revision deleted between the metadata list and the get is
+            // a release that changed under us, not a page that failed.
+            tracing::warn!("Failed to fetch Helm release secret: {}", error);
+            None
+        }
+    }) {
         if let Some(data) = secret.data {
             if let Some(release_data) = data.get("release") {
                 match decode_helm_release(&release_data.0) {
@@ -109,6 +182,98 @@ pub async fn list_helm_releases_native(
     releases.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
 
     Ok(releases)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn labels(name: &str, version: &str) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("owner".to_string(), "helm".to_string()),
+            ("name".to_string(), name.to_string()),
+            ("version".to_string(), version.to_string()),
+        ])
+    }
+
+    /// A history of superseded revisions must cost one fetch, not ten —
+    /// and the tenth beats the ninth numerically, where a string compare
+    /// would hand the win to `"9"`.
+    #[test]
+    fn picks_the_newest_revision_of_each_release() {
+        let traefik: Vec<BTreeMap<String, String>> = (1..=10)
+            .map(|v| labels("traefik", &v.to_string()))
+            .collect();
+        let argo = [labels("argocd", "1"), labels("argocd", "2")];
+        let entries: Vec<(&str, &str, Option<&BTreeMap<String, String>>)> = traefik
+            .iter()
+            .enumerate()
+            .map(|(i, l)| ("traefik", TRAEFIK_NAMES[i], Some(l)))
+            .chain([
+                ("argocd", "sh.helm.release.v1.argocd.v1", Some(&argo[0])),
+                ("argocd", "sh.helm.release.v1.argocd.v2", Some(&argo[1])),
+            ])
+            .collect();
+
+        let mut winners = latest_release_secrets(entries.into_iter());
+        winners.sort();
+        assert_eq!(
+            winners,
+            vec![
+                (
+                    "argocd".to_string(),
+                    "sh.helm.release.v1.argocd.v2".to_string()
+                ),
+                (
+                    "traefik".to_string(),
+                    "sh.helm.release.v1.traefik.v10".to_string()
+                ),
+            ]
+        );
+    }
+
+    const TRAEFIK_NAMES: [&str; 10] = [
+        "sh.helm.release.v1.traefik.v1",
+        "sh.helm.release.v1.traefik.v2",
+        "sh.helm.release.v1.traefik.v3",
+        "sh.helm.release.v1.traefik.v4",
+        "sh.helm.release.v1.traefik.v5",
+        "sh.helm.release.v1.traefik.v6",
+        "sh.helm.release.v1.traefik.v7",
+        "sh.helm.release.v1.traefik.v8",
+        "sh.helm.release.v1.traefik.v9",
+        "sh.helm.release.v1.traefik.v10",
+    ];
+
+    /// Two releases wearing one name in different namespaces are two
+    /// releases; a secret with no helm `name` label is none at all.
+    #[test]
+    fn keeps_namespaces_apart_and_skips_the_unlabelled() {
+        let one = labels("api", "3");
+        let two = labels("api", "5");
+        let entries: Vec<(&str, &str, Option<&BTreeMap<String, String>>)> = vec![
+            ("backend", "sh.helm.release.v1.api.v3", Some(&one)),
+            ("frontend", "sh.helm.release.v1.api.v5", Some(&two)),
+            ("backend", "some-other-secret", None),
+        ];
+
+        let mut winners = latest_release_secrets(entries.into_iter());
+        winners.sort();
+        assert_eq!(
+            winners,
+            vec![
+                (
+                    "backend".to_string(),
+                    "sh.helm.release.v1.api.v3".to_string()
+                ),
+                (
+                    "frontend".to_string(),
+                    "sh.helm.release.v1.api.v5".to_string()
+                ),
+            ]
+        );
+    }
 }
 
 /// Get Helm release detail (values, manifest, notes)

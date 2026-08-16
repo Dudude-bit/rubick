@@ -93,6 +93,14 @@ beforeEach(() => {
   listCustomResources.mockResolvedValue([]);
 });
 
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+// The detection scan is gated on a standing connection now — these tests
+// exercise what detection hands out, so the gate is opened for them.
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true, currentContext: "test" });
+});
+
 describe("the vendors that get a row", () => {
   /**
    * Would break if a vendor that declares what it gives but has no facts

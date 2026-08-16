@@ -11,8 +11,11 @@ license = "GPL-3.0-or-later"
 name = "k8s_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# The process name is what macOS prints in the dev app bar, where there is
+# no bundle to spell "Rubick" over it. The crate keeps its name; only the
+# binary wears the product's.
 [[bin]]
-name = "k8s-gui"
+name = "Rubick"
 path = "src/main.rs"
 
 [dependencies]
@@ -30,7 +33,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Kubernetes
-kube = { version = "0.97", default-features = false, features = ["client", "config", "runtime", "ws", "oauth", "oidc", "rustls-tls"] }
+kube = { version = "0.97", default-features = false, features = ["client", "config", "runtime", "ws", "oauth", "oidc", "rustls-tls", "gzip"] }
 k8s-openapi = { version = "0.23", features = ["v1_31"] }
 
 # GCP GKE authentication

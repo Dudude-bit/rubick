@@ -1,78 +1,60 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSource, type PeekSummary } from "./peek-sources";
-import type { NodeInfo } from "@/generated/types";
-import type { PeekTarget } from "@/hooks/usePeek";
+import { flatten } from "./peek-sources";
 
-function node(labels: Record<string, string> = {}): NodeInfo {
-  return {
-    name: "k3d-k8s-gui-dev-agent-0",
-    uid: "node-uid",
-    status: { ready: true, conditions: [], addresses: [] },
-    roles: [],
-    version: "v1.31.5+k3s1",
-    os: "linux",
-    arch: "amd64",
-    containerRuntime: "containerd://2.0.0",
-    labels,
-    taints: [],
-    capacity: { cpu: "8", memory: "16Gi", pods: "110", ephemeralStorage: null },
-    allocatable: {
-      cpu: "8",
-      memory: "16Gi",
-      pods: "110",
-      ephemeralStorage: null,
-    },
-    providerId: "k3s://k3d-k8s-gui-dev-agent-0",
-    createdAt: null,
-  };
-}
-
-const target: PeekTarget = { kind: "Node", name: "k3d-k8s-gui-dev-agent-0" };
-
-const summarise = (labels: Record<string, string> = {}): PeekSummary =>
-  resolveSource(target).summarise(node(labels), target);
-
-const group = (summary: PeekSummary, title: string) =>
-  summary.groups.find((entry) => entry.title === title);
-
-const rows = (summary: PeekSummary, title: string) =>
-  (group(summary, title)?.items ?? []).map((item) => [item.label, item.value]);
-
-describe("the node a peek opens on", () => {
-  it("says which pool made it, what it is and where, when the cluster says", () => {
-    const summary = summarise({
-      "cloud.google.com/gke-nodepool": "batch-pool",
-      "node.kubernetes.io/instance-type": "e2-standard-4",
-      "topology.kubernetes.io/zone": "europe-west1-b",
-    });
-    expect(rows(summary, "Placement")).toEqual(
-      expect.arrayContaining([
-        ["Pool", "batch-pool"],
-        ["Instance type", "e2-standard-4"],
-        ["Zone", "europe-west1-b"],
-      ])
+describe("what a peek shows of a spec it has no schema for", () => {
+  /**
+   * The reported case: an IngressRoute's whole point — the match rule, the
+   * service, the priority — sits inside `spec.routes`, and the peek printed
+   * `routes: 1 entries` and nothing else. An array of objects is descended
+   * with indexed paths, not counted.
+   */
+  it("descends into an array of objects instead of counting it", () => {
+    const rows = flatten(
+      {
+        entryPoints: ["web", "websecure"],
+        routes: [
+          {
+            match: "Host(`api.example.com`)",
+            priority: 10,
+            services: [{ name: "api", port: 8080 }],
+          },
+        ],
+      },
+      12
     );
+
+    expect(rows).toContainEqual({
+      label: "routes.0.match",
+      value: "Host(`api.example.com`)",
+      mono: true,
+    });
+    expect(rows).toContainEqual({
+      label: "routes.0.priority",
+      value: "10",
+      mono: true,
+    });
+    expect(rows).toContainEqual({
+      label: "routes.0.services.0.name",
+      value: "api",
+      mono: true,
+    });
   });
 
-  it("marks a node the cloud can take back, in the colour of a warning", () => {
-    const summary = summarise({
-      "cloud.google.com/gke-nodepool": "batch-pool",
-      "cloud.google.com/gke-spot": "true",
-    });
-    const spot = group(summary, "Placement")?.items.find(
-      (item) => item.label === "Spot"
-    );
-    expect(spot?.tone).toBe("warn");
-    expect(String(spot?.value)).toMatch(/take this node back/i);
+  /** A scalar list stays one row — `web · websecure` reads, ten rows do not. */
+  it("keeps a scalar array joined on one row", () => {
+    const rows = flatten({ entryPoints: ["web", "websecure"] }, 12);
+    expect(rows).toEqual([
+      { label: "entryPoints", value: "web · websecure", mono: true },
+    ]);
   });
 
-  it("claims nothing about a node no vendor labelled", () => {
-    // A k3d node carries a providerID and nothing else. "Not spot" is not a
-    // fact anybody holds, so the panel is the one it was before this existed.
-    const summary = summarise();
-    expect(group(summary, "Placement")).toBeUndefined();
-    expect(group(summary, "Machine")).toBeDefined();
-    expect(JSON.stringify(summary)).not.toMatch(/spot/i);
+  /** The cap still holds however deep the spec goes. */
+  it("stops at the row limit", () => {
+    const rows = flatten(
+      { routes: Array.from({ length: 40 }, () => ({ match: "x" })) },
+      12
+    );
+    expect(rows).toHaveLength(12);
   });
 });

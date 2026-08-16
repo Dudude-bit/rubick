@@ -5,7 +5,6 @@ import { AboutSettings } from "@/components/settings/AboutSettings";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { ClustersSettings } from "@/components/settings/ClustersSettings";
 import { DiagnosticsSettings } from "@/components/settings/DiagnosticsSettings";
-import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { SettingsSearchable } from "@/components/settings/settings-row";
 import {
@@ -32,32 +31,13 @@ import { cn } from "@/lib/utils";
  */
 
 function sectionContent(id: string, connected: boolean, active: boolean) {
+  void connected;
+  void active;
   switch (id) {
     case "appearance":
       return <AppearanceSettings />;
     case "clusters":
       return <ClustersSettings />;
-    case "integrations":
-      return connected ? (
-        // A query mounts every section so its rows can be counted. Mounting
-        // is not visiting, and what an extension is currently doing costs a
-        // list call per detected vendor to find out — so the pane indexes
-        // itself either way and only asks the cluster when it is the one
-        // being read.
-        <IntegrationsSettings active={active} />
-      ) : (
-        // An empty list and an unanswerable question look the same and
-        // mean different things: one says the cluster has none of these,
-        // the other that nothing was asked.
-        <div className="max-w-[64ch] py-8">
-          <h3 className="text-xs font-medium text-fg">No cluster connected</h3>
-          <p className="mt-1.5 text-xs text-fg-mut">
-            Connect a cluster and this will say what it has. Every extension
-            here is detected by asking the API server for its CRDs, and there is
-            no API server to ask.
-          </p>
-        </div>
-      );
     case "registries":
       // Registries keeps its own editor, which is not built from rows —
       // so the section is indexed as one thing.
@@ -173,6 +153,12 @@ export function Settings() {
             element={<SettingsShell activeId={section.id} />}
           />
         ))}
+        {/* Integrations moved out to its own door; the old address keeps
+            working for every link and bookmark that predates the move. */}
+        <Route
+          path="integrations"
+          element={<Navigate to="/integrations" replace />}
+        />
         <Route
           path="*"
           element={

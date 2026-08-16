@@ -85,10 +85,7 @@ export function LogHistoryBar({
           The API server has nothing more for{" "}
           <span className="font-mono">{stranded}</span>. Reading past a pod's
           own lifetime needs a Loki —{" "}
-          <Link
-            to="/settings/integrations"
-            className="text-info hover:underline"
-          >
+          <Link to="/integrations" className="text-info hover:underline">
             connect one
           </Link>
           .
