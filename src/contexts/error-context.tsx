@@ -1,44 +1,22 @@
 /**
- * Centralized Error Context Provider
+ * Application-wide error listener.
  *
- * Provides unified error handling across the application:
- * - Listens for global errors (window.error, unhandledrejection)
- * - Listens for backend errors (app-error event)
- * - Automatically logs all errors to the backend
- * - Provides toast notifications with deduplication
+ * Mounts three subscriptions and renders its children unchanged:
+ * - global errors (window.error, unhandledrejection)
+ * - backend errors (the `app-error` Tauri event)
+ * - the cluster store's error field
+ *
+ * Each one is logged to the backend and surfaced as a deduplicated
+ * toast. Nothing reads back from here — code that wants to report an
+ * error calls `reportError` from `@/lib/error-utils` directly.
  */
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
-import {
-  normalizeError,
-  reportError,
-  type NormalizedError,
-} from "@/lib/error-utils";
+import { reportError, type NormalizedError } from "@/lib/error-utils";
 
-interface ErrorContextValue {
-  /**
-   * Report an error - logs it and shows a toast notification
-   */
-  reportError: (error: unknown, context?: string) => NormalizedError;
-  /**
-   * Get the last N errors
-   */
-  getRecentErrors: () => NormalizedError[];
-}
-
-const ErrorContext = createContext<ErrorContextValue | null>(null);
-
-const MAX_RECENT_ERRORS = 20;
 const TOAST_DEDUPE_MS = 3000;
 
 interface Props {
@@ -50,7 +28,6 @@ interface Props {
  */
 export function ErrorProvider({ children }: Props) {
   const { toast } = useToast();
-  const recentErrors = useRef<NormalizedError[]>([]);
   const recentToasts = useRef<Map<string, number>>(new Map());
 
   const clusterError = useClusterStore((state) => state.error);
@@ -87,16 +64,10 @@ export function ErrorProvider({ children }: Props) {
     [toast]
   );
 
-  // Handle an error - log it, store it, and show toast
+  // Handle an error - log it and show toast
   const handleError = useCallback(
     (error: unknown, context?: string): NormalizedError => {
       const normalized = reportError(error, context);
-
-      // Store in recent errors
-      recentErrors.current.unshift(normalized);
-      if (recentErrors.current.length > MAX_RECENT_ERRORS) {
-        recentErrors.current.pop();
-      }
 
       // Determine toast title based on error type
       let title = "Error";
@@ -111,10 +82,6 @@ export function ErrorProvider({ children }: Props) {
     },
     [emitToast]
   );
-
-  const getRecentErrors = useCallback(() => {
-    return [...recentErrors.current];
-  }, []);
 
   // Handle cluster store errors
   useEffect(() => {
@@ -163,52 +130,5 @@ export function ErrorProvider({ children }: Props) {
     };
   }, [handleError]);
 
-  const value = useMemo(
-    () => ({
-      reportError: handleError,
-      getRecentErrors,
-    }),
-    [handleError, getRecentErrors]
-  );
-
-  return (
-    <ErrorContext.Provider value={value}>{children}</ErrorContext.Provider>
-  );
-}
-
-/**
- * Hook to access error context.
- *
- * Co-locating these hooks with the ErrorProvider component breaks
- * fast-refresh in dev (each save remounts the whole module).
- * Splitting into error-context-hooks.ts would force every consumer
- * to take a second import for marginal HMR gain.
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function useErrorContext(): ErrorContextValue {
-  const context = useContext(ErrorContext);
-  if (!context) {
-    throw new Error("useErrorContext must be used within ErrorProvider");
-  }
-  return context;
-}
-
-/**
- * Simplified hook for just reporting errors
- * Can be used without context being set up (will fall back to basic logging)
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function useReportError() {
-  const context = useContext(ErrorContext);
-
-  return useCallback(
-    (error: unknown, errorContext?: string): NormalizedError => {
-      if (context) {
-        return context.reportError(error, errorContext);
-      }
-      // Fallback when used outside provider
-      return normalizeError(error, errorContext);
-    },
-    [context]
-  );
+  return <>{children}</>;
 }

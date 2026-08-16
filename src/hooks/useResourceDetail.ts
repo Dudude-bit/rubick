@@ -206,22 +206,6 @@ export function useResourceDetail<T>(
 }
 
 /**
- * Error state component props
- */
-export interface DetailErrorProps {
-  /** Error message */
-  message?: string;
-  /** Resource kind for display */
-  resourceKind?: string;
-  /** Whether resource was not found */
-  isNotFound?: boolean;
-  /** Go back callback */
-  onBack?: () => void;
-  /** Additional actions */
-  actions?: React.ReactNode;
-}
-
-/**
  * Check if error indicates resource not found
  */
 export function isResourceNotFoundError(error: Error | null | string): boolean {

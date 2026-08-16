@@ -4,15 +4,10 @@ import type {
   PodInfo,
   NodeInfo,
 } from "@/generated/types";
-import { parseCPU, parseMemory } from "./k8s-quantity";
 
 export interface PodWithMetrics extends PodInfo {
   cpuMillicores: number | null;
   memoryBytes: number | null;
-}
-
-export interface PodWithMetricsAndResources extends PodWithMetrics {
-  aggregatedResources: AggregatedResources;
 }
 
 export interface NodeWithMetrics extends NodeInfo {
@@ -42,21 +37,6 @@ export function mergePodsWithMetrics(
       memoryBytes: metric?.memoryBytes ?? null,
     };
   });
-}
-
-/**
- * Merge pods with metrics AND parse resource specs
- */
-export function mergePodsWithMetricsAndResources(
-  pods: PodInfo[],
-  metrics: PodMetrics[]
-): PodWithMetricsAndResources[] {
-  const withMetrics = mergePodsWithMetrics(pods, metrics);
-
-  return withMetrics.map((pod) => ({
-    ...pod,
-    aggregatedResources: aggregatePodResources(pod),
-  }));
 }
 
 export function mergeNodesWithMetrics(
@@ -147,46 +127,6 @@ export function attachAggregatedPodMetrics<
       memoryBytes: aggregated.memoryBytes,
     };
   });
-}
-
-export function getTopPodsByCPU(
-  pods: Array<{
-    name: string;
-    namespace?: string | null;
-    cpuMillicores?: number | null;
-  }>,
-  limit: number = 5
-): Array<{ name: string; namespace: string; cpuMillicores: number }> {
-  return pods
-    .filter(
-      (pod) => pod.cpuMillicores !== null && pod.cpuMillicores !== undefined
-    )
-    .map((pod) => ({
-      name: pod.name,
-      namespace: pod.namespace ?? "default",
-      cpuMillicores: pod.cpuMillicores as number,
-    }))
-    .sort((a, b) => b.cpuMillicores - a.cpuMillicores)
-    .slice(0, limit);
-}
-
-export function getTopPodsByMemory(
-  pods: Array<{
-    name: string;
-    namespace?: string | null;
-    memoryBytes?: number | null;
-  }>,
-  limit: number = 5
-): Array<{ name: string; namespace: string; memoryBytes: number }> {
-  return pods
-    .filter((pod) => pod.memoryBytes !== null && pod.memoryBytes !== undefined)
-    .map((pod) => ({
-      name: pod.name,
-      namespace: pod.namespace ?? "default",
-      memoryBytes: pod.memoryBytes as number,
-    }))
-    .sort((a, b) => b.memoryBytes - a.memoryBytes)
-    .slice(0, limit);
 }
 
 /** The parts of a workload row that decide which pods are its own. */
@@ -286,83 +226,3 @@ export const matchDaemonSetPods = matcher(byGeneratedName);
 export const matchJobPods = matcher(byGeneratedName);
 export const matchCronJobPods = matcher(byGeneratedName);
 export const matchDeploymentPods = matcher(byDeploymentSelector);
-
-/**
- * Aggregated resource values in parsed form
- */
-export interface AggregatedResources {
-  cpuRequest: number | null;
-  cpuLimit: number | null;
-  memoryRequest: number | null;
-  memoryLimit: number | null;
-}
-
-/**
- * Aggregate resource requests and limits from a pod
- *
- * @param pod - Pod with cpuRequests, cpuLimits, memoryRequests, memoryLimits
- * @returns Parsed resource values
- */
-export function aggregatePodResources(pod: {
-  cpuRequests?: string | null;
-  cpuLimits?: string | null;
-  memoryRequests?: string | null;
-  memoryLimits?: string | null;
-}): AggregatedResources {
-  return {
-    cpuRequest: pod.cpuRequests ? parseCPU(pod.cpuRequests) : null,
-    cpuLimit: pod.cpuLimits ? parseCPU(pod.cpuLimits) : null,
-    memoryRequest: pod.memoryRequests ? parseMemory(pod.memoryRequests) : null,
-    memoryLimit: pod.memoryLimits ? parseMemory(pod.memoryLimits) : null,
-  };
-}
-
-/**
- * Aggregate resources across multiple pods
- *
- * @param pods - Array of pods with resource specs
- * @returns Summed resource values
- */
-export function aggregateMultiplePodResources(
-  pods: Array<{
-    cpuRequests?: string | null;
-    cpuLimits?: string | null;
-    memoryRequests?: string | null;
-    memoryLimits?: string | null;
-  }>
-): AggregatedResources {
-  let cpuRequest = 0;
-  let cpuLimit = 0;
-  let memoryRequest = 0;
-  let memoryLimit = 0;
-  let hasCpuRequest = false;
-  let hasCpuLimit = false;
-  let hasMemoryRequest = false;
-  let hasMemoryLimit = false;
-
-  for (const pod of pods) {
-    if (pod.cpuRequests) {
-      hasCpuRequest = true;
-      cpuRequest += parseCPU(pod.cpuRequests);
-    }
-    if (pod.cpuLimits) {
-      hasCpuLimit = true;
-      cpuLimit += parseCPU(pod.cpuLimits);
-    }
-    if (pod.memoryRequests) {
-      hasMemoryRequest = true;
-      memoryRequest += parseMemory(pod.memoryRequests);
-    }
-    if (pod.memoryLimits) {
-      hasMemoryLimit = true;
-      memoryLimit += parseMemory(pod.memoryLimits);
-    }
-  }
-
-  return {
-    cpuRequest: hasCpuRequest ? cpuRequest : null,
-    cpuLimit: hasCpuLimit ? cpuLimit : null,
-    memoryRequest: hasMemoryRequest ? memoryRequest : null,
-    memoryLimit: hasMemoryLimit ? memoryLimit : null,
-  };
-}

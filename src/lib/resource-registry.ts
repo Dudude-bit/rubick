@@ -24,11 +24,7 @@ import {
 
 export type ResourceScope = "namespaced" | "cluster";
 export type ResourceCategory =
-  | "workloads"
-  | "network"
-  | "storage"
-  | "configuration"
-  | null;
+  "workloads" | "network" | "storage" | "configuration" | null;
 
 export const RESOURCE_REGISTRY = [
   {
@@ -310,10 +306,6 @@ export function getApiVersion(resourceKind: string): string {
   return known?.apiVersion ?? "v1";
 }
 
-export function getScope(resourceKind: ResourceKind): ResourceScope {
-  return RESOURCE_BY_KIND.get(resourceKind)?.scope ?? "namespaced";
-}
-
 export function getDisplayPlural(resourceTypeOrPlural: string): string {
   const def =
     RESOURCE_BY_KIND.get(resourceTypeOrPlural as ResourceKind) ??
@@ -326,13 +318,6 @@ export function getResourceIcon(kind: ResourceKind | string): LucideIcon {
     RESOURCE_BY_KIND.get(kind as ResourceKind) ??
     RESOURCE_BY_PLURAL.get(kind.toLowerCase());
   return def?.icon ?? Box;
-}
-
-export function getCategory(resourceKindOrPlural: string): ResourceCategory {
-  const def =
-    RESOURCE_BY_KIND.get(resourceKindOrPlural as ResourceKind) ??
-    RESOURCE_BY_PLURAL.get(resourceKindOrPlural.toLowerCase());
-  return def?.category ?? null;
 }
 
 /**

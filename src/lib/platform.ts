@@ -5,10 +5,6 @@ export function setHostOs(os: string): void {
   hostOs = os;
 }
 
-export function getHostOs(): string {
-  return hostOs;
-}
-
 export function isMac(os: string = hostOs): boolean {
   return os === "macos";
 }

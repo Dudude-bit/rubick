@@ -19,10 +19,6 @@ import type {
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
-/** How many addresses take traffic: the ready ones, and the draining ones. */
-export const servingCount = (published: ServicePublished): number =>
-  published.ready + published.draining;
-
 /** Everything in the answer, published or merely present in it. */
 export const endpointCount = (published: ServicePublished): number =>
   published.ready + published.draining + published.notReady;

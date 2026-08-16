@@ -97,7 +97,3 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
  * credential to say something true.
  */
 export const DEFAULT_SETTINGS_SECTION = SETTINGS_SECTIONS[0].id;
-
-export function isSettingsSection(id: string | undefined): boolean {
-  return SETTINGS_SECTIONS.some((section) => section.id === id);
-}

@@ -99,17 +99,3 @@ export function isK8sVersionAtLeast(
   const minor = parseInt(match[2], 10);
   return major > minMajor || (major === minMajor && minor >= minMinor);
 }
-
-/**
- * Generate a stable hash from a string using djb2 algorithm
- *
- * @param str - Input string to hash
- * @returns Non-negative integer hash value
- */
-export function hashString(str: string): number {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) + hash + str.charCodeAt(i);
-  }
-  return Math.abs(hash);
-}

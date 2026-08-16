@@ -21,10 +21,7 @@ export type BackgroundJobType =
   | "drain";
 
 export type BackgroundJobStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed";
+  "pending" | "running" | "completed" | "failed";
 
 /**
  * Background job entry
@@ -209,29 +206,3 @@ export const useBackgroundJobStore = create<BackgroundJobState>((set, get) => ({
     ).length;
   },
 }));
-
-/**
- * Helper hook to run an async operation as a background job
- */
-export function useBackgroundJob() {
-  const { addJob, updateJob, completeJob, failJob } = useBackgroundJobStore();
-
-  const runJob = async <T>(
-    jobInfo: Omit<BackgroundJob, "id" | "createdAt" | "status">,
-    operation: () => Promise<T>
-  ): Promise<T> => {
-    const jobId = addJob({ ...jobInfo, status: "running" });
-
-    try {
-      const result = await operation();
-      completeJob(jobId);
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      failJob(jobId, message);
-      throw error;
-    }
-  };
-
-  return { runJob, addJob, updateJob, completeJob, failJob };
-}

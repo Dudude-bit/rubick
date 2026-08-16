@@ -67,46 +67,6 @@ const matchesSelector = (
   selectors: Record<string, string>
 ) => Object.entries(selectors).every(([key, value]) => labels[key] === value);
 
-const splitKeyValue = (value: string): [string, string] | null => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const equalsIndex = trimmed.indexOf("=");
-  const colonIndex = trimmed.indexOf(":");
-  const separatorIndex =
-    equalsIndex >= 0 ? equalsIndex : colonIndex >= 0 ? colonIndex : -1;
-  if (separatorIndex < 0) {
-    return null;
-  }
-  const key = trimmed.slice(0, separatorIndex).trim();
-  const val = trimmed.slice(separatorIndex + 1).trim();
-  if (!key) {
-    return null;
-  }
-  return [key, val];
-};
-
-export const parseLabelString = (value: string) => {
-  return value
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce<Record<string, string>>((acc, part) => {
-      const pair = splitKeyValue(part);
-      if (pair) {
-        acc[pair[0]] = pair[1];
-      }
-      return acc;
-    }, {});
-};
-
-export const formatLabelString = (labels: Record<string, string>) =>
-  Object.keys(labels)
-    .sort()
-    .map((key) => `${key}=${labels[key]}`)
-    .join(", ");
-
 export const parsePorts = (value: string) =>
   value
     .split(",")
@@ -114,26 +74,6 @@ export const parsePorts = (value: string) =>
     .filter((port) => Number.isFinite(port) && port > 0);
 
 export const formatPorts = (ports: number[]) => ports.join(", ");
-
-export const parseKeyValueLines = (value: string) => {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"))
-    .reduce<Record<string, string>>((acc, line) => {
-      const pair = splitKeyValue(line);
-      if (pair) {
-        acc[pair[0]] = pair[1];
-      }
-      return acc;
-    }, {});
-};
-
-export const formatKeyValueLines = (data: Record<string, string>) =>
-  Object.keys(data)
-    .sort()
-    .map((key) => `${key}=${data[key]}`)
-    .join("\n");
 
 export const createDefaultResourceData = (
   kind: ResourceKind,

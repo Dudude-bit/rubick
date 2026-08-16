@@ -273,30 +273,3 @@ export function calculateUtilization(
   if (total <= 0) return null;
   return Math.max(0, (used / total) * 100);
 }
-
-/**
- * Get color variant based on utilization percentage
- * Now supports type-specific thresholds
- *
- * @param percentage - Utilization percentage
- * @param type - Optional metric type for type-specific thresholds
- * @returns Color variant name
- */
-export function getUtilizationColor(
-  percentage: number | null,
-  type?: "cpu" | "memory"
-): "default" | "secondary" | "destructive" {
-  if (percentage === null) return "default";
-
-  // Type-specific thresholds
-  const thresholds =
-    type === "cpu"
-      ? { warning: 80, critical: 95 }
-      : type === "memory"
-        ? { warning: 70, critical: 85 }
-        : { warning: 70, critical: 90 }; // default when type not specified
-
-  if (percentage >= thresholds.critical) return "destructive";
-  if (percentage >= thresholds.warning) return "secondary";
-  return "default";
-}

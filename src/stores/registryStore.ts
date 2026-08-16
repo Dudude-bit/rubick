@@ -2,11 +2,7 @@ import { create } from "zustand";
 import { commands } from "@/lib/commands";
 
 export type RegistryProvider =
-  | "docker-hub"
-  | "registry-v2"
-  | "harbor"
-  | "gcr"
-  | "ecr";
+  "docker-hub" | "registry-v2" | "harbor" | "gcr" | "ecr";
 
 export interface RegistryConfig {
   id: string;
@@ -22,27 +18,6 @@ export interface RegistryConfig {
   username?: string;
   password?: string;
   token?: string;
-}
-
-export interface RegistryAuth {
-  authType: "none" | "basic" | "bearer";
-  username?: string;
-  password?: string;
-  token?: string;
-}
-
-export interface RegistryAuthStatus {
-  authType: RegistryAuth["authType"];
-  username?: string;
-  hasCredentials: boolean;
-}
-
-export interface RegistryImportEntry {
-  server: string;
-  host: string;
-  baseUrl: string;
-  isDockerHub: boolean;
-  auth?: RegistryAuth | null;
 }
 
 export const DEFAULT_REGISTRIES: RegistryConfig[] = [

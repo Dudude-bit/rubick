@@ -6,5 +6,3 @@ export const DEBUG_IMAGES = [
   { label: "Ubuntu", value: "ubuntu:latest" },
   { label: "Custom...", value: "custom" },
 ] as const;
-
-export type DebugImageValue = (typeof DEBUG_IMAGES)[number]["value"];

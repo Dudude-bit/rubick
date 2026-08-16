@@ -31,8 +31,6 @@ import { getValueByPath } from "../kit";
 export const AZURE_IDENTITY_CRD = "azureidentities.aadpodidentity.k8s.io";
 export const AZURE_IDENTITY_BINDING_CRD =
   "azureidentitybindings.aadpodidentity.k8s.io";
-export const AZURE_ASSIGNED_IDENTITY_CRD =
-  "azureassignedidentities.aadpodidentity.k8s.io";
 export const PROHIBITED_TARGET_CRD =
   "azureingressprohibitedtargets.appgw.ingress.k8s.io";
 
