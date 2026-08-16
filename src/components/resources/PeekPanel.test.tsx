@@ -381,6 +381,24 @@ describe("PeekPanel", () => {
     );
   });
 
+  /**
+   * "268435456" is a manifest's spelling; "256Mi" is an answer. The peek
+   * prints whatever unit the author used unless it can say it better.
+   */
+  it("prints requests and limits in humane units, not raw bytes", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({
+        cpuRequests: "0.5",
+        cpuLimits: null,
+        memoryRequests: "268435456",
+        memoryLimits: "1Gi",
+      } as Partial<PodInfo>)
+    );
+    wrap(POD_PEEK);
+    expect(await screen.findByText("500m → unlimited")).toBeInTheDocument();
+    expect(screen.getByText("256Mi → 1Gi")).toBeInTheDocument();
+  });
+
   it("says what failed and keeps offering the full page", async () => {
     vi.mocked(commands.getPod).mockRejectedValue(new Error("pods not found"));
     wrap(POD_PEEK);

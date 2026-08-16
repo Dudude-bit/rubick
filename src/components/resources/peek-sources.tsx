@@ -12,6 +12,8 @@ import {
   PHASE_LABEL,
   type ContainerLists,
 } from "@/lib/container-sequence";
+import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
+import { formatQuantity } from "@/lib/metric-format";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
@@ -131,6 +133,23 @@ function images(
   ];
 }
 
+/**
+ * A requests/limits value the way a person reads it: "268435456" is a
+ * manifest's spelling, "256Mi" is an answer. Anything unparseable is shown
+ * as written — the author's words beat a guess.
+ */
+function prettyQuantity(
+  value: string | null,
+  kind: "cpu" | "memory"
+): string | null {
+  if (!value) return null;
+  if (parseQuantity(value) === null) return value;
+  return formatQuantity(
+    kind === "cpu" ? parseCPU(value) : parseMemory(value),
+    kind
+  );
+}
+
 const list = (values: string[], empty = "—") =>
   values.length ? values.join(" · ") : empty;
 
@@ -247,12 +266,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             {
               label: "CPU",
-              value: `${pod.cpuRequests || "—"} → ${pod.cpuLimits || "unlimited"}`,
+              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? "unlimited"}`,
               mono: true,
             },
             {
               label: "Memory",
-              value: `${pod.memoryRequests || "—"} → ${pod.memoryLimits || "unlimited"}`,
+              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? "unlimited"}`,
               mono: true,
             },
           ],
