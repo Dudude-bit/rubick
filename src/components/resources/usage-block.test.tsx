@@ -435,7 +435,7 @@ describe("UsageBlock and a history supplier", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "connect one" })).toHaveAttribute(
       "href",
-      "/settings/integrations"
+      "/integrations"
     );
   });
 

@@ -100,6 +100,7 @@ import {
   allRoutes,
   backingOf,
   boundEntryPoints,
+  duplicatedServiceNames,
   hostGroups,
   terminatedUpstream,
   middlewareType,
@@ -454,6 +455,9 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  // Once per table, not per row: the same set decides every row's spelling.
+  const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
+
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     if (needle === "") return groups;
@@ -514,6 +518,7 @@ function RoutesTab({
             key={group.host ?? `catch-all-${index}`}
             group={group}
             sources={sources}
+            duplicated={duplicated}
             // Only an outage opens itself, and only while there are few
             // enough of them to read: a screen where everything is expanded
             // is a screen where nothing is emphasised.
@@ -554,10 +559,12 @@ function HostRow({
   group,
   sources,
   openByDefault,
+  duplicated,
 }: {
   group: HostGroup;
   sources: TraefikSources | null;
   openByDefault: boolean;
+  duplicated: Set<string>;
 }) {
   const state = hostState(group);
   const tls = group.tlsSecrets[0];
@@ -608,7 +615,7 @@ function HostRow({
         group.findings.length > 0 ? <Findings group={group} brief /> : undefined
       }
     >
-      <Paths group={group} sources={sources} />
+      <Paths group={group} sources={sources} duplicated={duplicated} />
       {sources && <HostChain group={group} sources={sources} />}
       <Findings group={group} />
     </TroubleRow>
@@ -624,14 +631,21 @@ function summarise(names: string[]): string {
 function Paths({
   group,
   sources,
+  duplicated,
 }: {
   group: HostGroup;
   sources: TraefikSources | null;
+  duplicated: Set<string>;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
       {group.routes.map((route) => (
-        <PathRow key={route.key} route={route} sources={sources} />
+        <PathRow
+          key={route.key}
+          route={route}
+          sources={sources}
+          duplicated={duplicated}
+        />
       ))}
     </div>
   );
@@ -640,9 +654,11 @@ function Paths({
 function PathRow({
   route,
   sources,
+  duplicated,
 }: {
   route: TraefikRoute;
   sources: TraefikSources | null;
+  duplicated: Set<string>;
 }) {
   const backing = sources ? backingOf(route, sources) : null;
 
@@ -667,12 +683,21 @@ function PathRow({
         {route.service ? (
           <>
             {route.service.kubernetes ? (
-              <ResourceRef
-                kind="Service"
-                name={route.service.name}
-                namespace={route.service.namespace}
-                showKind={false}
-              />
+              <>
+                {/* Two Services wearing one name render as the same word;
+                    the namespace is printed for exactly those. */}
+                {duplicated.has(route.service.name) && (
+                  <span className="font-mono text-fg-fnt">
+                    {route.service.namespace}/
+                  </span>
+                )}
+                <ResourceRef
+                  kind="Service"
+                  name={route.service.name}
+                  namespace={route.service.namespace}
+                  showKind={false}
+                />
+              </>
             ) : (
               // Traefik's own internals have no page in this app, and a link
               // to a Service that does not exist is a second dead end.
@@ -713,7 +738,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
   if (route.source.kind === "Ingress") {
     return (
       <span className="text-fg-fnt">
-        ·{" "}
+        · <span className="font-mono">{route.source.namespace}/</span>
         <ResourceRef
           kind="Ingress"
           name={route.source.name}
@@ -725,7 +750,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
   }
   return (
     <span className="text-fg-fnt">
-      ·{" "}
+      · <span className="font-mono">{route.source.namespace}/</span>
       <ResourceRef
         kind="IngressRoute"
         name={route.source.name}
@@ -1016,7 +1041,7 @@ const STOP_UNDER: Record<ChainStop["reason"], string> = {
 /** One object, linked, the way the reader will go and edit it. */
 function objectRef(route: TraefikRoute): ReactNode {
   return (
-    <span className="whitespace-nowrap">
+    <span>
       {route.source.kind}{" "}
       <span className="font-mono text-fg-fnt">{route.source.namespace}/</span>
       <ResourceRef

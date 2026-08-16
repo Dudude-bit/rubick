@@ -285,7 +285,7 @@ function HistoryNote({ state }: { state: RangedHistory }) {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
         Longer than this needs a Prometheus —{" "}
-        <Link to="/settings/integrations" className="text-info hover:underline">
+        <Link to="/integrations" className="text-info hover:underline">
           connect one
         </Link>
         .

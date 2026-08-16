@@ -9,6 +9,7 @@ import type {
 } from "@/generated/types";
 import {
   allRoutes,
+  duplicatedServiceNames,
   hostGroups,
   middlewareUses,
   readEntryPoints,
@@ -707,6 +708,37 @@ describe("the findings", () => {
     expect(
       catchAll?.findings.filter((finding) => finding.kind === "clear")
     ).toEqual([]);
+  });
+});
+
+describe("which service names need their namespace beside them", () => {
+  /**
+   * Two Services named `frontend` in two namespaces render as the same
+   * word on every row, and a reader migrating between them cannot tell
+   * which row is the old one — the exact moment they are looking.
+   */
+  it("names only the collisions", () => {
+    const route = (namespace: string, service: string) =>
+      ingressRoute(`${namespace}-${service}`, {
+        routes: [
+          {
+            match: `Host(\`${namespace}.example.com\`)`,
+            services: [{ name: service, namespace, port: 80 }],
+          },
+        ],
+      });
+
+    const groups = hostGroups(
+      sources({
+        ingressRoutes: [
+          route("sketchar", "frontend"),
+          route("frontend", "frontend"),
+          route("api", "api"),
+        ],
+      })
+    );
+
+    expect(duplicatedServiceNames(groups)).toEqual(new Set(["frontend"]));
   });
 });
 

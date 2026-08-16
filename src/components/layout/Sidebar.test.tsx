@@ -152,14 +152,11 @@ describe("the Network group", () => {
 
 describe("the Integrations category", () => {
   /**
-   * The rule this group exists to keep. Would break if the category ever
-   * drew itself over an empty list — a caption above a gap on the majority
-   * of clusters, which is exactly the "empty rather than absent" the design
-   * refuses. Hiding it is only safe because Settings → Integrations still
-   * names every extension the app knows, so this must stay a claim about
-   * what the cluster *has*.
+   * The category is a door now, not a claim: the catalog row is always
+   * there — "this cluster has none of these" is that page's own answer —
+   * but a vendor nothing detected must still never get a row of its own.
    */
-  it("is absent, not empty, when nothing is detected", async () => {
+  it("offers the catalog and no vendor rows when nothing is detected", async () => {
     detectInClusterExtensions.mockResolvedValue([
       { id: "traefik", installed: false, version: null },
       { id: "cert-manager", installed: false, version: null },
@@ -167,15 +164,12 @@ describe("the Integrations category", () => {
 
     wrap(<Sidebar />);
 
-    // Settings is the last row on every screen, and proves the rail rendered.
-    expect(await screen.findByText("Settings")).toBeInTheDocument();
-    // While the scan runs the group holds its place with a skeleton; the
-    // claim under test is about what it does once the answer is in: an
-    // empty result removes the group, caption and all.
+    expect(
+      await screen.findByRole("link", { name: "All integrations" })
+    ).toHaveAttribute("href", "/integrations");
     await waitFor(() =>
-      expect(screen.queryByText("Integrations")).not.toBeInTheDocument()
+      expect(screen.queryByRole("link", { name: /Traefik/ })).toBeNull()
     );
-    expect(screen.queryByRole("link", { name: /Traefik/ })).toBeNull();
   });
 
   /**

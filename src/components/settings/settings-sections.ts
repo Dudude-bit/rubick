@@ -1,11 +1,4 @@
-import {
-  Info,
-  Package,
-  Palette,
-  Plug,
-  Server,
-  Stethoscope,
-} from "lucide-react";
+import { Info, Package, Palette, Server, Stethoscope } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface SettingsSectionDef {
@@ -25,7 +18,9 @@ export interface SettingsSectionDef {
 }
 
 /**
- * Six sections, split by what kind of decision each holds.
+ * Five sections, split by what kind of decision each holds. Integrations
+ * used to be the sixth and earned its own door: what a cluster has is not a
+ * preference of this app's, and mixing the two made both harder to find.
  *
  * The page used to be one scroll of eight groups, and the groups were
  * three different kinds of thing wearing the same shirt: a preference, the
@@ -54,16 +49,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
       "How the app reaches a cluster: the file that names them, the identity that authenticates, and the binaries it shells out to.",
     keywords:
       "clusters kubeconfig context cloud profile gcp azure aws cli helm kubectl binary path auth",
-  },
-  {
-    id: "integrations",
-    label: "Integrations",
-    icon: Plug,
-    description:
-      "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
-    keywords:
-      "integrations extensions cert-manager traefik prometheus argo flux istio crd",
-    clusterScoped: true,
   },
   {
     id: "registries",

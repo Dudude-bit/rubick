@@ -889,6 +889,32 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
   return groups.sort(compareGroups);
 }
 
+/**
+ * Service names that appear in more than one namespace across the table.
+ *
+ * Two Services named `frontend` render as the same word on every row, and
+ * the reader mid-migration cannot tell the old one from the new — the exact
+ * moment they are looking. The rows print the namespace for these names
+ * only, so the common case stays one word wide.
+ */
+export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
+  const namespaces = new Map<string, Set<string>>();
+  for (const group of groups) {
+    for (const route of group.routes) {
+      const service = route.service;
+      if (!service?.kubernetes) continue;
+      const seen = namespaces.get(service.name) ?? new Set<string>();
+      seen.add(service.namespace);
+      namespaces.set(service.name, seen);
+    }
+  }
+  return new Set(
+    [...namespaces]
+      .filter(([, spread]) => spread.size > 1)
+      .map(([name]) => name)
+  );
+}
+
 function compareGroups(a: HostGroup, b: HostGroup): number {
   const rank = (group: HostGroup) => urgencyOf(group.findings);
   if (rank(a) !== rank(b)) return rank(b) - rank(a);

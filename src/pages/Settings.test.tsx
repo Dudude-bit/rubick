@@ -14,9 +14,6 @@ import { SETTINGS_SECTIONS } from "@/components/settings/settings-sections";
 vi.mock("@/components/settings/ClustersSettings", () => ({
   ClustersSettings: () => <div>clusters pane</div>,
 }));
-vi.mock("@/components/settings/IntegrationsSettings", () => ({
-  IntegrationsSettings: () => <div>integrations pane</div>,
-}));
 // About is left real: its rows are what the cross-section count test
 // needs something to count.
 vi.mock("@/components/registry/RegistrySettings", () => ({
@@ -46,6 +43,8 @@ function renderAt(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/settings/*" element={<Settings />} />
+          {/* Where the moved section now lives, so the redirect has a floor. */}
+          <Route path="/integrations" element={<div>catalog page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -56,7 +55,6 @@ function renderAt(path: string) {
 const PANE_MARK: Record<string, RegExp> = {
   appearance: /Resource colouring/,
   clusters: /clusters pane/,
-  integrations: /integrations pane/,
   registries: /registries pane/,
   diagnostics: /Nothing here needs attention|Search path/,
   about: /Automatic updates/,
@@ -184,15 +182,16 @@ describe("Settings", () => {
     });
   });
 
-  describe("integrations with no cluster", () => {
-    it("says it cannot answer rather than showing an empty list", async () => {
-      useClusterStore.setState({ currentContext: null });
+  describe("the address integrations used to live at", () => {
+    /**
+     * Integrations moved out to its own door, and every link and bookmark
+     * that predates the move still has the old address. Would break if the
+     * redirect were dropped with the section.
+     */
+    it("forwards to the catalog page", async () => {
       renderAt("/settings/integrations");
 
-      expect(
-        await screen.findByText(/No cluster connected/)
-      ).toBeInTheDocument();
-      expect(screen.queryByText("integrations pane")).not.toBeInTheDocument();
+      expect(await screen.findByText("catalog page")).toBeInTheDocument();
     });
   });
 });

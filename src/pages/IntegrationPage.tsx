@@ -70,8 +70,8 @@ function Missing({ title, body }: { title: string; body: string }) {
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
       <p className="text-[11px] text-fg-fnt">
-        <Link to="/settings/integrations" className="text-info hover:underline">
-          Settings → Integrations
+        <Link to="/integrations" className="text-info hover:underline">
+          Integrations
         </Link>{" "}
         lists every extension this app knows about and what each one would give.
       </p>
