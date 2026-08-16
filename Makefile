@@ -58,7 +58,7 @@ dev:
 build:
 	$(MISE_EXEC) bun run tauri build
 
-# Run tests — both suites, matching what pre-push enforces.
+# Run tests — both suites, the same two CI runs.
 #
 # `cargo test` from the workspace root builds the bin, and
 # `tauri::generate_context!()` reads ../dist at compile time. dist/ is
