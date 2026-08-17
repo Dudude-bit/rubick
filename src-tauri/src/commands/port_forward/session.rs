@@ -39,23 +39,114 @@ impl Drop for PortForwardCleanup {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// How many failures in a row before a forward stops claiming it is coming back.
+///
+/// Twelve at the capped ten seconds is about two minutes of trying, which
+/// outlasts a rollout and a node reboot but not a lunch break. A forward that
+/// has failed for two minutes is not reconnecting, and saying so is worth more
+/// than a banner that never resolves.
+const MAX_ATTEMPTS: u32 = 12;
+
+/// What to do after a failed attempt, and what to say about it.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum AfterFailure {
+    /// Wait, then try again. The reason rides along: a banner that says only
+    /// "Retry in 10s" cannot be acted on, and this one repeated for a user
+    /// whose credentials had simply expired.
+    Retry { after: Duration, note: String },
+    /// Stop, and say why. Nothing about trying again would change the answer.
+    GiveUp { note: String },
+}
+
+/// Whether the API server's answer can change by asking again.
+///
+/// 401 and 403 can — this app does not renew credentials, so the recovery is
+/// the user reconnecting, and `current_client` picks that up on the next
+/// attempt. What cannot change on its own is a 404: the pod named at session
+/// start is gone, and a Deployment's replacement has a different name.
+fn permanent(err: &kube::Error) -> Option<&'static str> {
+    match err {
+        kube::Error::Api(response) if response.code == 404 => Some(
+            "The pod is gone. A rollout replaced it under a new name — forward to the new pod.",
+        ),
+        _ => None,
+    }
+}
+
+pub(super) fn after_failure(err: &kube::Error, attempt: u32, auto_reconnect: bool) -> AfterFailure {
+    let reason = err.to_string();
+
+    if !auto_reconnect {
+        return AfterFailure::GiveUp {
+            note: format!("Port-forward failed: {reason}"),
+        };
+    }
+    if let Some(why) = permanent(err) {
+        return AfterFailure::GiveUp {
+            note: format!("{why} ({reason})"),
+        };
+    }
+    if attempt >= MAX_ATTEMPTS {
+        return AfterFailure::GiveUp {
+            note: format!("Gave up after {attempt} attempts: {reason}"),
+        };
+    }
+
+    let after = Duration::from_secs(u64::from(attempt).min(10));
+    AfterFailure::Retry {
+        after,
+        note: format!("{reason} — retry in {}s", after.as_secs()),
+    }
+}
+
+/// The client to forward through, looked up fresh.
+///
+/// Not the client the session started with. A `kube::Client` carries the
+/// credentials it was built with, and this app does not renew them — a GKE
+/// token lasts about an hour. Held across a session, it goes on failing every
+/// call after that hour and keeps failing after the user reconnects the
+/// cluster, because the reconnect replaces the manager's client while this
+/// task still holds its own copy. Asked for per attempt, a reconnect heals
+/// the forward instead of leaving it to retry a dead credential forever.
+fn current_client(
+    manager: &crate::client::K8sClientManager,
+    context: &str,
+) -> std::result::Result<kube::Client, String> {
+    match manager.get_client(context) {
+        Some(client) => Ok((*client).clone()),
+        None => Err(format!("Not connected to {context}")),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn forward_connection(
     pod: String,
     namespace: String,
     remote_port: u16,
     local_port: u16,
     auto_reconnect: bool,
-    client: kube::Client,
+    clients: Arc<crate::client::K8sClientManager>,
+    context: String,
     mut local_stream: tokio::net::TcpStream,
     event_tx: tokio::sync::broadcast::Sender<AppEvent>,
     session_id: String,
 ) {
-    let ctx = ResourceContext::from_client(client, namespace.clone());
-    let pod_api: Api<k8s_openapi::api::core::v1::Pod> = ctx.namespaced_api();
     let mut attempt: u32 = 0;
 
     loop {
-        match pod_api.portforward(&pod, &[remote_port]).await {
+        let attempt_result = match current_client(&clients, &context) {
+            Ok(client) => {
+                let ctx = ResourceContext::from_client(client, namespace.clone());
+                let pod_api: Api<k8s_openapi::api::core::v1::Pod> = ctx.namespaced_api();
+                pod_api.portforward(&pod, &[remote_port]).await
+            }
+            // Disconnected right now. Treated as a failed attempt rather than
+            // a fatal one: the user reconnecting is exactly the recovery this
+            // loop is waiting for.
+            Err(why) => Err(kube::Error::Service(why.into())),
+        };
+
+        match attempt_result {
             Ok(mut portforwarder) => {
                 if attempt > 0 {
                     emit_port_forward_status(
@@ -91,35 +182,37 @@ async fn forward_connection(
                 break;
             }
             Err(err) => {
-                if !auto_reconnect {
-                    emit_port_forward_status(
-                        &event_tx,
-                        &session_id,
-                        &pod,
-                        &namespace,
-                        local_port,
-                        remote_port,
-                        "error",
-                        Some(format!("Port-forward failed: {err}")),
-                        None,
-                    );
-                    break;
-                }
-
                 attempt += 1;
-                let backoff = Duration::from_secs(u64::from(attempt).min(10));
-                emit_port_forward_status(
-                    &event_tx,
-                    &session_id,
-                    &pod,
-                    &namespace,
-                    local_port,
-                    remote_port,
-                    "reconnecting",
-                    Some(format!("Retry in {}s", backoff.as_secs())),
-                    Some(attempt),
-                );
-                sleep(backoff).await;
+                match after_failure(&err, attempt, auto_reconnect) {
+                    AfterFailure::GiveUp { note } => {
+                        emit_port_forward_status(
+                            &event_tx,
+                            &session_id,
+                            &pod,
+                            &namespace,
+                            local_port,
+                            remote_port,
+                            "error",
+                            Some(note),
+                            Some(attempt),
+                        );
+                        break;
+                    }
+                    AfterFailure::Retry { after, note } => {
+                        emit_port_forward_status(
+                            &event_tx,
+                            &session_id,
+                            &pod,
+                            &namespace,
+                            local_port,
+                            remote_port,
+                            "reconnecting",
+                            Some(note),
+                            Some(attempt),
+                        );
+                        sleep(after).await;
+                    }
+                }
             }
         }
     }
@@ -143,10 +236,14 @@ pub async fn port_forward_pod(
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
 
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    // Refuse a forward to a cluster we are not connected to, before binding a
+    // local port that would then answer nothing. The client itself is not kept
+    // — each attempt asks the manager again, see `current_client`.
+    if state.client_manager.get_client(&context).is_none() {
+        return Err(Error::Internal(
+            crate::error::messages::NO_CLIENT.to_string(),
+        ));
+    }
 
     let namespace = require_namespace(namespace, String::new())?;
 
@@ -183,7 +280,8 @@ pub async fn port_forward_pod(
     let session_id_for_task = session_id.clone();
     let namespace_for_task = namespace.clone();
     let pod_for_task = pod.clone();
-    let client_for_task = (*client).clone();
+    let clients_for_task = state.client_manager.clone();
+    let context_for_task = context.clone();
     let auto_reconnect = config.auto_reconnect;
     let remote_port = config.remote_port;
     let local_port = config.local_port;
@@ -227,7 +325,8 @@ pub async fn port_forward_pod(
                             let session_id = session_id_for_task.clone();
                             let pod = pod_for_task.clone();
                             let namespace = namespace_for_task.clone();
-                            let client = client_for_task.clone();
+                            let clients = clients_for_task.clone();
+                            let context = context_for_task.clone();
 
                             tokio::spawn(async move {
                                 forward_connection(
@@ -236,7 +335,8 @@ pub async fn port_forward_pod(
                                     remote_port,
                                     local_port,
                                     auto_reconnect,
-                                    client,
+                                    clients,
+                                    context,
                                     stream,
                                     event_tx,
                                     session_id,
@@ -334,6 +434,93 @@ mod tests {
             auto_reconnect: false,
             created_at: chrono::Utc::now(),
         }
+    }
+
+    fn api_error(code: u16) -> kube::Error {
+        kube::Error::Api(kube::error::ErrorResponse {
+            status: "Failure".into(),
+            message: format!("the server responded with {code}"),
+            reason: "Whatever".into(),
+            code,
+        })
+    }
+
+    /// The reported bug. A user watched "Port-forward reconnecting / Retry in
+    /// 10s" repeat and had no way to learn why — the reason was thrown away
+    /// and only the delay survived.
+    #[test]
+    fn a_retry_says_why_it_is_retrying() {
+        let AfterFailure::Retry { note, .. } = after_failure(&api_error(401), 3, true) else {
+            panic!("a 401 is recoverable by reconnecting, so it should retry");
+        };
+        assert!(
+            note.contains("401"),
+            "the reason has to reach the banner, got {note:?}"
+        );
+        assert!(
+            note.contains("retry in 3s"),
+            "and so does the delay: {note:?}"
+        );
+    }
+
+    /// Credentials are the case that made this loop forever, and they are the
+    /// case that CAN heal: `current_client` picks up the reconnect.
+    #[test]
+    fn an_expired_credential_keeps_trying() {
+        assert!(matches!(
+            after_failure(&api_error(401), 1, true),
+            AfterFailure::Retry { .. }
+        ));
+        assert!(matches!(
+            after_failure(&api_error(403), 1, true),
+            AfterFailure::Retry { .. }
+        ));
+    }
+
+    /// A pod that a rollout replaced is never coming back under that name, so
+    /// retrying it is a banner that will never resolve.
+    #[test]
+    fn a_pod_that_is_gone_stops_immediately() {
+        let AfterFailure::GiveUp { note } = after_failure(&api_error(404), 1, true) else {
+            panic!("404 means the name is gone; asking again cannot change it");
+        };
+        assert!(note.contains("rollout"), "and says what to do: {note:?}");
+    }
+
+    /// Two minutes of failing is not "reconnecting".
+    #[test]
+    fn it_stops_claiming_it_will_come_back() {
+        assert!(matches!(
+            after_failure(&api_error(500), MAX_ATTEMPTS - 1, true),
+            AfterFailure::Retry { .. }
+        ));
+        let AfterFailure::GiveUp { note } = after_failure(&api_error(500), MAX_ATTEMPTS, true)
+        else {
+            panic!("should give up at the cap");
+        };
+        assert!(note.contains("Gave up"), "{note:?}");
+    }
+
+    /// The backoff climbs a second per attempt and stops at ten, which is what
+    /// the reported screenshot was showing.
+    #[test]
+    fn the_wait_grows_and_then_stops_growing() {
+        let wait = |n| match after_failure(&api_error(500), n, true) {
+            AfterFailure::Retry { after, .. } => after,
+            AfterFailure::GiveUp { .. } => panic!("unexpected give-up at {n}"),
+        };
+        assert_eq!(wait(1), Duration::from_secs(1));
+        assert_eq!(wait(5), Duration::from_secs(5));
+        assert_eq!(wait(11), Duration::from_secs(10));
+    }
+
+    /// Without auto-reconnect there is no second attempt to explain.
+    #[test]
+    fn a_forward_that_was_told_not_to_reconnect_does_not() {
+        let AfterFailure::GiveUp { note } = after_failure(&api_error(500), 1, false) else {
+            panic!("auto_reconnect off means one attempt");
+        };
+        assert!(note.starts_with("Port-forward failed"), "{note:?}");
     }
 
     #[test]
