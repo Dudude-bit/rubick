@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
+import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 
 interface PortForwardEventPayload {
@@ -19,6 +21,7 @@ const DEDUPE_MS = 2500;
 export function usePortForwardEvents() {
   const { toast } = useToast();
   const setStatus = usePortForwardStore((state) => state.setStatus);
+  const openActivityOn = useActivityPanelStore((state) => state.openOn);
   const refreshSessions = usePortForwardStore((state) => state.refreshSessions);
   const lastToastRef = useRef<Record<string, { status: string; time: number }>>(
     {}
@@ -55,17 +58,32 @@ export function usePortForwardEvents() {
       const base = `${payload.local_port} → ${payload.pod}:${payload.remote_port}`;
       const message = payload.message || base;
 
+      // The toast is where somebody first learns a forward exists, and where
+      // they learn it is in trouble — so it is also the shortest way to the
+      // panel that manages it. Without this the notification was a dead end
+      // and the panel stayed unfound.
+      const manage = (
+        <ToastAction
+          altText="Open the port-forward panel"
+          onClick={() => openActivityOn("ports")}
+        >
+          Manage
+        </ToastAction>
+      );
+
       switch (payload.status) {
         case "listening":
           toast({
             title: "Port-forward active",
             description: message,
+            action: manage,
           });
           break;
         case "reconnecting":
           toast({
             title: "Port-forward reconnecting",
             description: message,
+            action: manage,
           });
           break;
         case "reconnected":
@@ -85,6 +103,7 @@ export function usePortForwardEvents() {
           toast({
             title: "Port-forward error",
             description: message,
+            action: manage,
             variant: "destructive",
           });
           refreshSessions();
@@ -101,5 +120,5 @@ export function usePortForwardEvents() {
         unlisten();
       }
     };
-  }, [refreshSessions, setStatus, toast]);
+  }, [openActivityOn, refreshSessions, setStatus, toast]);
 }

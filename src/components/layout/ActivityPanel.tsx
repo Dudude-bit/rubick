@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Sheet,
   SheetContent,
@@ -11,11 +11,16 @@ import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useBackgroundJobStore } from "@/stores/backgroundJobStore";
+import {
+  useActivityPanelStore,
+  type ActivityTab,
+} from "@/stores/activityPanelStore";
+import { activityLabel } from "@/lib/activity-label";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
 
-type TabId = "ports" | "terminals" | "jobs";
+type TabId = ActivityTab;
 
 const TABS: Array<{
   id: TabId;
@@ -28,8 +33,13 @@ const TABS: Array<{
 ];
 
 export function ActivityPanel() {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<TabId>("ports");
+  // Not local state: the command palette and the port-forward toast open this
+  // panel by name, and a reader who cannot find a screen reaches for the
+  // palette first.
+  const open = useActivityPanelStore((state) => state.open);
+  const tab = useActivityPanelStore((state) => state.tab);
+  const setOpen = useActivityPanelStore((state) => state.setOpen);
+  const setTab = useActivityPanelStore((state) => state.openOn);
 
   // IMPORTANT: every Zustand selector here returns a *raw* slice
   // (`state.sessions`, `state.jobs`) so its result is reference-stable
@@ -62,6 +72,7 @@ export function ActivityPanel() {
   };
 
   const totalActive = counts.ports + counts.terminals + counts.jobs;
+  const label = activityLabel(counts);
 
   const handleClose = () => setOpen(false);
 
@@ -73,10 +84,13 @@ export function ActivityPanel() {
         <button
           type="button"
           aria-label="Activity panel"
-          className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
+          // Underlined on hover as well as brightened: on a line where
+          // everything else is text that does nothing, colour alone did not
+          // read as a control.
+          className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-fg-fnt transition-colors hover:text-fg hover:underline hover:decoration-dotted hover:underline-offset-2"
         >
           <Activity className="h-3 w-3" />
-          <span>{totalActive > 0 ? `${totalActive} active` : "activity"}</span>
+          <span className={cn(totalActive > 0 && "tabular-nums")}>{label}</span>
         </button>
       </SheetTrigger>
 

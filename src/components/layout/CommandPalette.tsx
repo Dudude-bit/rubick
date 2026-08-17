@@ -19,9 +19,14 @@ import {
   Search,
   Server,
   Settings,
+  Terminal,
   X,
 } from "lucide-react";
 
+import {
+  useActivityPanelStore,
+  type ActivityTab,
+} from "@/stores/activityPanelStore";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
@@ -99,6 +104,19 @@ const quickActions = [
 ];
 
 /**
+ * The Activity panel's three tabs, by the names a reader searches for.
+ *
+ * "Port forwards" is here because someone with one running could not find it:
+ * the panel is a sheet behind a status-bar line, and the palette — the app's
+ * own answer to not finding something — did not know it existed.
+ */
+const PANELS: Array<{ tab: ActivityTab; label: string; icon: IconType }> = [
+  { tab: "ports", label: "Port forwards", icon: Network },
+  { tab: "terminals", label: "Terminals", icon: Terminal },
+  { tab: "jobs", label: "Background jobs", icon: Activity },
+];
+
+/**
  * Rows one cluster may spend while others are still answering.
  *
  * A fan-out is only honest if the reader can see who has answered, and one
@@ -137,9 +155,7 @@ function highlight(match: ContextMatch): ReactNode {
  * reached by typing `!`, and both are visible afterwards as a chip.
  */
 type Scope =
-  | { kind: "current" }
-  | { kind: "all" }
-  | { kind: "context"; context: string };
+  { kind: "current" } | { kind: "all" } | { kind: "context"; context: string };
 
 /**
  * The clusters the reader has explicitly agreed to open a connection to,
@@ -186,6 +202,19 @@ type Entry =
   | { id: string; kind: "hit"; hit: SearchHit; path: string | null }
   | { id: string; kind: "more"; context: string; rest: number }
   | { id: string; kind: "link"; path: string; label: string; icon: IconType }
+  /**
+   * A row that does something instead of going somewhere. Added because the
+   * Activity panel — port forwards, terminals, background jobs — was a sheet
+   * behind a status-bar line and therefore invisible to the one mechanism this
+   * app offers for "I cannot find it".
+   */
+  | {
+      id: string;
+      kind: "panel";
+      tab: ActivityTab;
+      label: string;
+      icon: IconType;
+    }
   | {
       id: string;
       kind: "recent";
@@ -240,6 +269,7 @@ export function CommandPalette() {
   const namespaceScope = useNamespaceScope();
   const isConnected = useClusterStore((s) => s.isConnected);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
+  const openActivityOn = useActivityPanelStore((s) => s.openOn);
   const marks = useClusterIdentityStore((s) => s.marks);
   const openTab = useScopeTabStore((s) => s.openTab);
 
@@ -391,6 +421,24 @@ export function CommandPalette() {
             path: action.path,
             label: action.label,
             icon: action.icon,
+          });
+        }
+      }
+
+      // Under their own caption, not Navigation: they open a panel over the
+      // page you are on rather than taking you anywhere.
+      const panels = PANELS.filter(
+        (panel) => !hasQuery || panel.label.toLowerCase().includes(needle)
+      );
+      if (panels.length > 0) {
+        out.push({ id: "cap:activity", kind: "caption", text: "Activity" });
+        for (const panel of panels) {
+          out.push({
+            id: `panel:${panel.tab}`,
+            kind: "panel",
+            tab: panel.tab,
+            label: panel.label,
+            icon: panel.icon,
           });
         }
       }
@@ -659,6 +707,12 @@ export function CommandPalette() {
           }
           go(entry.path);
           return;
+        case "panel":
+          // Nothing to open in a tab: it is a panel over the current page,
+          // not a page of its own.
+          openActivityOn(entry.tab);
+          close();
+          return;
         default:
           return;
       }
@@ -667,6 +721,7 @@ export function CommandPalette() {
       close,
       currentContext,
       go,
+      openActivityOn,
       openTab,
       pickScope,
       switchNamespace,
@@ -1087,6 +1142,13 @@ function EntryRow({
         </Row>
       );
     case "link":
+      return (
+        <Row {...shared}>
+          <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
+          <span className="min-w-0 truncate">{entry.label}</span>
+        </Row>
+      );
+    case "panel":
       return (
         <Row {...shared}>
           <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
