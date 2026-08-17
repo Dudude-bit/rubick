@@ -61,7 +61,7 @@ secrecy = "0.10"
 # X.509 is parsed here and never in the webview: a certificate's facts are
 # small, its bytes are not, and the private key beside it must never leave
 # this process.
-x509-parser = "0.16"
+x509-parser = "0.18"
 
 # Logging and tracing — the subscriber is initialised in k8s-gui-common.
 tracing = "0.1"
