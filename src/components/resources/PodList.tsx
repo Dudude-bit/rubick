@@ -7,6 +7,7 @@ import {
   type PodWithMetrics,
 } from "@/hooks/usePodsWithMetrics";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { silenceNote, type WithNodeSilence } from "@/lib/node-reporting";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
@@ -27,12 +28,15 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
 
+/** A pod row that also knows whether its node is still reporting. */
+type PodRow = WithNodeSilence<PodWithMetrics>;
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // eslint-disable-next-line react-refresh/only-export-components
-export const columns: ColumnDef<PodWithMetrics>[] = [
-  createNameColumn<PodWithMetrics>(ResourceType.Pod),
-  createNamespaceColumn<PodWithMetrics>(),
+export const columns: ColumnDef<PodRow>[] = [
+  createNameColumn<PodRow>(ResourceType.Pod),
+  createNamespaceColumn<PodRow>(),
   {
     // "CrashLoopBackOff" is the widest state this column ever shows, and it
     // is the one nobody should have to guess at from a truncation.
@@ -42,15 +46,27 @@ export const columns: ColumnDef<PodWithMetrics>[] = [
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
-    cell: ({ row }) => (
-      <StatusBadge
-        status={row.original.status.display}
-        title={`Phase ${row.original.status.phase}`}
-      />
-    ),
+    cell: ({ row }) => {
+      // A pod on a node that stopped reporting keeps whatever status the
+      // kubelet last wrote. The label stays kubectl's — this is the status
+      // the cluster holds — but the colour drops to neutral, because a
+      // confident green about a machine nobody can reach is the lie.
+      const silence = row.original.nodeSilence;
+      return (
+        <StatusBadge
+          status={row.original.status.display}
+          roleOverride={silence ? "neutral" : undefined}
+          title={
+            silence
+              ? silenceNote(silence)
+              : `Phase ${row.original.status.phase}`
+          }
+        />
+      );
+    },
   },
-  createCpuColumn<PodWithMetrics>(),
-  createMemoryColumn<PodWithMetrics>(),
+  createCpuColumn<PodRow>(),
+  createMemoryColumn<PodRow>(),
   {
     size: 70,
     id: "ready",
@@ -122,7 +138,7 @@ export const columns: ColumnDef<PodWithMetrics>[] = [
       />
     ),
   },
-  createAgeColumn<PodWithMetrics>(),
+  createAgeColumn<PodRow>(),
 ];
 
 export function PodList() {

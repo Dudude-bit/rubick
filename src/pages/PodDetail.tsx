@@ -59,6 +59,8 @@ import { PodPortForwardDialog } from "@/components/pod/PodPortForwardDialog";
 import { usePodPortForward } from "@/components/pod/usePodPortForward";
 import { usePodReplacementSearch } from "@/components/pod/usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
+import { useSilentNodes } from "@/hooks/useSilentNodes";
+import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
 import { useNodePlacement } from "@/hooks/useNodePlacement";
 import { SpotMark } from "@/components/resources/spot-mark";
@@ -298,6 +300,9 @@ export function PodDetail() {
 
   const connections = useConnections(ResourceType.Pod, name, namespace);
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
+  // The kubelet on this pod's node writes its status. If the node stopped
+  // answering, everything below is the last thing it said, not the state now.
+  const silence = silenceOf(pod?.nodeName, useSilentNodes(Boolean(pod)));
 
   const {
     savedLabels,
@@ -567,7 +572,10 @@ export function PodDetail() {
           pod?.status.display ? (
             <StatusBadge
               status={pod.status.display}
-              title={`Phase ${pod.status.phase}`}
+              roleOverride={silence ? "neutral" : undefined}
+              title={
+                silence ? silenceNote(silence) : `Phase ${pod.status.phase}`
+              }
             />
           ) : null
         }

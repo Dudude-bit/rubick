@@ -43,6 +43,13 @@ export const queryKeys = {
   // Namespaces
   namespaces: (): string[] => ["namespaces"],
 
+  /**
+   * The nodes nothing is heard from. Its own key, not the node list's: this
+   * one is derived, polled at a different rate, and shared by every surface
+   * that draws pods.
+   */
+  silentNodes: (): string[] => ["nodes", "silent"],
+
   // Contexts
   contexts: (): string[] => ["contexts"],
 

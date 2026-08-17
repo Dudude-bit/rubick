@@ -8,6 +8,8 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useSilentNodes } from "@/hooks/useSilentNodes";
+import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import type { PodInfo } from "@/generated/types";
@@ -99,10 +101,14 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     includeNodes: false,
   });
 
+  // Which nodes stopped reporting. A pod on one of them is describing a
+  // moment that has passed, and nothing in the pod object says so.
+  const silent = useSilentNodes(enabled);
+
   // Merge pods with their metrics - memoized for performance
-  const podsWithMetrics = useMemo<PodWithMetrics[]>(() => {
-    return mergePodsWithMetrics(pods, podMetrics);
-  }, [pods, podMetrics]);
+  const podsWithMetrics = useMemo<WithNodeSilence<PodWithMetrics>[]>(() => {
+    return withNodeSilence(mergePodsWithMetrics(pods, podMetrics), silent);
+  }, [pods, podMetrics, silent]);
 
   return {
     data: podsWithMetrics,
