@@ -5,7 +5,12 @@
 //! started, which is all the phase ever claimed. kubectl derives the
 //! answer people actually mean from the container states, and this is
 //! that derivation, ported from `printPod` in
-//! `pkg/printers/internalversion/printers.go`.
+//! `pkg/printers/internalversion/printers.go` — with one deviation:
+//! a Running verdict is checked against the pod's Ready condition, and
+//! prints `NotReady` when the condition denies it. kubectl trusts the
+//! container states, but those are the kubelet's own claims and outlive
+//! it: a node that stops answering leaves its pods frozen at
+//! running-and-ready until eviction, minutes later. See `display_status`.
 //!
 //! It lives in Rust rather than beside `statusRole` in TypeScript because
 //! it reads fields the frontend is not sent and has no reason to be: init
@@ -174,6 +179,24 @@ pub fn display_status(pod: &Pod) -> String {
             } else {
                 "NotReady".to_string()
             };
+        }
+    }
+
+    // The one deliberate deviation from kubectl. Container states are the
+    // kubelet's own claims, and they freeze at their last written values
+    // when its node goes silent — for minutes, a pod on a dead node still
+    // says running-and-ready. The Ready condition is the only field another
+    // controller flips on the pod's behalf, which makes it the live fact;
+    // the same rule catches a failing readiness probe, where "Running" and
+    // out of every Service's endpoints are simultaneously true. Absent is
+    // not denied: only a condition someone wrote can contradict the phase.
+    if reason == "Running" {
+        let denied = status.and_then(|s| s.conditions.as_ref()).is_some_and(|c| {
+            c.iter()
+                .any(|cond| cond.type_ == "Ready" && cond.status != "True")
+        });
+        if denied {
+            reason = "NotReady".to_string();
         }
     }
 
@@ -359,6 +382,56 @@ mod tests {
     #[test]
     fn a_pending_pod_with_no_containers_yet_stays_pending() {
         assert_eq!(display_status(&pod("Pending")), "Pending");
+    }
+
+    #[test]
+    fn a_pod_whose_node_stopped_answering_is_not_running() {
+        // The kubelet's last words freeze at running-and-ready when its node
+        // goes silent; the node lifecycle controller can only flip the pod's
+        // Ready condition. The condition is the live fact, the container
+        // states are history.
+        let mut p = pod("Running");
+        let s = p.status.as_mut().unwrap();
+        s.container_statuses = Some(vec![status("app", running(), true)]);
+        s.conditions = Some(vec![condition("Ready", "False")]);
+        assert_eq!(display_status(&p), "NotReady");
+    }
+
+    #[test]
+    fn a_pod_failing_its_readiness_probe_is_not_running() {
+        let mut p = pod("Running");
+        let s = p.status.as_mut().unwrap();
+        s.container_statuses = Some(vec![status("app", running(), false)]);
+        s.conditions = Some(vec![condition("Ready", "False")]);
+        assert_eq!(display_status(&p), "NotReady");
+    }
+
+    #[test]
+    fn an_unknown_ready_condition_reads_not_ready() {
+        let mut p = pod("Running");
+        let s = p.status.as_mut().unwrap();
+        s.container_statuses = Some(vec![status("app", running(), true)]);
+        s.conditions = Some(vec![condition("Ready", "Unknown")]);
+        assert_eq!(display_status(&p), "NotReady");
+    }
+
+    #[test]
+    fn a_conditionless_pod_stays_running() {
+        // A real kubelet always writes a Ready condition on a scheduled pod;
+        // absent means synthetic data, not unreadiness.
+        let mut p = pod("Running");
+        p.status.as_mut().unwrap().container_statuses = Some(vec![status("app", running(), true)]);
+        assert_eq!(display_status(&p), "Running");
+    }
+
+    #[test]
+    fn deletion_wins_over_not_ready() {
+        let mut p = pod("Running");
+        p.metadata.deletion_timestamp = Some(Time(Utc::now()));
+        let s = p.status.as_mut().unwrap();
+        s.container_statuses = Some(vec![status("app", running(), true)]);
+        s.conditions = Some(vec![condition("Ready", "False")]);
+        assert_eq!(display_status(&p), "Terminating");
     }
 
     #[test]
