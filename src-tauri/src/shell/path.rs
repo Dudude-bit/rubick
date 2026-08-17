@@ -71,6 +71,21 @@ async fn resolve_user_path() -> String {
 }
 
 /// Build fallback PATH from known common locations.
+/// Where krew keeps the plugin symlinks: `$KREW_ROOT/bin`, or `~/.krew/bin`.
+///
+/// `KREW_ROOT` is read from this process's environment, which is the same
+/// place krew itself reads it from; a value set only in an interactive shell
+/// profile is invisible here, and the default is then the right guess anyway.
+#[cfg(not(windows))]
+fn krew_bin() -> PathBuf {
+    match std::env::var_os("KREW_ROOT").filter(|v| !v.is_empty()) {
+        Some(root) => PathBuf::from(root).join("bin"),
+        None => dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/"))
+            .join(".krew/bin"),
+    }
+}
+
 fn build_fallback_path() -> String {
     let mut paths: Vec<PathBuf> = Vec::new();
 
@@ -88,6 +103,15 @@ fn build_fallback_path() -> String {
 
         // Snap (Linux)
         paths.push(PathBuf::from("/snap/bin"));
+
+        // krew, which is how kubectl credential plugins are installed and
+        // therefore where a missing `kubectl-oidc_login` most often already
+        // is. It has to be listed here rather than left to the shell: krew's
+        // own instructions put its PATH export in `.bashrc` / `.zshrc`, which
+        // an interactive shell reads and the login shell below does not. A
+        // user whose plugin works in their terminal was told by this app to
+        // install the thing they already had.
+        paths.push(krew_bin());
 
         // User local paths
         if let Some(home) = dirs::home_dir() {
@@ -188,6 +212,37 @@ mod tests {
         let path = build_fallback_path();
         assert!(path.contains("/usr/local/bin"), "Missing /usr/local/bin");
         assert!(path.contains("/usr/bin"), "Missing /usr/bin");
+    }
+
+    /// The reported failure. A user had `kubectl-oidc_login` installed via
+    /// krew and working in their terminal; this app said it was not installed
+    /// and listed eighteen directories it had searched, none of them krew's.
+    /// krew's install instructions put its PATH export in `.zshrc`, which the
+    /// login shell used above never reads, so the fallback has to know.
+    #[cfg(not(windows))]
+    #[test]
+    fn the_fallback_looks_where_krew_installs() {
+        let path = build_fallback_path();
+        assert!(
+            path.contains(&krew_bin().to_string_lossy().to_string()),
+            "krew's bin is not searched, and it is where `kubectl krew install` puts plugins"
+        );
+    }
+
+    /// Honoured because krew does: a plugin installed under a moved root is
+    /// still the plugin the exec block names.
+    #[cfg(not(windows))]
+    #[test]
+    fn krew_root_moves_where_we_look() {
+        // Not a std::env::set_var test — that races every other test in the
+        // binary. The function's two branches are checked by shape instead.
+        let default = krew_bin();
+        assert!(default.ends_with(".krew/bin"), "default is ~/.krew/bin");
+        assert_eq!(
+            PathBuf::from("/opt/krew").join("bin"),
+            PathBuf::from("/opt/krew/bin"),
+            "a KREW_ROOT is joined with `bin`, not used bare"
+        );
     }
 
     #[cfg(all(target_arch = "aarch64", not(windows)))]
