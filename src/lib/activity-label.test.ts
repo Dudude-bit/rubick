@@ -31,4 +31,21 @@ describe("what the activity trigger calls itself", () => {
     expect(activityLabel({ ports: 1, terminals: 2, jobs: 0 })).toBe("3 active");
     expect(activityLabel({ ports: 1, terminals: 1, jobs: 1 })).toBe("3 active");
   });
+
+  /**
+   * The reason the counting moved into the catalogue. Russian picks between
+   * three forms by the number, and the `n === 1 ? x : y` this file used to
+   * carry could only ever produce two.
+   */
+  it("counts in the reader's language, with that language's forms", () => {
+    const ports = (n: number) => activityLabel({ ...none, ports: n }, "ru");
+    expect(ports(1)).toBe("1 проброс");
+    expect(ports(2)).toBe("2 проброса");
+    expect(ports(5)).toBe("5 пробросов");
+    expect(ports(21)).toBe("21 проброс");
+    expect(activityLabel(none, "ru")).toBe("активность");
+    expect(activityLabel({ ports: 1, terminals: 1, jobs: 1 }, "ru")).toBe(
+      "активных: 3"
+    );
+  });
 });

@@ -9,7 +9,13 @@
  * So when only one kind of activity is running — which is the common case —
  * the trigger says which. Only a genuine mixture falls back to the total,
  * because listing three things does not fit an eleven-pixel line.
+ *
+ * The counting is the catalogue's job, not this file's: "1 проброс, 2 проброса,
+ * 5 пробросов" is three forms chosen by the number, and the English
+ * `n === 1 ? x : y` that used to live here could not express it.
  */
+
+import { translate, type Locale } from "@/i18n";
 
 export interface ActivityCounts {
   ports: number;
@@ -17,25 +23,28 @@ export interface ActivityCounts {
   jobs: number;
 }
 
-const NOUNS: Record<keyof ActivityCounts, [one: string, many: string]> = {
-  ports: ["port forward", "port forwards"],
-  terminals: ["terminal", "terminals"],
-  jobs: ["job", "jobs"],
-};
+const KEYS = {
+  ports: "portForwards",
+  terminals: "terminalCount",
+  jobs: "jobCount",
+} as const;
 
-export function activityLabel(counts: ActivityCounts): string {
-  const running = (Object.keys(NOUNS) as Array<keyof ActivityCounts>).filter(
+export function activityLabel(
+  counts: ActivityCounts,
+  locale: Locale = "en"
+): string {
+  const running = (Object.keys(KEYS) as Array<keyof ActivityCounts>).filter(
     (kind) => counts[kind] > 0
   );
 
-  if (running.length === 0) return "activity";
+  if (running.length === 0) return translate(locale, "activity", "idle");
 
   if (running.length === 1) {
     const kind = running[0];
-    const n = counts[kind];
-    const [one, many] = NOUNS[kind];
-    return `${n} ${n === 1 ? one : many}`;
+    return translate(locale, "activity", KEYS[kind], { n: counts[kind] });
   }
 
-  return `${counts.ports + counts.terminals + counts.jobs} active`;
+  return translate(locale, "activity", "active", {
+    n: counts.ports + counts.terminals + counts.jobs,
+  });
 }

@@ -7,6 +7,9 @@ import {
   type ResourceColouring,
 } from "@/stores/displaySettingsStore";
 import { useThemeStore } from "@/stores/themeStore";
+import { useLocaleStore } from "@/stores/localeStore";
+import { isTranslated, LOCALES, LOCALE_NAMES, type Locale } from "@/i18n";
+import { useT } from "@/i18n/useT";
 import { SettingRow, SettingsGroup } from "./settings-row";
 
 const THEMES = [
@@ -31,9 +34,45 @@ const SEGMENT =
 export function AppearanceSettings() {
   const { theme, setTheme } = useThemeStore();
   const { resourceColouring, setResourceColouring } = useDisplaySettingsStore();
+  const { choice, setChoice } = useLocaleStore();
+  const t = useT();
 
   return (
     <SettingsGroup>
+      <SettingRow
+        label={t("settings", "language")}
+        hint={t("settings", "languageHint")}
+        htmlFor="setting-language"
+        keywords="language locale translation русский"
+        control={
+          // A plain select, not the radio row the theme uses: six options and
+          // growing, and a language list is looked up by name rather than
+          // scanned. Each language is written in itself — somebody who needs
+          // this setting cannot necessarily read the current one.
+          <select
+            id="setting-language"
+            value={choice ?? "system"}
+            onChange={(event) =>
+              setChoice(
+                event.target.value === "system"
+                  ? null
+                  : (event.target.value as Locale)
+              )
+            }
+            className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg"
+          >
+            <option value="system">{t("settings", "systemLanguage")}</option>
+            {LOCALES.map((locale) => (
+              <option key={locale} value={locale}>
+                {LOCALE_NAMES[locale]}
+                {/* Offered but empty: the scaffolding is done, the words are
+                    not, and hiding it would hide where to contribute. */}
+                {isTranslated(locale) ? "" : " — not translated yet"}
+              </option>
+            ))}
+          </select>
+        }
+      />
       <SettingRow
         label="Theme"
         hint="System follows your desktop's light/dark preference."

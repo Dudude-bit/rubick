@@ -16,6 +16,7 @@ import {
   type ActivityTab,
 } from "@/stores/activityPanelStore";
 import { activityLabel } from "@/lib/activity-label";
+import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
@@ -72,7 +73,7 @@ export function ActivityPanel() {
   };
 
   const totalActive = counts.ports + counts.terminals + counts.jobs;
-  const label = activityLabel(counts);
+  const label = activityLabel(counts, useLocale());
 
   const handleClose = () => setOpen(false);
 
