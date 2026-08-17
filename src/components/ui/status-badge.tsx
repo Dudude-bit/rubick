@@ -23,7 +23,15 @@ import {
 } from "@/lib/status-role";
 
 export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  /** Raw status from the API, e.g. "Running", "CrashLoopBackOff". */
+  /**
+   * Raw status from the API, e.g. "Running", "CrashLoopBackOff".
+   *
+   * A code, never copy. It is what `statusRole` looks up to choose the
+   * colour, and that lookup falls back to `neutral` on a miss — so a
+   * translated string here would turn every badge grey without failing
+   * anything. Put translated text in `children`, which is rendered in
+   * preference to this. A lint guard refuses `status={t(...)}`.
+   */
   status: string;
   /** Show a leading dot in the role colour, instead of the role's glyph. */
   showDot?: boolean;

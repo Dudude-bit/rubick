@@ -21,6 +21,33 @@ describe("StatusBadge", () => {
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
+  /**
+   * The constraint the whole translation project rests on. `statusRole`
+   * derives the colour by looking the status up in a table of English keys
+   * and falls back to `neutral` on a miss, so a translated `status` would
+   * turn every badge in the app grey at once — with no error and no failing
+   * test, because the rest of them pass English.
+   *
+   * The code decides the colour, the child decides what is read. A lint
+   * guard refuses `status={t(...)}` so this cannot be undone by hand.
+   */
+  it("takes its colour from the code, not from the label shown", () => {
+    const { container } = render(
+      <StatusBadge status="CrashLoopBackOff">
+        перезапускается по кругу
+      </StatusBadge>
+    );
+    expect(screen.getByText("перезапускается по кругу")).toBeInTheDocument();
+    expect(container.firstElementChild!.className).toContain("text-err");
+  });
+
+  /** And a status nobody has a colour for stays readable rather than blank. */
+  it("shows an unknown status as itself, in the neutral role", () => {
+    const { container } = render(<StatusBadge status="SomeCustomPhase" />);
+    expect(screen.getByText("SomeCustomPhase")).toBeInTheDocument();
+    expect(container.firstElementChild!.className).toContain("text-fg-mut");
+  });
+
   it("maps conditions to roles", () => {
     const { container } = render(
       <ConditionBadge conditionStatus="False" conditionType="Ready" />

@@ -138,6 +138,22 @@ export default [
           message:
             "Ask for a facet, not for a vendor: import { useCapability, useCrdView, flavourOf, ... } from '@/integrations'. Nothing outside src/integrations/ names a vendor.",
         },
+        {
+          // The one that turns the whole interface grey without failing.
+          //
+          // `statusRole()` derives a badge's colour by looking the status up
+          // in a table of English keys, and misses fall back to `neutral`
+          // rather than throwing. Hand it a translated string and every
+          // badge in the app loses its severity at once — silently, with
+          // every test still green, because the tests pass English.
+          //
+          // So `status` is a code and never copy. A translated label goes in
+          // `children`, which the badge already renders in preference to it.
+          selector:
+            "JSXAttribute[name.name='status'] > JSXExpressionContainer > CallExpression[callee.name=/^(t|translate)$/]",
+          message:
+            "StatusBadge's `status` decides the colour by table lookup, so it must stay the untranslated code. Put the translated text in children: <StatusBadge status={code}>{label}</StatusBadge>.",
+        },
       ],
     },
   },
