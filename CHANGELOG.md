@@ -5,6 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-08-17
+
+Four changes, three of them from one person's first hour with the app and
+one from a comment under the release post. All four are the same shape:
+the app said something confident that was not true, or said nothing at
+all where it knew better.
+
+### Fixed — a plugin that was installed, reported as missing
+
+A kubeconfig context authenticating through `kubectl oidc-login` needs a
+binary called `kubectl-oidc_login`. A user had one, working, in their
+terminal — and the app said it was not installed, listed the eighteen
+directories it had searched, and advised `kubectl krew install
+oidc-login`. krew is where the plugin already was.
+
+PATH comes from a login shell, which on zsh reads `.zshenv`, `.zprofile`
+and `.zlogin` and never `.zshrc` — and `.zshrc` is exactly where krew's
+own instructions put its PATH export. `$KREW_ROOT/bin`, or `~/.krew/bin`,
+is searched now regardless of what the shell said.
+
+### Fixed — a port-forward that reconnected forever and would not say why
+
+Two defects, one cause: the session could neither recover nor explain
+itself.
+
+It held the Kubernetes client it was created with. That client carries
+the credentials it was built with and this app renews none — a GKE token
+lasts about an hour — so every attempt failed after that, and kept
+failing even once the cluster was reconnected, because reconnecting
+replaces the app's client while the forward still held its own copy. Each
+attempt asks for the current client now, so reconnecting heals the
+forward.
+
+The reason was discarded. `Retry in 10s` was the whole message, which
+made an expired credential indistinguishable from a blip. It rides along
+now. And a forward that cannot come back stops saying it will: a pod
+replaced by a rollout ends immediately, naming what happened, and
+anything else gives up after about two minutes as an error rather than a
+banner that never resolves.
+
+### Fixed — port-forward management nobody could find
+
+There is a Ports tab, with every running forward, its address and its
+state. Its only door was a status-bar line reading "1 active" — the
+faintest role at eleven pixels, in a row of `dark · 239 pods · 8
+problems` where nothing else is clickable, naming a category rather than
+the thing anyone is looking for.
+
+Three doors now. The command palette lists **Port forwards**, Terminals
+and Background jobs — it is this app's answer to not finding something
+and it did not know the panel existed, so it also learned to do things
+rather than only go to them. The port-forward notifications carry a
+**Manage** action, since the moment you are told a forward exists, or
+that it is failing, is the moment you want it. And the status-bar line
+names what is running when only one kind is: "1 port forward".
+
+### Added — a pod whose node stopped reporting no longer reads healthy
+
+A pod's status is written by the kubelet on its node. When the node stops
+answering, nothing rewrites the pod: `Running` stays written until
+eviction, which the default toleration puts five minutes out and which
+never comes for a StatefulSet until the node object goes. Every client
+draws that pod confidently green.
+
+The label stays the one `kubectl` prints — it is the status the cluster
+holds, and a second opinion invented here would be its own lie. The
+colour drops to the app's "no opinion" role, and the tooltip names the
+node and how long it has been quiet.
+
+`Ready=False` is deliberately not silence. A node reporting NotReady is a
+node still talking, so its pods' statuses are current; marking those
+stale would light the mark on every ordinary unhealthy cluster, which is
+how a warning stops being read.
+
 ## [4.2.0] - 2026-08-17
 
 Three lines of work. The cluster's edge became a thing the app can see —
