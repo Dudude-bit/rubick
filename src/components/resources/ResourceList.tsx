@@ -1,4 +1,5 @@
 import { ReactNode, useMemo, useState } from "react";
+import { T } from "@/i18n/T";
 import { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -35,16 +36,16 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 const DELIVERY_COLUMN: ColumnDef<never> = {
   size: 150,
   id: "delivery",
-  header: "Delivery",
+  header: () => <T section="columns" k="delivery" />,
   enableSorting: false,
   cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
 };
 
-const deliveryColumn = <T,>() => DELIVERY_COLUMN as ColumnDef<T>;
+const deliveryColumn = <Row,>() => DELIVERY_COLUMN as ColumnDef<Row>;
 
-export interface ResourceDeleteConfig<T> {
+export interface ResourceDeleteConfig<Row> {
   /** Function to delete a resource */
-  mutationFn: (item: T) => Promise<void>;
+  mutationFn: (item: Row) => Promise<void>;
   /** Query keys to invalidate after deletion */
   invalidateQueryKeys: string[][];
   /** Resource type name for messages */
@@ -52,7 +53,7 @@ export interface ResourceDeleteConfig<T> {
 }
 
 export interface ResourceListProps<
-  T extends { name: string; namespace?: string | null },
+  Row extends { name: string; namespace?: string | null },
 > {
   /** Display title for the resource list */
   title: string | ((count: number) => string);
@@ -61,9 +62,9 @@ export interface ResourceListProps<
   /** Query key for React Query */
   queryKey?: string[];
   /** Function to fetch resources */
-  queryFn?: () => Promise<T[]>;
+  queryFn?: () => Promise<Row[]>;
   /** Optional data override (skips internal query) */
-  data?: T[];
+  data?: Row[];
   /** Optional loading state when using data override */
   isLoading?: boolean;
   /**
@@ -95,7 +96,8 @@ export interface ResourceListProps<
   slowed?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
-    ColumnDef<T>[] | ((setDeleteTarget: (item: T) => void) => ColumnDef<T>[]);
+    | ColumnDef<Row>[]
+    | ((setDeleteTarget: (item: Row) => void) => ColumnDef<Row>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
   /** Overrides the table's message for "the scope genuinely has none of
@@ -103,7 +105,7 @@ export interface ResourceListProps<
    *  reader unsure whether the kind exists at all. */
   emptyMessage?: string;
   /** Delete configuration */
-  deleteConfig?: ResourceDeleteConfig<T>;
+  deleteConfig?: ResourceDeleteConfig<Row>;
   /** Optional stale time override (default: 5000ms) */
   staleTime?: number;
   /** Which rate the list re-reads at, or `false` where a watch feeds it. */
@@ -119,19 +121,19 @@ export interface ResourceListProps<
   /** Optional search input placeholder */
   searchPlaceholder?: string;
   /** Generate navigation URL for row click */
-  getRowHref?: (row: T) => string;
+  getRowHref?: (row: Row) => string;
   /** Quick actions shown on row hover */
   quickActions?:
-    | QuickAction<T>[]
-    | ((setDeleteTarget: (item: T) => void) => QuickAction<T>[]);
+    | QuickAction<Row>[]
+    | ((setDeleteTarget: (item: Row) => void) => QuickAction<Row>[]);
   /** Function to get unique row ID (for stable keys during data updates) */
-  getRowId?: (row: T, index: number) => string;
+  getRowId?: (row: Row, index: number) => string;
   /**
    * A grouping the kind knows better than its namespace — node pools, so far.
    * Namespaces are the default because they are the one key every namespaced
    * kind carries.
    */
-  grouping?: RowGrouping<T> | null;
+  grouping?: RowGrouping<Row> | null;
   /**
    * The kind these rows are, for the `Delivery` column and its filter.
    *
@@ -149,7 +151,7 @@ export interface ResourceListProps<
 }
 
 export function ResourceList<
-  T extends { name: string; namespace?: string | null },
+  Row extends { name: string; namespace?: string | null },
 >({
   title,
   description,
@@ -178,16 +180,16 @@ export function ResourceList<
   getRowId,
   grouping,
   delivery,
-}: ResourceListProps<T>) {
+}: ResourceListProps<Row>) {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [deleteTarget, setDeleteTarget] = useState<T | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
 
   const shouldUseQuery = data === undefined && !!queryKey && !!queryFn;
   const queryResult = useResource(
     (queryKey ?? ["resource-list"]) as string[],
-    (queryFn ?? (async () => [] as T[])) as () => Promise<T[]>,
+    (queryFn ?? (async () => [] as Row[])) as () => Promise<Row[]>,
     {
       enabled: shouldUseQuery,
       staleTime: staleTime ?? STALE_TIMES.resourceList,
@@ -235,8 +237,8 @@ export function ResourceList<
       ? deliveries.of({
           group: delivery.group,
           kind: delivery.kind,
-          namespace: (row as T).namespace ?? null,
-          name: (row as T).name,
+          namespace: (row as Row).namespace ?? null,
+          name: (row as Row).name,
         })
       : [];
   const showDelivery = !!delivery && deliveries.available;
@@ -248,7 +250,7 @@ export function ResourceList<
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: async (item: T) => {
+    mutationFn: async (item: Row) => {
       if (deleteConfig) {
         await deleteConfig.mutationFn(item);
       }
@@ -285,17 +287,17 @@ export function ResourceList<
   const resolvedColumns = useMemo(() => {
     const base =
       typeof columns === "function"
-        ? columns(setDeleteTarget as (item: T) => void)
+        ? columns(setDeleteTarget as (item: Row) => void)
         : columns;
     return showDelivery
-      ? [...base.slice(0, -1), deliveryColumn<T>(), ...base.slice(-1)]
+      ? [...base.slice(0, -1), deliveryColumn<Row>(), ...base.slice(-1)]
       : base;
   }, [columns, showDelivery]);
 
   const resolvedQuickActions = useMemo(
     () =>
       typeof quickActions === "function"
-        ? quickActions(setDeleteTarget as (item: T) => void)
+        ? quickActions(setDeleteTarget as (item: Row) => void)
         : quickActions,
     [quickActions]
   );

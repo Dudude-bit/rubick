@@ -1,4 +1,5 @@
 import { commands } from "@/lib/commands";
+import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ColumnDef } from "@tanstack/react-table";
 import {
@@ -96,7 +97,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An ingress class name: "nginx", "traefik", "alb".
     size: 110,
     accessorKey: "className",
-    header: "Class",
+    header: () => <T section="columns" k="class" />,
     cell: ({ row }) => (
       <span className="text-fg-mut">{row.original.className || "default"}</span>
     ),
@@ -105,7 +106,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // The column people came to this page to read, and a hostname is long.
     size: 280,
     accessorKey: "rules",
-    header: "Hosts",
+    header: () => <T section="columns" k="hosts" />,
     cell: ({ row }) => {
       const hosts = row.original.rules
         .map((rule) => rule.host)
@@ -143,7 +144,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // "12 paths", with the routes themselves in the tooltip.
     size: 90,
     id: "paths",
-    header: "Paths",
+    header: () => <T section="columns" k="paths" />,
     cell: ({ row }) => {
       const allPaths = row.original.rules.flatMap((rule) => rule.paths);
       if (allPaths.length === 0) return <span className="text-fg-fnt">—</span>;
@@ -167,7 +168,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An IPv4 address and a "+2 more" beside it.
     size: 150,
     accessorKey: "loadBalancerIps",
-    header: "Address",
+    header: () => <T section="columns" k="address" />,
     cell: ({ row }) => {
       const ips = row.original.loadBalancerIps;
       // No address is the state worth naming: the ingress exists but is not

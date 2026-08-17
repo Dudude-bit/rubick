@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { Scale, RotateCw } from "lucide-react";
 
 import type { DeploymentInfo } from "@/generated/types";
@@ -30,7 +31,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     // "RollingUpdate" or "Recreate".
     size: 130,
     id: "strategy",
-    header: "Strategy",
+    header: () => <T section="columns" k="strategy" />,
     cell: ({ row }) => (
       <span className="text-fg-mut">
         {row.original.strategy || "RollingUpdate"}
@@ -40,7 +41,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   {
     size: 120,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
       const available = row.original.replicas.available || 0;
       const total = row.original.replicas.desired;

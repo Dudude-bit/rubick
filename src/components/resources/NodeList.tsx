@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
@@ -62,7 +63,7 @@ export const columns = (
   {
     size: 110,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
       const ready = row.original.status.ready;
       return <StatusBadge status={ready ? "Ready" : "NotReady"} />;
@@ -72,7 +73,7 @@ export const columns = (
     // "control-plane master etcd" on a single-node cluster.
     size: 170,
     accessorKey: "roles",
-    header: "Roles",
+    header: () => <T section="columns" k="roles" />,
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -87,12 +88,12 @@ export const columns = (
     // A kubelet version with its distro suffix: `v1.31.4+k3s1`.
     size: 120,
     accessorKey: "version",
-    header: "Version",
+    header: () => <T section="columns" k="version" />,
   },
   {
     size: 130,
     id: "internal_ip",
-    header: "Internal IP",
+    header: () => <T section="columns" k="internalIp" />,
     cell: ({ row }) => {
       const address = row.original.status.addresses.find(
         (a) => a.type === "InternalIP"
@@ -111,7 +112,7 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: "CPU Usage",
+    header: () => <T section="columns" k="cpuUsage" />,
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity ? row.original.capacity.cpu : null;
@@ -127,7 +128,7 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: "Memory Usage",
+    header: () => <T section="columns" k="memoryUsage" />,
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity
@@ -143,15 +144,15 @@ export const columns = (
     },
   },
   {
-    size: 80,
+    size: 120,
     id: "capacity_pods",
-    header: "Pod Cap",
+    header: () => <T section="columns" k="podCap" />,
     cell: ({ row }) => row.original.capacity?.pods || "-",
   },
   {
     size: 80,
     id: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
     cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
   },
 ];

@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 
 import type { DaemonSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -25,19 +26,19 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
   {
     size: 90,
     id: "desired",
-    header: "Desired",
+    header: () => <T section="columns" k="desired" />,
     cell: ({ row }) => row.original.desired,
   },
   {
     size: 90,
     id: "current",
-    header: "Current",
+    header: () => <T section="columns" k="current" />,
     cell: ({ row }) => row.original.current,
   },
   {
     size: 80,
     id: "ready",
-    header: "Ready",
+    header: () => <T section="columns" k="ready" />,
     cell: ({ row }) => {
       const { ready, desired } = row.original;
       // Full coverage is the expected state and stays quiet; only a shortfall

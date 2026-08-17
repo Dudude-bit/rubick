@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { T } from "@/i18n/T";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Crosshair } from "lucide-react";
 
@@ -28,7 +29,7 @@ export const columns = (
     // do not need rather than a name column's usual share.
     size: 420,
     accessorKey: "name",
-    header: "Name",
+    header: () => <T section="columns" k="name" />,
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">
         <ResourceRef
@@ -45,7 +46,7 @@ export const columns = (
   {
     size: 120,
     accessorKey: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => <StatusBadge status={row.original.status} showDot />,
   },
   {
@@ -61,7 +62,7 @@ export const columns = (
   {
     size: 80,
     accessorKey: "createdAt",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
     cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
   },
 ];

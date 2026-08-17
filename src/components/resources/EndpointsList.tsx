@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { CircleDot } from "lucide-react";
 
 import type { EndpointsInfo } from "@/generated/types";
@@ -94,7 +95,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     // Three `name:port/protocol` triples side by side, and a "+2" after them.
     size: 220,
     id: "ports",
-    header: "Ports",
+    header: () => <T section="columns" k="ports" />,
     cell: ({ row }) => {
       const ports = row.original.subsets.flatMap((s) => s.ports);
       if (ports.length === 0) return <span className="text-fg-fnt">—</span>;

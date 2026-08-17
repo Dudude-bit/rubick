@@ -5,6 +5,7 @@
  */
 
 import { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
 import {
@@ -46,12 +47,12 @@ interface WithMemoryLimits {
  * it in every row is the noise the coloured reference exists to remove.
  */
 export function createNameColumn<
-  T extends { name: string; namespace?: string | null },
->(kind: ResourceKind): ColumnDef<T> {
+  Row extends { name: string; namespace?: string | null },
+>(kind: ResourceKind): ColumnDef<Row> {
   return {
     size: 320,
     accessorKey: "name",
-    header: "Name",
+    header: () => <T section="columns" k="name" />,
     cell: ({ row }) => (
       <ResourceRef
         kind={kind}
@@ -67,12 +68,12 @@ export function createNameColumn<
  * Creates a namespace column
  */
 export function createNamespaceColumn<
-  T extends { namespace: string },
->(): ColumnDef<T> {
+  Row extends { namespace: string },
+>(): ColumnDef<Row> {
   return {
-    size: 140,
+    size: 190,
     accessorKey: "namespace",
-    header: "Namespace",
+    header: () => <T section="columns" k="namespace" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.namespace}</span>
     ),
@@ -83,11 +84,11 @@ export function createNamespaceColumn<
  * Creates an age column from created_at timestamp
  * Uses RealtimeAge for auto-updating display
  */
-export function createAgeColumn<T extends WithCreatedAt>(): ColumnDef<T> {
+export function createAgeColumn<Row extends WithCreatedAt>(): ColumnDef<Row> {
   return {
     size: 80,
     id: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
     cell: ({ row }) => (
       <span className="text-fg-fnt">
         <RealtimeAge timestamp={row.original.createdAt} />
@@ -101,8 +102,8 @@ export function createAgeColumn<T extends WithCreatedAt>(): ColumnDef<T> {
  * inline bar when the container declares a limit.
  */
 export function createCpuColumn<
-  T extends WithCpuUsage & Partial<WithCpuLimits>,
->(): ColumnDef<T> {
+  Row extends WithCpuUsage & Partial<WithCpuLimits>,
+>(): ColumnDef<Row> {
   return {
     size: 90,
     id: "cpu",
@@ -127,12 +128,12 @@ export function createCpuColumn<
  * inline bar when the container declares a limit.
  */
 export function createMemoryColumn<
-  T extends WithMemoryUsage & Partial<WithMemoryLimits>,
->(): ColumnDef<T> {
+  Row extends WithMemoryUsage & Partial<WithMemoryLimits>,
+>(): ColumnDef<Row> {
   return {
     size: 100,
     id: "memory",
-    header: "Memory",
+    header: () => <T section="columns" k="memory" />,
     cell: ({ row }) => {
       const used = row.original.memoryBytes ?? null;
       const request = row.original.memoryRequests
@@ -168,12 +169,12 @@ const ACCESS_MODE_NAME: Record<string, string> = {
  * no pill — the abbreviations are already the shortest form there is.
  */
 export function createAccessModesColumn<
-  T extends { accessModes: string[] },
->(): ColumnDef<T> {
+  Row extends { accessModes: string[] },
+>(): ColumnDef<Row> {
   return {
     size: 130,
     accessorKey: "accessModes",
-    header: "Access Modes",
+    header: () => <T section="columns" k="accessModes" />,
     cell: ({ row }) => {
       const modes = row.original.accessModes;
       if (modes.length === 0) return <span className="text-fg-fnt">—</span>;
@@ -197,12 +198,12 @@ export function createAccessModesColumn<
 
 /** Declared storage size, with the unit dimmed like every other quantity. */
 export function createCapacityColumn<
-  T extends { capacity?: string | null },
->(): ColumnDef<T> {
+  Row extends { capacity?: string | null },
+>(): ColumnDef<Row> {
   return {
     size: 100,
     accessorKey: "capacity",
-    header: "Capacity",
+    header: () => <T section="columns" k="capacity" />,
     cell: ({ row }) =>
       row.original.capacity ? (
         <UnitValue value={row.original.capacity} />
@@ -216,12 +217,12 @@ export function createCapacityColumn<
  * Creates a replicas column (ready/desired)
  */
 export function createReplicasColumn<
-  T extends { replicas: { ready: number; desired: number } },
->(): ColumnDef<T> {
+  Row extends { replicas: { ready: number; desired: number } },
+>(): ColumnDef<Row> {
   return {
     size: 100,
     id: "replicas",
-    header: "Replicas",
+    header: () => <T section="columns" k="replicas" />,
     cell: ({ row }) => {
       const { ready, desired } = row.original.replicas;
       const isHealthy = ready === desired;
@@ -238,13 +239,13 @@ export function createReplicasColumn<
 
 /** Data keys for ConfigMaps/Secrets. Identifiers, so mono and unboxed. */
 export function createDataKeysColumn<
-  T extends { dataKeys?: string[] },
->(options?: { maxDisplay?: number }): ColumnDef<T> {
+  Row extends { dataKeys?: string[] },
+>(options?: { maxDisplay?: number }): ColumnDef<Row> {
   const maxDisplay = options?.maxDisplay ?? 3;
   return {
     size: 160,
     id: "dataKeys",
-    header: "Keys",
+    header: () => <T section="columns" k="keys" />,
     cell: ({ row }) => {
       const keys = row.original.dataKeys ?? [];
       if (keys.length === 0) return <span className="text-fg-fnt">—</span>;

@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -20,7 +21,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     // "Retain" or "Delete" under a two-word header.
     size: 120,
     accessorKey: "reclaimPolicy",
-    header: "Reclaim Policy",
+    header: () => <T section="columns" k="reclaimPolicy" />,
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
     ),
@@ -28,7 +29,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   {
     size: 110,
     accessorKey: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
@@ -47,7 +48,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   {
     size: 80,
     accessorKey: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
   },
 ];
 

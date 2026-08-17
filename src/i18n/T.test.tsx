@@ -32,9 +32,12 @@ describe("a translated string as an element", () => {
    * `flexRender` inside the tree, where one can.
    */
   it("works from a column definition, which is where hooks cannot go", () => {
-    const column = { id: "name", header: () => <T section="nav" k="nodes" /> };
+    const column = {
+      id: "name",
+      header: () => <T section="columns" k="name" />,
+    };
     const Header = column.header;
     render(<Header />);
-    expect(screen.getByText("Nodes")).toBeInTheDocument();
+    expect(screen.getByText("Name")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
@@ -97,7 +98,7 @@ export function CustomResourceList({
     cols.push({
       size: 320,
       accessorKey: "name",
-      header: "Name",
+      header: () => <T section="columns" k="name" />,
       cell: ({ row }) => (
         <RouteLink
           to={getDetailPath(row.original)}

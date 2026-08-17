@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -36,7 +37,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 110,
     accessorKey: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
@@ -68,7 +69,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 80,
     accessorKey: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
   },
 ];
 

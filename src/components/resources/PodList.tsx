@@ -1,4 +1,5 @@
 import { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
 import { useMemo } from "react";
@@ -42,7 +43,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // is the one nobody should have to guess at from a truncation.
     size: 150,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
@@ -68,9 +69,9 @@ export const columns: ColumnDef<PodRow>[] = [
   createCpuColumn<PodRow>(),
   createMemoryColumn<PodRow>(),
   {
-    size: 70,
+    size: 110,
     id: "ready",
-    header: "Ready",
+    header: () => <T section="columns" k="ready" />,
     // The number people compare against `kubectl get pod` in the next
     // window, so it is kubectl's number: sidecars in both halves,
     // finished init containers in neither.
@@ -87,7 +88,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // The count and the age of the last one: "653 (2h ago)".
     size: 130,
     id: "restarts",
-    header: "Restarts",
+    header: () => <T section="columns" k="restarts" />,
     // kubectl prints the count with the age of the last one, and it is
     // the half that carries the news: 653 an hour ago and 653 last
     // week are the same number and not the same pod.
@@ -113,7 +114,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
     size: 220,
     id: "node",
-    header: "Node",
+    header: () => <T section="columns" k="node" />,
     cell: ({ row }) =>
       row.original.nodeName ? (
         <ResourceRef
