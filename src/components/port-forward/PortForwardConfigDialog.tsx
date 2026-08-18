@@ -18,6 +18,7 @@ import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "@/stores/portForwardStore";
+import { useT } from "@/i18n/useT";
 
 /**
  * The editor for a saved port-forward.
@@ -41,6 +42,7 @@ export function PortForwardConfigDialog({
   config?: PortForwardConfig;
   onClose: () => void;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const addConfig = usePortForwardStore((state) => state.addConfig);
   const updateConfig = usePortForwardStore((state) => state.updateConfig);
@@ -224,10 +226,12 @@ export function PortForwardConfigDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={save} disabled={busy}>
-            {config ? "Save changes" : "Save port forward"}
+            {config
+              ? t("action", "saveChanges")
+              : t("action", "savePortForward")}
           </Button>
         </DialogFooter>
       </DialogContent>

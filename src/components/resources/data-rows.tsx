@@ -138,7 +138,11 @@ export function DataSection({
             <>
               {sensitive && readable.length > 0 && (
                 <DetailAction
-                  label={allRevealed ? "Hide all" : "Reveal all"}
+                  label={
+                    allRevealed
+                      ? t("action", "hideAll")
+                      : t("action", "revealAll")
+                  }
                   icon={allRevealed ? EyeOff : Eye}
                   onClick={() =>
                     setRevealed(
@@ -149,7 +153,11 @@ export function DataSection({
                   }
                 />
               )}
-              <DetailAction label="Copy all" icon={Copy} onClick={copyAll} />
+              <DetailAction
+                label={t("action", "copyAll")}
+                icon={Copy}
+                onClick={copyAll}
+              />
             </>
           )
         }

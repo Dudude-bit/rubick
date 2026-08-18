@@ -12,6 +12,7 @@ import {
   type VendorFact,
 } from "@/integrations";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * The one screen allowed to name an extension.
@@ -148,6 +149,7 @@ function ExtensionRow({
   /** Whether the reader arrived here asking for this row by name. */
   asked?: boolean;
 }) {
+  const t = useT();
   const { vendor, extension, installed, version, facts, connection } = status;
   const Icon = extension.icon;
   const visible = useSettingSearchMatch(vendor.name, extension.gives);
@@ -237,7 +239,7 @@ function ExtensionRow({
               className="h-6 px-2 text-[11px]"
               onClick={() => setEditing(true)}
             >
-              {configured ? "Edit" : "Connect"}
+              {configured ? t("action", "edit") : t("action", "connect")}
             </Button>
             <ConnectIntegration
               vendorId={vendor.id}

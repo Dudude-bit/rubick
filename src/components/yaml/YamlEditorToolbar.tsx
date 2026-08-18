@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { History, Copy, RotateCcw, AlignLeft, GitCompare } from "lucide-react";
 import type { HistoryEntry } from "@/stores/yamlEditorStore";
+import { useT } from "@/i18n/useT";
 
 export interface YamlEditorToolbarProps {
   // Which buttons to show
@@ -54,6 +55,7 @@ export function YamlEditorToolbar({
   onToggleDiff,
   onRestoreHistory,
 }: YamlEditorToolbarProps) {
+  const t = useT();
   return (
     <div className="flex items-center gap-2">
       {showFormat && (
@@ -68,7 +70,7 @@ export function YamlEditorToolbar({
               <AlignLeft className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Format YAML</TooltipContent>
+          <TooltipContent>{t("action", "formatYaml")}</TooltipContent>
         </Tooltip>
       )}
 
@@ -84,7 +86,7 @@ export function YamlEditorToolbar({
               <Copy className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy to Clipboard</TooltipContent>
+          <TooltipContent>{t("action", "copyToClipboard")}</TooltipContent>
         </Tooltip>
       )}
 
@@ -100,7 +102,7 @@ export function YamlEditorToolbar({
               <RotateCcw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Reset to Original</TooltipContent>
+          <TooltipContent>{t("action", "resetToOriginal")}</TooltipContent>
         </Tooltip>
       )}
 
@@ -116,7 +118,7 @@ export function YamlEditorToolbar({
               <GitCompare className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle Diff View</TooltipContent>
+          <TooltipContent>{t("action", "toggleDiffView")}</TooltipContent>
         </Tooltip>
       )}
 
@@ -125,7 +127,7 @@ export function YamlEditorToolbar({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
               <History className="mr-2 h-4 w-4" />
-              History
+              {t("action", "history")}
               <Badge variant="secondary" className="ml-2">
                 {history.length}
               </Badge>

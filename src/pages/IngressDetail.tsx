@@ -401,7 +401,7 @@ export function IngressDetail() {
                   </span>
                   <span className="flex justify-end gap-0.5">
                     <IconAction
-                      label="Copy URL"
+                      label={t("action", "copyUrl")}
                       icon={Copy}
                       onClick={() =>
                         copyToClipboard(
@@ -411,7 +411,7 @@ export function IngressDetail() {
                     />
                     {url.host && url.host !== "*" && (
                       <IconAction
-                        label="Open in browser"
+                        label={t("action", "openInBrowser")}
                         icon={ExternalLink}
                         onClick={() =>
                           window.open(url.fullUrl, "_blank", "noreferrer")
@@ -644,7 +644,10 @@ export function IngressDetail() {
             count={events.length || undefined}
             actions={
               eventsError && (
-                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+                <DetailAction
+                  label={t("action", "retry")}
+                  onClick={() => refetchEvents()}
+                />
               )
             }
           />

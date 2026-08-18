@@ -44,6 +44,7 @@ import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -268,6 +269,7 @@ export function DataTable<TData, TValue>({
     []
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
+  const t = useT();
   const [searchValue, setSearchValue] = React.useState("");
   const deferredSearch = React.useDeferredValue(searchValue);
 
@@ -845,7 +847,7 @@ export function DataTable<TData, TValue>({
                           className="h-7 text-xs"
                           onClick={() => setSearchValue("")}
                         >
-                          Clear search
+                          {t("action", "clearSearch")}
                         </Button>
                       </div>
                     ) : (

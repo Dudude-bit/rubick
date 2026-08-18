@@ -39,6 +39,8 @@ import type { HelmRelease } from "@/generated/types";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 const getHelmReleaseRowId = (row: HelmRelease) =>
   `${row.source}-${row.namespace}-${row.name}`;
@@ -73,6 +75,7 @@ export function HelmReleasesTab({
   onRollback,
   onUninstall,
 }: HelmReleasesTabProps) {
+  const t = useT();
   const navigate = useNavigate();
 
   const columns: ColumnDef<HelmRelease>[] = useMemo(
@@ -154,12 +157,12 @@ export function HelmReleasesTab({
                 }
               >
                 <FileCode className="mr-2 h-4 w-4" />
-                View Details
+                <T section="action" k="viewDetails" />
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => onShowHistory(release)}>
                 <History className="mr-2 h-4 w-4" />
-                View History
+                <T section="action" k="viewHistory" />
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
@@ -173,7 +176,7 @@ export function HelmReleasesTab({
                         onClick={() => onUpgrade(release)}
                       >
                         <ArrowUpCircle className="mr-2 h-4 w-4" />
-                        Upgrade
+                        <T section="action" k="upgrade" />
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
@@ -188,7 +191,7 @@ export function HelmReleasesTab({
                         onClick={() => onRollback(release)}
                       >
                         <RotateCcw className="mr-2 h-4 w-4" />
-                        Rollback
+                        <T section="action" k="rollBack" />
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
@@ -206,7 +209,7 @@ export function HelmReleasesTab({
                         onClick={() => onUninstall(release)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Uninstall
+                        <T section="action" k="uninstall" />
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
@@ -284,7 +287,7 @@ export function HelmReleasesTab({
         </Select>
         <div className="ml-auto">
           <DetailAction
-            label="Refresh"
+            label={t("action", "refresh")}
             icon={RefreshCw}
             onClick={onRefetch}
             busy={isLoading}

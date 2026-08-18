@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 interface PortForwardFormState {
   localPort: string;
@@ -44,6 +45,7 @@ export function PortForwardDialog({
   initialPort,
   portName,
 }: PortForwardDialogProps) {
+  const t = useT();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const sessions = usePortForwardStore((state) => state.sessions);
@@ -303,7 +305,7 @@ export function PortForwardDialog({
                     size="sm"
                     onClick={() => handleStopPortForward(session.id)}
                   >
-                    Stop
+                    {t("action", "stop")}
                   </Button>
                 </div>
               ))}
@@ -312,10 +314,10 @@ export function PortForwardDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={handlePortForward} disabled={busy}>
-            {busy ? "Starting..." : "Start port-forward"}
+            {busy ? t("action", "starting") : t("action", "startPortForward")}
           </Button>
         </DialogFooter>
       </DialogContent>

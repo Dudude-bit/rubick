@@ -522,20 +522,20 @@ export function DeploymentDetail() {
         actions={
           <>
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={openScaleDialog}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               busy={restartMutation.isPending}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}

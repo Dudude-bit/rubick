@@ -19,8 +19,10 @@ import {
 } from "@/stores/registryStore";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 export function RegistrySettings() {
+  const t = useT();
   const { toast } = useToast();
   const registries = useRegistryStore((state) => state.registries);
   const selectedRegistryId = useRegistryStore(
@@ -323,7 +325,7 @@ export function RegistrySettings() {
             </Select>
           </div>
           <Button type="button" variant="outline" onClick={handleRegistryOpen}>
-            Add registry
+            {t("action", "addRegistry")}
           </Button>
           <Button
             type="button"
@@ -331,7 +333,7 @@ export function RegistrySettings() {
             onClick={() => removeRegistry(selectedRegistryId)}
             disabled={selectedRegistryId === "docker-hub"}
           >
-            Remove
+            {t("action", "remove")}
           </Button>
           <Button
             type="button"
@@ -456,7 +458,7 @@ export function RegistrySettings() {
             )}
             <div className="flex items-center gap-2">
               <Button type="button" size="sm" onClick={handleRegistrySave}>
-                Save
+                {t("action", "save")}
               </Button>
               <Button
                 type="button"
@@ -464,7 +466,7 @@ export function RegistrySettings() {
                 size="sm"
                 onClick={handleRegistryCancel}
               >
-                Cancel
+                {t("action", "cancel")}
               </Button>
             </div>
           </div>
@@ -640,7 +642,7 @@ export function RegistrySettings() {
               onClick={handleAuthSave}
               disabled={selectedRegistry.authType === "none"}
             >
-              Save credentials
+              {t("action", "saveCredentials")}
             </Button>
             <Button
               type="button"
@@ -648,7 +650,7 @@ export function RegistrySettings() {
               size="sm"
               onClick={handleAuthClear}
             >
-              Clear
+              {t("action", "clear")}
             </Button>
           </div>
           {authStatusMessage && (

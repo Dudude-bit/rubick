@@ -35,6 +35,7 @@ import type {
   DeploymentContainerInfo,
 } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * A pod's containers, and a deployment's container template, as metadata
@@ -253,6 +254,7 @@ function ContainerBlock({
   onUpdateImage?: (containerName: string, currentImage: string) => void;
   onOpenLogs?: (containerName: string) => void;
 }) {
+  const t = useT();
   const runtime = isRuntime(container);
   const status = step?.status ?? (runtime ? containerStatus(container) : null);
 
@@ -359,7 +361,7 @@ function ContainerBlock({
           <>
             {runtime && onOpenLogs && hasLogs && (
               <DetailAction
-                label="Logs"
+                label={t("action", "logs")}
                 icon={ScrollText}
                 onClick={() => onOpenLogs(container.name)}
               />
@@ -375,7 +377,7 @@ function ContainerBlock({
             )}
             {!runtime && onUpdateImage && (
               <DetailAction
-                label="Update image"
+                label={t("action", "updateImage")}
                 icon={ImageIcon}
                 onClick={() => onUpdateImage(container.name, container.image)}
               />

@@ -24,6 +24,7 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
 
@@ -161,13 +162,13 @@ export function Crds() {
             <DropdownMenuItem asChild>
               <Link to={crdHref(row.original.name)}>
                 <Eye className="mr-2 h-3.5 w-3.5" />
-                View details
+                <T section="action" k="viewDetails" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to={`${crdHref(row.original.name)}/instances`}>
                 <List className="mr-2 h-3.5 w-3.5" />
-                View instances
+                <T section="action" k="viewInstances" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -176,7 +177,7 @@ export function Crds() {
               onClick={() => setDeleteTarget(row.original)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
+              <T section="action" k="delete" />
             </DropdownMenuItem>
           </ActionMenu>
         ),
@@ -224,7 +225,7 @@ export function Crds() {
         onOpenChange={() => setDeleteTarget(null)}
         title="Delete CRD?"
         description={`Deleting "${deleteTarget?.name}" also deletes every instance of this custom resource.`}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

@@ -13,6 +13,7 @@ import {
   type KeyValueTone,
 } from "./key-values";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * The metadata row every detail page is made of.
@@ -87,6 +88,7 @@ export function KeyValueRow({
  * because that answer was already right.
  */
 function FoldedDocument({ label, text }: { label: string; text: string }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const copyToClipboard = useCopyToClipboard();
   const expanded = React.useMemo(() => expandDocument(text), [text]);
@@ -99,13 +101,13 @@ function FoldedDocument({ label, text }: { label: string; text: string }) {
         </span>
         <div className="-my-0.5 ml-auto flex items-center gap-1">
           <DetailAction
-            label={open ? "Hide" : "Show"}
+            label={open ? t("action", "hide") : t("action", "show")}
             icon={open ? ChevronDown : ChevronRight}
             onClick={() => setOpen(!open)}
             aria-expanded={open}
           />
           <DetailAction
-            label="Copy"
+            label={t("action", "copy")}
             icon={Copy}
             onClick={() => copyToClipboard(text, `Value of ${label} copied.`)}
           />

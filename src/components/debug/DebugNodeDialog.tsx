@@ -29,6 +29,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { Progress } from "@/components/ui/progress";
+import { useT } from "@/i18n/useT";
 
 export interface DebugNodeDialogProps {
   open: boolean;
@@ -43,6 +44,7 @@ export function DebugNodeDialog({
   nodeName,
   onDebugStart,
 }: DebugNodeDialogProps) {
+  const t = useT();
   const { toast } = useToast();
   const [selectedImage, setSelectedImage] = useState("busybox:latest");
   const [customImage, setCustomImage] = useState("");
@@ -207,12 +209,14 @@ export function DebugNodeDialog({
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={handleLeave}>
-              Leave
+              {t("action", "leave")}
             </Button>
             <Button variant="destructive" onClick={handleDeletePod}>
               Delete Pod
             </Button>
-            <Button onClick={handleKeepWaiting}>Keep Waiting</Button>
+            <Button onClick={handleKeepWaiting}>
+              {t("action", "keepWaiting")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -261,7 +265,7 @@ export function DebugNodeDialog({
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCancel}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -344,14 +348,14 @@ export function DebugNodeDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button
             onClick={handleDebug}
             disabled={!isImageValid}
             variant="destructive"
           >
-            Start Debug
+            {t("action", "startDebug")}
           </Button>
         </DialogFooter>
       </DialogContent>

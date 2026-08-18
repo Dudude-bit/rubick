@@ -623,20 +623,20 @@ export function PodDetail() {
         actions={
           <>
             <DetailAction
-              label="Debug"
+              label={t("action", "debug")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
               disabled={!currentContext || !pod}
             />
             <DetailAction
-              label="Port forward"
+              label={t("action", "portForward")}
               icon={Network}
               onClick={openPortForwardDialog}
               disabled={!currentContext || !pod}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               disabled={!pod}
@@ -644,7 +644,7 @@ export function PodDetail() {
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               disabled={!pod}

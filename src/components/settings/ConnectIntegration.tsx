@@ -39,6 +39,7 @@ import type {
   InClusterHint,
   ProbeResult,
 } from "@/integrations";
+import { useT } from "@/i18n/useT";
 
 export function ConnectIntegration({
   vendorId,
@@ -89,6 +90,7 @@ function ConnectForm({
   gives: string;
   onDone: () => void;
 }) {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   const remember = useClusterForwardStore((state) => state.remember);
   const setAutoStart = useClusterForwardStore((state) => state.setAutoStart);
@@ -270,7 +272,7 @@ function ConnectForm({
               }}
               className="text-err hover:text-err"
             >
-              Disconnect
+              {t("action", "disconnect")}
             </Button>
           )}
         </div>
@@ -281,14 +283,14 @@ function ConnectForm({
             onClick={test}
             disabled={testing || url.trim() === ""}
           >
-            {testing ? "Testing…" : "Test"}
+            {testing ? t("action", "testing") : t("action", "test")}
           </Button>
           <Button
             size="sm"
             onClick={save}
             disabled={editor.isSaving || url.trim() === ""}
           >
-            Save
+            {t("action", "save")}
           </Button>
         </div>
       </DialogFooter>

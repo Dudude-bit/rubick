@@ -420,7 +420,7 @@ export function Helm() {
         }}
         title="Remove Repository"
         description={`Are you sure you want to remove the repository "${deleteRepoTarget}"?`}
-        confirmLabel="Remove"
+        confirmLabel={t("action", "remove")}
         confirmVariant="destructive"
         confirmDisabled={removeRepoMutation.isPending}
         onConfirm={() => {
@@ -514,7 +514,7 @@ export function Helm() {
             ? `Are you sure you want to rollback "${rollbackTarget.release.name}" to revision ${rollbackTarget.revision}?`
             : undefined
         }
-        confirmLabel="Rollback"
+        confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
         onConfirm={() => {
@@ -540,7 +540,7 @@ export function Helm() {
             : undefined
         }
         confirmationText={uninstallTarget?.name ?? ""}
-        confirmLabel="Uninstall"
+        confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}
         onConfirm={() => {
           if (uninstallTarget) {

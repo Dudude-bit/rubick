@@ -435,7 +435,7 @@ export function CustomResourceDetail() {
         actions={
           <InterceptedAction
             intercept={intercept("Delete")}
-            label="Delete"
+            label={t("action", "delete")}
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
@@ -452,7 +452,7 @@ export function CustomResourceDetail() {
         onOpenChange={setDeleteDialogOpen}
         title={`Delete ${crdInfo?.kind || "resource"}?`}
         description={`"${name}" will be removed from the cluster. This cannot be undone.`}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

@@ -59,6 +59,7 @@ import {
   type PeekActionId,
   type PeekActionPlan,
 } from "./peek-actions";
+import { useT } from "@/i18n/useT";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
 type ScalableInfo = DeploymentInfo | StatefulSetDetailInfo;
@@ -104,6 +105,7 @@ export function useObjectActions({
   detail,
   onGone,
 }: ObjectActionsOptions): ObjectActions {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -330,7 +332,7 @@ export function useObjectActions({
         title={deletion.title}
         description={warned(deletion.description, intercept("Delete"))}
         confirmationText={name}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         isLoading={remove.isPending}
         onConfirm={() => remove.mutate()}
       />

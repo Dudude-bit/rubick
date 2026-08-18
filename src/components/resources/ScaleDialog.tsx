@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
+import { useT } from "@/i18n/useT";
 
 export interface ScaleDialogProps {
   open: boolean;
@@ -39,6 +40,7 @@ export function ScaleDialog({
   onSubmit,
   warnings = [],
 }: ScaleDialogProps) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -54,7 +56,11 @@ export function ScaleDialog({
         <ScaleForm
           current={current}
           busy={busy}
-          confirmLabel={warnings.length > 0 ? "Scale anyway" : "Scale"}
+          confirmLabel={
+            warnings.length > 0
+              ? t("action", "scaleAnyway")
+              : t("action", "scale")
+          }
           onCancel={() => onOpenChange(false)}
           onSubmit={onSubmit}
         />
@@ -76,6 +82,7 @@ function ScaleForm({
   onCancel: () => void;
   onSubmit: (replicas: number) => void;
 }) {
+  const t = useT();
   const [replicas, setReplicas] = useState(current);
 
   return (
@@ -94,7 +101,7 @@ function ScaleForm({
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("action", "cancel")}
         </Button>
         <Button onClick={() => onSubmit(replicas)} disabled={busy}>
           {confirmLabel}

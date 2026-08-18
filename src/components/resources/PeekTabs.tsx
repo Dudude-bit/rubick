@@ -132,6 +132,7 @@ function TabError({
   error: Error;
   onRetry: () => void;
 }) {
+  const t = useT();
   return (
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">Could not read {what}.</p>
@@ -139,7 +140,11 @@ function TabError({
         {error.message}
       </p>
       <div className="mt-2">
-        <DetailAction label="Retry" icon={RefreshCw} onClick={onRetry} />
+        <DetailAction
+          label={t("action", "retry")}
+          icon={RefreshCw}
+          onClick={onRetry}
+        />
       </div>
     </div>
   );
@@ -541,6 +546,7 @@ function PeekRelatedTab({
 /* ---------- YAML ---------- */
 
 function PeekYamlTab({ target }: { target: PeekTarget }) {
+  const t = useT();
   const copy = useCopyToClipboard();
   const namespace = target.namespace ?? null;
 
@@ -596,7 +602,11 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
         <span className="text-[11px] text-fg-mut">{target.kind} manifest</span>
         <Refreshing busy={isFetching} />
         <div className="ml-auto">
-          <DetailAction label="Copy" icon={Copy} onClick={handleCopy} />
+          <DetailAction
+            label={t("action", "copy")}
+            icon={Copy}
+            onClick={handleCopy}
+          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">

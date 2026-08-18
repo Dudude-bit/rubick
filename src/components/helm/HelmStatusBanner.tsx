@@ -4,6 +4,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { useT } from "@/i18n/useT";
 
 interface HelmStatusBannerProps {
   className?: string;
@@ -20,6 +21,7 @@ export function HelmStatusBanner({
   className,
   minimal = false,
 }: HelmStatusBannerProps) {
+  const t = useT();
   const { helm, isChecking, checkHelmAvailability } = useDependenciesStore();
 
   if (!helm || helm.available) {
@@ -47,7 +49,7 @@ export function HelmStatusBanner({
           type="button"
           onClick={() => checkHelmAvailability()}
           disabled={isChecking}
-          aria-label="Check again"
+          aria-label={t("action", "checkAgain")}
           className="rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
         >
           <RefreshCw className={cn("h-3 w-3", isChecking && "animate-spin")} />

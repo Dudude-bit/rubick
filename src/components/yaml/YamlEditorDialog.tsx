@@ -51,6 +51,7 @@ import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
+import { useT } from "@/i18n/useT";
 
 // Action Props
 interface YamlEditorActionProps {
@@ -108,6 +109,7 @@ export function YamlEditorMenuAction(props: YamlEditorActionProps) {
 
 // Main Dialog Component
 export function YamlEditorDialog() {
+  const t = useT();
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -349,7 +351,7 @@ export function YamlEditorDialog() {
                   ) : (
                     <FileCheck className="mr-2 h-4 w-4" />
                   )}
-                  Validate
+                  {t("action", "validate")}
                 </Button>
 
                 <Button
@@ -363,7 +365,7 @@ export function YamlEditorDialog() {
                   ) : (
                     <Play className="mr-2 h-4 w-4" />
                   )}
-                  Apply
+                  {t("action", "apply")}
                 </Button>
               </div>
             )}
@@ -403,7 +405,7 @@ export function YamlEditorDialog() {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeEditor}>
-              Close
+              {t("action", "close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -453,7 +455,7 @@ export function YamlEditorDialog() {
               variant="outline"
               onClick={() => setShowApplyConfirm(false)}
             >
-              Cancel
+              {t("action", "cancel")}
             </Button>
             <Button onClick={handleApply}>
               <Play className="mr-2 h-4 w-4" />
@@ -462,7 +464,9 @@ export function YamlEditorDialog() {
                   is no consequence to override. Otherwise the rule is the
                   Scale dialog's: a warning changes the word, not the outcome. */}
               {intercept?.confirmLabel ??
-                (warnings.length > 0 ? "Apply anyway" : "Apply")}
+                (warnings.length > 0
+                  ? t("action", "applyAnyway")
+                  : t("action", "apply"))}
             </Button>
           </DialogFooter>
         </DialogContent>

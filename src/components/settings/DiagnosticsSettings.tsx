@@ -21,9 +21,9 @@ import { useT } from "@/i18n/useT";
  * person pasting is thinking about their bug, not about their employer.
  */
 export function DiagnosticsSettings() {
+  const t = useT();
   const [redact, setRedact] = useState(true);
   const { toast } = useToast();
-  const t = useT();
 
   const { data } = useLiveQuery({
     queryKey: ["diagnostics", redact],

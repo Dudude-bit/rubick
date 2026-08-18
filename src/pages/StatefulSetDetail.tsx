@@ -314,13 +314,13 @@ export function StatefulSetDetail() {
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}

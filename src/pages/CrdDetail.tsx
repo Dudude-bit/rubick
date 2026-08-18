@@ -384,7 +384,7 @@ export function CrdDetail() {
         actions={
           <InterceptedAction
             intercept={intercept("Delete")}
-            label="Delete"
+            label={t("action", "delete")}
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
@@ -401,7 +401,7 @@ export function CrdDetail() {
         onOpenChange={setDeleteDialogOpen}
         title="Delete CRD?"
         description={`Deleting "${decodedName}" also deletes every instance of this custom resource in the cluster.`}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

@@ -518,7 +518,7 @@ export function InfrastructureBuilder() {
                 }
               >
                 <Trash2 className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                Delete selection
+                {t("action", "deleteSelection")}
               </Button>
               <Button
                 variant="ghost"

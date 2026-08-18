@@ -18,6 +18,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, HelmRevision } from "@/generated/types";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 interface HelmHistoryDialogProps {
   release: HelmRelease;
@@ -36,6 +37,7 @@ export function HelmHistoryDialog({
   onClose,
   onRollback,
 }: HelmHistoryDialogProps) {
+  const t = useT();
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[80vh] max-w-3xl overflow-hidden">
@@ -108,7 +110,7 @@ export function HelmHistoryDialog({
                         <span className="flex justify-end">
                           {!current && helmCliAvailable && (
                             <DetailAction
-                              label="Roll back"
+                              label={t("action", "rollBack")}
                               icon={RotateCcw}
                               onClick={() => onRollback(rev.revision)}
                             />

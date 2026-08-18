@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmChartSearchResult } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface HelmChartsTabProps {
   searchKeyword: string;
@@ -30,6 +31,7 @@ export function HelmChartsTab({
   onSearch,
   onInstall,
 }: HelmChartsTabProps) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -91,7 +93,7 @@ export function HelmChartsTab({
                 <TableCell>
                   <span className="flex justify-end">
                     <DetailAction
-                      label="Install"
+                      label={t("action", "install")}
                       icon={Download}
                       onClick={() => onInstall(chart)}
                     />

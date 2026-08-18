@@ -30,6 +30,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn, isK8sVersionAtLeast } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
+import { useT } from "@/i18n/useT";
 
 /** Debug mode - frontend only, backend has separate commands for each mode */
 type DebugMode = "ephemeralContainer" | "copyPod";
@@ -54,6 +55,7 @@ export function DebugPodDialog({
   kubernetesVersion,
   onDebugStart,
 }: DebugPodDialogProps) {
+  const t = useT();
   const { toast } = useToast();
 
   // Ephemeral containers require K8s 1.25+
@@ -233,12 +235,14 @@ export function DebugPodDialog({
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={handleLeave}>
-              Leave
+              {t("action", "leave")}
             </Button>
             <Button variant="destructive" onClick={handleDeletePod}>
               Delete Pod
             </Button>
-            <Button onClick={handleKeepWaiting}>Keep Waiting</Button>
+            <Button onClick={handleKeepWaiting}>
+              {t("action", "keepWaiting")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -287,7 +291,7 @@ export function DebugPodDialog({
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCancel}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -451,10 +455,10 @@ export function DebugPodDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={handleDebug} disabled={!isImageValid}>
-            Start Debug
+            {t("action", "startDebug")}
           </Button>
         </DialogFooter>
       </DialogContent>

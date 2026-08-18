@@ -20,8 +20,8 @@ import { useT } from "@/i18n/useT";
  * its own error line.
  */
 export function AboutSettings() {
-  const { toast } = useToast();
   const t = useT();
+  const { toast } = useToast();
   const {
     available,
     version,
