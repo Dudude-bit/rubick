@@ -17,10 +17,12 @@ export const ru: Catalogue = {
   nav: {
     overview: "Обзор",
     workloads: "Нагрузки",
+    cluster: "Кластер",
     network: "Сеть",
     storage: "Хранилище",
-    configuration: "Конфигурация",
+    config: "Конфигурация",
     integrations: "Интеграции",
+    app: "Приложение",
     settings: "Настройки",
   },
   columns: {

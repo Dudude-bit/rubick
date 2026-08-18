@@ -37,13 +37,18 @@ export interface Plural {
 }
 
 export const en = {
+  // The rail's own words. Resource rows are absent on purpose: their labels
+  // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
+  // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
     overview: "Overview",
     workloads: "Workloads",
+    cluster: "Cluster",
     network: "Network",
     storage: "Storage",
-    configuration: "Configuration",
+    config: "Config",
     integrations: "Integrations",
+    app: "App",
     settings: "Settings",
   },
   /**

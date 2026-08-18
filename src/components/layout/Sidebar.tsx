@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -23,14 +24,28 @@ import {
   getResourceListUrl,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import type { en } from "@/i18n/catalogue";
+import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 
-type NavItem = {
-  label: string;
+type NavKey = keyof typeof en.nav;
+
+/**
+ * A row names itself one of two ways, and must pick exactly one.
+ *
+ * A resource row's label is the kind's own plural — a proper noun that reads
+ * the same in every language, so it stays a literal. The app's own rows are
+ * ordinary words and carry a catalogue key. The union is what stops a third
+ * case: a row with neither, which renders as a clickable blank.
+ */
+type NavName =
+  { label: string; labelKey?: never } | { labelKey: NavKey; label?: never };
+
+type NavItem = NavName & {
   path: string;
   icon: LucideIcon;
   /** Which of the backend's counts belongs at the end of this row. */
@@ -66,15 +81,15 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
  * on every launch made the panel a list of four words. Captioned groups
  * cost one line each and keep every destination one click away.
  */
-const GROUPS: { caption?: string; items: NavItem[] }[] = [
+const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   {
     items: [
-      { label: "Overview", path: "/", icon: LayoutDashboard },
+      { labelKey: "overview", path: "/", icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
     ],
   },
   {
-    caption: "Workloads",
+    caption: "workloads",
     items: [
       resource(ResourceType.Pod, "pods"),
       resource(ResourceType.Deployment, "deployments"),
@@ -85,7 +100,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Cluster",
+    caption: "cluster",
     items: [
       resource(ResourceType.Node, "nodes"),
       resource(ResourceType.Namespace, "namespaces"),
@@ -94,7 +109,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Network",
+    caption: "network",
     items: [
       resource(ResourceType.Service, "services"),
       // Services name the endpoints behind each one; this is the only place
@@ -106,7 +121,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Storage",
+    caption: "storage",
     items: [
       resource(ResourceType.PersistentVolumeClaim),
       resource(ResourceType.PersistentVolume),
@@ -114,7 +129,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Config",
+    caption: "config",
     items: [
       resource(ResourceType.ConfigMap, "configMaps"),
       resource(ResourceType.Secret, "secrets"),
@@ -132,7 +147,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
  */
 const APP_ROWS: NavItem[] = [
   {
-    label: "Settings",
+    labelKey: "settings",
     path: "/settings",
     icon: Settings,
     section: "/settings",
@@ -157,7 +172,11 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
         {GROUPS.map((group, index) => (
           <div key={group.caption ?? `ungrouped-${index}`}>
-            {group.caption && <GroupCaption>{group.caption}</GroupCaption>}
+            {group.caption && (
+              <GroupCaption>
+                <T section="nav" k={group.caption} />
+              </GroupCaption>
+            )}
             {group.items.map((item) => (
               <NavRow key={item.path} item={item} overview={overview} />
             ))}
@@ -168,7 +187,9 @@ export function Sidebar() {
       {/* The app's own strip, outside the scroll: the rows above are the
           cluster's and travel with it; these stay put on every screen. */}
       <div className="border-t border-hair px-1.5 pb-2.5">
-        <GroupCaption>App</GroupCaption>
+        <GroupCaption>
+          <T section="nav" k="app" />
+        </GroupCaption>
         {APP_ROWS.map((item) => (
           <NavRow key={item.path} item={item} overview={overview} />
         ))}
@@ -177,7 +198,7 @@ export function Sidebar() {
   );
 }
 
-function GroupCaption({ children }: { children: string }) {
+function GroupCaption({ children }: { children: ReactNode }) {
   return (
     <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
       {children}
@@ -227,7 +248,9 @@ function IntegrationsGroup() {
   if (pages.length === 0 && pending) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption>
+          <T section="nav" k="integrations" />
+        </GroupCaption>
         <div aria-hidden>
           {[0, 1].map((row) => (
             <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
@@ -244,7 +267,9 @@ function IntegrationsGroup() {
   if (pages.length === 0) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption>
+          <T section="nav" k="integrations" />
+        </GroupCaption>
         {catalog}
       </div>
     );
@@ -272,7 +297,9 @@ function IntegrationsGroup() {
 
   return (
     <div>
-      <GroupCaption>Integrations</GroupCaption>
+      <GroupCaption>
+        <T section="nav" k="integrations" />
+      </GroupCaption>
       {pages.map((page) => (
         <NavRow
           key={page.path}
@@ -481,7 +508,7 @@ function NavRow({
               <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
             )}
           </div>
-          {item.label}
+          {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (
