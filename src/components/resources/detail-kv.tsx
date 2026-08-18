@@ -12,6 +12,7 @@ import {
   type KeyValue,
   type KeyValueTone,
 } from "./key-values";
+import { T } from "@/i18n/T";
 
 /**
  * The metadata row every detail page is made of.
@@ -128,11 +129,15 @@ export interface KeyValueListProps {
 
 export function KeyValueList({
   items,
-  emptyMessage = "None",
+  emptyMessage,
   className,
 }: KeyValueListProps) {
   if (items.length === 0) {
-    return <p className="py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
+    return (
+      <p className="py-1 text-xs text-fg-fnt">
+        {emptyMessage ?? <T section="empty" k="none" />}
+      </p>
+    );
   }
   return (
     <dl className={cn("flex flex-col", className)}>

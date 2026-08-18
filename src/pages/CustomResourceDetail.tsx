@@ -165,6 +165,7 @@ function statusOf(resource: CustomResourceDetailInfo): string | null {
 }
 
 export function CustomResourceDetail() {
+  const t = useT();
   const { crdName, namespace, name } = useParams<{
     crdName: string;
     namespace?: string;
@@ -357,7 +358,7 @@ export function CustomResourceDetail() {
             title="Owned by"
             count={owners.length || undefined}
             items={ownerItems}
-            emptyMessage="Nothing owns this object — it was created directly."
+            emptyMessage={t("empty", "noOwner")}
           />
           <KeyValueSection
             title="Finalizers"
@@ -367,19 +368,19 @@ export function CustomResourceDetail() {
               value: "blocks deletion until cleared",
               mono: false,
             }))}
-            emptyMessage="No finalizers"
+            emptyMessage={t("empty", "noFinalizers")}
           />
           <KeyValueSection
             title="Labels"
             count={Object.keys(resource?.labels ?? {}).length}
             items={recordToKeyValues(resource?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(resource?.annotations ?? {}).length}
             items={recordToKeyValues(resource?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

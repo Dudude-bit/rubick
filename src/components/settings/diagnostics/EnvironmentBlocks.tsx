@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Diagnostics } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -49,7 +50,9 @@ export function EnvironmentBlocks({
 
       <Block title={`Plugins · ${plugins.length}`}>
         {plugins.length === 0 ? (
-          <p className="text-xs text-fg-mut">No context needs one.</p>
+          <p className="text-xs text-fg-mut">
+            <T section="empty" k="noContextNeedsPlugin" />
+          </p>
         ) : (
           <ul className="space-y-1">
             {plugins.map((plugin) => (
@@ -71,7 +74,9 @@ export function EnvironmentBlocks({
 
       <Block title={`Contexts · ${contexts.length}`}>
         {contexts.length === 0 ? (
-          <p className="text-xs text-fg-mut">None read.</p>
+          <p className="text-xs text-fg-mut">
+            <T section="empty" k="noneRead" />
+          </p>
         ) : (
           <ul className="space-y-1">
             {contexts.map((ctx) => (

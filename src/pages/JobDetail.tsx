@@ -170,10 +170,10 @@ export function JobDetail() {
                   pods={pods}
                   idle={
                     job?.completionTime
-                      ? "This Job has finished."
+                      ? t("empty", "jobFinished")
                       : failed > 0
-                        ? "No pod of this Job is running, and the last one failed."
-                        : "No pod of this Job is running."
+                        ? t("empty", "jobNoPodRunningFailed")
+                        : t("empty", "jobNoPodRunning")
                   }
                 />
               }
@@ -191,13 +191,13 @@ export function JobDetail() {
               title="Labels"
               count={Object.keys(job?.labels ?? {}).length}
               items={recordToKeyValues(job?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
               title="Annotations"
               count={Object.keys(job?.annotations ?? {}).length}
               items={recordToKeyValues(job?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),
@@ -214,7 +214,7 @@ export function JobDetail() {
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
         content: (
-          <PodListCard pods={pods} emptyMessage="No pods for this job" />
+          <PodListCard pods={pods} emptyMessage={t("empty", "noPodsForJob")} />
         ),
       },
       {

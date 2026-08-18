@@ -39,6 +39,7 @@ import {
 import { useState } from "react";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
@@ -77,7 +78,9 @@ export function PublishedEndpoints({
   const published = publishedFor(data, service);
   if (!published) {
     return (
-      <p className="text-xs text-fg-fnt">Nothing was read for this Service.</p>
+      <p className="text-xs text-fg-fnt">
+        <T section="empty" k="nothingReadForService" />
+      </p>
     );
   }
   return <Lists published={published} />;
@@ -113,7 +116,7 @@ function Lists({ published }: { published: ServicePublished }) {
         />
         {published.endpoints.length === 0 ? (
           <p className="text-xs text-fg-fnt">
-            This Service publishes no address at all — nothing reaches it.
+            <T section="empty" k="servicePublishesNothing" />
           </p>
         ) : (
           <Table>

@@ -47,8 +47,10 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 export function CrdDetail() {
+  const t = useT();
   const { name } = useParams<{ name: string }>();
   const decodedName = name ? decodeURIComponent(name) : undefined;
   const navigate = useNavigate();
@@ -330,13 +332,13 @@ export function CrdDetail() {
             title="Labels"
             count={Object.keys(crd?.labels ?? {}).length}
             items={recordToKeyValues(crd?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(crd?.annotations ?? {}).length}
             items={recordToKeyValues(crd?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

@@ -41,6 +41,7 @@ import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { usePeekWidth } from "./peek-width";
+import { useT } from "@/i18n/useT";
 
 /**
  * The right-hand drawer a reference opens.
@@ -365,6 +366,7 @@ function PeekOverview({
   error: Error | null;
   isLoading: boolean;
 }) {
+  const t = useT();
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 pb-5">
       {error ? (
@@ -379,7 +381,7 @@ function PeekOverview({
             <PeekHeading title={group.title} count={group.count} />
             <KeyValueList
               items={group.items}
-              emptyMessage={group.emptyMessage ?? "None"}
+              emptyMessage={group.emptyMessage ?? t("empty", "none")}
             />
           </div>
         ))
@@ -700,6 +702,7 @@ function PeekSkeleton() {
 }
 
 function PeekEvents({ target }: { target: PeekTarget }) {
+  const t = useT();
   const { data: events, error } = useLiveQuery({
     queryKey: [
       "peek-events",
@@ -732,7 +735,7 @@ function PeekEvents({ target }: { target: PeekTarget }) {
       ) : (
         <EventRows
           events={events}
-          emptyMessage="No events for this object"
+          emptyMessage={t("empty", "noEventsForObject")}
           compact
         />
       )}

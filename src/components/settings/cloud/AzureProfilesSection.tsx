@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/use-toast";
 import type { AzureProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 const EMPTY_PROFILE: AzureProfile = {
   description: undefined,
@@ -31,6 +32,7 @@ const EMPTY_PROFILE: AzureProfile = {
 };
 
 export function AzureProfilesSection() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -117,7 +119,7 @@ export function AzureProfilesSection() {
         onAdd={openCreateDialog}
         isLoading={isLoading}
         isEmpty={!profiles || profiles.length === 0}
-        emptyMessage="No profiles — using the default az login credentials."
+        emptyMessage={t("empty", "noProfilesAzure")}
       >
         {profiles?.map((item) => (
           <ProfileRow

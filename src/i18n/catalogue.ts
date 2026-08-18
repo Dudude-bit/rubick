@@ -135,6 +135,106 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noPodsForJob: "No pods for this job",
+    noEventsForClaim: "No events for this claim",
+    none: "None",
+    noLabels: "No labels",
+    noAnnotations: "No annotations",
+    noFinalizers: "No finalizers",
+    noOwner: "Nothing owns this object — it was created directly.",
+    noConditions: "No conditions reported",
+    noEventsForObject: "No events for this object",
+    noEventsUnprovisioned:
+      "No events yet — no provisioner has picked this claim up.",
+    nothingScheduled: "nothing scheduled",
+    scaledToZero: "scaled to zero",
+    noResourcesInScope: "No resources of this type in the current scope.",
+    nothingMatches: "Nothing matches",
+    noDataKeys: "No data keys",
+    nothingBelongsToObject: "Nothing of this kind belongs to this object.",
+    deploymentHasNoReplicaSets: "This Deployment has no ReplicaSets",
+    cronJobNotRunYet: "This CronJob has not run yet",
+    noPodsForWorkload: "No pods for this workload",
+    kindHoldsNoKeys: "This {kind} holds no keys",
+    kindHasNoPods: "This {kind} has no pods right now",
+    revisionHasNoPods: "This revision has no pods right now",
+    noPodsSuperseded: "No pods — revision {revision} took over from this one.",
+    noPodsScaledToZero: "No pods — the Deployment is scaled to zero.",
+    noConditionsReplicaSet:
+      "This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod.",
+    noSelectorDaemonSet: "No selector — this DaemonSet matches nothing",
+    noSelectorService: "No selector — this service does not pick pods by label",
+    noParameters: "No parameters — the provisioner uses its own defaults.",
+    noLabelsOnNode:
+      "No labels on this node — not even the kubernetes.io/* set kubelet registers, which usually means the object was not read.",
+    noneInScope: "none in scope",
+    nothingBroken: "nothing broken",
+    nothingRunning: "nothing running",
+    usageIdleNote:
+      "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited — so there is no line rather than a line at zero.",
+    kindScaledToZero: "This {kind} is scaled to zero.",
+    kindNoPodsRunning: "None of this {kind}'s pods is running.",
+    daemonSetNoNodeMatches:
+      "No node matches this DaemonSet, so it has placed no pods.",
+    cronJobSuspended: "This CronJob is suspended, so no run will start.",
+    cronJobNoRunInFlight: "No run of this CronJob is in flight.",
+    jobFinished: "This Job has finished.",
+    jobNoPodRunningFailed:
+      "No pod of this Job is running, and the last one failed.",
+    jobNoPodRunning: "No pod of this Job is running.",
+    noPodsToReadLogs: "This deployment has no pods to read logs from.",
+    podMountsNothing: "This pod mounts nothing of its own.",
+    noContainersInSpec:
+      "No containers in this spec — nothing to inspect, and nothing an image or a probe could be read from.",
+    noEnvVarsMatchFilter: "No environment variables match the selected filter",
+    nothingReadForService: "Nothing was read for this Service.",
+    servicePublishesNothing:
+      "This Service publishes no address at all — nothing reaches it.",
+    noSchemaInfo: "No schema information available.",
+    noContextNeedsPlugin: "No context needs one.",
+    noneRead: "None read.",
+    fileNamesNoContexts: "This file names no contexts",
+    fileNamesNoContextsBody:
+      "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written — point the app at another file to check.",
+    configHasNoClusters: "The config file has no clusters in it",
+    configHasNoClustersSub:
+      "It was read, but it lists no context to connect with.",
+    notConnectedYet: "You are not connected to a cluster yet",
+    noKubeconfigFound: "No cluster configuration was found on this machine.",
+    noClusterIsConnected: "No cluster is connected",
+    kindReadFromCluster:
+      "{kind} are read from a cluster, and this window is not on one yet.",
+    notOnClusterYet: "This window is not on a cluster yet.",
+    kubeconfigListsNoClusters: "Your kubeconfig lists no clusters either.",
+    noClusterMatchesNeedle:
+      "No cluster in the kubeconfig answers to “{needle}”.",
+    noMatchesYet:
+      "No matches yet — {answered} of {total} clusters have answered.",
+    nothingSearchedNoCluster:
+      "Nothing has been searched: no cluster here is connected yet.",
+    nothingMatchesOnSearched:
+      "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
+    nothingMatchesQuery: "Nothing matches “{query}”.",
+    noHelmHistory: "No history — Helm keeps none for this release.",
+    nothingRoutesThroughController:
+      "Nothing routes through this controller, so there is no shape to draw.",
+    noIntegrationByName: "No integration by that name",
+    noIntegrationByNameBody:
+      "This app has no page for “{slug}”. The name may have changed, or the link may be from a newer version.",
+    integrationNotInstalled: "{name} is not installed in this cluster",
+    integrationNotInstalledBody:
+      "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional — the cluster works exactly as it does now.",
+    integrationNotConnected: "{name} is not connected",
+    integrationNotConnectedBody:
+      "It installs nothing in a cluster, so there is nothing to detect — it works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
+    noProfilesGcp: "No profiles — using Application Default Credentials.",
+    noProfilesAzure: "No profiles — using the default az login credentials.",
+    noCrdsInCluster: "This cluster has no custom resource definitions.",
+    crdNoInstances: "The CRD is installed, but no {kind} has been created yet.",
+    crdNoInstancesInNamespace:
+      "The CRD is installed, but no {kind} has been created in {namespace} yet.",
+    nothingManagesSecret:
+      "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
     nothingWrong: "Nothing here needs attention",
     noResults: "Nothing matched",
   },

@@ -2,6 +2,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { groupMounts, mountedBy } from "@/lib/mounts";
 import { ResourceRef } from "./ResourceRef";
 import type { PodVolumeInfo } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /**
  * What a pod mounts, and what each mount is made of.
@@ -37,7 +38,7 @@ export function VolumeRows({
       <Section>
         <SectionHeader title="Volumes" />
         <p className="py-1 text-xs text-fg-fnt">
-          This pod mounts nothing of its own.
+          <T section="empty" k="podMountsNothing" />
         </p>
       </Section>
     );

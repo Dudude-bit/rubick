@@ -8,6 +8,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { ResourceRef } from "./ResourceRef";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -49,13 +51,17 @@ export function ChildRows({
   // A default is what most callers ship with, so it has to name a state
   // rather than shrug: "Nothing here" told the reader neither what was
   // looked for nor whether the lookup worked.
-  emptyMessage = "Nothing of this kind belongs to this object.",
+  emptyMessage,
 }: {
   rows: ChildRow[];
   emptyMessage?: string;
 }) {
   if (rows.length === 0) {
-    return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
+    return (
+      <p className="px-1.5 py-1 text-xs text-fg-fnt">
+        {emptyMessage ?? <T section="empty" k="nothingBelongsToObject" />}
+      </p>
+    );
   }
   return (
     <div>
@@ -120,14 +126,15 @@ function ChildRowItem({ row }: { row: ChildRow }) {
  */
 export function RevisionRows({
   revisions,
-  emptyMessage = "This Deployment has no ReplicaSets",
+  emptyMessage,
 }: {
   revisions: ReplicaSetInfo[];
   emptyMessage?: string;
 }) {
+  const t = useT();
   return (
     <ChildRows
-      emptyMessage={emptyMessage}
+      emptyMessage={emptyMessage ?? t("empty", "deploymentHasNoReplicaSets")}
       rows={revisions.map((rs) => {
         const { desired, ready } = rs.replicas;
         const live = rs.revision !== null && rs.revision === rs.currentRevision;
@@ -162,14 +169,15 @@ export function RevisionRows({
 /** The Jobs a CronJob has spawned. */
 export function JobRows({
   jobs,
-  emptyMessage = "This CronJob has not run yet",
+  emptyMessage,
 }: {
   jobs: JobInfo[];
   emptyMessage?: string;
 }) {
+  const t = useT();
   return (
     <ChildRows
-      emptyMessage={emptyMessage}
+      emptyMessage={emptyMessage ?? t("empty", "cronJobNotRunYet")}
       rows={jobs.map((job) => ({
         kind: ResourceType.Job,
         name: job.name,

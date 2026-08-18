@@ -100,7 +100,7 @@ export function SecretDetail() {
             keys={dataKeys}
             sensitive
             isLoading={isDataLoading}
-            emptyMessage="This Secret holds no keys"
+            emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "Secret" })}
           />
         </>
       ),
@@ -116,13 +116,13 @@ export function SecretDetail() {
             title="Labels"
             count={Object.keys(labels).length}
             items={recordToKeyValues(labels)}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(annotations).length}
             items={recordToKeyValues(annotations)}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

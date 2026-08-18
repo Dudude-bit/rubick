@@ -65,6 +65,7 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import type { RecentItem } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 const quickActions = [
   { icon: LayoutDashboard, label: "Go to Overview", path: "/" },
@@ -252,6 +253,7 @@ function hasAnswered(cluster: ClusterSearchState): boolean {
 }
 
 export function CommandPalette() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [scope, setScope] = useState<Scope>({ kind: "current" });
@@ -387,7 +389,9 @@ export function CommandPalette() {
           kind: "hint",
           // The ladder refuses a name it cannot justify rather than
           // offering the nearest one, so an empty list is a real answer.
-          text: `No cluster in the kubeconfig answers to “${bang.needle}”.`,
+          text: t("empty", "noClusterMatchesNeedle", {
+            needle: bang.needle,
+          }),
         });
       }
       return out;
@@ -538,12 +542,16 @@ export function CommandPalette() {
         id: "hint:empty",
         kind: "hint",
         text: working
-          ? `No matches yet — ${answered} of ${total} clusters have answered.`
+          ? t("empty", "noMatchesYet", { answered, total })
           : answered === 0
-            ? "Nothing has been searched: no cluster here is connected yet."
+            ? t("empty", "nothingSearchedNoCluster")
             : cold > 0
-              ? `Nothing matches “${query}” on the ${answered} of ${total} clusters that were searched.`
-              : `Nothing matches “${query}”.`,
+              ? t("empty", "nothingMatchesOnSearched", {
+                  query,
+                  answered,
+                  total,
+                })
+              : t("empty", "nothingMatchesQuery", { query }),
       });
     }
 
@@ -564,6 +572,7 @@ export function CommandPalette() {
     scoped,
     shownClusters,
     working,
+    t,
   ]);
 
   const selectable = useMemo(() => entries.filter(isSelectable), [entries]);

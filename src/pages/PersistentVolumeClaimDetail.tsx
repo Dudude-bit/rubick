@@ -29,8 +29,10 @@ import type {
   EventFilters,
   PersistentVolumeClaimInfo,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function PersistentVolumeClaimDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -166,8 +168,8 @@ export function PersistentVolumeClaimDetail() {
               events={events}
               emptyMessage={
                 pending
-                  ? "No events yet — no provisioner has picked this claim up."
-                  : "No events for this claim"
+                  ? t("empty", "noEventsUnprovisioned")
+                  : t("empty", "noEventsForClaim")
               }
             />
           )}

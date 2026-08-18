@@ -34,6 +34,7 @@ import type {
   ContainerPhase,
   DeploymentContainerInfo,
 } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /**
  * A pod's containers, and a deployment's container template, as metadata
@@ -167,8 +168,7 @@ export function ContainerRows(props: ContainerRowsProps) {
     // workload — and the reader has to be able to tell the two apart.
     return (
       <p className="text-xs text-fg-fnt">
-        No containers in this spec — nothing to inspect, and nothing an image or
-        a probe could be read from.
+        <T section="empty" k="noContainersInSpec" />
       </p>
     );
   }

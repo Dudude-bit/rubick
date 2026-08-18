@@ -51,6 +51,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface AccessUrl {
   fullUrl: string;
@@ -140,6 +141,7 @@ function IconAction({
 }
 
 export function IngressDetail() {
+  const t = useT();
   const copyToClipboard = useCopyToClipboard();
   const {
     name,
@@ -619,13 +621,13 @@ export function IngressDetail() {
             title="Labels"
             count={Object.keys(ingress?.labels ?? {}).length}
             items={recordToKeyValues(ingress?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(ingress?.annotations ?? {}).length}
             items={recordToKeyValues(ingress?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

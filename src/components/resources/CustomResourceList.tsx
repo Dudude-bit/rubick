@@ -20,6 +20,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 import { useState } from "react";
+import { useT } from "@/i18n/useT";
 
 interface CustomResourceListProps {
   crdName: string;
@@ -45,6 +46,7 @@ export function CustomResourceList({
   printerColumns = [],
   embedded = false,
 }: CustomResourceListProps) {
+  const t = useT();
   const { currentNamespace } = useClusterStore();
 
   // How the vendor that installed this CRD draws it, if the app knows one.
@@ -232,9 +234,14 @@ export function CustomResourceList({
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.
-      emptyMessage={`The CRD is installed, but no ${crdKind} has been created${
-        namespace ? ` in ${namespace}` : ""
-      } yet.`}
+      emptyMessage={
+        namespace
+          ? t("empty", "crdNoInstancesInNamespace", {
+              kind: crdKind,
+              namespace,
+            })
+          : t("empty", "crdNoInstances", { kind: crdKind })
+      }
       deleteConfig={{
         mutationFn: (item) =>
           commands.deleteCustomResource(

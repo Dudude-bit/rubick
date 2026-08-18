@@ -34,6 +34,7 @@ import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
+import { T } from "@/i18n/T";
 
 /**
  * Where a variable's value came from.
@@ -586,7 +587,7 @@ export function EnvironmentVariables({
         <CollapsibleContent>
           {filteredEnvVars.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No environment variables match the selected filter
+              <T section="empty" k="noEnvVarsMatchFilter" />
             </p>
           ) : (
             <Table>

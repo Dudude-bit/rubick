@@ -20,6 +20,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import type { IssuanceStep, IssuanceStory } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /** "in 31 days", "6 days ago" — a date nobody has to subtract. */
 function relative(iso: string, now = Date.now()): string {
@@ -107,8 +108,7 @@ export function IssuanceSection({
       <Section>
         <SectionHeader title="Renewal" />
         <p className="text-xs text-fg-fnt">
-          Nothing in this namespace manages this Secret, so it will not renew on
-          its own — whoever put this certificate here replaces it.
+          <T section="empty" k="nothingManagesSecret" />
         </p>
       </Section>
     );

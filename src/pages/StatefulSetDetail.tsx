@@ -186,8 +186,12 @@ export function StatefulSetDetail() {
                   pods={pods}
                   idle={
                     desired === 0
-                      ? "This StatefulSet is scaled to zero."
-                      : "None of this StatefulSet's pods is running."
+                      ? t("empty", "kindScaledToZero", {
+                          kind: ResourceType.StatefulSet,
+                        })
+                      : t("empty", "kindNoPodsRunning", {
+                          kind: ResourceType.StatefulSet,
+                        })
                   }
                   connections={connections.data}
                 />
@@ -212,13 +216,13 @@ export function StatefulSetDetail() {
               title="Labels"
               count={Object.keys(statefulSet?.labels ?? {}).length}
               items={recordToKeyValues(statefulSet?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
               title="Annotations"
               count={Object.keys(statefulSet?.annotations ?? {}).length}
               items={recordToKeyValues(statefulSet?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),

@@ -37,6 +37,7 @@ import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /** A taint is the usual answer to "why is nothing scheduling here". */
 function taintKeyValues(taints: TaintInfo[]): KeyValue[] {
@@ -49,6 +50,7 @@ function taintKeyValues(taints: TaintInfo[]): KeyValue[] {
 }
 
 export function NodeDetail() {
+  const t = useT();
   const navigate = useNavigate();
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
 
@@ -283,7 +285,7 @@ export function NodeDetail() {
           // A whole tab, not a row beside Annotations — and every node kubelet
           // registers carries `kubernetes.io/*`, so an empty one is the read
           // failing rather than a node with nothing to say about itself.
-          emptyMessage="No labels on this node — not even the kubernetes.io/* set kubelet registers, which usually means the object was not read."
+          emptyMessage={t("empty", "noLabelsOnNode")}
         />
       ),
     },

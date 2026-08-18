@@ -721,13 +721,13 @@ export function PodDetail() {
                   title="Labels"
                   count={Object.keys(pod?.labels ?? {}).length}
                   items={recordToKeyValues(pod?.labels ?? {})}
-                  emptyMessage="No labels"
+                  emptyMessage={t("empty", "noLabels")}
                 />
                 <KeyValueSection
                   title="Annotations"
                   count={Object.keys(pod?.annotations ?? {}).length}
                   items={recordToKeyValues(pod?.annotations ?? {})}
-                  emptyMessage="No annotations"
+                  emptyMessage={t("empty", "noAnnotations")}
                 />
               </>
             ),

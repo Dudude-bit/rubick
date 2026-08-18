@@ -121,8 +121,8 @@ export function ReplicaSetDetail() {
     ? `Superseded by revision ${currentRevision}. The Deployment keeps this one at zero so a rollback can bring it straight back.`
     : "The Deployment is scaled to zero, so its current revision runs no pods.";
   const noPods = superseded
-    ? `No pods — revision ${currentRevision} took over from this one.`
-    : "No pods — the Deployment is scaled to zero.";
+    ? t("empty", "noPodsSuperseded", { revision: currentRevision ?? "" })
+    : t("empty", "noPodsScaledToZero");
 
   const emptyPods = desired === 0 && current === 0;
 
@@ -188,7 +188,7 @@ export function ReplicaSetDetail() {
                       tone: "err",
                     },
                   ]}
-                  emptyMessage="scaled to zero"
+                  emptyMessage={t("empty", "scaledToZero")}
                   // A bar of nothing is the picture of a fault. The end of a
                   // rollout looks identical, and only the sentence tells them
                   // apart — so the empty case never renders without one.
@@ -203,13 +203,13 @@ export function ReplicaSetDetail() {
             title="Labels"
             count={Object.keys(replicaSet?.labels ?? {}).length}
             items={recordToKeyValues(replicaSet?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(replicaSet?.annotations ?? {}).length}
             items={recordToKeyValues(replicaSet?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -230,9 +230,7 @@ export function ReplicaSetDetail() {
           pods={pods}
           // "No pods" on a superseded revision reads as a fault. It is the
           // ordinary end of a rollout, and the page has to say so.
-          emptyMessage={
-            emptyPods ? noPods : "This revision has no pods right now"
-          }
+          emptyMessage={emptyPods ? noPods : t("empty", "revisionHasNoPods")}
         />
       ),
     },
@@ -249,7 +247,7 @@ export function ReplicaSetDetail() {
           />
           <ConditionRows
             conditions={replicaSet?.conditions ?? []}
-            emptyMessage="This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod."
+            emptyMessage={t("empty", "noConditionsReplicaSet")}
             subject={{ kind: ResourceType.ReplicaSet, name, namespace }}
           />
         </Section>

@@ -6,6 +6,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type { KubeconfigSource } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The first screen anyone sees.
@@ -236,6 +237,7 @@ function NoClusters({
 }: {
   kubeconfig: ReturnType<typeof useKubeconfigPath>;
 }) {
+  const t = useT();
   const source = kubeconfig.source;
   const found = source?.candidates.some((c) => c.exists) ?? false;
   const counts = source?.counts;
@@ -244,8 +246,8 @@ function NoClusters({
     return (
       <>
         <Heading
-          title="The config file has no clusters in it"
-          sub="It was read, but it lists no context to connect with."
+          title={t("empty", "configHasNoClusters")}
+          sub={t("empty", "configHasNoClustersSub")}
         />
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
           <Act onClick={() => void kubeconfig.choose()}>
@@ -271,8 +273,8 @@ function NoClusters({
   return (
     <>
       <Heading
-        title="You are not connected to a cluster yet"
-        sub="No cluster configuration was found on this machine."
+        title={t("empty", "notConnectedYet")}
+        sub={t("empty", "noKubeconfigFound")}
       />
       <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
         Get one running

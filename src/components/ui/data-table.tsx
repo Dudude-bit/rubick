@@ -43,6 +43,7 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
+import { T } from "@/i18n/T";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -255,7 +256,7 @@ export function DataTable<TData, TValue>({
   quickActions,
   enableKeyboardNav,
   getRowId,
-  emptyMessage = "No resources of this type in the current scope.",
+  emptyMessage,
   grouping = null,
   rowLabel = "rows",
 }: DataTableProps<TData, TValue>) {
@@ -833,7 +834,7 @@ export function DataTable<TData, TValue>({
                           aria-hidden="true"
                         />
                         <p className="text-xs text-fg-mut">
-                          Nothing matches{" "}
+                          <T section="empty" k="nothingMatches" />{" "}
                           <span className="font-mono text-fg">
                             {searchValue}
                           </span>
@@ -853,7 +854,11 @@ export function DataTable<TData, TValue>({
                           className="h-5 w-5 text-fg-mut"
                           aria-hidden="true"
                         />
-                        <p className="text-xs text-fg-mut">{emptyMessage}</p>
+                        <p className="text-xs text-fg-mut">
+                          {emptyMessage ?? (
+                            <T section="empty" k="noResourcesInScope" />
+                          )}
+                        </p>
                       </div>
                     )}
                   </TableCell>

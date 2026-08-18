@@ -43,6 +43,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import type { CronJobDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The three facts a CronJob page exists to answer, at a glance.
@@ -115,6 +116,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
 }
 
 export function CronJobDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -261,8 +263,8 @@ export function CronJobDetail() {
                   pods={pods}
                   idle={
                     cronJob?.suspend
-                      ? "This CronJob is suspended, so no run will start."
-                      : "No run of this CronJob is in flight."
+                      ? t("empty", "cronJobSuspended")
+                      : t("empty", "cronJobNoRunInFlight")
                   }
                 />
               }
@@ -282,13 +284,13 @@ export function CronJobDetail() {
               title="Labels"
               count={Object.keys(cronJob?.labels ?? {}).length}
               items={recordToKeyValues(cronJob?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
               title="Annotations"
               count={Object.keys(cronJob?.annotations ?? {}).length}
               items={recordToKeyValues(cronJob?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),
@@ -323,7 +325,7 @@ export function CronJobDetail() {
         namespace: cronJob?.namespace || namespace,
       }),
     ],
-    [cronJob, jobs, pods, yaml, copyYaml, namespace, name]
+    [cronJob, jobs, pods, yaml, copyYaml, namespace, name, t]
   );
 
   if (!cronJob && !isLoading && !error) {

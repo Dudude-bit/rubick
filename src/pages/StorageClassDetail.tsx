@@ -15,8 +15,10 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function StorageClassDetail() {
+  const t = useT();
   const {
     name,
     resource: sc,
@@ -85,7 +87,7 @@ export function StorageClassDetail() {
           title="Parameters"
           count={Object.keys(parameters).length || undefined}
           items={recordToKeyValues(parameters)}
-          emptyMessage="No parameters — the provisioner uses its own defaults."
+          emptyMessage={t("empty", "noParameters")}
         />
       ),
     },

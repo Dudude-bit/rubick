@@ -322,7 +322,7 @@ export function DeploymentDetail() {
                       tone: "warn",
                     },
                   ]}
-                  emptyMessage="scaled to zero"
+                  emptyMessage={t("empty", "scaledToZero")}
                   note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
                 />
               </CountBlock>
@@ -337,8 +337,12 @@ export function DeploymentDetail() {
                 pods={pods}
                 idle={
                   desired === 0
-                    ? "This Deployment is scaled to zero."
-                    : "None of this Deployment's pods is running."
+                    ? t("empty", "kindScaledToZero", {
+                        kind: ResourceType.Deployment,
+                      })
+                    : t("empty", "kindNoPodsRunning", {
+                        kind: ResourceType.Deployment,
+                      })
                 }
                 connections={connections.data}
               />
@@ -358,13 +362,13 @@ export function DeploymentDetail() {
             title="Labels"
             count={Object.keys(deployment?.labels ?? {}).length}
             items={recordToKeyValues(deployment?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(deployment?.annotations ?? {}).length}
             items={recordToKeyValues(deployment?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -454,7 +458,7 @@ export function DeploymentDetail() {
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">
                 {pods.length === 0
-                  ? "This deployment has no pods to read logs from."
+                  ? t("empty", "noPodsToReadLogs")
                   : "Select a pod to view logs"}
               </p>
             )}

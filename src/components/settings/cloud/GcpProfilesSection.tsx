@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/use-toast";
 import type { GcpProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 const EMPTY_PROFILE: GcpProfile = {
   description: undefined,
@@ -30,6 +31,7 @@ const EMPTY_PROFILE: GcpProfile = {
 };
 
 export function GcpProfilesSection() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -131,7 +133,7 @@ export function GcpProfilesSection() {
         onAdd={openCreateDialog}
         isLoading={isLoading}
         isEmpty={!profiles || profiles.length === 0}
-        emptyMessage="No profiles — using Application Default Credentials."
+        emptyMessage={t("empty", "noProfilesGcp")}
       >
         {profiles?.map((item) => (
           <ProfileRow

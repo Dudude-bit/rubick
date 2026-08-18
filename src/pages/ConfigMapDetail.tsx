@@ -74,7 +74,7 @@ export function ConfigMapDetail() {
           binary={configMapData?.binary}
           keys={dataKeys}
           isLoading={isDataLoading}
-          emptyMessage="This ConfigMap holds no keys"
+          emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "ConfigMap" })}
         />
       ),
     },
@@ -89,13 +89,13 @@ export function ConfigMapDetail() {
             title="Labels"
             count={Object.keys(labels).length}
             items={recordToKeyValues(labels)}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(annotations).length}
             items={recordToKeyValues(annotations)}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

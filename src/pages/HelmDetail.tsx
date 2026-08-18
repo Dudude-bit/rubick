@@ -51,6 +51,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { installedObjects } from "@/lib/helm-manifest";
+import { T } from "@/i18n/T";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -275,7 +276,7 @@ export function HelmDetail() {
             <p className="text-xs text-fg-fnt">Reading history…</p>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No history — Helm keeps none for this release.
+              <T section="empty" k="noHelmHistory" />
             </p>
           ) : (
             <Table>

@@ -146,7 +146,7 @@ export function WorkloadUsage({
       <UsageBlock
         kind={kind}
         uid={uid}
-        scope="nothing running"
+        scope={t("empty", "nothingRunning")}
         cpu={null}
         memory={null}
         // The template's ceiling for one replica, unmultiplied: there are no
@@ -195,13 +195,12 @@ export function WorkloadUsage({
  * to ask why the workload is idle, when the answer is that it is not there.
  */
 function IdleUsage({ says }: { says: string }) {
+  const t = useT();
   return (
     <Section>
-      <SectionHeader title="Usage" count="nothing running" />
+      <SectionHeader title="Usage" count={t("empty", "nothingRunning")} />
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-        {says} Usage is summed from running pods, and metrics-server keeps
-        nothing about a pod that has exited — so there is no line rather than a
-        line at zero.
+        {says} {t("empty", "usageIdleNote")}
       </p>
     </Section>
   );

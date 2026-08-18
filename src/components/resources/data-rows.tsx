@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
 import type { BinaryValue } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -55,7 +56,7 @@ export function DataSection({
   withheld = {},
   binary = {},
   isLoading = false,
-  emptyMessage = "No data keys",
+  emptyMessage,
 }: DataSectionProps) {
   const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
@@ -112,7 +113,9 @@ export function DataSection({
       <Section>
         <SectionHeader title={title} count={0} />
         <p className="py-1 text-xs text-fg-fnt">
-          {isLoading ? "Reading…" : emptyMessage}
+          {isLoading
+            ? "Reading…"
+            : (emptyMessage ?? <T section="empty" k="noDataKeys" />)}
         </p>
       </Section>
     );

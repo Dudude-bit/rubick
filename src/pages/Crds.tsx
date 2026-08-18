@@ -216,7 +216,7 @@ export function Crds() {
         getRowHref={(row) => crdHref(row.name)}
         grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
-        emptyMessage="This cluster has no custom resource definitions."
+        emptyMessage={t("empty", "noCrdsInCluster")}
       />
 
       <ConfirmDialog

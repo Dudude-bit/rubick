@@ -9,6 +9,7 @@ import {
   ToggleLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { T } from "@/i18n/T";
 
 interface SchemaViewerProps {
   schema: unknown;
@@ -299,7 +300,9 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
 
   if (!parsedSchema || typeof parsedSchema !== "object") {
     return (
-      <p className="text-xs text-fg-mut">No schema information available.</p>
+      <p className="text-xs text-fg-mut">
+        <T section="empty" k="noSchemaInfo" />
+      </p>
     );
   }
 
