@@ -82,7 +82,7 @@ function SettingsShell({ activeId }: { activeId: string }) {
             <span className="text-[11px] text-fg-fnt">
               {searching ? (
                 matched === 0 ? (
-                  <>nothing here matches &ldquo;{query}&rdquo;</>
+                  <>{t("settings", "nothingHereMatches", { query })}</>
                 ) : (
                   <>
                     {t("count", "settingsMatch", { n: matched })} &ldquo;

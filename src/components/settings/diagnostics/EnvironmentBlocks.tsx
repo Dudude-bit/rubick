@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -32,23 +33,26 @@ export function EnvironmentBlocks({
   diagnostics: Diagnostics;
 }) {
   const { searchPath, plugins, contexts, kubeconfig, app } = diagnostics;
+  const t = useT();
 
   return (
     <div className="mt-6">
-      <Block title={`Search path · ${searchPath.length} directories`}>
+      <Block title={t("settings", "searchPathBlock", { n: searchPath.length })}>
         <ul className="space-y-1">
           {searchPath.map((entry) => (
             <li key={entry.path} className="font-mono text-xs text-fg-mut">
               {entry.path}
               {!entry.exists && (
-                <span className="ml-2 text-warn">not there</span>
+                <span className="ml-2 text-warn">
+                  {t("settings", "notThere")}
+                </span>
               )}
             </li>
           ))}
         </ul>
       </Block>
 
-      <Block title={`Plugins · ${plugins.length}`}>
+      <Block title={t("settings", "pluginsBlock", { n: plugins.length })}>
         {plugins.length === 0 ? (
           <p className="text-xs text-fg-mut">
             <T section="empty" k="noContextNeedsPlugin" />
@@ -61,10 +65,12 @@ export function EnvironmentBlocks({
                 {plugin.path ? (
                   <span className="ml-2 font-mono">{plugin.path}</span>
                 ) : (
-                  <Missing label="not found" />
+                  <Missing label={t("settings", "notFoundInline")} />
                 )}
                 <span className="ml-2">
-                  · needed by {plugin.requiredBy.join(", ")}
+                  {t("settings", "neededBy", {
+                    list: plugin.requiredBy.join(", "),
+                  })}
                 </span>
               </li>
             ))}
@@ -72,7 +78,7 @@ export function EnvironmentBlocks({
         )}
       </Block>
 
-      <Block title={`Contexts · ${contexts.length}`}>
+      <Block title={t("settings", "contextsBlock", { n: contexts.length })}>
         {contexts.length === 0 ? (
           <p className="text-xs text-fg-mut">
             <T section="empty" k="noneRead" />
@@ -87,7 +93,7 @@ export function EnvironmentBlocks({
                   <span className="ml-2 font-mono">{ctx.command}</span>
                 )}
                 {ctx.command && !ctx.commandPath && (
-                  <Missing label="not found" />
+                  <Missing label={t("settings", "notFoundInline")} />
                 )}
               </li>
             ))}
@@ -102,22 +108,29 @@ export function EnvironmentBlocks({
             {kubeconfig.parseError ? (
               <Missing label={kubeconfig.parseError} />
             ) : (
-              <span className="ml-2">· {kubeconfig.contextCount} contexts</span>
+              <span className="ml-2">
+                ·{" "}
+                {t("settings", "contextCount", {
+                  n: kubeconfig.contextCount,
+                })}
+              </span>
             )}
           </p>
         ) : (
           <p className="text-xs text-fg-mut">
-            None loaded yet — connect a cluster and this will name the file.
+            {t("settings", "noKubeconfigLoaded")}
           </p>
         )}
       </Block>
 
-      <Block title="Application">
+      <Block title={t("settings", "applicationBlock")}>
         <ul className="space-y-1 text-xs text-fg-mut">
-          <li>Version {app.version}</li>
+          <li>{t("settings", "appVersion", { version: app.version })}</li>
           <li>{app.os}</li>
           {app.configPath && <li className="font-mono">{app.configPath}</li>}
-          <li>Logs: {app.logDestination}</li>
+          <li>
+            {t("settings", "logsTo", { destination: app.logDestination })}
+          </li>
         </ul>
       </Block>
     </div>

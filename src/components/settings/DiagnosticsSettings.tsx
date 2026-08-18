@@ -10,6 +10,7 @@ import { commands } from "@/lib/commands";
 import { EnvironmentBlocks } from "./diagnostics/EnvironmentBlocks";
 import { FindingsList } from "./diagnostics/FindingsList";
 import { asMarkdown } from "./diagnostics/report";
+import { useT } from "@/i18n/useT";
 
 /**
  * What the app can see of this machine.
@@ -22,6 +23,7 @@ import { asMarkdown } from "./diagnostics/report";
 export function DiagnosticsSettings() {
   const [redact, setRedact] = useState(true);
   const { toast } = useToast();
+  const t = useT();
 
   const { data } = useLiveQuery({
     queryKey: ["diagnostics", redact],
@@ -43,20 +45,20 @@ export function DiagnosticsSettings() {
           onClick={async () => {
             if (!data) return;
             await writeText(asMarkdown(data));
-            toast({ title: "Diagnostics copied" });
+            toast({ title: t("settings", "diagnosticsCopied") });
           }}
         >
           <ClipboardCopy className="mr-1.5 h-3.5 w-3.5" />
-          Copy diagnostics
+          {t("settings", "copyDiagnostics")}
         </Button>
 
         <label className="flex items-center gap-2 text-xs text-fg-mut">
           <Checkbox
             checked={redact}
             onCheckedChange={(next) => setRedact(next === true)}
-            aria-label="Redact names and paths"
+            aria-label={t("settings", "redactNamesAndPaths")}
           />
-          Redact names and paths
+          {t("settings", "redactNamesAndPaths")}
         </label>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { RouteLink } from "@/components/ui/route-link";
 import { cn } from "@/lib/utils";
 import { SETTINGS_SECTIONS } from "./settings-sections";
 import { useSettingsSearch } from "./settings-search";
+import { useT } from "@/i18n/useT";
 
 const ITEM_ATTR = "data-settings-nav-item";
 
@@ -19,6 +20,7 @@ const ITEM_ATTR = "data-settings-nav-item";
  */
 export function SettingsNav({ activeId }: { activeId: string }) {
   const { query, setQuery, terms, counts } = useSettingsSearch();
+  const t = useT();
   const listRef = React.useRef<HTMLDivElement>(null);
   const searching = terms.length > 0;
 
@@ -59,8 +61,8 @@ export function SettingsNav({ activeId }: { activeId: string }) {
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <input
           type="search"
-          aria-label="Search settings"
-          placeholder="Search settings"
+          aria-label={t("settings", "searchSettings")}
+          placeholder={t("settings", "searchSettings")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -74,7 +76,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
         {query && (
           <button
             type="button"
-            aria-label="Clear search"
+            aria-label={t("settings", "clearSearch")}
             onClick={() => setQuery("")}
             className="rounded text-fg-fnt transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >
@@ -87,7 +89,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
         ref={listRef}
         onKeyDown={onKeyDown}
         role="navigation"
-        aria-label="Settings sections"
+        aria-label={t("settings", "settingsSections")}
         className="flex flex-col"
       >
         {SETTINGS_SECTIONS.map((section) => {
@@ -107,7 +109,10 @@ export function SettingsNav({ activeId }: { activeId: string }) {
               // pair is "About1". Say what the number counts instead.
               aria-label={
                 searching
-                  ? `${section.label}, ${count} matching`
+                  ? t("settings", "navMatching", {
+                      label: section.label,
+                      n: count,
+                    })
                   : section.label
               }
               className={cn(

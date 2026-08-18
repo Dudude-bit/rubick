@@ -90,7 +90,9 @@ export function AzureProfilesSection() {
     mutationFn: commands.testAzureProfile,
     onSuccess: (result) => {
       toast({
-        title: result.includes("successful") ? "Success" : "Failed",
+        title: result.includes("successful")
+          ? t("settings", "success")
+          : t("settings", "failed"),
         description: result,
         variant: result.includes("successful") ? "default" : "destructive",
       });

@@ -58,7 +58,7 @@ export function GcpProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
       setDialogOpen(false);
-      toast({ title: "GCP profile saved" });
+      toast({ title: t("settings", "gcpProfileSaved") });
     },
     onError: (error) => {
       toast({
@@ -74,7 +74,7 @@ export function GcpProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
       queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
-      toast({ title: "GCP profile deleted" });
+      toast({ title: t("settings", "gcpProfileDeleted") });
     },
     onError: (error) => {
       toast({
@@ -89,7 +89,9 @@ export function GcpProfilesSection() {
     mutationFn: commands.testGcpProfile,
     onSuccess: (result) => {
       toast({
-        title: result.includes("successful") ? "Success" : "Failed",
+        title: result.includes("successful")
+          ? t("settings", "success")
+          : t("settings", "failed"),
         description: result,
         variant: result.includes("successful") ? "default" : "destructive",
       });
@@ -129,7 +131,7 @@ export function GcpProfilesSection() {
     <>
       <ProfileSection
         title="GCP"
-        addLabel="Add profile"
+        addLabel={t("settings", "addProfile")}
         onAdd={openCreateDialog}
         isLoading={isLoading}
         isEmpty={!profiles || profiles.length === 0}

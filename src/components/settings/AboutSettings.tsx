@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
+import { useT } from "@/i18n/useT";
 
 /**
  * What this build is, and — separately — replacing it.
@@ -20,6 +21,7 @@ import { SettingRow, SettingsGroup } from "./settings-row";
  */
 export function AboutSettings() {
   const { toast } = useToast();
+  const t = useT();
   const {
     available,
     version,
@@ -43,7 +45,7 @@ export function AboutSettings() {
     <div className="flex flex-col gap-5">
       <SettingsGroup>
         <SettingRow
-          label="Version"
+          label={t("settings", "version")}
           keywords="build release"
           control={
             <span className="font-mono text-xs text-fg">
@@ -61,7 +63,7 @@ export function AboutSettings() {
           }
         />
         <SettingRow
-          label="Framework"
+          label={t("settings", "framework")}
           keywords="react typescript"
           control={
             <span className="text-xs text-fg-mut">React + TypeScript</span>
@@ -69,14 +71,14 @@ export function AboutSettings() {
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Updates">
+      <SettingsGroup title={t("settings", "updates")}>
         <SettingRow
           label={
             available && version
-              ? `Version ${version} is available`
-              : "You are running the latest version"
+              ? t("settings", "updateAvailable", { version })
+              : t("settings", "upToDate")
           }
-          hint="Downloading an update restarts the app when it is ready."
+          hint={t("settings", "updateHint")}
           keywords="update upgrade install download"
           control={
             available && !downloading ? (
@@ -84,14 +86,14 @@ export function AboutSettings() {
                 size="sm"
                 onClick={() => {
                   toast({
-                    title: "Downloading update",
-                    description: "The app restarts automatically when ready.",
+                    title: t("settings", "downloadingUpdate"),
+                    description: t("settings", "downloadingUpdateHint"),
                   });
                   downloadAndInstall();
                 }}
               >
                 <Download className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                Download &amp; install
+                {t("settings", "downloadAndInstall")}
               </Button>
             ) : (
               <Button
@@ -101,13 +103,15 @@ export function AboutSettings() {
                   const update = await checkForUpdates();
                   if (update) {
                     toast({
-                      title: "Update available",
-                      description: `Version ${update.version} is ready to download.`,
+                      title: t("settings", "updateFound"),
+                      description: t("settings", "updateReady", {
+                        version: update.version,
+                      }),
                     });
                   } else if (!error) {
                     toast({
-                      title: "No updates",
-                      description: "You're running the latest version.",
+                      title: t("settings", "noUpdates"),
+                      description: t("settings", "upToDateToast"),
                     });
                   }
                 }}
@@ -117,7 +121,9 @@ export function AboutSettings() {
                   className={`mr-1.5 h-3 w-3 ${checking ? "animate-spin" : ""}`}
                   aria-hidden="true"
                 />
-                {checking ? "Checking…" : "Check for updates"}
+                {checking
+                  ? t("settings", "checkingUpdates")
+                  : t("settings", "checkForUpdates")}
               </Button>
             )
           }
@@ -138,12 +144,12 @@ export function AboutSettings() {
           )}
         </SettingRow>
         <SettingRow
-          label="Automatic updates"
-          hint="Check on startup and every 30 minutes."
+          label={t("settings", "autoUpdates")}
+          hint={t("settings", "autoUpdatesHint")}
           keywords="auto check background"
           control={
             <Switch
-              aria-label="Automatic updates"
+              aria-label={t("settings", "autoUpdates")}
               checked={autoCheckEnabled}
               onCheckedChange={setAutoCheckEnabled}
             />

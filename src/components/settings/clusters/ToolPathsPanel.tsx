@@ -11,6 +11,7 @@ import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { SettingRow } from "../settings-row";
+import { useT } from "@/i18n/useT";
 
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
@@ -50,6 +51,7 @@ function availabilityHint(
  * feedback: the badge either turns green with a version or does not.
  */
 export function ToolPathsPanel() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const {
@@ -88,7 +90,7 @@ export function ToolPathsPanel() {
     },
     onError: (error) =>
       toast({
-        title: "Could not save the tool paths",
+        title: t("settings", "toolPathsSaveFailed"),
         description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
       }),
@@ -111,7 +113,7 @@ export function ToolPathsPanel() {
       recheck: checkKubectlAvailability,
       path: kubectlPath,
       setPath: setKubectlPath,
-      note: "Its directory is added to PATH when the app runs a credential plugin, which is how kubectl plugins like oidc-login are found.",
+      note: t("settings", "kubectlPathNote"),
     },
     {
       id: "helm",
@@ -120,7 +122,7 @@ export function ToolPathsPanel() {
       recheck: checkHelmAvailability,
       path: helmPath,
       setPath: setHelmPath,
-      note: "Only the Helm page uses it. Nothing about reaching a cluster does.",
+      note: t("settings", "helmPathNote"),
     },
   ] as const;
 
@@ -143,8 +145,7 @@ export function ToolPathsPanel() {
   return (
     <div className="mt-3 border-t border-hair pt-2">
       <p className="pb-1 text-[11px] text-fg-mut">
-        Where these binaries live, when they are somewhere the app does not
-        look. Leave a field empty to search PATH again.
+        {t("settings", "toolPathsIntro")}
       </p>
       {tools.map((tool) => {
         const pending = isChecking || tool.state === null;
@@ -167,11 +168,19 @@ export function ToolPathsPanel() {
                   roleOverride={
                     pending ? "pending" : tool.state?.available ? "ok" : "warn"
                   }
-                />
+                >
+                  {pending
+                    ? t("settings", "checking")
+                    : tool.state?.available
+                      ? t("settings", "available")
+                      : t("settings", "notFound")}
+                </StatusBadge>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={`Re-check ${tool.label}`}
+                  aria-label={t("settings", "recheckTool", {
+                    tool: tool.label,
+                  })}
                   onClick={() => tool.recheck()}
                   disabled={isChecking}
                 >
@@ -185,7 +194,9 @@ export function ToolPathsPanel() {
             <div className="flex gap-1.5">
               <Input
                 id={`${tool.id}-path`}
-                placeholder={`/path/to/${tool.id} — leave empty to auto-detect`}
+                placeholder={t("settings", "toolPathPlaceholder", {
+                  tool: tool.id,
+                })}
                 value={tool.path}
                 onChange={(event) => tool.setPath(event.target.value)}
                 onBlur={(event) => applyOn(tool.id)(event.target.value)}
@@ -197,12 +208,17 @@ export function ToolPathsPanel() {
               <Button
                 variant="outline"
                 size="icon"
-                aria-label={`Browse for the ${tool.label} binary`}
+                aria-label={t("settings", "browseForBinary", {
+                  tool: tool.label,
+                })}
                 onClick={() =>
-                  browseFor(`Select ${tool.label} binary`, (value) => {
-                    tool.setPath(value);
-                    applyOn(tool.id)(value);
-                  })
+                  browseFor(
+                    t("settings", "selectBinaryTitle", { tool: tool.label }),
+                    (value) => {
+                      tool.setPath(value);
+                      applyOn(tool.id)(value);
+                    }
+                  )
                 }
               >
                 <FolderOpen className="h-3.5 w-3.5" />
