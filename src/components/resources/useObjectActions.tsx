@@ -164,9 +164,12 @@ export function useObjectActions({
     }
   };
 
-  const failed = (verb: string) => (error: unknown) =>
+  const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) =>
     toast({
-      title: `Could not ${verb} ${name}`,
+      title: t("action", "couldNotDo", {
+        action: t("action", verb).toLowerCase(),
+        name,
+      }),
       description: normalizeTauriError(error),
       variant: "destructive",
     });
@@ -343,7 +346,7 @@ export function useObjectActions({
         title={bareRestart.title}
         description={warned(bareRestart.description, intercept("Restart"))}
         confirmationText={name}
-        confirmLabel="Restart"
+        confirmLabel={t("action", "restart")}
         isLoading={restart.isPending}
         onConfirm={() => restart.mutate()}
       />

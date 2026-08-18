@@ -26,6 +26,7 @@ import {
   DeliveryRowsProvider,
 } from "@/components/resources/delivery-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
+import { useT } from "@/i18n/useT";
 
 /**
  * The column, built once because every list that has one gets exactly this one
@@ -181,6 +182,7 @@ export function ResourceList<
   grouping,
   delivery,
 }: ResourceListProps<Row>) {
+  const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -261,16 +263,27 @@ export function ResourceList<
           queryClient.invalidateQueries({ queryKey: key });
         });
         toast({
-          title: `${deleteConfig.resourceType} deleted`,
-          description: `${deleteConfig.resourceType} ${item.name} has been deleted.`,
+          title: t("action", "kindDeleted", {
+            kind: deleteConfig.resourceType,
+          }),
+          description: t("action", "kindDeletedDetail", {
+            kind: deleteConfig.resourceType,
+            name: item.name,
+          }),
         });
       }
       setDeleteTarget(null);
     },
     onError: (error, item) => {
       toast({
-        title: "Error",
-        description: `Failed to delete ${deleteConfig?.resourceType?.toLowerCase() ?? "resource"} ${item.name}: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "deleteFailed", {
+          kind:
+            deleteConfig?.resourceType?.toLowerCase() ??
+            t("action", "resourceNoun"),
+          name: item.name,
+          error: String(error),
+        }),
         variant: "destructive",
       });
       setDeleteTarget(null);
@@ -340,7 +353,7 @@ export function ResourceList<
       {failed && resources.length === 0 ? (
         <div className="max-w-[68ch] py-8">
           <p className="text-xs text-err">
-            Could not read {emptyStateLabel} in this scope.
+            {t("empty", "couldNotReadInScope", { label: emptyStateLabel })}
           </p>
           <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {verbatim(failed.message)}
@@ -372,13 +385,20 @@ export function ResourceList<
               setDeleteTarget(null);
             }
           }}
-          title={`Delete ${deleteConfig.resourceType.toLowerCase()}?`}
+          title={t("action", "deleteKindQuestion", {
+            kind: deleteConfig.resourceType.toLowerCase(),
+          })}
           description={
             deleteTarget
-              ? `This will delete ${deleteTarget.name}${deleteTarget.namespace ? ` in ${deleteTarget.namespace}` : ""}.`
+              ? deleteTarget.namespace
+                ? t("action", "willDeleteInNamespace", {
+                    name: deleteTarget.name,
+                    namespace: deleteTarget.namespace,
+                  })
+                : t("action", "willDelete", { name: deleteTarget.name })
               : undefined
           }
-          confirmLabel="Delete"
+          confirmLabel={t("action", "delete")}
           confirmVariant="destructive"
           confirmDisabled={deleteMutation.isPending}
           onConfirm={() => {

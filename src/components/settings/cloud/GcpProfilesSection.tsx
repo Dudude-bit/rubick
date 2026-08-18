@@ -157,24 +157,26 @@ export function GcpProfilesSection() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingName ? "Edit GCP Profile" : "Create GCP Profile"}
+              {editingName
+                ? t("settings", "editGcpProfile")
+                : t("settings", "createGcpProfile")}
             </DialogTitle>
             <DialogDescription>
-              Configure authentication settings for GKE clusters
+              {t("settings", "gcpProfileDialogHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Profile Name</Label>
+              <Label>{t("settings", "profileName")}</Label>
               <Input
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
-                placeholder="e.g., production, personal"
+                placeholder={t("settings", "profileNamePlaceholder")}
                 disabled={!!editingName}
               />
             </div>
             <div className="space-y-2">
-              <Label>Description (optional)</Label>
+              <Label>{t("settings", "descriptionOptional")}</Label>
               <Input
                 value={editingProfile.description || ""}
                 onChange={(e) =>
@@ -183,11 +185,11 @@ export function GcpProfilesSection() {
                     description: e.target.value || undefined,
                   }))
                 }
-                placeholder="e.g., Production GKE clusters"
+                placeholder={t("settings", "gcpDescriptionPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label>Service Account Key Path (optional)</Label>
+              <Label>{t("settings", "serviceAccountKeyPath")}</Label>
               <div className="flex gap-2">
                 <Input
                   value={editingProfile.serviceAccountKeyPath || ""}
@@ -197,23 +199,23 @@ export function GcpProfilesSection() {
                       serviceAccountKeyPath: e.target.value || undefined,
                     }))
                   }
-                  placeholder="Leave empty to use ADC"
+                  placeholder={t("settings", "adcPlaceholder")}
                 />
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Browse for a service account key"
+                  aria-label={t("settings", "browseServiceAccountKey")}
                   onClick={() => handleFilePicker("serviceAccountKeyPath")}
                 >
                   <FolderOpen className="h-3.5 w-3.5" />
                 </Button>
               </div>
               <p className="text-[11px] text-fg-mut">
-                If not set, uses Application Default Credentials (gcloud auth).
+                {t("settings", "adcHint")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Default Project (optional)</Label>
+              <Label>{t("settings", "defaultProject")}</Label>
               <Input
                 value={editingProfile.defaultProject || ""}
                 onChange={(e) =>
@@ -222,11 +224,11 @@ export function GcpProfilesSection() {
                     defaultProject: e.target.value || undefined,
                   }))
                 }
-                placeholder="GCP Project ID"
+                placeholder={t("settings", "gcpProjectPlaceholder")}
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label>Prefer Native SDK Auth</Label>
+              <Label>{t("settings", "preferNativeAuth")}</Label>
               <Switch
                 checked={editingProfile.preferNativeAuth}
                 onCheckedChange={(checked) =>
@@ -240,7 +242,7 @@ export function GcpProfilesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
             <Button
               onClick={() =>
@@ -254,7 +256,7 @@ export function GcpProfilesSection() {
               {saveMutation.isPending && (
                 <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               )}
-              Save
+              {t("action", "save")}
             </Button>
           </DialogFooter>
         </DialogContent>

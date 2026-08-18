@@ -31,41 +31,47 @@ import type { FieldIndex } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { formatCount, type QueryTerm, type ViewMode } from "./types";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 const STRIP_MODES: Array<{
   mode: DensityStripMode;
-  label: string;
-  hint: string;
+  label: keyof typeof en.action;
+  hint: keyof typeof en.action;
 }> = [
   {
     mode: "full",
-    label: "Full",
-    hint: "Volume over time, with the clock and the error counts",
+    label: "stripFull",
+    hint: "stripFullHint",
   },
   {
     mode: "band",
-    label: "Band",
-    hint: "A few pixels: where the errors are, still clickable, still marking the viewport",
+    label: "stripBand",
+    hint: "stripBandHint",
   },
   {
     mode: "off",
-    label: "Hidden",
-    hint: "No map at all — clicking to jump and dragging a time range go with it",
+    label: "stripHidden",
+    hint: "stripHiddenHint",
   },
 ];
 
-const VIEW_MODES: Array<{ mode: ViewMode; label: string; hint: string }> = [
+const VIEW_MODES: Array<{
+  mode: ViewMode;
+  label: keyof typeof en.action;
+  hint: keyof typeof en.action;
+}> = [
   {
     mode: "compact",
-    label: "Compact",
-    hint: "One line per entry, fields inline",
+    label: "viewCompact",
+    hint: "viewCompactHint",
   },
   {
     mode: "table",
-    label: "Table",
-    hint: "Level spelled out and the message wrapped in full",
+    label: "viewTable",
+    hint: "viewTableHint",
   },
-  { mode: "raw", label: "Raw", hint: "The bytes the container wrote" },
+  { mode: "raw", label: "viewRaw", hint: "viewRawHint" },
 ];
 
 interface LogToolbarProps {
@@ -154,6 +160,8 @@ export function LogToolbar({
   stripMode,
   onStripModeChange,
 }: LogToolbarProps) {
+  const t = useT();
+
   return (
     // Wraps because the same toolbar sits in the peek panel, which the
     // reader can drag down to 360px — unwrapped it pushed its own controls
@@ -179,7 +187,7 @@ export function LogToolbar({
           <button
             key={mode}
             type="button"
-            title={hint}
+            title={t("action", hint)}
             aria-pressed={viewMode === mode}
             onClick={() => onViewModeChange(mode)}
             className={`flex h-full items-center rounded px-2 text-xs ${
@@ -188,7 +196,7 @@ export function LogToolbar({
                 : "text-fg-mut hover:bg-hover hover:text-fg"
             }`}
           >
-            {label}
+            {t("action", label)}
           </button>
         ))}
       </div>
@@ -196,9 +204,9 @@ export function LogToolbar({
       <ToolbarToggle
         on={collapseRepeats}
         onClick={() => onCollapseRepeatsChange(!collapseRepeats)}
-        title="Collapse consecutive repeats into one row with a count and a time span"
+        title={t("action", "collapseRepeatsHint")}
       >
-        Repeats
+        {t("action", "repeats")}
       </ToolbarToggle>
 
       {offerPreviousRun && (
@@ -207,12 +215,12 @@ export function LogToolbar({
           onClick={onPreviousRunToggle}
           title={
             previousRun
-              ? "Reading the run before the current one — click for the current run"
-              : "Read the run before the current one, which for a crash loop is the run that printed the reason"
+              ? t("action", "previousRunOnHint")
+              : t("action", "previousRunOffHint")
           }
         >
           <History aria-hidden="true" className="h-3 w-3" />
-          Previous run
+          {t("action", "previousRun")}
         </ToolbarToggle>
       )}
 
@@ -221,15 +229,15 @@ export function LogToolbar({
         onClick={onAutoScrollToggle}
         title={
           autoScroll
-            ? "Following the tail — click to stop and read"
-            : "Jump to the newest line and follow it"
+            ? t("action", "followOnHint")
+            : t("action", "followOffHint")
         }
       >
         <ArrowDown
           aria-hidden="true"
           className={`h-3 w-3 ${!isAtBottom && !autoScroll ? "animate-bounce" : ""}`}
         />
-        Follow
+        {t("action", "follow")}
       </ToolbarToggle>
 
       {/* One number, one meaning: it is what the stream backfills with
@@ -241,14 +249,14 @@ export function LogToolbar({
       >
         <SelectTrigger
           className="h-6 w-26 px-2 text-xs"
-          title="How many lines to backfill and then keep"
+          title={t("action", "keepLinesHint")}
         >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {LOG_LIMITS.map((option) => (
             <SelectItem key={option} value={option.toString()}>
-              Keep {formatCount(option)}
+              {t("action", "keepLines", { n: formatCount(option) })}
             </SelectItem>
           ))}
         </SelectContent>
@@ -261,15 +269,15 @@ export function LogToolbar({
           disabled={isConnecting}
           title={
             isStreaming
-              ? "Stop reading from the container"
-              : "Attach to the container and follow its output"
+              ? t("action", "stopStreamHint")
+              : t("action", "startStreamHint")
           }
           className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover disabled:opacity-60"
         >
           {isConnecting ? (
             <>
               <Spinner size="sm" />
-              Connecting
+              {t("action", "connecting")}
             </>
           ) : (
             <>
@@ -282,15 +290,19 @@ export function LogToolbar({
               {/* Three states, not two: a stream the reader stopped and a
                   stream that died are both "not live", and calling the
                   second one "Paused" blames the reader for it. */}
-              {isStreaming ? "Live" : isPaused ? "Paused" : "Stopped"}
+              {isStreaming
+                ? t("action", "streamLive")
+                : isPaused
+                  ? t("action", "streamPaused")
+                  : t("action", "streamStopped")}
             </>
           )}
         </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger
-            title="More log actions"
-            aria-label="More log actions"
+            title={t("action", "moreLogActions")}
+            aria-label={t("action", "moreLogActions")}
             className="flex h-6 w-6 items-center justify-center rounded text-fg-mut hover:bg-hover hover:text-fg"
           >
             <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
@@ -301,22 +313,22 @@ export function LogToolbar({
                 the one path guaranteed to yield every retained line. */}
             <DropdownMenuItem onSelect={onCopyLogs}>
               <Copy aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-              Copy the lines in view
+              {t("action", "copyLinesInView")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onDownloadLogs}>
               <Download aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-              Download the full log
+              {t("action", "downloadFullLog")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onClearLogs}>
               <Trash2 aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-              Clear what is buffered
+              {t("action", "clearBuffered")}
             </DropdownMenuItem>
 
             {/* Hiding the strip outright is only reachable from here, and so
                 is undoing it: a control that removes itself would leave the
                 reader nothing to click to get the map back. */}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Density strip</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("action", "densityStrip")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={stripMode}
               onValueChange={(value) =>
@@ -324,8 +336,12 @@ export function LogToolbar({
               }
             >
               {STRIP_MODES.map(({ mode, label, hint }) => (
-                <DropdownMenuRadioItem key={mode} value={mode} title={hint}>
-                  {label}
+                <DropdownMenuRadioItem
+                  key={mode}
+                  value={mode}
+                  title={t("action", hint)}
+                >
+                  {t("action", label)}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

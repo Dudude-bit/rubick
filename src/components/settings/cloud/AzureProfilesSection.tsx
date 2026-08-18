@@ -59,7 +59,7 @@ export function AzureProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
       setDialogOpen(false);
-      toast({ title: "Azure profile saved" });
+      toast({ title: t("settings", "azureProfileSaved") });
     },
     onError: (error) => {
       toast({
@@ -75,7 +75,7 @@ export function AzureProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
       queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
-      toast({ title: "Azure profile deleted" });
+      toast({ title: t("settings", "azureProfileDeleted") });
     },
     onError: (error) => {
       toast({
@@ -117,7 +117,7 @@ export function AzureProfilesSection() {
     <>
       <ProfileSection
         title="Azure"
-        addLabel="Add profile"
+        addLabel={t("settings", "addProfile")}
         onAdd={openCreateDialog}
         isLoading={isLoading}
         isEmpty={!profiles || profiles.length === 0}
@@ -129,7 +129,9 @@ export function AzureProfilesSection() {
             name={item.name}
             detail={
               item.profile.tenantId
-                ? `tenant ${item.profile.tenantId.slice(0, 8)}…`
+                ? t("settings", "tenantDetail", {
+                    id: item.profile.tenantId.slice(0, 8),
+                  })
                 : undefined
             }
             description={item.profile.description}
@@ -145,24 +147,26 @@ export function AzureProfilesSection() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingName ? "Edit Azure Profile" : "Create Azure Profile"}
+              {editingName
+                ? t("settings", "editAzureProfile")
+                : t("settings", "createAzureProfile")}
             </DialogTitle>
             <DialogDescription>
-              Configure authentication settings for AKS clusters
+              {t("settings", "azureProfileDialogHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Profile Name</Label>
+              <Label>{t("settings", "profileName")}</Label>
               <Input
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
-                placeholder="e.g., production, personal"
+                placeholder={t("settings", "profileNamePlaceholder")}
                 disabled={!!editingName}
               />
             </div>
             <div className="space-y-2">
-              <Label>Description (optional)</Label>
+              <Label>{t("settings", "descriptionOptional")}</Label>
               <Input
                 value={editingProfile.description || ""}
                 onChange={(e) =>
@@ -171,11 +175,11 @@ export function AzureProfilesSection() {
                     description: e.target.value || undefined,
                   }))
                 }
-                placeholder="e.g., Production AKS clusters"
+                placeholder={t("settings", "azureDescriptionPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label>Tenant ID (optional)</Label>
+              <Label>{t("settings", "tenantId")}</Label>
               <Input
                 value={editingProfile.tenantId || ""}
                 onChange={(e) =>
@@ -184,11 +188,11 @@ export function AzureProfilesSection() {
                     tenantId: e.target.value || undefined,
                   }))
                 }
-                placeholder="Azure AD Tenant ID"
+                placeholder={t("settings", "tenantIdPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label>Default Subscription (optional)</Label>
+              <Label>{t("settings", "defaultSubscription")}</Label>
               <Input
                 value={editingProfile.defaultSubscription || ""}
                 onChange={(e) =>
@@ -197,11 +201,11 @@ export function AzureProfilesSection() {
                     defaultSubscription: e.target.value || undefined,
                   }))
                 }
-                placeholder="Azure Subscription ID"
+                placeholder={t("settings", "subscriptionPlaceholder")}
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label>Use CLI Fallback</Label>
+              <Label>{t("settings", "useCliFallback")}</Label>
               <Switch
                 checked={editingProfile.useCliFallback}
                 onCheckedChange={(checked) =>
@@ -213,7 +217,7 @@ export function AzureProfilesSection() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label>Prefer Native SDK Auth</Label>
+              <Label>{t("settings", "preferNativeAuth")}</Label>
               <Switch
                 checked={editingProfile.preferNativeAuth}
                 onCheckedChange={(checked) =>
@@ -227,7 +231,7 @@ export function AzureProfilesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
             <Button
               onClick={() =>
@@ -241,7 +245,7 @@ export function AzureProfilesSection() {
               {saveMutation.isPending && (
                 <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               )}
-              Save
+              {t("action", "save")}
             </Button>
           </DialogFooter>
         </DialogContent>
