@@ -138,6 +138,42 @@ export const en = {
     nothingWrong: "Nothing here needs attention",
     noResults: "Nothing matched",
   },
+  count: {
+    keys: { one: "{n} key", other: "{n} keys" },
+    items: { one: "{n} item", other: "{n} items" },
+    fields: { one: "{n} field", other: "{n} fields" },
+    settingsMatch: { one: "{n} setting matches", other: "{n} settings match" },
+    volumes: { one: "{n} volume", other: "{n} volumes" },
+    paths: { one: "{n} path", other: "{n} paths" },
+    hosts: { one: "{n} host", other: "{n} hosts" },
+    resources: { one: "{n} resource", other: "{n} resources" },
+    releases: { one: "{n} release", other: "{n} releases" },
+    contexts: { one: "{n} context", other: "{n} contexts" },
+    apiGroups: { one: "{n} API group", other: "{n} API groups" },
+    loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
+    queriesRefused: {
+      one: "{n} query was refused",
+      other: "{n} queries were refused",
+    },
+    failedPods: { one: "{n} failed pod", other: "{n} failed pods" },
+    summedOverPods: {
+      one: "summed over {n} pod",
+      other: "summed over {n} pods",
+    },
+    replicasWanted: { one: "replica wanted", other: "replicas wanted" },
+    completionsWanted: {
+      one: "completion wanted",
+      other: "completions wanted",
+    },
+    retryNoun: { one: "retry", other: "retries" },
+    lineNoun: { one: "line", other: "lines" },
+    errorNoun: { one: "error", other: "errors" },
+    warningNoun: { one: "warning", other: "warnings" },
+    inSliceCount: { one: "in {n} slice", other: "in {n} slices" },
+    restartNoun: { one: "restart", other: "restarts" },
+    ofTotal: "{n} of {total}",
+    ofTotalReady: "{n} of {total} ready",
+  },
 } as const;
 
 /**

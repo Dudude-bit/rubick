@@ -41,6 +41,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import type { JobDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /** Wall-clock time the job has been running, or ran for. */
 function duration(start: string | null, end: string | null): string | null {
@@ -58,6 +59,7 @@ function duration(start: string | null, end: string | null): string | null {
 }
 
 export function JobDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -137,9 +139,7 @@ export function JobDetail() {
                     label={
                       job?.completions == null
                         ? "successful pod needed"
-                        : completions === 1
-                          ? "completion wanted"
-                          : "completions wanted"
+                        : t("count", "completionsWanted", { n: completions })
                     }
                     segments={[
                       { label: "succeeded", count: succeeded, tone: "neutral" },
@@ -149,7 +149,7 @@ export function JobDetail() {
                     note={
                       <>
                         {parallelism} at a time · up to {backoffLimit}{" "}
-                        {backoffLimit === 1 ? "retry" : "retries"}
+                        {t("count", "retryNoun", { n: backoffLimit })}
                         {succeeded < completions &&
                           active === 0 &&
                           failed > 0 && (
@@ -242,6 +242,7 @@ export function JobDetail() {
       }),
     ],
     [
+      t,
       job,
       pods,
       yaml,
@@ -276,7 +277,7 @@ export function JobDetail() {
       badges={
         failed > 0 && (
           <span className="text-[11px] text-err">
-            {failed} failed {failed === 1 ? "pod" : "pods"}
+            {t("count", "failedPods", { n: failed })}
           </span>
         )
       }

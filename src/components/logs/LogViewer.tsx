@@ -38,6 +38,7 @@ import { LogList } from "./LogList";
 import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
+import { useT } from "@/i18n/useT";
 import {
   countCollapsed,
   expandRuns,
@@ -111,6 +112,7 @@ function StreamFailureNotice({
   /** The way out of an earlier run that does not exist. */
   onShowCurrentRun: () => void;
 }) {
+  const t = useT();
   const gone = failure.kind === "gone";
   // A container that has never started has no log, and the apiserver
   // says so in 300 characters of `BadRequest (ErrorResponse { ... })`.
@@ -165,7 +167,7 @@ function StreamFailureNotice({
             It exited {describeTermination(termination)}
             {when ? `, ${when}` : ""}
             {info && info.restartCount > 0
-              ? ` · ${info.restartCount} ${info.restartCount === 1 ? "restart" : "restarts"} so far`
+              ? ` · ${info.restartCount} ${t("count", "restartNoun", { n: info.restartCount })} so far`
               : ""}
             .
           </p>
@@ -598,6 +600,7 @@ export function LogViewer({
   soloContainer,
   workload,
 }: LogViewerProps) {
+  const t = useT();
   const { toast } = useToast();
   const containers = useMemo(
     () => containerInfos.map((container) => container.name),
@@ -1005,9 +1008,9 @@ export function LogViewer({
     if (visibleLogs.length === 0) return;
     copyToClipboard(
       logsToText(visibleLogs),
-      `${formatCount(visibleLogs.length)} ${visibleLogs.length === 1 ? "line" : "lines"} copied`
+      `${formatCount(visibleLogs.length)} ${t("count", "lineNoun", { n: visibleLogs.length })} copied`
     );
-  }, [copyToClipboard, visibleLogs]);
+  }, [copyToClipboard, visibleLogs, t]);
 
   const shownContainers = useMemo(
     () => containers.filter((name) => !hidden.has(name)),

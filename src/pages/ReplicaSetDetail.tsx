@@ -37,6 +37,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { ReplicaSetInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * One revision of a Deployment.
@@ -48,6 +49,7 @@ import type { ReplicaSetInfo } from "@/generated/types";
  * revision is this, and what is it doing.*
  */
 export function ReplicaSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -172,7 +174,7 @@ export function ReplicaSetDetail() {
               <CountBlock title="Replicas" subject="what this revision runs">
                 <Composition
                   total={desired}
-                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  label={t("count", "replicasWanted", { n: desired })}
                   segments={[
                     { label: "ready", count: ready, tone: "ok" },
                     {

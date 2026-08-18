@@ -38,6 +38,7 @@ import {
   useClusterRecencyStore,
 } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 import {
   tabRouteLabel,
   tabScope,
@@ -914,7 +915,8 @@ function NamespaceRow({
   /** Add it to the selection, or take it out. */
   onToggle: () => void;
 }) {
-  const pods = `${row.podCount} ${row.podCount === 1 ? "pod" : "pods"}`;
+  const t = useT();
+  const pods = t("cluster", "podCount", { n: row.podCount });
   return (
     <div
       id={id}

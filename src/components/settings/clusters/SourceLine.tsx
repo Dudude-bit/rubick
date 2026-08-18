@@ -6,6 +6,7 @@ import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useSettingSearchMatch } from "../settings-search";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * The file every other line on this screen is downstream of, and how it
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
  * resolved value is the text; the field only appears when you ask for it.
  */
 export function SourceLine() {
+  const t = useT();
   const kubeconfig = useKubeconfigPath();
   const [editing, setEditing] = React.useState(false);
   const [typed, setTyped] = React.useState("");
@@ -105,9 +107,7 @@ export function SourceLine() {
           </span>
           <span className="text-[11px] text-fg-fnt">
             {contexts != null && (
-              <>
-                · {contexts} context{contexts === 1 ? "" : "s"}{" "}
-              </>
+              <>· {t("count", "contexts", { n: contexts })} </>
             )}
             · {provenance}
           </span>

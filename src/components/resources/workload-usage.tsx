@@ -24,6 +24,7 @@ import {
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import type { UsageScope } from "@/integrations";
+import { useT } from "@/i18n/useT";
 import type {
   DeploymentContainerInfo,
   PodInfo,
@@ -107,6 +108,7 @@ export function WorkloadUsage({
   connections,
   noLimitNote = NO_LIMITS_NOTE,
 }: WorkloadUsageProps) {
+  const t = useT();
   const running = useMemo(() => runningPods(pods), [pods]);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
@@ -167,7 +169,7 @@ export function WorkloadUsage({
     <UsageBlock
       kind={kind}
       uid={uid}
-      scope={`summed over ${running.length} pod${running.length === 1 ? "" : "s"}`}
+      scope={t("count", "summedOverPods", { n: running.length })}
       cpu={summed.cpuMillicores}
       memory={summed.memoryBytes}
       cpuLimit={ceiling.cpu === null ? null : ceiling.cpu * running.length}

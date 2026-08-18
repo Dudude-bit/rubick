@@ -15,11 +15,9 @@ import type { CrdView } from "../registry";
 const status: CrdStatus = {
   getStatus: (resource) => {
     const health = getValueByPath(resource, "status.health.status") as
-      | string
-      | undefined;
+      string | undefined;
     const sync = getValueByPath(resource, "status.sync.status") as
-      | string
-      | undefined;
+      string | undefined;
     // Health first: "OutOfSync" is a statement about git, and a Degraded
     // application that happens to match git is still the more urgent word.
     if (health && health !== "Healthy") return health;

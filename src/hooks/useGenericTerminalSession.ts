@@ -3,11 +3,7 @@ import { commands } from "@/lib/commands";
 import { listen } from "@tauri-apps/api/event";
 
 export type SessionStatus =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "closed"
-  | "error";
+  "idle" | "connecting" | "connected" | "closed" | "error";
 
 interface UseGenericTerminalSessionProps {
   sessionId: string | null;

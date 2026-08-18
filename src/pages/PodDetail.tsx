@@ -87,6 +87,7 @@ import {
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -236,6 +237,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
 }
 
 export function PodDetail() {
+  const t = useT();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentContext } = useClusterStore();
@@ -514,7 +516,10 @@ export function PodDetail() {
     {
       label: "Containers",
       value: pod
-        ? `${podReadiness(pod).ready} of ${podReadiness(pod).total} ready`
+        ? t("count", "ofTotalReady", {
+            n: podReadiness(pod).ready,
+            total: podReadiness(pod).total,
+          })
         : "—",
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },

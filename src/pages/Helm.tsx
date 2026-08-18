@@ -28,8 +28,10 @@ import type {
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { useT } from "@/i18n/useT";
 
 export function Helm() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isConnected } = useClusterStore();
@@ -325,7 +327,7 @@ export function Helm() {
             panels wired together. */}
         <SectionHeader
           title="Helm"
-          count={`${releases.length} ${releases.length === 1 ? "release" : "releases"}`}
+          count={t("count", "releases", { n: releases.length })}
           actions={
             <TabsList>
               <TabsTrigger value="releases">

@@ -7,6 +7,7 @@ import {
 } from "@/integrations";
 import { formatCount } from "./types";
 import type { HistoryState } from "./hooks/useLogHistory";
+import { useT } from "@/i18n/useT";
 
 /**
  * The one row that says where a pane's oldest lines came from — and, on the
@@ -73,6 +74,7 @@ export function LogHistoryBar({
   onReadOlder: () => void;
   onClear: () => void;
 }) {
+  const t = useT();
   if (stranded === null && !ranged) return null;
 
   if (capability.state === "absent") {
@@ -181,8 +183,9 @@ export function LogHistoryBar({
             pane could do is let a reader take an hour-old line for a live
             one while they are watching a rollout. */}
         <span className="text-info">History</span> · {formatCount(held)}{" "}
-        {held === 1 ? "line" : "lines"} from {from}, the last {loaded.range}.
-        Not live — these lines do not grow and Follow does not reach them.
+        {t("count", "lineNoun", { n: held })} from {from}, the last{" "}
+        {loaded.range}. Not live — these lines do not grow and Follow does not
+        reach them.
       </p>
       {dropped > 0 && (
         <p className="text-warn" data-testid="log-history-crowded">

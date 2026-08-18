@@ -29,6 +29,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * A custom resource is whatever its author decided it is, so nothing on this
@@ -89,6 +90,7 @@ function JsonRow({
   value: unknown;
   depth: number;
 }) {
+  const t = useT();
   if (!isContainer(value)) {
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
@@ -101,10 +103,8 @@ function JsonRow({
   }
 
   const size = Array.isArray(value)
-    ? `${value.length} item${value.length === 1 ? "" : "s"}`
-    : `${Object.keys(value as object).length} field${
-        Object.keys(value as object).length === 1 ? "" : "s"
-      }`;
+    ? t("count", "items", { n: value.length })
+    : t("count", "fields", { n: Object.keys(value as object).length });
 
   return (
     <div className="border-b border-hair py-1 last:border-b-0">

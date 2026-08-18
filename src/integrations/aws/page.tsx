@@ -34,6 +34,7 @@ import {
 } from "../page-kit";
 import { useAlbSources } from "./data";
 import { albGroups, type AlbFinding, type AlbGroup } from "./groups";
+import { useT } from "@/i18n/useT";
 import {
   INGRESS_CLASS_PARAMS_CRD,
   TARGET_GROUP_BINDING_CRD,
@@ -46,6 +47,7 @@ import {
 const AUTO_OPEN = 6;
 
 export default function AwsLoadBalancerPage() {
+  const t = useT();
   const sources = useAlbSources();
   const [filter, setFilter] = useState("");
 
@@ -97,7 +99,7 @@ export default function AwsLoadBalancerPage() {
         count={
           sources.isPending
             ? undefined
-            : `${groups.length} ${groups.length === 1 ? "load balancer" : "load balancers"}`
+            : t("count", "loadBalancers", { n: groups.length })
         }
         description="One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer."
       />
@@ -186,6 +188,7 @@ function GroupRow({
   openByDefault: boolean;
   last: boolean;
 }) {
+  const t = useT();
   const namespaces = [
     ...new Set(group.members.map((member) => member.ingress.namespace)),
   ];
@@ -207,8 +210,7 @@ function GroupRow({
           {group.members.length}{" "}
           {group.members.length === 1 ? "Ingress" : "Ingresses"}
           {namespaces.length > 1 && ` across ${namespaces.length} namespaces`}
-          {hosts.length > 0 &&
-            ` · ${hosts.length} ${hosts.length === 1 ? "host" : "hosts"}`}
+          {hosts.length > 0 && ` · ${t("count", "hosts", { n: hosts.length })}`}
           {group.name === null && " · its own ALB"}
         </>
       }

@@ -305,11 +305,9 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
 
   // Get the spec schema if available (common for CRDs)
   const specSchema = parsedSchema.properties?.spec as
-    | SchemaProperty
-    | undefined;
+    SchemaProperty | undefined;
   const statusSchema = parsedSchema.properties?.status as
-    | SchemaProperty
-    | undefined;
+    SchemaProperty | undefined;
 
   return (
     <div className="flex flex-col gap-2">

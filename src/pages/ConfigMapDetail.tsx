@@ -16,8 +16,10 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function ConfigMapDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -121,7 +123,7 @@ export function ConfigMapDetail() {
       createdAt={configMap?.createdAt}
       badges={
         <span className="text-[11px] text-fg-fnt">
-          {dataKeys.length} {dataKeys.length === 1 ? "key" : "keys"}
+          {t("count", "keys", { n: dataKeys.length })}
         </span>
       }
       onBack={goBack}

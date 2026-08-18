@@ -47,8 +47,10 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -152,7 +154,7 @@ export function StatefulSetDetail() {
                       rather than as a row in a fact table three blocks away. */}
                   <Composition
                     total={desired}
-                    label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                    label={t("count", "replicasWanted", { n: desired })}
                     segments={[
                       { label: "ready", count: ready, tone: "ok" },
                       {
@@ -263,6 +265,7 @@ export function StatefulSetDetail() {
       }),
     ],
     [
+      t,
       statefulSet,
       pods,
       yaml,

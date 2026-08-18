@@ -7,6 +7,7 @@ import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
 import type { BinaryValue } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -56,6 +57,7 @@ export function DataSection({
   isLoading = false,
   emptyMessage = "No data keys",
 }: DataSectionProps) {
+  const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const copyToClipboard = useCopyToClipboard();
 
@@ -122,7 +124,7 @@ export function DataSection({
         title={title}
         count={
           <>
-            {entries.length} {entries.length === 1 ? "key" : "keys"}
+            {t("count", "keys", { n: entries.length })}
             {sensitive && (
               <span className="text-fg-fnt"> · values hidden by default</span>
             )}

@@ -36,6 +36,7 @@ import {
   termLabel,
   type QueryTerm,
 } from "./types";
+import { useT } from "@/i18n/useT";
 
 /**
  * Values offered for one key. Past this the list stops being a list and
@@ -120,25 +121,21 @@ export function LogQuery({
     if (active === null) {
       return suggestions
         .filter((entry) => entry.key.toLowerCase().includes(needle))
-        .map(
-          (entry): Option => ({
-            kind: "key",
-            key: entry.key,
-            lines: entry.lines,
-          })
-        );
+        .map((entry): Option => ({
+          kind: "key",
+          key: entry.key,
+          lines: entry.lines,
+        }));
     }
     return active.values
       .filter((entry) => entry.value.toLowerCase().includes(needle))
       .slice(0, MAX_LISTED_VALUES)
-      .map(
-        (entry): Option => ({
-          kind: "value",
-          key: active.key,
-          value: entry.value,
-          lines: entry.lines,
-        })
-      );
+      .map((entry): Option => ({
+        kind: "value",
+        key: active.key,
+        value: entry.value,
+        lines: entry.lines,
+      }));
   }, [active, suggestions, draft]);
 
   // A cursor left pointing past a list the arriving batch shortened is not
@@ -397,6 +394,7 @@ function OptionRow({
   onPick: () => void;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div
       id={id}
@@ -413,7 +411,7 @@ function OptionRow({
           reason to pick one of these over another, and a screen reader
           reads the option's text. */}
       <span className="shrink-0 tabular-nums text-[11px] text-fg-fnt">
-        {formatCount(lines)} {lines === 1 ? "line" : "lines"}
+        {formatCount(lines)} {t("count", "lineNoun", { n: lines })}
       </span>
     </div>
   );

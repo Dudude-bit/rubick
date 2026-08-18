@@ -151,7 +151,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">
-            {allPaths.length} {allPaths.length === 1 ? "path" : "paths"}
+            <T section="count" k="paths" values={{ n: allPaths.length }} />
           </TooltipTrigger>
           <TooltipContent>
             {allPaths.map((path, i) => (

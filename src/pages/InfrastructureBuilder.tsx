@@ -62,6 +62,7 @@ import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 const LOCAL_CONTEXT = "__local__";
 
@@ -79,6 +80,7 @@ const isValidConnection = (source: ResourceKind, target: ResourceKind) => {
 };
 
 export function InfrastructureBuilder() {
+  const t = useT();
   const { toast } = useToast();
   const { isConnected, currentContext, currentNamespace } = useClusterStore();
   const theme = useThemeStore((state) => state.theme);
@@ -500,7 +502,7 @@ export function InfrastructureBuilder() {
       <Tabs value={mode} onValueChange={handleModeChange}>
         <SectionHeader
           title="Infrastructure Builder"
-          count={`${nodes.length} ${nodes.length === 1 ? "resource" : "resources"}`}
+          count={t("count", "resources", { n: nodes.length })}
           actions={
             <>
               <TabsList>

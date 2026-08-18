@@ -80,8 +80,10 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function DeploymentDetail() {
+  const t = useT();
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
@@ -311,7 +313,7 @@ export function DeploymentDetail() {
               <CountBlock title="Replicas" governance={connections}>
                 <Composition
                   total={desired}
-                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  label={t("count", "replicasWanted", { n: desired })}
                   segments={[
                     { label: "ready", count: ready, tone: "ok" },
                     {

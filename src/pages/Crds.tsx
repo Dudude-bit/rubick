@@ -23,6 +23,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
 
@@ -36,6 +37,7 @@ const getCrdRowId = (row: CrdListItem) => row.name;
 const crdHref = (name: string) => `${CRD_PATH}/${encodeURIComponent(name)}`;
 
 export function Crds() {
+  const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -194,7 +196,7 @@ export function Crds() {
         count={
           crds.length === 0
             ? "none"
-            : `${crds.length} · ${crdGroups.length} API ${crdGroups.length === 1 ? "group" : "groups"}`
+            : `${crds.length} · ${t("count", "apiGroups", { n: crdGroups.length })}`
         }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}

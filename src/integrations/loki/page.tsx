@@ -23,6 +23,7 @@ import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import { coverage, verdict } from "./coverage";
+import { useT } from "@/i18n/useT";
 
 /**
  * How many namespaces are worth one query each.
@@ -35,6 +36,7 @@ import { coverage, verdict } from "./coverage";
 const SAMPLE = 12;
 
 export default function LokiPage() {
+  const t = useT();
   const scope = useNamespaceScope();
   const { namespaces } = useClusterSummary();
 
@@ -145,7 +147,7 @@ export default function LokiPage() {
             <div className="mt-3">
               <Finding
                 tone="warn"
-                title={`${refused.length} ${refused.length === 1 ? "query was" : "queries were"} refused`}
+                title={t("count", "queriesRefused", { n: refused.length })}
                 verbatim={refused[0].problem}
               >
                 A refusal is not an absence. Nothing is claimed about these

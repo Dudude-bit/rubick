@@ -36,6 +36,7 @@ import {
   type Tone,
 } from "../page-kit";
 import { useBacking, useIngressSources } from "./data";
+import { useT } from "@/i18n/useT";
 import {
   BACKEND_CONFIG_CRD,
   FRONTEND_CONFIG_CRD,
@@ -61,6 +62,7 @@ import {
 const AUTO_OPEN = 8;
 
 export default function GkeIngressPage() {
+  const t = useT();
   const sources = useIngressSources();
   const backing = useBacking();
   const [filter, setFilter] = useState("");
@@ -115,7 +117,7 @@ export default function GkeIngressPage() {
         count={
           sources.isPending
             ? undefined
-            : `${hosts.length} ${hosts.length === 1 ? "host" : "hosts"}`
+            : t("count", "hosts", { n: hosts.length })
         }
         description="Every hostname this cluster's Google load balancers serve — what terminates it, and what answers behind it."
       />
@@ -237,6 +239,7 @@ function HostRow({
   /** The catch-all reads differently with nothing above it to match. */
   alone: boolean;
 }) {
+  const t = useT();
   const front = host.fronts[0];
   return (
     <TroubleRow
@@ -250,7 +253,7 @@ function HostRow({
       copy={host.host ?? undefined}
       meta={
         <>
-          {host.routes.length} {host.routes.length === 1 ? "path" : "paths"}
+          {t("count", "paths", { n: host.routes.length })}
           {front && ` · ${front.class}`}
           {front && !front.allowsHttp && " · no HTTP listener"}
         </>

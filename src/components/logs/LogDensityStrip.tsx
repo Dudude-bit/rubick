@@ -25,6 +25,7 @@ import {
   type DensityCursor,
 } from "./density";
 import { formatCount, formatSpan, type StreamedLogLine } from "./types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The strip: the retained buffer as a map you can click.
@@ -556,6 +557,7 @@ function Slice({
   dimmed: boolean;
   cursor: boolean;
 }) {
+  const t = useT();
   const height =
     bucket.total === 0
       ? 0
@@ -584,7 +586,7 @@ function Slice({
   const label = [
     sliceClock(bucket.start),
     stepLabel(step),
-    `${formatCount(bucket.total)} ${bucket.total === 1 ? "line" : "lines"}`,
+    `${formatCount(bucket.total)} ${t("count", "lineNoun", { n: bucket.total })}`,
     bucket.err > 0 && `${formatCount(bucket.err)} errors`,
     bucket.warn > 0 && `${formatCount(bucket.warn)} warnings`,
   ]
@@ -734,6 +736,7 @@ function Head({
   /** The way out of the chart, where the chart says what it is. */
   toggle: ReactNode;
 }) {
+  const t = useT();
   return (
     <div
       className="flex items-center gap-2 text-[11px] leading-4 text-fg-fnt"
@@ -742,13 +745,13 @@ function Head({
       <span className="text-fg-mut">{left}</span>
       {errors > 0 && (
         <span className="text-err">
-          {formatCount(errors)} {errors === 1 ? "error" : "errors"} in{" "}
-          {formatCount(bursts)} {bursts === 1 ? "slice" : "slices"}
+          {formatCount(errors)} {t("count", "errorNoun", { n: errors })}{" "}
+          {t("count", "inSliceCount", { n: bursts })}
         </span>
       )}
       {errors === 0 && warnings > 0 && (
         <span className="text-warn">
-          {formatCount(warnings)} {warnings === 1 ? "warning" : "warnings"}
+          {formatCount(warnings)} {t("count", "warningNoun", { n: warnings })}
         </span>
       )}
       {/* The one thing a map cannot leave to colour: what it covers. */}
