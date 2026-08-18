@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * A value whose only useful action is being copied — an IP, an address, an
@@ -53,6 +54,7 @@ export function CopyableValue({
   quietMark,
   className,
 }: CopyableValueProps) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -82,7 +84,7 @@ export function CopyableValue({
     <button
       type="button"
       onClick={copy}
-      title={copied ? "Copied" : `Copy ${value}`}
+      title={copied ? t("action", "copied") : `${t("action", "copy")} ${value}`}
       aria-label={`Copy ${label ?? value}`}
       className={cn(
         "group -mx-1 inline-flex min-w-0 items-center gap-1 rounded-sm px-1 font-mono",
@@ -107,7 +109,7 @@ export function CopyableValue({
         />
       )}
       <span className="sr-only" role="status">
-        {copied ? "Copied" : ""}
+        {copied ? t("action", "copied") : ""}
       </span>
     </button>
   );

@@ -296,7 +296,6 @@ export const en = {
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
-    manage: "Manage",
     openInBrowser: "Open in Browser",
     back: "Back",
   },
@@ -312,6 +311,7 @@ export const en = {
     active: "{n} active",
   },
   cluster: {
+    signingIn: "Signing in…",
     connectToValidate: "Connect to a cluster to validate manifests.",
     connectToApply: "Connect to a cluster to apply manifests.",
     builderNotConnected:
@@ -324,7 +324,6 @@ export const en = {
   },
   settings: {
     nothingHereMatches: "nothing here matches “{query}”",
-    searchNoMatch: "nothing here matches “{query}”",
     searchSettings: "Search settings",
     clearSearch: "Clear search",
     settingsSections: "Settings sections",
@@ -372,7 +371,6 @@ export const en = {
     },
     notThere: "not there",
     pluginsBlock: "Plugins · {n}",
-    noPluginNeeded: "No context needs one.",
     notFoundInline: "not found",
     neededBy: "· needed by {list}",
     contextsBlock: "Contexts · {n}",
@@ -386,9 +384,6 @@ export const en = {
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",
-    noContextsTitle: "This file names no contexts",
-    noContextsBody:
-      "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written — point the app at another file to check.",
     kubeconfigFile: "Kubeconfig file",
     browseKubeconfig: "Browse for a kubeconfig file",
     noKubeconfig: "no kubeconfig",
@@ -437,8 +432,6 @@ export const en = {
     success: "Success",
     failed: "Failed",
     addProfile: "Add profile",
-    noGcpProfiles: "No profiles — using Application Default Credentials.",
-    noAzureProfiles: "No profiles — using the default az login credentials.",
     serviceAccount: "service account",
     tenantDetail: "tenant {id}…",
     editGcpProfile: "Edit GCP Profile",
@@ -631,10 +624,11 @@ export const en = {
       "The CRD is installed, but no {kind} has been created in {namespace} yet.",
     nothingManagesSecret:
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
-    nothingWrong: "Nothing here needs attention",
-    noResults: "Nothing matched",
   },
   count: {
+    clustersAnswered: "{n} of {total} clusters answered",
+    podsRunning: "{n} of {total} pods running",
+    nodesReady: "{n} of {total} nodes ready",
     moreNotDrawn: {
       one: "{n} more not drawn — the counts above are the whole of it.",
       other: "{n} more not drawn — the counts above are the whole of it.",
@@ -660,7 +654,6 @@ export const en = {
     items: { one: "{n} item", other: "{n} items" },
     fields: { one: "{n} field", other: "{n} fields" },
     settingsMatch: { one: "{n} setting matches", other: "{n} settings match" },
-    volumes: { one: "{n} volume", other: "{n} volumes" },
     paths: { one: "{n} path", other: "{n} paths" },
     hosts: { one: "{n} host", other: "{n} hosts" },
     resources: { one: "{n} resource", other: "{n} resources" },
@@ -687,8 +680,6 @@ export const en = {
     errorNoun: { one: "error", other: "errors" },
     warningNoun: { one: "warning", other: "warnings" },
     inSliceCount: { one: "in {n} slice", other: "in {n} slices" },
-    restartNoun: { one: "restart", other: "restarts" },
-    ofTotal: "{n} of {total}",
     ofTotalReady: "{n} of {total} ready",
   },
 } as const;

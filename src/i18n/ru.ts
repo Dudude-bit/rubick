@@ -264,7 +264,6 @@ export const ru: Catalogue = {
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
-    manage: "Управление",
     openInBrowser: "Открыть в браузере",
     back: "Назад",
   },
@@ -297,6 +296,7 @@ export const ru: Catalogue = {
     active: "активных: {n}",
   },
   cluster: {
+    signingIn: "Вход…",
     connectToValidate: "Подключитесь к кластеру, чтобы проверять манифесты.",
     connectToApply: "Подключитесь к кластеру, чтобы применять манифесты.",
     builderNotConnected:
@@ -319,7 +319,6 @@ export const ru: Catalogue = {
   },
   settings: {
     nothingHereMatches: "здесь ничего не найдено по «{query}»",
-    searchNoMatch: "здесь ничего не найдено по «{query}»",
     searchSettings: "Поиск по настройкам",
     clearSearch: "Очистить поиск",
     settingsSections: "Разделы настроек",
@@ -370,7 +369,6 @@ export const ru: Catalogue = {
     },
     notThere: "не существует",
     pluginsBlock: "Плагины · {n}",
-    noPluginNeeded: "Ни одному контексту он не нужен.",
     notFoundInline: "не найден",
     neededBy: "· нужен для {list}",
     contextsBlock: "Контексты · {n}",
@@ -389,9 +387,6 @@ export const ru: Catalogue = {
     readingFile: "Чтение файла…",
     contexts: "Контексты",
     searchFiltersList: "{n} — поиск фильтрует этот список",
-    noContextsTitle: "В этом файле нет контекстов",
-    noContextsBody:
-      "Файл выше прочитан, но подключаться не к чему. Либо это не тот kubeconfig, либо контексты в нём так и не появились — укажите другой файл, чтобы проверить.",
     kubeconfigFile: "Файл kubeconfig",
     browseKubeconfig: "Выбрать файл kubeconfig",
     noKubeconfig: "kubeconfig не найден",
@@ -440,10 +435,6 @@ export const ru: Catalogue = {
     success: "Успешно",
     failed: "Не удалось",
     addProfile: "Добавить профиль",
-    noGcpProfiles:
-      "Профилей нет — используются Application Default Credentials.",
-    noAzureProfiles:
-      "Профилей нет — используются учётные данные az login по умолчанию.",
     serviceAccount: "сервисный аккаунт",
     tenantDetail: "тенант {id}…",
     editGcpProfile: "Изменить профиль GCP",
@@ -643,10 +634,11 @@ export const ru: Catalogue = {
       "CRD установлен, но в {namespace} ещё не создан ни один {kind}.",
     nothingManagesSecret:
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
-    nothingWrong: "Здесь всё в порядке",
-    noResults: "Ничего не найдено",
   },
   count: {
+    clustersAnswered: "ответили {n} из {total}",
+    podsRunning: "работает {n} из {total} подов",
+    nodesReady: "готовы {n} из {total} узлов",
     moreNotDrawn: {
       one: "Ещё {n} адрес не показан — счётчики выше учитывают всё.",
       few: "Ещё {n} адреса не показаны — счётчики выше учитывают всё.",
@@ -724,12 +716,6 @@ export const ru: Catalogue = {
       few: "{n} настройки подходят",
       many: "{n} настроек подходит",
       other: "{n} настройки подходят",
-    },
-    volumes: {
-      one: "{n} том",
-      few: "{n} тома",
-      many: "{n} томов",
-      other: "{n} тома",
     },
     paths: {
       one: "{n} путь",
@@ -828,13 +814,6 @@ export const ru: Catalogue = {
       many: "в {n} срезах",
       other: "в {n} срезах",
     },
-    restartNoun: {
-      one: "перезапуск",
-      few: "перезапуска",
-      many: "перезапусков",
-      other: "перезапуска",
-    },
-    ofTotal: "{n} из {total}",
     ofTotalReady: "{n} из {total} готовы",
   },
 };

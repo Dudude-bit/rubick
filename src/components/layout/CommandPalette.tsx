@@ -934,7 +934,10 @@ export function CommandPalette() {
               )}
               {shownClusters.length > 1 && hasQuery && (
                 <span className="ml-auto">
-                  {answered} of {shownClusters.length} clusters answered
+                  {t("count", "clustersAnswered", {
+                    n: answered,
+                    total: shownClusters.length,
+                  })}
                   {isSearching && " · results appear as each one does"}
                 </span>
               )}

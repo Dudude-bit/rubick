@@ -264,8 +264,8 @@ export function ProblemsPanel({
             Healthy
           </span>
           <span className="truncate text-fg-fnt">
-            {serving} of {podTotal(pods)} pods running · {readyNodes} of{" "}
-            {nodes.length} nodes ready
+            {t("count", "podsRunning", { n: serving, total: podTotal(pods) })} ·{" "}
+            {t("count", "nodesReady", { n: readyNodes, total: nodes.length })}
           </span>
           <span />
           <span />

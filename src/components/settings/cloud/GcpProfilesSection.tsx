@@ -142,7 +142,9 @@ export function GcpProfilesSection() {
             key={item.name}
             name={item.name}
             detail={
-              item.profile.serviceAccountKeyPath ? "service account" : undefined
+              item.profile.serviceAccountKeyPath
+                ? t("settings", "serviceAccount")
+                : undefined
             }
             description={item.profile.description}
             onTest={() => testMutation.mutate(item.name)}

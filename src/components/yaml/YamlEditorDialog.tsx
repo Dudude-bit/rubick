@@ -178,10 +178,10 @@ export function YamlEditorDialog() {
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
     toast({
-      title: "Copied",
+      title: t("action", "copied"),
       description: "YAML copied to clipboard.",
     });
-  }, [editedContent, toast]);
+  }, [editedContent, toast, t]);
 
   const handleValidate = useCallback(async () => {
     setIsValidating(true);
