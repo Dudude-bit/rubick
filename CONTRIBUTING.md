@@ -161,6 +161,17 @@ half-translated Rubick still makes sense:
   `<StatusBadge status={t(...)}>` for exactly this reason. Put the translation
   in the children and leave `status` as the code.
 
+A sentence that carries markup — a container name in mono, a status the reader
+has to pick out — stays **one** catalogue string with a `{placeholder}`, and the
+component substitutes the element with `parts()` from `src/i18n/parts.tsx`. Two
+half-sentences either side of a `<span>` are fixed in place by the markup
+between them, and a language that wants the fragment elsewhere has nowhere to
+put it.
+
+A helper that builds a sentence but is not a component takes the translator as a
+parameter: `function noShell(pod: PodInfo, t: T)`, with `T` from
+`src/i18n/useT.ts`. The component calls the hook once and hands it down.
+
 Counted strings are objects, not sentences glued together:
 
 ```ts
