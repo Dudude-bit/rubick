@@ -227,6 +227,12 @@ describe("routesBoard", () => {
       short: "hostnames don't intersect",
     });
     expect(row.via).toBe("edge :http");
+    // The way in is an object that exists — so the row can offer its peek.
+    expect(row.viaRef).toEqual({
+      kind: "Gateway",
+      name: "edge",
+      namespace: "gwtest",
+    });
   });
 
   it("orders the broken by break depth — a dead gateway above a missing grant", () => {
@@ -266,6 +272,9 @@ describe("routesBoard", () => {
       "no-grant",
     ]);
     expect(board.notServing[0].stop?.at).toBe("gateway");
+    // A missing gateway gets no reference — a link to a 404 is worse
+    // than the plain name.
+    expect(board.notServing[0].viaRef).toBeNull();
     expect(board.notServing[1].stop).toEqual({
       at: "references",
       short: "needs a ReferenceGrant in gwtest-other",
@@ -308,6 +317,11 @@ describe("routesBoard", () => {
     expect(board.mesh).toHaveLength(1);
     expect(board.mesh[0].tail).toContain("GAMMA");
     expect(board.mesh[0].via).toBe("app");
+    expect(board.mesh[0].viaRef).toEqual({
+      kind: "Service",
+      name: "app",
+      namespace: "gwtest",
+    });
   });
 
   it("calls a route with no parentRefs broken, not quiet", () => {

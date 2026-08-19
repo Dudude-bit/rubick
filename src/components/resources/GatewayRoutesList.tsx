@@ -13,9 +13,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Map as MapGlyph } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
   GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
   useGatewayRoutes,
 } from "@/hooks/useGatewayRoutes";
+import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -65,12 +67,33 @@ function matchesQuery(route: RouteInfo, query: string): boolean {
 }
 
 function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
+  const navigate = useNavigate();
+  const linkGesture = useLinkGesture();
+  const href = getResourceDetailUrl(row.kind, row.name, row.namespace);
+
+  // Not an anchor, on purpose: the via cell holds a real ResourceRef, and
+  // an anchor inside an anchor is where browsers split the row apart. The
+  // same rule the data table's rows follow — inner links and buttons are
+  // their own targets, everything else activates the row.
+  const act = (event: React.MouseEvent | React.KeyboardEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("a") || target.closest("button")) return;
+    linkGesture(event, href, () => navigate(href));
+  };
+
   return (
-    <Link
-      to={getResourceDetailUrl(row.kind, row.name, row.namespace)}
+    <div
+      role="link"
+      tabIndex={0}
+      aria-label={`${row.kind} ${row.name}`}
+      onClick={act}
+      onAuxClick={act}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") act(event);
+      }}
       className={cn(
         ROW_GRID,
-        "border-b border-hair px-1.5 py-1.5 hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden"
+        "cursor-pointer border-b border-hair px-1.5 py-1.5 hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info"
       )}
     >
       <span
@@ -122,11 +145,25 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
         {row.kind}
       </span>
       <span className="truncate font-mono text-xs text-fg-mut">{row.name}</span>
-      <span className="truncate text-xs text-fg-fnt">{row.via}</span>
+      <span className="truncate text-xs text-fg-fnt">
+        {row.viaRef && row.via.startsWith(row.viaRef.name) ? (
+          <>
+            <ResourceRef
+              kind={row.viaRef.kind}
+              name={row.viaRef.name}
+              namespace={row.viaRef.namespace}
+              showKind={false}
+            />
+            {row.via.slice(row.viaRef.name.length)}
+          </>
+        ) : (
+          row.via
+        )}
+      </span>
       <span className="text-right text-[11px] tabular-nums text-fg-fnt">
         <RealtimeAge timestamp={row.createdAt} />
       </span>
-    </Link>
+    </div>
   );
 }
 

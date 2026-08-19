@@ -31,6 +31,9 @@ export interface RouteRow {
   stale: { observed: number; current: number } | null;
   /** The way in: gateway and listener, or the mesh parent. */
   via: string;
+  /** The way in as an object — set only where it exists, so the row can
+   *  offer its peek without ever linking to a 404. */
+  viaRef: { kind: string; name: string; namespace: string } | null;
   createdAt: string | null;
   serving: boolean;
 }
@@ -184,6 +187,7 @@ export function routesBoard(
             short: "no parentRefs — attaches to nothing and serves no traffic",
           },
           via: "—",
+          viaRef: null,
           serving: false,
         },
       });
@@ -192,12 +196,22 @@ export function routesBoard(
 
     if (gatewayParents.length === 0) {
       const parent = route.parentRefs[0];
+      const at = parent.namespace ?? route.namespace;
+      const exists =
+        parent.kind === "Service" &&
+        sources.backing.backingKnown !== false &&
+        sources.backing.services.some(
+          (service) => service.name === parent.name && service.namespace === at
+        );
       mesh.push({
         ...base,
         serves: servesOf(route, undefined),
         stop: null,
         tail: `attaches to ${parent.kind} ${parent.name} — GAMMA, not judged here`,
         via: parent.name,
+        viaRef: exists
+          ? { kind: "Service", name: parent.name, namespace: at }
+          : null,
         serving: true,
       });
       continue;
@@ -219,6 +233,15 @@ export function routesBoard(
       tail: redirectOnly(route) ? "redirects — no backends, none needed" : null,
       stale: staleOf(traces),
       via: viaOf(gatewayParents),
+      viaRef: (() => {
+        const first = gatewayParents[0];
+        const at = first.namespace ?? route.namespace;
+        return sources.gateways.some(
+          (gateway) => gateway.name === first.name && gateway.namespace === at
+        )
+          ? { kind: "Gateway", name: first.name, namespace: at }
+          : null;
+      })(),
       serving: broken == null,
     };
     if (broken) {
