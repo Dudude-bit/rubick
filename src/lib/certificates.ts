@@ -37,6 +37,7 @@ const NO_PROCESS_LEFT_DAYS = 3;
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
+const MINUTE = 60_000;
 
 export type ExpiryTone = "warn" | "err" | null;
 
@@ -47,6 +48,16 @@ export interface Expiry {
   text: string;
   /** Whole days from now until `notAfter`; negative once it has passed. */
   days: number;
+  /**
+   * Milliseconds until `notAfter`, negative once it has passed — the same
+   * quantity {@link days} rounds off.
+   *
+   * Ranking by whole days used to decide the order of everything expiring
+   * inside one day by name, which is the hour the order matters most. `0`
+   * where there is no readable date, so an unreadable one keeps the place
+   * `days: 0` gave it rather than silently moving.
+   */
+  left: number;
   expired: boolean;
   /** cert-manager's own renewal plan has come and gone — see {@link managedExpiryOf}. */
   renewalOverdue: boolean;
@@ -56,12 +67,19 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** A span under a day is said in hours; "0 days" reads as a rendering bug. */
-function span(ms: number): string {
-  const hours = Math.floor(ms / HOUR);
-  return hours < 24
-    ? plural(hours, "hour")
-    : plural(Math.floor(ms / DAY), "day");
+/**
+ * A span in the largest unit that still gives it a number.
+ *
+ * Every step down exists because the one above it rounds to zero, and "0
+ * days" — or "0 hours" in the last hour of a certificate's life — reads as
+ * a rendering bug at exactly the moment the reader most needs a number.
+ * The floor is a minute: below that the number stops being useful before
+ * it stops being true.
+ */
+export function span(ms: number): string {
+  if (ms >= DAY) return plural(Math.floor(ms / DAY), "day");
+  if (ms >= HOUR) return plural(Math.floor(ms / HOUR), "hour");
+  return plural(Math.max(1, Math.floor(ms / MINUTE)), "minute");
 }
 
 /**
@@ -85,6 +103,7 @@ export function expiryOf(
       tone: "warn",
       text: "no readable expiry date",
       days: 0,
+      left: 0,
       expired: false,
       renewalOverdue: false,
     };
@@ -96,6 +115,7 @@ export function expiryOf(
       tone: "err",
       text: `not valid for another ${plural(days, "day")}`,
       days: Math.floor((notAfter - now) / DAY),
+      left: notAfter - now,
       expired: false,
       renewalOverdue: false,
     };
@@ -108,6 +128,7 @@ export function expiryOf(
       tone: "err",
       text: days === 0 ? "expired today" : `expired ${plural(days, "day")} ago`,
       days: -days,
+      left,
       expired: true,
       renewalOverdue: false,
     };
@@ -132,6 +153,7 @@ export function expiryOf(
       tone: "err",
       text: `expires in ${span(left)}`,
       days,
+      left,
       expired: false,
       renewalOverdue: false,
     };
@@ -141,6 +163,7 @@ export function expiryOf(
       tone: "warn",
       text: `expires in ${span(left)}`,
       days,
+      left,
       expired: false,
       renewalOverdue: false,
     };
@@ -149,6 +172,7 @@ export function expiryOf(
     tone: null,
     text: `valid for ${span(left)}`,
     days,
+    left,
     expired: false,
     renewalOverdue: false,
   };

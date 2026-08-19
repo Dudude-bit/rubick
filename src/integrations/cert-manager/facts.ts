@@ -12,7 +12,7 @@
  * disagree with the Certificates page about the same certificate.
  */
 
-import { managedExpiryOf } from "@/lib/certificates";
+import { managedExpiryOf, span } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
 import type { CustomResourceInfo } from "@/generated/types";
 
@@ -73,7 +73,10 @@ export async function facts(): Promise<VendorFact[]> {
       ),
     }))
     .filter(({ expiry }) => expiry.tone !== null)
-    .sort((a, b) => a.expiry.days - b.expiry.days);
+    // By the exact remaining time, not whole days: everything expiring
+    // inside one day ties on `days`, and the soonest is the one this
+    // line is about to name.
+    .sort((a, b) => a.expiry.left - b.expiry.left);
 
   const lines: VendorFact[] = [
     { text: plural(certificates.length, "certificate") },
@@ -93,7 +96,7 @@ export async function facts(): Promise<VendorFact[]> {
             : `1 ${soonest.text}`
           : overdue.length === expiring.length
             ? `${expiring.length} renewals overdue`
-            : `${expiring.length} expiring soon`,
+            : `${expiring.length} expiring, soonest in ${span(soonest.left)}`,
       tone: expiring.some(({ expiry }) => expiry.tone === "err")
         ? "err"
         : "warn",

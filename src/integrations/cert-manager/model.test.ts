@@ -124,6 +124,35 @@ describe("ordering by trouble", () => {
   });
 
   /**
+   * Would break if the rows ranked by whole days: two certificates expiring
+   * today tie there and fall back to the alphabet, so the one with two hours
+   * left could sit under the one with twenty — in the hour the order is the
+   * only thing the page is for.
+   */
+  it("ranks certificates expiring today by the hour, not the alphabet", () => {
+    const rows = certificateRows(
+      [
+        certificate({
+          name: "alpha",
+          ready: true,
+          notBefore: inDays(-6.4),
+          notAfter: inDays(0.6),
+        }),
+        certificate({
+          name: "omega",
+          ready: true,
+          notBefore: inDays(-6.8),
+          notAfter: inDays(0.2),
+        }),
+      ],
+      [],
+      [],
+      []
+    );
+    expect(rows.map((row) => row.name)).toEqual(["omega", "alpha"]);
+  });
+
+  /**
    * A certificate whose Secret does not exist and one that is merely failing
    * to renew are different outages: the second is still serving traffic, and
    * calling both "broken" would send somebody to the wrong one first.

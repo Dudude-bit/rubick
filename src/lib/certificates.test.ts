@@ -123,6 +123,40 @@ describe("expiryOf", () => {
   it("falls back to the absolute thresholds without a start date", () => {
     expect(expiryOf(facts("2026-08-14T12:00:00Z", ""), NOW).tone).toBe("warn");
   });
+
+  /**
+   * Would break if the last hour of a certificate's life read "expires in 0
+   * hours" — the same rendering-bug sentence the hours step exists to avoid,
+   * one unit further down, at the moment the reader can least afford to
+   * distrust the number.
+   */
+  it("counts the last hour in minutes", () => {
+    expect(
+      expiryOf(facts("2026-08-09T12:20:00Z", "2026-08-02T12:00:00Z"), NOW).text
+    ).toBe("expires in 20 minutes");
+    // And never zero: under a minute is still a minute, not a bug.
+    expect(
+      expiryOf(facts("2026-08-09T12:00:30Z", "2026-08-02T12:00:00Z"), NOW).text
+    ).toBe("expires in 1 minute");
+  });
+
+  /**
+   * Would break if callers had to rank certificates by whole days: everything
+   * expiring inside one day ties on `days`, which is the hour the order
+   * matters most.
+   */
+  it("reports the exact time left, not only the rounded days", () => {
+    const soon = expiryOf(
+      facts("2026-08-09T17:00:00Z", "2026-08-08T17:00:00Z"),
+      NOW
+    );
+    const sooner = expiryOf(
+      facts("2026-08-09T14:00:00Z", "2026-08-08T14:00:00Z"),
+      NOW
+    );
+    expect(soon.days).toBe(sooner.days);
+    expect(sooner.left).toBeLessThan(soon.left);
+  });
 });
 
 describe("managedExpiryOf", () => {

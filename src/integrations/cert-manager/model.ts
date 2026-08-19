@@ -397,7 +397,9 @@ export function certificateRows(
     .sort(
       (a, b) =>
         a.rank - b.rank ||
-        (a.expiry?.days ?? Infinity) - (b.expiry?.days ?? Infinity) ||
+        // The exact remaining time: whole days tie for everything expiring
+        // inside one day, and the alphabet is not a measure of urgency.
+        (a.expiry?.left ?? Infinity) - (b.expiry?.left ?? Infinity) ||
         a.name.localeCompare(b.name)
     );
 }

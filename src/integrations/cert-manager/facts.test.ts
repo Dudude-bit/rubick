@@ -93,4 +93,38 @@ describe("cert-manager facts", () => {
     const lines = await facts();
     expect(lines).toContainEqual({ text: "1 expires in 2 days", tone: "warn" });
   });
+
+  /**
+   * Would break if a mixed batch said only "expiring soon". The line has one
+   * job — telling the reader whether this is tonight or next week — and the
+   * count alone answers neither.
+   */
+  it("names how long the soonest of several has", async () => {
+    listed([
+      certificate({ renewalTime: inDays(-0.5) }),
+      certificate({ notAfter: inDays(1.4), notBefore: inDays(-5.6) }),
+    ]);
+    const lines = await facts();
+    expect(lines).toContainEqual({
+      text: "2 expiring, soonest in 1 day",
+      tone: "warn",
+    });
+  });
+
+  /**
+   * Would break if the soonest were picked by whole days: two certificates
+   * expiring today tie there, and the line would name whichever the API
+   * happened to list first.
+   */
+  it("picks the soonest by the exact time left", async () => {
+    listed([
+      certificate({ notAfter: inDays(0.75), notBefore: inDays(-6.25) }),
+      certificate({ notAfter: inDays(0.27), notBefore: inDays(-6.73) }),
+    ]);
+    const lines = await facts();
+    expect(lines).toContainEqual({
+      text: "2 expiring, soonest in 6 hours",
+      tone: "err",
+    });
+  });
 });
