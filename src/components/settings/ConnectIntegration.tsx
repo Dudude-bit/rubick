@@ -132,8 +132,7 @@ function ConnectForm({
       <DialogHeader>
         <DialogTitle>{vendorName}</DialogTitle>
         <DialogDescription>
-          One address per cluster, because a {vendorName} is per cluster —
-          staging&rsquo;s is not production&rsquo;s. Gives {gives}.
+          {t("settings", "oneAddressPerCluster", { vendor: vendorName, gives })}
         </DialogDescription>
       </DialogHeader>
 
@@ -156,11 +155,19 @@ function ConnectForm({
               that works from inside the cluster resolves to nothing here, and
               that is the commonest way to get this field wrong. */}
           <p className="text-[11px] text-fg-fnt">
-            Asked from this machine, not from inside the cluster — so a
-            cluster-internal name like{" "}
-            <span className="font-mono">prometheus.monitoring</span> will not
-            resolve. Give an address that reaches it from here, or let the app
-            forward a port to it.
+            {/* One sentence in the catalogue, split here rather than there:
+                a translator moves the example wherever their word order wants
+                it, and the monospace still lands on it. */}
+            {splitAround(t("settings", "addressIsFromHere"), "{example}").map(
+              (part, i) =>
+                i === 1 ? (
+                  <span key="example" className="font-mono">
+                    prometheus.monitoring
+                  </span>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+            )}
           </p>
         </div>
 
@@ -198,7 +205,7 @@ function ConnectForm({
               className="mt-0.5"
             />
             <span>
-              Open the tunnel when I switch to this cluster
+              {t("settings", "openTunnelOnSwitch")}
               <span className="mt-0.5 block text-[11px] text-fg-fnt">
                 Forwarding{" "}
                 <span className="font-mono">
@@ -218,7 +225,7 @@ function ConnectForm({
             checked={bearer}
             onCheckedChange={(value) => setBearer(value === true)}
           />
-          Send a bearer token
+          {t("settings", "sendBearerToken")}
         </label>
 
         {bearer && (
@@ -254,7 +261,7 @@ function ConnectForm({
             checked={insecure}
             onCheckedChange={(value) => setInsecure(value === true)}
           />
-          Accept a certificate this machine does not trust
+          {t("settings", "acceptUntrustedCert")}
         </label>
 
         {tested && <TestResult result={tested} />}
@@ -321,6 +328,7 @@ function InCluster({
   vendorName: string;
   onPicked: (forwarded: Forwarded) => void;
 }) {
+  const t = useT();
   const [looking, setLooking] = React.useState(false);
   const [found, setFound] = React.useState<Candidate[] | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -365,9 +373,7 @@ function InCluster({
 
       {found !== null && found.length === 0 && (
         <p className="text-[11px] text-fg-fnt">
-          No Service in this cluster is labelled or named for {vendorName}. If
-          it is here under another name, forward it yourself and give the
-          address above.
+          {t("settings", "noServiceForVendor", { vendor: vendorName })}
         </p>
       )}
 
@@ -386,7 +392,9 @@ function InCluster({
               <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
             </span>
             <span className="flex-none text-[11px] text-fg-fnt">
-              {busy === key ? "forwarding…" : candidate.because}
+              {busy === key
+                ? t("settings", "forwardingEllipsis")
+                : candidate.because}
             </span>
           </button>
         );
@@ -411,4 +419,17 @@ function TestResult({ result }: { result: ProbeResult }) {
       Did not answer — {result.reason}
     </p>
   );
+}
+
+/**
+ * A sentence kept whole in the catalogue, cut where it is rendered.
+ *
+ * The alternative is two half-sentences either side of a styled span, and a
+ * language that puts the example first has nowhere to put it. One string with
+ * a placeholder travels; the cut happens here.
+ */
+function splitAround(text: string, token: string): string[] {
+  const at = text.indexOf(token);
+  if (at < 0) return [text];
+  return [text.slice(0, at), token, text.slice(at + token.length)];
 }

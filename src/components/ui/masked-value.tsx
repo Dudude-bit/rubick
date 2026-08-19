@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 interface MaskedValueProps {
   value: string;
@@ -25,14 +26,15 @@ export function MaskedValue({
   isLoading = false,
   placeholder = "••••••••",
   className,
-  copyLabel = "Value copied to clipboard",
+  copyLabel,
   compact = false,
 }: MaskedValueProps) {
+  const t = useT();
   const copyToClipboard = useCopyToClipboard();
   const displayValue = isRevealed ? value : placeholder;
 
   const handleCopy = () => {
-    copyToClipboard(value, copyLabel);
+    copyToClipboard(value, copyLabel ?? t("action", "valueCopied"));
   };
 
   if (compact) {
@@ -44,7 +46,7 @@ export function MaskedValue({
             !isRevealed && "italic text-fg-fnt"
           )}
         >
-          {isLoading ? "Loading..." : displayValue}
+          {isLoading ? t("settings", "loading") : displayValue}
         </span>
         {onToggleReveal && (
           <Button
@@ -79,7 +81,7 @@ export function MaskedValue({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded bg-hover p-2 font-mono text-xs text-fg-mid">
-        {isLoading ? "Loading..." : displayValue}
+        {isLoading ? t("settings", "loading") : displayValue}
       </pre>
       <div className="flex items-center gap-1 shrink-0">
         {onToggleReveal && (

@@ -101,7 +101,7 @@ function Lists({ published }: { published: ServicePublished }) {
     <div className="flex flex-col gap-6">
       <Section>
         <SectionHeader
-          title="Published"
+          title={t("nav", "published")}
           count={publishedSummary(published)}
           description={source ?? undefined}
           actions={
@@ -196,7 +196,7 @@ function Lists({ published }: { published: ServicePublished }) {
       {published.unpublished.length > 0 && (
         <Section>
           <SectionHeader
-            title="Matches the selector, not published"
+            title={t("nav", "matchesSelectorNotPublished")}
             count={
               <span className="text-err">{published.unpublished.length}</span>
             }
@@ -225,7 +225,7 @@ function Lists({ published }: { published: ServicePublished }) {
 
       {topology && (
         <Section>
-          <SectionHeader title="Topology" />
+          <SectionHeader title={t("nav", "topology")} />
           <p className="text-xs text-fg-mut">{topology}</p>
         </Section>
       )}
@@ -233,14 +233,15 @@ function Lists({ published }: { published: ServicePublished }) {
       {published.ports.some((port) => !port.exposed) && (
         <Section>
           <SectionHeader
-            title="Ports the Service does not expose"
-            description="A slice carries a port by the Service port's name. These name none it declares, so nothing routes to them."
+            title={t("nav", "portsNotExposed")}
+            description={t("empty", "portsNotExposedHint")}
           />
           <p className="font-mono text-xs text-fg-mut">
             {published.ports
               .filter((port) => !port.exposed)
               .map(
-                (port) => `${port.name ?? "unnamed"} → ${port.port ?? "all"}`
+                (port) =>
+                  `${port.name ?? t("empty", "unnamedInline")} → ${port.port ?? t("empty", "allInline")}`
               )
               .join(" · ")}
           </p>

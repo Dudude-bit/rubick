@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useToast } from "@/components/ui/use-toast";
 import { termLabel, type QueryTerm } from "../types";
+import { useT } from "@/i18n/useT";
 
 /**
  * How long the chips are allowed to keep changing before the stream is
@@ -38,6 +39,7 @@ const keyOf = (terms: QueryTerm[]) => terms.map(termLabel).join("\u0000");
  * available to anyone who wants to read it again.
  */
 export function useIntake(terms: QueryTerm[]): QueryTerm[] {
+  const t = useT();
   const { toast } = useToast();
   const key = keyOf(terms);
   const [applied, setApplied] = useState<{ key: string; terms: QueryTerm[] }>(
@@ -71,18 +73,19 @@ export function useIntake(terms: QueryTerm[]): QueryTerm[] {
     // that is not visible anywhere on screen.
     if (demoted.length > 0) {
       toast({
-        title: `${list(demoted)} ${demoted.length === 1 ? "is a query again" : "are queries again"}`,
-        description:
-          "New lines are kept from now on; the ones already discarded do not come back.",
+        title: t("action", "termsAreQueryAgain", {
+          n: demoted.length,
+          list: list(demoted),
+        }),
+        description: t("action", "termsAreQueryAgainHint"),
       });
     } else if (promoted.length > 0) {
       toast({
-        title: `Keeping only ${list(promoted)}`,
-        description:
-          "Lines that do not match are discarded as they arrive. What is already buffered stays.",
+        title: t("action", "keepingOnly", { list: list(promoted) }),
+        description: t("action", "keepingOnlyHint"),
       });
     }
-  }, [applied, toast]);
+  }, [applied, t, toast]);
 
   return applied.terms;
 }

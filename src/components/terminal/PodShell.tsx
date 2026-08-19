@@ -12,6 +12,7 @@ import { lastTermination, terminationWhen } from "@/lib/pod-status";
 import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
+import { useT } from "@/i18n/useT";
 
 /**
  * The Shell tab: a chooser, and the session it chose.
@@ -221,6 +222,7 @@ function NoShellState({
   onOpenLogs: (container: string) => void;
   onDebug: () => void;
 }) {
+  const t = useT();
   const logs = state.logs;
   return (
     <Hollow headline={state.headline}>
@@ -237,8 +239,8 @@ function NoShellState({
             the failing piece taken out — is the thing that works. */}
         <HollowLink onClick={onDebug}>
           {finished
-            ? "Debug with a copy of this pod"
-            : "Debug with an ephemeral container"}
+            ? t("action", "debugWithCopy")
+            : t("action", "debugWithEphemeral")}
         </HollowLink>
       </div>
     </Hollow>
@@ -271,6 +273,7 @@ export function PodShell({
   onDebug,
   onEnd,
 }: PodShellProps) {
+  const t = useT();
   const containers = useMemo(() => podContainers(pod), [pod]);
   const colors = useMemo(
     () => containerColors(containers.map((c) => c.name)),
@@ -297,7 +300,7 @@ export function PodShell({
       {attachable.length > 0 && (
         <div
           role="radiogroup"
-          aria-label="Container to attach a shell to"
+          aria-label={t("action", "containerToAttach")}
           data-testid="shell-chooser"
           className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
         >
@@ -315,7 +318,7 @@ export function PodShell({
                 title={
                   why
                     ? `${c.name} — ${why}`
-                    : `Attach a shell to ${c.name}, and end the one that is open`
+                    : t("action", "attachShellTo", { name: c.name })
                 }
                 onClick={() => onChoose(c.name)}
                 className={`inline-flex items-center gap-1.5 rounded py-0.5 pl-1 pr-1.5 ${
@@ -367,10 +370,9 @@ export function PodShell({
           onDebug={onDebug}
         />
       ) : (
-        <Hollow headline="No shell is attached">
+        <Hollow headline={t("empty", "noShellAttached")}>
           <p className="text-xs text-fg-mut">
-            The session was ended. Choosing a container above opens a new one —
-            nothing is running here in the meantime.
+            {t("empty", "shellSessionEnded")}
           </p>
         </Hollow>
       )}

@@ -20,6 +20,7 @@ import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
+import { useT } from "@/i18n/useT";
 
 type TabId = ActivityTab;
 
@@ -34,6 +35,7 @@ const TABS: Array<{
 ];
 
 export function ActivityPanel() {
+  const t = useT();
   // Not local state: the command palette and the port-forward toast open this
   // panel by name, and a reader who cannot find a screen reaches for the
   // palette first.
@@ -84,7 +86,7 @@ export function ActivityPanel() {
       <SheetTrigger asChild>
         <button
           type="button"
-          aria-label="Activity panel"
+          aria-label={t("activity", "panel")}
           // Underlined on hover as well as brightened: on a line where
           // everything else is text that does nothing, colour alone did not
           // read as a control.
@@ -104,7 +106,7 @@ export function ActivityPanel() {
 
         <div
           role="tablist"
-          aria-label="Activity"
+          aria-label={t("activity", "title")}
           className="flex flex-none items-center gap-1 border-b border-hair px-2 pb-1.5"
         >
           {TABS.map((item) => {

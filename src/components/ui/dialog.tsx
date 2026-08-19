@@ -2,6 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { T } from "@/i18n/T";
 
 /**
  * Dialogs are overlays, so they carry the one legitimate elevation in the
@@ -54,7 +55,9 @@ const DialogContent = React.forwardRef<
       {children}
       <DialogPrimitive.Close className="absolute right-3 top-3 rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none">
         <X className="h-3.5 w-3.5" />
-        <span className="sr-only">Close</span>
+        <span className="sr-only">
+          <T section="action" k="close" />
+        </span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

@@ -312,7 +312,9 @@ export function Helm() {
   });
 
   if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel="Helm releases" />;
+    return (
+      <ConnectClusterEmptyState resourceLabel={t("empty", "helmReleases")} />
+    );
   }
 
   return (

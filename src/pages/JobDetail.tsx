@@ -119,26 +119,26 @@ export function JobDetail() {
     () => [
       {
         id: "overview",
-        label: "Overview",
+        label: t("nav", "overview"),
         glyph: viewGlyph(Info),
         content: (
           <>
             <WorkloadOverview
               count={
                 <CountBlock
-                  title="Run"
+                  title={t("action", "run")}
                   // A Job counts completions rather than replicas, and what
                   // decides the number is the spec rather than an autoscaler:
                   // parallelism and the backoff limit are the same setting read
                   // two more ways, so they qualify the count under the bar
                   // instead of standing as rows beside it.
-                  subject="how many have to succeed, and what it costs to retry"
+                  subject={t("action", "runSubject")}
                 >
                   <Composition
                     total={completions}
                     label={
                       job?.completions == null
-                        ? "successful pod needed"
+                        ? t("action", "successfulPodNeeded")
                         : t("count", "completionsWanted", { n: completions })
                     }
                     segments={[
@@ -148,12 +148,13 @@ export function JobDetail() {
                     ]}
                     note={
                       <>
-                        {parallelism} at a time · up to {backoffLimit}{" "}
+                        {t("action", "atATime", { n: parallelism })} ·{" "}
+                        {t("action", "upTo")} {backoffLimit}{" "}
                         {t("count", "retryNoun", { n: backoffLimit })}
                         {succeeded < completions &&
                           active === 0 &&
                           failed > 0 && (
-                            <> · no pod is running and the last one failed</>
+                            <> · {t("action", "noPodRunningLastFailed")}</>
                           )}
                       </>
                     }
@@ -177,7 +178,12 @@ export function JobDetail() {
                   }
                 />
               }
-              declared={<FactBlock title="Timing" items={timing(job)} />}
+              declared={
+                <FactBlock
+                  title={t("action", "timing")}
+                  items={timing(job, t)}
+                />
+              }
             >
               {job && (
                 <RelatedResources
@@ -188,13 +194,13 @@ export function JobDetail() {
             </WorkloadOverview>
 
             <KeyValueSection
-              title="Labels"
+              title={t("columns", "labels")}
               count={Object.keys(job?.labels ?? {}).length}
               items={recordToKeyValues(job?.labels ?? {})}
               emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
-              title="Annotations"
+              title={t("columns", "annotations")}
               count={Object.keys(job?.annotations ?? {}).length}
               items={recordToKeyValues(job?.annotations ?? {})}
               emptyMessage={t("empty", "noAnnotations")}
@@ -204,7 +210,7 @@ export function JobDetail() {
       },
       {
         id: "container-template",
-        label: "Template",
+        label: t("columns", "template"),
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={job} namespace={namespace} />,
       },
@@ -300,7 +306,10 @@ export function JobDetail() {
 }
 
 /** When it started, when it stopped, and what it runs as. */
-function timing(job: JobDetailInfo | undefined): KeyValue[] {
+function timing(
+  job: JobDetailInfo | undefined,
+  t: ReturnType<typeof useT>
+): KeyValue[] {
   const ran = duration(job?.startTime ?? null, job?.completionTime ?? null);
 
   return [
@@ -310,17 +319,17 @@ function timing(job: JobDetailInfo | undefined): KeyValue[] {
       tone: job?.startTime ? undefined : "warn",
     },
     {
-      label: "Finished",
+      label: t("action", "finished"),
       value: job?.completionTime
         ? formatDate(job.completionTime)
-        : "still running",
+        : t("action", "stillRunning"),
     },
-    ...(ran ? [{ label: "Ran for", value: ran, mono: true }] : []),
+    ...(ran ? [{ label: t("action", "ranFor"), value: ran, mono: true }] : []),
     ...(job?.activeDeadlineSeconds
       ? [
           {
-            label: "Deadline",
-            value: `${job.activeDeadlineSeconds}s after start`,
+            label: t("action", "deadline"),
+            value: t("action", "afterStart", { n: job.activeDeadlineSeconds }),
             mono: true,
           },
         ]

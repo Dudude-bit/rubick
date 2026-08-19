@@ -74,7 +74,9 @@ export function PeekActions({
         <DetailAction
           label={t("action", "copyName")}
           icon={Copy}
-          onClick={() => copy(target.name, `${target.name} copied`)}
+          onClick={() =>
+            copy(target.name, t("action", "nameCopied", { name: target.name }))
+          }
         />
         {plan.inline.map((action) => (
           <PeekActionButton

@@ -3,6 +3,7 @@ import { groupMounts, mountedBy } from "@/lib/mounts";
 import { ResourceRef } from "./ResourceRef";
 import type { PodVolumeInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * What a pod mounts, and what each mount is made of.
@@ -109,6 +110,7 @@ function Mounts({
   volume: PodVolumeInfo;
   containerCount: number;
 }) {
+  const t = useT();
   if (volume.mounts.length === 0) {
     // Declared and read by no container. The YAML does not point at it and
     // nothing fails, so the pod runs without the config somebody added.
@@ -129,11 +131,11 @@ function Mounts({
             <span className="font-mono text-fg-mid">{mount.path}</span>
             {mount.subPath && (
               <>
-                {" from "}
+                {` ${t("empty", "mountFrom")} `}
                 <span className="font-mono text-fg-mut">{mount.subPath}</span>
               </>
             )}
-            {mount.readOnly && ", read-only"}
+            {mount.readOnly && `, ${t("empty", "readOnly")}`}
           </span>
         );
       })}

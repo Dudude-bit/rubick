@@ -3,6 +3,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -65,22 +66,25 @@ const SheetContent = React.forwardRef<
   (
     { side = "right", showOverlay = true, className, children, ...props },
     ref
-  ) => (
-    <SheetPortal>
-      {showOverlay && <SheetOverlay />}
-      <SheetPrimitive.Content
-        ref={ref}
-        className={cn(sheetVariants({ side }), className)}
-        {...props}
-      >
-        <SheetPrimitive.Close className="absolute right-3 top-3 rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none">
-          <X className="h-3.5 w-3.5" />
-          <span className="sr-only">Close</span>
-        </SheetPrimitive.Close>
-        {children}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  )
+  ) => {
+    const t = useT();
+    return (
+      <SheetPortal>
+        {showOverlay && <SheetOverlay />}
+        <SheetPrimitive.Content
+          ref={ref}
+          className={cn(sheetVariants({ side }), className)}
+          {...props}
+        >
+          <SheetPrimitive.Close className="absolute right-3 top-3 rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none">
+            <X className="h-3.5 w-3.5" />
+            <span className="sr-only">{t("action", "close")}</span>
+          </SheetPrimitive.Close>
+          {children}
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    );
+  }
 );
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 

@@ -63,18 +63,16 @@ export function CredentialsExpired({
         <KeyRound className="size-4 flex-none translate-y-0.5 text-warn" />
         <h2 className="text-[13px] font-semibold tracking-tight text-fg">
           {context
-            ? `${context} is no longer accepting this session`
-            : "This session is no longer accepted"}
+            ? t("cluster", "sessionRefusedNamed", { context })
+            : t("cluster", "sessionRefused")}
         </h2>
       </div>
 
       <p className="text-xs text-fg-mut">
         {deadline
-          ? `The credentials this window connected with expired ${since} ago. `
-          : `The cluster refused this window's credentials ${since} ago. `}
-        Nothing here renews them on its own, so every list, count and chart in
-        this window stopped being answerable at that moment — which is why the
-        page is this rather than a screen of empty ones.
+          ? t("cluster", "credentialsExpiredAgo", { since })
+          : t("cluster", "credentialsRefusedAgo", { since })}
+        {t("cluster", "credentialsExpiredBody")}
       </p>
 
       {/* The server's own words, never paraphrased. Somebody is going to paste
@@ -100,8 +98,7 @@ export function CredentialsExpired({
             do something the reader has not tried yet. */}
         {tried && !isAuthenticating && (
           <span className="text-[11px] text-fg-fnt">
-            Still refused? The credential plugin this context uses may need a
-            sign-in of its own first — for GKE that is{" "}
+            {t("cluster", "stillRefusedHint")}{" "}
             <span className="select-text font-mono">gcloud auth login</span>.
           </span>
         )}

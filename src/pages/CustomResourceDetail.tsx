@@ -53,14 +53,15 @@ function isContainer(value: unknown): boolean {
 }
 
 function JsonLeaf({ value }: { value: unknown }) {
+  const t = useT();
   if (value === null || value === undefined) {
     return <span className="text-fg-fnt">null</span>;
   }
   if (Array.isArray(value)) {
-    return <span className="text-fg-fnt">empty list</span>;
+    return <span className="text-fg-fnt">{t("action", "emptyList")}</span>;
   }
   if (typeof value === "object") {
-    return <span className="text-fg-fnt">empty object</span>;
+    return <span className="text-fg-fnt">{t("action", "emptyObject")}</span>;
   }
   return (
     <span className="wrap-break-word font-mono text-fg">{String(value)}</span>
@@ -223,8 +224,10 @@ export function CustomResourceDetail() {
       ),
     onSuccess: () => {
       toast({
-        title: `${crdInfo?.kind || "Resource"} deleted`,
-        description: `${name} has been deleted.`,
+        title: t("action", "kindDeleted", {
+          kind: crdInfo?.kind || t("action", "resourceNoun"),
+        }),
+        description: t("action", "nameDeleted", { name: name ?? "" }),
       });
       queryClient.invalidateQueries({
         queryKey: ["custom-resources", decodedCrdName],
@@ -233,7 +236,9 @@ export function CustomResourceDetail() {
     },
     onError: (error: Error) => {
       toast({
-        title: `Failed to delete ${crdInfo?.kind || "resource"}`,
+        title: t("action", "deleteKindFailed", {
+          kind: crdInfo?.kind || t("action", "resourceNoun"),
+        }),
         description: error.message,
         variant: "destructive",
       });
@@ -260,7 +265,7 @@ export function CustomResourceDetail() {
     {
       // The CRD is what says this object's shape, and it has a page of its
       // own. The label already says what it is, so the reference does not.
-      label: "Definition",
+      label: t("columns", "definition"),
       value: (
         <ResourceRef
           kind={ResourceType.CustomResourceDefinition}
@@ -306,10 +311,14 @@ export function CustomResourceDetail() {
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <KeyValueSection title="Object" items={facts} className="max-w-lg" />
+        <KeyValueSection
+          title={t("columns", "object")}
+          items={facts}
+          className="max-w-lg"
+        />
       ),
     },
     {
@@ -326,8 +335,7 @@ export function CustomResourceDetail() {
             <JsonTree data={resource.spec} />
           ) : (
             <p className="text-xs text-fg-fnt">
-              This custom resource has not been read yet — its spec is whatever
-              the CRD defines, and nothing here has seen it.
+              {t("empty", "customResourceNotRead")}
             </p>
           )}
         </Section>
@@ -337,11 +345,14 @@ export function CustomResourceDetail() {
       ? [
           {
             id: "status",
-            label: "Status",
+            label: t("columns", "status"),
             glyph: viewGlyph(Activity),
             content: (
               <Section>
-                <SectionHeader title="Status" count={status ?? undefined} />
+                <SectionHeader
+                  title={t("columns", "status")}
+                  count={status ?? undefined}
+                />
                 <JsonTree data={resource.status} />
               </Section>
             ),
@@ -355,29 +366,29 @@ export function CustomResourceDetail() {
       content: (
         <>
           <KeyValueSection
-            title="Owned by"
+            title={t("columns", "ownedBy")}
             count={owners.length || undefined}
             items={ownerItems}
             emptyMessage={t("empty", "noOwner")}
           />
           <KeyValueSection
-            title="Finalizers"
+            title={t("columns", "finalizers")}
             count={finalizers.length || undefined}
             items={finalizers.map((finalizer) => ({
               label: finalizer,
-              value: "blocks deletion until cleared",
+              value: t("action", "blocksDeletion"),
               mono: false,
             }))}
             emptyMessage={t("empty", "noFinalizers")}
           />
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(resource?.labels ?? {}).length}
             items={recordToKeyValues(resource?.labels ?? {})}
             emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(resource?.annotations ?? {}).length}
             items={recordToKeyValues(resource?.annotations ?? {})}
             emptyMessage={t("empty", "noAnnotations")}
@@ -387,7 +398,7 @@ export function CustomResourceDetail() {
     },
     {
       id: "connections",
-      label: "Connections",
+      label: t("columns", "connections"),
       // A view rather than a kind, the same as every other Connections tab:
       // it opens onto whatever kinds this object happens to name.
       glyph: viewGlyph(Link2),
@@ -450,8 +461,12 @@ export function CustomResourceDetail() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title={`Delete ${crdInfo?.kind || "resource"}?`}
-        description={`"${name}" will be removed from the cluster. This cannot be undone.`}
+        title={t("action", "deleteKindQuestion", {
+          kind: crdInfo?.kind || t("action", "resourceNoun"),
+        })}
+        description={t("action", "willBeRemovedIrreversible", {
+          name: name ?? "",
+        })}
         confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}

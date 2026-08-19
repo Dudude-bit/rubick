@@ -8,6 +8,7 @@ import {
   type RegistryLink,
 } from "@/lib/image-ref";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * A container image reference, split the way a resource name is: the part a
@@ -117,7 +118,11 @@ function RegistryLinkMark({
   link: RegistryLink;
   quiet?: boolean;
 }) {
-  const label = `Open ${link.name} on ${link.site}`;
+  const t = useT();
+  const label = t("action", "openOnSite", {
+    name: link.name,
+    site: link.site,
+  });
 
   const go = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();

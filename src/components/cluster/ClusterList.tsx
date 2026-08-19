@@ -11,6 +11,7 @@ import {
   useClusterRecencyStore,
 } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 /**
  * The clusters in the kubeconfig, as the thing you act on rather than a
@@ -35,6 +36,7 @@ export function ClusterList({
   failedContext?: string | null;
   autoFocus?: boolean;
 }) {
+  const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
   const listRef = useRef<HTMLDivElement>(null);
@@ -79,11 +81,13 @@ export function ClusterList({
     <div
       ref={listRef}
       role="listbox"
-      aria-label="Clusters in the kubeconfig"
+      aria-label={t("cluster", "clustersInKubeconfig")}
       onKeyDown={onKeyDown}
       className="flex flex-col"
     >
-      {recent.length > 0 && rest.length > 0 && <Caption>Recent</Caption>}
+      {recent.length > 0 && rest.length > 0 && (
+        <Caption>{t("cluster", "recent")}</Caption>
+      )}
       {recent.map((ctx) => (
         <ClusterListRow
           key={ctx.name}
@@ -94,7 +98,9 @@ export function ClusterList({
         />
       ))}
 
-      {recent.length > 0 && rest.length > 0 && <Caption>All contexts</Caption>}
+      {recent.length > 0 && rest.length > 0 && (
+        <Caption>{t("cluster", "allContexts")}</Caption>
+      )}
       {rest.map((ctx) => (
         <ClusterListRow
           key={ctx.name}
@@ -126,6 +132,7 @@ function ClusterListRow({
   failed?: boolean;
   onSelect: (context: string) => void;
 }) {
+  const t = useT();
   const age = useRealtimeAge(
     lastUsedAt ? new Date(lastUsedAt).toISOString() : null
   );
@@ -169,7 +176,7 @@ function ClusterListRow({
                 className="hidden items-center gap-1 group-focus:inline-flex"
               >
                 <Kbd shortcut="→" className="leading-[13px]" />
-                rename
+                {t("cluster", "rename")}
               </span>
             </span>
           }

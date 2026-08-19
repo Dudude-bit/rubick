@@ -156,8 +156,7 @@ export function NodeDetail() {
           ? [
               {
                 label: "Spot",
-                value:
-                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+                value: t("cluster", "spotNodeWarning"),
               },
             ]
           : []),
@@ -329,7 +328,7 @@ export function NodeDetail() {
         onTabChange={setActiveTab}
         actions={
           <DetailAction
-            label="Debug node"
+            label={t("action", "debugNode")}
             icon={Bug}
             onClick={() => setDebugDialogOpen(true)}
             disabled={!node}

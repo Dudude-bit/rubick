@@ -41,7 +41,7 @@ export function HelmChartsTab({
             aria-hidden="true"
           />
           <Input
-            placeholder="Search charts — nginx, redis, postgresql…"
+            placeholder={t("action", "searchChartsPlaceholder")}
             value={searchKeyword}
             onChange={(e) => onSearchKeywordChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -55,14 +55,14 @@ export function HelmChartsTab({
           {isSearching ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
           ) : (
-            "Search"
+            t("action", "search")
           )}
         </Button>
       </div>
 
       {results.length === 0 ? (
         <p className="py-8 text-center text-xs text-fg-fnt">
-          Add a repository, then search it for charts.
+          {t("empty", "addRepositoryThenSearch")}
         </p>
       ) : (
         <Table>

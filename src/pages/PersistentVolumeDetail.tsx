@@ -44,10 +44,12 @@ export function PersistentVolumeDetail() {
   });
 
   const facts: KeyValue[] = [
-    { label: "Capacity", value: pv?.capacity ?? "—", mono: true },
+    { label: t("columns", "capacity"), value: pv?.capacity ?? "—", mono: true },
     {
-      label: "Access modes",
-      value: pv?.accessModes.length ? pv.accessModes.join(" · ") : "none",
+      label: t("columns", "accessModes"),
+      value: pv?.accessModes.length
+        ? pv.accessModes.join(" · ")
+        : t("empty", "none"),
       mono: true,
     },
     {
@@ -57,7 +59,7 @@ export function PersistentVolumeDetail() {
       value: pv?.claim ? (
         <ClaimRef claim={pv.claim} />
       ) : (
-        "unbound — no claim is using this volume"
+        t("empty", "pvUnbound")
       ),
       tone: pv?.claim ? undefined : "warn",
     },
@@ -70,10 +72,14 @@ export function PersistentVolumeDetail() {
           showKind={false}
         />
       ) : (
-        "none"
+        t("empty", "none")
       ),
     },
-    { label: "Reclaim policy", value: pv?.reclaimPolicy ?? "—", mono: true },
+    {
+      label: t("columns", "reclaimPolicy"),
+      value: pv?.reclaimPolicy ?? "—",
+      mono: true,
+    },
     ...(pv?.reason
       ? [{ label: "Reason", value: pv.reason, tone: "err" as const }]
       : []),
@@ -89,7 +95,7 @@ export function PersistentVolumeDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
@@ -123,10 +129,12 @@ export function PersistentVolumeDetail() {
               {pv.capacity}
             </span>
             <span className="text-[11px] text-fg-fnt">
-              {pv.accessModes.join(" · ") || "no access modes"}
+              {pv.accessModes.join(" · ") || t("empty", "noAccessModes")}
             </span>
             {!pv.claim && (
-              <span className="text-[11px] text-warn">unbound</span>
+              <span className="text-[11px] text-warn">
+                {t("action", "unbound")}
+              </span>
             )}
           </>
         )

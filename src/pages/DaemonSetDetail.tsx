@@ -112,7 +112,7 @@ export function DaemonSetDetail() {
     () => [
       {
         id: "overview",
-        label: "Overview",
+        label: t("nav", "overview"),
         glyph: viewGlyph(Info),
         content: (
           <>
@@ -132,7 +132,7 @@ export function DaemonSetDetail() {
                   <div className="grid grid-cols-2 gap-[22px]">
                     <Composition
                       total={desired}
-                      label={desired === 1 ? "node wanted" : "nodes wanted"}
+                      label={t("count", "nodesWanted", { n: desired })}
                       segments={[
                         { label: "ready", count: ready, tone: "ok" },
                         {
@@ -146,15 +146,19 @@ export function DaemonSetDetail() {
                           tone: "err",
                         },
                       ]}
-                      note={`${available} available`}
+                      note={t("action", "nAvailable", { n: available })}
                     />
                     <Composition
                       total={desired}
-                      label="on the current spec"
+                      label={t("action", "onCurrentSpec")}
                       segments={[
-                        { label: "up to date", count: upToDate, tone: "ok" },
                         {
-                          label: "outdated",
+                          label: t("action", "barUpToDate"),
+                          count: upToDate,
+                          tone: "ok",
+                        },
+                        {
+                          label: t("action", "barOutdated"),
                           count: Math.max(0, desired - upToDate),
                           tone: "warn",
                         },
@@ -184,8 +188,8 @@ export function DaemonSetDetail() {
               traffic={<TrafficChain query={connections} />}
               declared={
                 <FactBlock
-                  title="How it is declared"
-                  items={declaration(daemonSet)}
+                  title={t("action", "howDeclared")}
+                  items={declaration(daemonSet, t)}
                 />
               }
             >
@@ -198,7 +202,7 @@ export function DaemonSetDetail() {
             </WorkloadOverview>
 
             <KeyValueSection
-              title="Selector"
+              title={t("columns", "selector")}
               items={
                 daemonSet?.selector
                   ? [
@@ -213,13 +217,13 @@ export function DaemonSetDetail() {
               emptyMessage={t("empty", "noSelectorDaemonSet")}
             />
             <KeyValueSection
-              title="Labels"
+              title={t("columns", "labels")}
               count={Object.keys(daemonSet?.labels ?? {}).length}
               items={recordToKeyValues(daemonSet?.labels ?? {})}
               emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
-              title="Annotations"
+              title={t("columns", "annotations")}
               count={Object.keys(daemonSet?.annotations ?? {}).length}
               items={recordToKeyValues(daemonSet?.annotations ?? {})}
               emptyMessage={t("empty", "noAnnotations")}
@@ -230,7 +234,7 @@ export function DaemonSetDetail() {
       connectionsTab(connections, deliveryQuery),
       {
         id: "container-template",
-        label: "Template",
+        label: t("columns", "template"),
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={daemonSet} namespace={namespace} />,
       },
@@ -310,7 +314,9 @@ export function DaemonSetDetail() {
       }
       badges={
         upToDate < desired && (
-          <span className="text-[11px] text-info">rolling out</span>
+          <span className="text-[11px] text-info">
+            {t("action", "rollingOut")}
+          </span>
         )
       }
       onBack={goBack}
@@ -332,10 +338,13 @@ export function DaemonSetDetail() {
 }
 
 /** How it is declared: read once, and never while the rollout is fine. */
-function declaration(daemonSet: DaemonSetDetailInfo | undefined): KeyValue[] {
+function declaration(
+  daemonSet: DaemonSetDetailInfo | undefined,
+  t: ReturnType<typeof useT>
+): KeyValue[] {
   return [
     {
-      label: "Update strategy",
+      label: t("action", "updateStrategy"),
       value: daemonSet?.updateStrategy || "RollingUpdate",
     },
     serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),

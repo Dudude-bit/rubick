@@ -31,6 +31,7 @@ import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 type NavKey = keyof typeof en.nav;
 
@@ -220,6 +221,7 @@ function GroupCaption({ children }: { children: ReactNode }) {
  * `NavLink` light all of them at once.
  */
 function IntegrationsGroup() {
+  const t = useT();
   const { pathname, search } = useLocation();
   const { pages, pending } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
@@ -315,8 +317,8 @@ function IntegrationsGroup() {
           note={
             page.asleep
               ? waking === page.id
-                ? "connecting…"
-                : "asleep"
+                ? t("cluster", "tunnelWaking")
+                : t("cluster", "tunnelAsleep")
               : undefined
           }
           onPress={page.asleep ? () => press(page.id) : undefined}
@@ -357,6 +359,7 @@ function IntegrationsGroup() {
  * else a click could mean — the cluster is already the one you are on.
  */
 function ClusterRow() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const alias = useClusterMark(currentContext).alias?.trim();
   const isConnected = useClusterStore((s) => s.isConnected);
@@ -424,7 +427,9 @@ function ClusterRow() {
       <button
         type="button"
         aria-haspopup="menu"
-        aria-label={`${alias ?? currentContext} — rename or recolour`}
+        aria-label={t("cluster", "renameOrRecolour", {
+          name: alias ?? currentContext,
+        })}
         className={cn(
           row,
           "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden"

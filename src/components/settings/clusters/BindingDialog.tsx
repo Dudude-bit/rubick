@@ -83,7 +83,7 @@ export function BindingDialog({
 
   const failed = (error: unknown) =>
     toast({
-      title: "Error",
+      title: t("action", "error"),
       description: normalizeTauriError(error),
       variant: "destructive",
     });

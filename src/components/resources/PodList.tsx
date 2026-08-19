@@ -28,6 +28,7 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
+import { useT } from "@/i18n/useT";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -143,6 +144,7 @@ export const columns: ColumnDef<PodRow>[] = [
 ];
 
 export function PodList() {
+  const t = useT();
   const navigate = useNavigate();
   const {
     data: podsWithMetrics,
@@ -162,7 +164,7 @@ export function PodList() {
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(
             getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)
@@ -170,7 +172,7 @@ export function PodList() {
       },
       {
         icon: FileText,
-        label: "View Logs",
+        label: t("action", "viewLogs"),
         onClick: (item) =>
           navigate(
             `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=logs`
@@ -186,12 +188,12 @@ export function PodList() {
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item) => setDeleteTarget(item),
         variant: "destructive",
       },
     ],
-    [navigate]
+    [t, navigate]
   );
 
   return (

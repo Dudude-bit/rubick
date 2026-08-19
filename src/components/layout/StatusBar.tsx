@@ -68,7 +68,9 @@ export function StatusBar() {
         // The one place a name still belongs: mid-connect the sidebar and
         // the tab are still showing the cluster being left behind.
         <span className="truncate">
-          connecting to {pendingContext ?? currentContext}…
+          {t("cluster", "connectingToLower", {
+            context: pendingContext ?? currentContext ?? "",
+          })}
         </span>
       ) : error ? (
         <Tooltip>
@@ -99,7 +101,7 @@ export function StatusBar() {
           </span>
         </>
       ) : (
-        <span>not connected</span>
+        <span>{t("cluster", "notConnectedLower")}</span>
       )}
     </footer>
   );

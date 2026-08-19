@@ -8,12 +8,14 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ACTIVITY_ROW, ActivityEmpty, ActivityGroup } from "./primitives";
+import { useT } from "@/i18n/useT";
 
 interface TerminalsTabProps {
   onClose?: () => void;
 }
 
 export function TerminalsTab({ onClose }: TerminalsTabProps) {
+  const t = useT();
   const navigate = useNavigate();
   const currentContext = useClusterStore((state) => state.currentContext);
   const sessions = useTerminalSessionStore((state) => state.sessions);
@@ -33,7 +35,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
     return (
       <ActivityEmpty
         icon={AlertCircle}
-        title="Connect to a cluster to view terminals"
+        title={t("empty", "connectToViewTerminals")}
       />
     );
   }
@@ -45,11 +47,11 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
     return (
       <ActivityEmpty
         icon={Terminal}
-        title={`No terminal sessions open on ${currentContext}`}
+        title={t("empty", "noTerminalsOnContext", { context: currentContext })}
         hint={
           sessions.length > 0
-            ? `${sessions.length} open on other clusters. Open one here from any pod's detail page.`
-            : "Open one from any pod's detail page."
+            ? t("count", "openOnOtherClusters", { n: sessions.length })
+            : t("empty", "openFromPodPage")
         }
       />
     );
@@ -57,7 +59,10 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
 
   return (
     <div className="pb-3">
-      <ActivityGroup title="Sessions" count={contextSessions.length}>
+      <ActivityGroup
+        title={t("activity", "sessions")}
+        count={contextSessions.length}
+      >
         {contextSessions.map((session) => {
           const state =
             session.status === "connected"
@@ -120,7 +125,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
 
       {contextSessions.some((s) => s.status === "error") && (
         <p className="px-3 pt-2 text-[11px] text-err">
-          Some sessions have errors. Open one to reconnect.
+          {t("empty", "sessionsHaveErrors")}
         </p>
       )}
     </div>

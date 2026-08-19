@@ -84,6 +84,7 @@ function NamespaceSegment({
   to: string | null;
   label: string;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const scope = useClusterStore((state) => state.currentNamespace);
   const switchNamespace = useClusterStore((state) => state.switchNamespace);
@@ -96,8 +97,8 @@ function NamespaceSegment({
 
   if (to) {
     const says = narrows
-      ? `Show ${label} in ${namespace} — narrows this tab to that namespace`
-      : `Show ${label} in ${namespace}`;
+      ? t("action", "showInNamespaceNarrows", { label, namespace })
+      : t("action", "showInNamespace", { label, namespace });
     const handle = (event: MouseEvent<HTMLAnchorElement>) =>
       gesture(
         event,
@@ -125,7 +126,7 @@ function NamespaceSegment({
   if (!narrows)
     return <span className="truncate px-1 py-0.5 font-mono">{namespace}</span>;
 
-  const says = `Scope this tab to ${namespace}`;
+  const says = t("action", "scopeTabTo", { namespace });
   // The new tab a modified gesture opens has no list to land on either, so it
   // starts where a new tab always starts — the overview, under this scope.
   const handle = (event: MouseEvent<HTMLButtonElement>) =>
@@ -245,7 +246,8 @@ export function ResourceDetailHeader({
           className="text-[11px] text-fg-fnt"
           title={formatDate(createdAt) ?? undefined}
         >
-          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
+          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}
+          {t("action", "ageOldSuffix")}
         </span>
       )}
       <div className="ml-auto flex flex-none items-center">

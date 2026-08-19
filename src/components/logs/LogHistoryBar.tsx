@@ -84,11 +84,9 @@ export function LogHistoryBar({
     return (
       <Bar tone="fnt" testId="log-history-absent">
         <p>
-          The API server has nothing more for{" "}
-          <span className="font-mono">{stranded}</span>. Reading past a pod's
-          own lifetime needs a Loki —{" "}
+          {t("empty", "historyApiExhausted", { target: stranded })}{" "}
           <Link to="/integrations" className="text-info hover:underline">
-            connect one
+            {t("action", "connectOne")}
           </Link>
           .
         </p>
@@ -100,9 +98,10 @@ export function LogHistoryBar({
     return (
       <Bar tone="warn" testId="log-history-unreachable">
         <p>
-          {capability.vendor} did not answer — {capability.reason}. The live
-          stream above is untouched; what it kept from before this pod is out of
-          reach until it is back.
+          {t("empty", "historyVendorUnreachable", {
+            vendor: capability.vendor,
+            reason: capability.reason,
+          })}
         </p>
       </Bar>
     );
@@ -113,7 +112,9 @@ export function LogHistoryBar({
   if (history.state === "loading") {
     return (
       <Bar tone="mut" testId="log-history-loading">
-        <p>Reading what {capability.vendor} kept…</p>
+        <p>
+          {t("empty", "historyReadingVendor", { vendor: capability.vendor })}
+        </p>
       </Bar>
     );
   }
@@ -122,10 +123,14 @@ export function LogHistoryBar({
     return (
       <Bar tone="err" testId="log-history-failed">
         <p>
-          {capability.vendor} did not answer — {history.reason}. The live stream
-          above is untouched.
+          {t("empty", "historyVendorFailed", {
+            vendor: capability.vendor,
+            reason: history.reason,
+          })}
         </p>
-        {selected && <Act onClick={() => onRead(selected)}>Ask again</Act>}
+        {selected && (
+          <Act onClick={() => onRead(selected)}>{t("action", "askAgain")}</Act>
+        )}
       </Bar>
     );
   }
@@ -134,19 +139,14 @@ export function LogHistoryBar({
     return (
       <Bar tone="mut" testId="log-history-offer">
         <p>
-          {stranded !== null ? (
-            <>
-              The API server has nothing more for{" "}
-              <span className="font-mono">{stranded}</span>.{" "}
-            </>
-          ) : (
-            <>Older than the pods on screen: </>
-          )}
-          {capability.vendor} may still have those lines.
+          {stranded !== null
+            ? t("empty", "historyApiExhaustedShort", { target: stranded })
+            : t("empty", "historyOlderThanPods")}{" "}
+          {t("empty", "historyVendorMayHave", { vendor: capability.vendor })}
         </p>
         {stranded !== null && (
           <Act onClick={() => onRead(DEFAULT_RANGE)}>
-            Read what {capability.vendor} kept
+            {t("action", "readWhatVendorKept", { vendor: capability.vendor })}
           </Act>
         )}
         {ranged && <Ranges selected={null} onSelect={onRead} />}
@@ -166,10 +166,15 @@ export function LogHistoryBar({
     return (
       <Bar tone="warn" testId="log-history-unmatched">
         <p>
-          {capability.vendor} answered with nothing for this {kindOf(ranged)} —
-          its labels may not match this app&apos;s query (tried{" "}
-          <span className="font-mono">{loaded.labelsTried.join("/")}</span>).
-          Nothing was found in the last {loaded.range}.
+          {t(
+            "empty",
+            ranged ? "historyUnmatchedWorkload" : "historyUnmatchedPod",
+            {
+              vendor: capability.vendor,
+              labels: loaded.labelsTried.join("/"),
+              range: loaded.range,
+            }
+          )}
         </p>
         {ranged && <Ranges selected={selected} onSelect={onRead} />}
       </Bar>
@@ -182,23 +187,29 @@ export function LogHistoryBar({
         {/* "History" first, because the single most dangerous thing this
             pane could do is let a reader take an hour-old line for a live
             one while they are watching a rollout. */}
-        <span className="text-info">History</span> · {formatCount(held)}{" "}
-        {t("count", "lineNoun", { n: held })} from {from}, the last{" "}
-        {loaded.range}. Not live — these lines do not grow and Follow does not
-        reach them.
+        <span className="text-info">{t("action", "history")}</span> ·{" "}
+        {formatCount(held)} {t("count", "lineNoun", { n: held })}{" "}
+        {t("empty", "historyLoadedSummary", {
+          from,
+          range: loaded.range,
+          follow: t("action", "follow"),
+        })}
       </p>
       {dropped > 0 && (
         <p className="text-warn" data-testid="log-history-crowded">
-          {formatCount(dropped)} more came back and{" "}
-          {dropped === 1 ? "is" : "are"} not held — the live stream already
-          fills Keep {formatCount(keep)}. Raise it, or clear the pane, and ask
-          again.
+          {t("count", "historyMoreNotHeld", {
+            n: dropped,
+            count: formatCount(dropped),
+            keep: formatCount(keep),
+          })}
         </p>
       )}
       {loaded.truncated && (
         <p className="text-warn" data-testid="log-history-truncated">
-          Showing the newest {formatCount(loaded.limit)} lines of this range —
-          the limit was reached, so there is more inside it.
+          {t("count", "historyTruncated", {
+            n: loaded.limit,
+            count: formatCount(loaded.limit),
+          })}
         </p>
       )}
       {loaded.older !== null && (
@@ -215,10 +226,6 @@ export function LogHistoryBar({
 /** The window a stranded pod is asked about without being asked which. */
 const DEFAULT_RANGE: UsageRange = "1h";
 
-function kindOf(ranged: boolean): string {
-  return ranged ? "workload" : "pod";
-}
-
 /**
  * The same four words the usage chart offers, because "the last six hours"
  * must mean one thing in this app rather than one thing per pane.
@@ -230,6 +237,7 @@ function Ranges({
   selected: UsageRange | null;
   onSelect: (range: UsageRange) => void;
 }) {
+  const t = useT();
   return (
     <span className="ml-auto flex items-center gap-0.5">
       {USAGE_RANGES.map((range) => (
@@ -238,7 +246,7 @@ function Ranges({
           type="button"
           aria-pressed={selected === range}
           onClick={() => onSelect(range)}
-          title={`Read the last ${range}`}
+          title={t("action", "readTheLast", { range })}
           className={
             selected === range
               ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"

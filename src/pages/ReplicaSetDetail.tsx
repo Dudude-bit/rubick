@@ -171,7 +171,10 @@ export function ReplicaSetDetail() {
         <>
           <WorkloadOverview
             count={
-              <CountBlock title="Replicas" subject="what this revision runs">
+              <CountBlock
+                title="Replicas"
+                subject={t("columns", "whatThisRevisionRuns")}
+              >
                 <Composition
                   total={desired}
                   label={t("count", "replicasWanted", { n: desired })}

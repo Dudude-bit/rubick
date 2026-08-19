@@ -16,6 +16,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import type { NamespaceInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -38,7 +39,9 @@ export const columns = (
           showKind={false}
         />
         {row.original.name === currentNamespace && (
-          <span className="text-[11px] text-fg-fnt">current scope</span>
+          <span className="text-[11px] text-fg-fnt">
+            <T section="cluster" k="currentScope" />
+          </span>
         )}
       </span>
     ),
@@ -73,6 +76,7 @@ export const columns = (
  * The row's useful verb is "point this window at it", so that is the action.
  */
 export function NamespaceList() {
+  const t = useT();
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const { namespaces } = useClusterSummary();
@@ -93,11 +97,11 @@ export function NamespaceList() {
     () => [
       {
         icon: Crosshair,
-        label: "Scope this window to it",
+        label: t("action", "scopeWindowToIt"),
         onClick: (item) => switchNamespace(item.name),
       },
     ],
-    [switchNamespace]
+    [switchNamespace, t]
   );
 
   return (

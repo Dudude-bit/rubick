@@ -19,16 +19,18 @@ import {
   ActivityEmpty,
   ActivityGroup,
 } from "./primitives";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
-const JOB_TYPE_LABELS: Record<BackgroundJobType, string> = {
-  delete: "Delete",
-  scale: "Scale",
-  restart: "Restart",
-  apply: "Apply",
-  rollback: "Rollback",
-  cordon: "Cordon",
-  uncordon: "Uncordon",
-  drain: "Drain",
+const JOB_TYPE_LABELS: Record<BackgroundJobType, keyof typeof en.action> = {
+  delete: "delete",
+  scale: "scale",
+  restart: "restart",
+  apply: "apply",
+  rollback: "rollBack",
+  cordon: "cordon",
+  uncordon: "uncordon",
+  drain: "drain",
 };
 
 function JobStatusIcon({ job }: { job: BackgroundJob }) {
@@ -47,10 +49,11 @@ function JobStatusIcon({ job }: { job: BackgroundJob }) {
 }
 
 function JobIdentity({ job }: { job: BackgroundJob }) {
+  const t = useT();
   return (
     <span className="min-w-0 flex-1">
       <span className="block truncate text-fg-mid">
-        {JOB_TYPE_LABELS[job.type]} {job.resourceType}
+        {t("action", JOB_TYPE_LABELS[job.type])} {job.resourceType}
       </span>
       <span className="block truncate font-mono text-[11px] text-fg-fnt">
         {job.resourceName}
@@ -66,6 +69,7 @@ function JobIdentity({ job }: { job: BackgroundJob }) {
 }
 
 export function BackgroundJobsTab() {
+  const t = useT();
   const { jobs, removeJob, clearCompleted } = useBackgroundJobStore();
 
   const activeJobs = jobs.filter(
@@ -79,8 +83,8 @@ export function BackgroundJobsTab() {
     return (
       <ActivityEmpty
         icon={RefreshCw}
-        title="No background jobs"
-        hint="Delete, scale and restart operations show up here"
+        title={t("empty", "noBackgroundJobs")}
+        hint={t("empty", "backgroundJobsHint")}
       />
     );
   }
@@ -115,10 +119,12 @@ export function BackgroundJobsTab() {
 
       {completedJobs.length > 0 && (
         <ActivityGroup
-          title="Finished"
+          title={t("activity", "finished")}
           count={completedJobs.length}
           action={
-            <ActivityAction onClick={clearCompleted}>Clear</ActivityAction>
+            <ActivityAction onClick={clearCompleted}>
+              {t("action", "clear")}
+            </ActivityAction>
           }
         >
           {completedJobs.map((job) => (
@@ -130,7 +136,10 @@ export function BackgroundJobsTab() {
                 className="flex-none text-[11px] text-fg-fnt"
               />
               <ActivityAction
-                aria-label={`Dismiss ${JOB_TYPE_LABELS[job.type]} ${job.resourceName}`}
+                aria-label={t("action", "dismissJob", {
+                  job: t("action", JOB_TYPE_LABELS[job.type]),
+                  name: job.resourceName,
+                })}
                 onClick={() => removeJob(job.id)}
               >
                 <Trash2 className="h-3 w-3" />

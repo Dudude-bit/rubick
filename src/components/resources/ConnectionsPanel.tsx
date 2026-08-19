@@ -29,6 +29,7 @@ import type { DeliveryQuery } from "@/integrations";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 const GROUP_HEADING =
   "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
@@ -147,17 +148,17 @@ function Row({ row }: { row: ConnRow }) {
  * asked — which is the mistake this whole view exists to stop making.
  */
 function Nothing({ subject }: { subject: ResourceConnections["subject"] }) {
+  const t = useT();
   const where = subject.namespace
-    ? `in ${subject.namespace}`
-    : "in the cluster";
+    ? t("empty", "inNamespaceWhere", { namespace: subject.namespace })
+    : t("empty", "inClusterWhere");
   return (
     <Section>
       <p className="text-xs text-fg-mut">
-        Nothing {where} states an edge to this {subject.kind}.
+        {t("empty", "nothingStatesEdge", { where, kind: subject.kind })}
       </p>
       <p className="text-[11px] text-fg-fnt">
-        Every pod, Deployment, StatefulSet, DaemonSet, Job, CronJob and Ingress{" "}
-        {where} was read; none of them names it.
+        {t("empty", "everyWorkloadRead", { where })}
       </p>
     </Section>
   );
@@ -170,6 +171,7 @@ export function ConnectionsPanel({
   query: ConnectionsQuery;
   delivery?: DeliveryQuery | null;
 }) {
+  const t = useT();
   const { data, isPending, error } = query;
   const { deliveries } = useDelivery(delivery ?? null);
 
@@ -184,10 +186,10 @@ export function ConnectionsPanel({
     return (
       <Section>
         <p className="text-xs text-err">
-          Could not read what connects to this.
+          {t("empty", "couldNotReadWhatConnects")}
         </p>
         <p className="text-[11px] text-fg-fnt">
-          {error?.message ?? "The cluster did not answer."}
+          {error?.message ?? t("empty", "clusterDidNotAnswer")}
         </p>
       </Section>
     );

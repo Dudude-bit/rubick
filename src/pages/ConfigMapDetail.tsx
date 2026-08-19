@@ -62,7 +62,7 @@ export function ConfigMapDetail() {
   const tabs = [
     {
       id: "data",
-      label: "Data",
+      label: t("columns", "data"),
       glyph: viewGlyph(Table2),
       mark: countMark(dataKeys.length),
       // The keys are the object; the metadata is context, so it moves to a
@@ -81,18 +81,18 @@ export function ConfigMapDetail() {
     connectionsTab(connections, deliveryQuery),
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(labels).length}
             items={recordToKeyValues(labels)}
             emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(annotations).length}
             items={recordToKeyValues(annotations)}
             emptyMessage={t("empty", "noAnnotations")}

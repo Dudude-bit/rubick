@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Terminal } from "./Terminal";
 import { commands } from "@/lib/commands";
+import { useT } from "@/i18n/useT";
 
 export interface AuthTerminalProps {
   open: boolean;
@@ -30,6 +31,7 @@ export function AuthTerminal({
   context,
   command,
 }: AuthTerminalProps) {
+  const t = useT();
   const handleClose = useCallback(() => {
     // Cancel the auth session when user closes the dialog
     commands.cancelAuthSession(authSessionId).catch((e) => {
@@ -48,13 +50,15 @@ export function AuthTerminal({
     <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-4xl h-[600px] flex flex-col p-0">
         <DialogHeader className="p-6 pb-4">
-          <DialogTitle>Authentication Required</DialogTitle>
+          <DialogTitle>{t("action", "authenticationRequired")}</DialogTitle>
           <DialogDescription>
-            Context: <span className="font-mono">{context}</span>
+            {t("action", "contextLabel")}{" "}
+            <span className="font-mono">{context}</span>
             {command && (
               <>
                 <br />
-                Command: <span className="font-mono text-xs">{command}</span>
+                {t("action", "commandLabel")}{" "}
+                <span className="font-mono text-xs">{command}</span>
               </>
             )}
           </DialogDescription>
@@ -63,7 +67,7 @@ export function AuthTerminal({
           <Terminal
             sessionId={terminalSessionId}
             metadata={{
-              title: "Authentication",
+              title: t("action", "authentication"),
               subtitle: context,
             }}
             onClose={handleTerminalClose}

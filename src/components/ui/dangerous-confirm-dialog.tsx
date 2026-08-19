@@ -67,17 +67,17 @@ export function DangerousConfirmDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription className={description ? "" : "sr-only"}>
-            {description || "Confirm this action by typing the required text"}
+            {description || t("action", "confirmByTyping")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">
           <Label htmlFor="confirmation-input" className="text-sm">
-            Type{" "}
+            {t("action", "typeWord")}{" "}
             <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
               {confirmationText}
             </code>{" "}
-            to confirm
+            {t("action", "toConfirm")}
           </Label>
           <Input
             id="confirmation-input"

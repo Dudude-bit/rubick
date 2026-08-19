@@ -103,7 +103,7 @@ export default function GkeIngressPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s Ingresses
+          {t("empty", "couldNotReadIngresses")}
         </h2>
         <p className="text-[11px] text-fg-fnt">{sources.error.message}</p>
       </Section>
@@ -119,7 +119,7 @@ export default function GkeIngressPage() {
             ? undefined
             : t("count", "hosts", { n: hosts.length })
         }
-        description="Every hostname this cluster's Google load balancers serve — what terminates it, and what answers behind it."
+        description={t("empty", "gkeIngressHint")}
       />
 
       {sources.data?.unread.map((kind) => (
@@ -128,28 +128,23 @@ export default function GkeIngressPage() {
           tone="warn"
           title={
             <>
-              <span className="font-mono">{kind.crd}</span> could not be listed
+              <span className="font-mono">{kind.crd}</span>{" "}
+              {t("empty", "couldNotBeListed")}
             </>
           }
           verbatim={kind.reason}
         >
-          Anything below that names one is shown as unresolved rather than as
-          missing — the two are not the same and only one of them is a fault in
-          the cluster.
+          {t("empty", "unresolvedNotMissing")}
         </Finding>
       ))}
 
       {ignored.length > 0 && (
-        <Finding
-          tone="err"
-          title="Ingresses asking for GKE the way GKE does not read"
-        >
-          GKE reads{" "}
-          <span className="font-mono">kubernetes.io/ingress.class</span> and
-          ignores <span className="font-mono">spec.ingressClassName</span>.
-          These name a GKE class in the field Kubernetes documents, carry no
-          annotation, and are served by nothing at all — correct YAML, no
-          events, no error:{" "}
+        <Finding tone="err" title={t("empty", "ingressesWrongClassField")}>
+          {t("empty", "gkeReads")}{" "}
+          <span className="font-mono">kubernetes.io/ingress.class</span>{" "}
+          {t("empty", "gkeIgnores")}{" "}
+          <span className="font-mono">spec.ingressClassName</span>
+          {t("empty", "gkeClassFieldNote")}{" "}
           {ignored.map((ingress, index) => (
             <span key={`${ingress.namespace}/${ingress.name}`}>
               {index > 0 && ", "}
@@ -171,24 +166,27 @@ export default function GkeIngressPage() {
           <FilterBox
             value={filter}
             onChange={setFilter}
-            placeholder="Filter by host or Service…"
-            label="Filter hosts"
+            placeholder={t("action", "filterHostsPlaceholder")}
+            label={t("action", "filterHosts")}
           />
         </div>
 
         {sources.isPending ? (
-          <p className="text-xs text-fg-fnt">Reading the Ingresses…</p>
+          <p className="text-xs text-fg-fnt">
+            {t("empty", "readingIngresses")}
+          </p>
         ) : hosts.length === 0 ? (
           <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
-            No Ingress in this cluster carries{" "}
+            {t("empty", "noIngressCarries")}{" "}
             <span className="font-mono">kubernetes.io/ingress.class: gce</span>{" "}
-            or <span className="font-mono">gce-internal</span>, so GKE&rsquo;s
-            controller is serving nothing here. The CRDs it owns may still be
-            installed — that is what put this page in the sidebar.
+            {t("empty", "orInline")}{" "}
+            <span className="font-mono">gce-internal</span>
+            {t("empty", "gkeControllerServesNothing")}
           </p>
         ) : shown.length === 0 ? (
           <p className="text-[11.5px] text-fg-fnt">
-            Nothing matches <span className="font-mono">{filter}</span>.
+            {t("empty", "nothingMatches")}{" "}
+            <span className="font-mono">{filter}</span>.
           </p>
         ) : (
           <div className="flex flex-col">
@@ -210,19 +208,24 @@ export default function GkeIngressPage() {
 }
 
 /** The word at the right of a host line: what is true of it right now. */
-function hostState(host: GkeHost): { text: string; tone: Tone } {
+function hostState(
+  host: GkeHost,
+  t: ReturnType<typeof useT>
+): { text: string; tone: Tone } {
   if (host.findings.some((finding) => finding.kind === "stop")) {
-    return { text: "nothing behind it", tone: "err" };
+    return { text: t("empty", "nothingBehindIt"), tone: "err" };
   }
   const certificate = host.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
-  if (certificate) return { text: "certificate failed", tone: "err" };
+  if (certificate)
+    return { text: t("empty", "certificateFailed"), tone: "err" };
   if (host.findings.some((finding) => finding.kind === "missing-object")) {
-    return { text: "names something absent", tone: "err" };
+    return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
   }
-  if (host.findings.length > 0) return { text: "worth a look", tone: "warn" };
-  return { text: "serving", tone: "ok" };
+  if (host.findings.length > 0)
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function HostRow({
@@ -246,7 +249,7 @@ function HostRow({
       title={
         host.host ?? (
           <span className="text-fg-mut">
-            {alone ? "every host" : "any host not matched above"}
+            {alone ? t("empty", "everyHost") : t("empty", "anyHostNotMatched")}
           </span>
         )
       }
@@ -255,10 +258,10 @@ function HostRow({
         <>
           {t("count", "paths", { n: host.routes.length })}
           {front && ` · ${front.class}`}
-          {front && !front.allowsHttp && " · no HTTP listener"}
+          {front && !front.allowsHttp && t("empty", "noHttpListener")}
         </>
       }
-      state={hostState(host)}
+      state={hostState(host, t)}
       openByDefault={openByDefault}
       last={last}
     >
@@ -282,6 +285,7 @@ function HostRow({
 
 /** What terminates the host, before anything looks at a backend. */
 function FrontBlock({ front }: { front: GkeFront }) {
+  const t = useT();
   const certificates = [
     ...front.certificates.map((certificate) => certificate.name),
     ...front.preShared.map((name) => `${name} (pre-shared)`),
@@ -294,7 +298,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
           under={
             front.addresses.length > 0
               ? front.addresses.join(", ")
-              : "no address yet"
+              : t("empty", "noAddressYet")
           }
         >
           <ResourceRef
@@ -305,15 +309,21 @@ function FrontBlock({ front }: { front: GkeFront }) {
           />
         </Cell>
       </Column>
-      <Column label="Listeners">
+      <Column label={t("columns", "listeners")}>
         <Cell
           warn={!front.allowsHttp}
-          under={front.staticIp ? `static IP ${front.staticIp}` : undefined}
+          under={
+            front.staticIp
+              ? t("empty", "staticIp", { ip: front.staticIp })
+              : undefined
+          }
         >
-          {front.allowsHttp ? "HTTP and HTTPS" : "HTTPS only"}
+          {front.allowsHttp
+            ? t("empty", "httpAndHttps")
+            : t("empty", "httpsOnly")}
         </Cell>
       </Column>
-      <Column label="Frontend">
+      <Column label={t("columns", "frontend")}>
         {front.frontendConfig ? (
           <Cell
             bad={!front.frontendConfig.found}
@@ -334,19 +344,23 @@ function FrontBlock({ front }: { front: GkeFront }) {
                 {frontendConfigSummary(front.frontendConfig.found)}
               </ObjectLink>
             ) : (
-              `${front.frontendConfig.name} — absent`
+              t("empty", "nameAbsent", { name: front.frontendConfig.name })
             )}
           </Cell>
         ) : (
           <Cell>
-            <span className="text-fg-fnt">no FrontendConfig</span>
+            <span className="text-fg-fnt">
+              {t("empty", "noFrontendConfig")}
+            </span>
           </Cell>
         )}
       </Column>
       <Column label="Certificate">
         {certificates.length === 0 ? (
           <Cell warn>
-            <span className="text-fg-fnt">nothing terminates TLS</span>
+            <span className="text-fg-fnt">
+              {t("empty", "nothingTerminatesTls")}
+            </span>
           </Cell>
         ) : (
           front.certificates.map((certificate) => (
@@ -354,7 +368,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
               key={certificate.name}
               bad={certificateTone(certificate.status) === "err"}
               warn={certificateTone(certificate.status) === "warn"}
-              under={certificate.status ?? "no status yet"}
+              under={certificate.status ?? t("empty", "noStatusYet")}
             >
               {certificate.found ? (
                 <ResourceRef
@@ -365,18 +379,18 @@ function FrontBlock({ front }: { front: GkeFront }) {
                   showKind={false}
                 />
               ) : (
-                `${certificate.name} — absent`
+                t("empty", "nameAbsent", { name: certificate.name })
               )}
             </Cell>
           ))
         )}
         {front.preShared.map((name) => (
-          <Cell key={name} under="uploaded to Google, not in this cluster">
+          <Cell key={name} under={t("empty", "uploadedToGoogle")}>
             <span className="font-mono">{name}</span>
           </Cell>
         ))}
         {front.tlsSecrets.map((name) => (
-          <Cell key={name} under="from spec.tls">
+          <Cell key={name} under={t("empty", "fromSpecTls")}>
             <span className="font-mono">{name}</span>
           </Cell>
         ))}
@@ -393,10 +407,11 @@ function RouteChain({
   route: GkeRoute;
   sources: GkeSources | null;
 }) {
+  const t = useT();
   const backing = sources ? backingFor(route, sources) : null;
   return (
     <Chain>
-      <Column label="Path">
+      <Column label={t("columns", "path")}>
         <Cell under={route.pathType}>
           <span className="font-mono">{route.path}</span>
         </Cell>
@@ -405,7 +420,11 @@ function RouteChain({
         {route.backend ? (
           <Cell
             bad={backing?.stop !== null && backing?.stop !== undefined}
-            under={route.neg ? "container-native (NEG)" : "through kube-proxy"}
+            under={
+              route.neg
+                ? t("empty", "containerNativeNeg")
+                : t("empty", "throughKubeProxy")
+            }
           >
             <ResourceRef
               kind={ResourceType.Service}
@@ -416,14 +435,14 @@ function RouteChain({
           </Cell>
         ) : (
           <Cell bad={route.resourceBackend === null}>
-            {route.resourceBackend ?? "no backend"}
+            {route.resourceBackend ?? t("empty", "noBackend")}
           </Cell>
         )}
       </Column>
-      <Column label="Backend config">
+      <Column label={t("columns", "backendConfig")}>
         {route.configs.length === 0 ? (
           <Cell>
-            <span className="text-fg-fnt">GKE defaults</span>
+            <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
           </Cell>
         ) : (
           route.configs.map((config) => (
@@ -450,7 +469,7 @@ function RouteChain({
                   {backendConfigSummary(config.found, { cdn: false })}
                 </ObjectLink>
               ) : (
-                `${config.name} — absent`
+                t("empty", "nameAbsent", { name: config.name })
               )}
             </Cell>
           ))
@@ -462,7 +481,7 @@ function RouteChain({
       {route.configs.some(
         (config) => config.found && cdnOf(config.found) !== null
       ) && (
-        <Column label="Edge cache">
+        <Column label={t("columns", "edgeCache")}>
           {route.configs.map((config) => {
             const cdn = config.found ? cdnOf(config.found) : null;
             if (!cdn) return null;
@@ -474,7 +493,7 @@ function RouteChain({
           })}
         </Column>
       )}
-      <Column label="Taken out after">
+      <Column label={t("columns", "takenOutAfter")}>
         {route.configs.map((config) => {
           if (!config.found) return null;
           const timing = healthCheckTiming(config.found);
@@ -495,7 +514,7 @@ function RouteChain({
               {stated ? (
                 `${timing.intervalSec! * timing.unhealthyThreshold!}s`
               ) : (
-                <span className="text-fg-fnt">GKE defaults</span>
+                <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
               )}
             </Cell>
           );
@@ -511,6 +530,7 @@ function RouteChain({
 }
 
 function FindingLine({ finding }: { finding: GkeFinding }) {
+  const t = useT();
   switch (finding.kind) {
     case "missing-object":
       return (
@@ -518,7 +538,9 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
           tone="err"
           title={
             <>
-              No <span className="font-mono">{finding.what}</span> named{" "}
+              {t("empty", "noWord")}{" "}
+              <span className="font-mono">{finding.what}</span>{" "}
+              {t("empty", "namedWord")}{" "}
               <span className="font-mono">{finding.name}</span>
             </>
           }
@@ -532,14 +554,19 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
           tone={finding.severity}
           title={
             <>
-              <span className="font-mono">{finding.domain.domain}</span> is{" "}
-              {finding.domain.status}
+              <span className="font-mono">{finding.domain.domain}</span>{" "}
+              {t("empty", "certificateIs")} {finding.domain.status}
             </>
           }
         >
           {finding.domain.status === "FailedNotVisible"
-            ? `Google could not reach ${finding.domain.domain} at this load balancer, which is almost always DNS that does not point here yet. It stays this way until something changes — ${finding.certificate} will not retry its way out of it.`
-            : `From ${finding.certificate}. Provisioning is a wait rather than a fault; anything beginning Failed is a stop.`}
+            ? t("empty", "certFailedNotVisible", {
+                domain: finding.domain.domain,
+                certificate: finding.certificate,
+              })
+            : t("empty", "certProvisioningNote", {
+                certificate: finding.certificate,
+              })}
         </Finding>
       );
     case "wildcard":
@@ -548,17 +575,14 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
           tone="err"
           title={
             <>
-              <span className="font-mono">{finding.certificate}</span> asks for
-              a wildcard, which Google will not issue
+              <span className="font-mono">{finding.certificate}</span>{" "}
+              {t("empty", "asksForWildcard")}
             </>
           }
         >
-          Google-managed certificates do not support wildcard domains at all —
-          up to a hundred names, every one of them literal. The API server
-          accepted <span className="font-mono">{finding.domain}</span>, Google
-          never issues it, and the object reports it as ordinary provisioning
-          for ever. A wildcard needs a self-managed certificate here, or the
-          Gateway API with Certificate Manager.
+          {t("empty", "wildcardNotePrefix")}{" "}
+          <span className="font-mono">{finding.domain}</span>
+          {t("empty", "wildcardNoteSuffix")}
         </Finding>
       );
     case "domain-unserved":
@@ -567,17 +591,15 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
           tone="warn"
           title={
             <>
-              <span className="font-mono">{finding.certificate}</span> covers a
-              domain this Ingress does not serve
+              <span className="font-mono">{finding.certificate}</span>{" "}
+              {t("empty", "coversUnservedDomain")}
             </>
           }
         >
-          <span className="font-mono">{finding.domain}</span> is in the
-          certificate&rsquo;s <span className="font-mono">spec.domains</span>{" "}
-          and in none of this Ingress&rsquo;s rules. Google provisions a domain
-          by reaching this load balancer at that name, and nothing here answers
-          to it — so the whole certificate sits unissued for a domain nobody
-          meant to serve.
+          <span className="font-mono">{finding.domain}</span>{" "}
+          {t("empty", "domainUnservedMid")}{" "}
+          <span className="font-mono">spec.domains</span>{" "}
+          {t("empty", "domainUnservedSuffix")}
         </Finding>
       );
     case "no-tls":
@@ -586,17 +608,16 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
           tone="warn"
           title={
             <>
-              <span className="font-mono">{finding.ingress}</span> answers on
-              nothing
+              <span className="font-mono">{finding.ingress}</span>{" "}
+              {t("empty", "answersOnNothing")}
             </>
           }
         >
-          Its HTTP listener is switched off with{" "}
+          {t("empty", "httpListenerOffPrefix")}{" "}
           <span className="font-mono">
             kubernetes.io/ingress.allow-http: false
           </span>{" "}
-          and it names no certificate of any kind, so GKE builds neither
-          listener.
+          {t("empty", "httpListenerOffSuffix")}
         </Finding>
       );
     case "stop": {

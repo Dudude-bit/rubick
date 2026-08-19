@@ -91,7 +91,8 @@ function SettingsShell({ activeId }: { activeId: string }) {
                 )
               ) : active.clusterScoped && currentContext ? (
                 <>
-                  in <span className="font-mono">{currentContext}</span>
+                  {t("settings", "inWord")}{" "}
+                  <span className="font-mono">{currentContext}</span>
                 </>
               ) : null}
             </span>

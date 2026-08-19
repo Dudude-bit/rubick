@@ -109,7 +109,9 @@ function FoldedDocument({ label, text }: { label: string; text: string }) {
           <DetailAction
             label={t("action", "copy")}
             icon={Copy}
-            onClick={() => copyToClipboard(text, `Value of ${label} copied.`)}
+            onClick={() =>
+              copyToClipboard(text, t("action", "valueCopied", { label }))
+            }
           />
         </div>
       </div>

@@ -35,6 +35,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * Where a variable's value came from.
@@ -202,6 +203,7 @@ export function EnvironmentVariables({
   containerName,
   namespace,
 }: EnvironmentVariablesProps) {
+  const t = useT();
   const [showSecrets, setShowSecrets] = useState(false);
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(
     new Set()
@@ -425,12 +427,12 @@ export function EnvironmentVariables({
     // For envFrom placeholders
     if (ev.isFromEnvFrom && ev.name.endsWith("*")) {
       if (isSecret && !showSecrets) {
-        return "(enable 'Show all secrets' to reveal)";
+        return t("empty", "enableShowSecrets");
       }
       if (loadingConfigMaps || loadingSecrets) {
-        return "Loading...";
+        return t("settings", "loading");
       }
-      return "(no data found)";
+      return t("empty", "noDataFound");
     }
 
     // For secrets from envFrom
@@ -447,8 +449,11 @@ export function EnvironmentVariables({
         if (secretData && ev.sourceKey in secretData) {
           return secretData[ev.sourceKey];
         }
-        if (loadingSecrets) return "Loading...";
-        return `(not found: ${ev.sourceName}:${ev.sourceKey})`;
+        if (loadingSecrets) return t("settings", "loading");
+        return t("empty", "notFoundRef", {
+          name: ev.sourceName,
+          key: ev.sourceKey,
+        });
       }
       return ev.value || "";
     }
@@ -460,8 +465,11 @@ export function EnvironmentVariables({
         if (cmData && ev.sourceKey in cmData) {
           return cmData[ev.sourceKey];
         }
-        if (loadingConfigMaps) return "Loading...";
-        return `(not found: ${ev.sourceName}:${ev.sourceKey})`;
+        if (loadingConfigMaps) return t("settings", "loading");
+        return t("empty", "notFoundRef", {
+          name: ev.sourceName,
+          key: ev.sourceKey,
+        });
       }
       return ev.value || "";
     }
@@ -513,7 +521,7 @@ export function EnvironmentVariables({
     <Collapsible asChild open={isExpanded} onOpenChange={setIsExpanded}>
       <Section>
         <SectionHeader
-          title="Environment"
+          title={t("columns", "environment")}
           count={expandedEnvVars.filter((ev) => !ev.name.endsWith("*")).length}
           actions={
             <>
@@ -525,13 +533,15 @@ export function EnvironmentVariables({
                   {/* Borderless, like every other picker on a detail page:
                       the canvas has no boxed controls. */}
                   <SelectTrigger
-                    aria-label="Filter by source"
+                    aria-label={t("action", "filterBySource")}
                     className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{FILTER_LABEL.all}</SelectItem>
+                    <SelectItem value="all">
+                      {t("action", "allSources")}
+                    </SelectItem>
                     {FILTER_ORDER.filter((option) => sources.has(option)).map(
                       (option) => (
                         <SelectItem key={option} value={option}>
@@ -566,13 +576,15 @@ export function EnvironmentVariables({
                     htmlFor={`show-secrets-${containerName}`}
                     className="text-[11px] text-fg-mut"
                   >
-                    Show secrets
+                    {t("action", "showSecrets")}
                   </Label>
                 </div>
               )}
 
               <CollapsibleTrigger
-                aria-label={isExpanded ? "Collapse" : "Expand"}
+                aria-label={
+                  isExpanded ? t("action", "collapse") : t("action", "expand")
+                }
                 className="ml-1 text-fg-mut hover:text-fg"
               >
                 {isExpanded ? (
@@ -593,12 +605,16 @@ export function EnvironmentVariables({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[200px]">Name</TableHead>
-                  <TableHead>Value</TableHead>
+                  <TableHead className="w-[200px]">
+                    {t("columns", "name")}
+                  </TableHead>
+                  <TableHead>{t("columns", "value")}</TableHead>
                   {/* Wide enough for `configmap demo-config → database.url` on one
                       line: the object and the key it points into are one fact,
                       and wrapping between them reads as two. */}
-                  <TableHead className="w-[280px]">Source</TableHead>
+                  <TableHead className="w-[280px]">
+                    {t("columns", "source")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -617,7 +633,7 @@ export function EnvironmentVariables({
                       <TableCell className="font-mono text-xs font-medium">
                         {isPlaceholder ? (
                           <span className="text-fg-fnt">
-                            all keys from{" "}
+                            {t("empty", "allKeysFrom")}{" "}
                             {ev.sourceName && namespace ? (
                               <ResourceRef
                                 kind={

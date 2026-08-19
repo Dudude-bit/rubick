@@ -94,6 +94,7 @@ function PeekContent({
   requestedTab: PeekTabId;
   onTabChange: (tab: PeekTabId) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const { close } = usePeek();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -216,7 +217,11 @@ function PeekContent({
           {(summary?.createdAt || summary?.age) && (
             <>
               <span className="text-fg-fnt">·</span>
-              <span>{summary.createdAt ? `${age} old` : summary.age}</span>
+              <span>
+                {summary.createdAt
+                  ? t("empty", "ageOld", { age })
+                  : summary.age}
+              </span>
             </>
           )}
           <DeliveryMarks deliveries={deliveries} />
@@ -301,6 +306,7 @@ function PeekResizeHandle({
   onPreview: (width: number) => void;
   onCommit: (width: number) => void;
 }) {
+  const t = useT();
   const drag = useRef<{ pointerX: number; width: number } | null>(null);
 
   const widthAt = (event: ReactPointerEvent<HTMLDivElement>) =>
@@ -325,7 +331,7 @@ function PeekResizeHandle({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Panel width"
+      aria-label={t("action", "panelWidth")}
       aria-valuenow={width}
       aria-valuemin={min}
       aria-valuemax={max}
@@ -371,7 +377,10 @@ function PeekOverview({
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 pb-5">
       {error ? (
         <p className="pt-4 text-xs text-warn">
-          Could not read this {target.kind.toLowerCase()}: {error.message}
+          {t("empty", "couldNotReadKind", {
+            kind: target.kind.toLowerCase(),
+            error: error.message,
+          })}
         </p>
       ) : isLoading || !summary ? (
         <PeekSkeleton />
@@ -419,6 +428,7 @@ const TRAFFIC_KINDS = new Set([
  * Two flat headings used to say that order in words, and read as prose.
  */
 function PeekTraffic({ target }: { target: PeekTarget }) {
+  const t = useT();
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
   const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
@@ -525,7 +535,9 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     ...(vendorRoutes.length > shownRoutes.length
       ? [
           <p key="more" className="text-[11px] text-fg-fnt">
-            and {vendorRoutes.length - shownRoutes.length} more
+            {t("empty", "andMore", {
+              n: vendorRoutes.length - shownRoutes.length,
+            })}
           </p>,
         ]
       : []),
@@ -547,7 +559,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={entry.namespace}
             showKind={false}
           />{" "}
-          — the Service in front
+          — {t("empty", "theServiceInFront")}
         </p>
       )),
     });
@@ -563,7 +575,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={namespace}
             showKind={false}
           />{" "}
-          — the Service these endpoints publish
+          — {t("empty", "theServiceEndpointsPublish")}
         </p>,
       ],
     });
@@ -580,7 +592,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             showKind={false}
           />
         </span>{" "}
-        — this {target.kind}
+        — {t("empty", "thisKind", { kind: target.kind })}
       </p>,
     ],
   });
@@ -595,18 +607,20 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={namespace}
             showKind={false}
           />{" "}
-          — the addresses actually answering, pod by pod
+          — {t("empty", "addressesAnswering")}
         </p>,
         ...(behind
           ? [
               <p key="proxy" className="text-[11px] text-fg-fnt">
-                {behind.vendor}&rsquo;s own proxy — the {behind.hosts} host
-                {behind.hosts === 1 ? "" : "s"} it serves are on{" "}
+                {t("count", "vendorProxyHosts", {
+                  vendor: behind.vendor,
+                  n: behind.hosts,
+                })}{" "}
                 <Link
                   to={behind.to}
                   className="text-info underline-offset-2 hover:underline"
                 >
-                  its page
+                  {t("empty", "itsPage")}
                 </Link>
               </p>,
             ]
@@ -727,9 +741,14 @@ function PeekEvents({ target }: { target: PeekTarget }) {
 
   return (
     <>
-      <PeekHeading title="Recent events" count={events?.length || undefined} />
+      <PeekHeading
+        title={t("nav", "recentEvents")}
+        count={events?.length || undefined}
+      />
       {error ? (
-        <p className="py-1 text-xs text-warn">Could not read events.</p>
+        <p className="py-1 text-xs text-warn">
+          {t("empty", "couldNotReadEvents")}
+        </p>
       ) : !events ? (
         <Skeleton className="h-3 w-2/3" />
       ) : (

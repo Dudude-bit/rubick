@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 interface DiffLine {
   type: "added" | "removed" | "unchanged";
@@ -128,6 +129,7 @@ export function YamlDiffViewer({
   modified,
   height = "500px",
 }: YamlDiffViewerProps) {
+  const t = useT();
   const diffLines = useMemo(
     () => computeDiff(original, modified),
     [original, modified]
@@ -139,7 +141,7 @@ export function YamlDiffViewer({
     return (
       <div className="flex h-full items-center justify-center gap-1.5 py-8 text-xs text-fg-mut">
         <CheckCircle2 className="h-3.5 w-3.5" />
-        No changes detected
+        {t("empty", "noChangesDetected")}
       </div>
     );
   }

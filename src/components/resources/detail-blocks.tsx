@@ -14,6 +14,7 @@ import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * The blocks a resource detail page repeats: an action in the header row, a
@@ -220,7 +221,7 @@ function ConditionRow({
         {detail && <ResourceMessage message={detail} subject={subject} />}
         {held && (
           <span className="text-fg-fnt" title={stamp}>
-            for {age}
+            <T section="count" k="heldFor" values={{ age }} />
           </span>
         )}
       </span>
@@ -308,6 +309,7 @@ const BAR_ROLE = { ok: "bg-info", warn: "bg-warn", err: "bg-err" } as const;
  * rather than green — a bar at 30% is not an achievement worth colouring.
  */
 export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
+  const t = useT();
   const usedNum = typeof used === "number" ? used : null;
   const totalNum = typeof total === "number" && total > 0 ? total : null;
   const ratio =
@@ -341,9 +343,9 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
           // is a cluster the reader can fix rather than a reading.
           <span
             className="text-fg-fnt"
-            title="metrics-server is not reporting for this object"
+            title={t("empty", "metricsServerNotReporting")}
           >
-            no metrics-server
+            {t("empty", "noMetricsServer")}
           </span>
         ) : (
           <UnitValue value={formatQuantity(usedNum, type, unit)} />

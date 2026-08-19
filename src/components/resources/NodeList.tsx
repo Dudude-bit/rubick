@@ -28,6 +28,7 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { useT } from "@/i18n/useT";
 
 /**
  * Nodes, grouped by the pool the cloud says made them.
@@ -158,6 +159,7 @@ export const columns = (
 ];
 
 export function NodeList() {
+  const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -175,11 +177,14 @@ export function NodeList() {
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `Nodes: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: toPlural(ResourceType.Node),
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed]
+    [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<NodeInfo>({
     enabled: isConnected,
@@ -209,14 +214,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node cordoned",
-        description: `Node ${nodeName} has been cordoned.`,
+        title: t("action", "nodeCordoned"),
+        description: t("action", "nodeCordonedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to cordon node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "cordonFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -229,14 +234,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node uncordoned",
-        description: `Node ${nodeName} has been uncordoned.`,
+        title: t("action", "nodeUncordoned"),
+        description: t("action", "nodeUncordonedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to uncordon node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "uncordonFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -249,14 +254,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node drained",
-        description: `Node ${nodeName} has been drained.`,
+        title: t("action", "nodeDrained"),
+        description: t("action", "nodeDrainedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to drain node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "drainFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -273,23 +278,23 @@ export function NodeList() {
     () => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(getResourceDetailUrl(ResourceType.Node, item.name)),
       },
       {
         icon: ShieldOff,
-        label: "Cordon",
+        label: t("action", "cordon"),
         onClick: (item) => cordonMutation.mutate(item.name),
       },
       {
         icon: Shield,
-        label: "Uncordon",
+        label: t("action", "uncordon"),
         onClick: (item) => uncordonMutation.mutate(item.name),
       },
       {
         icon: AlertTriangle,
-        label: "Drain",
+        label: t("action", "drain"),
         // Straight to the dialog rather than to the mutation: a drain is the
         // one action here that can be refused by something the reader cannot
         // see from this row.
@@ -297,7 +302,7 @@ export function NodeList() {
         variant: "destructive",
       },
     ],
-    [navigate, cordonMutation, uncordonMutation]
+    [t, navigate, cordonMutation, uncordonMutation]
   );
 
   return (
