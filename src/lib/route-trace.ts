@@ -57,6 +57,10 @@ export interface TraceStep {
   state: TraceStepState;
   say: string;
   who: "infra" | "yours" | "controller" | "machine";
+  /** The break compressed to list length — set on every err step, so the
+   *  routes list can say "stops at listener — hostnames don't intersect"
+   *  in exactly the words this step will expand into. */
+  short?: string;
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
@@ -155,6 +159,7 @@ function classStep(
       state: "err",
       say: `Class ${gateway.className} does not exist`,
       who: "infra",
+      short: `class ${gateway.className} does not exist`,
       detail: {
         title: `No GatewayClass named ${gateway.className}`,
         body: "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
@@ -170,6 +175,7 @@ function classStep(
       state: "err",
       say: `Nothing claims class ${gateway.className}`,
       who: "infra",
+      short: `nothing claims class ${gateway.className}`,
       detail: {
         title: `No controller has accepted ${gateway.className}`,
         body: refused
@@ -207,6 +213,7 @@ function gatewayStep(
       state: "err",
       say: `Gateway ${parent.name} does not exist in ${at}`,
       who: "yours",
+      short: `${parent.name} does not exist`,
       detail: {
         title: "The parentRef names a Gateway that is not there",
         body: "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
@@ -222,6 +229,7 @@ function gatewayStep(
       state: "err",
       say: `Gateway ${gateway.name} is not programmed`,
       who: "infra",
+      short: `${gateway.name} is not programmed`,
       detail: {
         title: "The controller refuses this Gateway",
         body: `${said(programmed)}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.`,
@@ -234,6 +242,7 @@ function gatewayStep(
       state: "err",
       say: `Gateway ${gateway.name} has no address yet`,
       who: "infra",
+      short: `${gateway.name} has no address yet`,
       detail: {
         title: "No address to send traffic to",
         body: "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
@@ -284,6 +293,7 @@ function acceptanceSteps(
         state: "err",
         say: "No controller answered for this parent",
         who: "controller",
+        short: "no controller answered",
         detail: {
           title: "No status was written for this route",
           body: "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
@@ -326,6 +336,7 @@ function acceptanceSteps(
           state: "err",
           say: `The listener does not allow routes from ${route.namespace}`,
           who: "yours",
+          short: `namespace ${route.namespace} not allowed`,
           freshness,
           detail: {
             title: "The namespace is outside what the listener allows",
@@ -347,6 +358,9 @@ function acceptanceSteps(
         state: "err",
         say: `${label} does not accept this route`,
         who: "yours",
+        short: hostnameMiss
+          ? "hostnames don't intersect"
+          : (accepted.reason ?? "refused"),
         freshness,
         detail: {
           title: hostnameMiss
@@ -447,6 +461,7 @@ function refsStep(
           ? `Reference to ${target}/${foreign.name} is not permitted`
           : "A reference is not permitted",
         who: "yours",
+        short: `needs a ReferenceGrant in ${target}`,
         freshness,
         detail: {
           title: `No ReferenceGrant in ${target} allows it`,
@@ -460,6 +475,8 @@ function refsStep(
       state: "err",
       say: "A reference this route makes did not resolve",
       who: "yours",
+      short:
+        resolved.message ?? resolved.reason ?? "a reference did not resolve",
       freshness,
       detail: {
         title: "ResolvedRefs: False",
@@ -513,6 +530,7 @@ function backendSteps(
         state: "err",
         say: "No backendRefs — a matched request has nowhere to go",
         who: "yours",
+        short: "no backendRefs — matched requests have nowhere to go",
         detail: {
           title: "The route matches traffic and drops it",
           body: "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
@@ -569,6 +587,7 @@ function backendSteps(
         state: "err",
         say: `Backend Service ${missing.backend.name} does not exist in ${missing.namespace}`,
         who: "yours",
+        short: `Service ${missing.backend.name} does not exist`,
         detail: {
           title: describeStop(missing.state.stop!).title,
           body: describeStop(missing.state.stop!).note,
@@ -580,6 +599,7 @@ function backendSteps(
           state: "err",
           say: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
           who: "yours",
+          short: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
           detail: {
             title: "The Service exists, the port does not",
             body: "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
@@ -626,6 +646,7 @@ function backendSteps(
         state: "err",
         say: `${down.backend.name}: ${stop.title}`,
         who: "yours",
+        short: stop.title,
         detail: { title: stop.title, body: stop.note },
       },
     ];
