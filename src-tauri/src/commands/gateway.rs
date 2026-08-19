@@ -63,15 +63,7 @@ async fn gateway_api(
         .kinds
         .first()
         .ok_or_else(|| Error::InvalidInput(format!("{kind} is installed but serves no version")))?;
-    let version = served.read_version.clone();
-
-    let api_resource = ApiResource {
-        group: GATEWAY_API_GROUP.to_string(),
-        api_version: format!("{GATEWAY_API_GROUP}/{version}"),
-        version,
-        kind: kind.to_string(),
-        plural: plural.to_string(),
-    };
+    let api_resource = served.api_resource();
 
     let cluster_scoped = kind == "GatewayClass";
     let ctx = if cluster_scoped {
@@ -90,7 +82,7 @@ async fn gateway_api(
 
 /// List responses strip apiVersion/kind off every item; the readers report
 /// them, so they are put back from the resource the request was made for.
-fn with_types(mut obj: DynamicObject, api_resource: &ApiResource) -> DynamicObject {
+pub(crate) fn with_types(mut obj: DynamicObject, api_resource: &ApiResource) -> DynamicObject {
     if obj.types.is_none() {
         obj.types = Some(TypeMeta {
             api_version: api_resource.api_version.clone(),

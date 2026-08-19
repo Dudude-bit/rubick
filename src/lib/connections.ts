@@ -183,6 +183,8 @@ function describeFacts(facts: ObjectFacts | null): string | null {
       return serviceVia(facts);
     case "ingress":
       return facts.className;
+    case "gateway":
+      return facts.className;
     case "autoscaler":
       return join(autoscalerRange(facts), autoscalerReplicas(facts));
     case "budget":
@@ -299,6 +301,32 @@ export function describeStop(stop: ChainStop): { title: string; note: string } {
             ? `1 pod carries ${stop.selector}, and it is not ready`
             : `${stop.pods} pods carry ${stop.selector}, and none of them is ready`,
         note: "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+      };
+    case "routeNotAccepted":
+      return {
+        title: `${stop.gateway.name} does not accept this route`,
+        note:
+          `The controller answered Accepted: False` +
+          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+          (stop.message ? `: ${stop.message}` : ".") +
+          " The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
+      };
+    case "routeRefsUnresolved":
+      return {
+        title:
+          stop.conditionReason === "RefNotPermitted"
+            ? "A reference this route makes is not permitted — no ReferenceGrant allows it"
+            : "A reference this route makes did not resolve",
+        note:
+          `The controller answered ResolvedRefs: False` +
+          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+          (stop.message ? `: ${stop.message}` : ".") +
+          " The spec obliges the implementation to fail the affected traffic rather than route around it.",
+      };
+    case "gatewayMissing":
+      return {
+        title: `Names a Gateway that does not exist`,
+        note: `${stop.route.name} attaches to ${stop.gateway.namespace ? `${stop.gateway.namespace}/` : ""}${stop.gateway.name}, which the API server does not have. No controller will ever write status for that parent — this is the one refusal the cluster cannot say itself.`,
       };
   }
 }
@@ -599,8 +627,10 @@ export function trafficChains(
 
   return fronting
     .map((service): ChainPath => {
-      const stop = conns.stops.find((entry) =>
-        sameObject(entry.service, service)
+      // Only the Service-anchored stops belong to this hop; the Gateway API
+      // ones stop at a route or a Gateway and are drawn on their own hops.
+      const stop = conns.stops.find(
+        (entry) => "service" in entry && sameObject(entry.service, service)
       );
       const published = publishedFor(conns, service);
 

@@ -620,12 +620,14 @@ export async function deletePortForwardConfig(id: string): Promise<void> {
 export async function getResourceConnections(
   kind: string,
   name: string,
-  namespace: string | null
+  namespace: string | null,
+  gateway: GatewayApiDetection | null
 ): Promise<ResourceConnections> {
   return invoke<ResourceConnections>("get_resource_connections", {
     kind,
     name,
     namespace,
+    gateway,
   });
 }
 

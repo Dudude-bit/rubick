@@ -11,6 +11,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import type { ResourceConnections } from "@/generated/types";
 
@@ -30,10 +31,21 @@ export function useConnections(
    */
   enabled = true
 ) {
+  // The cluster's cached Gateway API scan rides along so the backend can
+  // draw route hops without a CRD list of its own. It joins the query key:
+  // a chain answered before the scan landed must not stay cached as the
+  // whole answer once the cluster turns out to speak Gateway API.
+  const gateway = useGatewayApi().data ?? null;
   return useLiveQuery<ResourceConnections>({
-    queryKey: ["connections", kind, namespace ?? null, name],
+    queryKey: [
+      "connections",
+      kind,
+      namespace ?? null,
+      name,
+      gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null,
+    ],
     queryFn: () =>
-      commands.getResourceConnections(kind, name!, namespace ?? null),
+      commands.getResourceConnections(kind, name!, namespace ?? null, gateway),
     enabled: enabled && !!name,
     // A pod going ready is the fact this view exists to show, so it follows
     // the list pages rather than sitting on a stale answer.

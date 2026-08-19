@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import type { ServiceStop } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import {
@@ -43,7 +44,7 @@ import { describeStop } from "@/lib/connections";
 import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
-import type { ChainStop } from "@/generated/types";
+
 import { plural } from "../kit";
 import {
   Chain,
@@ -895,7 +896,7 @@ function Findings({
   );
 }
 
-const STOP_UNDER: Record<ChainStop["reason"], string> = {
+const STOP_UNDER: Record<ServiceStop["reason"], string> = {
   backendMissing: "no service to send to",
   selectsNothing: "selector matches nothing",
   noneReady: "running, none ready",

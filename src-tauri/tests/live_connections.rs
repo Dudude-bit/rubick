@@ -77,6 +77,8 @@ fn verb(relation: &Relation) -> &'static str {
         Relation::Selects { .. } => "selects",
         Relation::Uses { .. } => "uses",
         Relation::Routes { .. } => "routes",
+        Relation::RuleRoutes { .. } => "ruleRoutes",
+        Relation::AttachesTo { .. } => "attachesTo",
         Relation::RunsOn => "runsOn",
         Relation::Binds => "binds",
         Relation::Governs { .. } => "governs",
@@ -111,7 +113,7 @@ async fn log_demo_reaches_its_pods_end_to_end() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let answer = connections_of(&ctx, "Deployment", "log-demo")
+    let answer = connections_of(&ctx, "Deployment", "log-demo", None)
         .await
         .expect("connections");
     describe("log-demo Deployment", &answer);
@@ -255,7 +257,7 @@ async fn a_set_based_selector_claims_the_pods_the_controller_claims() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let answer = connections_of(&ctx, "Deployment", "expr-demo")
+    let answer = connections_of(&ctx, "Deployment", "expr-demo", None)
         .await
         .expect("connections");
     describe("expr-demo Deployment", &answer);
@@ -340,7 +342,9 @@ async fn a_node_answers_with_every_namespace_it_carries() {
     let node =
         std::env::var("K8S_GUI_NODE").unwrap_or_else(|_| "k3d-k8s-gui-dev-server-0".to_string());
 
-    let answer = connections_of(&ctx, "Node", &node).await.expect("node");
+    let answer = connections_of(&ctx, "Node", &node, None)
+        .await
+        .expect("node");
     describe("the node", &answer);
 
     assert_eq!(answer.subject.namespace, None, "a Node has no namespace");
@@ -379,7 +383,7 @@ async fn the_three_stops_are_different_stops() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let tls = connections_of(&ctx, "Ingress", "tls-demo")
+    let tls = connections_of(&ctx, "Ingress", "tls-demo", None)
         .await
         .expect("connections");
     describe("tls-demo Ingress", &tls);
@@ -412,7 +416,7 @@ async fn the_three_stops_are_different_stops() {
         "the certificate the Ingress serves is an edge too"
     );
 
-    let ghost = connections_of(&ctx, "Ingress", "ghost-demo")
+    let ghost = connections_of(&ctx, "Ingress", "ghost-demo", None)
         .await
         .expect("connections");
     describe("ghost-demo Ingress", &ghost);
@@ -426,7 +430,7 @@ async fn the_three_stops_are_different_stops() {
         other => panic!("ghost-demo stops at a Service that is not there, got {other:?}"),
     }
 
-    let unready = connections_of(&ctx, "Service", "unready-demo")
+    let unready = connections_of(&ctx, "Service", "unready-demo", None)
         .await
         .expect("connections");
     describe("unready-demo Service", &unready);
@@ -470,7 +474,7 @@ async fn mounts_demo_says_how_each_thing_is_used() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let answer = connections_of(&ctx, "Deployment", "mounts-demo")
+    let answer = connections_of(&ctx, "Deployment", "mounts-demo", None)
         .await
         .expect("connections");
     describe("mounts-demo Deployment", &answer);
@@ -563,7 +567,7 @@ async fn a_claim_names_who_mounts_it() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let answer = connections_of(&ctx, "PersistentVolumeClaim", "pvc-demo")
+    let answer = connections_of(&ctx, "PersistentVolumeClaim", "pvc-demo", None)
         .await
         .expect("connections");
     describe("pvc-demo claim", &answer);
@@ -599,7 +603,7 @@ async fn a_claim_names_who_mounts_it() {
         "and its storage class"
     );
 
-    let stateful = connections_of(&ctx, "PersistentVolumeClaim", "data-stateful-demo-0")
+    let stateful = connections_of(&ctx, "PersistentVolumeClaim", "data-stateful-demo-0", None)
         .await
         .expect("connections");
     describe("data-stateful-demo-0 claim", &stateful);
@@ -619,7 +623,7 @@ async fn the_empty_shapes_state_nothing_rather_than_something_wrong() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let external = connections_of(&ctx, "Service", "external-demo")
+    let external = connections_of(&ctx, "Service", "external-demo", None)
         .await
         .expect("connections");
     describe("external-demo Service", &external);
@@ -638,7 +642,7 @@ async fn the_empty_shapes_state_nothing_rather_than_something_wrong() {
     assert!(selector.is_none(), "there is no selector to state");
     assert_eq!(external_name.as_deref(), Some("example.com"));
 
-    let resource = connections_of(&ctx, "Ingress", "resource-demo")
+    let resource = connections_of(&ctx, "Ingress", "resource-demo", None)
         .await
         .expect("connections");
     describe("resource-demo Ingress", &resource);
@@ -654,7 +658,7 @@ async fn the_empty_shapes_state_nothing_rather_than_something_wrong() {
     assert_eq!(backend.to.kind, "StorageBucket");
     assert_eq!(backend.to.existence, Existence::NotChecked);
 
-    let ownerless = connections_of(&ctx, "Pod", "shell-demo")
+    let ownerless = connections_of(&ctx, "Pod", "shell-demo", None)
         .await
         .expect("connections");
     describe("shell-demo Pod", &ownerless);
@@ -674,7 +678,7 @@ async fn a_pod_names_the_service_that_fronts_it() {
     let ns = namespace();
     let ctx = context(&ns).await;
 
-    let pods = connections_of(&ctx, "Deployment", "log-demo")
+    let pods = connections_of(&ctx, "Deployment", "log-demo", None)
         .await
         .expect("connections");
     let pod = pods
@@ -684,7 +688,7 @@ async fn a_pod_names_the_service_that_fronts_it() {
         .map(|e| e.to.name.clone())
         .expect("a log-demo pod");
 
-    let answer = connections_of(&ctx, "Pod", &pod)
+    let answer = connections_of(&ctx, "Pod", &pod, None)
         .await
         .expect("connections");
     describe("a log-demo pod", &answer);

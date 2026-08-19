@@ -101,6 +101,11 @@ pub enum ObjectFacts {
         #[serde(rename = "className")]
         class_name: Option<String>,
     },
+    /// A Gateway API Gateway, by the claim that decides whose it is.
+    Gateway {
+        #[serde(rename = "className")]
+        class_name: String,
+    },
     Pod {
         phase: String,
         /// What `kubectl get pod` prints in STATUS.
@@ -273,6 +278,27 @@ pub enum Relation {
         /// Whether the Ingress's `spec.tls` covers this host.
         tls: bool,
     },
+    /// A Gateway API route rule's `backendRefs[]` names a Service.
+    ///
+    /// The Gateway API cousin of [`Relation::Routes`], carrying the route's
+    /// own vocabulary: hostnames rather than one host, and a weight because
+    /// `0` is a backend deliberately taken out of traffic — configuration,
+    /// not an outage.
+    RuleRoutes {
+        hostnames: Vec<String>,
+        /// The backend port the rule sends to, where it names one.
+        port: Option<String>,
+        weight: Option<i32>,
+    },
+    /// A route's `parentRefs[]` names a Gateway.
+    ///
+    /// Stated by the route — the Gateway consents through the route's
+    /// `Accepted` condition, and the refusal is a [`ChainStop`], not this
+    /// edge's business.
+    AttachesTo {
+        #[serde(rename = "sectionName")]
+        section_name: Option<String>,
+    },
     /// `spec.nodeName`.
     RunsOn,
     /// A claim's `spec.volumeName` or `spec.storageClassName`.
@@ -316,6 +342,37 @@ pub enum ChainStop {
     BackendMissing {
         ingress: ObjectRef,
         service: ObjectRef,
+    },
+    /// A route's controller wrote `Accepted: False` for this parent — the
+    /// Gateway is refusing the route, in the cluster's own words
+    /// (`NoMatchingListenerHostname`, `NotAllowedByListeners`, …).
+    RouteNotAccepted {
+        route: ObjectRef,
+        gateway: ObjectRef,
+        /// The condition's own `reason` — named apart because this enum's
+        /// serde tag already spends the word.
+        #[serde(rename = "conditionReason")]
+        condition_reason: Option<String>,
+        message: Option<String>,
+    },
+    /// A route's controller wrote `ResolvedRefs: False` — a reference it
+    /// refused or could not resolve. `RefNotPermitted` is the
+    /// missing-ReferenceGrant spelling, and the spec obliges the
+    /// implementation to fail the affected traffic, so this is a stop and
+    /// not a footnote.
+    RouteRefsUnresolved {
+        route: ObjectRef,
+        #[serde(rename = "conditionReason")]
+        condition_reason: Option<String>,
+        message: Option<String>,
+    },
+    /// A `parentRefs[]` entry of kind Gateway names one the API server does
+    /// not have. No controller will ever write status for that parent —
+    /// this is the structurally silent case, detected by lookup because
+    /// nothing else will say it.
+    GatewayMissing {
+        route: ObjectRef,
+        gateway: ObjectRef,
     },
     /// A Service's selector matches no pod in its namespace.
     SelectsNothing {

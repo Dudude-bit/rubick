@@ -822,21 +822,6 @@ export interface GatewayClassInfo {
   createdAt: string | null;
 }
 
-export interface GatewayApiDetection {
-  installed: boolean;
-  bundleVersion: string | null;
-  channel: string | null;
-  mixedBundle: boolean;
-  kinds: ServedGatewayKind[];
-}
-
-export interface ServedGatewayKind {
-  kind: string;
-  plural: string;
-  versions: string[];
-  readVersion: string;
-}
-
 export interface PodInfo {
   name: string;
   namespace: string;
@@ -1004,6 +989,21 @@ export interface ConnectionEdge {
   from: ObjectRef;
   to: ObjectRef;
   relation: Relation;
+}
+
+export interface GatewayApiDetection {
+  installed: boolean;
+  bundleVersion: string | null;
+  channel: string | null;
+  mixedBundle: boolean;
+  kinds: ServedGatewayKind[];
+}
+
+export interface ServedGatewayKind {
+  kind: string;
+  plural: string;
+  versions: string[];
+  readVersion: string;
 }
 
 export interface PortForwardConfigPayload {
@@ -1615,6 +1615,7 @@ export type ObjectFacts =
       ports: ServicePortInfo[];
     }
   | { kind: "ingress"; className: string | null }
+  | { kind: "gateway"; className: string }
   | { kind: "pod"; phase: string; display: string; ready: boolean }
   | {
       kind: "workload";
@@ -1681,6 +1682,20 @@ export type ContainerState =
 
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | {
+      reason: "routeNotAccepted";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "routeRefsUnresolved";
+      route: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
   | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
   | {
@@ -1704,6 +1719,13 @@ export type Relation =
       port: string | null;
       tls: boolean;
     }
+  | {
+      verb: "ruleRoutes";
+      hostnames: string[];
+      port: string | null;
+      weight: number | null;
+    }
+  | { verb: "attachesTo"; sectionName: string | null }
   | { verb: "runsOn" }
   | { verb: "binds" }
   | { verb: "governs"; selector: string | null };
