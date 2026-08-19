@@ -719,12 +719,15 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
-export interface HostProbe {
+export interface TcpProbe {
+  ms: number | null;
+  error: string | null;
+}
+
+export interface ResolveProbe {
   resolved: string[];
-  resolveError: string | null;
+  error: string | null;
   matchesGateway: boolean | null;
-  tcpMs: number | null;
-  tcpError: string | null;
 }
 
 export interface RouteInfo {

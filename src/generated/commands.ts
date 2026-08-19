@@ -47,7 +47,6 @@ import type {
   HelmReleaseDetail,
   HelmRepository,
   HelmRevision,
-  HostProbe,
   InfrastructureBuilderStateDto,
   IngressClassBinding,
   IngressInfo,
@@ -82,6 +81,7 @@ import type {
   RegistryImportEntry,
   RegistrySearchRequest,
   ReplicaSetInfo,
+  ResolveProbe,
   ResourceConnections,
   ResourceFilters,
   RolloutStatus,
@@ -97,6 +97,7 @@ import type {
   StatefulSetInfo,
   StorageClassInfo,
   StreamLogConfig,
+  TcpProbe,
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
@@ -806,16 +807,23 @@ export async function deleteGatewayRoute(
   return invoke<void>("delete_gateway_route", { kind, name, namespace });
 }
 
-export async function probeGatewayHost(
+export async function probeResolveHost(
   host: string,
   gatewayAddress: string | null,
   port: number
-): Promise<HostProbe> {
-  return invoke<HostProbe>("probe_gateway_host", {
+): Promise<ResolveProbe> {
+  return invoke<ResolveProbe>("probe_resolve_host", {
     host,
     gatewayAddress,
     port,
   });
+}
+
+export async function probeTcpConnect(
+  address: string,
+  port: number
+): Promise<TcpProbe> {
+  return invoke<TcpProbe>("probe_tcp_connect", { address, port });
 }
 
 export async function getPodsMetrics(
