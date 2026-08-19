@@ -4,7 +4,6 @@ import { ServiceList } from "@/components/resources/ServiceList";
 import { IngressList } from "@/components/resources/IngressList";
 import { EndpointsList } from "@/components/resources/EndpointsList";
 import { GatewayList } from "@/components/resources/GatewayList";
-import { GatewayHostsList } from "@/components/resources/GatewayHostsList";
 import { GatewayRoutesList } from "@/components/resources/GatewayRoutesList";
 
 export function Network() {
@@ -17,12 +16,15 @@ export function Network() {
           the sidebar are gated on detection, but a pasted or stale URL still
           deserves the page's own honest empty state over a 404. */}
       <Route path={toPlural(ResourceType.Gateway)} element={<GatewayList />} />
-      {/* Hosts first: the answer to "what does this cluster serve", broken
-          sorted above healthy. The object table stays one link away at
-          /routes/all for the reader who came for an object; the per-kind
-          plurals land on the hosts page. */}
-      <Route path="routes" element={<GatewayHostsList />} />
-      <Route path="routes/all" element={<GatewayRoutesList />} />
+      {/* One table for the five kinds — the reader's question is "what
+          routes into this cluster", not "which kind am I in". Depth lives on
+          the row's detail page, where the trace is. /routes/all survives as
+          a redirect for links minted while it was a separate page. */}
+      <Route path="routes" element={<GatewayRoutesList />} />
+      <Route
+        path="routes/all"
+        element={<Navigate to="/network/routes" replace />}
+      />
       {[
         ResourceType.HTTPRoute,
         ResourceType.GRPCRoute,

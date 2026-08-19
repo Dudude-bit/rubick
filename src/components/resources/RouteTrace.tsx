@@ -297,10 +297,10 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   );
 
   // Unscoped on purpose, twice over: routes attach to Gateways in other
-  // namespaces, and the class claim is cluster-scoped. Same keys as the
-  // routes list, so the two pages share one cache entry.
+  // namespaces, and the class claim is cluster-scoped. Same key as the
+  // routes list's map, so table → detail reuses one cache entry.
   const gateways = useQuery({
-    queryKey: ["gateway-hosts-gateways"],
+    queryKey: ["gateway-map-gateways"],
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     enabled: served.has("Gateway"),
