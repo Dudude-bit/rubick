@@ -71,6 +71,8 @@ function makeRouteList(kind: ResourceKind) {
     fetcher: ({ namespace }) => commands.listGatewayRoutes(kind, namespace),
     deleter: (item) =>
       commands.deleteGatewayRoute(kind, item.name, item.namespace),
+    watch: ({ namespace }) =>
+      commands.subscribeGatewayRouteWatch(kind, namespace),
     searchKey: "name",
     columns: () => [
       createNameColumn<RouteInfo>(kind),

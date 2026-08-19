@@ -867,6 +867,19 @@ export async function unsubscribeResourceWatch(
   return invoke<void>("unsubscribe_resource_watch", { streamId });
 }
 
+export async function subscribeGatewayWatch(
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_gateway_watch", { namespace });
+}
+
+export async function subscribeGatewayRouteWatch(
+  kind: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_gateway_route_watch", { kind, namespace });
+}
+
 export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
   return invoke<RegistryImportEntry[]>("import_docker_config");
 }

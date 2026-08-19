@@ -41,16 +41,14 @@ fn plural_of(kind: &str) -> Result<&'static str> {
     })
 }
 
-/// A dynamic API for one Gateway API kind, at the served version detection
-/// picked. Errors with the CRD's own absence when the kind is not
-/// installed — the sidebar should have kept the caller away, but a stale
-/// window may still ask.
-async fn gateway_api(
+/// The dynamic-API coordinates for one Gateway API kind, at the served
+/// version detection picks. Errors with the CRD's own absence when the
+/// kind is not installed — the sidebar should have kept the caller away,
+/// but a stale window may still ask.
+pub(crate) async fn served_api_resource(
     kind: &str,
-    namespace: Option<String>,
-    listing: bool,
     state: &State<'_, AppState>,
-) -> Result<(Api<DynamicObject>, ApiResource)> {
+) -> Result<ApiResource> {
     let plural = plural_of(kind)?;
     let crd: CustomResourceDefinition = crate::commands::helpers::get_cluster_resource(
         format!("{plural}.{GATEWAY_API_GROUP}"),
@@ -63,7 +61,17 @@ async fn gateway_api(
         .kinds
         .first()
         .ok_or_else(|| Error::InvalidInput(format!("{kind} is installed but serves no version")))?;
-    let api_resource = served.api_resource();
+    Ok(served.api_resource())
+}
+
+/// A dynamic API for one Gateway API kind, at the served version.
+async fn gateway_api(
+    kind: &str,
+    namespace: Option<String>,
+    listing: bool,
+    state: &State<'_, AppState>,
+) -> Result<(Api<DynamicObject>, ApiResource)> {
+    let api_resource = served_api_resource(kind, state).await?;
 
     let cluster_scoped = kind == "GatewayClass";
     let ctx = if cluster_scoped {
@@ -178,7 +186,7 @@ pub async fn delete_gateway(
     Ok(())
 }
 
-fn require_route_kind(kind: &str) -> Result<()> {
+pub(crate) fn require_route_kind(kind: &str) -> Result<()> {
     if ROUTE_KINDS.contains(&kind) {
         Ok(())
     } else {

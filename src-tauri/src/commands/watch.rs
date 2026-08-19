@@ -228,3 +228,59 @@ pub fn resource_watch_subscribed(stream_id: String, state: State<'_, AppState>) 
 pub fn unsubscribe_resource_watch(stream_id: String, state: State<'_, AppState>) {
     state.watch_manager.unsubscribe(&stream_id);
 }
+
+// ----- Gateway API (runtime-discovered served versions) -----
+
+/// Subscribe to Gateways, at the served version detection picks, with the
+/// same `GatewayInfo` payload the list command answers — ListenerSet
+/// merging excluded: a watch event refreshes a row, and the row's listener
+/// count is re-read with the next list, not recomputed per event.
+#[tauri::command]
+pub async fn subscribe_gateway_watch(
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    let client = current_client(&state)?;
+    let namespace = normalize_optional_namespace(namespace);
+    let api_resource = crate::commands::gateway::served_api_resource("Gateway", &state).await?;
+    let stamp = api_resource.clone();
+    Ok(state.watch_manager.subscribe_custom_resource(
+        client,
+        api_resource,
+        "Gateway",
+        namespace,
+        move |obj| {
+            // Watch events strip apiVersion/kind like list items do; put
+            // them back so the payload matches what the fetcher returned.
+            Some(crate::resources::GatewayInfo::read(
+                &crate::commands::gateway::with_types(obj.clone(), &stamp),
+            ))
+        },
+    ))
+}
+
+/// Subscribe to one route kind, `RouteInfo` payload — the shape all five
+/// list pages share.
+#[tauri::command]
+pub async fn subscribe_gateway_route_watch(
+    kind: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    crate::commands::gateway::require_route_kind(&kind)?;
+    let client = current_client(&state)?;
+    let namespace = normalize_optional_namespace(namespace);
+    let api_resource = crate::commands::gateway::served_api_resource(&kind, &state).await?;
+    let stamp = api_resource.clone();
+    Ok(state.watch_manager.subscribe_custom_resource(
+        client,
+        api_resource,
+        &kind,
+        namespace,
+        move |obj| {
+            Some(crate::resources::RouteInfo::read(
+                &crate::commands::gateway::with_types(obj.clone(), &stamp),
+            ))
+        },
+    ))
+}
