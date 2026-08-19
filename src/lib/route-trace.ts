@@ -61,6 +61,9 @@ export interface TraceStep {
    *  routes list can say "stops at listener — hostnames don't intersect"
    *  in exactly the words this step will expand into. */
   short?: string;
+  /** Addresses this step vouches for, kept out of {@link say} so the UI
+   *  can make each one copyable instead of baking them into prose. */
+  addresses?: string[];
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
@@ -260,8 +263,9 @@ function gatewayStep(
   return {
     id: "gateway",
     state: "ok",
-    say: `Gateway ${gateway.name} is programmed · ${gateway.addresses.join(", ")}`,
+    say: `Gateway ${gateway.name} is programmed`,
     who: "infra",
+    addresses: gateway.addresses,
   };
 }
 

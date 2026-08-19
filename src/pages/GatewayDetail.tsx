@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -347,10 +348,13 @@ export function GatewayDetail() {
     },
     {
       label: "Addresses",
-      value:
-        gateway && gateway.addresses.length > 0
-          ? gateway.addresses.join(", ")
-          : "none published",
+      value: (
+        <CopyableAddresses
+          values={gateway?.addresses ?? []}
+          label="Gateway address"
+          empty="none published"
+        />
+      ),
     },
     // The version this object was actually read at, said only where it is
     // not the current one — an old bundle is a fact about the cluster the

@@ -9,6 +9,10 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
+import {
+  CopyableAddresses,
+  CopyableValue,
+} from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -119,6 +123,13 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
         <span className={off ? "text-xs text-fg-fnt" : "text-xs text-fg-mid"}>
           {step.say}
         </span>
+        {!off && step.addresses && step.addresses.length > 0 && (
+          <CopyableAddresses
+            values={step.addresses}
+            label="Gateway address"
+            className="text-xs text-fg"
+          />
+        )}
         {step.freshness && (
           <span className="rounded-full border border-warn/45 px-1.5 text-[10px] text-warn">
             about generation {step.freshness.observed} — you are on{" "}
@@ -207,16 +218,31 @@ function ProbePanel({ trace }: { trace: RouteTrace }) {
             ) : (
               <span>
                 <span className="font-mono">{target}</span> resolves to{" "}
-                <span
-                  className={`font-mono ${probe.matchesGateway === false ? "text-err" : ""}`}
-                >
-                  {probe.resolved.join(", ")}
-                </span>
-                {probe.matchesGateway === false && (
+                {probe.resolved.map((ip, index) => (
+                  <span key={ip}>
+                    {index > 0 && ", "}
+                    <CopyableValue
+                      value={ip}
+                      label={`Resolved address ${ip}`}
+                      quietMark
+                      className={
+                        probe.matchesGateway === false ? "text-err" : undefined
+                      }
+                    />
+                  </span>
+                ))}
+                {probe.matchesGateway === false && address && (
                   <span className="text-err">
                     {" "}
-                    — not the gateway&apos;s {address}. DNS still points
-                    somewhere else; traffic never arrives at this cluster.
+                    — not the gateway&apos;s{" "}
+                    <CopyableValue
+                      value={address}
+                      label={`Gateway address ${address}`}
+                      quietMark
+                      className="text-err"
+                    />
+                    . DNS still points somewhere else; traffic never arrives at
+                    this cluster.
                   </span>
                 )}
                 {probe.matchesGateway === true && " — the gateway's address"}
@@ -228,14 +254,23 @@ function ProbePanel({ trace }: { trace: RouteTrace }) {
             {probe.tcpError ? (
               <span>
                 TCP :{port ?? 80} to{" "}
-                <span className="font-mono">{address ?? target}</span> —{" "}
-                {probe.tcpError}
+                <CopyableValue
+                  value={address ?? target}
+                  label={`Probe target ${address ?? target}`}
+                  quietMark
+                />{" "}
+                — {probe.tcpError}
               </span>
             ) : (
               <span>
                 TCP :{port ?? 80} to{" "}
-                <span className="font-mono">{address ?? target}</span> answers
-                in <span className="tabular-nums">{probe.tcpMs} ms</span>
+                <CopyableValue
+                  value={address ?? target}
+                  label={`Probe target ${address ?? target}`}
+                  quietMark
+                />{" "}
+                answers in{" "}
+                <span className="tabular-nums">{probe.tcpMs} ms</span>
               </span>
             )}
           </li>

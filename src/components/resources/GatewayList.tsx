@@ -10,6 +10,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
+import { CopyableAddress } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
@@ -78,7 +79,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
           return <span className="text-fg-fnt">—</span>;
         return (
           <span className="truncate">
-            {addresses[0]}
+            <CopyableAddress value={addresses[0]} label="Gateway address" />
             {addresses.length > 1 && (
               <span className="text-fg-fnt"> +{addresses.length - 1}</span>
             )}
