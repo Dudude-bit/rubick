@@ -358,7 +358,7 @@ export function IngressDetail() {
       content: (
         <Section>
           <SectionHeader
-            title="Reachable at"
+            title={t("columns", "reachableAt")}
             count={
               plainHttp > 0
                 ? `${t("count", "paths", { n: accessUrls.length })} · ${t(
@@ -371,7 +371,7 @@ export function IngressDetail() {
           />
           {accessUrls.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No rules, so this ingress routes nothing.
+              {t("empty", "noRulesRoutesNothing")}
             </p>
           ) : (
             <div>

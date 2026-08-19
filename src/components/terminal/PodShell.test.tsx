@@ -206,8 +206,11 @@ describe("PodShell when there is nothing to attach to", () => {
     render(
       <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
     );
+    // Whole sentences rather than clauses glued with "and" / "—": the join
+    // was English grammar, and a sentence assembled from fragments cannot be
+    // translated. Same facts, in the same order.
     expect(screen.getByTestId("shell-hollow")).toHaveTextContent(
-      "The pod is still in init and stopped on migrate, which has failed 33 times. app has not started, and wait-for-db, the init container that did run, has already exited — a shell needs a live process on the other end."
+      "The pod is still in init and stopped on migrate, which has failed 33 times. app has not started. wait-for-db, the init container that did run, has already exited. A shell needs a live process on the other end."
     );
   });
 

@@ -106,6 +106,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    reachableAt: "Reachable at",
     controlledBy: "Controlled by",
     objects: "Objects",
     lastFetched: "Last fetched",
@@ -286,6 +287,10 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    listAnd: " and ",
+    listComma: ", ",
+    readLastRunOf: "Read {name}'s last run",
+    readLogOf: "Read {name}'s log",
     portForwardHint: "Forward traffic from your machine to this pod.",
     quickPresets: "Quick presets",
     clickToAutofillPorts: "Click to auto-fill local and remote ports",
@@ -1399,6 +1404,34 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
+    noContainerToAttach: "No container is running to attach to",
+    whichFailedTimes: "which has failed {n} times",
+    whichExited: "which exited {code}",
+    whichHasNotFinished: "which has not finished",
+    shellAnswerIsInTheLog:
+      "What the shell would have told you is in the log of the run that failed.",
+    podStoppedInInit:
+      "The pod is still in init and stopped on {container}, {failure}.",
+    haveNotStarted: {
+      one: "{names} has not started.",
+      other: "{names} have not started.",
+    },
+    initContainersAlreadyExited: {
+      one: "{names}, the init container that did run, has already exited.",
+      other:
+        "{names}, the {n} init containers that did run, have already exited.",
+    },
+    shellNeedsLiveProcess: "A shell needs a live process on the other end.",
+    everyContainerExited:
+      "Every container in this pod has exited; {container} was the last{when}.",
+    shellNeedsLiveProcessNoneLeft:
+      "A shell needs a live process on the other end, and this pod has none left — what they printed is all that is still here.",
+    containerHasNotStarted: "{container} has not started.",
+    containerHeldAt:
+      "{container} has not started — the kubelet is holding it at {reason}.",
+    podIsStatusNoneRunning:
+      "This pod is {status}, and none of its containers is running.",
     overPlainHttp: "{n} over plain HTTP",
     rulesOfEqualOrder: "rules of equal order",
     membersDisagree: "members disagree",

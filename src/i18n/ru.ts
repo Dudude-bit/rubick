@@ -73,6 +73,7 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    reachableAt: "Доступен по",
     controlledBy: "Контролируется",
     objects: "Объекты",
     lastFetched: "Последняя загрузка",
@@ -253,6 +254,10 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    listAnd: " и ",
+    listComma: ", ",
+    readLastRunOf: "Открыть лог последнего запуска {name}",
+    readLogOf: "Открыть лог {name}",
     portForwardHint: "Проброс трафика с вашей машины в этот под.",
     quickPresets: "Быстрый выбор",
     clickToAutofillPorts:
@@ -1421,6 +1426,40 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noRulesRoutesNothing:
+      "Правил нет, поэтому этот Ingress ничего не маршрутизирует.",
+    noContainerToAttach:
+      "Нет запущенного контейнера, к которому можно подключиться",
+    whichFailedTimes: "он падал {n} раз",
+    whichExited: "он завершился с кодом {code}",
+    whichHasNotFinished: "он не завершился",
+    shellAnswerIsInTheLog:
+      "То, что сказала бы оболочка, есть в логе упавшего запуска.",
+    podStoppedInInit:
+      "Под всё ещё в инициализации и встал на {container}: {failure}.",
+    haveNotStarted: {
+      one: "{names} не запустился.",
+      few: "{names} не запустились.",
+      many: "{names} не запустились.",
+      other: "{names} не запустились.",
+    },
+    initContainersAlreadyExited: {
+      one: "{names} — init-контейнер, который отработал, — уже завершился.",
+      few: "{names} — {n} init-контейнера, которые отработали, — уже завершились.",
+      many: "{names} — {n} init-контейнеров, которые отработали, — уже завершились.",
+      other:
+        "{names} — {n} init-контейнера, которые отработали, — уже завершились.",
+    },
+    shellNeedsLiveProcess: "Оболочке нужен живой процесс на том конце.",
+    everyContainerExited:
+      "Все контейнеры этого пода завершились; последним был {container}{when}.",
+    shellNeedsLiveProcessNoneLeft:
+      "Оболочке нужен живой процесс на том конце, а у этого пода не осталось ни одного — всё, что здесь есть, это то, что они успели напечатать.",
+    containerHasNotStarted: "{container} не запустился.",
+    containerHeldAt:
+      "{container} не запустился — кубелет держит его на {reason}.",
+    podIsStatusNoneRunning:
+      "Под сейчас {status}, и ни один его контейнер не работает.",
     overPlainHttp: "{n} по обычному HTTP",
     rulesOfEqualOrder: "правила с одинаковым порядком",
     membersDisagree: "участники расходятся",

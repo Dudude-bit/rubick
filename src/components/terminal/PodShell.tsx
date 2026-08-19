@@ -13,6 +13,8 @@ import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
+import type { T } from "@/i18n/useT";
 
 /**
  * The Shell tab: a chooser, and the session it chose.
@@ -33,19 +35,16 @@ function Mono({ children }: { children: ReactNode }) {
 }
 
 /** "a", "a and b", "a, b and c" — in the pod's own names, in the pod's font. */
-function names(list: readonly string[]): ReactNode {
+function names(list: readonly string[], t: T): ReactNode {
   return list.map((name, index) => (
     <span key={name}>
-      {index > 0 && (index === list.length - 1 ? " and " : ", ")}
+      {index > 0 &&
+        (index === list.length - 1
+          ? t("action", "listAnd")
+          : t("action", "listComma"))}
       <Mono>{name}</Mono>
     </span>
   ));
-}
-
-const COUNT_WORD = ["no", "one", "two", "three", "four", "five", "six"];
-
-function count(n: number): string {
-  return COUNT_WORD[n] ?? String(n);
 }
 
 interface NoShell {
@@ -65,8 +64,8 @@ interface NoShell {
  * there is no shell to give. So it says why, and hands over the two things
  * that do work: the log of the run that failed, and Debug.
  */
-function noShell(pod: PodInfo): NoShell {
-  const headline = "No container is running to attach to";
+function noShell(pod: PodInfo, t: T): NoShell {
+  const headline = t("empty", "noContainerToAttach");
   const all = podContainers(pod);
   const init = all.filter((c) => c.phase === "init");
   const app = all.filter((c) => c.phase !== "init");
@@ -78,43 +77,52 @@ function noShell(pod: PodInfo): NoShell {
     const death = lastTermination(blocker);
     const failure =
       blocker.restartCount > 0
-        ? `which has failed ${blocker.restartCount} times`
+        ? t("empty", "whichFailedTimes", { n: blocker.restartCount })
         : death && death.exitCode !== 0
-          ? `which exited ${death.exitCode}`
-          : "which has not finished";
+          ? t("empty", "whichExited", { code: death.exitCode })
+          : t("empty", "whichHasNotFinished");
     const unstarted = app.filter((c) => c.state.type !== "terminated");
     const ran = init.filter(
       (c) => c.name !== blocker.name && c.state.type === "terminated"
     );
     return {
       headline,
-      hint: death
-        ? "What the shell would have told you is in the log of the run that failed."
-        : null,
+      hint: death ? t("empty", "shellAnswerIsInTheLog") : null,
       logs: death
-        ? { container: blocker.name, label: `Read ${blocker.name}'s last run` }
+        ? {
+            container: blocker.name,
+            label: t("action", "readLastRunOf", { name: blocker.name }),
+          }
         : null,
       body: (
         <>
-          The pod is still in init and stopped on <Mono>{blocker.name}</Mono>,{" "}
-          {failure}.{" "}
+          {parts(t("empty", "podStoppedInInit", { failure }), {
+            container: <Mono>{blocker.name}</Mono>,
+          })}{" "}
           {unstarted.length > 0 && (
             <>
-              {names(unstarted.map((c) => c.name))}{" "}
-              {unstarted.length === 1 ? "has" : "have"} not started
-              {ran.length > 0 ? ", and " : " — "}
+              {parts(t("empty", "haveNotStarted", { n: unstarted.length }), {
+                names: names(
+                  unstarted.map((c) => c.name),
+                  t
+                ),
+              })}{" "}
             </>
           )}
           {ran.length > 0 && (
             <>
-              {names(ran.map((c) => c.name))},{" "}
-              {ran.length === 1
-                ? "the init container that did run,"
-                : `the ${count(ran.length)} init containers that did run,`}{" "}
-              {ran.length === 1 ? "has" : "have"} already exited —{" "}
+              {parts(
+                t("empty", "initContainersAlreadyExited", { n: ran.length }),
+                {
+                  names: names(
+                    ran.map((c) => c.name),
+                    t
+                  ),
+                }
+              )}{" "}
             </>
           )}
-          a shell needs a live process on the other end.
+          {t("empty", "shellNeedsLiveProcess")}
         </>
       ),
     };
@@ -128,13 +136,19 @@ function noShell(pod: PodInfo): NoShell {
     return {
       headline,
       hint: null,
-      logs: { container: last.name, label: `Read ${last.name}'s log` },
+      logs: {
+        container: last.name,
+        label: t("action", "readLogOf", { name: last.name }),
+      },
       body: (
         <>
-          Every container in this pod has exited; <Mono>{last.name}</Mono> was
-          the last{when ? `, ${when}` : ""}. A shell needs a live process on the
-          other end, and this pod has none left — what they printed is all that
-          is still here.
+          {parts(
+            t("empty", "everyContainerExited", {
+              when: when ? `, ${when}` : "",
+            }),
+            { container: <Mono>{last.name}</Mono> }
+          )}{" "}
+          {t("empty", "shellNeedsLiveProcessNoneLeft")}
         </>
       ),
     };
@@ -148,28 +162,32 @@ function noShell(pod: PodInfo): NoShell {
     headline,
     hint: null,
     logs: crashed
-      ? { container: crashed.name, label: `Read ${crashed.name}'s last run` }
+      ? {
+          container: crashed.name,
+          label: t("action", "readLastRunOf", { name: crashed.name }),
+        }
       : null,
     body: (
       <>
         {waiting ? (
           <>
-            <Mono>{waiting.name}</Mono> has not started
-            {reason ? (
-              <>
-                {" — the kubelet is holding it at "}
-                <Mono>{reason}</Mono>
-              </>
-            ) : null}
-            .{" "}
+            {reason
+              ? parts(t("empty", "containerHeldAt"), {
+                  container: <Mono>{waiting.name}</Mono>,
+                  reason: <Mono>{reason}</Mono>,
+                })
+              : parts(t("empty", "containerHasNotStarted"), {
+                  container: <Mono>{waiting.name}</Mono>,
+                })}{" "}
           </>
         ) : (
           <>
-            This pod is <Mono>{pod.status.display}</Mono>, and none of its
-            containers is running.{" "}
+            {parts(t("empty", "podIsStatusNoneRunning"), {
+              status: <Mono>{pod.status.display}</Mono>,
+            })}{" "}
           </>
         )}
-        A shell needs a live process on the other end.
+        {t("empty", "shellNeedsLiveProcess")}
       </>
     ),
   };
@@ -293,7 +311,7 @@ export function PodShell({
     : null;
   const target = chosen ?? (ended ? null : (attachable[0] ?? null));
 
-  const hollow = attachable.length === 0 ? noShell(pod) : null;
+  const hollow = attachable.length === 0 ? noShell(pod, t) : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
