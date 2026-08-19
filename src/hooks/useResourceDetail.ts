@@ -21,6 +21,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useResourceYaml } from "./useResourceYaml";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
+import { useT } from "@/i18n/useT";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -88,6 +89,7 @@ export interface UseResourceDetailResult<T> {
 export function useResourceDetail<T>(
   options: UseResourceDetailOptions<T>
 ): UseResourceDetailResult<T> {
+  const t = useT();
   const {
     resourceKind,
     isClusterScoped = false,
@@ -162,9 +164,9 @@ export function useResourceDetail<T>(
   // Copy YAML to clipboard
   const copyYaml = useCallback(() => {
     if (yaml) {
-      copyToClipboard(yaml, "YAML copied to clipboard.");
+      copyToClipboard(yaml, t("action", "yamlCopied"));
     }
-  }, [yaml, copyToClipboard]);
+  }, [yaml, copyToClipboard, t]);
 
   // Go back navigation
   const goBack = useCallback(() => {
@@ -179,8 +181,11 @@ export function useResourceDetail<T>(
     },
     onSuccess: () => {
       toast({
-        title: `${resourceKind} deleted`,
-        description: `${resourceKind} ${name} has been deleted.`,
+        title: t("action", "kindDeleted", { kind: resourceKind }),
+        description: t("action", "kindDeletedDetail", {
+          kind: resourceKind,
+          name: name ?? "",
+        }),
       });
       queryClient.invalidateQueries({
         queryKey: [resourceKind.toLowerCase()],
@@ -193,8 +198,12 @@ export function useResourceDetail<T>(
     },
     onError: (err) => {
       toast({
-        title: "Error",
-        description: `Failed to delete ${resourceKind.toLowerCase()}: ${err}`,
+        title: t("action", "error"),
+        description: t("action", "deleteFailed", {
+          kind: resourceKind.toLowerCase(),
+          name: name ?? "",
+          error: String(err),
+        }),
         variant: "destructive",
       });
     },

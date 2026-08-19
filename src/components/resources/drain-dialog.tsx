@@ -55,24 +55,21 @@ export function DrainDialog({
     <Dialog open={!!node} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Drain {node}</DialogTitle>
+          <DialogTitle>
+            {t("action", "drainNamed", { name: node ?? "" })}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs text-fg-mut">
-            The node is cordoned and every pod on it that a controller can
-            replace is evicted. DaemonSet pods stay.
-          </p>
+          <p className="text-xs text-fg-mut">{t("empty", "drainExplained")}</p>
           {query.isPending && node && (
             <p className="text-[11px] text-fg-fnt">
-              Reading what would refuse to move…
+              {t("empty", "readingWhatRefusesToMove")}
             </p>
           )}
           {blockers.length > 0 && (
             <div className="flex flex-col gap-1 pt-1">
               <p className="text-xs font-medium text-warn">
-                {blockers.length === 1
-                  ? "One disruption budget on this node allows nothing to be evicted."
-                  : `${blockers.length} disruption budgets on this node allow nothing to be evicted.`}
+                {t("count", "budgetsAllowNoEviction", { n: blockers.length })}
               </p>
               {blockers.map(({ budget, pods }) => (
                 <p
@@ -82,14 +79,17 @@ export function DrainDialog({
                   <span className="font-mono text-fg-mid">
                     {budget.object.namespace}/{budget.object.name}
                   </span>{" "}
-                  — {budgetRule(budget.facts)}, {budget.facts.currentHealthy} of{" "}
-                  {budget.facts.expectedPods} healthy, covering{" "}
-                  {t("cluster", "podCount", { n: pods })} here.
+                  —{" "}
+                  {t("empty", "budgetRuleHealthyCovering", {
+                    rule: budgetRule(budget.facts),
+                    healthy: budget.facts.currentHealthy,
+                    expected: budget.facts.expectedPods,
+                    pods: t("cluster", "podCount", { n: pods }),
+                  })}
                 </p>
               ))}
               <p className="text-[11px] text-fg-fnt">
-                The drain will not fail on these — it will wait, and keep
-                waiting until another replica is ready somewhere else.
+                {t("empty", "drainWillWait")}
               </p>
             </div>
           )}
@@ -98,7 +98,7 @@ export function DrainDialog({
               to={`/nodes/${node}`}
               className="pt-1 text-[11px] text-info hover:underline"
             >
-              Open the node first
+              {t("action", "openTheNodeFirst")}
             </Link>
           )}
         </div>
@@ -111,7 +111,9 @@ export function DrainDialog({
             disabled={busy}
             onClick={() => node && onConfirm(node)}
           >
-            {blockers.length > 0 ? "Drain anyway" : "Drain"}
+            {blockers.length > 0
+              ? t("action", "drainAnyway")
+              : t("action", "drain")}
           </Button>
         </DialogFooter>
       </DialogContent>

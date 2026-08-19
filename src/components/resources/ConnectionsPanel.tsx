@@ -178,7 +178,9 @@ export function ConnectionsPanel({
   if (isPending) {
     return (
       <Section>
-        <p className="text-xs text-fg-fnt">Reading what connects to this…</p>
+        <p className="text-xs text-fg-fnt">
+          {t("empty", "readingWhatConnects")}
+        </p>
       </Section>
     );
   }

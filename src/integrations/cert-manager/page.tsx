@@ -47,7 +47,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { plural } from "../kit";
 import { FilterBox, Finding, TroubleRow } from "../page-kit";
 import { usePicture } from "./data";
 import { uncovered } from "./serves";
@@ -105,7 +104,7 @@ export default function CertManagerPage() {
       id: "certificates",
       label: "Certificates",
       glyph: viewGlyph(ShieldCheck),
-      mark: certificatesMark(certificates, broken),
+      mark: certificatesMark(t, certificates, broken),
       content: (
         <CertificatesTab
           rows={certificates}
@@ -118,7 +117,7 @@ export default function CertManagerPage() {
       id: "issuers",
       label: "Issuers",
       glyph: viewGlyph(Stamp),
-      mark: issuersMark(issuers, unreadIssuers),
+      mark: issuersMark(t, issuers, unreadIssuers),
       content: (
         <IssuersTab rows={issuers} loading={isPending} unread={unreadIssuers} />
       ),
@@ -156,6 +155,7 @@ export default function CertManagerPage() {
  * carries both: thirty certificates with two failing renewals says two.
  */
 function certificatesMark(
+  t: ReturnType<typeof useT>,
   rows: CertRow[],
   broken: CertRow[]
 ): DetailTabMark | undefined {
@@ -163,7 +163,7 @@ function certificatesMark(
   if (broken.length === 0) return countMark(rows.length);
   return severityMark(
     broken.some((row) => row.state.tone === "err") ? "err" : "warn",
-    `${broken.length} of ${rows.length} need attention`
+    t("count", "needAttentionOfTotal", { n: broken.length, total: rows.length })
   );
 }
 
@@ -176,19 +176,23 @@ function certificatesMark(
  * the page is guessing.
  */
 function issuersMark(
+  t: ReturnType<typeof useT>,
   rows: IssuerRow[],
   unread: UnreadKind[]
 ): DetailTabMark | undefined {
   const broken = rows.filter((issuer) => issuer.ready === false);
   if (broken.length > 0) {
-    return severityMark("err", `${plural(broken.length, "issuer")} not ready`);
+    return severityMark(
+      "err",
+      t("count", "issuersNotReady", { n: broken.length })
+    );
   }
   if (unread.length > 0) {
     return severityMark(
       "warn",
       unread.length === 1
-        ? `${unread[0].kind}s could not be read`
-        : "issuers could not be read"
+        ? t("empty", "crdCouldNotBeListed", { crd: `${unread[0].kind}s` })
+        : t("empty", "issuersCouldNotBeRead")
     );
   }
   return rows.length === 0 ? undefined : countMark(rows.length);
@@ -267,9 +271,18 @@ function CertificatesTab({
           {t("empty", "nothingAskedForCertificate")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No Certificate object exists in any namespace, and no Ingress carries
-          the <span className="font-mono">cert-manager.io/cluster-issuer</span>{" "}
-          annotation that would make one.
+          {t("empty", "noCertificateObjectAnywhere")
+            .split("{annotation}")
+            .map((part, i) => (
+              <span key={i}>
+                {i > 0 && (
+                  <span className="font-mono">
+                    cert-manager.io/cluster-issuer
+                  </span>
+                )}
+                {part}
+              </span>
+            ))}
         </p>
       </div>
     );
@@ -384,8 +397,19 @@ function ServingLine({ row }: { row: CertRow }) {
   if (row.use.hosts.length === 0) {
     return (
       <p className="max-w-[68ch] text-[11px] text-fg-fnt">
-        No Ingress in <span className="font-mono">{row.namespace}</span> mounts{" "}
-        <span className="font-mono">{row.secretName ?? "its Secret"}</span>.
+        {t("empty", "noIngressMountsSecret")
+          .split(/(\{namespace\}|\{secret\})/)
+          .map((part, i) =>
+            part === "{namespace}" || part === "{secret}" ? (
+              <span key={i} className="font-mono">
+                {part === "{namespace}"
+                  ? row.namespace
+                  : (row.secretName ?? t("empty", "itsSecret"))}
+              </span>
+            ) : (
+              <span key={i}>{part}</span>
+            )
+          )}
         {row.use.unusedIsCertain
           ? t("empty", "nothingServingCertificate")
           : t("empty", "routingCrdMayMount")}
@@ -429,16 +453,25 @@ function ServingLine({ row }: { row: CertRow }) {
           tone="err"
           title={<>{t("count", "servedOnNames", { n: wrong.length })}</>}
         >
-          <span className="font-mono">
-            {[
-              ...new Set(wrong.map((entry: { host: string }) => entry.host)),
-            ].join(", ")}
-          </span>{" "}
-          {wrong.length === 1 ? "is" : "are"} served from this Secret and not in
-          its <span className="font-mono">spec.dnsNames</span>. Every other
-          surface reads this as healthy — the Secret is populated, the
-          certificate is valid, the Ingress is serving — and a browser refuses
-          the connection outright.
+          {t("count", "servedNotInDnsNames", { n: wrong.length })
+            .split(/(\{names\}|\{field\})/)
+            .map((part, i) =>
+              part === "{names}" ? (
+                <span key={i} className="font-mono">
+                  {[
+                    ...new Set(
+                      wrong.map((entry: { host: string }) => entry.host)
+                    ),
+                  ].join(", ")}
+                </span>
+              ) : part === "{field}" ? (
+                <span key={i} className="font-mono">
+                  spec.dnsNames
+                </span>
+              ) : (
+                <span key={i}>{part}</span>
+              )
+            )}
         </Finding>
       )}
     </div>
@@ -634,16 +667,38 @@ function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
       {!brief &&
         (row.neverIssued ? (
           <>
-            Nothing is serving TLS from{" "}
-            <span className="font-mono">{row.secretName ?? "its Secret"}</span>,
-            so every host above it is refused or served in the clear.
+            {t("empty", "nothingServingTlsFrom")
+              .split("{secret}")
+              .map((part, i) => (
+                <span key={i}>
+                  {i > 0 && (
+                    <span className="font-mono">
+                      {row.secretName ?? t("empty", "itsSecret")}
+                    </span>
+                  )}
+                  {part}
+                </span>
+              ))}
           </>
         ) : (
           <>
-            The certificate already in{" "}
-            <span className="font-mono">{row.secretName ?? "its Secret"}</span>{" "}
-            is still being served, so this is not an outage yet
-            {row.expiry ? ` — it ${row.expiry.text}` : ""}.
+            {(row.expiry
+              ? t("empty", "certificateStillServedUntil", {
+                  expiry: row.expiry.text,
+                })
+              : t("empty", "certificateStillServed")
+            )
+              .split("{secret}")
+              .map((part, i) => (
+                <span key={i}>
+                  {i > 0 && (
+                    <span className="font-mono">
+                      {row.secretName ?? t("empty", "itsSecret")}
+                    </span>
+                  )}
+                  {part}
+                </span>
+              ))}
           </>
         ))}
     </Finding>
@@ -679,11 +734,10 @@ function IssuersTab({
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          This cluster has no Issuer and no ClusterIssuer.
+          {t("empty", "noIssuerNoClusterIssuer")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          cert-manager signs nothing without one, so any Certificate here will
-          sit unissued until one exists.
+          {t("empty", "certManagerNeedsIssuer")}
         </p>
       </div>
     );

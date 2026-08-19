@@ -145,16 +145,15 @@ export function Helm() {
     }) => commands.helmRollback(name, namespace, revision),
     onSuccess: () => {
       toast({
-        title: "Rollback initiated",
-        description:
-          "The release is being rolled back to the previous revision.",
+        title: t("action", "rollbackInitiated"),
+        description: t("action", "rollbackInitiatedDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
       setRollbackTarget(null);
     },
     onError: (error) => {
       toast({
-        title: "Rollback failed",
+        title: t("action", "rollbackFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -171,15 +170,15 @@ export function Helm() {
     }) => commands.helmUninstall(name, namespace),
     onSuccess: () => {
       toast({
-        title: "Release uninstalled",
-        description: "The Helm release has been successfully uninstalled.",
+        title: t("action", "releaseUninstalled"),
+        description: t("action", "releaseUninstalledDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
       setUninstallTarget(null);
     },
     onError: (error) => {
       toast({
-        title: "Uninstall failed",
+        title: t("action", "uninstallFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -191,8 +190,10 @@ export function Helm() {
       commands.addHelmRepo(name, url),
     onSuccess: () => {
       toast({
-        title: "Repository added",
-        description: `Repository "${newRepoName}" has been added successfully.`,
+        title: t("action", "repositoryAdded"),
+        description: t("action", "repositoryAddedDetail", {
+          name: newRepoName,
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
       setAddRepoDialogOpen(false);
@@ -201,7 +202,7 @@ export function Helm() {
     },
     onError: (error) => {
       toast({
-        title: "Failed to add repository",
+        title: t("action", "addRepositoryFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -212,15 +213,15 @@ export function Helm() {
     mutationFn: async (name: string) => commands.removeHelmRepo(name),
     onSuccess: () => {
       toast({
-        title: "Repository removed",
-        description: "The repository has been removed successfully.",
+        title: t("action", "repositoryRemoved"),
+        description: t("action", "repositoryRemovedDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
       setDeleteRepoTarget(null);
     },
     onError: (error) => {
       toast({
-        title: "Failed to remove repository",
+        title: t("action", "removeRepositoryFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -231,14 +232,14 @@ export function Helm() {
     mutationFn: async () => commands.updateHelmRepos(),
     onSuccess: () => {
       toast({
-        title: "Repositories updated",
-        description: "All Helm repositories have been updated.",
+        title: t("action", "repositoriesUpdated"),
+        description: t("action", "repositoriesUpdatedDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
     },
     onError: (error) => {
       toast({
-        title: "Failed to update repositories",
+        title: t("action", "updateRepositoriesFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -253,7 +254,7 @@ export function Helm() {
       setSearchResults(results);
     } catch (error) {
       toast({
-        title: "Search failed",
+        title: t("action", "searchFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -267,8 +268,10 @@ export function Helm() {
       commands.helmInstall(options),
     onSuccess: () => {
       toast({
-        title: "Chart installed",
-        description: `Release "${installReleaseName}" has been installed successfully.`,
+        title: t("action", "chartInstalled"),
+        description: t("action", "chartInstalledDetail", {
+          name: installReleaseName,
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
       setInstallChart(null);
@@ -281,7 +284,7 @@ export function Helm() {
     },
     onError: (error) => {
       toast({
-        title: "Installation failed",
+        title: t("action", "installationFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -293,8 +296,10 @@ export function Helm() {
       commands.helmUpgrade(options),
     onSuccess: () => {
       toast({
-        title: "Release upgraded",
-        description: `Release "${upgradeTarget?.name}" has been upgraded successfully.`,
+        title: t("action", "releaseUpgraded"),
+        description: t("action", "releaseUpgradedDetail", {
+          name: upgradeTarget?.name ?? "",
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
       setUpgradeTarget(null);
@@ -304,7 +309,7 @@ export function Helm() {
     },
     onError: (error) => {
       toast({
-        title: "Upgrade failed",
+        title: t("action", "upgradeFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -334,15 +339,15 @@ export function Helm() {
             <TabsList>
               <TabsTrigger value="releases">
                 <Package className="h-3 w-3" aria-hidden="true" />
-                Releases
+                {t("nav", "releases")}
               </TabsTrigger>
               <TabsTrigger value="charts" disabled={!helmCliAvailable}>
                 <Search className="h-3 w-3" aria-hidden="true" />
-                Charts
+                {t("nav", "charts")}
               </TabsTrigger>
               <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
                 <FolderGit2 className="h-3 w-3" aria-hidden="true" />
-                Repositories
+                {t("nav", "repositories")}
               </TabsTrigger>
             </TabsList>
           }
@@ -420,8 +425,10 @@ export function Helm() {
         onOpenChange={(open) => {
           if (!open) setDeleteRepoTarget(null);
         }}
-        title="Remove Repository"
-        description={`Are you sure you want to remove the repository "${deleteRepoTarget}"?`}
+        title={t("action", "removeRepository")}
+        description={t("action", "removeRepositoryConfirm", {
+          name: deleteRepoTarget ?? "",
+        })}
         confirmLabel={t("action", "remove")}
         confirmVariant="destructive"
         confirmDisabled={removeRepoMutation.isPending}
@@ -510,10 +517,13 @@ export function Helm() {
         onOpenChange={(open) => {
           if (!open) setRollbackTarget(null);
         }}
-        title="Rollback Release"
+        title={t("action", "rollBackReleaseQuestion")}
         description={
           rollbackTarget
-            ? `Are you sure you want to rollback "${rollbackTarget.release.name}" to revision ${rollbackTarget.revision}?`
+            ? t("action", "rollBackReleaseDetail", {
+                name: rollbackTarget.release.name,
+                revision: rollbackTarget.revision,
+              })
             : undefined
         }
         confirmLabel={t("action", "rollBack")}
@@ -535,10 +545,13 @@ export function Helm() {
         onOpenChange={(open) => {
           if (!open) setUninstallTarget(null);
         }}
-        title="Uninstall Release"
+        title={t("action", "uninstallRelease")}
         description={
           uninstallTarget
-            ? `This will permanently delete the Helm release "${uninstallTarget.name}" and all its resources from namespace "${uninstallTarget.namespace}". This action cannot be undone.`
+            ? t("action", "uninstallReleaseDetail", {
+                name: uninstallTarget.name,
+                namespace: uninstallTarget.namespace,
+              })
             : undefined
         }
         confirmationText={uninstallTarget?.name ?? ""}

@@ -142,7 +142,7 @@ function Lists({ published }: { published: ServicePublished }) {
                     <TableCell>
                       <CopyableAddress
                         value={endpointAddress(endpoint)}
-                        label="Address"
+                        label={t("columns", "address")}
                       />
                     </TableCell>
                     <TableCell>

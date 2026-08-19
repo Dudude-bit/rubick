@@ -61,24 +61,27 @@ export function DebugNodeDialog({
   const handleReady = useCallback(
     (result: DebugResult) => {
       toast({
-        title: "Debug pod ready",
-        description: `Debug pod "${result.podName}" created on node "${nodeName}"`,
+        title: t("action", "debugPodReady"),
+        description: t("action", "debugPodReadyDetail", {
+          pod: result.podName,
+          node: nodeName,
+        }),
       });
       onDebugStart(result);
       onOpenChange(false);
     },
-    [toast, nodeName, onDebugStart, onOpenChange]
+    [toast, nodeName, onDebugStart, onOpenChange, t]
   );
 
   const handleError = useCallback(
     (error: string) => {
       toast({
-        title: "Debug failed",
+        title: t("action", "debugFailed"),
         description: error,
         variant: "destructive",
       });
     },
-    [toast]
+    [toast, t]
   );
 
   const handleTimeout = useCallback((operation: DebugOperation) => {
@@ -110,8 +113,8 @@ export function DebugNodeDialog({
   const handleDebug = async () => {
     if (!isImageValid) {
       toast({
-        title: "Invalid image",
-        description: "Please select or enter a valid debug image",
+        title: t("action", "invalidImage"),
+        description: t("action", "invalidImageDetail"),
         variant: "destructive",
       });
       return;
@@ -155,12 +158,14 @@ export function DebugNodeDialog({
           timeoutOperation.namespace
         );
         toast({
-          title: "Debug pod deleted",
-          description: `Pod "${timeoutOperation.podName}" has been deleted`,
+          title: t("action", "debugPodDeleted"),
+          description: t("action", "podDeletedDetail", {
+            pod: timeoutOperation.podName,
+          }),
         });
       } catch (err) {
         toast({
-          title: "Failed to delete pod",
+          title: t("action", "failedToDeletePod"),
           description: String(err),
           variant: "destructive",
         });
@@ -185,13 +190,14 @@ export function DebugNodeDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warn" />
-              Debug Pod Not Ready
+              {t("action", "debugPodNotReady")}
             </DialogTitle>
             <DialogDescription>
-              The debug pod{" "}
-              <span className="font-medium">{timeoutOperation.podName}</span> on
-              node <span className="font-medium">{nodeName}</span> did not
-              become ready within the timeout period.
+              {t("action", "theDebugPod")}{" "}
+              <span className="font-medium">{timeoutOperation.podName}</span>{" "}
+              {t("action", "onNode")}{" "}
+              <span className="font-medium">{nodeName}</span>{" "}
+              {t("action", "didNotBecomeReady")}
             </DialogDescription>
           </DialogHeader>
 
@@ -200,7 +206,9 @@ export function DebugNodeDialog({
               <div className="rounded-md border border-hair p-3">
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-3.5 w-3.5 text-fg-fnt" />
-                  <span className="text-fg-mut">Last status:</span>
+                  <span className="text-fg-mut">
+                    {t("action", "lastStatus")}:
+                  </span>
                   <span className="font-medium">{statusReason}</span>
                 </div>
               </div>
@@ -212,7 +220,7 @@ export function DebugNodeDialog({
               {t("action", "leave")}
             </Button>
             <Button variant="destructive" onClick={handleDeletePod}>
-              Delete Pod
+              {t("action", "deletePod")}
             </Button>
             <Button onClick={handleKeepWaiting}>
               {t("action", "keepWaiting")}
@@ -232,11 +240,12 @@ export function DebugNodeDialog({
             <DialogTitle className="flex items-center gap-2">
               <Loader2 className="h-5 w-5 animate-spin" />
               {state === "creating"
-                ? "Creating debug pod..."
-                : "Waiting for pod..."}
+                ? t("action", "creatingDebugPod")
+                : t("action", "waitingForPod")}
             </DialogTitle>
             <DialogDescription>
-              Debug pod on node <span className="font-medium">{nodeName}</span>
+              {t("action", "debugPodPrefix")} {t("action", "onNode")}{" "}
+              <span className="font-medium">{nodeName}</span>
             </DialogDescription>
           </DialogHeader>
 
@@ -244,9 +253,9 @@ export function DebugNodeDialog({
             {/* Status */}
             <div className="rounded-md border border-hair p-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-fg-mut">Status</span>
+                <span className="text-fg-mut">{t("columns", "status")}</span>
                 <span className="font-medium">
-                  {statusReason || "Initializing..."}
+                  {statusReason || t("action", "initializing")}
                 </span>
               </div>
             </div>
@@ -254,7 +263,7 @@ export function DebugNodeDialog({
             {/* Progress */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-fg-mut">Elapsed</span>
+                <span className="text-fg-mut">{t("action", "elapsed")}</span>
                 <span className="font-medium">
                   {elapsedSeconds}s / {timeoutSeconds}s
                 </span>
@@ -280,10 +289,10 @@ export function DebugNodeDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            Debug Node
+            {t("action", "debugNode")}
           </DialogTitle>
           <DialogDescription>
-            Create a privileged debug pod on node{" "}
+            {t("action", "createPrivilegedDebugPodOnNode")}{" "}
             <span className="font-medium">{nodeName}</span>
           </DialogDescription>
         </DialogHeader>
@@ -292,17 +301,17 @@ export function DebugNodeDialog({
           {/* Node Info */}
           <div className="rounded-md border border-hair p-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-fg-mut">Target Node</span>
+              <span className="text-fg-mut">{t("action", "targetNode")}</span>
               <span className="font-medium">{nodeName}</span>
             </div>
           </div>
 
           {/* Debug Image Selection */}
           <div className="space-y-2">
-            <Label htmlFor="debug-image">Debug Image</Label>
+            <Label htmlFor="debug-image">{t("action", "debugImage")}</Label>
             <Select value={selectedImage} onValueChange={setSelectedImage}>
               <SelectTrigger>
-                <SelectValue placeholder="Select debug image" />
+                <SelectValue placeholder={t("action", "selectDebugImage")} />
               </SelectTrigger>
               <SelectContent>
                 {DEBUG_IMAGES.map((img) => (
@@ -314,7 +323,7 @@ export function DebugNodeDialog({
             </Select>
             {selectedImage === "custom" && (
               <Input
-                placeholder="Enter custom image (e.g., myregistry/debug:latest)"
+                placeholder={t("action", "customImagePlaceholder")}
                 value={customImage}
                 onChange={(e) => setCustomImage(e.target.value)}
               />
@@ -323,7 +332,9 @@ export function DebugNodeDialog({
 
           {/* Namespace for debug pod */}
           <div className="space-y-2">
-            <Label htmlFor="namespace">Debug Pod Namespace</Label>
+            <Label htmlFor="namespace">
+              {t("action", "debugPodNamespace")}
+            </Label>
             <Input
               id="namespace"
               placeholder="default"
@@ -331,7 +342,7 @@ export function DebugNodeDialog({
               onChange={(e) => setNamespace(e.target.value)}
             />
             <p className="text-xs text-fg-mut">
-              Namespace where the debug pod will be created
+              {t("action", "debugPodNamespaceHint")}
             </p>
           </div>
 
@@ -339,8 +350,9 @@ export function DebugNodeDialog({
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              This will create a <strong>privileged pod</strong> with full
-              access to the host. The host filesystem will be mounted at{" "}
+              {t("action", "debugNodeWarningPre")}{" "}
+              <strong>{t("action", "privilegedPod")}</strong>{" "}
+              {t("action", "debugNodeWarningPost")}{" "}
               <code className="rounded bg-hover px-1">/host</code>.
             </AlertDescription>
           </Alert>

@@ -139,7 +139,7 @@ function ConnectForm({
       <div className="flex flex-col gap-3 py-1">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="integration-url" className="text-xs text-fg-mut">
-            Address
+            {t("columns", "address")}
           </Label>
           <Input
             id="integration-url"
@@ -207,14 +207,28 @@ function ConnectForm({
             <span>
               {t("settings", "openTunnelOnSwitch")}
               <span className="mt-0.5 block text-[11px] text-fg-fnt">
-                Forwarding{" "}
-                <span className="font-mono">
-                  {saved.namespace}/{saved.service}:{saved.remotePort}
-                </span>{" "}
-                to{" "}
-                <span className="font-mono">localhost:{saved.localPort}</span>.
-                Left off, the row stays in the sidebar and pressing it opens the
-                tunnel — kept per cluster, on this machine only.
+                {splitAround(
+                  t("settings", "forwardingTunnelNote"),
+                  "{target}"
+                ).map((part, i) =>
+                  i === 1 ? (
+                    <span key="target" className="font-mono">
+                      {saved.namespace}/{saved.service}:{saved.remotePort}
+                    </span>
+                  ) : (
+                    <React.Fragment key={i}>
+                      {splitAround(part, "{local}").map((sub, j) =>
+                        j === 1 ? (
+                          <span key="local" className="font-mono">
+                            localhost:{saved.localPort}
+                          </span>
+                        ) : (
+                          <span key={j}>{sub}</span>
+                        )
+                      )}
+                    </React.Fragment>
+                  )
+                )}
               </span>
             </span>
           </label>
@@ -231,7 +245,7 @@ function ConnectForm({
         {bearer && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="integration-token" className="text-xs text-fg-mut">
-              Token
+              {t("settings", "token")}
             </Label>
             <Input
               id="integration-token"
@@ -240,8 +254,8 @@ function ConnectForm({
               autoComplete="off"
               placeholder={
                 editor.saved?.hasToken
-                  ? "unchanged — type to replace it"
-                  : "pasted here, kept out of this window afterwards"
+                  ? t("settings", "tokenUnchangedPlaceholder")
+                  : t("settings", "tokenNewPlaceholder")
               }
               onChange={(event) => setToken(event.target.value)}
               className="font-mono text-xs"
@@ -249,9 +263,7 @@ function ConnectForm({
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
             <p className="text-[11px] leading-snug text-fg-fnt">
-              Stored in this app&rsquo;s config file in plain text, beside the
-              registry passwords it already keeps there, and sent only from the
-              backend — it is never handed back to this window.
+              {t("settings", "tokenStorageNote")}
             </p>
           </div>
         )}
@@ -368,7 +380,9 @@ function InCluster({
         disabled={looking}
         className="self-start text-xs"
       >
-        {looking ? "Looking…" : `Find ${vendorName} in this cluster`}
+        {looking
+          ? t("settings", "lookingEllipsis")
+          : t("settings", "findVendorInCluster", { vendor: vendorName })}
       </Button>
 
       {found !== null && found.length === 0 && (
@@ -406,17 +420,18 @@ function InCluster({
 }
 
 function TestResult({ result }: { result: ProbeResult }) {
+  const t = useT();
   if (result.ok) {
     return (
       <p className="text-[11px] text-ok" role="status">
-        Answered in {result.latencyMs}ms
+        {t("settings", "probeAnswered", { ms: result.latencyMs })}
         {result.version ? ` · ${result.version}` : ""}
       </p>
     );
   }
   return (
     <p className="text-[11px] text-err" role="status">
-      Did not answer — {result.reason}
+      {t("settings", "probeDidNotAnswer", { reason: result.reason })}
     </p>
   );
 }

@@ -42,6 +42,7 @@ import {
   bindingSummary,
   boundService,
 } from "./model";
+import type { en } from "@/i18n/catalogue";
 
 /** Past this many groups with a finding, nothing opens itself. */
 const AUTO_OPEN = 6;
@@ -155,20 +156,23 @@ export default function AwsLoadBalancerPage() {
   );
 }
 
-function groupState(group: AlbGroup): { text: string; tone: Tone } {
+function groupState(group: AlbGroup): {
+  key: keyof typeof en.empty;
+  tone: Tone;
+} {
   if (group.findings.some((finding) => finding.kind === "no-params")) {
-    return { text: "names something absent", tone: "err" };
+    return { key: "namesSomethingAbsent", tone: "err" };
   }
   if (group.findings.some((finding) => finding.kind === "order-clash")) {
-    return { text: "rules of equal order", tone: "warn" };
+    return { key: "rulesOfEqualOrder", tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "disagree")) {
-    return { text: "members disagree", tone: "warn" };
+    return { key: "membersDisagree", tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "shared")) {
-    return { text: "shared across namespaces", tone: "warn" };
+    return { key: "sharedAcrossNamespaces", tone: "warn" };
   }
-  return { text: "serving", tone: "ok" };
+  return { key: "serving", tone: "ok" };
 }
 
 function GroupRow({
@@ -183,6 +187,7 @@ function GroupRow({
   last: boolean;
 }) {
   const t = useT();
+  const state = groupState(group);
   const namespaces = [
     ...new Set(group.members.map((member) => member.ingress.namespace)),
   ];
@@ -209,7 +214,7 @@ function GroupRow({
           {group.name === null && ` · ${t("action", "itsOwnAlb")}`}
         </>
       }
-      state={groupState(group)}
+      state={{ text: t("empty", state.key), tone: state.tone }}
       openByDefault={openByDefault}
       last={last}
     >

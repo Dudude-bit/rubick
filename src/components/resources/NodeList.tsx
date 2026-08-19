@@ -53,6 +53,18 @@ const poolGrouping: RowGrouping<NodeInfo> = {
   },
 };
 
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function InternalIpCell({ address }: { address: string | undefined }) {
+  const t = useT();
+  return (
+    <CopyableAddress
+      value={address}
+      label={t("columns", "internalIp")}
+      fallback="-"
+    />
+  );
+}
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -99,13 +111,7 @@ export const columns = (
       const address = row.original.status.addresses.find(
         (a) => a.type === "InternalIP"
       );
-      return (
-        <CopyableAddress
-          value={address?.address}
-          label="Internal IP"
-          fallback="-"
-        />
-      );
+      return <InternalIpCell address={address?.address} />;
     },
   },
   // Wider than the pod table's CPU and Memory: these carry a usage bar

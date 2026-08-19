@@ -41,6 +41,27 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    relatedResources: "Related resources",
+    trafficPath: "Traffic path",
+    releases: "Releases",
+    charts: "Charts",
+    repositories: "Repositories",
+    reconcilers: "Reconcilers",
+    sources: "Sources",
+    controllers: "Controllers",
+    reachableAt: "Reachable at",
+    howTrafficGetsHere: "How traffic gets here",
+    volumes: "Volumes",
+    subsets: "Subsets",
+    routedDefinedNowhere: "Routed to, and defined nowhere",
+    entryPoints: "Entry points",
+    renewal: "Renewal",
+    appSets: "App sets",
+    applicationSets: "Application sets",
+    projects: "Projects",
+    argoOwnWorkloads: "Argo's own workloads",
+    argoOwnUi: "Argo's own UI",
+    itsObjects: "Its objects",
     openApiSchema: "OpenAPI schema",
     matchesSelectorNotPublished: "Matches the selector, not published",
     portsNotExposed: "Ports the Service does not expose",
@@ -85,6 +106,38 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    controlledBy: "Controlled by",
+    objects: "Objects",
+    lastFetched: "Last fetched",
+    appliedBy: "Applied by",
+    rules: "Rules",
+    match: "Match",
+    backend: "Backend",
+    loadBalancerAddress: "Load balancer address",
+    containerRuntime: "Container runtime",
+    os: "OS",
+    architecture: "Architecture",
+    created: "Created",
+    pool: "Pool",
+    instanceType: "Instance type",
+    cloud: "Cloud",
+    ephemeralStorage: "Ephemeral storage",
+    headroom: "Headroom",
+    allocatable: "Allocatable",
+    lastRun: "Last run",
+    nextRun: "Next run",
+    rollout: "Rollout",
+    ingressAddress: "Ingress address",
+    podIp: "Pod IP",
+    hostIp: "Host IP",
+    phase: "Phase",
+    entryPoint: "Entry point",
+    image: "Image",
+    lastExit: "Last exit",
+    requests: "Requests",
+    limits: "Limits",
+    resources: "Resources",
+    health: "Health",
     whatThisRevisionRuns: "what this revision runs",
     selector: "Selector",
     connections: "Connections",
@@ -233,6 +286,121 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    portForwardHint: "Forward traffic from your machine to this pod.",
+    quickPresets: "Quick presets",
+    clickToAutofillPorts: "Click to auto-fill local and remote ports",
+    localPort: "Local port",
+    remotePort: "Remote port",
+    autoReconnect: "Auto reconnect",
+    autoReconnectHint: "Retry when the pod or connection drops",
+    saveAsConfig: "Save as config",
+    saveAsConfigHint: "Keep this port-forward for quick reuse",
+    autoStart: "Auto start",
+    autoStartHint: "Start automatically when this cluster connects",
+    configName: "Config name",
+    activePortForwards: "Active port-forwards",
+    activeInline: "Active",
+    debugPodReady: "Debug pod ready",
+    debugPodReadyDetail: 'Debug pod "{pod}" created on node "{node}"',
+    debugPodNotReady: "Debug Pod Not Ready",
+    theDebugPod: "The debug pod",
+    onNode: "on node",
+    creatingDebugPod: "Creating debug pod...",
+    waitingForPod: "Waiting for pod...",
+    createPrivilegedDebugPodOnNode: "Create a privileged debug pod on node",
+    targetNode: "Target Node",
+    debugPodNamespace: "Debug Pod Namespace",
+    debugPodNamespaceHint: "Namespace where the debug pod will be created",
+    debugNodeWarningPre: "This will create a",
+    privilegedPod: "privileged pod",
+    debugNodeWarningPost:
+      "with full access to the host. The host filesystem will be mounted at",
+    repositoryAdded: "Repository added",
+    repositoryAddedDetail: 'Repository "{name}" has been added successfully.',
+    addRepositoryFailed: "Failed to add repository",
+    repositoryRemoved: "Repository removed",
+    repositoryRemovedDetail: "The repository has been removed successfully.",
+    removeRepositoryFailed: "Failed to remove repository",
+    repositoriesUpdated: "Repositories updated",
+    repositoriesUpdatedDetail: "All Helm repositories have been updated.",
+    updateRepositoriesFailed: "Failed to update repositories",
+    searchFailed: "Search failed",
+    chartInstalled: "Chart installed",
+    chartInstalledDetail: 'Release "{name}" has been installed successfully.',
+    installationFailed: "Installation failed",
+    releaseUpgraded: "Release upgraded",
+    releaseUpgradedDetail: 'Release "{name}" has been upgraded successfully.',
+    upgradeFailed: "Upgrade failed",
+    removeRepository: "Remove Repository",
+    removeRepositoryConfirm:
+      'Are you sure you want to remove the repository "{name}"?',
+    openPortForwardPanel: "Open the port-forward panel",
+    portForwardActive: "Port-forward active",
+    portForwardReconnecting: "Port-forward reconnecting",
+    portForwardReconnected: "Port-forward reconnected",
+    portForwardStopped: "Port-forward stopped",
+    portForwardError: "Port-forward error",
+    started: "Started",
+    notStarted: "not started",
+    bufferFill: "Buffer fill",
+    filterReconcilers: "Filter reconcilers",
+    filterReconcilersPlaceholder: "Filter by name, path, chart or source",
+    somethingWentWrong: "Something went wrong",
+    goHome: "Go Home",
+    yamlCopied: "YAML copied to clipboard.",
+    viewKindDetails: "View {kind} details",
+    invalidPort: "Invalid port",
+    invalidPortHint: "Please enter valid port numbers (1-65535)",
+    updating: "updating…",
+    manifestCopiedNamed: "{name} manifest copied",
+    kindManifest: "{kind} manifest",
+    importedFromCluster: "Imported from cluster",
+    suspendedLower: "suspended",
+    inTime: "in {time}",
+    unknownLower: "unknown",
+    resourceWatchFailed: "Resource watch failed",
+    eventBridgeLagged: {
+      one: "The event bridge fell behind and dropped {n} update, so this list may be incomplete.",
+      other:
+        "The event bridge fell behind and dropped {n} updates, so this list may be incomplete.",
+    },
+    filterByHostVirtualServiceDestination:
+      "Filter by host, VirtualService or destination",
+    manage: "Manage",
+    rolloutSubject: "one pod per eligible node",
+    today: "today",
+    eventsWarnings: "Warnings",
+    eventsNormal: "Normal",
+    eventType: "Event type",
+    eventsFetched: "Events fetched",
+    noLimit: "No limit",
+    latestN: "Latest {n}",
+    drainNamed: "Drain {name}",
+    drainAnyway: "Drain anyway",
+    openTheNodeFirst: "Open the node first",
+    loadOlder: "Load older",
+    hideHistory: "Hide history",
+    viewYaml: "View YAML",
+    editYaml: "Edit YAML",
+    yamlCopiedToClipboard: "YAML copied to clipboard.",
+    manifestIsValid: "Manifest is valid and can be applied.",
+    manifestApplied: "Manifest applied to cluster.",
+    failedToApplyManifest: "Failed to apply manifest.",
+    formatted: "Formatted",
+    yamlFormatted: "YAML has been formatted.",
+    restored: "Restored",
+    contentRestoredFromHistory: "Content restored from history.",
+    unsavedChanges: "Unsaved Changes",
+    viewYamlManifest: "View the YAML manifest",
+    editYamlManifestHint:
+      "Edit the YAML manifest and apply changes to the cluster",
+    applyChangesQuestion: "Apply Changes?",
+    applyManifestConfirm:
+      "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",
+    changesToBeApplied: "Changes to be applied:",
+    filterApplications: "Filter applications",
+    filterByNameProjectRepoObject: "Filter by name, project, repo or object",
+    openInArgoCd: "Open {name} in Argo CD",
     debugNode: "Debug node",
     jumpToLatest: "Jump to latest",
     forwardThisPort: "Forward this port",
@@ -814,6 +982,33 @@ export const en = {
     back: "Back",
   },
   activity: {
+    forwardStarted: "Port forward started",
+    forwardingDetail: "Forwarding localhost:{local} → {pod}:{remote}",
+    forwardStopped: "Port forward stopped",
+    forwardDialogHint: "Forward traffic from your machine to this pod.",
+    saveAsConfig: "Save as config",
+    saveAsConfigHint: "Keep this port-forward for quick reuse",
+    configName: "Config name",
+    activeForwards: "Active port-forwards",
+    activeFallback: "Active",
+    reconnectingInline: "reconnecting",
+    runningElsewhere: "Running elsewhere",
+    missingTarget: "Missing target",
+    missingTargetDetail: "Pod name and namespace are required.",
+    invalidPort: "Invalid port",
+    invalidPortDetail: "Ports must be between 1 and 65535.",
+    saveForwardFailed: "Failed to save port-forward",
+    createForwardFailed: "Failed to create port-forward",
+    editPortForward: "Edit port forward",
+    newPortForward: "New port forward",
+    forwardSavedFor:
+      "Saved for {context} and offered in the activity panel until you delete it.",
+    localPort: "Local port",
+    remotePort: "Remote port",
+    autoReconnect: "Auto reconnect",
+    autoReconnectHint: "Retry when the pod or the connection drops.",
+    autoStartLabel: "Auto start",
+    autoStartHint: "Start as soon as this cluster connects.",
     panel: "Activity panel",
     saved: "Saved",
     startAll: "Start all",
@@ -855,6 +1050,7 @@ export const en = {
     active: "{n} active",
   },
   cluster: {
+    connectToImport: "Connect to a cluster to import live resources.",
     spotNodeWarning:
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
     unknownAge: "Unknown",
@@ -965,6 +1161,33 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    authRunsPlugin: "Runs {plugin} for a token.",
+    aCredentialPlugin: "a credential plugin",
+    authClientCertFrom:
+      "Client certificate, from {source} — nothing else needed.",
+    authClientCertEmbedded:
+      "Client certificate, embedded in the file — nothing else needed.",
+    authTokenFrom: "A bearer token, read from {source}.",
+    authTokenInFile:
+      "A bearer token, written in the file — nothing else needed.",
+    authBasicAs: "Username and password, as {username}.",
+    authBasicInFile: "Username and password, stored in the file.",
+    authProviderNamed: "The {name} auth provider, configured in the file.",
+    authUnrecognised:
+      "The file does not say how this context authenticates — this app cannot tell.",
+    forwardingTunnelNote:
+      "Forwarding {target} to {local}. Left off, the row stays in the sidebar and pressing it opens the tunnel — kept per cluster, on this machine only.",
+    tokenUnchangedPlaceholder: "unchanged — type to replace it",
+    tokenNewPlaceholder: "pasted here, kept out of this window afterwards",
+    tokenStorageNote:
+      "Stored in this app’s config file in plain text, beside the registry passwords it already keeps there, and sent only from the backend — it is never handed back to this window.",
+    lookingEllipsis: "Looking…",
+    findVendorInCluster: "Find {vendor} in this cluster",
+    probeAnswered: "Answered in {ms}ms",
+    probeDidNotAnswer: "Did not answer — {reason}",
+    searchingRegistry: "Searching {registry}…",
+    registrySearchFailed: "Search failed. Check registry settings.",
+    officialBadge: "official",
     oneAddressPerCluster:
       "One address per cluster, because a {vendor} is per cluster — staging's is not production's. Gives {gives}.",
     addressIsFromHere:
@@ -1176,6 +1399,508 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    overPlainHttp: "{n} over plain HTTP",
+    rulesOfEqualOrder: "rules of equal order",
+    membersDisagree: "members disagree",
+    sharedAcrossNamespaces: "shared across namespaces",
+    readingWhatConnects: "Reading what connects to this…",
+    couldNotReadFlux: "Could not read what Flux is reconciling",
+    couldNotReadFluxBody:
+      "Everything on this page comes from Flux’s own objects in this API server, and that request failed — so a list here would be a guess rather than an answer.",
+    fluxPageDescription:
+      "What Flux is applying, what it is applying from, and where the two have come apart.",
+    readingWhatFluxApplies: "Reading what Flux applies…",
+    fluxApplyingNothing: "Flux is installed here and applying nothing.",
+    fluxNoReconcilers:
+      "No Kustomization and no HelmRelease exists in this cluster, so nothing has been given to its controllers to apply.",
+    noReconcilerMatches: "No reconciler here matches that.",
+    fetchFailingLower: "fetch failing",
+    fetchedLower: "fetched",
+    nothingToApplyFrom: "nothing to apply from",
+    sourceHasRevision: "the source has {revision}",
+    neverApplied: "never applied",
+    appliedRevision: "applied {revision}",
+    nothingApplied: "nothing applied",
+    suspendedLower: "suspended",
+    heldInHelmStorage: "held in Helm's own storage",
+    fromRevision: "from {revision}",
+    nothingAppliedYet: "nothing applied yet",
+    aHelmRelease: "a Helm release",
+    dependsOn: "depends on {list}",
+    fluxSuspendedTitle:
+      "Suspended: it is not reconciling and it is not failing",
+    fluxSuspendedTitleAgo:
+      "Suspended — {age} ago: it is not reconciling and it is not failing",
+    fluxSuspendedWasReady:
+      "A suspended {kind} keeps the Ready condition from the last time it ran, so it reads as healthy in every list — Flux's own included. It last applied {revision}; whatever has been committed since is not here.",
+    fluxSuspendedNeverRan:
+      "It was suspended before it ever reconciled, so nothing it describes has been applied at all.",
+    fluxFrozenTitle:
+      "Its source stopped fetching; everything below it is frozen at {revision}",
+    fluxFrozenHelm:
+      "The release is installed and healthy — from a chart version the source can no longer refresh.",
+    fluxFrozenObjects: {
+      one: "The {n} object is applied and healthy — from a revision the source can no longer refresh.",
+      other:
+        "The {n} objects are applied and healthy — from a revision the source can no longer refresh.",
+    },
+    fluxFrozenExceptPre: "Nothing here says “failed” except",
+    fluxFrozenExceptPost: ", and every reconciler under it looks fine.",
+    fluxSourceMissing: "The source it names is not in this cluster",
+    fluxSourceStoppedNeverApplied:
+      "Its source has stopped fetching, and this has never applied anything",
+    fluxSourceNeverFetched:
+      "Its source has never fetched, so this has never applied anything",
+    fluxNotReconciling: "Not reconciling",
+    fluxNotReconcilingReason: "Not reconciling — {reason}",
+    fluxStalledTitle:
+      "Stalled: it has stopped retrying and will not try again on its own",
+    fluxStalledNote:
+      "Flux gives up after its retry budget. Nothing changes until the spec does.",
+    fluxBlockingTitle: {
+      one: "{list} is waiting on this one",
+      other: "{list} are waiting on this one",
+    },
+    fluxBlockingDeclares: { one: "declares", other: "both declare" },
+    fluxBlockingTail: {
+      one: ", so it has reconciled either. Fixing this one releases it.",
+      other:
+        ", so neither has reconciled either. Fixing this one releases them.",
+    },
+    fluxWaitingOn: "Waiting on {name}, which is not ready",
+    fluxWaitingSays: "says:",
+    fluxWaitingTail:
+      "— nothing here is wrong, and nothing here will move until that does.",
+    fluxWaitingQueue:
+      "Nothing here is wrong; it is in the queue behind something that is.",
+    readingSources: "Reading the sources…",
+    fluxNoSources:
+      "No source objects. Nothing is being fetched, so nothing can be applied.",
+    fluxSourcesDescription:
+      "A source is fetched once and applied by everything that names it. This is the half of Flux that fails quietly: a source that stops fetching leaves every reconciler under it reporting the last revision it managed to apply.",
+    noUrlDeclared: "no URL declared",
+    nothingLower: "nothing",
+    fluxFetchStopped:
+      "It stopped fetching, and what it fetched before is what is running",
+    fluxFetchNever:
+      "It has never fetched, so nothing under it has ever been applied",
+    fluxSourceUnusedTitle: "Nothing applies this source",
+    fluxSourceUnusedBody:
+      "It is fetched on its schedule and no Kustomization or HelmRelease names it, so it is configuration doing nothing. Nowhere else in this app could tell you that.",
+    fluxFrozenStillApplying: {
+      one: "is still applying {revision}{fetched}, and reports Ready while doing it.",
+      other:
+        "are still applying {revision}{fetched}, and report Ready while doing it.",
+    },
+    fluxFetchedAgo: ", fetched {age} ago",
+    fluxFrozenNothingToApply: {
+      one: "has nothing to apply.",
+      other: "have nothing to apply.",
+    },
+    fluxSourceUnaffected: "Nothing names this source, so nothing is affected.",
+    readingFluxWorkloads: "Reading Flux’s own workloads…",
+    fluxWorkloadsTitle: "Flux's own workloads",
+    fluxWorkloadsDescription:
+      "One controller per kind of object, each with its own logs — which is where a Flux problem this page cannot see is actually diagnosed. Flux ships no dashboard, so there is nowhere else to go.",
+    fluxNoControllersPre: "Nothing in this cluster carries",
+    fluxNoControllersPost:
+      ", so Flux’s own workloads could not be found. Its objects are still read from the API server — but with no controller running, none of them is being acted on.",
+    allHosts: "All hosts",
+    noClassNamed: "no class",
+    nothingServesClass: "{name} — nothing serves it",
+    noneTrafficUnencrypted: "none — traffic is unencrypted",
+    catchAllCertificate: "catch-all certificate",
+    ingressDefaultBackendOnly:
+      "No rules — every request reaching this load balancer goes to the default backend:",
+    ingressNoRulesNoDefault:
+      "No rules and no default backend, so this ingress routes nothing.",
+    noTlsConfigured: "No TLS configured — this ingress serves plain HTTP.",
+    autoGenerated: "(auto-generated)",
+    catchAllAppliesToRest: "catch-all · applies to every host not listed",
+    noHosts: "no hosts",
+    pageFailedToRender:
+      "The page failed to render. You can reload or return home.",
+    readingRepositories: "Reading repositories…",
+    noRepositoriesConfigured:
+      "No repositories configured — add one to search for charts.",
+    resourceNotFoundInCluster: "Resource not found in cluster",
+    supersededByRevision:
+      "Superseded by revision {revision}. The Deployment keeps this one at zero so a rollback can bring it straight back.",
+    deploymentScaledToZeroNote:
+      "The Deployment is scaled to zero, so its current revision runs no pods.",
+    noDeploymentRollingOut: "nothing — no Deployment is rolling this out",
+    currentRevisionLower: "current revision",
+    supersededLower: "superseded",
+    noCertificateObjectAnywhere:
+      "No Certificate object exists in any namespace, and no Ingress carries the {annotation} annotation that would make one.",
+    noIngressMountsSecret: "No Ingress in {namespace} mounts {secret}.",
+    itsSecret: "its Secret",
+    nothingServingTlsFrom:
+      "Nothing is serving TLS from {secret}, so every host above it is refused or served in the clear.",
+    certificateStillServed:
+      "The certificate already in {secret} is still being served, so this is not an outage yet.",
+    certificateStillServedUntil:
+      "The certificate already in {secret} is still being served, so this is not an outage yet — it {expiry}.",
+    noIssuerNoClusterIssuer: "This cluster has no Issuer and no ClusterIssuer.",
+    certManagerNeedsIssuer:
+      "cert-manager signs nothing without one, so any Certificate here will sit unissued until one exists.",
+    issuersCouldNotBeRead: "issuers could not be read",
+    containerIsWaiting: "{container} is waiting · {reason}",
+    schedulerHasNotPlacedIt: "The scheduler has not placed it on a node yet.",
+    noContainerHasStarted: "No container has started — this pod is {status}.",
+    recentEventsSayMore:
+      "{explanation} Recent events on the Overview tab say more.",
+    podDeclaresNoContainers: "This pod declares no containers.",
+    nothingToInspectUntilSpecFixed:
+      "Nothing to inspect until its spec is fixed.",
+    couldNotReadKindData: "Could not read this {kind}'s data.",
+    couldNotReadWorkloadPods: "Could not read this workload's pods.",
+    couldNotReadCronJobRuns: "Could not read this CronJob's runs.",
+    couldNotReadKindManifest: "Could not read this {kind}'s manifest.",
+    clusterIpOnlyInside:
+      "{type} services are only accessible from within the cluster. Use port-forward for local development:",
+    integrationsPageLists:
+      "{link} lists every extension this app knows about and what each one would give.",
+    accessExternalLb: "External (LoadBalancer)",
+    accessExternalLbHint: "Access via load balancer IP",
+    accessExternalNodePort: "External (NodePort)",
+    accessExternalNodePortHint: "Access via any cluster node IP",
+    accessExternalName: "External Name",
+    accessExternalNameHint: "DNS alias to external service",
+    accessInternalFullDns: "Internal (full DNS)",
+    accessInternalFullDnsHint: "From any namespace in cluster",
+    accessInternalShort: "Internal (short)",
+    accessInternalShortHint: "From same namespace only",
+    mountedByNothing: "mounted by nothing",
+    allocatableNote: "what the scheduler may hand out",
+    placementNote: "what the cloud says this node is and where",
+    everyPort: "every port",
+    portNumber: "port {port}",
+    noSuchIntegration: "no such integration",
+    couldNotReadMeshRouting: "Could not read this mesh’s routing",
+    meshRoutingRequestFailed:
+      "Every route this page draws is a Gateway, a VirtualService or a DestinationRule in this API server, and that request failed — so the chain would be a guess rather than an answer.",
+    istioPageDescription:
+      "What this mesh routes, and where each hostname stops.",
+    readingMesh: "Reading the mesh…",
+    noVirtualServiceRoutes:
+      "No VirtualService routes anything here, so there is no shape to draw.",
+    istioNothingRoutes:
+      "Istio is installed here and nothing routes through it.",
+    istioNoVirtualServiceHost:
+      "No VirtualService declares a host. The mesh will still carry traffic between the workloads that have a sidecar — that is the default and needs no object — but there is no routing rule to draw.",
+    noHostVirtualServiceMatches:
+      "No host, VirtualService or destination here matches that.",
+    noGatewayServesIt: "no Gateway serves it",
+    subsetNotDefined: "subset not defined",
+    weightsDoNotAddUp: "weights do not add up",
+    routingState: "routing",
+    inMeshOnly: "in-mesh only",
+    throughGateways: "through {list}",
+    everyRequest: "every request",
+    nowhere: "nowhere",
+    theRuleFor: "the rule for",
+    noEdgeListener: "no edge listener",
+    notInThisCluster: "not in this cluster",
+    servesOtherHosts: "serves other hosts",
+    noSubset: "no subset",
+    definesList: "defines {list}",
+    noSubsets: "no subsets",
+    noRuleNamesThisHost: "no rule names this host",
+    outsideThisCluster: "outside this cluster",
+    notThisClustersPods: "not this cluster's pods",
+    matchShownAsWrittenBecause:
+      "This match is shown exactly as written, because {reason}.",
+    matchFieldsNotInterpreted: {
+      one: "Shown exactly as written: {list} is not interpreted here.",
+      other: "Shown exactly as written: {list} are not interpreted here.",
+    },
+    istioNoGatewayServes: "No Gateway serves {host}",
+    istioGatewaysAbsentNote: {
+      one: "{list} is named here and does not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge — there is no status, no event and no condition anywhere that says so.",
+      other:
+        "{list} are named here and do not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge — there is no status, no event and no condition anywhere that says so.",
+    },
+    istioGatewaysCoverNothingNote: {
+      one: "{list} exists and no server on it covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.",
+      other:
+        "{list} exist and no server on them covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.",
+    },
+    istioSubsetUndefinedTitle:
+      "{name} routes to a subset called {subset}, and nothing defines it",
+    istioSubsetRuleDeclaresNote:
+      "A DestinationRule names {host} and declares {declares}. Istio has no endpoints to send this route to, and every request on it is answered with a 503.",
+    istioSubsetDeclaredNot: "{list} — not {subset}",
+    istioNoSubsetsAtAll: "no subsets at all",
+    istioNoRuleNamesHostNote:
+      "No DestinationRule in this cluster names {host} at all, so the subset {subset} is defined nowhere. A subset is a label selector that has to exist before it can be routed to; every request on this route gets a 503.",
+    istioWeightsTitle: "The weights on this rule add up to {sum}, not 100",
+    istioWeightsNote:
+      "Istio divides a route's traffic by a hundred, so {detail}. The proportion actually served is not something these objects state.",
+    istioWeightsUnder:
+      "{percent}% of the requests matching this rule are not covered by any destination it names",
+    istioWeightsOver:
+      "the shares written here are not the shares that will be served",
+    istioRouteResolves503:
+      "This route resolves and every request gets a 503 — {detail}",
+    istioNoGatewayObjects:
+      "This cluster has no Gateway objects, so nothing in the mesh is exposed at the edge. Traffic between workloads that have a sidecar still flows, which needs no Gateway.",
+    istioGatewaysDescription:
+      "What the mesh listens on at its edge, and which hosts bind to each. A Gateway nothing binds to is a listener with no routes behind it.",
+    noServers: "no servers",
+    nothingBindsToIt: "nothing binds to it",
+    istioNoDestinationRules:
+      "This cluster has no DestinationRule objects. Every route reaches its Service’s pods with no subset in between, which is the ordinary case.",
+    istioRoutedDefinedNowhereNote:
+      "A subset is a label selector that has to exist before a route can name it. Istio accepts the reference and answers every request on that route with a 503.",
+    istioSubsetsDescription:
+      "Every DestinationRule, the subsets it defines, and whether anything routes to them.",
+    noSubsetsTrafficPolicyOnly: "no subsets — traffic policy only",
+    noMatchesFound: "No matches found.",
+    theLoadBalancerInFront: "the load balancer in front",
+    cannotPullImage: "{container} cannot pull its image",
+    imagePullRetrying:
+      "— the kubelet is retrying, waiting longer after each attempt. The name, the tag or the pull credentials are what to check.",
+    startsAndExits: "{container} starts and then exits, over and over",
+    crashRestartsWithLastRun: {
+      one: "{n} restart so far; the last run ended {how}. What it printed before it died is in Logs.",
+      other:
+        "{n} restarts so far; the last run ended {how}. What it printed before it died is in Logs.",
+    },
+    crashRestartsNoLastRun: {
+      one: "{n} restart so far. What it printed before it last died is in Logs.",
+      other:
+        "{n} restarts so far. What it printed before it last died is in Logs.",
+    },
+    cannotBeBuilt: "{container} cannot be built from this spec",
+    missingConfigMapSecretOrVolume:
+      "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
+    waitingToStart: "{container} is waiting to start",
+    containerExitedWith: "{container} exited with {code}",
+    lastRunNotClean:
+      "{how} — the last run of this container did not finish cleanly.",
+    noNodeWillTakePod: "No node will take this pod",
+    conditionIsStatus: "{type} is {status}",
+    thisPodFailed: "This pod failed",
+    certificateExpired: "certificate expired",
+    certificateRunningOut: "certificate running out",
+    canaryShadowingNothing: "canary shadowing nothing",
+    servedInTheClear: "served in the clear",
+    splitShares: "split {shares}",
+    tlsFrom: "TLS from {name}",
+    noTls: "no TLS",
+    stopNoServiceToSendTo: "no service to send to",
+    stopSelectorMatchesNothing: "selector matches nothing",
+    stopRunningNoneReady: "running, none ready",
+    stopNoPortToSendTo: "no port to send to",
+    everyRequest503:
+      "This host answers, and every request gets a 503 — {reason}",
+    servedInClearTitle:
+      "Served in the clear — nothing offers this host over TLS",
+    nginxClearRedirectAnyway:
+      "No Ingress under this host declares a certificate, so nginx serves it on :80 and nothing else. One of them does carry ssl-redirect, which reads like protection and is doing nothing: nginx applies that redirect only where the Ingress has a certificate to redirect to.",
+    nginxClearNote:
+      "No Ingress under this host declares a certificate, so nginx serves it on :80 and there is no encrypted way to reach it, even for a client that asks for one.",
+    twoIngressesClaimPath: "Two Ingresses claim {path} on this host",
+    nginxDuplicateWinner:
+      "nginx serves {object} — the older object wins a conflict — and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.",
+    nginxDuplicateTie:
+      "nginx breaks the tie by creation time and serves the older object; these do not both state one, so which of them is serving the request is not something this app can say from here.",
+    canaryShadowingNothingTitle: "{name} is a canary shadowing nothing",
+    canaryShadowingNothingNote:
+      "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it — the object is correct YAML that does nothing at all.",
+    secretNotACertificate: "{name} could not be read as a certificate",
+    secretNotParsable:
+      "The Secret is there and what is in it is not a certificate this app could parse.",
+    certExpiryBrowserNote:
+      "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
+    traefikRoutingRequestFailed:
+      "The routes this page draws come from the Ingresses and IngressRoutes in this API server, and that request failed — so the table would be a guess rather than an answer.",
+    traefikPageDescription:
+      "What this proxy serves, and where each hostname goes.",
+    traefikRestOnNodeHint:
+      "Rest on a node to light up everything one edge away. A host goes to its own paths and their chain; a Service goes to its page — every line is one object naming another.",
+    traefikRunningNothingRoutes:
+      "Traefik is running here and nothing routes to it.",
+    traefikNoRouteClaimsClass:
+      "No IngressRoute exists, and no Ingress names an IngressClass this proxy claims. An Ingress naming a class nothing serves is correct YAML with no events and no error, and is simply never served.",
+    theEdge: "the edge",
+    tlsEndsAt: "TLS ends at {name}",
+    everyEntryPoint: "every entry point",
+    throughWord: "through",
+    anApiObject: "an API object",
+    insideTheProxy: "inside the proxy",
+    thePathThrough: "the path through {path}",
+    notReadLower: "not read",
+    kindRule: "{kind} rule",
+    shownInFullBelow: "shown in full below",
+    traefiksOwnNotService: "Traefik's own, not a Service",
+    notPods: "not pods",
+    ruleShownAsWrittenBecause:
+      "This rule is shown exactly as written, because {reason}.",
+    shownExactlyAsWritten: {
+      one: "Shown exactly as written: {list} is not interpreted here.",
+      other: "Shown exactly as written: {list} are not interpreted here.",
+    },
+    notFoundInThisCluster: "not found in this cluster",
+    everyRequest502:
+      "This host answers, and every request gets a 502 — {reason}",
+    traefikClearNote: {
+      one: "No route under this host carries a certificate, and it is bound to {list}, which terminates no TLS and carries no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
+      other:
+        "No route under this host carries a certificate, and it is bound to {list}, which terminate no TLS and carry no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
+    },
+    twoObjectsClaimPath: "Two objects claim {path} on this host",
+    traefikDuplicateWinner:
+      "wins — {because} — and the rest never fire for this path.",
+    traefikPriorityDeclared:
+      "it declares priority {n}, above the others' declared or defaulted weight",
+    traefikPriorityLongest:
+      "its rule is the longest, which is Traefik's default priority for a router that declares none",
+    traefikDuplicateTied:
+      "carry the same priority, declared or defaulted to their rule’s length — Traefik’s pick between them is not something the objects state.",
+    traefikDuplicateUnsettled:
+      "both match it. Traefik breaks the tie by router priority — declared, or defaulting to the length of the router’s rule — and for an Ingress that rule is one Traefik generates and this app never sees, so which of them serves the request is not settled from here.",
+    noMiddlewareObjects:
+      "This cluster has no Middleware objects. Traefik serves every route without one, which is the ordinary case.",
+    middlewaresDescription:
+      "Every one, and who uses it. A middleware nothing references is doing nothing, and nowhere else in this app could tell you.",
+    middlewareUnreferenced:
+      "nothing references it — it is configuration that does nothing",
+    readingTheProxy: "Reading the proxy…",
+    cannotSayWhatTraefikListensOn:
+      "This cluster cannot say what Traefik listens on.",
+    entryPointsAreStatic:
+      "Entry points are static configuration — they exist only in the flags the proxy was started with, and nothing in the API server carries them.",
+    entryPointsDescription:
+      "What the proxy listens on, which of them terminate TLS, and which hosts land on each — the answer to “why is my route on :80”.",
+    plainLower: "plain",
+    redirectsTo: "redirects to {target}",
+    plainEntryPointsHead: {
+      one: "{list} terminates no TLS and redirects nowhere.",
+      other: "{list} terminate no TLS and redirect nowhere.",
+    },
+    plainEntryPointsNote:
+      "A route that names no entry point is bound to all of them, so every host in this cluster is also reachable unencrypted — including the ones with a certificate. Setting a redirection on the entry point fixes all of them at once; a redirect middleware fixes one route.",
+    theProxyTitle: "The proxy",
+    theProxyDescription:
+      "Where a Traefik problem is actually diagnosed: its own pods, and its own logs.",
+    traefikClaimsNoClass:
+      "Traefik is running and claims no IngressClass, so no Ingress in this cluster can reach it by class.",
+    renewalNotReadable:
+      "The certificate above was read from the Secret. Who renews it could not be read: {error}",
+    renewedAutomaticallyBy: "Renewed automatically by",
+    nextRenewalAt: ", next {when}",
+    issuanceFailed: "failed",
+    issuanceNotFinished: "not finished",
+    issuanceInProgress: "in progress",
+    startedWhen: "started {when}",
+    renewsAutomatically: "renews automatically {when}",
+    renewalNotFinished: "Renewal has not finished",
+    noEventsInScope: "No events in {scope} yet.",
+    drainExplained:
+      "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
+    readingWhatRefusesToMove: "Reading what would refuse to move…",
+    drainWillWait:
+      "The drain will not fail on these — it will wait, and keep waiting until another replica is ready somewhere else.",
+    budgetRuleHealthyCovering:
+      "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
+    couldNotReadClusterState: "Could not read cluster state",
+    controllerLower: "controller",
+    noneSet: "none set",
+    couldNotReadManifest: "Could not read the manifest",
+    couldNotReadApplications: "Could not read this cluster’s Applications",
+    applicationsUnreadableBody:
+      "Everything on this page comes from the {kind} objects in this API server, and that request failed — so a list here would be a guess rather than an answer.",
+    argoPageDescription:
+      "Whether what is running is what git says should be running, and what is stopping it where it is not.",
+    acrossEveryNamespace: "{count} across every namespace",
+    readingApplications: "Reading the Applications…",
+    argoOwnsNothing: "Argo CD is installed here and owns nothing yet.",
+    argoNoApplicationsBody:
+      "No {kind} exists in this cluster, so nothing is being delivered from git. The controller is running and waiting for one.",
+    nothingFailing: "nothing failing",
+    allInSync: "{count}, all in sync",
+    noApplicationMatches: "No Application here matches that.",
+    argoProjectDestination: "project {project} → {destination}",
+    generatedByName: "generated by {name}",
+    noSourceDeclared: "no source declared",
+    defaultBranch: "default branch",
+    autoSyncSelfHealing: "auto-sync, self-healing",
+    autoSyncOn: "auto-sync on",
+    autoSyncOff: "auto-sync off",
+    nothingComparedYet: "nothing compared yet",
+    lastSyncedAgo: "last synced {age} ago",
+    neverSynced: "never synced",
+    fromGit: "from git",
+    syncedAgo: "synced {age} ago",
+    unknownLower: "unknown",
+    argoNotComparedYet:
+      "Argo has not compared this Application yet, so it lists no objects.",
+    generatedByApplicationSet: "Generated by ApplicationSet",
+    editingGeneratedAppUndone:
+      ". Editing this Application is undone the next time the generator runs — the file to change is the ApplicationSet.",
+    argoDiffNoAddress:
+      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold — and no Ingress in this cluster serves {service}, so there is no address to send you to.",
+    forLineByLineDiff:
+      "for the line-by-line diff, which needs a credential this app does not hold.",
+    syncFailingFor: "Sync has been failing for {age}, and auto-sync is on",
+    syncFailing: "Sync has been failing, and auto-sync is on",
+    argoRetries:
+      "Argo retries and fails; nothing will converge until the manifest changes.",
+    lastSyncFailedAgo: "The last sync failed, {age} ago, and auto-sync is off",
+    lastSyncFailed: "The last sync failed, and auto-sync is off",
+    nothingRetryingSync:
+      "Nothing is retrying it. It will stay exactly as it is until somebody syncs it again.",
+    outOfSyncLastSynced:
+      "Out of sync — last synced {age} ago, and auto-sync is off",
+    outOfSyncNeverSynced: "Out of sync and never synced, and auto-sync is off",
+    driftedNote:
+      "Nothing is going to fix this on its own. Somebody either changed the cluster by hand and meant to, or changed git and nobody pressed sync.",
+    nameIsDegraded: "{name} is degraded",
+    degradedNote:
+      "It is applied and it is not working, which the sync status says nothing about.",
+    argoReports: "Argo reports {type}",
+    noApplicationSets:
+      "No ApplicationSet in this cluster. Every Application here was written by hand, which means editing one is a change that stays.",
+    applicationSetsDescription:
+      "A generator and the Applications it made. What it generated is a template's output — editing one of those Applications is undone the next time the generator runs.",
+    generatedNothing: "generated nothing in this cluster",
+    noAppProjects:
+      "This cluster has no AppProject objects — not even {name}, which Argo normally installs. Every Application names a project, so one of them is naming something that is not there.",
+    projectsDescription:
+      "What each project lets an Application do: which repositories it may deploy from, and where it may deploy to.",
+    noRepositoryAllowed: "no repository allowed",
+    anyRepository: "any repository",
+    noDestinationAllowed: "no destination allowed",
+    anyNamespace: "any namespace",
+    anyCluster: "any cluster",
+    namespaceOnCluster: "{namespace} on {cluster}",
+    readingArgoWorkloads: "Reading Argo’s own workloads…",
+    argoWorkloadsDescription:
+      "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
+    argoUiDescription:
+      "Half of what Argo knows needs a credential this app does not hold — the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over.",
+    kindNameServes: "{kind} {name} serves",
+    anIngressServes: "An Ingress serves",
+    soEveryApplicationOffersWayIn:
+      ", so every Application above offers a way into it.",
+    readingWhatRoutes: "Reading what routes {service}…",
+    somethingWord: "Something",
+    hostNotKnownTls:
+      ", but nothing in the API server says whether that host is served over TLS — the proxy’s entry points are start-up flags and this app could not read them. Rather than guess a scheme and hand you a link that may refuse the connection, the host is stated and left to you.",
+    nothingRoutesServiceToHostname:
+      "Nothing this app can read routes {service} to a hostname",
+    noIngressNoRoutingController:
+      " — no Ingress, and no routing controller installed that could be asked about its own objects",
+    serviceIsClusterIpNoRoute:
+      ". {service} is a ClusterIP with no route from this machine, so there is no address this app could construct, and a link into a connection error is worse than no link.",
+    everythingReadFromObjects:
+      " Everything on this page is read from the {kind} objects themselves and needs no credential.",
+    oneRoutingControllerDidNotAnswer:
+      "One routing controller was asked and did not answer:",
+    itsObjectsDescription:
+      "The CRDs this page reads, for a reader who wants the raw thing.",
     loadingTerminal: "Loading terminal…",
     noMetricsReading:
       "metrics-server has no reading for this object — its containers may not be running",
@@ -1816,6 +2541,118 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    reconcilersFromSources: {
+      one: "{n} reconciler from {sources}",
+      other: "{n} reconcilers from {sources}",
+    },
+    sources: { one: "{n} source", other: "{n} sources" },
+    notReconcilingAndFirst: "{n} of {total} not reconciling, and first",
+    reconcilersAllApplied: {
+      one: "{n} reconciler, all applied",
+      other: "{n} reconcilers, all applied",
+    },
+    overPlainHttp: "{n} over plain HTTP",
+    ingressProxyHosts: {
+      one: "That Service is {vendor}'s own proxy — this Ingress is its front door, and the {n} host it serves is on",
+      other:
+        "That Service is {vendor}'s own proxy — this Ingress is its front door, and the {n} hosts it serves are on",
+    },
+    moreCertificatesInBundle: {
+      one: "with {n} more certificate in the bundle",
+      other: "with {n} more certificates in the bundle",
+    },
+    kindInstances: "{kind} Instances ({n})",
+    otherRevisionsAtZero: {
+      one: "{n} other revision is scaled to zero",
+      other: "{n} other revisions are scaled to zero",
+    },
+    needAttentionOfTotal: {
+      one: "{n} of {total} needs attention",
+      other: "{n} of {total} need attention",
+    },
+    issuersNotReady: {
+      one: "{n} issuer not ready",
+      other: "{n} issuers not ready",
+    },
+    servedNotInDnsNames: {
+      one: "{names} is served from this Secret and not in its {field}. Every other surface reads this as healthy — the Secret is populated, the certificate is valid, the Ingress is serving — and a browser refuses the connection outright.",
+      other:
+        "{names} are served from this Secret and not in its {field}. Every other surface reads this as healthy — the Secret is populated, the certificate is valid, the Ingress is serving — and a browser refuses the connection outright.",
+    },
+    servicesFrontThis: {
+      one: "{n} Service fronts this",
+      other: "{n} Services front this",
+    },
+    loadedResources: {
+      one: "Loaded {n} resource from the cluster.",
+      other: "Loaded {n} resources from the cluster.",
+    },
+    routesToUndefinedSubset: {
+      one: "{n} route to a subset nothing defines",
+      other: "{n} routes to a subset nothing defines",
+    },
+    rules: { one: "{n} rule", other: "{n} rules" },
+    gatewaysNamed: { one: "{n} gateway named", other: "{n} gateways named" },
+    hostsNameItNoneCovered: {
+      one: "{n} host names it, none covered",
+      other: "{n} hosts name it, none covered",
+    },
+    subsetsNothingRoutesTo: {
+      one: "{list} — nothing routes to it",
+      other: "{list} — nothing routes to them",
+    },
+    runningSegment: "running",
+    succeededSegment: "succeeded",
+    failedSegment: "failed",
+    notScheduledSegment: "not scheduled",
+    plusMore: "+{n} more",
+    hostsNeedAttention: {
+      one: "{n} of {total} host needs attention",
+      other: "{n} of {total} hosts need attention",
+    },
+    snippetsOfRawNginx: {
+      one: "{n} snippet of raw nginx config",
+      other: "{n} snippets of raw nginx config",
+    },
+    middlewaresUnused: {
+      one: "{n} middleware unused",
+      other: "{n} middlewares unused",
+    },
+    hostsBrokenOfTotal: {
+      one: "{n} of {total} host broken",
+      other: "{n} of {total} hosts broken",
+    },
+    hostsLandHere: { one: "{n} host lands here", other: "{n} hosts land here" },
+    inDays: { one: "in {n} day", other: "in {n} days" },
+    daysAgo: { one: "{n} day ago", other: "{n} days ago" },
+    warningEvents: { one: "{n} warning", other: "{n} warning" },
+    normalEvents: { one: "{n} normal", other: "{n} normal" },
+    latestKept: "latest {n}",
+    budgetsAllowNoEviction: {
+      one: "One disruption budget on this node allows nothing to be evicted.",
+      other: "{n} disruption budgets on this node allow nothing to be evicted.",
+    },
+    applicationsNeedAttention: {
+      one: "{n} of {total} applications need attention",
+      other: "{n} of {total} applications need attention",
+    },
+    failingAndFirst: "{n} of {total} failing, and first",
+    objects: { one: "{n} object", other: "{n} objects" },
+    toLookAt: { one: "{n} to look at", other: "{n} to look at" },
+    andMoreSynced: {
+      one: "and {n} more Argo reports as synced",
+      other: "and {n} more Argo reports as synced",
+    },
+    argoRetriesAfterAttempts: {
+      one: "Argo retries and fails — {n} attempt so far; nothing will converge until the manifest changes.",
+      other:
+        "Argo retries and fails — {n} attempts so far; nothing will converge until the manifest changes.",
+    },
+    resourcesDegraded: {
+      one: "{list} is degraded",
+      other: "{list} are degraded",
+    },
+    syncedOutOfSync: "{synced} synced · {drifted} out of sync",
     jobsKept: { one: "job kept", other: "jobs kept" },
     nodesWanted: { one: "node wanted", other: "nodes wanted" },
     volumes: { one: "{n} volume", other: "{n} volumes" },

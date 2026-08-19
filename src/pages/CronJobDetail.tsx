@@ -79,8 +79,12 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
         }
       />
       <Headline
-        label="Last run"
-        value={cronJob.lastSchedule ? `${lastAge} ago` : "never"}
+        label={t("columns", "lastRun")}
+        value={
+          cronJob.lastSchedule
+            ? t("action", "agoSuffix", { age: lastAge })
+            : t("action", "never")
+        }
         note={
           cronJob.lastSuccessfulTime
             ? t("action", "lastSuccessAt", {
@@ -97,13 +101,13 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
         }
       />
       <Headline
-        label="Next run"
+        label={t("columns", "nextRun")}
         value={
           cronJob.suspend
-            ? "suspended"
+            ? t("action", "suspendedLower")
             : next
-              ? `in ${countdown.display}`
-              : "unknown"
+              ? t("action", "inTime", { time: countdown.display })
+              : t("action", "unknownLower")
         }
         tone={cronJob.suspend ? "warn" : undefined}
         note={
@@ -226,19 +230,19 @@ export function CronJobDetail() {
                     // tab.
                     segments={[
                       {
-                        label: "running",
+                        label: t("count", "runningSegment"),
                         count: jobs.filter((job) => job.status === "Running")
                           .length,
                         tone: "ok",
                       },
                       {
-                        label: "succeeded",
+                        label: t("count", "succeededSegment"),
                         count: jobs.filter((job) => job.status === "Complete")
                           .length,
                         tone: "neutral",
                       },
                       {
-                        label: "failed",
+                        label: t("count", "failedSegment"),
                         count: jobs.filter((job) => job.status === "Failed")
                           .length,
                         tone: "err",

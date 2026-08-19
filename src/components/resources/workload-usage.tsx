@@ -196,7 +196,10 @@ function IdleUsage({ says }: { says: string }) {
   const t = useT();
   return (
     <Section>
-      <SectionHeader title="Usage" count={t("empty", "nothingRunning")} />
+      <SectionHeader
+        title={t("columns", "usage")}
+        count={t("empty", "nothingRunning")}
+      />
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
         {says} {t("empty", "usageIdleNote")}
       </p>

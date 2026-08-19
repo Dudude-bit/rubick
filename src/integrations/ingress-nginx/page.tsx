@@ -44,7 +44,6 @@ import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import type { ChainStop } from "@/generated/types";
-import { plural } from "../kit";
 import {
   Chain,
   Cell,
@@ -77,6 +76,7 @@ import {
 } from "./model";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -195,7 +195,7 @@ export default function IngressNginxPage() {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length),
+      mark: routesMark(groups, troubled.length, t),
       content: (
         <RoutesTab
           groups={groups}
@@ -221,7 +221,7 @@ export default function IngressNginxPage() {
       id: "annotations",
       label: t("columns", "annotations"),
       glyph: viewGlyph(FileCode2),
-      mark: annotationsMark(groups),
+      mark: annotationsMark(groups, t),
       content: <AnnotationsTab groups={groups} />,
     },
     {
@@ -305,14 +305,18 @@ function MapTab({
 
 function routesMark(
   groups: NginxHostGroup[],
-  troubled: number
+  troubled: number,
+  t: ReturnType<typeof useT>
 ): DetailTabMark | undefined {
   if (groups.length === 0) return undefined;
   const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
   return troubled > 0
     ? severityMark(
         worst,
-        `${troubled} of ${groups.length} hosts need attention`
+        t("count", "hostsNeedAttention", {
+          n: troubled,
+          total: groups.length,
+        })
       )
     : countMark(groups.length);
 }
@@ -324,14 +328,17 @@ function routesMark(
  * is the one thing on this tab worth going and looking at, because it is
  * where the page stops being able to answer.
  */
-function annotationsMark(groups: NginxHostGroup[]): DetailTabMark | undefined {
+function annotationsMark(
+  groups: NginxHostGroup[],
+  t: ReturnType<typeof useT>
+): DetailTabMark | undefined {
   const readings = allAnnotations(groups);
   if (readings.length === 0) return undefined;
   const snippets = readings.filter((reading) => reading.raw === "snippet");
   if (snippets.length > 0) {
     return severityMark(
       "warn",
-      `${plural(snippets.length, "snippet")} of raw nginx config`
+      t("count", "snippetsOfRawNginx", { n: snippets.length })
     );
   }
   return countMark(readings.length);
@@ -452,9 +459,12 @@ function RoutesTab({
   );
 }
 
-function hostState(group: NginxHostGroup): { text: string; tone: Tone } {
+function hostState(
+  group: NginxHostGroup,
+  t: ReturnType<typeof useT>
+): { text: string; tone: Tone } {
   const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: "nothing behind it", tone: "err" };
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -462,21 +472,21 @@ function hostState(group: NginxHostGroup): { text: string; tone: Tone } {
     return {
       text:
         certificate.kind === "certificate" && certificate.expiry?.expired
-          ? "certificate expired"
-          : "certificate running out",
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
       tone: "err",
     };
   }
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
-    return { text: "canary shadowing nothing", tone: "warn" };
+    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: "served in the clear", tone: "warn" };
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }
   if (group.findings.length > 0) {
-    return { text: "worth a look", tone: "warn" };
+    return { text: t("empty", "worthALook"), tone: "warn" };
   }
-  return { text: "serving", tone: "ok" };
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function HostRow({
@@ -488,18 +498,22 @@ function HostRow({
   sources: NginxSources | null;
   openByDefault: boolean;
 }) {
-  const state = hostState(group);
+  const t = useT();
+  const state = hostState(group, t);
   const tls = group.tlsSecrets[0];
 
   return (
     <TroubleRow
-      title={group.host ?? "any host"}
+      title={group.host ?? t("empty", "anyHost")}
       copy={group.host ?? undefined}
       meta={
         <>
-          {plural(group.routes.length, "path")}
-          {group.split && ` · split ${splitSummary(group)}`}
-          {tls ? ` · TLS from ${tls.secretName}` : " · no TLS"}
+          {t("count", "paths", { n: group.routes.length })}
+          {group.split &&
+            ` · ${t("empty", "splitShares", { shares: splitSummary(group) })}`}
+          {tls
+            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
+            : ` · ${t("empty", "noTls")}`}
         </>
       }
       state={state}
@@ -728,7 +742,7 @@ function HostChain({
         <Column label={t("columns", "annotations")}>
           {route.annotations.length === 0 ? (
             <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
-              none
+              {t("empty", "noneLower")}
             </div>
           ) : (
             <>
@@ -772,7 +786,7 @@ function HostChain({
           ) : !backing.known ? (
             <Cell under={t("empty", "readingEndpoints")}>—</Cell>
           ) : backing.stop ? (
-            <Cell bad under={STOP_UNDER[backing.stop.reason]}>
+            <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (
@@ -902,7 +916,7 @@ function Findings({
   return (
     <div className="flex flex-col gap-2">
       {shown.map((finding, index) => {
-        const said = describeFinding(finding);
+        const said = describeFinding(finding, t);
         return (
           <FindingBlock key={index} tone={finding.severity} title={said.title}>
             {!brief && said.note}
@@ -924,53 +938,62 @@ function Findings({
   );
 }
 
-const STOP_UNDER: Record<ChainStop["reason"], string> = {
-  backendMissing: "no service to send to",
-  selectsNothing: "selector matches nothing",
-  noneReady: "running, none ready",
-  publishesNothing: "no port to send to",
+const STOP_UNDER: Record<ChainStop["reason"], keyof typeof en.empty> = {
+  backendMissing: "stopNoServiceToSendTo",
+  selectsNothing: "stopSelectorMatchesNothing",
+  noneReady: "stopRunningNoneReady",
+  publishesNothing: "stopNoPortToSendTo",
 };
 
-function describeFinding(finding: Finding): { title: string; note: string } {
+function describeFinding(
+  finding: Finding,
+  t: ReturnType<typeof useT>
+): { title: string; note: string } {
   switch (finding.kind) {
     case "stop": {
       const said = describeStop(finding.stop);
       return {
-        title: `This host answers, and every request gets a 503 — ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        title: t("empty", "everyRequest503", {
+          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        }),
         note: said.note,
       };
     }
     case "clear":
       return {
-        title: "Served in the clear — nothing offers this host over TLS",
+        title: t("empty", "servedInClearTitle"),
         note: finding.redirectAnyway
-          ? "No Ingress under this host declares a certificate, so nginx serves it on :80 and nothing else. One of them does carry ssl-redirect, which reads like protection and is doing nothing: nginx applies that redirect only where the Ingress has a certificate to redirect to."
-          : "No Ingress under this host declares a certificate, so nginx serves it on :80 and there is no encrypted way to reach it, even for a client that asks for one.",
+          ? t("empty", "nginxClearRedirectAnyway")
+          : t("empty", "nginxClearNote"),
       };
     case "duplicate":
       return {
-        title: `Two Ingresses claim ${finding.path} on this host`,
+        title: t("empty", "twoIngressesClaimPath", { path: finding.path }),
         note: finding.winner
-          ? `nginx serves ${finding.winner.source.namespace}/${finding.winner.source.name} — the older object wins a conflict — and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.`
-          : `nginx breaks the tie by creation time and serves the older object; these do not both state one, so which of them is serving the request is not something this app can say from here.`,
+          ? t("empty", "nginxDuplicateWinner", {
+              object: `${finding.winner.source.namespace}/${finding.winner.source.name}`,
+            })
+          : t("empty", "nginxDuplicateTie"),
       };
     case "orphanCanary":
       return {
-        title: `${finding.route.source.name} is a canary shadowing nothing`,
-        note: "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it — the object is correct YAML that does nothing at all.",
+        title: t("empty", "canaryShadowingNothingTitle", {
+          name: finding.route.source.name,
+        }),
+        note: t("empty", "canaryShadowingNothingNote"),
       };
     case "certificate": {
       if (!finding.expiry) {
         return {
-          title: `${finding.secretName} could not be read as a certificate`,
-          note:
-            finding.read?.problem ??
-            "The Secret is there and what is in it is not a certificate this app could parse.",
+          title: t("empty", "secretNotACertificate", {
+            name: finding.secretName,
+          }),
+          note: finding.read?.problem ?? t("empty", "secretNotParsable"),
         };
       }
       return {
         title: `${finding.secretName} ${finding.expiry.text}`,
-        note: "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
+        note: t("empty", "certExpiryBrowserNote"),
       };
     }
   }

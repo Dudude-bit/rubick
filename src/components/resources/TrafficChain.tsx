@@ -576,9 +576,11 @@ export function TrafficChain({
   return (
     <Section>
       <SectionHeader
-        title="How traffic gets here"
+        title={t("nav", "howTrafficGetsHere")}
         count={
-          paths.length > 1 ? `${paths.length} Services front this` : undefined
+          paths.length > 1
+            ? t("count", "servicesFrontThis", { n: paths.length })
+            : undefined
         }
       />
       {/* A read that failed is not a chain that is still loading, and until

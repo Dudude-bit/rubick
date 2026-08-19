@@ -68,10 +68,10 @@ export function HelmChartsTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Chart</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>App version</TableHead>
-              <TableHead>Description</TableHead>
+              <TableHead>{t("columns", "chart")}</TableHead>
+              <TableHead>{t("columns", "version")}</TableHead>
+              <TableHead>{t("columns", "appVersion")}</TableHead>
+              <TableHead>{t("columns", "description")}</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>

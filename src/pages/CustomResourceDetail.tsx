@@ -251,7 +251,7 @@ export function CustomResourceDetail() {
 
   const facts: KeyValue[] = [
     { label: "API version", value: resource?.apiVersion ?? "—", mono: true },
-    { label: "Kind", value: resource?.kind ?? "—", mono: true },
+    { label: t("columns", "kind"), value: resource?.kind ?? "—", mono: true },
     { label: "UID", value: resource?.uid ?? "—", mono: true },
     ...(resource?.resourceVersion
       ? [
@@ -277,7 +277,9 @@ export function CustomResourceDetail() {
   ];
 
   const ownerItems: KeyValue[] = owners.map((owner) => ({
-    label: `${owner.kind}${owner.controller ? " · controller" : ""}`,
+    label: owner.controller
+      ? `${owner.kind} · ${t("empty", "controllerLower")}`
+      : owner.kind,
     // An owner is often another custom resource, which has no route of its
     // own. Linking on a guessed plural would hand the user a dead end.
     value: (
@@ -361,7 +363,7 @@ export function CustomResourceDetail() {
       : []),
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>

@@ -21,17 +21,18 @@ import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 type TabId = ActivityTab;
 
 const TABS: Array<{
   id: TabId;
-  label: string;
+  label: keyof typeof en.activity;
   icon: typeof Network;
 }> = [
-  { id: "ports", label: "Ports", icon: Network },
-  { id: "terminals", label: "Terminals", icon: Terminal },
-  { id: "jobs", label: "Jobs", icon: Loader2 },
+  { id: "ports", label: "ports", icon: Network },
+  { id: "terminals", label: "terminals", icon: Terminal },
+  { id: "jobs", label: "jobs", icon: Loader2 },
 ];
 
 export function ActivityPanel() {
@@ -101,7 +102,7 @@ export function ActivityPanel() {
           on the flat rules — hairlines and alignment, no inner panels. */}
       <SheetContent className="flex w-[400px] flex-col gap-0 p-0 sm:w-[460px]">
         <SheetHeader className="flex-none px-3 py-2">
-          <SheetTitle>Activity</SheetTitle>
+          <SheetTitle>{t("activity", "title")}</SheetTitle>
         </SheetHeader>
 
         <div
@@ -125,7 +126,7 @@ export function ActivityPanel() {
                 )}
               >
                 <item.icon className="h-3.5 w-3.5 text-fg-fnt" />
-                {item.label}
+                {t("activity", item.label)}
                 {count > 0 && (
                   <span className="font-mono text-[11px] text-fg-fnt">
                     {count}

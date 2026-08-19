@@ -105,7 +105,13 @@ export const columns: ColumnDef<PodRow>[] = [
         {row.original.restartCount > 0 && row.original.lastRestartAt && (
           <span className="text-fg-fnt">
             {" "}
-            ({formatAge(row.original.lastRestartAt)} ago)
+            (
+            <T
+              section="action"
+              k="agoSuffix"
+              values={{ age: formatAge(row.original.lastRestartAt) }}
+            />
+            )
           </span>
         )}
       </span>
@@ -180,7 +186,7 @@ export function PodList() {
       },
       {
         icon: Terminal,
-        label: "Shell",
+        label: t("action", "shell"),
         onClick: (item) =>
           navigate(
             `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=terminal`

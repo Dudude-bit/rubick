@@ -15,6 +15,27 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    relatedResources: "Связанные ресурсы",
+    trafficPath: "Путь трафика",
+    releases: "Релизы",
+    charts: "Чарты",
+    repositories: "Репозитории",
+    reconcilers: "Реконсиляторы",
+    sources: "Источники",
+    controllers: "Контроллеры",
+    reachableAt: "Доступен по",
+    howTrafficGetsHere: "Как сюда приходит трафик",
+    volumes: "Тома",
+    subsets: "Наборы",
+    routedDefinedNowhere: "Есть маршрут, но набор не определён",
+    entryPoints: "Точки входа",
+    renewal: "Продление",
+    appSets: "Наборы",
+    applicationSets: "Наборы приложений",
+    projects: "Проекты",
+    argoOwnWorkloads: "Собственные нагрузки Argo",
+    argoOwnUi: "Собственный интерфейс Argo",
+    itsObjects: "Его объекты",
     openApiSchema: "Схема OpenAPI",
     matchesSelectorNotPublished: "Подходит под селектор, но не публикуется",
     portsNotExposed: "Порты, которые Service не публикует",
@@ -52,6 +73,38 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    controlledBy: "Контролируется",
+    objects: "Объекты",
+    lastFetched: "Последняя загрузка",
+    appliedBy: "Применяют",
+    rules: "Правила",
+    match: "Совпадение",
+    backend: "Бэкенд",
+    loadBalancerAddress: "Адрес балансировщика",
+    containerRuntime: "Среда выполнения контейнеров",
+    os: "ОС",
+    architecture: "Архитектура",
+    created: "Создан",
+    pool: "Пул",
+    instanceType: "Тип инстанса",
+    cloud: "Облако",
+    ephemeralStorage: "Эфемерное хранилище",
+    headroom: "Запас",
+    allocatable: "Доступно к выделению",
+    lastRun: "Последний запуск",
+    nextRun: "Следующий запуск",
+    rollout: "Раскатка",
+    ingressAddress: "Адрес Ingress",
+    podIp: "IP пода",
+    hostIp: "IP узла",
+    phase: "Фаза",
+    entryPoint: "Точка входа",
+    image: "Образ",
+    lastExit: "Последнее завершение",
+    requests: "Запросы",
+    limits: "Лимиты",
+    resources: "Ресурсы",
+    health: "Состояние",
     whatThisRevisionRuns: "что запускает эта ревизия",
     selector: "Селектор",
     connections: "Связи",
@@ -200,6 +253,126 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    portForwardHint: "Проброс трафика с вашей машины в этот под.",
+    quickPresets: "Быстрый выбор",
+    clickToAutofillPorts:
+      "Нажмите, чтобы подставить локальный и удалённый порты",
+    localPort: "Локальный порт",
+    remotePort: "Удалённый порт",
+    autoReconnect: "Переподключаться автоматически",
+    autoReconnectHint: "Повторять попытки, когда под или соединение падает",
+    saveAsConfig: "Сохранить как конфигурацию",
+    saveAsConfigHint: "Сохранить этот проброс, чтобы быстро запускать снова",
+    autoStart: "Запускать автоматически",
+    autoStartHint: "Запускать сразу после подключения к этому кластеру",
+    configName: "Название конфигурации",
+    activePortForwards: "Активные пробросы",
+    activeInline: "Активен",
+    debugPodReady: "Под для отладки готов",
+    debugPodReadyDetail: "Под для отладки «{pod}» создан на узле «{node}»",
+    debugPodNotReady: "Под для отладки не готов",
+    theDebugPod: "Под для отладки",
+    onNode: "на узле",
+    creatingDebugPod: "Создаём под для отладки…",
+    waitingForPod: "Ждём под…",
+    createPrivilegedDebugPodOnNode:
+      "Создать привилегированный под для отладки на узле",
+    targetNode: "Целевой узел",
+    debugPodNamespace: "Пространство имён пода для отладки",
+    debugPodNamespaceHint:
+      "Пространство имён, в котором будет создан под для отладки",
+    debugNodeWarningPre: "Будет создан",
+    privilegedPod: "привилегированный под",
+    debugNodeWarningPost:
+      "с полным доступом к хосту. Файловая система хоста будет смонтирована в",
+    repositoryAdded: "Репозиторий добавлен",
+    repositoryAddedDetail: "Репозиторий «{name}» добавлен.",
+    addRepositoryFailed: "Не удалось добавить репозиторий",
+    repositoryRemoved: "Репозиторий удалён",
+    repositoryRemovedDetail: "Репозиторий удалён.",
+    removeRepositoryFailed: "Не удалось удалить репозиторий",
+    repositoriesUpdated: "Репозитории обновлены",
+    repositoriesUpdatedDetail: "Все репозитории Helm обновлены.",
+    updateRepositoriesFailed: "Не удалось обновить репозитории",
+    searchFailed: "Поиск не удался",
+    chartInstalled: "Чарт установлен",
+    chartInstalledDetail: "Релиз «{name}» установлен.",
+    installationFailed: "Установка не удалась",
+    releaseUpgraded: "Релиз обновлён",
+    releaseUpgradedDetail: "Релиз «{name}» обновлён.",
+    upgradeFailed: "Обновление не удалось",
+    removeRepository: "Удалить репозиторий",
+    removeRepositoryConfirm: "Удалить репозиторий «{name}»?",
+    openPortForwardPanel: "Открыть панель пробросов",
+    portForwardActive: "Проброс активен",
+    portForwardReconnecting: "Проброс переподключается",
+    portForwardReconnected: "Проброс переподключён",
+    portForwardStopped: "Проброс остановлен",
+    portForwardError: "Ошибка проброса",
+    started: "Начат",
+    notStarted: "не начат",
+    bufferFill: "Заполнение буфера",
+    filterReconcilers: "Фильтровать реконсиляторы",
+    filterReconcilersPlaceholder: "Фильтр по имени, пути, чарту или источнику",
+    somethingWentWrong: "Что-то пошло не так",
+    goHome: "На главную",
+    yamlCopied: "YAML скопирован в буфер обмена.",
+    viewKindDetails: "Подробнее о {kind}",
+    invalidPort: "Неверный порт",
+    invalidPortHint: "Введите номера портов в диапазоне 1–65535",
+    updating: "обновляется…",
+    manifestCopiedNamed: "Манифест {name} скопирован",
+    kindManifest: "манифест {kind}",
+    importedFromCluster: "Импортировано из кластера",
+    suspendedLower: "приостановлен",
+    inTime: "через {time}",
+    unknownLower: "неизвестно",
+    resourceWatchFailed: "Не удалось следить за ресурсом",
+    eventBridgeLagged: {
+      one: "Шина событий не успела и потеряла {n} обновление, поэтому список может быть неполным.",
+      few: "Шина событий не успела и потеряла {n} обновления, поэтому список может быть неполным.",
+      many: "Шина событий не успела и потеряла {n} обновлений, поэтому список может быть неполным.",
+      other:
+        "Шина событий не успела и потеряла {n} обновления, поэтому список может быть неполным.",
+    },
+    filterByHostVirtualServiceDestination:
+      "Фильтр по хосту, VirtualService или назначению",
+    manage: "Настроить",
+    rolloutSubject: "по одному поду на каждый подходящий узел",
+    today: "сегодня",
+    eventsWarnings: "Предупреждения",
+    eventsNormal: "Обычные",
+    eventType: "Тип события",
+    eventsFetched: "Сколько событий читать",
+    noLimit: "Без ограничения",
+    latestN: "Последние {n}",
+    drainNamed: "Освободить узел {name}",
+    drainAnyway: "Всё равно освободить",
+    openTheNodeFirst: "Сначала открыть узел",
+    loadOlder: "Загрузить более ранние",
+    hideHistory: "Скрыть историю",
+    viewYaml: "Посмотреть YAML",
+    editYaml: "Изменить YAML",
+    yamlCopiedToClipboard: "YAML скопирован в буфер обмена.",
+    manifestIsValid: "Манифест корректен, его можно применить.",
+    manifestApplied: "Манифест применён к кластеру.",
+    failedToApplyManifest: "Не удалось применить манифест.",
+    formatted: "Отформатировано",
+    yamlFormatted: "YAML отформатирован.",
+    restored: "Восстановлено",
+    contentRestoredFromHistory: "Содержимое восстановлено из истории.",
+    unsavedChanges: "Несохранённые изменения",
+    viewYamlManifest: "Просмотр YAML-манифеста",
+    editYamlManifestHint:
+      "Отредактируйте YAML-манифест и примените изменения к кластеру",
+    applyChangesQuestion: "Применить изменения?",
+    applyManifestConfirm:
+      "Манифест будет применён к вашему кластеру Kubernetes. Убедитесь, что вы проверили изменения.",
+    changesToBeApplied: "Изменения, которые будут применены:",
+    filterApplications: "Фильтровать Application",
+    filterByNameProjectRepoObject:
+      "Фильтр по имени, проекту, репозиторию или объекту",
+    openInArgoCd: "Открыть {name} в Argo CD",
     debugNode: "Отладить узел",
     jumpToLatest: "К последним",
     forwardThisPort: "Пробросить порт",
@@ -793,6 +966,33 @@ export const ru: Catalogue = {
     back: "Назад",
   },
   activity: {
+    forwardStarted: "Проброс порта запущен",
+    forwardingDetail: "Проброс localhost:{local} → {pod}:{remote}",
+    forwardStopped: "Проброс порта остановлен",
+    forwardDialogHint: "Пробросить трафик с этой машины в этот под.",
+    saveAsConfig: "Сохранить как настройку",
+    saveAsConfigHint: "Оставить этот проброс, чтобы быстро запускать снова",
+    configName: "Название настройки",
+    activeForwards: "Активные пробросы",
+    activeFallback: "Активен",
+    reconnectingInline: "переподключение",
+    runningElsewhere: "Выполняются в других кластерах",
+    missingTarget: "Не указана цель",
+    missingTargetDetail: "Нужно указать имя пода и пространство имён.",
+    invalidPort: "Неверный порт",
+    invalidPortDetail: "Порт должен быть от 1 до 65535.",
+    saveForwardFailed: "Не удалось сохранить проброс порта",
+    createForwardFailed: "Не удалось создать проброс порта",
+    editPortForward: "Изменить проброс порта",
+    newPortForward: "Новый проброс порта",
+    forwardSavedFor:
+      "Сохранён для {context} и доступен на панели активности, пока вы его не удалите.",
+    localPort: "Локальный порт",
+    remotePort: "Удалённый порт",
+    autoReconnect: "Переподключаться автоматически",
+    autoReconnectHint: "Повторять попытки, когда пропадает под или соединение.",
+    autoStartLabel: "Запускать автоматически",
+    autoStartHint: "Запускать сразу после подключения к этому кластеру.",
     panel: "Панель активности",
     saved: "Сохранённые",
     startAll: "Запустить все",
@@ -854,6 +1054,8 @@ export const ru: Catalogue = {
     active: "активных: {n}",
   },
   cluster: {
+    connectToImport:
+      "Подключитесь к кластеру, чтобы импортировать из него ресурсы.",
     spotNodeWarning:
       "Облако может забрать этот узел в любой момент. Уходящие отсюда поды — это устройство, а не сбой.",
     unknownAge: "Неизвестно",
@@ -973,6 +1175,32 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    authRunsPlugin: "Запускает {plugin} за токеном.",
+    aCredentialPlugin: "плагин учётных данных",
+    authClientCertFrom:
+      "Клиентский сертификат, из {source} — больше ничего не нужно.",
+    authClientCertEmbedded:
+      "Клиентский сертификат, встроен в файл — больше ничего не нужно.",
+    authTokenFrom: "Bearer-токен, прочитан из {source}.",
+    authTokenInFile: "Bearer-токен, записан в файле — больше ничего не нужно.",
+    authBasicAs: "Логин и пароль, как {username}.",
+    authBasicInFile: "Логин и пароль, хранятся в файле.",
+    authProviderNamed: "Провайдер аутентификации {name}, настроен в файле.",
+    authUnrecognised:
+      "Файл не говорит, как этот контекст аутентифицируется, — приложение не может это определить.",
+    forwardingTunnelNote:
+      "Проброс {target} на {local}. Если выключено, строка остаётся в боковой панели и открывает туннель по нажатию — хранится для каждого кластера и только на этой машине.",
+    tokenUnchangedPlaceholder: "без изменений — введите, чтобы заменить",
+    tokenNewPlaceholder: "вставьте сюда, дальше в это окно он не возвращается",
+    tokenStorageNote:
+      "Хранится в конфиге приложения открытым текстом, рядом с паролями реестров, которые уже лежат там, и отправляется только из бэкенда — обратно в это окно он не попадает.",
+    lookingEllipsis: "Ищем…",
+    findVendorInCluster: "Найти {vendor} в этом кластере",
+    probeAnswered: "Ответил за {ms} мс",
+    probeDidNotAnswer: "Не ответил — {reason}",
+    searchingRegistry: "Ищем в {registry}…",
+    registrySearchFailed: "Поиск не удался. Проверьте настройки реестра.",
+    officialBadge: "официальный",
     oneAddressPerCluster:
       "Свой адрес на каждый кластер: {vendor} живёт внутри кластера, и у staging он не тот, что у production. Даёт {gives}.",
     addressIsFromHere:
@@ -1193,6 +1421,550 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    overPlainHttp: "{n} по обычному HTTP",
+    rulesOfEqualOrder: "правила с одинаковым порядком",
+    membersDisagree: "участники расходятся",
+    sharedAcrossNamespaces: "общий для нескольких пространств имён",
+    readingWhatConnects: "Читаем, что с этим связано…",
+    couldNotReadFlux: "Не удалось прочитать, что согласует Flux",
+    couldNotReadFluxBody:
+      "Всё на этой странице берётся из собственных объектов Flux в этом API-сервере, и запрос не прошёл — поэтому список здесь был бы догадкой, а не ответом.",
+    fluxPageDescription:
+      "Что Flux применяет, откуда он это применяет и где эти две вещи разошлись.",
+    readingWhatFluxApplies: "Читаем, что применяет Flux…",
+    fluxApplyingNothing: "Flux здесь установлен и ничего не применяет.",
+    fluxNoReconcilers:
+      "В этом кластере нет ни одного Kustomization и ни одного HelmRelease, поэтому его контроллерам нечего применять.",
+    noReconcilerMatches: "Ни один реконсилятор здесь этому не соответствует.",
+    fetchFailingLower: "загрузка не удаётся",
+    fetchedLower: "загружено",
+    nothingToApplyFrom: "нечего применять",
+    sourceHasRevision: "у источника {revision}",
+    neverApplied: "ни разу не применялось",
+    appliedRevision: "применено {revision}",
+    nothingApplied: "ничего не применено",
+    suspendedLower: "приостановлено",
+    heldInHelmStorage: "хранится в собственном хранилище Helm",
+    fromRevision: "из {revision}",
+    nothingAppliedYet: "пока ничего не применено",
+    aHelmRelease: "релиз Helm",
+    dependsOn: "зависит от {list}",
+    fluxSuspendedTitle: "Приостановлено: не согласуется и не падает",
+    fluxSuspendedTitleAgo:
+      "Приостановлено {age} назад: не согласуется и не падает",
+    fluxSuspendedWasReady:
+      "Приостановленный {kind} сохраняет условие Ready с последнего запуска, поэтому в любом списке — включая собственный список Flux — он выглядит здоровым. В последний раз он применил {revision}; всё, что закоммичено после, сюда не попало.",
+    fluxSuspendedNeverRan:
+      "Он был приостановлен до первого согласования, поэтому ничего из описанного в нём так и не применилось.",
+    fluxFrozenTitle:
+      "Его источник перестал загружаться; всё под ним заморожено на {revision}",
+    fluxFrozenHelm:
+      "Релиз установлен и здоров — из версии чарта, которую источник больше не может обновить.",
+    fluxFrozenObjects: {
+      one: "{n} объект применён и здоров — из ревизии, которую источник больше не может обновить.",
+      few: "{n} объекта применены и здоровы — из ревизии, которую источник больше не может обновить.",
+      many: "{n} объектов применены и здоровы — из ревизии, которую источник больше не может обновить.",
+      other:
+        "{n} объектов применены и здоровы — из ревизии, которую источник больше не может обновить.",
+    },
+    fluxFrozenExceptPre: "Ничто здесь не говорит «failed», кроме",
+    fluxFrozenExceptPost: ", и каждый реконсилятор под ним выглядит нормально.",
+    fluxSourceMissing: "Источника, который он называет, нет в этом кластере",
+    fluxSourceStoppedNeverApplied:
+      "Его источник перестал загружаться, а сам он так ничего и не применил",
+    fluxSourceNeverFetched:
+      "Его источник ни разу не загружался, поэтому сам он ничего не применил",
+    fluxNotReconciling: "Не согласуется",
+    fluxNotReconcilingReason: "Не согласуется — {reason}",
+    fluxStalledTitle: "Остановлено: попытки прекращены и сами не возобновятся",
+    fluxStalledNote:
+      "Flux сдаётся, когда исчерпан бюджет попыток. Ничего не изменится, пока не изменится spec.",
+    fluxBlockingTitle: {
+      one: "{list} ждёт этот",
+      few: "{list} ждут этот",
+      many: "{list} ждут этот",
+      other: "{list} ждут этот",
+    },
+    fluxBlockingDeclares: {
+      one: "объявляет",
+      few: "оба объявляют",
+      many: "оба объявляют",
+      other: "оба объявляют",
+    },
+    fluxBlockingTail: {
+      one: ", поэтому и он не согласовался. Починить этот — значит освободить его.",
+      few: ", поэтому ни один из них не согласовался. Починить этот — значит освободить их.",
+      many: ", поэтому ни один из них не согласовался. Починить этот — значит освободить их.",
+      other:
+        ", поэтому ни один из них не согласовался. Починить этот — значит освободить их.",
+    },
+    fluxWaitingOn: "Ждёт {name}, который не готов",
+    fluxWaitingSays: "сообщает:",
+    fluxWaitingTail:
+      "— здесь всё в порядке, и ничего не сдвинется, пока не сдвинется то.",
+    fluxWaitingQueue:
+      "Здесь всё в порядке; он стоит в очереди за тем, что не в порядке.",
+    readingSources: "Читаем источники…",
+    fluxNoSources:
+      "Объектов-источников нет. Ничего не загружается, значит и применять нечего.",
+    fluxSourcesDescription:
+      "Источник загружается один раз, и его применяет всё, что на него ссылается. Это та половина Flux, которая ломается тихо: если источник перестал загружаться, каждый реконсилятор под ним продолжает показывать последнюю ревизию, которую успел применить.",
+    noUrlDeclared: "URL не задан",
+    nothingLower: "ничего",
+    fluxFetchStopped:
+      "Он перестал загружаться, и работает то, что было загружено раньше",
+    fluxFetchNever:
+      "Он ни разу не загружался, поэтому под ним ничего и не применялось",
+    fluxSourceUnusedTitle: "Этот источник никто не применяет",
+    fluxSourceUnusedBody:
+      "Он загружается по расписанию, и на него не ссылается ни один Kustomization или HelmRelease — то есть это конфигурация, которая ничего не делает. Больше нигде в приложении об этом не узнать.",
+    fluxFrozenStillApplying: {
+      one: "всё ещё применяет {revision}{fetched} и при этом сообщает Ready.",
+      few: "всё ещё применяют {revision}{fetched} и при этом сообщают Ready.",
+      many: "всё ещё применяют {revision}{fetched} и при этом сообщают Ready.",
+      other: "всё ещё применяют {revision}{fetched} и при этом сообщают Ready.",
+    },
+    fluxFetchedAgo: ", загружено {age} назад",
+    fluxFrozenNothingToApply: {
+      one: "нечего применять.",
+      few: "нечего применять.",
+      many: "нечего применять.",
+      other: "нечего применять.",
+    },
+    fluxSourceUnaffected:
+      "На этот источник никто не ссылается, поэтому ничего не затронуто.",
+    readingFluxWorkloads: "Читаем собственные нагрузки Flux…",
+    fluxWorkloadsTitle: "Собственные нагрузки Flux",
+    fluxWorkloadsDescription:
+      "По контроллеру на каждый вид объектов, у каждого свои логи — именно там и диагностируется проблема Flux, которую эта страница не видит. Дашборда у Flux нет, идти больше некуда.",
+    fluxNoControllersPre: "Ничто в этом кластере не несёт",
+    fluxNoControllersPost:
+      ", поэтому собственные нагрузки Flux найти не удалось. Его объекты по-прежнему читаются из API-сервера — но раз ни один контроллер не запущен, ни с одним из них ничего не происходит.",
+    allHosts: "Все хосты",
+    noClassNamed: "класс не указан",
+    nothingServesClass: "{name} — его никто не обслуживает",
+    noneTrafficUnencrypted: "нет — трафик не шифруется",
+    catchAllCertificate: "универсальный сертификат",
+    ingressDefaultBackendOnly:
+      "Правил нет — каждый запрос, дошедший до этого балансировщика, идёт в бэкенд по умолчанию:",
+    ingressNoRulesNoDefault:
+      "Ни правил, ни бэкенда по умолчанию — этот Ingress ничего не маршрутизирует.",
+    noTlsConfigured: "TLS не настроен — этот Ingress отдаёт обычный HTTP.",
+    autoGenerated: "(создан автоматически)",
+    catchAllAppliesToRest:
+      "универсальный · действует для всех хостов, которых нет в списке",
+    noHosts: "хостов нет",
+    pageFailedToRender:
+      "Страницу не удалось отрисовать. Можно перезагрузить её или вернуться на главную.",
+    readingRepositories: "Читаем репозитории…",
+    noRepositoriesConfigured:
+      "Репозитории не настроены — добавьте один, чтобы искать чарты.",
+    resourceNotFoundInCluster: "Ресурс не найден в кластере",
+    supersededByRevision:
+      "Заменена ревизией {revision}. Deployment держит эту на нуле, чтобы откат сразу вернул её.",
+    deploymentScaledToZeroNote:
+      "Deployment масштабирован до нуля, поэтому его текущая ревизия не запускает подов.",
+    noDeploymentRollingOut:
+      "ничего — эту ревизию не разворачивает ни один Deployment",
+    currentRevisionLower: "текущая ревизия",
+    supersededLower: "заменена",
+    noCertificateObjectAnywhere:
+      "Ни в одном пространстве имён нет объекта Certificate, и ни один Ingress не несёт аннотацию {annotation}, которая создала бы его.",
+    noIngressMountsSecret:
+      "Ни один Ingress в {namespace} не монтирует {secret}.",
+    itsSecret: "его Secret",
+    nothingServingTlsFrom:
+      "TLS из {secret} никто не отдаёт, поэтому каждый хост выше либо отклоняется, либо отдаётся открытым текстом.",
+    certificateStillServed:
+      "Сертификат, который уже лежит в {secret}, продолжает отдаваться, так что это ещё не авария.",
+    certificateStillServedUntil:
+      "Сертификат, который уже лежит в {secret}, продолжает отдаваться, так что это ещё не авария — он {expiry}.",
+    noIssuerNoClusterIssuer: "В этом кластере нет ни Issuer, ни ClusterIssuer.",
+    certManagerNeedsIssuer:
+      "Без него cert-manager ничего не подписывает, поэтому любой Certificate здесь останется невыпущенным, пока он не появится.",
+    issuersCouldNotBeRead: "не удалось прочитать издателей",
+    containerIsWaiting: "{container} ожидает · {reason}",
+    schedulerHasNotPlacedIt: "Планировщик ещё не разместил его на узле.",
+    noContainerHasStarted:
+      "Ни один контейнер не запустился — этот под сейчас {status}.",
+    recentEventsSayMore:
+      "{explanation} Подробнее — в недавних событиях на вкладке «Обзор».",
+    podDeclaresNoContainers: "В этом поде не объявлено ни одного контейнера.",
+    nothingToInspectUntilSpecFixed:
+      "Смотреть нечего, пока не исправлен его spec.",
+    couldNotReadKindData: "Не удалось прочитать данные этого {kind}.",
+    couldNotReadWorkloadPods: "Не удалось прочитать поды этой нагрузки.",
+    couldNotReadCronJobRuns: "Не удалось прочитать запуски этого CronJob.",
+    couldNotReadKindManifest: "Не удалось прочитать манифест этого {kind}.",
+    clusterIpOnlyInside:
+      "Сервисы {type} доступны только изнутри кластера. Для локальной разработки используйте проброс порта:",
+    integrationsPageLists:
+      "{link} — список всех расширений, которые знает это приложение, и того, что каждое из них даёт.",
+    accessExternalLb: "Снаружи (LoadBalancer)",
+    accessExternalLbHint: "Доступ по IP-адресу балансировщика",
+    accessExternalNodePort: "Снаружи (NodePort)",
+    accessExternalNodePortHint: "Доступ по IP-адресу любого узла кластера",
+    accessExternalName: "Внешнее имя",
+    accessExternalNameHint: "DNS-псевдоним для внешнего сервиса",
+    accessInternalFullDns: "Внутри (полное DNS-имя)",
+    accessInternalFullDnsHint: "Из любого пространства имён кластера",
+    accessInternalShort: "Внутри (короткое имя)",
+    accessInternalShortHint: "Только из того же пространства имён",
+    mountedByNothing: "не смонтирован ни одним контейнером",
+    allocatableNote: "что планировщик может раздать",
+    placementNote: "что облако сообщает об этом узле и о его расположении",
+    everyPort: "любой порт",
+    portNumber: "порт {port}",
+    noSuchIntegration: "такой интеграции нет",
+    couldNotReadMeshRouting: "Не удалось прочитать маршрутизацию этой сети",
+    meshRoutingRequestFailed:
+      "Каждый маршрут на этой странице — это Gateway, VirtualService или DestinationRule в этом API-сервере, и запрос к ним не удался, поэтому цепочка была бы догадкой, а не ответом.",
+    istioPageDescription:
+      "Что маршрутизирует эта сеть и где заканчивается каждое имя хоста.",
+    readingMesh: "Читаем сеть…",
+    noVirtualServiceRoutes:
+      "Ни один VirtualService здесь ничего не маршрутизирует, поэтому рисовать нечего.",
+    istioNothingRoutes:
+      "Istio здесь установлен, и через него ничего не маршрутизируется.",
+    istioNoVirtualServiceHost:
+      "Ни один VirtualService не объявляет хост. Сеть по-прежнему передаёт трафик между нагрузками с sidecar — это поведение по умолчанию и объекта не требует, — но правил маршрутизации нет, и рисовать нечего.",
+    noHostVirtualServiceMatches:
+      "Ни один хост, VirtualService или назначение здесь этому не соответствует.",
+    noGatewayServesIt: "ни один Gateway его не обслуживает",
+    subsetNotDefined: "набор не определён",
+    weightsDoNotAddUp: "веса не сходятся",
+    routingState: "маршрутизируется",
+    inMeshOnly: "только внутри сети",
+    throughGateways: "через {list}",
+    everyRequest: "любой запрос",
+    nowhere: "в никуда",
+    theRuleFor: "правило для",
+    noEdgeListener: "нет слушателя на границе",
+    notInThisCluster: "нет в этом кластере",
+    servesOtherHosts: "обслуживает другие хосты",
+    noSubset: "без набора",
+    definesList: "определяет {list}",
+    noSubsets: "ни одного набора",
+    noRuleNamesThisHost: "ни одно правило не называет этот хост",
+    outsideThisCluster: "вне этого кластера",
+    notThisClustersPods: "это поды не этого кластера",
+    matchShownAsWrittenBecause:
+      "Это условие показано ровно так, как написано, потому что {reason}.",
+    matchFieldsNotInterpreted: {
+      one: "Показано ровно так, как написано: {list} здесь не интерпретируется.",
+      few: "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+      many: "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+      other:
+        "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+    },
+    istioNoGatewayServes: "Ни один Gateway не обслуживает {host}",
+    istioGatewaysAbsentNote: {
+      one: "{list} назван здесь и в этом кластере не существует. Istio принимает ссылку без возражений, а VirtualService не получает на границе ничего — и нигде нет ни статуса, ни события, ни условия, которое бы об этом сказало.",
+      few: "{list} названы здесь и в этом кластере не существуют. Istio принимает ссылку без возражений, а VirtualService не получает на границе ничего — и нигде нет ни статуса, ни события, ни условия, которое бы об этом сказало.",
+      many: "{list} названы здесь и в этом кластере не существуют. Istio принимает ссылку без возражений, а VirtualService не получает на границе ничего — и нигде нет ни статуса, ни события, ни условия, которое бы об этом сказало.",
+      other:
+        "{list} названы здесь и в этом кластере не существуют. Istio принимает ссылку без возражений, а VirtualService не получает на границе ничего — и нигде нет ни статуса, ни события, ни условия, которое бы об этом сказало.",
+    },
+    istioGatewaysCoverNothingNote: {
+      one: "{list} существует, но ни один сервер на нём не покрывает это имя хоста, поэтому на границе его никто не слушает. VirtualService — корректный YAML, который не получает ни одного запроса.",
+      few: "{list} существуют, но ни один сервер на них не покрывает это имя хоста, поэтому на границе его никто не слушает. VirtualService — корректный YAML, который не получает ни одного запроса.",
+      many: "{list} существуют, но ни один сервер на них не покрывает это имя хоста, поэтому на границе его никто не слушает. VirtualService — корректный YAML, который не получает ни одного запроса.",
+      other:
+        "{list} существуют, но ни один сервер на них не покрывает это имя хоста, поэтому на границе его никто не слушает. VirtualService — корректный YAML, который не получает ни одного запроса.",
+    },
+    istioSubsetUndefinedTitle:
+      "{name} маршрутизирует в набор {subset}, а его никто не определяет",
+    istioSubsetRuleDeclaresNote:
+      "DestinationRule называет {host} и объявляет {declares}. У Istio нет эндпоинтов, куда отправить этот маршрут, и каждый запрос по нему получает 503.",
+    istioSubsetDeclaredNot: "{list} — но не {subset}",
+    istioNoSubsetsAtAll: "вообще ни одного набора",
+    istioNoRuleNamesHostNote:
+      "Ни один DestinationRule в этом кластере вообще не называет {host}, поэтому набор {subset} нигде не определён. Набор — это селектор меток, который должен существовать до того, как в него можно маршрутизировать; каждый запрос по этому маршруту получает 503.",
+    istioWeightsTitle: "Веса в этом правиле дают в сумме {sum}, а не 100",
+    istioWeightsNote:
+      "Istio делит трафик маршрута на сто, поэтому {detail}. Какая доля обслуживается на самом деле, эти объекты не сообщают.",
+    istioWeightsUnder:
+      "{percent}% запросов, подходящих под это правило, не покрыты ни одним назначением, которое оно называет",
+    istioWeightsOver:
+      "записанные здесь доли — не те доли, которые будут обслужены",
+    istioRouteResolves503:
+      "Маршрут разрешается, но каждый запрос получает 503 — {detail}",
+    istioNoGatewayObjects:
+      "В этом кластере нет объектов Gateway, поэтому на границе сети ничего не опубликовано. Трафик между нагрузками с sidecar по-прежнему идёт — для него Gateway не нужен.",
+    istioGatewaysDescription:
+      "Что сеть слушает на своей границе и какие хосты привязаны к каждому. Gateway, к которому ничего не привязано, — это слушатель без маршрутов за ним.",
+    noServers: "нет серверов",
+    nothingBindsToIt: "к нему ничего не привязано",
+    istioNoDestinationRules:
+      "В этом кластере нет объектов DestinationRule. Каждый маршрут доходит до подов своего Service без промежуточного набора — это обычный случай.",
+    istioRoutedDefinedNowhereNote:
+      "Набор — это селектор меток, который должен существовать до того, как маршрут сможет его назвать. Istio принимает ссылку и отвечает на каждый запрос по этому маршруту кодом 503.",
+    istioSubsetsDescription:
+      "Каждый DestinationRule, наборы, которые он определяет, и маршрутизируется ли в них что-нибудь.",
+    noSubsetsTrafficPolicyOnly: "без наборов — только политика трафика",
+    noMatchesFound: "Ничего не найдено.",
+    theLoadBalancerInFront: "балансировщик перед ним",
+    cannotPullImage: "{container} не может загрузить свой образ",
+    imagePullRetrying:
+      "— kubelet повторяет попытки, увеличивая паузу после каждой. Проверьте имя, тег или учётные данные для загрузки.",
+    startsAndExits:
+      "{container} запускается и тут же завершается, раз за разом",
+    crashRestartsWithLastRun: {
+      one: "уже {n} перезапуск; последний запуск закончился {how}. Что он напечатал перед смертью — в логах.",
+      few: "уже {n} перезапуска; последний запуск закончился {how}. Что он напечатал перед смертью — в логах.",
+      many: "уже {n} перезапусков; последний запуск закончился {how}. Что он напечатал перед смертью — в логах.",
+      other:
+        "уже {n} перезапуска; последний запуск закончился {how}. Что он напечатал перед смертью — в логах.",
+    },
+    crashRestartsNoLastRun: {
+      one: "уже {n} перезапуск. Что он напечатал перед прошлой смертью — в логах.",
+      few: "уже {n} перезапуска. Что он напечатал перед прошлой смертью — в логах.",
+      many: "уже {n} перезапусков. Что он напечатал перед прошлой смертью — в логах.",
+      other:
+        "уже {n} перезапуска. Что он напечатал перед прошлой смертью — в логах.",
+    },
+    cannotBeBuilt: "{container} нельзя собрать по этой спецификации",
+    missingConfigMapSecretOrVolume:
+      "ConfigMap, Secret или том, который называет контейнер, отсутствует или в нём нет такого ключа.",
+    waitingToStart: "{container} ждёт запуска",
+    containerExitedWith: "{container} завершился с кодом {code}",
+    lastRunNotClean:
+      "{how} — последний запуск этого контейнера завершился не штатно.",
+    noNodeWillTakePod: "Ни один узел не берёт этот под",
+    conditionIsStatus: "{type} — {status}",
+    thisPodFailed: "Этот под завершился с ошибкой",
+    certificateExpired: "сертификат истёк",
+    certificateRunningOut: "сертификат заканчивается",
+    canaryShadowingNothing: "canary ничего не перекрывает",
+    servedInTheClear: "обслуживается без шифрования",
+    splitShares: "делится {shares}",
+    tlsFrom: "TLS из {name}",
+    noTls: "без TLS",
+    stopNoServiceToSendTo: "нет service, куда отправлять",
+    stopSelectorMatchesNothing: "селектор ничего не находит",
+    stopRunningNoneReady: "работают, но ни один не готов",
+    stopNoPortToSendTo: "нет порта, куда отправлять",
+    everyRequest503:
+      "Этот хост отвечает, но на каждый запрос отдаёт 503 — {reason}",
+    servedInClearTitle:
+      "Обслуживается без шифрования — этот хост никто не отдаёт по TLS",
+    nginxClearRedirectAnyway:
+      "Ни один Ingress этого хоста не объявляет сертификат, поэтому nginx отдаёт его только на :80. У одного из них есть ssl-redirect — выглядит как защита, но не делает ничего: nginx применяет этот редирект только там, где у Ingress есть сертификат, на который можно перенаправить.",
+    nginxClearNote:
+      "Ни один Ingress этого хоста не объявляет сертификат, поэтому nginx отдаёт его только на :80, и зашифрованного способа до него добраться нет — даже если клиент его просит.",
+    twoIngressesClaimPath: "Два Ingress претендуют на {path} этого хоста",
+    nginxDuplicateWinner:
+      "nginx обслуживает {object} — в конфликте побеждает более старый объект — и пишет в свой лог предупреждение, которое больше нигде в этом кластере не видно. Второй не срабатывает никогда.",
+    nginxDuplicateTie:
+      "nginx разрешает спор по времени создания и обслуживает более старый объект; здесь его указывают не оба, поэтому кто именно обслуживает запрос, отсюда сказать нельзя.",
+    canaryShadowingNothingTitle:
+      "{name} — canary, который ничего не перекрывает",
+    canaryShadowingNothingNote:
+      "Canary-Ingress вливается в server-блок хоста, который уже обслуживает другой Ingress. Этот хост не обслуживает никакой другой Ingress, поэтому вливать его некуда, и nginx не направит к нему ни одного запроса — объект остаётся корректным YAML, который не делает ничего.",
+    secretNotACertificate: "{name} не удалось прочитать как сертификат",
+    secretNotParsable:
+      "Secret на месте, но то, что в нём лежит, приложение не смогло разобрать как сертификат.",
+    certExpiryBrowserNote:
+      "Как только он истечёт, любой браузер перестанет открывать этот хост, и ни Ingress, ни Service об этом не скажут.",
+    traefikRoutingRequestFailed:
+      "Маршруты на этой странице берутся из Ingress и IngressRoute этого API-сервера, и запрос к ним не удался: таблица была бы догадкой, а не ответом.",
+    traefikPageDescription:
+      "Что обслуживает этот прокси и куда идёт каждое имя хоста.",
+    traefikRestOnNodeHint:
+      "Наведите на узел, чтобы подсветить всё в одном ребре от него. Хост ведёт к своим путям и их цепочке, Service — на свою страницу: каждая линия — это один объект, который называет другой.",
+    traefikRunningNothingRoutes:
+      "Traefik здесь работает, но к нему ничего не направлено.",
+    traefikNoRouteClaimsClass:
+      "Ни одного IngressRoute нет, и ни один Ingress не называет IngressClass, который забирает себе этот прокси. Ingress, называющий класс, который никто не обслуживает, — это корректный YAML без событий и без ошибок, который просто никогда не обслуживается.",
+    theEdge: "граница сети",
+    tlsEndsAt: "TLS заканчивается: {name}",
+    everyEntryPoint: "все точки входа",
+    throughWord: "через",
+    anApiObject: "объект API",
+    insideTheProxy: "внутри прокси",
+    thePathThrough: "путь через {path}",
+    notReadLower: "не прочитано",
+    kindRule: "правило {kind}",
+    shownInFullBelow: "полностью показано ниже",
+    traefiksOwnNotService: "собственный объект Traefik, а не Service",
+    notPods: "не поды",
+    ruleShownAsWrittenBecause:
+      "Правило показано ровно так, как написано, потому что {reason}.",
+    shownExactlyAsWritten: {
+      one: "Показано ровно так, как написано: {list} здесь не интерпретируется.",
+      few: "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+      many: "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+      other:
+        "Показано ровно так, как написано: {list} здесь не интерпретируются.",
+    },
+    notFoundInThisCluster: "в этом кластере не найдено",
+    everyRequest502:
+      "Этот хост отвечает, но на каждый запрос отдаёт 502 — {reason}",
+    traefikClearNote: {
+      one: "Ни один маршрут этого хоста не несёт сертификата, а сам он привязан к {list}, которая не терминирует TLS и никуда не перенаправляет. Зашифрованного способа до него добраться нет — даже если клиент его просит.",
+      few: "Ни один маршрут этого хоста не несёт сертификата, а сам он привязан к {list}, которые не терминируют TLS и никуда не перенаправляют. Зашифрованного способа до него добраться нет — даже если клиент его просит.",
+      many: "Ни один маршрут этого хоста не несёт сертификата, а сам он привязан к {list}, которые не терминируют TLS и никуда не перенаправляют. Зашифрованного способа до него добраться нет — даже если клиент его просит.",
+      other:
+        "Ни один маршрут этого хоста не несёт сертификата, а сам он привязан к {list}, которые не терминируют TLS и никуда не перенаправляют. Зашифрованного способа до него добраться нет — даже если клиент его просит.",
+    },
+    twoObjectsClaimPath: "Два объекта претендуют на {path} этого хоста",
+    traefikDuplicateWinner:
+      "выигрывает — {because} — а остальные для этого пути не срабатывают никогда.",
+    traefikPriorityDeclared:
+      "он объявляет приоритет {n}, выше объявленного или подставленного веса остальных",
+    traefikPriorityLongest:
+      "его правило самое длинное, а это и есть приоритет по умолчанию у Traefik для роутера, который приоритет не объявляет",
+    traefikDuplicateTied:
+      "имеют одинаковый приоритет — объявленный или подставленный по длине правила; какой из них выберет Traefik, из самих объектов не следует.",
+    traefikDuplicateUnsettled:
+      "оба подходят под него. Traefik разрешает спор по приоритету роутера — объявленному или подставленному по длине его правила, — а для Ingress это правило Traefik генерирует сам, и приложение его не видит, поэтому кто из них обслуживает запрос, отсюда не определить.",
+    noMiddlewareObjects:
+      "В этом кластере нет объектов Middleware. Traefik обслуживает все маршруты без них — это обычное дело.",
+    middlewaresDescription:
+      "Все они и кто их использует. Middleware, на который никто не ссылается, не делает ничего, и больше нигде в приложении этого не увидеть.",
+    middlewareUnreferenced:
+      "на него никто не ссылается — это конфигурация, которая ничего не делает",
+    readingTheProxy: "Читаем прокси…",
+    cannotSayWhatTraefikListensOn:
+      "Этот кластер не может сказать, что слушает Traefik.",
+    entryPointsAreStatic:
+      "Точки входа — статическая конфигурация: они есть только во флагах, с которыми запущен прокси, и в API-сервере их не хранит ничто.",
+    entryPointsDescription:
+      "Что слушает прокси, какие из них терминируют TLS и какие хосты приходят на каждую — ответ на вопрос «почему мой маршрут на :80».",
+    plainLower: "без шифрования",
+    redirectsTo: "перенаправляет на {target}",
+    plainEntryPointsHead: {
+      one: "{list} не терминирует TLS и никуда не перенаправляет.",
+      few: "{list} не терминируют TLS и никуда не перенаправляют.",
+      many: "{list} не терминируют TLS и никуда не перенаправляют.",
+      other: "{list} не терминируют TLS и никуда не перенаправляют.",
+    },
+    plainEntryPointsNote:
+      "Маршрут, который не называет точку входа, привязан ко всем сразу, поэтому каждый хост этого кластера доступен и без шифрования — включая те, у которых есть сертификат. Редирект на самой точке входа чинит все сразу; middleware с редиректом чинит один маршрут.",
+    theProxyTitle: "Прокси",
+    theProxyDescription:
+      "Где на самом деле диагностируется проблема с Traefik: его собственные поды и его собственные логи.",
+    traefikClaimsNoClass:
+      "Traefik работает и не забирает ни одного IngressClass, поэтому ни один Ingress в этом кластере не дотянется до него по классу.",
+    renewalNotReadable:
+      "Сертификат выше прочитан из Secret. Кто его продлевает — прочитать не удалось: {error}",
+    renewedAutomaticallyBy: "Продлевается автоматически объектом",
+    nextRenewalAt: ", следующее {when}",
+    issuanceFailed: "не удалось",
+    issuanceNotFinished: "не завершено",
+    issuanceInProgress: "выполняется",
+    startedWhen: "начато {when}",
+    renewsAutomatically: "продлевается автоматически {when}",
+    renewalNotFinished: "Продление не завершено",
+    noEventsInScope: "Событий в {scope} пока нет.",
+    drainExplained:
+      "Узел закрывается для планирования, и каждый под на нём, который контроллер может пересоздать, вытесняется. Поды DaemonSet остаются.",
+    readingWhatRefusesToMove: "Читаем, что откажется переезжать…",
+    drainWillWait:
+      "Из-за них освобождение не завершится ошибкой — оно будет ждать, пока другая реплика не поднимется где-то ещё.",
+    budgetRuleHealthyCovering:
+      "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
+    couldNotReadClusterState: "Не удалось прочитать состояние кластера",
+    controllerLower: "контроллер",
+    noneSet: "не заданы",
+    couldNotReadManifest: "Не удалось прочитать манифест",
+    couldNotReadApplications:
+      "Не удалось прочитать Applications этого кластера",
+    applicationsUnreadableBody:
+      "Всё на этой странице берётся из объектов {kind} в этом API-сервере, и этот запрос не удался — поэтому список был бы догадкой, а не ответом.",
+    argoPageDescription:
+      "Совпадает ли то, что работает, с тем, что должно работать по git, и что этому мешает там, где не совпадает.",
+    acrossEveryNamespace: "{count} по всем пространствам имён",
+    readingApplications: "Читаем Applications…",
+    argoOwnsNothing: "Argo CD здесь установлен и пока ничем не владеет.",
+    argoNoApplicationsBody:
+      "В этом кластере нет ни одного {kind}, поэтому из git ничего не доставляется. Контроллер работает и ждёт первого.",
+    nothingFailing: "сбоев нет",
+    allInSync: "{count}, все синхронизированы",
+    noApplicationMatches: "Ни один Application здесь этому не соответствует.",
+    argoProjectDestination: "проект {project} → {destination}",
+    generatedByName: "сгенерировано {name}",
+    noSourceDeclared: "источник не объявлен",
+    defaultBranch: "ветка по умолчанию",
+    autoSyncSelfHealing: "автосинхронизация, самовосстановление",
+    autoSyncOn: "автосинхронизация включена",
+    autoSyncOff: "автосинхронизация выключена",
+    nothingComparedYet: "сравнения ещё не было",
+    lastSyncedAgo: "последняя синхронизация {age} назад",
+    neverSynced: "ни разу не синхронизировано",
+    fromGit: "из git",
+    syncedAgo: "синхронизировано {age} назад",
+    unknownLower: "неизвестно",
+    argoNotComparedYet:
+      "Argo ещё не сравнивал этот Application, поэтому объектов не перечисляет.",
+    generatedByApplicationSet: "Сгенерировано ApplicationSet",
+    editingGeneratedAppUndone:
+      ". Правки этого Application отменятся при следующем запуске генератора — менять нужно ApplicationSet.",
+    argoDiffNoAddress:
+      "Построчный diff живёт в собственном API Argo, которому нужны учётные данные, которых у приложения нет, — и ни один Ingress в этом кластере не обслуживает {service}, так что адреса, куда вас отправить, нет.",
+    forLineByLineDiff:
+      "за построчным diff, которому нужны учётные данные, которых у приложения нет.",
+    syncFailingFor:
+      "Синхронизация не удаётся уже {age}, а автосинхронизация включена",
+    syncFailing: "Синхронизация не удаётся, а автосинхронизация включена",
+    argoRetries:
+      "Argo повторяет попытки и получает ошибку; ничего не сойдётся, пока не изменится манифест.",
+    lastSyncFailedAgo:
+      "Последняя синхронизация не удалась {age} назад, а автосинхронизация выключена",
+    lastSyncFailed:
+      "Последняя синхронизация не удалась, а автосинхронизация выключена",
+    nothingRetryingSync:
+      "Никто её не повторяет. Всё останется ровно как есть, пока кто-нибудь не синхронизирует заново.",
+    outOfSyncLastSynced:
+      "Рассинхронизировано — последняя синхронизация {age} назад, а автосинхронизация выключена",
+    outOfSyncNeverSynced:
+      "Рассинхронизировано и ни разу не синхронизировано, а автосинхронизация выключена",
+    driftedNote:
+      "Само это не починится. Либо кто-то изменил кластер руками и хотел этого, либо изменил git, а синхронизацию никто не запустил.",
+    nameIsDegraded: "{name} в состоянии Degraded",
+    degradedNote:
+      "Он применён и не работает, о чём статус синхронизации ничего не говорит.",
+    argoReports: "Argo сообщает: {type}",
+    noApplicationSets:
+      "В этом кластере нет ни одного ApplicationSet. Каждый Application здесь написан руками, а значит правка в нём останется.",
+    applicationSetsDescription:
+      "Генератор и сделанные им Application. То, что он сгенерировал, — вывод шаблона: правка в таком Application отменится при следующем запуске генератора.",
+    generatedNothing: "в этом кластере ничего не сгенерировал",
+    noAppProjects:
+      "В этом кластере нет ни одного объекта AppProject — даже {name}, который Argo обычно ставит сам. Каждый Application называет проект, значит один из них называет то, чего нет.",
+    projectsDescription:
+      "Что каждый проект разрешает Application: из каких репозиториев разворачивать и куда.",
+    noRepositoryAllowed: "репозитории не разрешены",
+    anyRepository: "любой репозиторий",
+    noDestinationAllowed: "назначения не разрешены",
+    anyNamespace: "любое пространство имён",
+    anyCluster: "любой кластер",
+    namespaceOnCluster: "{namespace} в {cluster}",
+    readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
+    argoWorkloadsDescription:
+      "Где на самом деле диагностируется проблема Argo. Репозиторий, до которого он не достучался, и вебхук, который до него не дошёл, — в логах repo-server и контроллера, а не в статусе какого-либо Application.",
+    argoUiDescription:
+      "Половине того, что знает Argo, нужны учётные данные, которых у приложения нет, — прежде всего построчному diff. Там, где кластер говорит, как добраться до интерфейса Argo, эта страница передаёт такие вопросы ему.",
+    kindNameServes: "{kind} {name} обслуживает",
+    anIngressServes: "Ingress обслуживает",
+    soEveryApplicationOffersWayIn:
+      ", поэтому каждый Application выше даёт путь внутрь.",
+    readingWhatRoutes: "Читаем, что маршрутизирует {service}…",
+    somethingWord: "Что-то",
+    hostNotKnownTls:
+      ", но в API-сервере нигде не сказано, обслуживается ли этот хост по TLS — точки входа прокси задаются флагами запуска, а прочитать их приложение не смогло. Чем гадать схему и дать ссылку, которая может не открыться, хост назван и оставлен вам.",
+    nothingRoutesServiceToHostname:
+      "Ничто из того, что приложение может прочитать, не маршрутизирует {service} на имя хоста",
+    noIngressNoRoutingController:
+      " — ни Ingress, ни установленного контроллера маршрутизации, которого можно было бы спросить о его собственных объектах",
+    serviceIsClusterIpNoRoute:
+      ". {service} — это ClusterIP, до которого с этой машины нет маршрута, поэтому адрес построить не из чего, а ссылка в ошибку соединения хуже, чем её отсутствие.",
+    everythingReadFromObjects:
+      " Всё на этой странице читается из самих объектов {kind} и не требует учётных данных.",
+    oneRoutingControllerDidNotAnswer:
+      "Один контроллер маршрутизации был опрошен и не ответил:",
+    itsObjectsDescription:
+      "CRD, которые читает эта страница, — для тех, кому нужен сырой объект.",
     loadingTerminal: "Терминал загружается…",
     noMetricsReading:
       "metrics-server не отдаёт показаний по этому объекту — возможно, его контейнеры не запущены",
@@ -1853,6 +2625,214 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    reconcilersFromSources: {
+      one: "{n} реконсилятор из {sources}",
+      few: "{n} реконсилятора из {sources}",
+      many: "{n} реконсиляторов из {sources}",
+      other: "{n} реконсиляторов из {sources}",
+    },
+    sources: {
+      one: "{n} источник",
+      few: "{n} источника",
+      many: "{n} источников",
+      other: "{n} источников",
+    },
+    notReconcilingAndFirst: "{n} из {total} не согласуются, и они первыми",
+    reconcilersAllApplied: {
+      one: "{n} реконсилятор, всё применено",
+      few: "{n} реконсилятора, всё применено",
+      many: "{n} реконсиляторов, всё применено",
+      other: "{n} реконсиляторов, всё применено",
+    },
+    overPlainHttp: "{n} по обычному HTTP",
+    ingressProxyHosts: {
+      one: "Этот Service — собственный прокси {vendor}, а этот Ingress — его парадная дверь; {n} обслуживаемый им хост — на",
+      few: "Этот Service — собственный прокси {vendor}, а этот Ingress — его парадная дверь; {n} обслуживаемых им хоста — на",
+      many: "Этот Service — собственный прокси {vendor}, а этот Ingress — его парадная дверь; {n} обслуживаемых им хостов — на",
+      other:
+        "Этот Service — собственный прокси {vendor}, а этот Ingress — его парадная дверь; {n} обслуживаемых им хостов — на",
+    },
+    moreCertificatesInBundle: {
+      one: "и ещё {n} сертификат в связке",
+      few: "и ещё {n} сертификата в связке",
+      many: "и ещё {n} сертификатов в связке",
+      other: "и ещё {n} сертификатов в связке",
+    },
+    kindInstances: "Экземпляры {kind} ({n})",
+    otherRevisionsAtZero: {
+      one: "ещё {n} ревизия масштабирована до нуля",
+      few: "ещё {n} ревизии масштабированы до нуля",
+      many: "ещё {n} ревизий масштабированы до нуля",
+      other: "ещё {n} ревизии масштабированы до нуля",
+    },
+    needAttentionOfTotal: {
+      one: "{n} из {total} требует внимания",
+      few: "{n} из {total} требуют внимания",
+      many: "{n} из {total} требуют внимания",
+      other: "{n} из {total} требуют внимания",
+    },
+    issuersNotReady: {
+      one: "{n} издатель не готов",
+      few: "{n} издателя не готовы",
+      many: "{n} издателей не готовы",
+      other: "{n} издателя не готовы",
+    },
+    servedNotInDnsNames: {
+      one: "{names} отдаётся из этого Secret и не указан в его {field}. Все остальные экраны считают это исправным — Secret заполнен, сертификат действителен, Ingress отдаёт трафик, — а браузер просто отказывается соединяться.",
+      few: "{names} отдаются из этого Secret и не указаны в его {field}. Все остальные экраны считают это исправным — Secret заполнен, сертификат действителен, Ingress отдаёт трафик, — а браузер просто отказывается соединяться.",
+      many: "{names} отдаются из этого Secret и не указаны в его {field}. Все остальные экраны считают это исправным — Secret заполнен, сертификат действителен, Ingress отдаёт трафик, — а браузер просто отказывается соединяться.",
+      other:
+        "{names} отдаются из этого Secret и не указаны в его {field}. Все остальные экраны считают это исправным — Secret заполнен, сертификат действителен, Ingress отдаёт трафик, — а браузер просто отказывается соединяться.",
+    },
+    servicesFrontThis: {
+      one: "перед этим стоит {n} Service",
+      few: "перед этим стоят {n} Service",
+      many: "перед этим стоят {n} Service",
+      other: "перед этим стоят {n} Service",
+    },
+    loadedResources: {
+      one: "Из кластера загружен {n} ресурс.",
+      few: "Из кластера загружено {n} ресурса.",
+      many: "Из кластера загружено {n} ресурсов.",
+      other: "Из кластера загружено {n} ресурса.",
+    },
+    routesToUndefinedSubset: {
+      one: "{n} маршрут в набор, который никто не определяет",
+      few: "{n} маршрута в набор, который никто не определяет",
+      many: "{n} маршрутов в набор, который никто не определяет",
+      other: "{n} маршрута в набор, который никто не определяет",
+    },
+    rules: {
+      one: "{n} правило",
+      few: "{n} правила",
+      many: "{n} правил",
+      other: "{n} правила",
+    },
+    gatewaysNamed: {
+      one: "назван {n} Gateway",
+      few: "названо {n} Gateway",
+      many: "названо {n} Gateway",
+      other: "названо {n} Gateway",
+    },
+    hostsNameItNoneCovered: {
+      one: "{n} хост называет его, ни один не покрыт",
+      few: "{n} хоста называют его, ни один не покрыт",
+      many: "{n} хостов называют его, ни один не покрыт",
+      other: "{n} хоста называют его, ни один не покрыт",
+    },
+    subsetsNothingRoutesTo: {
+      one: "{list} — в него ничего не маршрутизируется",
+      few: "{list} — в них ничего не маршрутизируется",
+      many: "{list} — в них ничего не маршрутизируется",
+      other: "{list} — в них ничего не маршрутизируется",
+    },
+    runningSegment: "выполняются",
+    succeededSegment: "завершились",
+    failedSegment: "не удались",
+    notScheduledSegment: "не назначено",
+    plusMore: "ещё {n}",
+    hostsNeedAttention: {
+      one: "{n} из {total} хостов требует внимания",
+      few: "{n} из {total} хостов требуют внимания",
+      many: "{n} из {total} хостов требуют внимания",
+      other: "{n} из {total} хостов требуют внимания",
+    },
+    snippetsOfRawNginx: {
+      one: "{n} вставка сырого конфига nginx",
+      few: "{n} вставки сырого конфига nginx",
+      many: "{n} вставок сырого конфига nginx",
+      other: "{n} вставки сырого конфига nginx",
+    },
+    middlewaresUnused: {
+      one: "{n} middleware не используется",
+      few: "{n} middleware не используются",
+      many: "{n} middleware не используются",
+      other: "{n} middleware не используются",
+    },
+    hostsBrokenOfTotal: {
+      one: "{n} из {total} хостов сломан",
+      few: "{n} из {total} хостов сломаны",
+      many: "{n} из {total} хостов сломаны",
+      other: "{n} из {total} хостов сломаны",
+    },
+    hostsLandHere: {
+      one: "{n} хост приходит сюда",
+      few: "{n} хоста приходят сюда",
+      many: "{n} хостов приходят сюда",
+      other: "{n} хоста приходят сюда",
+    },
+    inDays: {
+      one: "через {n} день",
+      few: "через {n} дня",
+      many: "через {n} дней",
+      other: "через {n} дня",
+    },
+    daysAgo: {
+      one: "{n} день назад",
+      few: "{n} дня назад",
+      many: "{n} дней назад",
+      other: "{n} дня назад",
+    },
+    warningEvents: {
+      one: "{n} предупреждение",
+      few: "{n} предупреждения",
+      many: "{n} предупреждений",
+      other: "{n} предупреждения",
+    },
+    normalEvents: {
+      one: "{n} обычное",
+      few: "{n} обычных",
+      many: "{n} обычных",
+      other: "{n} обычных",
+    },
+    latestKept: "последние {n}",
+    budgetsAllowNoEviction: {
+      one: "{n} бюджет прерываний на этом узле не разрешает вытеснить ничего.",
+      few: "{n} бюджета прерываний на этом узле не разрешают вытеснить ничего.",
+      many: "{n} бюджетов прерываний на этом узле не разрешают вытеснить ничего.",
+      other:
+        "{n} бюджета прерываний на этом узле не разрешают вытеснить ничего.",
+    },
+    applicationsNeedAttention: {
+      one: "{n} из {total} приложений требует внимания",
+      few: "{n} из {total} приложений требуют внимания",
+      many: "{n} из {total} приложений требуют внимания",
+      other: "{n} из {total} приложений требуют внимания",
+    },
+    failingAndFirst: "со сбоем {n} из {total}, и они первыми",
+    objects: {
+      one: "{n} объект",
+      few: "{n} объекта",
+      many: "{n} объектов",
+      other: "{n} объекта",
+    },
+    toLookAt: {
+      one: "{n} требует внимания",
+      few: "{n} требуют внимания",
+      many: "{n} требуют внимания",
+      other: "{n} требуют внимания",
+    },
+    andMoreSynced: {
+      one: "и ещё {n}, который Argo считает синхронизированным",
+      few: "и ещё {n}, которые Argo считает синхронизированными",
+      many: "и ещё {n}, которые Argo считает синхронизированными",
+      other: "и ещё {n}, которые Argo считает синхронизированными",
+    },
+    argoRetriesAfterAttempts: {
+      one: "Argo повторяет попытки и получает ошибку — уже {n} попытка; ничего не сойдётся, пока не изменится манифест.",
+      few: "Argo повторяет попытки и получает ошибку — уже {n} попытки; ничего не сойдётся, пока не изменится манифест.",
+      many: "Argo повторяет попытки и получает ошибку — уже {n} попыток; ничего не сойдётся, пока не изменится манифест.",
+      other:
+        "Argo повторяет попытки и получает ошибку — уже {n} попытки; ничего не сойдётся, пока не изменится манифест.",
+    },
+    resourcesDegraded: {
+      one: "{list} в состоянии Degraded",
+      few: "{list} в состоянии Degraded",
+      many: "{list} в состоянии Degraded",
+      other: "{list} в состоянии Degraded",
+    },
+    syncedOutOfSync:
+      "{synced} синхронизировано · {drifted} рассинхронизировано",
     jobsKept: {
       one: "задача в истории",
       few: "задачи в истории",

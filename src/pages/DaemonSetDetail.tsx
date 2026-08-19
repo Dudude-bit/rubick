@@ -119,8 +119,8 @@ export function DaemonSetDetail() {
             <WorkloadOverview
               count={
                 <CountBlock
-                  title="Rollout"
-                  subject="one pod per eligible node"
+                  title={t("columns", "rollout")}
+                  subject={t("action", "rolloutSubject")}
                   governance={connections}
                 >
                   {/* One fact, not five: desired/current/ready/up-to-date/
@@ -134,14 +134,18 @@ export function DaemonSetDetail() {
                       total={desired}
                       label={t("count", "nodesWanted", { n: desired })}
                       segments={[
-                        { label: "ready", count: ready, tone: "ok" },
                         {
-                          label: "not ready",
+                          label: t("count", "readyWord"),
+                          count: ready,
+                          tone: "ok",
+                        },
+                        {
+                          label: t("count", "notReadyWord"),
                           count: Math.max(0, current - ready),
                           tone: "warn",
                         },
                         {
-                          label: "not scheduled",
+                          label: t("count", "notScheduledSegment"),
                           count: Math.max(0, desired - current),
                           tone: "err",
                         },
@@ -308,7 +312,7 @@ export function DaemonSetDetail() {
       statusBadge={
         daemonSet && (
           <StatusBadge status={short ? "Degraded" : "Ready"}>
-            {ready}/{desired} ready
+            {t("count", "slashReady", { n: ready, total: desired })}
           </StatusBadge>
         )
       }

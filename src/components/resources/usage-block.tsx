@@ -261,7 +261,7 @@ export function UsageBlock({
              *  reader can fix, and the row that says so already exists. */}
             <UsageRow label="CPU" used={null} total={cpuLimit} type="cpu" />
             <UsageRow
-              label="Memory"
+              label={t("columns", "memory")}
               used={null}
               total={memoryLimit}
               type="memory"

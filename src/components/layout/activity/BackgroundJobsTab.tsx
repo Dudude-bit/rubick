@@ -92,7 +92,10 @@ export function BackgroundJobsTab() {
   return (
     <div className="pb-3">
       {activeJobs.length > 0 && (
-        <ActivityGroup title="Running" count={activeJobs.length}>
+        <ActivityGroup
+          title={t("activity", "running")}
+          count={activeJobs.length}
+        >
           {activeJobs.map((job) => (
             <div key={job.id} className={cn(ACTIVITY_ROW, "flex-col gap-1")}>
               <span className="flex w-full items-center gap-2.5">

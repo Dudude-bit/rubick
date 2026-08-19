@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PHASE_LABEL, podPorts } from "@/lib/container-sequence";
 import type { PodInfo, PortForwardSessionInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface PortForwardFormState {
   name: string;
@@ -64,6 +65,7 @@ export function PodPortForwardDialog({
   portForwardStatusBySession,
   onStopSession,
 }: PodPortForwardDialogProps) {
+  const t = useT();
   // Sidecars included, app ports first. A mesh proxy's port is the one a
   // forward is usually aimed at, and it is not on `.containers` at all.
   const allPorts = podPorts(pod);
@@ -76,15 +78,15 @@ export function PodPortForwardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Port forward</DialogTitle>
+          <DialogTitle>{t("action", "portForward")}</DialogTitle>
           <DialogDescription>
-            Forward traffic from your machine to this pod.
+            {t("action", "portForwardHint")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="rounded-md border p-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-fg-mut">Target</span>
+              <span className="text-fg-mut">{t("columns", "target")}</span>
               <span className="font-medium">
                 {pod.namespace}/{pod.name}
               </span>
@@ -93,7 +95,7 @@ export function PodPortForwardDialog({
 
           {allPorts.length > 0 && (
             <div className="space-y-2">
-              <Label>Quick presets</Label>
+              <Label>{t("action", "quickPresets")}</Label>
               <div className="flex flex-wrap gap-2">
                 {allPorts.map(({ container, port }) => (
                   <Button
@@ -127,14 +129,14 @@ export function PodPortForwardDialog({
                 ))}
               </div>
               <p className="text-xs text-fg-mut">
-                Click to auto-fill local and remote ports
+                {t("action", "clickToAutofillPorts")}
               </p>
             </div>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="pf-local-port">Local port</Label>
+              <Label htmlFor="pf-local-port">{t("action", "localPort")}</Label>
               <Input
                 id="pf-local-port"
                 type="number"
@@ -152,7 +154,9 @@ export function PodPortForwardDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pf-remote-port">Remote port</Label>
+              <Label htmlFor="pf-remote-port">
+                {t("action", "remotePort")}
+              </Label>
               <Input
                 id="pf-remote-port"
                 type="number"
@@ -174,9 +178,11 @@ export function PodPortForwardDialog({
           <div className="rounded-md border p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Auto reconnect</p>
+                <p className="text-sm font-medium">
+                  {t("action", "autoReconnect")}
+                </p>
                 <p className="text-xs text-fg-mut">
-                  Retry when the pod or connection drops
+                  {t("action", "autoReconnectHint")}
                 </p>
               </div>
               <Switch
@@ -188,9 +194,11 @@ export function PodPortForwardDialog({
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Save as config</p>
+                <p className="text-sm font-medium">
+                  {t("action", "saveAsConfig")}
+                </p>
                 <p className="text-xs text-fg-mut">
-                  Keep this port-forward for quick reuse
+                  {t("action", "saveAsConfigHint")}
                 </p>
               </div>
               <Switch
@@ -204,9 +212,11 @@ export function PodPortForwardDialog({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">Auto start</p>
+                    <p className="text-sm font-medium">
+                      {t("action", "autoStart")}
+                    </p>
                     <p className="text-xs text-fg-mut">
-                      Start automatically when this cluster connects
+                      {t("action", "autoStartHint")}
                     </p>
                   </div>
                   <Switch
@@ -217,7 +227,9 @@ export function PodPortForwardDialog({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="pf-config-name">Config name</Label>
+                  <Label htmlFor="pf-config-name">
+                    {t("action", "configName")}
+                  </Label>
                   <Input
                     id="pf-config-name"
                     value={form.name}
@@ -233,7 +245,7 @@ export function PodPortForwardDialog({
 
           {activePortForwards.length > 0 && (
             <div className="space-y-2">
-              <Label>Active port-forwards</Label>
+              <Label>{t("action", "activePortForwards")}</Label>
               {activePortForwards.map((session) => (
                 <div
                   key={session.id}
@@ -246,7 +258,7 @@ export function PodPortForwardDialog({
                     <div className="text-xs text-fg-mut">
                       {portForwardStatusBySession[session.id]?.message ||
                         portForwardStatusBySession[session.id]?.status ||
-                        "Active"}
+                        t("action", "activeInline")}
                     </div>
                   </div>
                   <Button
@@ -254,7 +266,7 @@ export function PodPortForwardDialog({
                     size="sm"
                     onClick={() => onStopSession(session.id)}
                   >
-                    Stop
+                    {t("action", "stop")}
                   </Button>
                 </div>
               ))}
@@ -263,10 +275,10 @@ export function PodPortForwardDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={onSubmit} disabled={busy}>
-            {busy ? "Starting..." : "Start port-forward"}
+            {busy ? t("action", "starting") : t("action", "startPortForward")}
           </Button>
         </DialogFooter>
       </DialogContent>

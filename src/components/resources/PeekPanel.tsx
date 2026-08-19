@@ -527,7 +527,10 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           <RouteSource route={route} /> — {route.source.kind}
         </p>
         <p className="text-[11px] text-fg-fnt">
-          <CopyableAddress value={routeAddress(route)} label="Address" />
+          <CopyableAddress
+            value={routeAddress(route)}
+            label={t("columns", "address")}
+          />
           {route.h2c ? " (gRPC)" : ""}
         </p>
       </div>
@@ -634,7 +637,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
 
   return (
     <div>
-      <PeekHeading title="Traffic path" />
+      <PeekHeading title={t("nav", "trafficPath")} />
       <div className="pb-1">
         {levels.map((level, index) => {
           const last = index === levels.length - 1;

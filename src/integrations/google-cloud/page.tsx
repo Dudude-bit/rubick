@@ -355,7 +355,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
           </Cell>
         )}
       </Column>
-      <Column label="Certificate">
+      <Column label={t("columns", "certificate")}>
         {certificates.length === 0 ? (
           <Cell warn>
             <span className="text-fg-fnt">
@@ -450,7 +450,9 @@ function RouteChain({
               key={`${config.name}/${config.port ?? "default"}`}
               bad={!config.found}
               under={
-                config.port === null ? "every port" : `port ${config.port}`
+                config.port === null
+                  ? t("empty", "everyPort")
+                  : t("empty", "portNumber", { port: config.port })
               }
               title={
                 config.found

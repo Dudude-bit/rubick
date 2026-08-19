@@ -142,9 +142,21 @@ export function JobDetail() {
                         : t("count", "completionsWanted", { n: completions })
                     }
                     segments={[
-                      { label: "succeeded", count: succeeded, tone: "neutral" },
-                      { label: "running", count: active, tone: "ok" },
-                      { label: "failed", count: failed, tone: "err" },
+                      {
+                        label: t("count", "succeededSegment"),
+                        count: succeeded,
+                        tone: "neutral",
+                      },
+                      {
+                        label: t("count", "runningSegment"),
+                        count: active,
+                        tone: "ok",
+                      },
+                      {
+                        label: t("count", "failedSegment"),
+                        count: failed,
+                        tone: "err",
+                      },
                     ]}
                     note={
                       <>
@@ -225,12 +237,15 @@ export function JobDetail() {
       },
       {
         id: "conditions",
-        label: "Conditions",
+        label: t("nav", "conditions"),
         glyph: viewGlyph(BadgeCheck),
         mark: conditionsMark(job?.conditions),
         content: (
           <Section>
-            <SectionHeader title="Conditions" count={job?.conditions.length} />
+            <SectionHeader
+              title={t("nav", "conditions")}
+              count={job?.conditions.length}
+            />
             <ConditionRows
               conditions={job?.conditions ?? []}
               subject={{ kind: ResourceType.Job, name, namespace }}
@@ -314,8 +329,10 @@ function timing(
 
   return [
     {
-      label: "Started",
-      value: job?.startTime ? formatDate(job.startTime) : "not started",
+      label: t("action", "started"),
+      value: job?.startTime
+        ? formatDate(job.startTime)
+        : t("action", "notStarted"),
       tone: job?.startTime ? undefined : "warn",
     },
     {

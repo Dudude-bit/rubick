@@ -4,6 +4,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { usePortForwardStore } from "@/stores/portForwardStore";
+import { useT } from "@/i18n/useT";
 
 interface PortForwardEventPayload {
   id: string;
@@ -19,6 +20,7 @@ interface PortForwardEventPayload {
 const DEDUPE_MS = 2500;
 
 export function usePortForwardEvents() {
+  const t = useT();
   const { toast } = useToast();
   const setStatus = usePortForwardStore((state) => state.setStatus);
   const openActivityOn = useActivityPanelStore((state) => state.openOn);
@@ -64,44 +66,44 @@ export function usePortForwardEvents() {
       // and the panel stayed unfound.
       const manage = (
         <ToastAction
-          altText="Open the port-forward panel"
+          altText={t("action", "openPortForwardPanel")}
           onClick={() => openActivityOn("ports")}
         >
-          Manage
+          {t("action", "manage")}
         </ToastAction>
       );
 
       switch (payload.status) {
         case "listening":
           toast({
-            title: "Port-forward active",
+            title: t("action", "portForwardActive"),
             description: message,
             action: manage,
           });
           break;
         case "reconnecting":
           toast({
-            title: "Port-forward reconnecting",
+            title: t("action", "portForwardReconnecting"),
             description: message,
             action: manage,
           });
           break;
         case "reconnected":
           toast({
-            title: "Port-forward reconnected",
+            title: t("action", "portForwardReconnected"),
             description: base,
           });
           break;
         case "stopped":
           toast({
-            title: "Port-forward stopped",
+            title: t("action", "portForwardStopped"),
             description: base,
           });
           refreshSessions();
           break;
         case "error":
           toast({
-            title: "Port-forward error",
+            title: t("action", "portForwardError"),
             description: message,
             action: manage,
             variant: "destructive",
@@ -120,5 +122,5 @@ export function usePortForwardEvents() {
         unlisten();
       }
     };
-  }, [openActivityOn, refreshSessions, setStatus, toast]);
+  }, [openActivityOn, refreshSessions, setStatus, t, toast]);
 }

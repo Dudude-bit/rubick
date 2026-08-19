@@ -50,6 +50,7 @@ import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 
 type Workload = { name: string; namespace: string };
 
@@ -89,6 +90,7 @@ export function createWorkloadListPage<T extends Workload>(
   config: WorkloadListPageConfig<T>
 ) {
   const ListPage = function WorkloadListPage() {
+    const t = useT();
     const currentNamespace = useClusterStore((s) => s.currentNamespace);
     const navigate = useNavigate();
 
@@ -116,11 +118,14 @@ export function createWorkloadListPage<T extends Workload>(
         if (watchFailed) return;
         setWatchFailed(true);
         toast({
-          title: "Real-time updates unavailable",
-          description: `${config.title}: falling back to periodic refresh. ${err}`,
+          title: t("action", "realtimeUnavailable"),
+          description: t("action", "fallingBackToPolling", {
+            title: config.title,
+            error: err,
+          }),
         });
       },
-      [toast, watchFailed]
+      [t, toast, watchFailed]
     );
 
     const listQuery = useResourceList(
@@ -156,7 +161,7 @@ export function createWorkloadListPage<T extends Workload>(
         ): QuickAction<T & ResourceMetrics>[] => [
           {
             icon: Eye,
-            label: "View Details",
+            label: t("action", "viewDetails"),
             onClick: (item) =>
               navigate(
                 getResourceDetailUrl(
@@ -169,12 +174,12 @@ export function createWorkloadListPage<T extends Workload>(
           ...(config.extraActions?.({ navigate }) ?? []),
           {
             icon: Trash2,
-            label: "Delete",
+            label: t("action", "delete"),
             onClick: (item) => setDeleteTarget(item),
             variant: "destructive",
           },
         ],
-      [navigate]
+      [navigate, t]
     );
 
     return (

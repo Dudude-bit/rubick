@@ -68,10 +68,12 @@ export function CertificateLine({
   );
 }
 
-function chainNote(cert: CertificateFacts): string | null {
+function chainNote(
+  cert: CertificateFacts,
+  t: ReturnType<typeof useT>
+): string | null {
   if (cert.chainLength <= 1) return null;
-  const rest = cert.chainLength - 1;
-  return `with ${rest} more certificate${rest === 1 ? "" : "s"} in the bundle`;
+  return t("count", "moreCertificatesInBundle", { n: cert.chainLength - 1 });
 }
 
 /**
@@ -94,7 +96,7 @@ export function CertificateSection({
   if (!read.certificate) {
     return (
       <Section>
-        <SectionHeader title="Certificate" />
+        <SectionHeader title={t("columns", "certificate")} />
         <p className="text-xs text-warn">{read.problem}</p>
       </Section>
     );
@@ -109,7 +111,10 @@ export function CertificateSection({
 
   return (
     <Section>
-      <SectionHeader title="Certificate" count={chainNote(cert) ?? undefined} />
+      <SectionHeader
+        title={t("columns", "certificate")}
+        count={chainNote(cert, t) ?? undefined}
+      />
       <KeyValueList
         className="max-w-lg"
         items={[

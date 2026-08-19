@@ -106,8 +106,8 @@ function SessionRow({
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
-          {isError && " · failed"}
-          {isReconnecting && " · reconnecting"}
+          {isError && ` · ${t("cluster", "failedInline")}`}
+          {isReconnecting && ` · ${t("activity", "reconnectingInline")}`}
         </span>
       </span>
       <ActivityAction
@@ -286,7 +286,10 @@ export function PortForwardsTab() {
   return (
     <div className="pb-3">
       {contextSessions.length > 0 && (
-        <ActivityGroup title="Running" count={contextSessions.length}>
+        <ActivityGroup
+          title={t("activity", "running")}
+          count={contextSessions.length}
+        >
           {contextSessions.map((session) => (
             <SessionRow
               key={session.id}
@@ -300,7 +303,10 @@ export function PortForwardsTab() {
       )}
 
       {otherSessions.length > 0 && (
-        <ActivityGroup title="Running elsewhere" count={otherSessions.length}>
+        <ActivityGroup
+          title={t("activity", "runningElsewhere")}
+          count={otherSessions.length}
+        >
           {otherSessions.map((session) => (
             <SessionRow
               key={session.id}

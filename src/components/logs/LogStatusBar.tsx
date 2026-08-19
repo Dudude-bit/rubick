@@ -61,7 +61,7 @@ export function LogStatusBar({
   const rate = useMemo(() => measureRate(logs), [logs]);
   const fill = limit > 0 ? Math.min(100, (retained / limit) * 100) : 0;
 
-  const intakeKey = intake.map(termLabel).join(" and ");
+  const intakeKey = intake.map(termLabel).join(` ${t("empty", "listAnd")} `);
 
   /**
    * Both sides of the discard, read off the one buffer.
@@ -100,7 +100,7 @@ export function LogStatusBar({
         aria-valuenow={retained}
         aria-valuemin={0}
         aria-valuemax={limit}
-        aria-label="Buffer fill"
+        aria-label={t("action", "bufferFill")}
       >
         <span
           className={`block h-full ${fill >= 100 ? "bg-warn" : "bg-fg-fnt"}`}

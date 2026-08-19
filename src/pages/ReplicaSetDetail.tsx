@@ -118,8 +118,8 @@ export function ReplicaSetDetail() {
   // under the bar — so neither is a verbatim echo of the other.
   const superseded = standing === "superseded";
   const whyEmpty = superseded
-    ? `Superseded by revision ${currentRevision}. The Deployment keeps this one at zero so a rollback can bring it straight back.`
-    : "The Deployment is scaled to zero, so its current revision runs no pods.";
+    ? t("empty", "supersededByRevision", { revision: currentRevision ?? "" })
+    : t("empty", "deploymentScaledToZeroNote");
   const noPods = superseded
     ? t("empty", "noPodsSuperseded", { revision: currentRevision ?? "" })
     : t("empty", "noPodsScaledToZero");
@@ -128,7 +128,7 @@ export function ReplicaSetDetail() {
 
   const facts: KeyValue[] = [
     {
-      label: "Owned by",
+      label: t("columns", "ownedBy"),
       value: owner ? (
         <ResourceRef
           kind={ResourceType.Deployment}
@@ -137,22 +137,21 @@ export function ReplicaSetDetail() {
           showKind={false}
         />
       ) : (
-        "nothing — no Deployment is rolling this out"
+        t("empty", "noDeploymentRollingOut")
       ),
     },
     {
-      label: "Revision",
+      label: t("columns", "revision"),
       value:
         revision === null ? (
-          "none"
+          t("empty", "noneLower")
         ) : (
           <>
             {revision}
             {retired > 0 && (
               <span className="text-fg-fnt">
                 {" "}
-                · {retired} other{" "}
-                {retired === 1 ? "revision is" : "revisions are"} scaled to zero
+                · {t("count", "otherRevisionsAtZero", { n: retired })}
               </span>
             )}
           </>
@@ -165,28 +164,32 @@ export function ReplicaSetDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
           <WorkloadOverview
             count={
               <CountBlock
-                title="Replicas"
+                title={t("columns", "replicas")}
                 subject={t("columns", "whatThisRevisionRuns")}
               >
                 <Composition
                   total={desired}
                   label={t("count", "replicasWanted", { n: desired })}
                   segments={[
-                    { label: "ready", count: ready, tone: "ok" },
                     {
-                      label: "starting",
+                      label: t("count", "readySegment"),
+                      count: ready,
+                      tone: "ok",
+                    },
+                    {
+                      label: t("count", "startingSegment"),
                       count: Math.max(0, current - ready),
                       tone: "warn",
                     },
                     {
-                      label: "not created",
+                      label: t("count", "notCreatedSegment"),
                       count: Math.max(0, desired - current),
                       tone: "err",
                     },
@@ -199,17 +202,19 @@ export function ReplicaSetDetail() {
                 />
               </CountBlock>
             }
-            declared={<FactBlock title="Revision" items={facts} />}
+            declared={
+              <FactBlock title={t("columns", "revision")} items={facts} />
+            }
           />
 
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(replicaSet?.labels ?? {}).length}
             items={recordToKeyValues(replicaSet?.labels ?? {})}
             emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(replicaSet?.annotations ?? {}).length}
             items={recordToKeyValues(replicaSet?.annotations ?? {})}
             emptyMessage={t("empty", "noAnnotations")}
@@ -219,7 +224,7 @@ export function ReplicaSetDetail() {
     },
     {
       id: "container-template",
-      label: "Template",
+      label: t("nav", "template"),
       glyph: viewGlyph(Layers2),
       content: <ContainerRows template={replicaSet} namespace={namespace} />,
     },
@@ -239,13 +244,13 @@ export function ReplicaSetDetail() {
     },
     {
       id: "conditions",
-      label: "Conditions",
+      label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
       mark: conditionsMark(replicaSet?.conditions),
       content: (
         <Section>
           <SectionHeader
-            title="Conditions"
+            title={t("columns", "conditions")}
             count={replicaSet?.conditions.length}
           />
           <ConditionRows
@@ -301,13 +306,15 @@ export function ReplicaSetDetail() {
         replicaSet &&
         (standing === "unversioned" ? (
           <StatusBadge status={ready < desired ? "Degraded" : "Ready"}>
-            {ready}/{desired} ready
+            {t("count", "slashReady", { n: ready, total: desired })}
           </StatusBadge>
         ) : (
           <StatusBadge
             status={standing === "current" ? "Current" : "Superseded"}
           >
-            {standing === "current" ? "current revision" : "superseded"}
+            {standing === "current"
+              ? t("empty", "currentRevisionLower")
+              : t("empty", "supersededLower")}
           </StatusBadge>
         ))
       }
@@ -315,7 +322,9 @@ export function ReplicaSetDetail() {
         replicaSet &&
         standing !== "unversioned" && (
           <span className="text-[11px] text-fg-fnt">
-            {emptyPods ? "scaled to zero" : `${ready}/${desired} ready`}
+            {emptyPods
+              ? t("empty", "scaledToZero")
+              : t("count", "slashReady", { n: ready, total: desired })}
           </span>
         )
       }

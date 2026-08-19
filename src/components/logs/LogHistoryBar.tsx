@@ -214,11 +214,11 @@ export function LogHistoryBar({
       )}
       {loaded.older !== null && (
         <Act onClick={onReadOlder} disabled={isPaging}>
-          {isPaging ? "Reading…" : "Load older"}
+          {isPaging ? t("action", "reading") : t("action", "loadOlder")}
         </Act>
       )}
       {ranged && <Ranges selected={selected} onSelect={onRead} />}
-      <Act onClick={onClear}>Hide history</Act>
+      <Act onClick={onClear}>{t("action", "hideHistory")}</Act>
     </Bar>
   );
 }
