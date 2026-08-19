@@ -64,6 +64,10 @@ export interface TraceStep {
   /** Addresses this step vouches for, kept out of {@link say} so the UI
    *  can make each one copyable instead of baking them into prose. */
   addresses?: string[];
+  /** The object {@link say} names, where it exists and has a page — so the
+   *  UI can make the name a peek like every other reference in the app.
+   *  Absent on a missing object: a link to a 404 is worse than plain text. */
+  subject?: { kind: string; name: string; namespace: string };
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
@@ -223,6 +227,11 @@ function gatewayStep(
       },
     };
   }
+  const subject = {
+    kind: "Gateway",
+    name: gateway.name,
+    namespace: gateway.namespace,
+  };
   const programmed =
     gateway.conditions.find((c) => c.type === "Programmed") ??
     gateway.conditions.find((c) => c.type === "Ready");
@@ -233,6 +242,7 @@ function gatewayStep(
       say: `Gateway ${gateway.name} is not programmed`,
       who: "infra",
       short: `${gateway.name} is not programmed`,
+      subject,
       detail: {
         title: "The controller refuses this Gateway",
         body: `${said(programmed)}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.`,
@@ -246,6 +256,7 @@ function gatewayStep(
       say: `Gateway ${gateway.name} has no address yet`,
       who: "infra",
       short: `${gateway.name} has no address yet`,
+      subject,
       detail: {
         title: "No address to send traffic to",
         body: "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
@@ -258,6 +269,7 @@ function gatewayStep(
       state: "warn",
       say: `Gateway ${gateway.name} — the controller has not reported Programmed`,
       who: "infra",
+      subject,
     };
   }
   return {
@@ -266,6 +278,7 @@ function gatewayStep(
     say: `Gateway ${gateway.name} is programmed`,
     who: "infra",
     addresses: gateway.addresses,
+    subject,
   };
 }
 
@@ -466,6 +479,11 @@ function refsStep(
           : "A reference is not permitted",
         who: "yours",
         short: `needs a ReferenceGrant in ${target}`,
+        // The backend may well exist — only the *permission* is missing —
+        // so its name stays a reference the reader can peek behind.
+        subject: foreign
+          ? { kind: "Service", name: foreign.name, namespace: target }
+          : undefined,
         freshness,
         detail: {
           title: `No ReferenceGrant in ${target} allows it`,
@@ -604,6 +622,11 @@ function backendSteps(
           say: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
           who: "yours",
           short: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
+          subject: {
+            kind: "Service",
+            name: wrongPort.backend.name,
+            namespace: wrongPort.namespace,
+          },
           detail: {
             title: "The Service exists, the port does not",
             body: "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
@@ -624,6 +647,14 @@ function backendSteps(
               ? `Backend Service ${verdicts[0].backend.name} serves :${verdicts[0].backend.port ?? "?"}`
               : `All ${verdicts.length} backend Services exist, ports match`,
           who: "yours",
+          subject:
+            verdicts.length === 1
+              ? {
+                  kind: "Service",
+                  name: verdicts[0].backend.name,
+                  namespace: verdicts[0].namespace,
+                }
+              : undefined,
         };
 
   if (backendStep.state === "err") {
@@ -651,6 +682,11 @@ function backendSteps(
         say: `${down.backend.name}: ${stop.title}`,
         who: "yours",
         short: stop.title,
+        subject: {
+          kind: "Service",
+          name: down.backend.name,
+          namespace: down.namespace,
+        },
         detail: { title: stop.title, body: stop.note },
       },
     ];
@@ -737,6 +773,8 @@ function traceFor(
       step.state = "off";
       step.detail = undefined;
       step.freshness = undefined;
+      step.subject = undefined;
+      step.addresses = undefined;
     }
   }
 

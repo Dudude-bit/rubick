@@ -13,6 +13,7 @@ import {
   CopyableAddresses,
   CopyableValue,
 } from "@/components/ui/copyable-value";
+import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -107,6 +108,37 @@ function StepDetail({ step }: { step: TraceStep }) {
   );
 }
 
+/**
+ * The step's sentence, with the object it names rendered as the same
+ * peekable reference every other surface draws — the name stays inside the
+ * prose, the click opens the peek, a modified click opens a tab.
+ */
+function Say({ step }: { step: TraceStep }) {
+  const subject = step.subject;
+  const at = subject ? step.say.indexOf(subject.name) : -1;
+  if (
+    !subject ||
+    at < 0 ||
+    objectUrl(subject.kind, subject.name, subject.namespace) === null
+  ) {
+    return <>{step.say}</>;
+  }
+  return (
+    <>
+      {step.say.slice(0, at)}
+      <ObjectLink
+        kind={subject.kind}
+        name={subject.name}
+        namespace={subject.namespace}
+        className="-mx-0.5 rounded-sm px-0.5 font-mono text-fg hover:bg-hover hover:underline hover:decoration-dotted hover:underline-offset-2"
+      >
+        {subject.name}
+      </ObjectLink>
+      {step.say.slice(at + subject.name.length)}
+    </>
+  );
+}
+
 function StepRow({ step, index }: { step: TraceStep; index: number }) {
   const off = step.state === "off";
   return (
@@ -121,7 +153,7 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
       </span>
       <div className="flex min-h-[26px] flex-wrap items-baseline gap-2 pb-2">
         <span className={off ? "text-xs text-fg-fnt" : "text-xs text-fg-mid"}>
-          {step.say}
+          <Say step={step} />
         </span>
         {!off && step.addresses && step.addresses.length > 0 && (
           <CopyableAddresses

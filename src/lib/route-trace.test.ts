@@ -228,6 +228,17 @@ describe("routeTraces", () => {
     expect(trace.steps[7].who).toBe("machine");
     expect(trace.steps[0].who).toBe("infra");
     expect(trace.steps[6].say).toContain("1 ready");
+    // The objects a step vouches for are peekable, like everywhere else.
+    expect(trace.steps[1].subject).toEqual({
+      kind: "Gateway",
+      name: "edge",
+      namespace: "gwtest",
+    });
+    expect(trace.steps[5].subject).toEqual({
+      kind: "Service",
+      name: "healthy",
+      namespace: "gwtest",
+    });
     expect(trace.probe).toEqual({
       host: "healthy.example.com",
       address: "203.0.113.10",
@@ -438,6 +449,8 @@ describe("routeTraces", () => {
 
     expect(trace.stopStep).toBe(6);
     expect(trace.steps[5].say).toContain("healthy");
+    // A missing Service has no page to peek at — no subject, no dead link.
+    expect(trace.steps[5].subject).toBeUndefined();
   });
 
   it("stops at the backend when the Service does not serve the ref's port", () => {
