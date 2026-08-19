@@ -117,7 +117,7 @@ Every name you can go to is a link, with the gestures you expect: click to peek,
 
 ## Install
 
-Grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). There is no Homebrew or winget package yet.
+Grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). There is no Homebrew or winget package yet. On Arch there is [`rubick-kubernetes-bin`](https://aur.archlinux.org/packages/rubick-kubernetes-bin) in the AUR — packaged and updated by someone outside this project, from the same `.deb` published here.
 
 - **macOS** — signed with a Developer ID certificate and notarised by Apple, so it opens on a double-click.
 - **Windows** — not signed, so SmartScreen will warn on the first launch. **More info → Run anyway**.
