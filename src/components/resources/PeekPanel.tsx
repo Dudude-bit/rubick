@@ -445,6 +445,26 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     }
     ingresses.set(key, entry);
   }
+  // Gateway API doors, same shape: the route with its hostnames, and above
+  // it the Gateway the route attaches to — the path's true beginning.
+  const gatewayRoutes = new Map<
+    string,
+    { object: ObjectRef; hosts: string[] }
+  >();
+  const gateways = new Map<string, ObjectRef>();
+  for (const edge of edges) {
+    if (edge.relation.verb === "ruleRoutes") {
+      const key = `${edge.from.kind}/${edge.from.namespace}/${edge.from.name}`;
+      const entry = gatewayRoutes.get(key) ?? { object: edge.from, hosts: [] };
+      for (const host of edge.relation.hostnames) {
+        if (!entry.hosts.includes(host)) entry.hosts.push(host);
+      }
+      gatewayRoutes.set(key, entry);
+    }
+    if (edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway") {
+      gateways.set(`${edge.to.namespace}/${edge.to.name}`, edge.to);
+    }
+  }
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.
   const services = isServiceish
@@ -507,6 +527,25 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
         — Ingress
       </p>
     )),
+    ...[...gatewayRoutes.values()].map(({ object, hosts }) => (
+      <p
+        key={`gwroute/${object.kind}/${object.namespace}/${object.name}`}
+        className="text-[11px] text-fg-fnt"
+      >
+        <ResourceRef
+          kind={object.kind}
+          name={object.name}
+          namespace={object.namespace}
+          showKind={false}
+        />{" "}
+        {hosts.length > 0 && (
+          <span className="font-mono text-xs text-fg-mid">
+            {hosts.join(", ")}{" "}
+          </span>
+        )}
+        — {object.kind}
+      </p>
+    )),
     // Object first and the address under it, the order every other entry
     // reads in — this line is the router, not its hostname.
     ...shownRoutes.map((route) => (
@@ -530,6 +569,29 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   ];
 
   const levels: { key: string; entries: ReactNode[] }[] = [];
+  // The Gateways the routes attach to sit a level above the doors — the
+  // path's true beginning, address and all.
+  if (gateways.size > 0) {
+    levels.push({
+      key: "gateways",
+      entries: [...gateways.values()].map((object) => (
+        <p
+          key={`gateway/${object.namespace}/${object.name}`}
+          className="text-[11px] text-fg-fnt"
+        >
+          <ResourceRef
+            kind="Gateway"
+            name={object.name}
+            namespace={object.namespace}
+            showKind={false}
+          />{" "}
+          — Gateway
+          {object.facts?.kind === "gateway" &&
+            `, class ${object.facts.className}`}
+        </p>
+      )),
+    });
+  }
   if (waysIn.length > 0) levels.push({ key: "ways-in", entries: waysIn });
   if (services.length > 0) {
     levels.push({

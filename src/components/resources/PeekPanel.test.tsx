@@ -1088,6 +1088,45 @@ describe("PeekPanel traffic chain", () => {
     expect(screen.queryByText("Behind it")).toBeNull();
   });
 
+  it("walks the whole Gateway API way in: Gateway, route, Service, addresses", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("HTTPRoute", "frontend-route", "storefront"),
+          to: objRef("Service", "frontend", "storefront"),
+          relation: {
+            verb: "ruleRoutes",
+            hostnames: ["shop.example.com"],
+            port: "3000",
+            weight: null,
+          },
+        },
+        {
+          from: objRef("HTTPRoute", "frontend-route", "storefront"),
+          to: {
+            ...objRef("Gateway", "edge", "infra"),
+            facts: { kind: "gateway", className: "envoy" },
+          },
+          relation: { verb: "attachesTo", sectionName: "http" },
+        },
+      ])
+    );
+    wrap(SERVICE_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    const gateway = await screen.findByRole("link", { name: "Gateway edge" });
+    const route = screen.getByRole("link", {
+      name: "HTTPRoute frontend-route",
+    });
+    const self = screen.getByText(/this Service/);
+    // The path runs from its true beginning: Gateway above route above Service.
+    expectAbove(gateway, route);
+    expectAbove(route, self);
+    // The route's hostnames ride on the hop, and the class rides the Gateway.
+    expect(screen.getByText("shop.example.com")).toBeInTheDocument();
+    expect(screen.getByText(/class envoy/)).toBeInTheDocument();
+  });
+
   it("puts the Service in front above a Pod, and nothing below it", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections([
