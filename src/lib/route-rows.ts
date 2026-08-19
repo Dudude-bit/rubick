@@ -34,6 +34,10 @@ export interface RouteRow {
   /** The way in as an object — set only where it exists, so the row can
    *  offer its peek without ever linking to a 404. */
   viaRef: { kind: string; name: string; namespace: string } | null;
+  /** The way in named as *known missing* — the sources were read and the
+   *  object is not there. Null while they are still loading: absence is
+   *  only a fact once the list that would hold it has answered. */
+  viaGhost: { kind: string; name: string; namespace: string } | null;
   createdAt: string | null;
   serving: boolean;
 }
@@ -188,6 +192,7 @@ export function routesBoard(
           },
           via: "—",
           viaRef: null,
+          viaGhost: null,
           serving: false,
         },
       });
@@ -197,21 +202,22 @@ export function routesBoard(
     if (gatewayParents.length === 0) {
       const parent = route.parentRefs[0];
       const at = parent.namespace ?? route.namespace;
+      const settled =
+        parent.kind === "Service" && sources.backing.backingKnown !== false;
       const exists =
-        parent.kind === "Service" &&
-        sources.backing.backingKnown !== false &&
+        settled &&
         sources.backing.services.some(
           (service) => service.name === parent.name && service.namespace === at
         );
+      const ref = { kind: parent.kind, name: parent.name, namespace: at };
       mesh.push({
         ...base,
         serves: servesOf(route, undefined),
         stop: null,
         tail: `attaches to ${parent.kind} ${parent.name} — GAMMA, not judged here`,
         via: parent.name,
-        viaRef: exists
-          ? { kind: "Service", name: parent.name, namespace: at }
-          : null,
+        viaRef: exists ? ref : null,
+        viaGhost: settled && !exists ? ref : null,
         serving: true,
       });
       continue;
@@ -233,14 +239,17 @@ export function routesBoard(
       tail: redirectOnly(route) ? "redirects — no backends, none needed" : null,
       stale: staleOf(traces),
       via: viaOf(gatewayParents),
-      viaRef: (() => {
+      ...(() => {
         const first = gatewayParents[0];
         const at = first.namespace ?? route.namespace;
-        return sources.gateways.some(
+        const ref = { kind: "Gateway", name: first.name, namespace: at };
+        const exists = sources.gateways.some(
           (gateway) => gateway.name === first.name && gateway.namespace === at
-        )
-          ? { kind: "Gateway", name: first.name, namespace: at }
-          : null;
+        );
+        return {
+          viaRef: exists ? ref : null,
+          viaGhost: sources.topologyKnown && !exists ? ref : null,
+        };
       })(),
       serving: broken == null,
     };

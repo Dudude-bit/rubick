@@ -273,8 +273,15 @@ describe("routesBoard", () => {
     ]);
     expect(board.notServing[0].stop?.at).toBe("gateway");
     // A missing gateway gets no reference — a link to a 404 is worse
-    // than the plain name.
+    // than the plain name — but it is named as missing, so the row can
+    // wear the "?" and say why.
     expect(board.notServing[0].viaRef).toBeNull();
+    expect(board.notServing[0].viaGhost).toEqual({
+      kind: "Gateway",
+      name: "ghost-gw",
+      namespace: "gwtest",
+    });
+    expect(board.notServing[1].viaGhost).toBeNull();
     expect(board.notServing[1].stop).toEqual({
       at: "references",
       short: "needs a ReferenceGrant in gwtest-other",
@@ -386,6 +393,16 @@ describe("routesBoard", () => {
     );
 
     expect(board.verdictsKnown).toBe(false);
+  });
+
+  it("does not call a gateway a ghost while the gateway list is unread", () => {
+    const board = routesBoard(
+      [route("healthy")],
+      sources({ gateways: [], classes: [], topologyKnown: false })
+    );
+
+    expect(board.serving[0].viaRef).toBeNull();
+    expect(board.serving[0].viaGhost).toBeNull();
   });
 
   it("marks the worst parent's verdict on a route attached to two gateways", () => {

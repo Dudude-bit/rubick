@@ -16,6 +16,11 @@ import { Map as MapGlyph } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -156,6 +161,24 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
             />
             {row.via.slice(row.viaRef.name.length)}
           </>
+        ) : row.viaGhost ? (
+          <Tooltip>
+            <TooltipTrigger className="inline-flex items-baseline gap-1.5">
+              {row.via}
+              <span
+                aria-label={`${row.viaGhost.kind} ${row.viaGhost.name} does not exist`}
+                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
+              >
+                ?
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[42ch]">
+              {row.viaGhost.kind} {row.viaGhost.name} does not exist in{" "}
+              {row.viaGhost.namespace} — this route names an object that is not
+              there, so nothing can accept it. Usually a typo, or it was deleted
+              after the route was written.
+            </TooltipContent>
+          </Tooltip>
         ) : (
           row.via
         )}
