@@ -26,9 +26,12 @@ import { vendorPeek } from "@/integrations";
 import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import { ClaimRef } from "./storage-refs";
+import { conditionRole } from "@/lib/condition-health";
+import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue } from "./key-values";
+import type { KeyValue, KeyValueTone } from "./key-values";
 import type {
+  ConditionInfo,
   ContainerPhase,
   CustomResourceDetailInfo,
   NodeInfo,
@@ -997,6 +1000,33 @@ export function flatten(value: unknown, limit: number): KeyValue[] {
   return rows;
 }
 
+/** The one shape the whole API machinery shares — enough to read as one. */
+function isConditionList(
+  path: string,
+  value: unknown[]
+): value is Array<Record<string, unknown>> {
+  return (
+    /(^|\.)conditions$/i.test(path) &&
+    value.length > 0 &&
+    value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as Record<string, unknown>).type === "string" &&
+        typeof (entry as Record<string, unknown>).status === "string"
+    )
+  );
+}
+
+/** The five roles, folded to the tones a key-value row can carry —
+ *  `neutral` deliberately stays uncoloured, and `pending` reads as info. */
+const ROLE_TONE: Partial<Record<StatusRole, KeyValueTone>> = {
+  ok: "ok",
+  warn: "warn",
+  err: "err",
+  pending: "info",
+};
+
 function walk(
   value: unknown,
   path: string,
@@ -1008,6 +1038,39 @@ function walk(
     const scalars = value.filter((entry) => typeof entry !== "object");
     if (scalars.length === value.length) {
       rows.push({ label: path, value: scalars.join(" · "), mono: true });
+      return;
+    }
+    // A conditions array is verdicts, not data: one row per condition, in
+    // the reason-first wording and polarity-aware tone every condition row
+    // in the app already carries — instead of six grey fragments per entry.
+    if (isConditionList(path, value)) {
+      for (const entry of value.slice(0, limit - rows.length)) {
+        const condition: ConditionInfo = {
+          type: String(entry.type),
+          status: String(entry.status),
+          reason: typeof entry.reason === "string" ? entry.reason : null,
+          message: typeof entry.message === "string" ? entry.message : null,
+          lastTransitionTime: null,
+        };
+        const role = conditionRole(condition);
+        const spoken = [
+          condition.status,
+          condition.reason && condition.reason !== condition.type
+            ? condition.reason
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" — ");
+        rows.push({
+          label: `${path}.${condition.type}`,
+          value:
+            role !== "ok" && condition.message
+              ? `${spoken}: ${condition.message}`
+              : spoken,
+          mono: true,
+          tone: ROLE_TONE[role],
+        });
+      }
       return;
     }
     // An array of objects is where a custom resource keeps the part anybody
