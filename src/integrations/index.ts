@@ -543,6 +543,7 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
 } {
   const { data, isPending, error } = useDetected();
   const connections = useConnections();
+  const context = useClusterStore((state) => state.currentContext);
 
   const detected = EXTENSIONS.map((vendor) => {
     const connection = vendor.connect
@@ -571,7 +572,11 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
 
   const results = useQueries({
     queries: asking.map(({ vendor }) => ({
-      queryKey: ["integration-facts", vendor.id],
+      // The context first, like every other integration read: a fact is a
+      // sentence about *this* cluster ("2 renewals overdue"), and one kept
+      // from the last cluster is not stale inventory, it is an accusation
+      // aimed at the wrong place.
+      queryKey: [context, "integration-facts", vendor.id],
       queryFn: () => vendor.extension.facts!(),
       enabled: facts,
       staleTime: FACTS_STALE_TIME,
