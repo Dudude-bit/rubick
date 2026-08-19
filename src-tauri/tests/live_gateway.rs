@@ -150,3 +150,31 @@ async fn the_gateway_chain_arrives_and_the_stops_are_named() {
         ChainStop::GatewayMissing { route, .. } if route.name == "gwtest-mesh"
     )));
 }
+
+/// The Service page asks the same question from its own side.
+#[tokio::test]
+#[ignore]
+async fn the_service_page_sees_its_routes() {
+    let ns = namespace();
+    let ctx = context(&ns).await;
+    let detection = detection(&ctx).await;
+
+    let answer = connections_of(&ctx, "Service", "gwtest-app", Some(&detection))
+        .await
+        .expect("neighbourhood");
+
+    let rule_edges: Vec<_> = answer
+        .edges
+        .iter()
+        .filter(|edge| matches!(edge.relation, Relation::RuleRoutes { .. }))
+        .collect();
+    assert!(
+        !rule_edges.is_empty(),
+        "routes draw on the Service page; edges: {:#?}",
+        answer.edges
+    );
+    assert!(answer
+        .edges
+        .iter()
+        .any(|edge| matches!(edge.relation, Relation::AttachesTo { .. })));
+}
