@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { Eye, Trash2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Eye, Map as MapGlyph, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { ResourceList } from "./ResourceList";
@@ -21,15 +22,19 @@ import {
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
+import { gatewayTopology } from "./gateway-topology";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+import { cn } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { RouteInfo } from "@/generated/types";
@@ -86,6 +91,50 @@ function parentsCell(route: RouteInfo): string {
   return route.parentRefs
     .map((p) => (p.kind === "Gateway" ? p.name : `${p.name} (mesh)`))
     .join(", ");
+}
+
+/** One filter chip. Active is the selection surface, not a new colour. */
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "relative rounded-full border border-hair px-2.5 py-0.5 text-[11px]",
+        // The visual stays chip-sized; the hit area does not.
+        "after:absolute after:-inset-2 after:content-['']",
+        active ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+type Verdict = "all" | "accepted" | "refused" | "unanswered";
+
+const VERDICTS: Array<{ id: Verdict; label: string }> = [
+  { id: "all", label: "Any verdict" },
+  { id: "accepted", label: "Accepted" },
+  { id: "refused", label: "Refused" },
+  { id: "unanswered", label: "No controller answered" },
+];
+
+function matchesVerdict(route: RouteInfo, verdict: Verdict): boolean {
+  if (verdict === "all") return true;
+  const tone = acceptance(route).tone;
+  if (verdict === "accepted") return tone === "ok";
+  if (verdict === "refused") return tone === "err";
+  return tone === "mute";
 }
 
 /** One kind's list and its watch, alive only where the kind is served. */
@@ -205,6 +254,40 @@ export function GatewayRoutesList() {
         .flatMap((entry) => entry.query.data ?? []),
     [http, grpc, tls, tcp, udp]
   );
+
+  // The filters narrow the table and the map together: a map of everything
+  // beside a table of one kind would be two answers to one question.
+  const [kindFilter, setKindFilter] = useState<string | null>(null);
+  const [verdict, setVerdict] = useState<Verdict>("all");
+  const filtered = useMemo(
+    () =>
+      routes.filter(
+        (route) =>
+          (kindFilter === null || route.kind === kindFilter) &&
+          matchesVerdict(route, verdict)
+      ),
+    [routes, kindFilter, verdict]
+  );
+
+  // The map's own ingredients: every Gateway (unscoped — routes attach
+  // across namespaces) and what each backend Service publishes.
+  const [showMap, setShowMap] = useState(false);
+  const gateways = useQuery({
+    queryKey: ["gateway-map-gateways"],
+    queryFn: () => commands.listGateways(null),
+    staleTime: 60_000,
+    enabled: showMap && served.has("Gateway"),
+  });
+  const backing = useBackingLists();
+  const topology = useMemo(
+    () =>
+      gatewayTopology(
+        gateways.data ?? [],
+        filtered,
+        backing.data ? { ...backing.data, backingKnown: true } : undefined
+      ),
+    [gateways.data, filtered, backing.data]
+  );
   const isLoading =
     active.length > 0 && active.some((entry) => entry.query.isLoading);
   // An error only speaks when it hides rows: one kind failing while four
@@ -280,7 +363,7 @@ export function GatewayRoutesList() {
     <ResourceList<RouteInfo>
       title={(count) => `Routes (${count})`}
       description="Every Gateway API route kind in scope, in one list."
-      data={routes}
+      data={filtered}
       isLoading={isLoading}
       error={error}
       dataUpdatedAt={dataUpdatedAt}
@@ -294,6 +377,69 @@ export function GatewayRoutesList() {
           : "No routes in the current scope."
       }
       searchKey="name"
+      headerActions={
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={showMap}
+          onClick={() => setShowMap((on) => !on)}
+        >
+          <MapGlyph className="mr-1.5 h-3.5 w-3.5" />
+          {showMap ? "Hide map" : "Map"}
+        </Button>
+      }
+      headerContent={
+        <div className="flex flex-col gap-2 px-1 pb-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                active={kindFilter === null}
+                onClick={() => setKindFilter(null)}
+              >
+                All kinds
+              </Chip>
+              {ROUTE_KINDS.filter((kind) => served.has(kind)).map((kind) => (
+                <Chip
+                  key={kind}
+                  active={kindFilter === kind}
+                  onClick={() =>
+                    setKindFilter((current) => (current === kind ? null : kind))
+                  }
+                >
+                  {kind}
+                </Chip>
+              ))}
+            </div>
+            <span aria-hidden className="h-4 w-px bg-hair" />
+            <div className="flex flex-wrap gap-2">
+              {VERDICTS.map((entry) => (
+                <Chip
+                  key={entry.id}
+                  active={verdict === entry.id}
+                  onClick={() => setVerdict(entry.id)}
+                >
+                  {entry.label}
+                </Chip>
+              ))}
+            </div>
+          </div>
+          {showMap &&
+            (topology.columns[1].nodes.length === 0 ? (
+              <p className="max-w-[64ch] text-xs text-fg-mut">
+                Nothing to draw for this filter — no route matches it.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <RoutingMap data={topology} />
+                <p className="text-[11px] text-fg-fnt">
+                  {gateways.isError
+                    ? "The Gateways could not be read, so entry points named by a route draw as missing — which here means unread, not absent."
+                    : "Rest on a node to light up everything one edge away. Every line is one object naming another; the filters above narrow this map and the list together."}
+                </p>
+              </div>
+            ))}
+        </div>
+      }
       getRowHref={(row) =>
         getResourceDetailUrl(row.kind, row.name, row.namespace)
       }

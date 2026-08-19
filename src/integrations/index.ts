@@ -966,7 +966,13 @@ export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 // routing page reads (see ./ingress), and naming the file from outside
 // would break the seam the lint rule keeps.
 export { backingOf, useBackingLists } from "./ingress";
-export type { BackendRef as RouteBackendRef, ServiceStop } from "./ingress";
+export type {
+  BackendRef as RouteBackendRef,
+  BackingSources,
+  ServiceStop,
+} from "./ingress";
+export { RoutingMap } from "./routing-map";
+export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 
 /**
  * Every label a vendor uses to name the pool a node was made by, in
