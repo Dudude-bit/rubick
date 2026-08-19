@@ -365,6 +365,12 @@ function acceptanceSteps(
           say: `The listener does not allow routes from ${route.namespace}`,
           who: "yours",
           short: `namespace ${route.namespace} not allowed`,
+          // The namespace's labels are the fix — a selector matches them.
+          subject: {
+            kind: "Namespace",
+            name: route.namespace,
+            namespace: null,
+          },
           freshness,
           detail: {
             title: "The namespace is outside what the listener allows",
@@ -441,6 +447,10 @@ function namespaceQuiet(
           }`
         : "Namespace allowed by the listener",
     who: "yours",
+    subject:
+      state === "ok"
+        ? { kind: "Namespace", name: route.namespace, namespace: null }
+        : undefined,
   };
 }
 

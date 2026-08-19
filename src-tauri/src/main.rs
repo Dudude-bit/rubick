@@ -115,6 +115,7 @@ fn main() {
             commands::diagnostics::collect_diagnostics,
             // Namespace management
             commands::namespace::list_namespaces,
+            commands::namespace::get_namespace,
             // Cross-cluster search
             commands::search::start_resource_search,
             commands::search::resource_search_subscribed,

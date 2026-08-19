@@ -239,6 +239,11 @@ describe("routeTraces", () => {
       name: "edge",
       namespace: "gwtest",
     });
+    expect(trace.steps[3].subject).toEqual({
+      kind: "Namespace",
+      name: "gwtest",
+      namespace: null,
+    });
     expect(trace.steps[5].subject).toEqual({
       kind: "Service",
       name: "healthy",

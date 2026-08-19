@@ -214,6 +214,27 @@ const workloadStatus = (ready: number, desired: number) =>
   desired > 0 && ready >= desired ? "Ready" : "Progressing";
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
+  // What other objects ask of a namespace: whether it is Active, and the
+  // labels every namespaceSelector — a listener's allowedRoutes included —
+  // matches against.
+  Namespace: source(
+    (name) => commands.getNamespace(name),
+    (ns) => ({
+      status: ns.status,
+      createdAt: ns.createdAt,
+      groups: [
+        {
+          title: "Labels",
+          count: Object.keys(ns.labels).length || undefined,
+          items: Object.entries(ns.labels)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([label, value]) => ({ label, value, mono: true })),
+          emptyMessage:
+            "No labels — no namespaceSelector anywhere matches this namespace.",
+        },
+      ],
+    })
+  ),
   Pod: source(commands.getPod, (pod) => {
     const readiness = podReadiness(pod);
     return {

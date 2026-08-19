@@ -87,6 +87,11 @@ const GatewayClassDetail = lazy(() =>
     default: m.GatewayClassDetail,
   }))
 );
+const NamespaceDetail = lazy(() =>
+  import("@/pages/NamespaceDetail").then((m) => ({
+    default: m.NamespaceDetail,
+  }))
+);
 const GatewayRouteDetail = lazy(() =>
   import("@/pages/GatewayRouteDetail").then((m) => ({
     default: m.GatewayRouteDetail,
@@ -296,6 +301,10 @@ export default function App() {
             <Route
               path={`${toPlural(ResourceType.GatewayClass)}/:name`}
               element={<GatewayClassDetail />}
+            />
+            <Route
+              path={`${toPlural(ResourceType.Namespace)}/:name`}
+              element={<NamespaceDetail />}
             />
             {[
               ResourceType.HTTPRoute,

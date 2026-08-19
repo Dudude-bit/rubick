@@ -57,8 +57,8 @@ export interface ResourceRefProps {
 
 /**
  * Kinds `App.tsx` serves a detail route for. The registry is deliberately not
- * the authority: it also lists Namespace and Event, which have a list route
- * and no detail route, and a CustomResourceDefinition *instance* lives under
+ * the authority: it also lists Event, which has a list route and no detail
+ * route, and a CustomResourceDefinition *instance* lives under
  * `/customresourcedefinitions/:crdName/instances/...`, which cannot be built
  * from kind and name alone. Everything else here maps to `/<plural>/...`,
  * which is exactly what `getResourceDetailUrl` produces.
@@ -81,6 +81,7 @@ const ROUTABLE = new Set<ResourceKind>([
   "Ingress",
   "Gateway",
   "GatewayClass",
+  "Namespace",
   "HTTPRoute",
   "GRPCRoute",
   "TLSRoute",

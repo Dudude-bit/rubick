@@ -64,13 +64,14 @@ vi.mock("@/lib/commands", () => ({
     getCustomResourceYaml: vi.fn(),
     getService: vi.fn(),
     getResourceConnections: vi.fn(),
+    getNamespace: vi.fn(),
   },
 }));
 
-const NAMESPACE_MANIFEST = `apiVersion: v1
-kind: Namespace
+const REPLICASET_MANIFEST = `apiVersion: apps/v1
+kind: ReplicaSet
 metadata:
-  name: kube-system
+  name: promo-abc
   labels:
     tier: control
 status:
@@ -302,7 +303,16 @@ function mockCluster() {
   vi.mocked(commands.getPod).mockReset().mockResolvedValue(buildPod());
   vi.mocked(commands.getManifest)
     .mockReset()
-    .mockResolvedValue(NAMESPACE_MANIFEST);
+    .mockResolvedValue(REPLICASET_MANIFEST);
+  vi.mocked(commands.getNamespace)
+    .mockReset()
+    .mockResolvedValue({
+      name: "kube-system",
+      uid: "uid-kube-system",
+      status: "Active",
+      labels: { tier: "control" },
+      createdAt: null,
+    });
   vi.mocked(commands.listEvents).mockReset().mockResolvedValue([buildEvent()]);
   vi.mocked(commands.getConfigmap)
     .mockReset()
@@ -436,19 +446,30 @@ describe("PeekPanel", () => {
   });
 
   it("falls back to the manifest for a kind with no detail command", async () => {
-    wrap("/events?peek=namespaces/kube-system");
+    wrap("/events?peek=replicasets/k8s-gui-test/promo-abc");
     // The badge and the status row both read the phase out of the manifest.
     expect(await screen.findAllByText("Active")).toHaveLength(2);
     expect(commands.getManifest).toHaveBeenCalledWith(
-      "Namespace",
-      "v1",
-      "kube-system",
-      null
+      "ReplicaSet",
+      "apps/v1",
+      "promo-abc",
+      "k8s-gui-test"
     );
     // The manifest becomes rows, not a wall of YAML.
     expect(screen.getByText("phase")).toBeInTheDocument();
     expect(screen.getByText("tier")).toBeInTheDocument();
     expect(screen.getByText("control")).toBeInTheDocument();
+  });
+
+  it("reads a namespace through its own command, labels first", async () => {
+    wrap("/events?peek=namespaces/kube-system");
+    expect(await screen.findByText("tier")).toBeInTheDocument();
+    expect(commands.getNamespace).toHaveBeenCalledWith("kube-system");
+    // The labels are the payload: they are what every namespaceSelector —
+    // a Gateway listener's allowedRoutes included — matches against.
+    expect(screen.getByText("control")).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(commands.getManifest).not.toHaveBeenCalled();
   });
 });
 

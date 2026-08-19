@@ -941,6 +941,10 @@ export async function listNamespaces(): Promise<NamespaceInfo[]> {
   return invoke<NamespaceInfo[]>("list_namespaces");
 }
 
+export async function getNamespace(name: string): Promise<NamespaceInfo> {
+  return invoke<NamespaceInfo>("get_namespace", { name });
+}
+
 export async function listPersistentVolumes(
   filters: ResourceFilters | null
 ): Promise<PersistentVolumeInfo[]> {
