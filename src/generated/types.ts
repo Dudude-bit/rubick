@@ -345,6 +345,7 @@ export interface ConditionInfo {
   reason: string | null;
   message: string | null;
   lastTransitionTime: string | null;
+  observedGeneration?: number;
 }
 
 export interface AutoscalerMetric {
@@ -718,6 +719,14 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface HostProbe {
+  resolved: string[];
+  resolveError: string | null;
+  matchesGateway: boolean | null;
+  tcpMs: number | null;
+  tcpError: string | null;
+}
+
 export interface RouteInfo {
   kind: string;
   apiVersion: string;
@@ -727,6 +736,7 @@ export interface RouteInfo {
   parentRefs: ParentRefInfo[];
   rules: RouteRuleInfo[];
   parents: RouteParentStatusInfo[];
+  generation: number | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
@@ -786,6 +796,7 @@ export interface GatewayInfo {
   listeners: ListenerInfo[];
   addresses: string[];
   conditions: ConditionInfo[];
+  generation: number | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;

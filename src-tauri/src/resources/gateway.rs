@@ -128,6 +128,10 @@ pub struct RouteInfo {
     /// controller ever wrote status — the structurally-silent case the
     /// surfaces must not paint green.
     pub parents: Vec<RouteParentStatusInfo>,
+    /// `metadata.generation` — what the conditions' `observedGeneration`
+    /// is honest against. A verdict about an older generation is not
+    /// wrong, it is old, and the surfaces say which.
+    pub generation: Option<i64>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<String>,
@@ -190,6 +194,8 @@ pub struct GatewayInfo {
     /// `status.addresses`, values only.
     pub addresses: Vec<String>,
     pub conditions: Vec<ConditionInfo>,
+    /// `metadata.generation` — see [`RouteInfo::generation`].
+    pub generation: Option<i64>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<String>,
@@ -333,6 +339,7 @@ impl GatewayInfo {
                 .collect(),
             addresses: status.addresses.into_iter().map(|a| a.value).collect(),
             conditions: status.conditions,
+            generation: obj.metadata.generation,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
             annotations: obj.metadata.annotations.clone().unwrap_or_default(),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
@@ -809,6 +816,7 @@ impl RouteInfo {
                     conditions: p.conditions,
                 })
                 .collect(),
+            generation: obj.metadata.generation,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
             annotations: obj.metadata.annotations.clone().unwrap_or_default(),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),

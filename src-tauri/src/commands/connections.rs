@@ -774,6 +774,7 @@ fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
                         reason: c.reason.clone(),
                         message: c.message.clone(),
                         last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        observed_generation: None,
                     })
                     .collect()
             })
@@ -926,6 +927,7 @@ fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
                         reason: Some(c.reason.clone()).filter(|r| !r.is_empty()),
                         message: Some(c.message.clone()).filter(|m| !m.is_empty()),
                         last_transition_time: Some(c.last_transition_time.0),
+                        observed_generation: None,
                     })
                     .collect()
             })

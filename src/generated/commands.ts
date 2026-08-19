@@ -47,6 +47,7 @@ import type {
   HelmReleaseDetail,
   HelmRepository,
   HelmRevision,
+  HostProbe,
   InfrastructureBuilderStateDto,
   IngressClassBinding,
   IngressInfo,
@@ -795,6 +796,18 @@ export async function deleteGatewayRoute(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_gateway_route", { kind, name, namespace });
+}
+
+export async function probeGatewayHost(
+  host: string,
+  gatewayAddress: string | null,
+  port: number
+): Promise<HostProbe> {
+  return invoke<HostProbe>("probe_gateway_host", {
+    host,
+    gatewayAddress,
+    port,
+  });
 }
 
 export async function getPodsMetrics(

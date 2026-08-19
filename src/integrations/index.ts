@@ -968,6 +968,7 @@ export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 export { backingOf, useBackingLists } from "./ingress";
 export type {
   BackendRef as RouteBackendRef,
+  Backing,
   BackingSources,
   ServiceStop,
 } from "./ingress";

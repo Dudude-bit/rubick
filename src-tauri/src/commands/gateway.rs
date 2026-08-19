@@ -239,3 +239,83 @@ pub async fn delete_gateway_route(
     api.delete(&name, &DeleteParams::default()).await?;
     Ok(())
 }
+
+/// What this machine sees when it tries the host — DNS and TCP, honestly
+/// scoped: a VPN or split DNS can disagree with the cluster's own view,
+/// and the caller says so on screen.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostProbe {
+    /// Every address the hostname resolves to from here.
+    pub resolved: Vec<String>,
+    pub resolve_error: Option<String>,
+    /// Whether any resolved address is the gateway's own — `None` where the
+    /// gateway has published no address to compare against.
+    pub matches_gateway: Option<bool>,
+    /// Milliseconds to open a TCP connection to the gateway's address (or
+    /// the first resolved one, absent that).
+    pub tcp_ms: Option<u64>,
+    pub tcp_error: Option<String>,
+}
+
+/// Probe a route's hostname from this machine: resolve it, compare against
+/// the Gateway's published address, and open one TCP connection.
+///
+/// Explicitly on demand — never automatic — because it sends packets on
+/// the reader's network, and because "checked from your laptop" is only an
+/// honest answer when the reader asked for it.
+#[tauri::command]
+pub async fn probe_gateway_host(
+    host: String,
+    gateway_address: Option<String>,
+    port: u16,
+) -> Result<HostProbe> {
+    use std::time::{Duration, Instant};
+
+    crate::validation::validate_dns_subdomain(&host)?;
+
+    let (resolved, resolve_error) = match tokio::net::lookup_host((host.as_str(), port)).await {
+        Ok(addrs) => {
+            let mut ips: Vec<String> = addrs.map(|a| a.ip().to_string()).collect();
+            ips.dedup();
+            (ips, None)
+        }
+        Err(err) => (Vec::new(), Some(err.to_string())),
+    };
+
+    let matches_gateway = gateway_address
+        .as_ref()
+        .map(|address| resolved.iter().any(|ip| ip == address));
+
+    // The gateway's address is the thing traffic must reach; the resolved
+    // one is the fallback so a probe still says *something* on a cluster
+    // that published none.
+    let target = gateway_address.or_else(|| resolved.first().cloned());
+    let (tcp_ms, tcp_error) = match target {
+        None => (None, Some("nothing to connect to".to_string())),
+        Some(address) => {
+            let started = Instant::now();
+            match tokio::time::timeout(
+                Duration::from_secs(3),
+                tokio::net::TcpStream::connect((address.as_str(), port)),
+            )
+            .await
+            {
+                Ok(Ok(_)) => (
+                    Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)),
+                    None,
+                ),
+                Ok(Err(err)) => (None, Some(err.to_string())),
+                Err(_) => (None, Some("timed out after 3s".to_string())),
+            }
+        }
+    };
+
+    Ok(HostProbe {
+        resolved,
+        resolve_error,
+        matches_gateway,
+        tcp_ms,
+        tcp_error,
+    })
+}

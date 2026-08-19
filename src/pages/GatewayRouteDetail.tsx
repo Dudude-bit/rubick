@@ -30,6 +30,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { RouteTraceSection } from "@/components/resources/RouteTrace";
 import {
   KeyValueSection,
   type KeyValue,
@@ -45,7 +46,6 @@ import type {
   EventFilters,
   RouteInfo,
   RouteMatchInfo,
-  RouteParentStatusInfo,
   RouteRuleInfo,
 } from "@/generated/types";
 
@@ -63,107 +63,6 @@ function sayMatch(match: RouteMatchInfo): string {
   }
   parts.push(...match.headers);
   return parts.length > 0 ? parts.join(" · ") : "everything";
-}
-
-/**
- * The conditions one controller wrote for one parent, said in full — the
- * reasons are the product, and a route with two parents under two
- * controllers legitimately has four different verdicts.
- */
-function ParentRows({ route }: { route: RouteInfo }) {
-  const statusFor = (index: number): RouteParentStatusInfo[] => {
-    const parent = route.parentRefs[index];
-    return route.parents.filter(
-      (entry) =>
-        entry.parent.name === parent.name &&
-        (entry.parent.namespace ?? route.namespace) ===
-          (parent.namespace ?? route.namespace)
-    );
-  };
-
-  return (
-    <Section>
-      <SectionHeader title="Parents" count={route.parentRefs.length} />
-      {route.parentRefs.length === 0 ? (
-        <p className="text-xs text-fg-fnt">
-          No parentRefs — this route attaches to nothing and serves no traffic.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {route.parentRefs.map((parent, index) => {
-            const said = statusFor(index);
-            const mesh = parent.kind !== "Gateway";
-            return (
-              <div
-                key={`${parent.kind}/${parent.namespace ?? ""}/${parent.name}/${parent.sectionName ?? ""}`}
-                className="rounded border border-hair px-3 py-2"
-              >
-                <div className="flex items-baseline gap-2 text-xs">
-                  {mesh ? (
-                    <span className="text-fg-mut">
-                      {parent.kind} {parent.name}
-                      <span className="text-fg-fnt">
-                        {" "}
-                        — mesh routing (GAMMA), not interpreted by this app
-                      </span>
-                    </span>
-                  ) : (
-                    <ResourceRef
-                      kind={ResourceType.Gateway}
-                      name={parent.name}
-                      namespace={parent.namespace ?? route.namespace}
-                    />
-                  )}
-                  {parent.sectionName && (
-                    <span className="font-mono text-fg-fnt">
-                      section {parent.sectionName}
-                    </span>
-                  )}
-                </div>
-                {!mesh &&
-                  (said.length === 0 ? (
-                    <p className="pt-1 text-xs text-warn">
-                      No controller wrote status for this parent — either
-                      nothing claims the Gateway's class, or the Gateway does
-                      not exist. Nothing serves this route.
-                    </p>
-                  ) : (
-                    said.map((entry) => (
-                      <div
-                        key={entry.controllerName}
-                        className="pt-1 text-xs text-fg-fnt"
-                      >
-                        <span className="font-mono">
-                          {entry.controllerName}
-                        </span>
-                        {entry.conditions.map((condition) => (
-                          <span
-                            key={condition.type}
-                            className={
-                              condition.status === "False"
-                                ? "block text-err"
-                                : "block text-fg-mut"
-                            }
-                          >
-                            {condition.type}: {condition.status}
-                            {condition.reason &&
-                              condition.reason !== condition.type &&
-                              ` — ${condition.reason}`}
-                            {condition.status === "False" &&
-                              condition.message &&
-                              `: ${condition.message}`}
-                          </span>
-                        ))}
-                      </div>
-                    ))
-                  ))}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Section>
-  );
 }
 
 function RuleRows({ route }: { route: RouteInfo }) {
@@ -373,7 +272,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
       content: (
         <>
           <KeyValueSection title={kind} items={facts} className="max-w-lg" />
-          {route && <ParentRows route={route} />}
+          {route && <RouteTraceSection route={route} />}
         </>
       ),
     },
