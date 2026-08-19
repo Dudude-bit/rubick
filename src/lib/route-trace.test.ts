@@ -229,6 +229,12 @@ describe("routeTraces", () => {
     expect(trace.steps[0].who).toBe("infra");
     expect(trace.steps[6].say).toContain("1 ready");
     // The objects a step vouches for are peekable, like everywhere else.
+    expect(trace.steps[0].subject).toEqual({
+      kind: "GatewayClass",
+      name: "envoy",
+      namespace: null,
+      group: "gateway.networking.k8s.io",
+    });
     expect(trace.steps[1].subject).toEqual({
       kind: "Gateway",
       name: "edge",

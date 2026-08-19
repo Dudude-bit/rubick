@@ -64,10 +64,17 @@ export interface TraceStep {
   /** Addresses this step vouches for, kept out of {@link say} so the UI
    *  can make each one copyable instead of baking them into prose. */
   addresses?: string[];
-  /** The object {@link say} names, where it exists and has a page — so the
-   *  UI can make the name a peek like every other reference in the app.
-   *  Absent on a missing object: a link to a 404 is worse than plain text. */
-  subject?: { kind: string; name: string; namespace: string };
+  /** The object {@link say} names, where it exists — so the UI can make
+   *  the name a peek like every other reference in the app. Absent on a
+   *  missing object: a link to a 404 is worse than plain text. `group` is
+   *  set for kinds with no native page (GatewayClass), where the address
+   *  goes through the cluster's CRD index instead. */
+  subject?: {
+    kind: string;
+    name: string;
+    namespace: string | null;
+    group?: string;
+  };
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
@@ -159,6 +166,14 @@ function classStep(
       who: "infra",
     };
   }
+  // Cluster-scoped and pageless: the reference resolves through the CRD
+  // index, so the UI needs the group to ask with.
+  const subject = {
+    kind: "GatewayClass",
+    name: gateway.className,
+    namespace: null,
+    group: "gateway.networking.k8s.io",
+  };
   const cls = classes.find((c) => c.name === gateway.className);
   if (!cls) {
     return {
@@ -183,6 +198,7 @@ function classStep(
       say: `Nothing claims class ${gateway.className}`,
       who: "infra",
       short: `nothing claims class ${gateway.className}`,
+      subject,
       detail: {
         title: `No controller has accepted ${gateway.className}`,
         body: refused
@@ -196,6 +212,7 @@ function classStep(
     state: "ok",
     say: `Class ${gateway.className} is claimed by ${cls.controllerName}`,
     who: "infra",
+    subject,
   };
 }
 
