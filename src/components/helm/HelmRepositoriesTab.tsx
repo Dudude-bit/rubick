@@ -11,6 +11,7 @@ import {
 import { DetailAction } from "@/components/resources/detail-blocks";
 
 import type { HelmRepository } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface HelmRepositoriesTabProps {
   repositories: HelmRepository[];
@@ -29,16 +30,17 @@ export function HelmRepositoriesTab({
   onAddRepoClick,
   onDeleteRepo,
 }: HelmRepositoriesTabProps) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
         <DetailAction
-          label="Add repository"
+          label={t("action", "addRepository")}
           icon={Plus}
           onClick={onAddRepoClick}
         />
         <DetailAction
-          label="Update all"
+          label={t("action", "updateAll")}
           icon={RefreshCw}
           onClick={onUpdateAll}
           busy={isUpdating}
@@ -80,7 +82,7 @@ export function HelmRepositoriesTab({
                 <TableCell>
                   <span className="flex justify-end">
                     <DetailAction
-                      label="Remove"
+                      label={t("action", "remove")}
                       icon={Trash2}
                       onClick={() => onDeleteRepo(repo.name)}
                       danger

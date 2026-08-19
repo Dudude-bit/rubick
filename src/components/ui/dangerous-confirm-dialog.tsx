@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
+import { useT } from "@/i18n/useT";
 
 interface DangerousConfirmDialogProps {
   open: boolean;
@@ -34,12 +35,13 @@ export function DangerousConfirmDialog({
   description,
   confirmationText,
   confirmationPlaceholder,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   onOpenChange,
   onConfirm,
   isLoading = false,
 }: DangerousConfirmDialogProps) {
+  const t = useT();
   const [inputValue, setInputValue] = useState("");
 
   const isConfirmEnabled = inputValue === confirmationText && !isLoading;
@@ -89,14 +91,16 @@ export function DangerousConfirmDialog({
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>
-            {cancelLabel}
+            {cancelLabel ?? t("action", "cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             className={buttonVariants({ variant: "destructive" })}
             onClick={handleConfirm}
             disabled={!isConfirmEnabled}
           >
-            {isLoading ? "Processing..." : confirmLabel}
+            {isLoading
+              ? t("action", "processing")
+              : (confirmLabel ?? t("action", "confirm"))}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

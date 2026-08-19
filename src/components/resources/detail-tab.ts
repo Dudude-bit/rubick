@@ -27,8 +27,7 @@ import type { ConditionInfo, PodInfo } from "@/generated/types";
  * a verb rather than a thing, and a hue would claim it is a resource.
  */
 export type DetailTabGlyph =
-  | { names: "kind"; kind: string }
-  | { names: "view"; icon: LucideIcon };
+  { names: "kind"; kind: string } | { names: "view"; icon: LucideIcon };
 
 /**
  * Rule two: a tab earns a mark only when the mark changes which tab is

@@ -9,6 +9,7 @@ import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 export interface PodTerminalProps {
   podName: string;
@@ -28,6 +29,7 @@ export function PodTerminal({
   containerName,
   onClose,
 }: PodTerminalProps) {
+  const t = useT();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
@@ -184,7 +186,9 @@ export function PodTerminal({
 
         if (container?.state.type === "terminated") {
           setUnavailableReason(
-            `Container terminated · ${describeTermination(container.state.termination)}`
+            t("empty", "containerTerminated", {
+              detail: describeTermination(container.state.termination),
+            })
           );
           disconnect();
           return;
@@ -198,7 +202,7 @@ export function PodTerminal({
       } catch (err) {
         const errorText = normalizeTauriError(err);
         if (errorText.includes("not found") || errorText.includes("NotFound")) {
-          setUnavailableReason("Pod not found");
+          setUnavailableReason(t("empty", "podNotFound"));
           disconnect();
         }
       }
@@ -211,7 +215,7 @@ export function PodTerminal({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [sessionId, podName, namespace, containerName, disconnect]);
+  }, [sessionId, podName, namespace, containerName, disconnect, t]);
 
   const handleClose = useCallback(() => {
     disconnect();
@@ -236,8 +240,12 @@ export function PodTerminal({
           <div className="min-w-0">
             <p className={`text-xs ${canReconnect ? "text-err" : "text-warn"}`}>
               {canReconnect
-                ? `No shell on ${podName}/${containerName}.`
-                : `${podName}/${containerName} is no longer available.`}
+                ? t("empty", "noShellOn", {
+                    target: `${podName}/${containerName}`,
+                  })
+                : t("empty", "noLongerAvailable", {
+                    target: `${podName}/${containerName}`,
+                  })}
             </p>
             <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
               {failureReason}
@@ -251,11 +259,11 @@ export function PodTerminal({
               onClick={connect}
             >
               <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              Reconnect
+              {t("action", "reconnect")}
             </Button>
           ) : (
             <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-              Nothing left to attach to
+              {t("empty", "nothingLeftToAttachTo")}
             </span>
           )}
         </div>

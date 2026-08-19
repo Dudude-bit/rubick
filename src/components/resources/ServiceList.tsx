@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -27,7 +28,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // "ExternalName" is the longest word this column ever holds.
     size: 120,
     accessorKey: "type",
-    header: "Type",
+    header: () => <T section="columns" k="type" />,
     cell: ({ row }) => (
       <span
         className={
@@ -73,7 +74,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // Two `80:30080/TCP` mappings and a "+3" after them.
     size: 180,
     accessorKey: "ports",
-    header: "Ports",
+    header: () => <T section="columns" k="ports" />,
     cell: ({ row }) => (
       <PortsDisplay ports={row.original.ports} maxDisplay={2} />
     ),

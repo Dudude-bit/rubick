@@ -29,8 +29,10 @@ import type {
   EventFilters,
   PersistentVolumeClaimInfo,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function PersistentVolumeClaimDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -148,7 +150,10 @@ export function PersistentVolumeClaimDetail() {
             count={events.length || undefined}
             actions={
               eventsError && (
-                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+                <DetailAction
+                  label={t("action", "retry")}
+                  onClick={() => refetchEvents()}
+                />
               )
             }
           />
@@ -166,8 +171,8 @@ export function PersistentVolumeClaimDetail() {
               events={events}
               emptyMessage={
                 pending
-                  ? "No events yet — no provisioner has picked this claim up."
-                  : "No events for this claim"
+                  ? t("empty", "noEventsUnprovisioned")
+                  : t("empty", "noEventsForClaim")
               }
             />
           )}
@@ -219,7 +224,7 @@ export function PersistentVolumeClaimDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

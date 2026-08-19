@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Copy, ExternalLink } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import type { ServiceInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface ServiceAccessInfoProps {
   service: ServiceInfo;
 }
 
 export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
+  const t = useT();
   const copyToClipboard = useCopyToClipboard();
 
   const internalDns = `${service.name}.${service.namespace}.svc.cluster.local`;
@@ -90,7 +92,7 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => copyToClipboard(item.url)}
-                title="Copy"
+                title={t("action", "copy")}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -99,7 +101,7 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => window.open(item.url, "_blank", "noreferrer")}
-                  title="Open in Browser"
+                  title={t("action", "openInBrowser")}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>

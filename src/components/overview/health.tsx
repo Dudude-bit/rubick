@@ -23,6 +23,7 @@ import type {
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /** Reserved share past which the scheduler is the binding constraint. */
 const PRESSURE_WARN = 0.85;
@@ -227,6 +228,7 @@ export function ProblemsPanel({
   pods: PodComposition;
   nodes: NodeSummary[];
 }) {
+  const t = useT();
   // The headline counts everything that is wrong, not everything that fits —
   // an outage that overflows the cap must not read as smaller than it is.
   const total = problems.length + problemsTruncated;
@@ -237,7 +239,9 @@ export function ProblemsPanel({
     <Section>
       <SectionHeader
         title="Needs attention"
-        count={total > 0 ? `${total} · worst first` : "nothing broken"}
+        count={
+          total > 0 ? `${total} · worst first` : t("empty", "nothingBroken")
+        }
       />
       <div>
         {problems.map((problem) => (
@@ -260,8 +264,8 @@ export function ProblemsPanel({
             Healthy
           </span>
           <span className="truncate text-fg-fnt">
-            {serving} of {podTotal(pods)} pods running · {readyNodes} of{" "}
-            {nodes.length} nodes ready
+            {t("count", "podsRunning", { n: serving, total: podTotal(pods) })} ·{" "}
+            {t("count", "nodesReady", { n: readyNodes, total: nodes.length })}
           </span>
           <span />
           <span />
@@ -350,6 +354,7 @@ export function WorkloadsPanel({
   overview: ClusterOverview;
   scope: string;
 }) {
+  const t = useT();
   const { counts, pods, jobs, nodes, problems, problemsTruncated } = overview;
   const podCount = podTotal(pods);
 
@@ -367,25 +372,25 @@ export function WorkloadsPanel({
         <Composition
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
-          emptyMessage="none in scope"
+          emptyMessage={t("empty", "noneInScope")}
           segments={podSegments(pods)}
         />
         <Composition
           total={counts.deployments}
           label={counts.deployments === 1 ? "Deployment" : "Deployments"}
-          emptyMessage="none in scope"
+          emptyMessage={t("empty", "noneInScope")}
           segments={deploymentSegments(problems, counts.deployments)}
         />
         <Composition
           total={nodes.length}
           label={nodes.length === 1 ? "Node" : "Nodes"}
-          emptyMessage="none in scope"
+          emptyMessage={t("empty", "noneInScope")}
           segments={nodeSegments(nodes)}
         />
         <Composition
           total={counts.jobs}
           label={counts.jobs === 1 ? "Job" : "Jobs"}
-          emptyMessage="none in scope"
+          emptyMessage={t("empty", "noneInScope")}
           segments={
             jobs
               ? [

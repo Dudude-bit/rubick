@@ -13,6 +13,7 @@ import { ResourceMessage } from "./ResourceMessage";
 import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /**
  * The blocks a resource detail page repeats: an action in the header row, a
@@ -109,7 +110,7 @@ const CONDITION_ROW_UNDATED =
 
 export function ConditionRows({
   conditions,
-  emptyMessage = "No conditions reported",
+  emptyMessage,
   subject,
 }: {
   conditions: ConditionInfo[];
@@ -122,7 +123,11 @@ export function ConditionRows({
   subject?: MessageSubject;
 }) {
   if (conditions.length === 0) {
-    return <p className="px-1.5 py-1 text-xs text-fg-fnt">{emptyMessage}</p>;
+    return (
+      <p className="px-1.5 py-1 text-xs text-fg-fnt">
+        {emptyMessage ?? <T section="empty" k="noConditions" />}
+      </p>
+    );
   }
   // A pod's conditions carry no message at all — that is the whole list on
   // every healthy pod — so its age column would be a strip of numbers at the
@@ -412,7 +417,7 @@ export function Composition({
   total,
   label,
   segments,
-  emptyMessage = "nothing scheduled",
+  emptyMessage,
   note,
 }: CompositionProps) {
   const visible = segments.filter((segment) => segment.count > 0);
@@ -444,7 +449,9 @@ export function Composition({
         {total == null ? (
           <span className="text-fg-fnt">not readable with this access</span>
         ) : visible.length === 0 ? (
-          <span className="text-fg-fnt">{emptyMessage}</span>
+          <span className="text-fg-fnt">
+            {emptyMessage ?? <T section="empty" k="nothingScheduled" />}
+          </span>
         ) : (
           visible.map((segment) => (
             <span key={segment.label} className={SEGMENT_LEGEND[segment.tone]}>
@@ -520,7 +527,7 @@ export interface EventRowsProps {
 /** The event feed. Used whole-cluster on `/events` and scoped on a detail. */
 export function EventRows({
   events,
-  emptyMessage = "No events for this object",
+  emptyMessage,
   showObject = false,
   showNamespace = false,
   compact = false,
@@ -528,7 +535,7 @@ export function EventRows({
   if (events.length === 0) {
     return (
       <p className={cn("py-1 text-xs text-fg-fnt", !compact && "px-1.5")}>
-        {emptyMessage}
+        {emptyMessage ?? <T section="empty" k="noEventsForObject" />}
       </p>
     );
   }

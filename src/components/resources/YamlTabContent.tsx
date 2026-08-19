@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
 import { DetailAction } from "./detail-blocks";
+import { useT } from "@/i18n/useT";
 
 export interface YamlTabContentProps {
   /**
@@ -37,6 +38,7 @@ export function YamlTabContent({
   note = "the object as the API server has it",
   onCopy,
 }: YamlTabContentProps) {
+  const t = useT();
   const isYamlLoading = yaml == null;
 
   const handleFetchYaml = useCallback(() => {
@@ -63,7 +65,7 @@ export function YamlTabContent({
             />
           )}
           <DetailAction
-            label="Copy"
+            label={t("action", "copy")}
             icon={Copy}
             onClick={onCopy}
             disabled={isYamlLoading}

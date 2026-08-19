@@ -28,8 +28,10 @@ import type {
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { useT } from "@/i18n/useT";
 
 export function Helm() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isConnected } = useClusterStore();
@@ -325,7 +327,7 @@ export function Helm() {
             panels wired together. */}
         <SectionHeader
           title="Helm"
-          count={`${releases.length} ${releases.length === 1 ? "release" : "releases"}`}
+          count={t("count", "releases", { n: releases.length })}
           actions={
             <TabsList>
               <TabsTrigger value="releases">
@@ -418,7 +420,7 @@ export function Helm() {
         }}
         title="Remove Repository"
         description={`Are you sure you want to remove the repository "${deleteRepoTarget}"?`}
-        confirmLabel="Remove"
+        confirmLabel={t("action", "remove")}
         confirmVariant="destructive"
         confirmDisabled={removeRepoMutation.isPending}
         onConfirm={() => {
@@ -512,7 +514,7 @@ export function Helm() {
             ? `Are you sure you want to rollback "${rollbackTarget.release.name}" to revision ${rollbackTarget.revision}?`
             : undefined
         }
-        confirmLabel="Rollback"
+        confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
         onConfirm={() => {
@@ -538,7 +540,7 @@ export function Helm() {
             : undefined
         }
         confirmationText={uninstallTarget?.name ?? ""}
-        confirmLabel="Uninstall"
+        confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}
         onConfirm={() => {
           if (uninstallTarget) {

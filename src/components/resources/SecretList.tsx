@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import type { SecretInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
@@ -18,7 +19,7 @@ export const columns = (): ColumnDef<SecretInfo>[] => [
     // wider than the resource names beside it.
     size: 180,
     id: "type",
-    header: "Type",
+    header: () => <T section="columns" k="type" />,
     // A secret's type is a classification, not a state. The previous
     // colour-per-type table spent four hues telling the reader something
     // the word already says.

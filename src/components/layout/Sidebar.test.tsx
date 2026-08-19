@@ -44,6 +44,7 @@ vi.mock("@/hooks/useClusterOverview", () => ({
 const { Sidebar } = await import("./Sidebar");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useUpdaterStore } = await import("@/stores/updaterStore");
+const { useLocaleStore } = await import("@/stores/localeStore");
 
 function wrap(node: ReactNode, route: string[] = ["/"]) {
   const client = new QueryClient({
@@ -64,6 +65,8 @@ beforeEach(() => {
   overview = undefined;
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   useUpdaterStore.setState({ available: false });
+  // A test that fails mid-way must not leave the next one reading Russian.
+  useLocaleStore.setState({ choice: "en" });
 });
 
 const DAY = 86_400_000;
@@ -333,6 +336,23 @@ describe("the Integrations category", () => {
   });
 
   /**
+   * The label is spoken, not drawn, and a screen reader is the one reader
+   * who cannot see that the rest of the rail is in their language. It is
+   * built from the same catalogue key the caption draws, so the two cannot
+   * drift apart.
+   */
+  it("says it in the reader's language too", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    detectInClusterExtensions.mockReturnValue(new Promise(() => {}));
+
+    wrap(<Sidebar />);
+
+    expect(
+      await screen.findByLabelText("идёт чтение: интеграции")
+    ).toBeInTheDocument();
+  });
+
+  /**
    * Would break if a vendor the cluster does not have started appearing.
    * The category is a claim about what this cluster *has*, not about what
    * the app knows how to read.
@@ -347,5 +367,22 @@ describe("the Integrations category", () => {
 
     await screen.findByRole("link", { name: /Traefik/ });
     expect(screen.queryByRole("link", { name: /cert-manager/ })).toBeNull();
+  });
+});
+
+describe("the rail in another language", () => {
+  it("translates its own captions and leaves the kinds alone", () => {
+    useLocaleStore.setState({ choice: "ru" });
+
+    wrap(<Sidebar />);
+
+    expect(screen.getByText("Нагрузки")).toBeInTheDocument();
+    expect(screen.getByText("Обзор")).toBeInTheDocument();
+    expect(screen.getByText("Настройки")).toBeInTheDocument();
+
+    // The point of the split: a Kubernetes kind is a proper noun, and
+    // "Поды" would be this app inventing a word no cluster answers to.
+    expect(screen.getByText("Pods")).toBeInTheDocument();
+    expect(screen.getByText("Helm")).toBeInTheDocument();
   });
 });

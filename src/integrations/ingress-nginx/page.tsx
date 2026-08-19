@@ -75,6 +75,8 @@ import {
   type NginxRoute,
   type NginxSources,
 } from "./model";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -285,7 +287,7 @@ function MapTab({
   if (!data || groups.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        Nothing routes through this controller, so there is no shape to draw.
+        <T section="empty" k="nothingRoutesThroughController" />
       </p>
     );
   }
@@ -1117,6 +1119,7 @@ function ControllerTab({
   controller: ControllerInfo | undefined;
   sources: NginxSources | null;
 }) {
+  const t = useT();
   if (!controller) {
     return <p className="text-xs text-fg-fnt">Reading the controller…</p>;
   }
@@ -1139,8 +1142,11 @@ function ControllerTab({
                 showKind={false}
               />
               <span className="text-fg-fnt">
-                {controller.workload.ready} of {controller.workload.desired}{" "}
-                ready · {controller.workload.namespace}
+                {t("count", "ofTotalReady", {
+                  n: controller.workload.ready,
+                  total: controller.workload.desired,
+                })}{" "}
+                · {controller.workload.namespace}
               </span>
             </span>
             {controller.workload.image && (

@@ -62,6 +62,7 @@ import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 const LOCAL_CONTEXT = "__local__";
 
@@ -79,6 +80,7 @@ const isValidConnection = (source: ResourceKind, target: ResourceKind) => {
 };
 
 export function InfrastructureBuilder() {
+  const t = useT();
   const { toast } = useToast();
   const { isConnected, currentContext, currentNamespace } = useClusterStore();
   const theme = useThemeStore((state) => state.theme);
@@ -291,9 +293,8 @@ export function InfrastructureBuilder() {
       }
       if (!isValidConnection(sourceNode.data.kind, targetNode.data.kind)) {
         toast({
-          title: "Invalid connection",
-          description:
-            "Ingress connects to Services, and Services connect to Pods or Deployments.",
+          title: t("action", "invalidConnection"),
+          description: t("action", "invalidConnectionHint"),
           variant: "destructive",
         });
         return;
@@ -321,7 +322,7 @@ export function InfrastructureBuilder() {
         }
       }
     },
-    [nodes, onConnect, toast, updateNode]
+    [nodes, onConnect, t, toast, updateNode]
   );
 
   const handleModeChange = useCallback(
@@ -335,9 +336,8 @@ export function InfrastructureBuilder() {
         const result = syncFromYaml();
         if (!result.success) {
           toast({
-            title: "Invalid YAML",
-            description:
-              result.message ?? "Fix YAML before switching to the canvas.",
+            title: t("action", "invalidYaml"),
+            description: result.message ?? t("action", "fixYamlBeforeCanvas"),
             variant: "destructive",
           });
           return;
@@ -345,7 +345,7 @@ export function InfrastructureBuilder() {
         setMode("visual");
       }
     },
-    [syncFromYaml, syncToYaml, toast]
+    [syncFromYaml, syncToYaml, t, toast]
   );
 
   const buildApplyPayload = useCallback(
@@ -368,16 +368,16 @@ export function InfrastructureBuilder() {
     const content = buildApplyPayload(includeImported);
     if (!content.trim()) {
       toast({
-        title: "Nothing to validate",
-        description: "Add resources or paste a manifest first.",
+        title: t("empty", "nothingToValidate"),
+        description: t("empty", "addResourcesFirst"),
         variant: "destructive",
       });
       return;
     }
     if (!isConnected) {
       toast({
-        title: "Cluster not connected",
-        description: "Connect to a cluster to validate manifests.",
+        title: t("cluster", "notConnected"),
+        description: t("cluster", "connectToValidate"),
         variant: "destructive",
       });
       return;
@@ -388,22 +388,31 @@ export function InfrastructureBuilder() {
         content,
         currentNamespace || null
       );
-      const message = result.stderr || result.stdout || "Validation completed.";
+      const message =
+        result.stderr || result.stdout || t("action", "validationCompleted");
       setLastResult({
-        title: result.success ? "Validation passed" : "Validation failed",
+        title: result.success
+          ? t("action", "validationPassed")
+          : t("action", "validationFailed"),
         message,
         success: result.success,
       });
       toast({
-        title: result.success ? "Validation passed" : "Validation failed",
+        title: result.success
+          ? t("action", "validationPassed")
+          : t("action", "validationFailed"),
         description: message,
         variant: result.success ? "default" : "destructive",
       });
     } catch (error) {
       const message = normalizeTauriError(error);
-      setLastResult({ title: "Validation failed", message, success: false });
+      setLastResult({
+        title: t("action", "validationFailed"),
+        message,
+        success: false,
+      });
       toast({
-        title: "Validation failed",
+        title: t("action", "validationFailed"),
         description: message,
         variant: "destructive",
       });
@@ -415,6 +424,7 @@ export function InfrastructureBuilder() {
     currentNamespace,
     includeImported,
     isConnected,
+    t,
     toast,
   ]);
 
@@ -422,16 +432,16 @@ export function InfrastructureBuilder() {
     const content = buildApplyPayload(includeImported);
     if (!content.trim()) {
       toast({
-        title: "Nothing to apply",
-        description: "Add resources or paste a manifest first.",
+        title: t("empty", "nothingToApply"),
+        description: t("empty", "addResourcesFirst"),
         variant: "destructive",
       });
       return;
     }
     if (!isConnected) {
       toast({
-        title: "Cluster not connected",
-        description: "Connect to a cluster to apply manifests.",
+        title: t("cluster", "notConnected"),
+        description: t("cluster", "connectToApply"),
         variant: "destructive",
       });
       return;
@@ -442,22 +452,31 @@ export function InfrastructureBuilder() {
         content,
         currentNamespace || null
       );
-      const message = result.stderr || result.stdout || "Apply completed.";
+      const message =
+        result.stderr || result.stdout || t("action", "applyCompleted");
       setLastResult({
-        title: result.success ? "Apply succeeded" : "Apply failed",
+        title: result.success
+          ? t("action", "applySucceeded")
+          : t("action", "applyFailed"),
         message,
         success: result.success,
       });
       toast({
-        title: result.success ? "Apply succeeded" : "Apply failed",
+        title: result.success
+          ? t("action", "applySucceeded")
+          : t("action", "applyFailed"),
         description: message,
         variant: result.success ? "default" : "destructive",
       });
     } catch (error) {
       const message = normalizeTauriError(error);
-      setLastResult({ title: "Apply failed", message, success: false });
+      setLastResult({
+        title: t("action", "applyFailed"),
+        message,
+        success: false,
+      });
       toast({
-        title: "Apply failed",
+        title: t("action", "applyFailed"),
         description: message,
         variant: "destructive",
       });
@@ -469,6 +488,7 @@ export function InfrastructureBuilder() {
     currentNamespace,
     includeImported,
     isConnected,
+    t,
     toast,
   ]);
 
@@ -499,12 +519,12 @@ export function InfrastructureBuilder() {
     <div className="flex flex-col gap-2 animate-in fade-in duration-200">
       <Tabs value={mode} onValueChange={handleModeChange}>
         <SectionHeader
-          title="Infrastructure Builder"
-          count={`${nodes.length} ${nodes.length === 1 ? "resource" : "resources"}`}
+          title={t("nav", "infrastructureBuilder")}
+          count={t("count", "resources", { n: nodes.length })}
           actions={
             <>
               <TabsList>
-                <TabsTrigger value="visual">Visual</TabsTrigger>
+                <TabsTrigger value="visual">{t("nav", "visual")}</TabsTrigger>
                 <TabsTrigger value="yaml">YAML</TabsTrigger>
               </TabsList>
               <Button
@@ -516,14 +536,14 @@ export function InfrastructureBuilder() {
                 }
               >
                 <Trash2 className="mr-1.5 h-3 w-3" aria-hidden="true" />
-                Delete selection
+                {t("action", "deleteSelection")}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setClearOpen(true)}
               >
-                Clear canvas
+                {t("action", "clearCanvas")}
               </Button>
               <Button
                 variant="ghost"
@@ -536,7 +556,7 @@ export function InfrastructureBuilder() {
                 ) : (
                   <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" />
                 )}
-                Import
+                {t("action", "import")}
               </Button>
               <Button
                 variant="outline"
@@ -549,7 +569,7 @@ export function InfrastructureBuilder() {
                 ) : (
                   <CheckCircle2 className="mr-1.5 h-3 w-3" aria-hidden="true" />
                 )}
-                Validate
+                {t("action", "validate")}
               </Button>
               <Button size="sm" onClick={handleApply} disabled={isApplying}>
                 {isApplying ? (
@@ -557,14 +577,14 @@ export function InfrastructureBuilder() {
                 ) : (
                   <Play className="mr-1.5 h-3 w-3" aria-hidden="true" />
                 )}
-                Apply
+                {t("action", "apply")}
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Open builder help"
+                    aria-label={t("action", "openBuilderHelp")}
                     onClick={() => setHelpOpen(true)}
                   >
                     <HelpCircle className="h-3.5 w-3.5" />
@@ -575,8 +595,7 @@ export function InfrastructureBuilder() {
                   align="center"
                   className="max-w-xs"
                 >
-                  Drag from the palette, lasso-select on empty canvas. Delete:
-                  Backspace · Select all: Cmd/Ctrl+A · Invert: Cmd/Ctrl+Shift+I
+                  {t("action", "builderShortcutsTooltip")}
                 </TooltipContent>
               </Tooltip>
             </>
@@ -585,8 +604,8 @@ export function InfrastructureBuilder() {
 
         <div className="flex flex-wrap items-center gap-3 py-1">
           <Input
-            placeholder="Filter resources…"
-            aria-label="Filter resources"
+            placeholder={t("action", "filterResourcesPlaceholder")}
+            aria-label={t("action", "filterResources")}
             className="w-56"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
@@ -602,14 +621,14 @@ export function InfrastructureBuilder() {
                 htmlFor="include-imported"
                 className="text-[11px] font-normal text-fg-mut"
               >
-                Include imported
+                {t("action", "includeImported")}
               </Label>
             </span>
           )}
           {!isConnected && (
             <span className="flex items-center gap-1.5 text-[11px] text-warn">
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              Not connected — validate, apply and import are unavailable.
+              {t("cluster", "builderNotConnected")}
             </span>
           )}
         </div>
@@ -663,7 +682,7 @@ export function InfrastructureBuilder() {
                 {emptyCanvas && (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <p className="text-xs text-fg-mut">
-                      Drag resources here, or click one in the palette.
+                      {t("empty", "dragResourcesHere")}
                     </p>
                   </div>
                 )}
@@ -695,8 +714,7 @@ export function InfrastructureBuilder() {
             </div>
             <div className="flex flex-col gap-3 border-l border-hair pl-3">
               <p className="text-[11px] text-fg-mut">
-                Paste or fine-tune manifests here. Switching back to the canvas
-                parses this text and maps the resource types it recognises.
+                {t("action", "yamlPaneHint")}
               </p>
               {!isConnected && (
                 <ConnectClusterEmptyState resourceLabel="Manifests" />
@@ -708,9 +726,9 @@ export function InfrastructureBuilder() {
       <ConfirmDialog
         open={clearOpen}
         onOpenChange={setClearOpen}
-        title="Clear canvas?"
-        description="This will remove all resources and connections from the canvas."
-        confirmLabel="Clear"
+        title={t("action", "clearCanvasQuestion")}
+        description={t("action", "clearCanvasConfirm")}
+        confirmLabel={t("action", "clear")}
         confirmVariant="destructive"
         onConfirm={() => {
           setClearOpen(false);
@@ -720,34 +738,31 @@ export function InfrastructureBuilder() {
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Infrastructure Builder help</DialogTitle>
+            <DialogTitle>{t("action", "builderHelpTitle")}</DialogTitle>
             <DialogDescription>
-              Shortcuts and selection tips for the canvas.
+              {t("action", "builderHelpHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 text-xs text-fg-mid">
             <div>
               <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-                Canvas
+                {t("action", "builderHelpCanvas")}
               </h3>
               <ul className="list-disc space-y-0.5 pl-4">
-                <li>Drag a resource from the palette to place it.</li>
-                <li>
-                  Click a resource in the palette to add it near the canvas
-                  centre.
-                </li>
-                <li>Drag on empty canvas to draw a selection box.</li>
-                <li>Click a node to select it, drag to move.</li>
+                <li>{t("action", "builderHelpDrag")}</li>
+                <li>{t("action", "builderHelpClick")}</li>
+                <li>{t("action", "builderHelpLasso")}</li>
+                <li>{t("action", "builderHelpNode")}</li>
               </ul>
             </div>
             <div>
               <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-                Shortcuts
+                {t("action", "builderHelpShortcuts")}
               </h3>
               <ul className="list-disc space-y-0.5 pl-4">
-                <li>Delete or Backspace: remove current selection.</li>
-                <li>Cmd/Ctrl + A: select all nodes and edges.</li>
-                <li>Cmd/Ctrl + Shift + I: invert selection.</li>
+                <li>{t("action", "builderHelpDelete")}</li>
+                <li>{t("action", "builderHelpSelectAll")}</li>
+                <li>{t("action", "builderHelpInvert")}</li>
               </ul>
             </div>
           </div>

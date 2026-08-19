@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 /**
  * What a page shows when the window is not on a cluster.
@@ -21,6 +22,7 @@ export function ConnectClusterEmptyState({
   /** What this page would have shown, in its own plural. */
   resourceLabel?: string;
 }) {
+  const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const connect = useClusterStore((s) => s.connect);
 
@@ -28,14 +30,16 @@ export function ConnectClusterEmptyState({
     <div className="flex h-full justify-center px-6 py-12">
       <div className="w-full max-w-[420px]">
         <h2 className="text-[13px] font-semibold tracking-tight text-fg">
-          No cluster is connected
+          {t("empty", "noClusterIsConnected")}
         </h2>
         <p className="mt-[3px] text-xs text-fg-mut">
           {resourceLabel
             ? // Callers hand this label in whichever case their page title
               // uses, and it starts a sentence here.
-              `${resourceLabel[0].toUpperCase()}${resourceLabel.slice(1)} are read from a cluster, and this window is not on one yet.`
-            : "This window is not on a cluster yet."}
+              t("empty", "kindReadFromCluster", {
+                kind: `${resourceLabel[0].toUpperCase()}${resourceLabel.slice(1)}`,
+              })
+            : t("empty", "notOnClusterYet")}
         </p>
 
         {contexts.length > 0 ? (
@@ -44,7 +48,7 @@ export function ConnectClusterEmptyState({
           </div>
         ) : (
           <p className="mt-4 text-[11px] text-fg-fnt">
-            Your kubeconfig lists no clusters either.{" "}
+            {t("empty", "kubeconfigListsNoClusters")}{" "}
             <Link
               to="/"
               className="text-fg-mut underline decoration-dotted underline-offset-2 hover:text-fg"

@@ -29,6 +29,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * A custom resource is whatever its author decided it is, so nothing on this
@@ -89,6 +90,7 @@ function JsonRow({
   value: unknown;
   depth: number;
 }) {
+  const t = useT();
   if (!isContainer(value)) {
     return (
       <div className="grid grid-cols-[minmax(0,160px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0">
@@ -101,10 +103,8 @@ function JsonRow({
   }
 
   const size = Array.isArray(value)
-    ? `${value.length} item${value.length === 1 ? "" : "s"}`
-    : `${Object.keys(value as object).length} field${
-        Object.keys(value as object).length === 1 ? "" : "s"
-      }`;
+    ? t("count", "items", { n: value.length })
+    : t("count", "fields", { n: Object.keys(value as object).length });
 
   return (
     <div className="border-b border-hair py-1 last:border-b-0">
@@ -165,6 +165,7 @@ function statusOf(resource: CustomResourceDetailInfo): string | null {
 }
 
 export function CustomResourceDetail() {
+  const t = useT();
   const { crdName, namespace, name } = useParams<{
     crdName: string;
     namespace?: string;
@@ -357,7 +358,7 @@ export function CustomResourceDetail() {
             title="Owned by"
             count={owners.length || undefined}
             items={ownerItems}
-            emptyMessage="Nothing owns this object — it was created directly."
+            emptyMessage={t("empty", "noOwner")}
           />
           <KeyValueSection
             title="Finalizers"
@@ -367,19 +368,19 @@ export function CustomResourceDetail() {
               value: "blocks deletion until cleared",
               mono: false,
             }))}
-            emptyMessage="No finalizers"
+            emptyMessage={t("empty", "noFinalizers")}
           />
           <KeyValueSection
             title="Labels"
             count={Object.keys(resource?.labels ?? {}).length}
             items={recordToKeyValues(resource?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(resource?.annotations ?? {}).length}
             items={recordToKeyValues(resource?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -434,7 +435,7 @@ export function CustomResourceDetail() {
         actions={
           <InterceptedAction
             intercept={intercept("Delete")}
-            label="Delete"
+            label={t("action", "delete")}
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
@@ -451,7 +452,7 @@ export function CustomResourceDetail() {
         onOpenChange={setDeleteDialogOpen}
         title={`Delete ${crdInfo?.kind || "resource"}?`}
         description={`"${name}" will be removed from the cluster. This cannot be undone.`}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

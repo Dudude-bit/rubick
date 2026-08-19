@@ -18,8 +18,7 @@ import { daysUntil } from "@/lib/utils";
 const certificateStatusConfig: CrdStatus = {
   getStatus: (resource) => {
     const conditions = getValueByPath(resource, "status.conditions") as
-      | Array<{ type: string; status: string }>
-      | undefined;
+      Array<{ type: string; status: string }> | undefined;
 
     if (!Array.isArray(conditions)) return null;
 
@@ -51,8 +50,7 @@ const certificateColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -72,8 +70,7 @@ const certificateColumns: CrdColumn[] = [
     header: "Issuer",
     accessor: (resource) => {
       const issuerRef = getValueByPath(resource, "spec.issuerRef") as
-        | { name: string; kind?: string }
-        | undefined;
+        { name: string; kind?: string } | undefined;
 
       if (!issuerRef) return null;
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;
@@ -85,8 +82,7 @@ const certificateColumns: CrdColumn[] = [
     header: "DNS Names",
     accessor: (resource) => {
       const dnsNames = getValueByPath(resource, "spec.dnsNames") as
-        | string[]
-        | undefined;
+        string[] | undefined;
       return dnsNames?.length ?? 0;
     },
     cell: (value) => (typeof value === "number" ? `${value} names` : "-"),
@@ -116,8 +112,7 @@ const issuerColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -131,8 +126,7 @@ const issuerColumns: CrdColumn[] = [
     header: "Type",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!spec) return "Unknown";
 
       // Detect issuer type based on spec fields
@@ -150,8 +144,7 @@ const issuerColumns: CrdColumn[] = [
     header: "Server/Details",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!spec) return null;
 
       if (spec.acme) {
@@ -187,8 +180,7 @@ const certificateRequestColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -208,8 +200,7 @@ const certificateRequestColumns: CrdColumn[] = [
     header: "Issuer",
     accessor: (resource) => {
       const issuerRef = getValueByPath(resource, "spec.issuerRef") as
-        | { name: string; kind?: string }
-        | undefined;
+        { name: string; kind?: string } | undefined;
 
       if (!issuerRef) return null;
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;

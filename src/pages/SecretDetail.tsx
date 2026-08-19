@@ -21,8 +21,10 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { SecretInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function SecretDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -98,7 +100,7 @@ export function SecretDetail() {
             keys={dataKeys}
             sensitive
             isLoading={isDataLoading}
-            emptyMessage="This Secret holds no keys"
+            emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "Secret" })}
           />
         </>
       ),
@@ -114,13 +116,13 @@ export function SecretDetail() {
             title="Labels"
             count={Object.keys(labels).length}
             items={recordToKeyValues(labels)}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(annotations).length}
             items={recordToKeyValues(annotations)}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -155,14 +157,14 @@ export function SecretDetail() {
       }
       badges={
         <span className="text-[11px] text-fg-fnt">
-          {dataKeys.length} {dataKeys.length === 1 ? "key" : "keys"}
+          {t("count", "keys", { n: dataKeys.length })}
         </span>
       }
       onBack={goBack}
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

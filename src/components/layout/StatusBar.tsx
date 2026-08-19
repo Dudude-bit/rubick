@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
+import { useT } from "@/i18n/useT";
 
 /**
  * The window's bottom line: what the keyboard does on the left, what is
@@ -33,6 +34,7 @@ import { ActivityPanel } from "./ActivityPanel";
  * the connection behind them is actually up.
  */
 export function StatusBar() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const isLoading = useClusterStore((s) => s.isLoading);
@@ -81,10 +83,10 @@ export function StatusBar() {
         </Tooltip>
       ) : isConnected ? (
         <>
-          <span>{podCount} pods</span>
+          <span>{t("cluster", "podCount", { n: podCount })}</span>
           <span>·</span>
           <span className={cn(problemCount > 0 && "text-err")}>
-            {problemCount} problems
+            {t("cluster", "problemCount", { n: problemCount })}
             {/* The backend caps its ranked list; saying "12+" is the
                 difference between a count and a guess. */}
             {problemsTruncated > 0 && "+"}

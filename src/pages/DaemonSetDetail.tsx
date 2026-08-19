@@ -43,8 +43,10 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DaemonSetDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function DaemonSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -171,8 +173,10 @@ export function DaemonSetDetail() {
                   pods={pods}
                   idle={
                     desired === 0
-                      ? "No node matches this DaemonSet, so it has placed no pods."
-                      : "None of this DaemonSet's pods is running."
+                      ? t("empty", "daemonSetNoNodeMatches")
+                      : t("empty", "kindNoPodsRunning", {
+                          kind: ResourceType.DaemonSet,
+                        })
                   }
                   connections={connections.data}
                 />
@@ -206,19 +210,19 @@ export function DaemonSetDetail() {
                     ]
                   : []
               }
-              emptyMessage="No selector — this DaemonSet matches nothing"
+              emptyMessage={t("empty", "noSelectorDaemonSet")}
             />
             <KeyValueSection
               title="Labels"
               count={Object.keys(daemonSet?.labels ?? {}).length}
               items={recordToKeyValues(daemonSet?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
               title="Annotations"
               count={Object.keys(daemonSet?.annotations ?? {}).length}
               items={recordToKeyValues(daemonSet?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),
@@ -278,6 +282,7 @@ export function DaemonSetDetail() {
       ready,
       upToDate,
       available,
+      t,
     ]
   );
 
@@ -312,7 +317,7 @@ export function DaemonSetDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

@@ -47,8 +47,10 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -152,7 +154,7 @@ export function StatefulSetDetail() {
                       rather than as a row in a fact table three blocks away. */}
                   <Composition
                     total={desired}
-                    label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                    label={t("count", "replicasWanted", { n: desired })}
                     segments={[
                       { label: "ready", count: ready, tone: "ok" },
                       {
@@ -184,8 +186,12 @@ export function StatefulSetDetail() {
                   pods={pods}
                   idle={
                     desired === 0
-                      ? "This StatefulSet is scaled to zero."
-                      : "None of this StatefulSet's pods is running."
+                      ? t("empty", "kindScaledToZero", {
+                          kind: ResourceType.StatefulSet,
+                        })
+                      : t("empty", "kindNoPodsRunning", {
+                          kind: ResourceType.StatefulSet,
+                        })
                   }
                   connections={connections.data}
                 />
@@ -210,13 +216,13 @@ export function StatefulSetDetail() {
               title="Labels"
               count={Object.keys(statefulSet?.labels ?? {}).length}
               items={recordToKeyValues(statefulSet?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
               title="Annotations"
               count={Object.keys(statefulSet?.annotations ?? {}).length}
               items={recordToKeyValues(statefulSet?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),
@@ -263,6 +269,7 @@ export function StatefulSetDetail() {
       }),
     ],
     [
+      t,
       statefulSet,
       pods,
       yaml,
@@ -307,13 +314,13 @@ export function StatefulSetDetail() {
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}

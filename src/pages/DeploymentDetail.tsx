@@ -80,8 +80,10 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function DeploymentDetail() {
+  const t = useT();
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
@@ -311,7 +313,7 @@ export function DeploymentDetail() {
               <CountBlock title="Replicas" governance={connections}>
                 <Composition
                   total={desired}
-                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  label={t("count", "replicasWanted", { n: desired })}
                   segments={[
                     { label: "ready", count: ready, tone: "ok" },
                     {
@@ -320,7 +322,7 @@ export function DeploymentDetail() {
                       tone: "warn",
                     },
                   ]}
-                  emptyMessage="scaled to zero"
+                  emptyMessage={t("empty", "scaledToZero")}
                   note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
                 />
               </CountBlock>
@@ -335,8 +337,12 @@ export function DeploymentDetail() {
                 pods={pods}
                 idle={
                   desired === 0
-                    ? "This Deployment is scaled to zero."
-                    : "None of this Deployment's pods is running."
+                    ? t("empty", "kindScaledToZero", {
+                        kind: ResourceType.Deployment,
+                      })
+                    : t("empty", "kindNoPodsRunning", {
+                        kind: ResourceType.Deployment,
+                      })
                 }
                 connections={connections.data}
               />
@@ -356,13 +362,13 @@ export function DeploymentDetail() {
             title="Labels"
             count={Object.keys(deployment?.labels ?? {}).length}
             items={recordToKeyValues(deployment?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(deployment?.annotations ?? {}).length}
             items={recordToKeyValues(deployment?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -452,7 +458,7 @@ export function DeploymentDetail() {
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">
                 {pods.length === 0
-                  ? "This deployment has no pods to read logs from."
+                  ? t("empty", "noPodsToReadLogs")
                   : "Select a pod to view logs"}
               </p>
             )}
@@ -516,20 +522,20 @@ export function DeploymentDetail() {
         actions={
           <>
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={openScaleDialog}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               busy={restartMutation.isPending}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}

@@ -1,4 +1,5 @@
 import type { Finding, Severity } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * How far down the page a finding belongs.
@@ -19,12 +20,11 @@ function toneFor(severity: Severity) {
 }
 
 export function FindingsList({ findings }: { findings: Finding[] }) {
+  const t = useT();
   if (findings.length === 0) {
     return (
       <p className="max-w-[72ch] text-xs text-fg-mut">
-        Nothing here needs attention. The environment below is what this app
-        sees when it spawns a credential plugin — which is not always what your
-        shell sees.
+        {t("settings", "diagnosticsAllClear")}
       </p>
     );
   }

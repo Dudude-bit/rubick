@@ -13,19 +13,15 @@ import { useT } from "@/i18n/useT";
 import { SettingRow, SettingsGroup } from "./settings-row";
 
 const THEMES = [
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
-  { value: "system", label: "System", Icon: Monitor },
+  { value: "light", k: "themeLight", Icon: Sun },
+  { value: "dark", k: "themeDark", Icon: Moon },
+  { value: "system", k: "themeSystem", Icon: Monitor },
 ] as const;
 
 const COLOURINGS = [
-  { value: "full", label: "Full", hint: "Kind and identifier both coloured" },
-  {
-    value: "minimal",
-    label: "Minimal",
-    hint: "Kind by icon, identifier dimmed",
-  },
-  { value: "off", label: "Off", hint: "No colour on resource names" },
+  { value: "full", k: "colouringFull", hintK: "colouringFullHint" },
+  { value: "minimal", k: "colouringMinimal", hintK: "colouringMinimalHint" },
+  { value: "off", k: "colouringOff", hintK: "colouringOffHint" },
 ] as const;
 
 const SEGMENT =
@@ -67,15 +63,17 @@ export function AppearanceSettings() {
                 {LOCALE_NAMES[locale]}
                 {/* Offered but empty: the scaffolding is done, the words are
                     not, and hiding it would hide where to contribute. */}
-                {isTranslated(locale) ? "" : " — not translated yet"}
+                {isTranslated(locale)
+                  ? ""
+                  : ` — ${t("settings", "notTranslatedYet")}`}
               </option>
             ))}
           </select>
         }
       />
       <SettingRow
-        label="Theme"
-        hint="System follows your desktop's light/dark preference."
+        label={t("settings", "theme")}
+        hint={t("settings", "themeHint")}
         keywords="dark light appearance"
         control={
           <RadioGroup
@@ -85,7 +83,7 @@ export function AppearanceSettings() {
             }
             className="flex items-center gap-0.5"
           >
-            {THEMES.map(({ value, label, Icon }) => (
+            {THEMES.map(({ value, k, Icon }) => (
               <div key={value}>
                 <RadioGroupItem
                   value={value}
@@ -94,7 +92,7 @@ export function AppearanceSettings() {
                 />
                 <Label htmlFor={`theme-${value}`} className={SEGMENT}>
                   <Icon className="h-3 w-3" aria-hidden="true" />
-                  {label}
+                  {t("settings", k)}
                 </Label>
               </div>
             ))}
@@ -102,8 +100,8 @@ export function AppearanceSettings() {
         }
       />
       <SettingRow
-        label="Resource colouring"
-        hint="Colour tells resource kinds apart and gives each object a stable tint. Minimal keeps the icon only."
+        label={t("settings", "resourceColouring")}
+        hint={t("settings", "resourceColouringHint")}
         // The app spells it the British way throughout; somebody who types
         // the other spelling is looking for exactly this row.
         keywords="color coloring tint kind"
@@ -115,7 +113,7 @@ export function AppearanceSettings() {
             }
             className="flex items-center gap-0.5"
           >
-            {COLOURINGS.map(({ value, label, hint }) => (
+            {COLOURINGS.map(({ value, k, hintK }) => (
               <div key={value}>
                 <RadioGroupItem
                   value={value}
@@ -124,10 +122,10 @@ export function AppearanceSettings() {
                 />
                 <Label
                   htmlFor={`colouring-${value}`}
-                  title={hint}
+                  title={t("settings", hintK)}
                   className={SEGMENT}
                 >
-                  {label}
+                  {t("settings", k)}
                 </Label>
               </div>
             ))}

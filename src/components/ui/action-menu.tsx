@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal } from "lucide-react";
+import { useT } from "@/i18n/useT";
 
 interface ActionMenuProps {
   children: React.ReactNode;
@@ -16,16 +17,17 @@ interface ActionMenuProps {
 export function ActionMenu({
   children,
   align = "end",
-  triggerLabel = "Open actions",
+  triggerLabel,
   disabled = false,
 }: ActionMenuProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          aria-label={triggerLabel}
+          aria-label={triggerLabel ?? t("action", "openActions")}
           disabled={disabled}
         >
           <MoreHorizontal className="h-4 w-4" />

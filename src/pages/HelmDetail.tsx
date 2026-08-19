@@ -51,6 +51,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { installedObjects } from "@/lib/helm-manifest";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -82,6 +84,7 @@ function valuesAsYaml(values: unknown): string {
 }
 
 export function HelmDetail() {
+  const t = useT();
   const { source, namespace, name } = useParams<{
     source: string;
     namespace: string;
@@ -195,7 +198,10 @@ export function HelmDetail() {
           reconciliation history live on the custom resource.
         </p>
         <div className="flex items-center gap-1 pt-1">
-          <DetailAction label="Back to releases" onClick={goBack} />
+          <DetailAction
+            label={t("action", "backToReleases")}
+            onClick={goBack}
+          />
           <DetailAction
             label="Open the HelmRelease"
             icon={ExternalLink}
@@ -275,7 +281,7 @@ export function HelmDetail() {
             <p className="text-xs text-fg-fnt">Reading history…</p>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No history — Helm keeps none for this release.
+              <T section="empty" k="noHelmHistory" />
             </p>
           ) : (
             <Table>
@@ -326,7 +332,7 @@ export function HelmDetail() {
                         <span className="flex justify-end">
                           {!current && helmCliAvailable && (
                             <DetailAction
-                              label="Roll back"
+                              label={t("action", "rollBack")}
                               icon={RotateCcw}
                               onClick={() => setRollbackTarget(rev.revision)}
                             />
@@ -474,7 +480,7 @@ export function HelmDetail() {
         actions={
           <>
             <DetailAction
-              label="Refresh"
+              label={t("action", "refresh")}
               icon={RefreshCw}
               onClick={() => refetch()}
               busy={isFetching}
@@ -482,13 +488,13 @@ export function HelmDetail() {
             {helmCliAvailable && release && (
               <>
                 <DetailAction
-                  label="Roll back"
+                  label={t("action", "rollBack")}
                   icon={RotateCcw}
                   onClick={() => setRollbackTarget(release.revision - 1)}
                   disabled={release.revision <= 1}
                 />
                 <DetailAction
-                  label="Uninstall"
+                  label={t("action", "uninstall")}
                   icon={Trash2}
                   onClick={() => setShowUninstall(true)}
                   danger
@@ -509,7 +515,7 @@ export function HelmDetail() {
         }}
         title="Roll back release?"
         description={`"${release?.name}" will be rolled back to revision ${rollbackTarget}.`}
-        confirmLabel="Roll back"
+        confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
         onConfirm={() => {
@@ -525,7 +531,7 @@ export function HelmDetail() {
         title="Uninstall release"
         description={`This permanently deletes the Helm release "${release?.name}" and every resource it created in namespace "${release?.namespace}". This cannot be undone.`}
         confirmationText={release?.name ?? ""}
-        confirmLabel="Uninstall"
+        confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}
         onConfirm={() => uninstallMutation.mutate()}
       />

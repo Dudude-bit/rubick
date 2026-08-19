@@ -23,6 +23,7 @@ import { useToast } from "@/components/ui/use-toast";
 import type { ContextBinding } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 const NONE = "__none__";
 const EMPTY: ContextBinding = {
@@ -51,6 +52,7 @@ export function BindingDialog({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const t = useT();
   // Held against the context it was typed for, so opening the dialog on a
   // different row shows that row's binding rather than the last one's.
   const [edited, setEdited] = useState<{
@@ -105,8 +107,8 @@ export function BindingDialog({
     onSuccess: () =>
       done(
         binding.gcpProfile || binding.azureProfile
-          ? "Context binding saved"
-          : "Context binding removed"
+          ? t("settings", "bindingSaved")
+          : t("settings", "bindingRemoved")
       ),
     onError: failed,
   });
@@ -114,8 +116,8 @@ export function BindingDialog({
   const clouds = [
     {
       id: "gcp",
-      label: "GCP profile",
-      fallback: "Application Default Credentials",
+      label: t("settings", "gcpProfile"),
+      fallback: t("settings", "useAdc"),
       value: binding.gcpProfile,
       profiles: gcpProfiles,
       set: (value: string | undefined) =>
@@ -123,8 +125,8 @@ export function BindingDialog({
     },
     {
       id: "azure",
-      label: "Azure profile",
-      fallback: "the default az login",
+      label: t("settings", "azureProfile"),
+      fallback: t("settings", "useDefaultAzLogin"),
       value: binding.azureProfile,
       profiles: azureProfiles,
       set: (value: string | undefined) =>
@@ -136,7 +138,7 @@ export function BindingDialog({
     <Dialog open={context !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Profile for this context</DialogTitle>
+          <DialogTitle>{t("settings", "profileForContext")}</DialogTitle>
           <DialogDescription>
             <span className="font-mono">{context}</span>
           </DialogDescription>
@@ -155,7 +157,7 @@ export function BindingDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>Use {cloud.fallback}</SelectItem>
+                  <SelectItem value={NONE}>{cloud.fallback}</SelectItem>
                   {cloud.profiles?.map((profile) => (
                     <SelectItem key={profile.name} value={profile.name}>
                       {profile.name}
@@ -168,13 +170,13 @@ export function BindingDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Save
+            {t("action", "save")}
           </Button>
         </DialogFooter>
       </DialogContent>

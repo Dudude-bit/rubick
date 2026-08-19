@@ -12,6 +12,7 @@ import {
 } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 export interface ResourceDetailHeaderProps {
   /** The object's own name — an identifier, so it reads as mono. */
@@ -174,6 +175,7 @@ export function ResourceDetailHeader({
   dataUpdatedAt,
   slowed,
 }: ResourceDetailHeaderProps) {
+  const t = useT();
   const segment = {
     to: listUrl === null ? null : (listUrl ?? getResourceListUrl(kind)),
     label: listLabel ?? toPlural(kind as ResourceKind),
@@ -184,7 +186,7 @@ export function ResourceDetailHeader({
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back"
+        aria-label={t("action", "back")}
         className="-ml-1 flex h-5 w-5 flex-none items-center justify-center rounded transition-colors hover:bg-hover hover:text-fg"
       >
         <ArrowLeft className="h-3.5 w-3.5" />

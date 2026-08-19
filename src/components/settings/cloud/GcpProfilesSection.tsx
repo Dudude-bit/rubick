@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/use-toast";
 import type { GcpProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 const EMPTY_PROFILE: GcpProfile = {
   description: undefined,
@@ -30,6 +31,7 @@ const EMPTY_PROFILE: GcpProfile = {
 };
 
 export function GcpProfilesSection() {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -56,7 +58,7 @@ export function GcpProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
       setDialogOpen(false);
-      toast({ title: "GCP profile saved" });
+      toast({ title: t("settings", "gcpProfileSaved") });
     },
     onError: (error) => {
       toast({
@@ -72,7 +74,7 @@ export function GcpProfilesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
       queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
-      toast({ title: "GCP profile deleted" });
+      toast({ title: t("settings", "gcpProfileDeleted") });
     },
     onError: (error) => {
       toast({
@@ -87,7 +89,9 @@ export function GcpProfilesSection() {
     mutationFn: commands.testGcpProfile,
     onSuccess: (result) => {
       toast({
-        title: result.includes("successful") ? "Success" : "Failed",
+        title: result.includes("successful")
+          ? t("settings", "success")
+          : t("settings", "failed"),
         description: result,
         variant: result.includes("successful") ? "default" : "destructive",
       });
@@ -127,18 +131,20 @@ export function GcpProfilesSection() {
     <>
       <ProfileSection
         title="GCP"
-        addLabel="Add profile"
+        addLabel={t("settings", "addProfile")}
         onAdd={openCreateDialog}
         isLoading={isLoading}
         isEmpty={!profiles || profiles.length === 0}
-        emptyMessage="No profiles — using Application Default Credentials."
+        emptyMessage={t("empty", "noProfilesGcp")}
       >
         {profiles?.map((item) => (
           <ProfileRow
             key={item.name}
             name={item.name}
             detail={
-              item.profile.serviceAccountKeyPath ? "service account" : undefined
+              item.profile.serviceAccountKeyPath
+                ? t("settings", "serviceAccount")
+                : undefined
             }
             description={item.profile.description}
             onTest={() => testMutation.mutate(item.name)}
@@ -153,24 +159,26 @@ export function GcpProfilesSection() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingName ? "Edit GCP Profile" : "Create GCP Profile"}
+              {editingName
+                ? t("settings", "editGcpProfile")
+                : t("settings", "createGcpProfile")}
             </DialogTitle>
             <DialogDescription>
-              Configure authentication settings for GKE clusters
+              {t("settings", "gcpProfileDialogHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Profile Name</Label>
+              <Label>{t("settings", "profileName")}</Label>
               <Input
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
-                placeholder="e.g., production, personal"
+                placeholder={t("settings", "profileNamePlaceholder")}
                 disabled={!!editingName}
               />
             </div>
             <div className="space-y-2">
-              <Label>Description (optional)</Label>
+              <Label>{t("settings", "descriptionOptional")}</Label>
               <Input
                 value={editingProfile.description || ""}
                 onChange={(e) =>
@@ -179,11 +187,11 @@ export function GcpProfilesSection() {
                     description: e.target.value || undefined,
                   }))
                 }
-                placeholder="e.g., Production GKE clusters"
+                placeholder={t("settings", "gcpDescriptionPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label>Service Account Key Path (optional)</Label>
+              <Label>{t("settings", "serviceAccountKeyPath")}</Label>
               <div className="flex gap-2">
                 <Input
                   value={editingProfile.serviceAccountKeyPath || ""}
@@ -193,23 +201,23 @@ export function GcpProfilesSection() {
                       serviceAccountKeyPath: e.target.value || undefined,
                     }))
                   }
-                  placeholder="Leave empty to use ADC"
+                  placeholder={t("settings", "adcPlaceholder")}
                 />
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Browse for a service account key"
+                  aria-label={t("settings", "browseServiceAccountKey")}
                   onClick={() => handleFilePicker("serviceAccountKeyPath")}
                 >
                   <FolderOpen className="h-3.5 w-3.5" />
                 </Button>
               </div>
               <p className="text-[11px] text-fg-mut">
-                If not set, uses Application Default Credentials (gcloud auth).
+                {t("settings", "adcHint")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Default Project (optional)</Label>
+              <Label>{t("settings", "defaultProject")}</Label>
               <Input
                 value={editingProfile.defaultProject || ""}
                 onChange={(e) =>
@@ -218,11 +226,11 @@ export function GcpProfilesSection() {
                     defaultProject: e.target.value || undefined,
                   }))
                 }
-                placeholder="GCP Project ID"
+                placeholder={t("settings", "gcpProjectPlaceholder")}
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label>Prefer Native SDK Auth</Label>
+              <Label>{t("settings", "preferNativeAuth")}</Label>
               <Switch
                 checked={editingProfile.preferNativeAuth}
                 onCheckedChange={(checked) =>
@@ -236,7 +244,7 @@ export function GcpProfilesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
             <Button
               onClick={() =>
@@ -250,7 +258,7 @@ export function GcpProfilesSection() {
               {saveMutation.isPending && (
                 <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
               )}
-              Save
+              {t("action", "save")}
             </Button>
           </DialogFooter>
         </DialogContent>

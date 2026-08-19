@@ -129,10 +129,7 @@ export function describeAuth(context: ContextInfo): ReactNode {
 }
 
 export type ContextStatus =
-  | "connected"
-  | "ready"
-  | "cannot connect"
-  | "cannot tell";
+  "connected" | "ready" | "cannot connect" | "cannot tell";
 
 export interface ContextReading {
   how: ReactNode;

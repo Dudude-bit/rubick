@@ -39,6 +39,8 @@ import {
 import { useState } from "react";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
@@ -57,33 +59,37 @@ export function PublishedEndpoints({
   query: ConnectionsQuery;
   service: ObjectRef;
 }) {
+  const t = useT();
   const { data, isPending, error } = query;
 
   if (isPending) {
     return (
       <p className="text-xs text-fg-fnt">
-        Reading what this Service publishes…
+        {t("empty", "readingWhatServicePublishes")}
       </p>
     );
   }
   if (error || !data) {
     return (
       <p className="text-xs text-err">
-        Could not read what this Service publishes:{" "}
-        {error?.message ?? "no answer"}
+        {t("empty", "couldNotReadWhatServicePublishes")}{" "}
+        {error?.message ?? t("empty", "noAnswer")}
       </p>
     );
   }
   const published = publishedFor(data, service);
   if (!published) {
     return (
-      <p className="text-xs text-fg-fnt">Nothing was read for this Service.</p>
+      <p className="text-xs text-fg-fnt">
+        <T section="empty" k="nothingReadForService" />
+      </p>
     );
   }
   return <Lists published={published} />;
 }
 
 function Lists({ published }: { published: ServicePublished }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const rows = all ? published.endpoints : published.endpoints.slice(0, SHOWN);
   const hidden = published.endpoints.length - rows.length;
@@ -106,24 +112,26 @@ function Lists({ published }: { published: ServicePublished }) {
                 className="h-6 text-[11px]"
                 onClick={() => setAll(!all)}
               >
-                {all ? "Show fewer" : `Show all ${published.endpoints.length}`}
+                {all
+                  ? t("action", "showFewer")
+                  : t("action", "showAll", { n: published.endpoints.length })}
               </Button>
             ) : undefined
           }
         />
         {published.endpoints.length === 0 ? (
           <p className="text-xs text-fg-fnt">
-            This Service publishes no address at all — nothing reaches it.
+            <T section="empty" k="servicePublishesNothing" />
           </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Address</TableHead>
+                <TableHead>{t("columns", "address")}</TableHead>
                 <TableHead>Pod</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Node</TableHead>
-                {zoned && <TableHead>Zone</TableHead>}
+                <TableHead>{t("columns", "state")}</TableHead>
+                <TableHead>{t("columns", "node")}</TableHead>
+                {zoned && <TableHead>{t("columns", "zone")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -148,7 +156,9 @@ function Lists({ published }: { published: ServicePublished }) {
                       ) : (
                         // A hand-written slice names no pod, and that is a
                         // state rather than a gap in the reading.
-                        <span className="text-fg-fnt">registered by hand</span>
+                        <span className="text-fg-fnt">
+                          {t("empty", "registeredByHand")}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className={cn("text-[11px]", TONE[state.tone])}>
@@ -178,7 +188,7 @@ function Lists({ published }: { published: ServicePublished }) {
         )}
         {hidden > 0 && (
           <p className="text-[11px] text-fg-fnt">
-            {hidden} more not drawn — the counts above are the whole of it.
+            {t("count", "moreNotDrawn", { n: hidden })}
           </p>
         )}
       </Section>

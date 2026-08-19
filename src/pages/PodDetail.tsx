@@ -87,6 +87,7 @@ import {
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -236,6 +237,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
 }
 
 export function PodDetail() {
+  const t = useT();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentContext } = useClusterStore();
@@ -514,7 +516,10 @@ export function PodDetail() {
     {
       label: "Containers",
       value: pod
-        ? `${podReadiness(pod).ready} of ${podReadiness(pod).total} ready`
+        ? t("count", "ofTotalReady", {
+            n: podReadiness(pod).ready,
+            total: podReadiness(pod).total,
+          })
         : "—",
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
@@ -618,20 +623,20 @@ export function PodDetail() {
         actions={
           <>
             <DetailAction
-              label="Debug"
+              label={t("action", "debug")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
               disabled={!currentContext || !pod}
             />
             <DetailAction
-              label="Port forward"
+              label={t("action", "portForward")}
               icon={Network}
               onClick={openPortForwardDialog}
               disabled={!currentContext || !pod}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               disabled={!pod}
@@ -639,7 +644,7 @@ export function PodDetail() {
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               disabled={!pod}
@@ -716,13 +721,13 @@ export function PodDetail() {
                   title="Labels"
                   count={Object.keys(pod?.labels ?? {}).length}
                   items={recordToKeyValues(pod?.labels ?? {})}
-                  emptyMessage="No labels"
+                  emptyMessage={t("empty", "noLabels")}
                 />
                 <KeyValueSection
                   title="Annotations"
                   count={Object.keys(pod?.annotations ?? {}).length}
                   items={recordToKeyValues(pod?.annotations ?? {})}
-                  emptyMessage="No annotations"
+                  emptyMessage={t("empty", "noAnnotations")}
                 />
               </>
             ),

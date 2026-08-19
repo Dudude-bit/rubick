@@ -26,6 +26,7 @@ import {
 import { useConnections } from "@/hooks/useConnections";
 import { budgetRule, drainBlockers } from "@/lib/governance";
 import { ResourceType } from "@/lib/resource-registry";
+import { useT } from "@/i18n/useT";
 
 export function DrainDialog({
   node,
@@ -39,6 +40,7 @@ export function DrainDialog({
   onConfirm: (node: string) => void;
   busy: boolean;
 }) {
+  const t = useT();
   // Asked for only while the dialog is open: a node's neighbourhood is every
   // pod on it in every namespace, which is not a read to make from a list row.
   const query = useConnections(
@@ -82,7 +84,7 @@ export function DrainDialog({
                   </span>{" "}
                   — {budgetRule(budget.facts)}, {budget.facts.currentHealthy} of{" "}
                   {budget.facts.expectedPods} healthy, covering{" "}
-                  {pods === 1 ? "1 pod" : `${pods} pods`} here.
+                  {t("cluster", "podCount", { n: pods })} here.
                 </p>
               ))}
               <p className="text-[11px] text-fg-fnt">
@@ -102,7 +104,7 @@ export function DrainDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button
             variant="destructive"

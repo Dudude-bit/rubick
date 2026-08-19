@@ -19,8 +19,10 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function PersistentVolumeDetail() {
+  const t = useT();
   const {
     name,
     resource: pv,
@@ -136,7 +138,7 @@ export function PersistentVolumeDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

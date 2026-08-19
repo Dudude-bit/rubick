@@ -31,6 +31,7 @@ import type {
   ConfigData,
   SecretInfo,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The peek's work surfaces.
@@ -131,6 +132,7 @@ function TabError({
   error: Error;
   onRetry: () => void;
 }) {
+  const t = useT();
   return (
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">Could not read {what}.</p>
@@ -138,7 +140,11 @@ function TabError({
         {error.message}
       </p>
       <div className="mt-2">
-        <DetailAction label="Retry" icon={RefreshCw} onClick={onRetry} />
+        <DetailAction
+          label={t("action", "retry")}
+          icon={RefreshCw}
+          onClick={onRetry}
+        />
       </div>
     </div>
   );
@@ -279,6 +285,7 @@ function PeekDataTab({
   target: PeekTarget;
   detail: unknown;
 }) {
+  const t = useT();
   const kind = toKind(target.kind);
   const namespace = target.namespace ?? null;
   const isSecret = kind === "Secret";
@@ -320,7 +327,7 @@ function PeekDataTab({
         keys={keys}
         sensitive={isSecret}
         isLoading={isPending || (isFetching && !data)}
-        emptyMessage={`This ${target.kind} holds no keys`}
+        emptyMessage={t("empty", "kindHoldsNoKeys", { kind: target.kind })}
       />
     </div>
   );
@@ -385,6 +392,7 @@ function PeekPodsTab({
   target: PeekTarget;
   detail: unknown;
 }) {
+  const t = useT();
   const namespace = target.namespace ?? null;
   const kind = toKind(target.kind);
   const selector =
@@ -421,13 +429,14 @@ function PeekPodsTab({
     >
       <PodListCard
         pods={data}
-        emptyMessage={`This ${target.kind} has no pods right now`}
+        emptyMessage={t("empty", "kindHasNoPods", { kind: target.kind })}
       />
     </ChildrenSection>
   );
 }
 
 function PeekJobsTab({ target }: { target: PeekTarget }) {
+  const t = useT();
   const namespace = target.namespace ?? null;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
@@ -467,7 +476,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
       busy={isFetching}
       empty={data.length === 0}
     >
-      <JobRows jobs={data} emptyMessage="This CronJob has not run yet" />
+      <JobRows jobs={data} emptyMessage={t("empty", "cronJobNotRunYet")} />
     </ChildrenSection>
   );
 }
@@ -537,6 +546,7 @@ function PeekRelatedTab({
 /* ---------- YAML ---------- */
 
 function PeekYamlTab({ target }: { target: PeekTarget }) {
+  const t = useT();
   const copy = useCopyToClipboard();
   const namespace = target.namespace ?? null;
 
@@ -592,7 +602,11 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
         <span className="text-[11px] text-fg-mut">{target.kind} manifest</span>
         <Refreshing busy={isFetching} />
         <div className="ml-auto">
-          <DetailAction label="Copy" icon={Copy} onClick={handleCopy} />
+          <DetailAction
+            label={t("action", "copy")}
+            icon={Copy}
+            onClick={handleCopy}
+          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">

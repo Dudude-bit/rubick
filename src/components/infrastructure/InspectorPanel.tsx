@@ -29,6 +29,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ImageSearchInput } from "./ImageSearchInput";
 import { KeyValueRowsEditor, type KeyValueRow } from "./KeyValueRowsEditor";
+import { useT } from "@/i18n/useT";
 
 const SERVICE_TYPE_OPTIONS = ["ClusterIP", "NodePort", "LoadBalancer"] as const;
 const SERVICE_SESSION_AFFINITY_OPTIONS = ["None", "ClientIP"] as const;
@@ -58,6 +59,7 @@ export function InspectorPanel({
   onRemove,
   onOpenYaml,
 }: InspectorPanelProps) {
+  const t = useT();
   const allNodes = useInfrastructureBuilderStore((state) => state.nodes);
   const { isConnected, currentContext, currentNamespace } = useClusterStore();
   const [labelRows, setLabelRows] = useState<KeyValueRow[]>([]);
@@ -156,7 +158,7 @@ export function InspectorPanel({
   if (!node) {
     return (
       <div className="border-l border-hair pl-3 text-xs text-fg-mut">
-        Select a resource to edit its configuration.
+        {t("empty", "selectResourceToEdit")}
       </div>
     );
   }
@@ -191,7 +193,7 @@ export function InspectorPanel({
           {node.data.kind}
         </h3>
         <p className="text-[11px] text-fg-mut">
-          Core fields here; switch to YAML for anything else.
+          {t("action", "inspectorHint")}
         </p>
       </div>
 
@@ -201,7 +203,7 @@ export function InspectorPanel({
             htmlFor="resource-name"
             className="text-[11px] font-normal text-fg-mut"
           >
-            Name
+            {t("columns", "name")}
           </Label>
           <Input
             id="resource-name"
@@ -215,7 +217,7 @@ export function InspectorPanel({
           />
           {nameConflict && (
             <p className="text-[11px] text-err">
-              Name already used for a {node.data.kind} in this namespace.
+              {t("action", "nameAlreadyUsed", { kind: node.data.kind })}
             </p>
           )}
         </div>
@@ -224,7 +226,7 @@ export function InspectorPanel({
             htmlFor="resource-namespace"
             className="text-[11px] font-normal text-fg-mut"
           >
-            Namespace
+            {t("columns", "namespace")}
           </Label>
           {isConnected && namespaceOptions.length > 0 ? (
             <>
@@ -245,14 +247,16 @@ export function InspectorPanel({
                   <SelectValue
                     placeholder={
                       currentNamespace
-                        ? `Use current (${currentNamespace})`
-                        : "Use current context"
+                        ? t("action", "useCurrentNamespace", {
+                            namespace: currentNamespace,
+                          })
+                        : t("action", "useCurrentContext")
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__inherit__">
-                    Use current context
+                    {t("action", "useCurrentContext")}
                     {currentNamespace ? ` (${currentNamespace})` : ""}
                   </SelectItem>
                   {namespaceOptions.map((ns) => (
@@ -260,13 +264,15 @@ export function InspectorPanel({
                       {ns}
                     </SelectItem>
                   ))}
-                  <SelectItem value="__custom__">Custom...</SelectItem>
+                  <SelectItem value="__custom__">
+                    {t("action", "customValue")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               {showNamespaceInput && (
                 <Input
                   id="resource-namespace-custom"
-                  placeholder="custom namespace"
+                  placeholder={t("action", "customNamespacePlaceholder")}
                   value={node.data.namespace}
                   onChange={(event) =>
                     onUpdate(node.id, { namespace: event.target.value })
@@ -290,7 +296,7 @@ export function InspectorPanel({
             htmlFor="resource-labels"
             className="text-[11px] font-normal text-fg-mut"
           >
-            Labels
+            {t("columns", "labels")}
           </Label>
           <KeyValueRowsEditor
             rows={labelRows}
@@ -310,7 +316,7 @@ export function InspectorPanel({
               htmlFor="pod-image"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Container Image
+              {t("columns", "containerImage")}
             </Label>
             <ImageSearchInput
               id="pod-image"
@@ -324,7 +330,7 @@ export function InspectorPanel({
               htmlFor="pod-ports"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Ports
+              {t("columns", "ports")}
             </Label>
             <Input
               id="pod-ports"
@@ -347,7 +353,7 @@ export function InspectorPanel({
               htmlFor="deployment-replicas"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Replicas
+              {t("columns", "replicas")}
             </Label>
             <Input
               id="deployment-replicas"
@@ -366,7 +372,7 @@ export function InspectorPanel({
               htmlFor="deployment-image"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Container Image
+              {t("columns", "containerImage")}
             </Label>
             <ImageSearchInput
               id="deployment-image"
@@ -380,7 +386,7 @@ export function InspectorPanel({
               htmlFor="deployment-ports"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Ports
+              {t("columns", "ports")}
             </Label>
             <Input
               id="deployment-ports"
@@ -400,7 +406,7 @@ export function InspectorPanel({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-[11px] font-normal text-fg-mut">
-              Service Type
+              {t("columns", "serviceType")}
             </Label>
             <Select
               value={node.data.serviceType}
@@ -411,7 +417,7 @@ export function InspectorPanel({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={t("action", "selectType")} />
               </SelectTrigger>
               <SelectContent>
                 {SERVICE_TYPE_OPTIONS.map((type) => (
@@ -425,7 +431,7 @@ export function InspectorPanel({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <Label className="text-[11px] font-normal text-fg-mut">
-                Session Affinity
+                {t("columns", "sessionAffinity")}
               </Label>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -437,8 +443,7 @@ export function InspectorPanel({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Routes client requests to the same backend when set to
-                  ClientIP.
+                  {t("action", "sessionAffinityHint")}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -452,7 +457,7 @@ export function InspectorPanel({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select affinity" />
+                <SelectValue placeholder={t("action", "selectAffinity")} />
               </SelectTrigger>
               <SelectContent>
                 {SERVICE_SESSION_AFFINITY_OPTIONS.map((option) => (
@@ -468,7 +473,7 @@ export function InspectorPanel({
               htmlFor="service-ports"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Ports
+              {t("columns", "ports")}
             </Label>
             <Input
               id="service-ports"
@@ -486,7 +491,7 @@ export function InspectorPanel({
               htmlFor="service-selectors"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Selectors
+              {t("columns", "selectors")}
             </Label>
             <KeyValueRowsEditor
               rows={selectorRows}
@@ -507,7 +512,7 @@ export function InspectorPanel({
               htmlFor="ingress-host"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Host
+              {t("columns", "host")}
             </Label>
             <Input
               id="ingress-host"
@@ -523,7 +528,7 @@ export function InspectorPanel({
               htmlFor="ingress-path"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Path
+              {t("columns", "path")}
             </Label>
             <Input
               id="ingress-path"
@@ -537,7 +542,7 @@ export function InspectorPanel({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <Label className="text-[11px] font-normal text-fg-mut">
-                Path Type
+                {t("columns", "pathType")}
               </Label>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -549,8 +554,7 @@ export function InspectorPanel({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Controls how the path is matched (Prefix, Exact, or
-                  ImplementationSpecific).
+                  {t("action", "pathTypeHint")}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -563,7 +567,7 @@ export function InspectorPanel({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select path type" />
+                <SelectValue placeholder={t("action", "selectPathType")} />
               </SelectTrigger>
               <SelectContent>
                 {INGRESS_PATH_TYPE_OPTIONS.map((type) => (
@@ -579,7 +583,7 @@ export function InspectorPanel({
               htmlFor="ingress-service"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Backend Service
+              {t("columns", "backendService")}
             </Label>
             <Input
               id="ingress-service"
@@ -595,7 +599,7 @@ export function InspectorPanel({
               htmlFor="ingress-port"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Backend Port
+              {t("columns", "backendPort")}
             </Label>
             <Input
               id="ingress-port"
@@ -614,7 +618,9 @@ export function InspectorPanel({
 
       {node.data.kind === ResourceType.ConfigMap && (
         <div className="space-y-1.5">
-          <Label className="text-[11px] font-normal text-fg-mut">Data</Label>
+          <Label className="text-[11px] font-normal text-fg-mut">
+            {t("columns", "data")}
+          </Label>
           <KeyValueRowsEditor
             rows={configMapRows}
             onChange={(next) => {
@@ -633,7 +639,7 @@ export function InspectorPanel({
               htmlFor="secret-type"
               className="text-[11px] font-normal text-fg-mut"
             >
-              Secret Type
+              {t("columns", "secretType")}
             </Label>
             <Select
               value={secretTypeValue}
@@ -648,7 +654,7 @@ export function InspectorPanel({
               }}
             >
               <SelectTrigger id="secret-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={t("action", "selectType")} />
               </SelectTrigger>
               <SelectContent>
                 {SECRET_TYPE_OPTIONS.map((type) => (
@@ -656,13 +662,13 @@ export function InspectorPanel({
                     {type}
                   </SelectItem>
                 ))}
-                <SelectItem value="custom">Custom</SelectItem>
+                <SelectItem value="custom">{t("action", "custom")}</SelectItem>
               </SelectContent>
             </Select>
             {secretTypeValue === "custom" && (
               <Input
                 id="secret-type-custom"
-                placeholder="custom secret type"
+                placeholder={t("action", "customSecretTypePlaceholder")}
                 value={isPresetSecretType ? "" : node.data.secretType}
                 onChange={(event) =>
                   onUpdate(node.id, { secretType: event.target.value })
@@ -671,7 +677,9 @@ export function InspectorPanel({
             )}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-normal text-fg-mut">Data</Label>
+            <Label className="text-[11px] font-normal text-fg-mut">
+              {t("columns", "data")}
+            </Label>
             <KeyValueRowsEditor
               rows={secretRows}
               onChange={(next) => {
@@ -686,14 +694,14 @@ export function InspectorPanel({
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onOpenYaml}>
-          Open YAML
+          {t("action", "openYaml")}
         </Button>
         <Button
           variant="destructive"
           size="sm"
           onClick={() => onRemove(node.id)}
         >
-          Remove Resource
+          {t("action", "removeResource")}
         </Button>
       </div>
     </div>

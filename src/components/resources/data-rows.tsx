@@ -7,6 +7,8 @@ import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
 import type { BinaryValue } from "@/generated/types";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -54,8 +56,9 @@ export function DataSection({
   withheld = {},
   binary = {},
   isLoading = false,
-  emptyMessage = "No data keys",
+  emptyMessage,
 }: DataSectionProps) {
+  const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const copyToClipboard = useCopyToClipboard();
 
@@ -110,7 +113,9 @@ export function DataSection({
       <Section>
         <SectionHeader title={title} count={0} />
         <p className="py-1 text-xs text-fg-fnt">
-          {isLoading ? "Reading…" : emptyMessage}
+          {isLoading
+            ? "Reading…"
+            : (emptyMessage ?? <T section="empty" k="noDataKeys" />)}
         </p>
       </Section>
     );
@@ -122,7 +127,7 @@ export function DataSection({
         title={title}
         count={
           <>
-            {entries.length} {entries.length === 1 ? "key" : "keys"}
+            {t("count", "keys", { n: entries.length })}
             {sensitive && (
               <span className="text-fg-fnt"> · values hidden by default</span>
             )}
@@ -133,7 +138,11 @@ export function DataSection({
             <>
               {sensitive && readable.length > 0 && (
                 <DetailAction
-                  label={allRevealed ? "Hide all" : "Reveal all"}
+                  label={
+                    allRevealed
+                      ? t("action", "hideAll")
+                      : t("action", "revealAll")
+                  }
                   icon={allRevealed ? EyeOff : Eye}
                   onClick={() =>
                     setRevealed(
@@ -144,7 +153,11 @@ export function DataSection({
                   }
                 />
               )}
-              <DetailAction label="Copy all" icon={Copy} onClick={copyAll} />
+              <DetailAction
+                label={t("action", "copyAll")}
+                icon={Copy}
+                onClick={copyAll}
+              />
             </>
           )
         }

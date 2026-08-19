@@ -31,8 +31,10 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { publishedFor } from "@/lib/published";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function ServiceDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -187,7 +189,7 @@ export function ServiceDetail() {
           title="Pod selector"
           count={Object.keys(service?.selector ?? {}).length}
           items={recordToKeyValues(service?.selector ?? {})}
-          emptyMessage="No selector — this service does not pick pods by label"
+          emptyMessage={t("empty", "noSelectorService")}
         />
       ),
     },
@@ -213,13 +215,13 @@ export function ServiceDetail() {
             title="Labels"
             count={Object.keys(service?.labels ?? {}).length}
             items={recordToKeyValues(service?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(service?.annotations ?? {}).length}
             items={recordToKeyValues(service?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

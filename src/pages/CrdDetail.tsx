@@ -47,8 +47,10 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 export function CrdDetail() {
+  const t = useT();
   const { name } = useParams<{ name: string }>();
   const decodedName = name ? decodeURIComponent(name) : undefined;
   const navigate = useNavigate();
@@ -330,13 +332,13 @@ export function CrdDetail() {
             title="Labels"
             count={Object.keys(crd?.labels ?? {}).length}
             items={recordToKeyValues(crd?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(crd?.annotations ?? {}).length}
             items={recordToKeyValues(crd?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -382,7 +384,7 @@ export function CrdDetail() {
         actions={
           <InterceptedAction
             intercept={intercept("Delete")}
-            label="Delete"
+            label={t("action", "delete")}
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
@@ -399,7 +401,7 @@ export function CrdDetail() {
         onOpenChange={setDeleteDialogOpen}
         title="Delete CRD?"
         description={`Deleting "${decodedName}" also deletes every instance of this custom resource in the cluster.`}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

@@ -37,12 +37,14 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { verbatim } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ExpiredCredentials } from "@/lib/credentials";
+import { useT } from "@/i18n/useT";
 
 export function CredentialsExpired({
   expired,
 }: {
   expired: ExpiredCredentials;
 }) {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   const connect = useClusterStore((state) => state.connect);
   const isAuthenticating = useClusterStore((state) => state.isAuthenticating);
@@ -90,7 +92,9 @@ export function CredentialsExpired({
             if (context) void connect(context);
           }}
         >
-          {isAuthenticating ? "Signing in…" : "Sign in again"}
+          {isAuthenticating
+            ? t("cluster", "signingIn")
+            : t("cluster", "signInAgain")}
         </Button>
         {/* Said only after a press: before one, it would be an instruction to
             do something the reader has not tried yet. */}

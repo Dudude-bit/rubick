@@ -11,6 +11,8 @@ import { ToolPathsPanel } from "./clusters/ToolPathsPanel";
 import { ToolsFoot } from "./clusters/ToolsFoot";
 import { execBinary } from "./clusters/context-reading";
 import { useSettingSearchMatch } from "./settings-search";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * The contexts are the screen.
@@ -35,6 +37,7 @@ export function ClustersSettings() {
 
   const currentContext = useClusterStore((state) => state.currentContext);
   const isConnected = useClusterStore((state) => state.isConnected);
+  const t = useT();
 
   const { data: contexts, isLoading } = useQuery({
     queryKey: ["contexts"],
@@ -89,7 +92,9 @@ export function ClustersSettings() {
       <SourceLine />
 
       {isLoading ? (
-        <p className="py-6 text-[11px] text-fg-fnt">Reading the file…</p>
+        <p className="py-6 text-[11px] text-fg-fnt">
+          {t("settings", "readingFile")}
+        </p>
       ) : ordered.length === 0 ? (
         <NoContexts />
       ) : (
@@ -132,14 +137,15 @@ export function ClustersSettings() {
  * that do the same thing, so the caption points at the one that exists.
  */
 function ListCaption({ count }: { count: number }) {
+  const t = useT();
   return (
     <div className="flex items-baseline justify-between gap-4 pb-1 pt-3">
       <h3 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-        Contexts
+        {t("settings", "contexts")}
       </h3>
       {count > 8 && (
         <span className="text-[11px] text-fg-fnt">
-          {count} — search filters this list
+          {t("settings", "searchFiltersList", { n: count })}
         </span>
       )}
     </div>
@@ -153,12 +159,10 @@ function NoContexts() {
   return (
     <div className={visible ? "max-w-[64ch] py-8" : "hidden"} hidden={!visible}>
       <h3 className="text-xs font-medium text-fg">
-        This file names no contexts
+        <T section="empty" k="fileNamesNoContexts" />
       </h3>
       <p className="mt-1.5 text-xs text-fg-mut">
-        The file above parsed, and it has nothing to connect to. Either it is
-        not the kubeconfig you meant or its contexts were never written — point
-        the app at another file to check.
+        <T section="empty" k="fileNamesNoContextsBody" />
       </p>
     </div>
   );

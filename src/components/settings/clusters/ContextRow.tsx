@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useSettingSearchMatch } from "../settings-search";
 import { VENDOR_LABEL, binaryLabel, readContext } from "./context-reading";
+import { useT } from "@/i18n/useT";
 
 /**
  * One context, and the three questions every row answers: what is it, how
@@ -31,6 +32,7 @@ export function ContextRow({
   onBind: (context: string) => void;
 }) {
   const reading = readContext(context, { binaries, binding, connected });
+  const t = useT();
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
   const colour = clusterColor(context.name, mark.hue);
@@ -87,7 +89,9 @@ export function ContextRow({
               onClick={() => onBind(context.name)}
               className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-[10px] text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
-              {VENDOR_LABEL[reading.bound.vendor]} profile{" "}
+              {t("settings", "vendorProfile", {
+                vendor: VENDOR_LABEL[reading.bound.vendor],
+              })}{" "}
               <span className="font-mono">{reading.bound.profile}</span>
             </button>
           )}
@@ -95,9 +99,8 @@ export function ContextRow({
 
         {missing && (
           <div className="mt-1 text-[11px] text-err">
-            <span className="font-mono">{binaryLabel(missing)}</span> is not on
-            the PATH this app sees, so connecting will fail. Install it, or put
-            its directory on that PATH and restart the app.
+            <span className="font-mono">{binaryLabel(missing)}</span>{" "}
+            {t("settings", "binaryNotOnPath")}
           </div>
         )}
 

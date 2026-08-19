@@ -5,6 +5,7 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useSettingSearchMatch } from "../settings-search";
+import { useT } from "@/i18n/useT";
 
 /**
  * The binaries, in one line, at the foot — with what depends on them.
@@ -27,6 +28,7 @@ export function ToolsFoot({
 }) {
   const { helm, kubectl, checkAllDependencies, isChecking } =
     useDependenciesStore();
+  const t = useT();
 
   useEffect(() => {
     if ((helm === null || kubectl === null) && !isChecking) {
@@ -67,14 +69,12 @@ export function ToolsFoot({
       <Tool name="helm" found={helm?.available} version={helm?.version} />
       {" — "}
       <Foot onClick={onManagePaths} expanded={toolPathsOpen}>
-        manage tool paths
+        {t("settings", "manageToolPaths")}
       </Foot>
-      {helm &&
-        !helm.available &&
-        ". Helm is only needed for the Helm page; nothing here uses it."}
+      {helm && !helm.available && `. ${t("settings", "helmOnlyForHelmPage")}`}
       <span className="px-2.5">·</span>
       <Foot onClick={onManageProfiles} expanded={profilesOpen}>
-        Cloud profiles
+        {t("settings", "cloudProfiles")}
       </Foot>
       {` ${profileSummary(gcpProfiles?.length, azureProfiles?.length)}`}
     </p>
@@ -90,10 +90,15 @@ function Tool({
   found: boolean | undefined;
   version: string | null | undefined;
 }) {
+  const t = useT();
   return (
     <span>
       <span className="font-mono text-fg-mut">{name}</span>{" "}
-      {found === undefined ? "…" : found ? (version ?? "found") : "not found"}
+      {found === undefined
+        ? "…"
+        : found
+          ? (version ?? t("settings", "foundInline"))
+          : t("settings", "notFoundInline")}
     </span>
   );
 }

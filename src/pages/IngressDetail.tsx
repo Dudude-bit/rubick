@@ -51,6 +51,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface AccessUrl {
   fullUrl: string;
@@ -140,6 +141,7 @@ function IconAction({
 }
 
 export function IngressDetail() {
+  const t = useT();
   const copyToClipboard = useCopyToClipboard();
   const {
     name,
@@ -401,7 +403,7 @@ export function IngressDetail() {
                   </span>
                   <span className="flex justify-end gap-0.5">
                     <IconAction
-                      label="Copy URL"
+                      label={t("action", "copyUrl")}
                       icon={Copy}
                       onClick={() =>
                         copyToClipboard(
@@ -411,7 +413,7 @@ export function IngressDetail() {
                     />
                     {url.host && url.host !== "*" && (
                       <IconAction
-                        label="Open in browser"
+                        label={t("action", "openInBrowser")}
                         icon={ExternalLink}
                         onClick={() =>
                           window.open(url.fullUrl, "_blank", "noreferrer")
@@ -621,13 +623,13 @@ export function IngressDetail() {
             title="Labels"
             count={Object.keys(ingress?.labels ?? {}).length}
             items={recordToKeyValues(ingress?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
             title="Annotations"
             count={Object.keys(ingress?.annotations ?? {}).length}
             items={recordToKeyValues(ingress?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -644,7 +646,10 @@ export function IngressDetail() {
             count={events.length || undefined}
             actions={
               eventsError && (
-                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+                <DetailAction
+                  label={t("action", "retry")}
+                  onClick={() => refetchEvents()}
+                />
               )
             }
           />

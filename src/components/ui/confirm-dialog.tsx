@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
+import { useT } from "@/i18n/useT";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -26,13 +27,14 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   confirmVariant = "default",
   confirmDisabled = false,
   onOpenChange,
   onConfirm,
 }: ConfirmDialogProps) {
+  const t = useT();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -43,13 +45,15 @@ export function ConfirmDialog({
           )}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel>
+            {cancelLabel ?? t("action", "cancel")}
+          </AlertDialogCancel>
           <AlertDialogAction
             className={buttonVariants({ variant: confirmVariant })}
             onClick={onConfirm}
             disabled={confirmDisabled}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("action", "confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -18,6 +18,7 @@ import {
 } from "@/components/settings/settings-sections";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * The nav does not fold, and the arithmetic is why.
@@ -56,6 +57,7 @@ function sectionContent(id: string, connected: boolean, active: boolean) {
 }
 
 function SettingsShell({ activeId }: { activeId: string }) {
+  const t = useT();
   const { query, terms, counts } = useSettingsSearch();
   const currentContext = useClusterStore((state) => state.currentContext);
   const searching = terms.length > 0;
@@ -80,11 +82,11 @@ function SettingsShell({ activeId }: { activeId: string }) {
             <span className="text-[11px] text-fg-fnt">
               {searching ? (
                 matched === 0 ? (
-                  <>nothing here matches &ldquo;{query}&rdquo;</>
+                  <>{t("settings", "nothingHereMatches", { query })}</>
                 ) : (
                   <>
-                    {matched} setting{matched === 1 ? "" : "s"} match
-                    {matched === 1 ? "es" : ""} &ldquo;{query}&rdquo;
+                    {t("count", "settingsMatch", { n: matched })} &ldquo;
+                    {query}&rdquo;
                   </>
                 )
               ) : active.clusterScoped && currentContext ? (
