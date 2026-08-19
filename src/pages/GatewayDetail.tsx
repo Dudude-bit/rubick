@@ -205,16 +205,11 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                             className="block text-fg-fnt"
                           >
                             <ResourceRef
-                              kind="Namespace"
-                              name={ref.namespace!}
-                              showKind={false}
-                            />
-                            /
-                            <ResourceRef
                               kind="Secret"
                               name={ref.name}
                               namespace={ref.namespace}
                               showKind={false}
+                              showNamespace
                             />{" "}
                             — cross-namespace, needs a ReferenceGrant
                           </span>

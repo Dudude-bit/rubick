@@ -120,8 +120,9 @@ function Say({ step }: { step: TraceStep }) {
   if (!subject || at < 0) {
     return <>{step.say}</>;
   }
-  // A sentence that spells the object as `namespace/name` gets two
-  // references, because both halves are objects with pages of their own.
+  // A sentence that spells the object as `namespace/name` still gets ONE
+  // reference — the resource outranks its namespace, so the prefix rides
+  // inside the ref, dim, the way `showNamespace` draws it everywhere else.
   const prefix = step.say.slice(0, at);
   const spellsNamespace =
     subject.namespace != null && prefix.endsWith(`${subject.namespace}/`);
@@ -130,21 +131,12 @@ function Say({ step }: { step: TraceStep }) {
       {spellsNamespace
         ? prefix.slice(0, -(subject.namespace!.length + 1))
         : prefix}
-      {spellsNamespace && (
-        <>
-          <ResourceRef
-            kind="Namespace"
-            name={subject.namespace!}
-            showKind={false}
-          />
-          /
-        </>
-      )}
       <ResourceRef
         kind={subject.kind}
         name={subject.name}
         namespace={subject.namespace}
         showKind={false}
+        showNamespace={spellsNamespace}
       />
       {step.say.slice(at + subject.name.length)}
     </>
@@ -368,16 +360,11 @@ function TraceCard({
           <span className="ml-auto inline-flex items-baseline gap-1 text-[11px] text-fg-fnt">
             via Gateway
             <ResourceRef
-              kind="Namespace"
-              name={trace.gateway.namespace}
-              showKind={false}
-            />
-            /
-            <ResourceRef
               kind="Gateway"
               name={trace.gateway.name}
               namespace={trace.gateway.namespace}
               showKind={false}
+              showNamespace
             />
           </span>
         )}
