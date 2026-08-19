@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
+import { ClickableServicePort } from "@/components/ui/clickable-port";
 import {
   CopyableAddresses,
   CopyableValue,
@@ -158,6 +159,20 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
       <div className="flex min-h-[26px] flex-wrap items-baseline gap-2 pb-2">
         <span className={off ? "text-xs text-fg-fnt" : "text-xs text-fg-mid"}>
           <Say step={step} />
+          {!off &&
+            step.forwardPort != null &&
+            step.subject?.namespace != null && (
+              <>
+                {" "}
+                <ClickableServicePort
+                  prefix=":"
+                  port={step.forwardPort}
+                  serviceName={step.subject.name}
+                  namespace={step.subject.namespace}
+                  className="text-xs"
+                />
+              </>
+            )}
         </span>
         {!off && step.addresses && step.addresses.length > 0 && (
           <CopyableAddresses

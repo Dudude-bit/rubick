@@ -29,6 +29,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { EventRows } from "@/components/resources/detail-blocks";
+import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { RouteTraceSection } from "@/components/resources/RouteTrace";
@@ -168,7 +169,16 @@ function RuleRows({ route }: { route: RouteInfo }) {
                               )}
                           </TableCell>
                           <TableCell className="font-mono text-fg-mut">
-                            {backend.port ?? "—"}
+                            {backend.kind === "Service" &&
+                            backend.port != null ? (
+                              <ClickableServicePort
+                                port={backend.port}
+                                serviceName={backend.name}
+                                namespace={namespace}
+                              />
+                            ) : (
+                              (backend.port ?? "—")
+                            )}
                           </TableCell>
                           <TableCell className="text-fg-fnt">
                             {backend.weight === 0

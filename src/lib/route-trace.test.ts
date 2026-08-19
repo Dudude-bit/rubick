@@ -249,6 +249,8 @@ describe("routeTraces", () => {
       name: "healthy",
       namespace: "gwtest",
     });
+    // The port rides beside the sentence, so the UI can offer a forward.
+    expect(trace.steps[5].forwardPort).toBe(8080);
     expect(trace.probe).toEqual({
       host: "healthy.example.com",
       address: "203.0.113.10",

@@ -72,6 +72,10 @@ export interface TraceStep {
     name: string;
     namespace: string | null;
   };
+  /** A Service port worth forwarding, kept out of {@link say} so the UI
+   *  can make it a click-to-forward instead of baking it into prose.
+   *  Only set beside a Service {@link subject} that answers on it. */
+  forwardPort?: number;
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
@@ -665,7 +669,9 @@ function backendSteps(
           state: "ok",
           say:
             verdicts.length === 1
-              ? `Backend Service ${verdicts[0].backend.name} serves :${verdicts[0].backend.port ?? "?"}`
+              ? verdicts[0].backend.port != null
+                ? `Backend Service ${verdicts[0].backend.name} serves`
+                : `Backend Service ${verdicts[0].backend.name} exists`
               : `All ${verdicts.length} backend Services exist, ports match`,
           who: "yours",
           subject:
@@ -675,6 +681,10 @@ function backendSteps(
                   name: verdicts[0].backend.name,
                   namespace: verdicts[0].namespace,
                 }
+              : undefined,
+          forwardPort:
+            verdicts.length === 1
+              ? (verdicts[0].backend.port ?? undefined)
               : undefined,
         };
 
@@ -796,6 +806,7 @@ function traceFor(
       step.freshness = undefined;
       step.subject = undefined;
       step.addresses = undefined;
+      step.forwardPort = undefined;
     }
   }
 
