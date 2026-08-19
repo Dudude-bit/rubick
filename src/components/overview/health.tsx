@@ -117,6 +117,7 @@ function Sparkline({
 }
 
 function ProblemRow({ problem }: { problem: ClusterProblem }) {
+  const t = useT();
   const navigate = useNavigate();
   const isCritical = problem.severity === "critical";
   const tone = isCritical ? "text-err" : "text-warn";
@@ -179,7 +180,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         {restarts > 0 ? (
           <>
             {restarts}
-            <Unit> restarts</Unit>
+            <Unit> {t("count", "restartNoun", { n: restarts })}</Unit>
           </>
         ) : (
           "—"
@@ -238,9 +239,11 @@ export function ProblemsPanel({
   return (
     <Section>
       <SectionHeader
-        title="Needs attention"
+        title={t("action", "needsAttention")}
         count={
-          total > 0 ? `${total} · worst first` : t("empty", "nothingBroken")
+          total > 0
+            ? t("count", "worstFirst", { n: total })
+            : t("empty", "nothingBroken")
         }
       />
       <div>
@@ -252,8 +255,10 @@ export function ProblemsPanel({
         ))}
         {problemsTruncated > 0 && (
           <p className="px-1.5 py-[5px] text-[11px] text-fg-fnt">
-            +{problemsTruncated} more — showing the {problems.length} most
-            severe
+            {t("count", "moreMostSevere", {
+              n: problemsTruncated,
+              shown: problems.length,
+            })}
           </p>
         )}
         {/* What is fine gets one muted line at the end, never a panel of
@@ -261,7 +266,7 @@ export function ProblemsPanel({
         <div className={ROW}>
           <span className="justify-self-center text-[9px] text-ok">{"●"}</span>
           <span className="truncate font-mono font-medium text-fg-mut">
-            Healthy
+            {t("cluster", "healthy")}
           </span>
           <span className="truncate text-fg-fnt">
             {t("count", "podsRunning", { n: serving, total: podTotal(pods) })} ·{" "}
@@ -361,10 +366,12 @@ export function WorkloadsPanel({
   return (
     <Section>
       <SectionHeader
-        title="Workloads"
+        title={t("nav", "workloads")}
         count={
           problemsTruncated > 0
-            ? `${scope} · +${problemsTruncated} unranked problems`
+            ? `${scope} · +${t("count", "unrankedProblems", {
+                n: problemsTruncated,
+              })}`
             : scope
         }
       />
@@ -466,22 +473,23 @@ export function SchedulerPanel({
   scheduler: SchedulerPressure;
   metricsAvailable: boolean;
 }) {
+  const t = useT();
   return (
     <Section>
       {/* Naming the denominator matters: people read a low bar as "room to
        *  spare" and then wonder why the next pod sits Pending. */}
       <SectionHeader
-        title="Scheduler headroom"
+        title={t("cluster", "schedulerHeadroom")}
         count={
           metricsAvailable
-            ? "requests vs allocatable · tick marks live usage"
-            : "requests vs allocatable · no metrics-server, live usage unknown"
+            ? t("cluster", "headroomLegend")
+            : t("cluster", "headroomLegendNoMetrics")
         }
       />
       <div>
         <PressureRow label="CPU" pressure={scheduler.cpu} ratio={cpuRatio} />
         <PressureRow
-          label="Memory"
+          label={t("columns", "memory")}
           pressure={scheduler.memory}
           ratio={memoryRatio}
         />
@@ -491,6 +499,7 @@ export function SchedulerPanel({
 }
 
 function NodeRow({ node }: { node: NodeSummary }) {
+  const t = useT();
   const navigate = useNavigate();
   const open = () =>
     navigate(getResourceDetailUrl(ResourceType.Node, node.name));
@@ -536,7 +545,10 @@ function NodeRow({ node }: { node: NodeSummary }) {
             {node.podCapacity}
           </>
         )}
-        <Unit> pods</Unit>
+        <Unit>
+          {" "}
+          {t("count", "podNoun", { n: node.podCapacity ?? node.podCount })}
+        </Unit>
       </span>
     </div>
   );
@@ -571,11 +583,15 @@ export function NodesPanel({
 }
 
 export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
+  const t = useT();
   if (warnings.length === 0) return null;
 
   return (
     <Section>
-      <SectionHeader title="Warning events" count="last hour, by reason" />
+      <SectionHeader
+        title={t("cluster", "warningEvents")}
+        count={t("cluster", "warningEventsScope")}
+      />
       <SectionBody>
         {warnings.map((warning) => (
           <WarningRow key={warning.reason} warning={warning} />

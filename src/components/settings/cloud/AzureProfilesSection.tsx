@@ -63,7 +63,7 @@ export function AzureProfilesSection() {
     },
     onError: (error) => {
       toast({
-        title: "Error",
+        title: t("action", "error"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -79,7 +79,7 @@ export function AzureProfilesSection() {
     },
     onError: (error) => {
       toast({
-        title: "Error",
+        title: t("action", "error"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });

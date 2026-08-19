@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { HelmChartSearchResult } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface HelmInstallDialogProps {
   /** Chart to install */
@@ -70,18 +71,21 @@ export function HelmInstallDialog({
   onInstall,
   isInstalling,
 }: HelmInstallDialogProps) {
+  const t = useT();
   return (
     <Dialog open={chart !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Install Chart</DialogTitle>
+          <DialogTitle>{t("action", "installChart")}</DialogTitle>
           <DialogDescription>
-            Install {chart?.name} to your cluster
+            {t("action", "installChartHint", { name: chart?.name ?? "" })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="install-release-name">Release Name</Label>
+            <Label htmlFor="install-release-name">
+              {t("action", "releaseName")}
+            </Label>
             <Input
               id="install-release-name"
               value={releaseName}
@@ -90,10 +94,12 @@ export function HelmInstallDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="install-namespace">Namespace</Label>
+            <Label htmlFor="install-namespace">
+              {t("columns", "namespace")}
+            </Label>
             <Select value={namespace} onValueChange={onNamespaceChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Select namespace" />
+                <SelectValue placeholder={t("action", "selectNamespace")} />
               </SelectTrigger>
               <SelectContent>
                 {namespaces.map((ns) => (
@@ -105,7 +111,9 @@ export function HelmInstallDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="install-version">Version (optional)</Label>
+            <Label htmlFor="install-version">
+              {t("action", "versionOptional")}
+            </Label>
             <Input
               id="install-version"
               value={version}
@@ -114,7 +122,9 @@ export function HelmInstallDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="install-values">Values (YAML, optional)</Label>
+            <Label htmlFor="install-values">
+              {t("action", "valuesYamlOptional")}
+            </Label>
             <Textarea
               id="install-values"
               value={values}
@@ -133,7 +143,7 @@ export function HelmInstallDialog({
                 }
               />
               <Label htmlFor="install-create-ns" className="text-sm">
-                Create namespace
+                {t("action", "createNamespace")}
               </Label>
             </div>
             <div className="flex items-center gap-2">
@@ -143,20 +153,20 @@ export function HelmInstallDialog({
                 onCheckedChange={(checked) => onWaitChange(checked === true)}
               />
               <Label htmlFor="install-wait" className="text-sm">
-                Wait for ready
+                {t("action", "waitForReady")}
               </Label>
             </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button
             onClick={onInstall}
             disabled={!releaseName || !namespace || isInstalling}
           >
-            {isInstalling ? "Installing..." : "Install"}
+            {isInstalling ? t("action", "installing") : t("action", "install")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -66,42 +66,47 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import type { RecentItem } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
-const quickActions = [
-  { icon: LayoutDashboard, label: "Go to Overview", path: "/" },
+const quickActions: Array<{
+  icon: IconType;
+  label: keyof typeof en.action;
+  path: string;
+}> = [
+  { icon: LayoutDashboard, label: "goToOverview", path: "/" },
   {
     icon: Box,
-    label: "Go to Pods",
+    label: "goToPods",
     path: `/workloads/${toPlural(ResourceType.Pod)}`,
   },
   {
     icon: Box,
-    label: "Go to Deployments",
+    label: "goToDeployments",
     path: `/workloads/${toPlural(ResourceType.Deployment)}`,
   },
   {
     icon: Network,
-    label: "Go to Services",
+    label: "goToServices",
     path: `/network/${toPlural(ResourceType.Service)}`,
   },
   {
     icon: Server,
-    label: "Go to Nodes",
+    label: "goToNodes",
     path: `/${toPlural(ResourceType.Node)}`,
   },
   {
     icon: FileText,
-    label: "Go to ConfigMaps",
+    label: "goToConfigMaps",
     path: `/configuration/${toPlural(ResourceType.ConfigMap)}`,
   },
   {
     icon: FileText,
-    label: "Go to Secrets",
+    label: "goToSecrets",
     path: `/configuration/${toPlural(ResourceType.Secret)}`,
   },
-  { icon: Activity, label: "Go to Events", path: "/events" },
-  { icon: Package, label: "Go to Helm", path: "/helm" },
-  { icon: Settings, label: "Go to Settings", path: "/settings" },
+  { icon: Activity, label: "goToEvents", path: "/events" },
+  { icon: Package, label: "goToHelm", path: "/helm" },
+  { icon: Settings, label: "goToSettings", path: "/settings" },
 ];
 
 /**
@@ -111,10 +116,14 @@ const quickActions = [
  * the panel is a sheet behind a status-bar line, and the palette — the app's
  * own answer to not finding something — did not know it existed.
  */
-const PANELS: Array<{ tab: ActivityTab; label: string; icon: IconType }> = [
-  { tab: "ports", label: "Port forwards", icon: Network },
-  { tab: "terminals", label: "Terminals", icon: Terminal },
-  { tab: "jobs", label: "Background jobs", icon: Activity },
+const PANELS: Array<{
+  tab: ActivityTab;
+  label: keyof typeof en.activity;
+  icon: IconType;
+}> = [
+  { tab: "ports", label: "panelPortForwards", icon: Network },
+  { tab: "terminals", label: "terminals", icon: Terminal },
+  { tab: "jobs", label: "panelBackgroundJobs", icon: Activity },
 ];
 
 /**
@@ -355,7 +364,11 @@ export function CommandPalette() {
     const out: Entry[] = [];
 
     if (bang) {
-      out.push({ id: "cap:clusters", kind: "caption", text: "Clusters" });
+      out.push({
+        id: "cap:clusters",
+        kind: "caption",
+        text: t("settings", "sectionClusters"),
+      });
       if (matchesAllClusters(bang.needle)) {
         out.push({ id: "ctx:*", kind: "all-clusters" });
       }
@@ -380,7 +393,10 @@ export function CommandPalette() {
               ? match.context
               : highlight(match)
             : undefined,
-          meta: match.context === currentContext ? "live" : "not connected",
+          meta:
+            match.context === currentContext
+              ? t("cluster", "liveInline")
+              : t("cluster", "notConnectedInline"),
         });
       }
       if (out.length === 1) {
@@ -399,7 +415,11 @@ export function CommandPalette() {
 
     if (!scoped) {
       if (!hasQuery && recentItems.length > 0) {
-        out.push({ id: "cap:recent", kind: "caption", text: "Recent" });
+        out.push({
+          id: "cap:recent",
+          kind: "caption",
+          text: t("action", "paletteRecent"),
+        });
         for (const item of recentItems) {
           out.push({
             id: `recent:${item.path}`,
@@ -413,11 +433,17 @@ export function CommandPalette() {
       }
 
       const needle = query.toLowerCase();
-      const links = quickActions.filter(
-        (action) => !hasQuery || action.label.toLowerCase().includes(needle)
-      );
+      const links = quickActions
+        .map((action) => ({ ...action, label: t("action", action.label) }))
+        .filter(
+          (action) => !hasQuery || action.label.toLowerCase().includes(needle)
+        );
       if (links.length > 0) {
-        out.push({ id: "cap:nav", kind: "caption", text: "Navigation" });
+        out.push({
+          id: "cap:nav",
+          kind: "caption",
+          text: t("action", "paletteNavigation"),
+        });
         for (const action of links) {
           out.push({
             id: `nav:${action.path}`,
@@ -431,11 +457,18 @@ export function CommandPalette() {
 
       // Under their own caption, not Navigation: they open a panel over the
       // page you are on rather than taking you anywhere.
-      const panels = PANELS.filter(
+      const panels = PANELS.map((panel) => ({
+        ...panel,
+        label: t("activity", panel.label),
+      })).filter(
         (panel) => !hasQuery || panel.label.toLowerCase().includes(needle)
       );
       if (panels.length > 0) {
-        out.push({ id: "cap:activity", kind: "caption", text: "Activity" });
+        out.push({
+          id: "cap:activity",
+          kind: "caption",
+          text: t("activity", "title"),
+        });
         for (const panel of panels) {
           out.push({
             id: `panel:${panel.tab}`,
@@ -455,35 +488,47 @@ export function CommandPalette() {
           kind: "hint",
           text:
             scope.kind === "all"
-              ? "Type to search every cluster you are connected to."
-              : `Type to search ${scope.context}.`,
+              ? t("empty", "typeToSearchAll")
+              : t("empty", "typeToSearchContext", { context: scope.context }),
         });
       }
       return out;
     }
 
     if (!scoped && !isConnected) {
-      out.push({ id: "cap:res", kind: "caption", text: "Resources" });
+      out.push({
+        id: "cap:res",
+        kind: "caption",
+        text: t("action", "paletteResources"),
+      });
       out.push({
         id: "hint:offline",
         kind: "hint",
-        text: "Connect to a cluster, or type ! to search another one.",
+        text: t("empty", "connectOrBang"),
       });
       return out;
     }
 
     if (query.length < MIN_SEARCH_LENGTH) {
-      out.push({ id: "cap:res", kind: "caption", text: "Resources" });
+      out.push({
+        id: "cap:res",
+        kind: "caption",
+        text: t("action", "paletteResources"),
+      });
       out.push({
         id: "hint:short",
         kind: "hint",
-        text: `Type at least ${MIN_SEARCH_LENGTH} characters to search resources.`,
+        text: t("count", "typeAtLeastChars", { n: MIN_SEARCH_LENGTH }),
       });
       return out;
     }
 
     if (error) {
-      out.push({ id: "cap:res", kind: "caption", text: "Resources" });
+      out.push({
+        id: "cap:res",
+        kind: "caption",
+        text: t("action", "paletteResources"),
+      });
       out.push({ id: "hint:error", kind: "hint", text: error });
       return out;
     }
@@ -843,7 +888,7 @@ export function CommandPalette() {
 
   const scopeLabel =
     scope.kind === "all"
-      ? "all clusters"
+      ? t("cluster", "allClusters")
       : scope.kind === "context"
         ? scope.context
         : null;
@@ -851,7 +896,9 @@ export function CommandPalette() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="z-60 max-w-[620px] gap-0 overflow-hidden p-0">
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogTitle className="sr-only">
+          {t("action", "commandPalette")}
+        </DialogTitle>
 
         {/* One field on the raised surface. A bordered input inside an
             overlay is a second surface on top of the only surface the
@@ -871,7 +918,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             autoFocus
-            aria-label="Search resources, actions and pages"
+            aria-label={t("action", "searchResourcesActionsPages")}
             role="combobox"
             aria-expanded
             aria-controls={listId}
@@ -880,8 +927,8 @@ export function CommandPalette() {
             }
             placeholder={
               scopeLabel
-                ? "Search this cluster…"
-                : "Search resources, or ! for a cluster…"
+                ? t("action", "searchThisCluster")
+                : t("action", "searchOrBang")
             }
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -893,7 +940,7 @@ export function CommandPalette() {
         <div
           id={listId}
           role="listbox"
-          aria-label="Results"
+          aria-label={t("action", "results")}
           className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
         >
           {entries.map((entry) => (
@@ -916,21 +963,23 @@ export function CommandPalette() {
         <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
           {bang ? (
             <>
-              <FootKey shortcut="↵">scope to it</FootKey>
-              <FootKey shortcut="⇥">complete</FootKey>
+              <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
+              <FootKey shortcut="⇥">{t("action", "hintComplete")}</FootKey>
               <span className="ml-auto">
-                type <span className="font-mono text-fg-mut">!*</span> for all
+                {t("action", "hintTypeAllPrefix")}{" "}
+                <span className="font-mono text-fg-mut">!*</span>{" "}
+                {t("action", "hintTypeAllSuffix")}
               </span>
             </>
           ) : (
             <>
-              <FootKey shortcut="↑↓">move</FootKey>
-              <FootKey shortcut="↵">open</FootKey>
-              <FootKey shortcut="mod+↵">new tab</FootKey>
+              <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+              <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+              <FootKey shortcut="mod+↵">{t("action", "hintNewTab")}</FootKey>
               {scoped ? (
-                <FootKey shortcut="⌫">drop the cluster</FootKey>
+                <FootKey shortcut="⌫">{t("action", "hintDropCluster")}</FootKey>
               ) : (
-                <FootKey shortcut="!">a cluster</FootKey>
+                <FootKey shortcut="!">{t("action", "hintACluster")}</FootKey>
               )}
               {shownClusters.length > 1 && hasQuery && (
                 <span className="ml-auto">
@@ -938,7 +987,7 @@ export function CommandPalette() {
                     n: answered,
                     total: shownClusters.length,
                   })}
-                  {isSearching && " · results appear as each one does"}
+                  {isSearching && ` · ${t("cluster", "resultsAsTheyAnswer")}`}
                 </span>
               )}
             </>
@@ -978,6 +1027,7 @@ function ScopeChip({
   label: string;
   onRemove: () => void;
 }) {
+  const t = useT();
   return (
     <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
       <span className="flex items-center gap-1 pl-1.5">
@@ -989,8 +1039,8 @@ function ScopeChip({
         // Not a tab stop: the caret never leaves the field, and backspace
         // on an empty query does exactly this.
         tabIndex={-1}
-        aria-label={`Search every cluster's own scope again — drop ${label}`}
-        title={`Drop ${label}`}
+        aria-label={t("action", "dropScopeAria", { label })}
+        title={t("action", "dropScope", { label })}
         onClick={onRemove}
         className="pr-1 text-info/70 transition-colors hover:text-err"
       >
@@ -1013,6 +1063,7 @@ function EntryRow({
   onHover: () => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
+  const t = useT();
   if (entry.kind === "caption") {
     return (
       <div
@@ -1052,12 +1103,14 @@ function EntryRow({
       return (
         <Row {...shared}>
           <span className="h-1.5 w-1.5 flex-none rounded-full border border-fg-fnt" />
-          <span className="min-w-0 truncate font-mono">all clusters</span>
+          <span className="min-w-0 truncate font-mono">
+            {t("cluster", "allClusters")}
+          </span>
           {/* `!*` does not connect to anything on its own: on a laptop
               with fifteen contexts that would be fifteen auth prompts
               from one keystroke. */}
           <span className="ml-auto flex-none text-[11px] text-fg-fnt">
-            already-connected ones are searched
+            {t("action", "alreadyConnectedSearched")}
           </span>
         </Row>
       );
@@ -1112,7 +1165,9 @@ function EntryRow({
           {/* Where the namespace would be, because for this row the name
               already is one and what the reader gets is the scope. */}
           {entry.path === null && (
-            <span className="truncate text-fg-fnt">scope to it</span>
+            <span className="truncate text-fg-fnt">
+              {t("action", "hintUseAsScope")}
+            </span>
           )}
           <span className="ml-auto flex-none text-[11px] text-fg-fnt">
             {entry.hit.kind}
@@ -1146,10 +1201,10 @@ function EntryRow({
       return (
         <Row {...shared}>
           <span className="min-w-0 truncate text-fg-fnt">
-            {entry.rest} more on this cluster
+            {t("count", "moreOnThisCluster", { n: entry.rest })}
           </span>
           <span className="ml-auto flex flex-none items-center gap-1 text-[11px] text-fg-fnt">
-            <Kbd shortcut="↵" /> scope to it
+            <Kbd shortcut="↵" /> {t("action", "hintScopeToIt")}
           </span>
         </Row>
       );
@@ -1194,6 +1249,7 @@ function ClusterGroup({
   onHover: () => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
+  const t = useT();
   const { cluster, action } = entry;
   const working =
     cluster.status === "searching" || cluster.status === "connecting";
@@ -1201,15 +1257,16 @@ function ClusterGroup({
   let state: ReactNode;
   let tone = "text-fg-mut";
   if (cluster.status === "connecting") {
-    state = "connecting…";
+    state = t("cluster", "connectingInline");
     tone = "text-info";
   } else if (cluster.status === "searching") {
-    state = "searching…";
+    state = t("cluster", "searchingInline");
     tone = "text-info";
   } else if (cluster.status === "failed") {
     state = (
       <>
-        {cluster.message ?? "failed"} — <Kbd shortcut="↵" /> retry
+        {cluster.message ?? t("cluster", "failedInline")} — <Kbd shortcut="↵" />{" "}
+        {t("cluster", "retryInline")}
       </>
     );
     tone = "text-err";
@@ -1217,14 +1274,19 @@ function ClusterGroup({
     state =
       cluster.reason === "not-connected" ? (
         <>
-          not connected — <Kbd shortcut="↵" /> to search it
+          {t("cluster", "notConnectedInline")} — <Kbd shortcut="↵" />{" "}
+          {t("cluster", "toSearchIt")}
         </>
       ) : (
-        "not in the kubeconfig"
+        t("cluster", "notInKubeconfig")
       );
   } else {
-    state = cluster.matched === 0 ? "no matches" : `${cluster.matched} matches`;
-    if (cluster.truncated) state = `${cluster.matched}+ matches · capped`;
+    state =
+      cluster.matched === 0
+        ? t("empty", "noMatchesInline")
+        : t("count", "matchCount", { n: cluster.matched });
+    if (cluster.truncated)
+      state = t("count", "matchesCapped", { n: cluster.matched });
   }
 
   return (

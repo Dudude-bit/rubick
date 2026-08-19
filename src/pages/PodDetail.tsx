@@ -347,16 +347,16 @@ export function PodDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Pod restarted",
-        description: `Pod ${name} is being restarted.`,
+        title: t("action", "podRestarted"),
+        description: t("action", "podRestartingDetail", { name: name ?? "" }),
       });
       queryClient.invalidateQueries({ queryKey: ["pod", namespace, name] });
       refetch();
     },
     onError: (err) => {
       toast({
-        title: "Error",
-        description: `Failed to restart pod: ${err}`,
+        title: t("action", "error"),
+        description: t("action", "failedToRestartPod", { error: String(err) }),
         variant: "destructive",
       });
     },
@@ -413,8 +413,8 @@ export function PodDetail() {
 
     if (isDebugPod && pod) {
       toast({
-        title: "Debug pod still running",
-        description: "Delete when done to free cluster resources",
+        title: t("action", "debugPodStillRunning"),
+        description: t("action", "debugPodDeleteHint"),
         action: (
           <Button
             size="sm"
@@ -422,32 +422,46 @@ export function PodDetail() {
             onClick={async () => {
               try {
                 await commands.deleteDebugPod(pod.name, pod.namespace);
-                toast({ title: "Debug pod deleted", description: pod.name });
+                toast({
+                  title: t("action", "debugPodDeleted"),
+                  description: pod.name,
+                });
                 navigate(-1);
               } catch (err) {
                 toast({
-                  title: "Failed to delete",
+                  title: t("action", "failedToDelete"),
                   description: normalizeTauriError(err),
                   variant: "destructive",
                 });
               }
             }}
           >
-            Delete Now
+            {t("action", "deleteNow")}
           </Button>
         ),
         duration: 10000,
       });
     }
-  }, [isDebugPod, pod, podKey, toast, navigate, searchParams, setSearchParams]);
+  }, [
+    isDebugPod,
+    pod,
+    podKey,
+    t,
+    toast,
+    navigate,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const handleFindReplacement = savedLabels
     ? () =>
         findReplacement().then((replacement) => {
           if (replacement) {
             toast({
-              title: "Found replacement pod",
-              description: `Switching to ${replacement.name}`,
+              title: t("action", "foundReplacementPod"),
+              description: t("action", "switchingTo", {
+                name: replacement.name,
+              }),
             });
             navigate(
               `/${toPlural(ResourceType.Pod)}/${replacement.namespace}/${replacement.name}`,
@@ -455,8 +469,8 @@ export function PodDetail() {
             );
           } else {
             toast({
-              title: "No replacement found",
-              description: "No other running pods with matching labels",
+              title: t("action", "noReplacementFound"),
+              description: t("empty", "noMatchingRunningPods"),
               variant: "destructive",
             });
           }
@@ -465,7 +479,7 @@ export function PodDetail() {
 
   const placement: KeyValue[] = [
     {
-      label: "Node",
+      label: t("columns", "node"),
       value: pod?.nodeName ? (
         <span className="inline-flex items-baseline gap-2">
           <ResourceRef
@@ -476,7 +490,7 @@ export function PodDetail() {
           {nodeIsSpot && <SpotMark says="spot" />}
         </span>
       ) : (
-        "unscheduled"
+        t("empty", "unscheduled")
       ),
       tone: pod?.nodeName ? undefined : "warn",
     },
@@ -487,9 +501,8 @@ export function PodDetail() {
     ...(nodeIsSpot
       ? [
           {
-            label: "Spot node",
-            value:
-              "The cloud can reclaim this node at any time. An eviction here is the arrangement, not a fault.",
+            label: t("columns", "spotNode"),
+            value: t("empty", "spotNodeNote"),
           },
         ]
       : []),
@@ -502,7 +515,7 @@ export function PodDetail() {
       value: <CopyableAddress value={pod?.hostIp} label="Host IP" />,
     },
     {
-      label: "Restarts",
+      label: t("columns", "restarts"),
       value: pod ? describeRestarts(pod) : 0,
       tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
     },
@@ -514,7 +527,7 @@ export function PodDetail() {
       ? [{ label: "Phase", value: pod.status.phase, mono: true }]
       : []),
     {
-      label: "Containers",
+      label: t("columns", "containers"),
       value: pod
         ? t("count", "ofTotalReady", {
             n: podReadiness(pod).ready,
@@ -529,7 +542,7 @@ export function PodDetail() {
       // so it renders as the glyph and the tinted name and no link — but it
       // is the same object under the same mark wherever it is named, and the
       // day the kind gets a page it lights up without a change here.
-      label: "Service account",
+      label: t("columns", "serviceAccount"),
       value: pod?.serviceAccountName ? (
         <ResourceRef
           kind="ServiceAccount"
@@ -612,7 +625,12 @@ export function PodDetail() {
               tone={problem.tone}
               action={
                 <DetailAction
-                  label={`See ${problem.tab}`}
+                  label={t(
+                    "action",
+                    problem.tab === "containers"
+                      ? "seeContainers"
+                      : "seeConditions"
+                  )}
                   icon={ArrowRight}
                   onClick={() => setActiveTab(problem.tab)}
                 />
@@ -656,7 +674,7 @@ export function PodDetail() {
         tabs={[
           {
             id: "overview",
-            label: "Overview",
+            label: t("nav", "overview"),
             glyph: viewGlyph(Info),
             content: (
               <>
@@ -672,7 +690,12 @@ export function PodDetail() {
                   takes the first slot is the question a Pod does have in the
                   same place: where the one is. */}
                 <WorkloadOverview
-                  count={<FactBlock title="Placement" items={placement} />}
+                  count={
+                    <FactBlock
+                      title={t("columns", "placement")}
+                      items={placement}
+                    />
+                  }
                   usage={
                     <UsageBlock
                       kind={ResourceType.Pod}
@@ -718,13 +741,13 @@ export function PodDetail() {
                   />
                 )}
                 <KeyValueSection
-                  title="Labels"
+                  title={t("columns", "labels")}
                   count={Object.keys(pod?.labels ?? {}).length}
                   items={recordToKeyValues(pod?.labels ?? {})}
                   emptyMessage={t("empty", "noLabels")}
                 />
                 <KeyValueSection
-                  title="Annotations"
+                  title={t("columns", "annotations")}
                   count={Object.keys(pod?.annotations ?? {}).length}
                   items={recordToKeyValues(pod?.annotations ?? {})}
                   emptyMessage={t("empty", "noAnnotations")}
@@ -735,7 +758,7 @@ export function PodDetail() {
           connectionsTab(connections, deliveryQuery),
           {
             id: "containers",
-            label: "Containers",
+            label: t("columns", "containers"),
             // A container has no kind of its own; it is what a Pod is made of,
             // so it arrives under the Pod's cube and the Pod's hue — the same
             // mark the reader clicked to get here.
@@ -758,7 +781,7 @@ export function PodDetail() {
           },
           {
             id: "logs",
-            label: "Logs",
+            label: t("action", "logs"),
             glyph: viewGlyph(AlignLeft),
             kind: "surface",
             content: pod ? (
@@ -773,11 +796,15 @@ export function PodDetail() {
           },
           {
             id: "shell",
-            label: "Shell",
+            label: t("columns", "shell"),
             glyph: viewGlyph(SquareTerminal),
             kind: "surface",
             mark: shellSession
-              ? liveMark(`session attached to ${shellSession.containerName}`)
+              ? liveMark(
+                  t("empty", "sessionAttachedTo", {
+                    container: shellSession.containerName,
+                  })
+                )
               : undefined,
             content: pod ? (
               <PodShell
@@ -793,13 +820,13 @@ export function PodDetail() {
           },
           {
             id: "conditions",
-            label: "Conditions",
+            label: t("columns", "conditions"),
             glyph: viewGlyph(BadgeCheck),
             mark: conditionsMark(pod?.status.conditions),
             content: (
               <Section>
                 <SectionHeader
-                  title="Conditions"
+                  title={t("columns", "conditions")}
                   count={pod?.status.conditions.length}
                 />
                 <ConditionRows

@@ -85,24 +85,27 @@ export function DebugPodDialog({
   const handleReady = useCallback(
     (result: DebugResult) => {
       toast({
-        title: "Debug container ready",
-        description: `Container "${result.containerName}" is ready in pod "${result.podName}"`,
+        title: t("action", "debugContainerReady"),
+        description: t("action", "debugContainerReadyDetail", {
+          container: result.containerName,
+          pod: result.podName,
+        }),
       });
       onDebugStart(result);
       onOpenChange(false);
     },
-    [toast, onDebugStart, onOpenChange]
+    [t, toast, onDebugStart, onOpenChange]
   );
 
   const handleError = useCallback(
     (error: string) => {
       toast({
-        title: "Debug failed",
+        title: t("action", "debugFailed"),
         description: error,
         variant: "destructive",
       });
     },
-    [toast]
+    [t, toast]
   );
 
   const handleTimeout = useCallback((operation: DebugOperation) => {
@@ -135,8 +138,8 @@ export function DebugPodDialog({
   const handleDebug = async () => {
     if (!isImageValid) {
       toast({
-        title: "Invalid image",
-        description: "Please select or enter a valid debug image",
+        title: t("action", "invalidImage"),
+        description: t("action", "invalidImageDetail"),
         variant: "destructive",
       });
       return;
@@ -184,12 +187,14 @@ export function DebugPodDialog({
           timeoutOperation.namespace
         );
         toast({
-          title: "Debug pod deleted",
-          description: `Pod "${timeoutOperation.podName}" has been deleted`,
+          title: t("action", "debugPodDeleted"),
+          description: t("action", "podDeletedDetail", {
+            pod: timeoutOperation.podName,
+          }),
         });
       } catch (err) {
         toast({
-          title: "Failed to delete pod",
+          title: t("action", "failedToDeletePod"),
           description: String(err),
           variant: "destructive",
         });
@@ -214,21 +219,21 @@ export function DebugPodDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warn" />
-              Container Not Ready
+              {t("action", "containerNotReady")}
             </DialogTitle>
             <DialogDescription>
-              The debug container in pod{" "}
+              {t("action", "debugContainerInPod")}{" "}
               <span className="font-mono text-fg">
                 {timeoutOperation.podName}
               </span>{" "}
-              did not become ready within the timeout period.
+              {t("action", "didNotBecomeReady")}
             </DialogDescription>
           </DialogHeader>
 
           {statusReason && (
             <div className="flex items-center gap-2 border-t border-hair pt-2 text-xs">
               <Clock className="h-3.5 w-3.5 flex-none text-fg-fnt" />
-              <span className="text-fg-mut">Last status</span>
+              <span className="text-fg-mut">{t("action", "lastStatus")}</span>
               <span className="ml-auto font-mono text-fg">{statusReason}</span>
             </div>
           )}

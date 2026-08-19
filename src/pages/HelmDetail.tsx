@@ -68,13 +68,13 @@ const INSTALLED_ROW =
  * is off because a wrapped value in a values file is a value nobody can copy
  * a line of.
  */
-function valuesAsYaml(values: unknown): string {
+function valuesAsYaml(values: unknown, empty: string): string {
   if (typeof values === "string") return values;
   if (
     values == null ||
     (typeof values === "object" && Object.keys(values).length === 0)
   ) {
-    return "# No values set — the chart's defaults apply.";
+    return empty;
   }
   try {
     return dump(values, { indent: 2, lineWidth: -1, noRefs: true });
@@ -136,8 +136,8 @@ export function HelmDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Rollback initiated",
-        description: "The release is being rolled back.",
+        title: t("action", "rollbackInitiated"),
+        description: t("action", "rollbackInitiatedDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-release-detail"] });
       queryClient.invalidateQueries({ queryKey: ["helm-history"] });
@@ -145,7 +145,7 @@ export function HelmDetail() {
     },
     onError: (error) => {
       toast({
-        title: "Rollback failed",
+        title: t("action", "rollbackFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -159,14 +159,14 @@ export function HelmDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Release uninstalled",
-        description: "The Helm release has been successfully uninstalled.",
+        title: t("action", "releaseUninstalled"),
+        description: t("action", "releaseUninstalledDetail"),
       });
       navigate("/helm");
     },
     onError: (error) => {
       toast({
-        title: "Uninstall failed",
+        title: t("action", "uninstallFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -174,17 +174,19 @@ export function HelmDetail() {
   });
 
   const values = useMemo(
-    () => valuesAsYaml(release?.values),
-    [release?.values]
+    () => valuesAsYaml(release?.values, t("empty", "noValuesSet")),
+    [release?.values, t]
   );
-  const manifest = release?.manifest || "# The release stored no manifest.";
+  const manifest = release?.manifest || t("empty", "noStoredManifest");
   const installed = useMemo(
     () => installedObjects(release?.manifest ?? "", release?.namespace ?? ""),
     [release?.manifest, release?.namespace]
   );
 
   if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel="Helm releases" />;
+    return (
+      <ConnectClusterEmptyState resourceLabel={t("empty", "helmReleases")} />
+    );
   }
 
   // Flux owns its releases through a CRD; this page only speaks to Helm's
@@ -192,10 +194,12 @@ export function HelmDetail() {
   if (!isNative) {
     return (
       <Section className="max-w-lg">
-        <SectionHeader title="Managed by Flux" count={`${namespace}/${name}`} />
+        <SectionHeader
+          title={t("action", "managedByFlux")}
+          count={`${namespace}/${name}`}
+        />
         <p className="text-xs text-fg-mut">
-          This release is a Flux CD HelmRelease. Its spec, status and
-          reconciliation history live on the custom resource.
+          {t("empty", "fluxManagedRelease")}
         </p>
         <div className="flex items-center gap-1 pt-1">
           <DetailAction
@@ -203,7 +207,7 @@ export function HelmDetail() {
             onClick={goBack}
           />
           <DetailAction
-            label="Open the HelmRelease"
+            label={t("action", "openHelmRelease")}
             icon={ExternalLink}
             onClick={() =>
               navigate(fluxHelmReleasePath(namespace ?? "", name ?? ""))
@@ -221,24 +225,32 @@ export function HelmDetail() {
 
   const facts: KeyValue[] = [
     {
-      label: "Chart",
+      label: t("columns", "chart"),
       value: `${release?.chart ?? "—"}:${release?.chartVersion ?? "—"}`,
       mono: true,
     },
-    { label: "App version", value: release?.appVersion || "—", mono: true },
-    { label: "Revision", value: release?.revision ?? "—", mono: true },
     {
-      label: "Last deployed",
+      label: t("columns", "appVersion"),
+      value: release?.appVersion || "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "revision"),
+      value: release?.revision ?? "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "lastDeployed"),
       value: formatDate(release?.lastDeployed) ?? "—",
     },
     {
-      label: "First deployed",
+      label: t("columns", "firstDeployed"),
       value: formatDate(release?.firstDeployed) ?? "—",
     },
     ...(release?.description
       ? [
           {
-            label: "Description",
+            label: t("columns", "description"),
             value: release.description,
             tone: failed ? ("err" as const) : undefined,
           },
@@ -249,14 +261,18 @@ export function HelmDetail() {
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
-          <KeyValueSection title="Release" items={facts} className="max-w-lg" />
+          <KeyValueSection
+            title={t("action", "releaseHeading")}
+            items={facts}
+            className="max-w-lg"
+          />
           {!helmCliAvailable && (
             <p className="text-[11px] text-warn">
-              Helm CLI not found — rollback and uninstall are unavailable.
+              {t("empty", "helmCliMissing")}
             </p>
           )}
         </>
@@ -264,21 +280,26 @@ export function HelmDetail() {
     },
     {
       id: "history",
-      label: "History",
+      label: t("action", "history"),
       glyph: viewGlyph(History),
       mark: countMark(history.length),
       content: (
         <Section>
           <SectionHeader
-            title="Revisions"
+            title={t("action", "revisionsHeading")}
             count={
               failedRevisions > 0
-                ? `${history.length} · ${failedRevisions} failed`
+                ? t("count", "withFailed", {
+                    total: history.length,
+                    n: failedRevisions,
+                  })
                 : history.length || undefined
             }
           />
           {historyLoading ? (
-            <p className="text-xs text-fg-fnt">Reading history…</p>
+            <p className="text-xs text-fg-fnt">
+              {t("empty", "readingHistory")}
+            </p>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               <T section="empty" k="noHelmHistory" />
