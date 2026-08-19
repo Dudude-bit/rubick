@@ -248,7 +248,11 @@ function IntegrationsGroup() {
   // answer that page owns, not a reason to hide the way to it.
   const catalog = (
     <NavRow
-      item={{ label: "All integrations", path: "/integrations", icon: Plug }}
+      item={{
+        labelKey: "allIntegrations",
+        path: "/integrations",
+        icon: Plug,
+      }}
       overview={undefined}
       value={null}
       active={pathname === "/integrations" && vendor === null}
@@ -477,6 +481,7 @@ function NavRow({
    */
   active?: boolean;
 }) {
+  const t = useT();
   const { pathname } = useLocation();
   const updateAvailable = useUpdaterStore((state) => state.available);
   const badge = item.updateBadge === true && updateAvailable;
@@ -532,7 +537,11 @@ function NavRow({
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
                 {mark && (
                   <span
-                    aria-label={mark === "err" ? "broken" : "worth a look"}
+                    aria-label={
+                      mark === "err"
+                        ? t("cluster", "markBroken")
+                        : t("cluster", "markWorthALook")
+                    }
                     className={cn(
                       "h-1.5 w-1.5 flex-none rounded-full",
                       mark === "err" ? "bg-err" : "bg-warn"

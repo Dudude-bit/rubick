@@ -111,15 +111,18 @@ export function CrdDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "CRD deleted",
-        description: `${decodedName} has been deleted.`,
+        title: t("action", "kindDeleted", { kind: "CRD" }),
+        description: t("action", "kindDeletedDetail", {
+          kind: "CRD",
+          name: decodedName ?? "",
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["crds"] });
       navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
     },
     onError: (err: Error) => {
       toast({
-        title: "Failed to delete CRD",
+        title: t("action", "deleteKindFailed", { kind: "CRD" }),
         description: err.message,
         variant: "destructive",
       });
@@ -146,25 +149,33 @@ export function CrdDetail() {
   const deprecatedVersions = (crd?.versions ?? []).filter((v) => v.deprecated);
 
   const facts: KeyValue[] = [
-    { label: "Group", value: crd?.group || "core", mono: true },
-    { label: "Kind", value: crd?.kind ?? "—", mono: true },
-    { label: "Scope", value: crd?.scope ?? "—" },
+    { label: t("columns", "group"), value: crd?.group || "core", mono: true },
+    { label: t("columns", "kind"), value: crd?.kind ?? "—", mono: true },
+    { label: t("columns", "scope"), value: crd?.scope ?? "—" },
     {
-      label: "Storage version",
-      value: storageVersion?.name ?? "none declared",
+      label: t("columns", "storageVersion"),
+      value: storageVersion?.name ?? t("empty", "noneDeclared"),
       mono: !!storageVersion,
       tone: storageVersion ? undefined : "warn",
     },
-    { label: "Plural", value: crd?.plural ?? "—", mono: true },
-    { label: "Singular", value: crd?.singular || "—", mono: true },
+    { label: t("columns", "plural"), value: crd?.plural ?? "—", mono: true },
     {
-      label: "Short names",
-      value: crd?.shortNames.length ? crd.shortNames.join(" · ") : "none",
+      label: t("columns", "singular"),
+      value: crd?.singular || "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "shortNames"),
+      value: crd?.shortNames.length
+        ? crd.shortNames.join(" · ")
+        : t("empty", "noneInline"),
       mono: !!crd?.shortNames.length,
     },
     {
-      label: "Categories",
-      value: crd?.categories.length ? crd.categories.join(" · ") : "none",
+      label: t("columns", "categories"),
+      value: crd?.categories.length
+        ? crd.categories.join(" · ")
+        : t("empty", "noneInline"),
       mono: !!crd?.categories.length,
     },
   ];
@@ -178,11 +189,11 @@ export function CrdDetail() {
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection
-          title="Definition"
+          title={t("nav", "definition")}
           items={facts}
           className="max-w-lg"
         />
@@ -190,27 +201,30 @@ export function CrdDetail() {
     },
     {
       id: "versions",
-      label: "Versions",
+      label: t("nav", "versions"),
       glyph: viewGlyph(GitBranch),
       mark: countMark(crd?.versions.length ?? 0),
       content: (
         <Section>
           <SectionHeader
-            title="Versions"
+            title={t("nav", "versions")}
             count={
               deprecatedVersions.length > 0
-                ? `${crd?.versions.length ?? 0} · ${deprecatedVersions.length} deprecated`
+                ? t("count", "versionsWithDeprecated", {
+                    n: crd?.versions.length ?? 0,
+                    deprecated: deprecatedVersions.length,
+                  })
                 : (crd?.versions.length ?? 0)
             }
           />
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Version</TableHead>
-                <TableHead>Served</TableHead>
-                <TableHead>Storage</TableHead>
-                <TableHead>Printer columns</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>{t("columns", "version")}</TableHead>
+                <TableHead>{t("columns", "served")}</TableHead>
+                <TableHead>{t("columns", "storage")}</TableHead>
+                <TableHead>{t("columns", "printerColumns")}</TableHead>
+                <TableHead>{t("columns", "note")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -222,7 +236,7 @@ export function CrdDetail() {
                   <TableCell
                     className={version.served ? "text-fg-mut" : "text-warn"}
                   >
-                    {version.served ? "yes" : "no"}
+                    {version.served ? t("action", "yes") : t("action", "no")}
                   </TableCell>
                   <TableCell className="text-fg-mut">
                     {version.storage ? "yes" : "no"}
@@ -312,7 +326,7 @@ export function CrdDetail() {
     },
     {
       id: "conditions",
-      label: "Conditions",
+      label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
       mark: conditionsMark(conditions),
       content: (
@@ -324,18 +338,18 @@ export function CrdDetail() {
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(crd?.labels ?? {}).length}
             items={recordToKeyValues(crd?.labels ?? {})}
             emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(crd?.annotations ?? {}).length}
             items={recordToKeyValues(crd?.annotations ?? {})}
             emptyMessage={t("empty", "noAnnotations")}

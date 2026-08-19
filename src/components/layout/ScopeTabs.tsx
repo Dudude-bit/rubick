@@ -73,6 +73,7 @@ import {
  * sliver. Nothing stretches, so one tab is one tab's worth of chrome.
  */
 export function ScopeTabs() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useClusterStore((s) => s.namespaceScope);
@@ -155,7 +156,7 @@ export function ScopeTabs() {
       <div
         ref={stripRef}
         role="tablist"
-        aria-label="Open scopes"
+        aria-label={t("action", "openScopes")}
         // A tab strip is one line, so a trackpad's vertical gesture is the
         // gesture a reader will use on it.
         onWheel={(event) => {
@@ -183,7 +184,7 @@ export function ScopeTabs() {
         }
         className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
       >
-        Search
+        {t("action", "search")}
         <Kbd shortcut="mod+K" className="leading-[13px]" />
       </button>
     </div>
@@ -203,6 +204,7 @@ export function ScopeTabs() {
  * back: one gesture, one new tab, on the cluster you named.
  */
 function NewTabButton() {
+  const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const currentContext = useClusterStore((s) => s.currentContext);
   const openTab = useScopeTabStore((s) => s.openTab);
@@ -216,7 +218,7 @@ function NewTabButton() {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              aria-label="New tab. Menu key opens it on another cluster."
+              aria-label={t("action", "newTabAria")}
               aria-haspopup="menu"
               onClick={() => openTab()}
               className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
@@ -227,18 +229,18 @@ function NewTabButton() {
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-[240px]">
           <p className="flex items-center gap-1.5">
-            New tab here
+            {t("action", "newTabHere")}
             <Kbd shortcut="mod+T" className="leading-[13px]" />
           </p>
-          <p className="mt-0.5">Right click for another cluster.</p>
+          <p className="mt-0.5">{t("action", "rightClickForAnotherCluster")}</p>
         </TooltipContent>
       </Tooltip>
 
       <ContextMenuContent className="w-[244px]">
-        <ContextMenuLabel>New tab on</ContextMenuLabel>
+        <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
         {contexts.length === 0 && (
           <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
-            No contexts in the kubeconfig.
+            {t("empty", "noContextsInKubeconfig")}
           </p>
         )}
         {/* The same row the picker and the front door use, so a renamed or
@@ -256,9 +258,9 @@ function NewTabButton() {
         <ContextMenuItem onSelect={() => openTab()}>
           {/* Named by what it does rather than by the cluster, because the
               cluster it lands on is whichever one is on screen. */}
-          New tab here
+          {t("action", "newTabHere")}
           <span className="ml-auto pl-4 text-fg-fnt">
-            {currentContext ?? "no cluster"}
+            {currentContext ?? t("cluster", "noCluster")}
           </span>
         </ContextMenuItem>
       </ContextMenuContent>
@@ -279,6 +281,7 @@ function ScopeTabItem({
   /** The strip has somewhere to fall back to if this tab goes. */
   closable: boolean;
 }) {
+  const t = useT();
   const { context } = tab;
   const scope = tabScope(tab);
   const switchContext = useClusterStore((s) => s.switchContext);
@@ -356,13 +359,13 @@ function ScopeTabItem({
               provider="generic"
               className="h-[13px] w-[13px] flex-none"
             />
-            Choose a cluster
+            {t("cluster", "chooseCluster")}
           </button>
         </ContextPopover>
         {closable && (
           <button
             type="button"
-            aria-label="Close tab"
+            aria-label={t("action", "closeTab")}
             onClick={(event) => {
               event.stopPropagation();
               closeTab(tab.id);
@@ -453,7 +456,7 @@ function ScopeTabItem({
                 />
                 {showName && (
                   <span className="min-w-0 truncate">
-                    {alias ?? context ?? "no cluster"}
+                    {alias ?? context ?? t("cluster", "noCluster")}
                   </span>
                 )}
               </button>
@@ -466,7 +469,7 @@ function ScopeTabItem({
               until the kubeconfig does. */}
           {tab.missing && (
             <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
-              missing
+              {t("cluster", "missingBadge")}
             </span>
           )}
 
@@ -517,7 +520,9 @@ function ScopeTabItem({
 
           <button
             type="button"
-            aria-label={`Close ${tabTitle(tab, alias)}`}
+            aria-label={t("action", "closeNamed", {
+              name: tabTitle(tab, alias),
+            })}
             onClick={(event) => {
               event.stopPropagation();
               closeTab(tab.id);
@@ -533,13 +538,10 @@ function ScopeTabItem({
       <TooltipContent side="bottom" align="start" className="max-w-[340px]">
         <p className="text-fg">{route}</p>
         <p className="truncate font-mono">
-          {context ?? "no cluster"} / {scopeLabel(scope)}
+          {context ?? t("cluster", "noCluster")} / {scopeLabel(scope)}
         </p>
         {tab.missing && (
-          <p className="mt-0.5">
-            This cluster is no longer in the kubeconfig, so the tab cannot be
-            made live.
-          </p>
+          <p className="mt-0.5">{t("cluster", "missingTabHint")}</p>
         )}
       </TooltipContent>
     </Tooltip>
@@ -568,6 +570,7 @@ function ContextPopover({
   onSelect: (context: string) => void;
   activeContext?: string | null;
 }) {
+  const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
 
@@ -583,12 +586,12 @@ function ContextPopover({
       <PopoverContent className="w-[244px] p-1">
         <div
           role="listbox"
-          aria-label="Cluster"
+          aria-label={t("nav", "cluster")}
           className="max-h-[420px] overflow-auto"
         >
           {contexts.length === 0 && (
             <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
-              No contexts in the kubeconfig.
+              {t("empty", "noContextsInKubeconfig")}
             </p>
           )}
           {ordered.map((ctx) => {
@@ -688,6 +691,7 @@ function NamespacePopover({
   scope: string[];
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
+  const t = useT();
   const { namespaces, podCount } = useClusterSummary();
   const [filter, setFilter] = useState("");
   const [cursor, setCursor] = useState(-1);
@@ -709,7 +713,7 @@ function NamespacePopover({
   const rows: NamespaceOption[] = [
     {
       key: "",
-      label: "All namespaces",
+      label: t("cluster", "allNamespaces"),
       mono: false,
       podCount,
       problemCount: 0,
@@ -771,12 +775,22 @@ function NamespacePopover({
   };
 
   const note = refused
-    ? `Cannot watch ${refused} as well — ${SCOPE_LIMIT} namespaces is the most one window reads at once. Open it on its own instead.`
+    ? t("cluster", "namespaceLimitRefused", {
+        namespace: refused,
+        limit: SCOPE_LIMIT,
+      })
     : full
-      ? `${scope.length} namespaces — the most one window reads at once.`
+      ? t("cluster", "namespaceLimitFull", { n: scope.length })
       : scope.length > 1
-        ? `${scope.length} of ${SCOPE_LIMIT} namespaces — every list is narrowed to them.`
-        : `${formatShortcut("mod")}-click or ${formatShortcut("mod+Enter")}, or the box, to watch up to ${SCOPE_LIMIT} at once.`;
+        ? t("cluster", "namespaceScopeCount", {
+            n: scope.length,
+            limit: SCOPE_LIMIT,
+          })
+        : t("cluster", "namespaceMultiHint", {
+            click: formatShortcut("mod"),
+            enter: formatShortcut("mod+Enter"),
+            limit: SCOPE_LIMIT,
+          });
 
   return (
     <Popover
@@ -823,8 +837,8 @@ function NamespacePopover({
               if (event.metaKey || event.ctrlKey) toggle(row);
               else replace(row);
             }}
-            placeholder="Filter namespaces…"
-            aria-label="Filter namespaces"
+            placeholder={t("action", "filterNamespacesPlaceholder")}
+            aria-label={t("action", "filterNamespaces")}
             role="combobox"
             aria-expanded
             aria-controls={listId}
@@ -838,7 +852,7 @@ function NamespacePopover({
           <div
             id={listId}
             role="listbox"
-            aria-label="Namespaces"
+            aria-label={t("cluster", "namespaces")}
             aria-multiselectable
             // The caret belongs to the filter box for as long as the list is
             // open — it is what names the arrowed row — and a press on a row
@@ -871,8 +885,8 @@ function NamespacePopover({
           {visible.length === 0 && (
             <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
               {namespaces.length === 0
-                ? "No namespaces visible on this cluster."
-                : `Nothing matches "${filter}".`}
+                ? t("empty", "noNamespacesVisible")
+                : t("empty", "nothingMatchesQuery", { query: filter })}
             </p>
           )}
         </div>
@@ -926,7 +940,9 @@ function NamespaceRow({
       aria-label={[
         row.label,
         pods,
-        row.problemCount > 0 ? `${row.problemCount} with a problem` : null,
+        row.problemCount > 0
+          ? t("count", "withAProblem", { n: row.problemCount })
+          : null,
       ]
         .filter(Boolean)
         .join(", ")}
@@ -980,7 +996,7 @@ function NamespaceRow({
         )}
       >
         {row.problemCount > 0
-          ? `${row.podCount} · ${row.problemCount} bad`
+          ? `${row.podCount} · ${t("count", "badPods", { n: row.problemCount })}`
           : row.podCount}
       </span>
     </div>

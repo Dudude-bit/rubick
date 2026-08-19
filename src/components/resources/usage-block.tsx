@@ -25,6 +25,7 @@ import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface UsageBlockProps {
   /** "Usage" on a workload, "Headroom" on a node. */
@@ -89,7 +90,7 @@ export interface UsageBlockProps {
 }
 
 export function UsageBlock({
-  title = "Usage",
+  title,
   kind,
   uid,
   scope,
@@ -108,6 +109,7 @@ export function UsageBlock({
   live = true,
   idleNote,
 }: UsageBlockProps) {
+  const t = useT();
   const available = status === null || status.status === "available";
   /** Nothing declares a ceiling for either measure. */
   const neither =
@@ -165,7 +167,11 @@ export function UsageBlock({
       ? `no ${limitNoun}s declared`
       : `against declared ${limitNoun}s`
     : past.window !== null
-      ? [scope, `from ${past.endpoint}`, past.window.resolution]
+      ? [
+          scope,
+          t("count", "fromEndpoint", { endpoint: past.endpoint }),
+          past.window.resolution,
+        ]
           .filter(Boolean)
           .join(" · ")
       : [
@@ -178,8 +184,8 @@ export function UsageBlock({
           !live
             ? null
             : watched === null
-              ? "watching from now"
-              : `watched since you opened this page · ${watched} so far`,
+              ? t("count", "watchingFromNow")
+              : t("count", "watchedSincePageOpen", { span: watched }),
         ]
           .filter(Boolean)
           .join(" · ");
@@ -187,7 +193,7 @@ export function UsageBlock({
   return (
     <Section>
       <SectionHeader
-        title={title}
+        title={title ?? t("columns", "usage")}
         count={caption}
         actions={
           available ? (
@@ -215,7 +221,7 @@ export function UsageBlock({
               live={live}
             />
             <UsageChart
-              label="Memory"
+              label={t("columns", "memory")}
               type="memory"
               samples={drawing.samples}
               limit={memoryLimit}
@@ -235,10 +241,16 @@ export function UsageBlock({
               <p className="px-1.5 pb-1 pt-1 text-[11px] leading-snug text-fg-fnt">
                 {idleNote}{" "}
                 {kept === null
-                  ? `Reading what ${past.vendor} kept from while it was running.`
+                  ? t("empty", "readingWhatVendorKept", {
+                      vendor: past.vendor,
+                    })
                   : kept
-                    ? `There is no live line to draw — this is what ${past.vendor} kept from while it was running.`
-                    : `${past.vendor} has nothing for it in this window either — try a longer one, or it ran before this one was watching.`}
+                    ? t("empty", "noLiveLineVendorKept", {
+                        vendor: past.vendor,
+                      })
+                    : t("empty", "vendorNothingInWindow", {
+                        vendor: past.vendor,
+                      })}
               </p>
             )}
             <HistoryNote state={past} />

@@ -82,13 +82,13 @@ export function HelmReleasesTab({
     () => [
       {
         accessorKey: "source",
-        header: "Source",
+        header: t("columns", "source"),
         cell: ({ row }) => <SourceIcon source={row.original.source} />,
         size: 70,
       },
       {
         accessorKey: "name",
-        header: "Name",
+        header: t("columns", "name"),
         size: 260,
         cell: ({ row }) => (
           <RouteLink
@@ -99,11 +99,15 @@ export function HelmReleasesTab({
           </RouteLink>
         ),
       },
-      { accessorKey: "namespace", header: "Namespace", size: 150 },
-      { accessorKey: "revision", header: "Rev", size: 60 },
+      {
+        accessorKey: "namespace",
+        header: t("columns", "namespace"),
+        size: 150,
+      },
+      { accessorKey: "revision", header: t("columns", "rev"), size: 60 },
       {
         accessorKey: "status",
-        header: "Status",
+        header: t("columns", "status"),
         size: 120,
         cell: ({ row }) => {
           const status = row.original.status;
@@ -117,7 +121,7 @@ export function HelmReleasesTab({
       },
       {
         accessorKey: "chart",
-        header: "Chart",
+        header: t("columns", "chart"),
         size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.chart}</span>
@@ -125,13 +129,13 @@ export function HelmReleasesTab({
       },
       {
         accessorKey: "appVersion",
-        header: "App Version",
+        header: t("columns", "appVersion"),
         size: 120,
         cell: ({ row }) => row.original.appVersion || "—",
       },
       {
         accessorKey: "updated",
-        header: "Updated",
+        header: t("columns", "updated"),
         size: 150,
         cell: ({ row }) => {
           return (
@@ -180,7 +184,9 @@ export function HelmReleasesTab({
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
-                      <TooltipContent>Helm CLI required</TooltipContent>
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
                     )}
                   </Tooltip>
 
@@ -195,7 +201,9 @@ export function HelmReleasesTab({
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
-                      <TooltipContent>Helm CLI required</TooltipContent>
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
                     )}
                   </Tooltip>
 
@@ -213,7 +221,9 @@ export function HelmReleasesTab({
                       </DropdownMenuItem>
                     </TooltipTrigger>
                     {!helmCliAvailable && (
-                      <TooltipContent>Helm CLI required</TooltipContent>
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
                     )}
                   </Tooltip>
                 </>
@@ -225,18 +235,18 @@ export function HelmReleasesTab({
                     {release.suspended ? (
                       <>
                         <PlayCircle className="mr-2 h-4 w-4" />
-                        Resume
+                        <T section="action" k="resume" />
                       </>
                     ) : (
                       <>
                         <PauseCircle className="mr-2 h-4 w-4" />
-                        Suspend
+                        <T section="action" k="suspend" />
                       </>
                     )}
                   </DropdownMenuItem>
                   <DropdownMenuItem disabled>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Reconcile
+                    <T section="action" k="reconcile" />
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -247,7 +257,7 @@ export function HelmReleasesTab({
                     }
                   >
                     <ExternalLink className="mr-2 h-4 w-4" />
-                    View CRD
+                    <T section="action" k="viewCrd" />
                   </DropdownMenuItem>
                 </>
               )}
@@ -257,6 +267,7 @@ export function HelmReleasesTab({
       },
     ],
     [
+      t,
       navigate,
       helmCliAvailable,
       onShowHistory,
@@ -271,13 +282,13 @@ export function HelmReleasesTab({
       <div className="flex items-center gap-2">
         <Select value={selectedNamespace} onValueChange={onNamespaceChange}>
           <SelectTrigger
-            aria-label="Namespace"
+            aria-label={t("columns", "namespace")}
             className="h-6 w-44 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
           >
-            <SelectValue placeholder="All namespaces" />
+            <SelectValue placeholder={t("action", "allNamespaces")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All namespaces</SelectItem>
+            <SelectItem value="all">{t("action", "allNamespaces")}</SelectItem>
             {namespaces.map((ns) => (
               <SelectItem key={ns} value={ns}>
                 {ns}
@@ -299,7 +310,7 @@ export function HelmReleasesTab({
         columns={columns}
         data={releases}
         isLoading={isLoading}
-        searchPlaceholder="Search releases..."
+        searchPlaceholder={t("action", "searchReleases")}
         searchKey="name"
         getRowId={getHelmReleaseRowId}
         getRowHref={helmReleaseHref}

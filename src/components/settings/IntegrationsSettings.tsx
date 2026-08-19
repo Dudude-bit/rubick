@@ -13,6 +13,7 @@ import {
 } from "@/integrations";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /**
  * The one screen allowed to name an extension.
@@ -41,6 +42,7 @@ import { useT } from "@/i18n/useT";
  * own it, and the reader continues in the part of the app built for them.
  */
 export function IntegrationsSettings({ active = true }: { active?: boolean }) {
+  const t = useT();
   const { statuses, isPending, error } = useIntegrations({ facts: active });
   // The sidebar sends an extension that owns no screen here rather than
   // nowhere, and a pane of fourteen rows is not an answer to "show me
@@ -52,12 +54,10 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
     return (
       <div className="max-w-[64ch] py-8">
         <h3 className="text-xs font-medium text-fg">
-          Could not read this cluster&rsquo;s CRDs
+          {t("empty", "couldNotReadCrds")}
         </h3>
         <p className="mt-1.5 text-xs text-fg-mut">
-          Every extension here is detected by asking the API server for the
-          custom resource definitions it installs, and that request failed — so
-          this list would be a guess rather than an answer.
+          {t("empty", "crdDetectionFailed")}
         </p>
         <p className="mt-2 text-[11px] text-fg-fnt">{error.message}</p>
       </div>
@@ -74,7 +74,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
   return (
     <div className="flex flex-col gap-6">
       {configured.length > 0 && (
-        <SettingsGroup title="Configured — an address per cluster">
+        <SettingsGroup title={t("settings", "configuredGroup")}>
           {configured.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -88,7 +88,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
       {!isPending && !anyDetected ? (
         <NothingInstalled />
       ) : (
-        <SettingsGroup title="Detected in this cluster">
+        <SettingsGroup title={t("settings", "detectedGroup")}>
           {detected.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -112,6 +112,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
  * would buy.
  */
 function NothingInstalled() {
+  const t = useT();
   const visible = useSettingSearchMatch(
     "integrations extensions",
     EXTENSION_NAMES.join(" ")
@@ -119,24 +120,24 @@ function NothingInstalled() {
   return (
     <div className={cn("max-w-[64ch] py-8", !visible && "hidden")}>
       <h3 className="text-xs font-medium text-fg">
-        Nothing installed that this app knows how to use
+        {t("empty", "nothingInstalledKnown")}
       </h3>
       <p className="mt-1.5 text-xs text-fg-mut">
-        The cluster works exactly as it does now — every extension here is
-        optional, and none of them is needed to read a pod.
+        {t("empty", "everyExtensionOptional")}
       </p>
       <p className="mt-2 text-[11px] text-fg-fnt">
-        Looked for {sentenceList(EXTENSION_NAMES)} by asking the API server for
-        their CRDs. None of them are in this cluster.
+        {t("empty", "lookedForExtensions", {
+          list: sentenceList(EXTENSION_NAMES, t("empty", "listAnd")),
+        })}
       </p>
     </div>
   );
 }
 
 /** "a, b and c" — the list reads as a sentence, because it is one. */
-function sentenceList(names: readonly string[]): string {
+function sentenceList(names: readonly string[], and: string): string {
   if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
 }
 
 function ExtensionRow({
@@ -199,7 +200,9 @@ function ExtensionRow({
           )}
         </div>
         <div className="mt-0.5 text-[11px] text-fg-fnt">
-          {installed || configured ? "Gives " : "Would give "}
+          {installed || configured
+            ? t("empty", "gives")
+            : t("empty", "wouldGive")}{" "}
           <span className="text-fg-mut">{extension.gives}</span>
         </div>
         {showFacts && <Facts facts={facts} />}
@@ -223,13 +226,13 @@ function ExtensionRow({
         >
           {pending
             ? connection
-              ? "asking…"
-              : "looking…"
+              ? t("empty", "asking")
+              : t("empty", "looking")
             : connection
-              ? CONNECTION_WORD[connection.state]
+              ? t("empty", CONNECTION_WORD[connection.state])
               : installed
-                ? "detected"
-                : "not installed"}
+                ? t("empty", "detected")
+                : t("empty", "notInstalled")}
         </span>
         {connection && !pending && (
           <>
@@ -261,11 +264,11 @@ function ExtensionRow({
  * "not configured" is not "not installed": the app has no idea whether the
  * thing exists, only that nobody has given it an address.
  */
-const CONNECTION_WORD: Record<string, string> = {
-  reading: "asking…",
-  notConfigured: "not configured",
+const CONNECTION_WORD: Record<string, keyof typeof en.empty> = {
+  reading: "asking",
+  notConfigured: "notConfigured",
   connected: "connected",
-  unreachable: "no answer",
+  unreachable: "noAnswer",
 };
 
 /**
@@ -277,14 +280,19 @@ const CONNECTION_WORD: Record<string, string> = {
  * "1 renewal failing" is why you came.
  */
 function Facts({ facts }: { facts: IntegrationStatus["facts"] }) {
+  const t = useT();
   if (facts.state === "none") return null;
   if (facts.state === "loading") {
-    return <p className="mt-1.5 text-[11px] text-fg-fnt">reading…</p>;
+    return (
+      <p className="mt-1.5 text-[11px] text-fg-fnt">
+        {t("action", "readingInline")}
+      </p>
+    );
   }
   if (facts.state === "failed") {
     return (
       <p className="mt-1.5 text-[11px] text-warn">
-        It is installed, but its objects could not be read — {facts.reason}
+        {t("empty", "installedButUnreadable", { reason: facts.reason })}
       </p>
     );
   }
