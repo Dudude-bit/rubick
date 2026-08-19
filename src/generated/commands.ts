@@ -36,6 +36,9 @@ import type {
   EventFilters,
   EventInfo,
   FrontendLogEntry,
+  GatewayApiDetection,
+  GatewayClassInfo,
+  GatewayInfo,
   GcpProfile,
   GcpProfileInfo,
   HelmChartSearchResult,
@@ -81,6 +84,7 @@ import type {
   ResourceConnections,
   ResourceFilters,
   RolloutStatus,
+  RouteInfo,
   SearchHandle,
   SearchRequest,
   SecretFilters,
@@ -738,6 +742,57 @@ export async function getDeploymentReplicasets(
     name,
     namespace,
   });
+}
+
+export async function detectGatewayApi(): Promise<GatewayApiDetection> {
+  return invoke<GatewayApiDetection>("detect_gateway_api");
+}
+
+export async function listGatewayClasses(): Promise<GatewayClassInfo[]> {
+  return invoke<GatewayClassInfo[]>("list_gateway_classes");
+}
+
+export async function listGateways(
+  namespace: string | null
+): Promise<GatewayInfo[]> {
+  return invoke<GatewayInfo[]>("list_gateways", { namespace });
+}
+
+export async function getGateway(
+  name: string,
+  namespace: string | null
+): Promise<GatewayInfo> {
+  return invoke<GatewayInfo>("get_gateway", { name, namespace });
+}
+
+export async function deleteGateway(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_gateway", { name, namespace });
+}
+
+export async function listGatewayRoutes(
+  kind: string,
+  namespace: string | null
+): Promise<RouteInfo[]> {
+  return invoke<RouteInfo[]>("list_gateway_routes", { kind, namespace });
+}
+
+export async function getGatewayRoute(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<RouteInfo> {
+  return invoke<RouteInfo>("get_gateway_route", { kind, name, namespace });
+}
+
+export async function deleteGatewayRoute(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_gateway_route", { kind, name, namespace });
 }
 
 export async function getPodsMetrics(

@@ -395,12 +395,6 @@ export interface EndpointTargetRef {
   namespace: string;
 }
 
-export interface IngressDefaultBackend {
-  backendService: string;
-  backendPort: string;
-  resourceBackend: string | null;
-}
-
 export interface IngressInfo {
   name: string;
   namespace: string;
@@ -420,6 +414,12 @@ export interface IngressTlsConfig {
   hosts: string[];
   secretName: string | null;
   isCatchAll: boolean;
+}
+
+export interface IngressDefaultBackend {
+  backendService: string;
+  backendPort: string;
+  resourceBackend: string | null;
 }
 
 export interface IngressRule {
@@ -716,6 +716,125 @@ export interface PodMetrics {
   namespace: string;
   cpuMillicores: number | null;
   memoryBytes: number | null;
+}
+
+export interface RouteInfo {
+  kind: string;
+  apiVersion: string;
+  name: string;
+  namespace: string;
+  hostnames: string[];
+  parentRefs: ParentRefInfo[];
+  rules: RouteRuleInfo[];
+  parents: RouteParentStatusInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface RouteParentStatusInfo {
+  parent: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface RouteRuleInfo {
+  matches: RouteMatchInfo[];
+  backendRefs: BackendRefInfo[];
+  hasRedirect: boolean;
+  extensionRefs: ExtensionRefInfo[];
+}
+
+export interface ExtensionRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+}
+
+export interface BackendRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  port: number | null;
+  weight: number | null;
+}
+
+export interface RouteMatchInfo {
+  path: string | null;
+  pathType: string | null;
+  method: string | null;
+  grpcService: string | null;
+  grpcMethod: string | null;
+  headers: string[];
+}
+
+export interface ParentRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  sectionName: string | null;
+  port: number | null;
+}
+
+export interface GatewayInfo {
+  name: string;
+  namespace: string;
+  apiVersion: string;
+  className: string;
+  listeners: ListenerInfo[];
+  addresses: string[];
+  conditions: ConditionInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface ListenerInfo {
+  name: string;
+  port: number;
+  protocol: string;
+  hostname: string | null;
+  tlsMode: string | null;
+  certificateRefs: CertificateRefInfo[];
+  allowedNamespaces: string | null;
+  attachedRoutes: number | null;
+  conditions: ConditionInfo[];
+  fromListenerSet: string | null;
+}
+
+export interface CertificateRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface GatewayClassInfo {
+  name: string;
+  controllerName: string;
+  description: string | null;
+  accepted: boolean | null;
+  conditions: ConditionInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface GatewayApiDetection {
+  installed: boolean;
+  bundleVersion: string | null;
+  channel: string | null;
+  mixedBundle: boolean;
+  kinds: ServedGatewayKind[];
+}
+
+export interface ServedGatewayKind {
+  kind: string;
+  plural: string;
+  versions: string[];
+  readVersion: string;
 }
 
 export interface PodInfo {

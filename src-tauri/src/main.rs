@@ -325,6 +325,15 @@ fn main() {
             commands::network::list_service_endpoints,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
+            // Gateway API commands
+            commands::gateway::detect_gateway_api,
+            commands::gateway::list_gateway_classes,
+            commands::gateway::list_gateways,
+            commands::gateway::get_gateway,
+            commands::gateway::delete_gateway,
+            commands::gateway::list_gateway_routes,
+            commands::gateway::get_gateway_route,
+            commands::gateway::delete_gateway_route,
             // Stats commands
             commands::overview::get_cluster_overview,
             // Metrics API
