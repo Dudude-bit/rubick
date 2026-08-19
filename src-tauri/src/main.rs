@@ -330,6 +330,8 @@ fn main() {
             // Gateway API commands
             commands::gateway::detect_gateway_api,
             commands::gateway::list_gateway_classes,
+            commands::gateway::get_gateway_class,
+            commands::gateway::delete_gateway_class,
             commands::gateway::list_gateways,
             commands::gateway::get_gateway,
             commands::gateway::delete_gateway,

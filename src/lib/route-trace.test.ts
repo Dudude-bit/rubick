@@ -233,7 +233,6 @@ describe("routeTraces", () => {
       kind: "GatewayClass",
       name: "envoy",
       namespace: null,
-      group: "gateway.networking.k8s.io",
     });
     expect(trace.steps[1].subject).toEqual({
       kind: "Gateway",

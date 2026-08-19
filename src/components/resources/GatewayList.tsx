@@ -11,6 +11,7 @@ import {
   createNamespaceColumn,
 } from "./columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
+import { ResourceRef } from "./ResourceRef";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
@@ -48,9 +49,16 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
       accessorKey: "className",
       header: "Class",
       size: 140,
-      cell: ({ row }) => (
-        <span className="text-fg-mut">{row.original.className || "—"}</span>
-      ),
+      cell: ({ row }) =>
+        row.original.className ? (
+          <ResourceRef
+            kind={ResourceType.GatewayClass}
+            name={row.original.className}
+            showKind={false}
+          />
+        ) : (
+          <span className="text-fg-fnt">—</span>
+        ),
     },
     {
       id: "listeners",

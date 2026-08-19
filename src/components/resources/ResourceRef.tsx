@@ -80,6 +80,7 @@ const ROUTABLE = new Set<ResourceKind>([
   "Service",
   "Ingress",
   "Gateway",
+  "GatewayClass",
   "HTTPRoute",
   "GRPCRoute",
   "TLSRoute",

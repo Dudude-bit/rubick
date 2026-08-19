@@ -23,6 +23,7 @@ import {
   FolderOpen,
   Puzzle,
   Gauge,
+  Shapes,
   ShieldCheck,
   Waypoints,
   type LucideIcon,
@@ -144,6 +145,15 @@ export const RESOURCE_REGISTRY = [
     icon: Router,
     apiVersion: "gateway.networking.k8s.io/v1",
     scope: "namespaced",
+    category: "network",
+  },
+  {
+    kind: "GatewayClass",
+    plural: "gatewayclasses",
+    displayPlural: "Gateway Classes",
+    icon: Shapes,
+    apiVersion: "gateway.networking.k8s.io/v1",
+    scope: "cluster",
     category: "network",
   },
   {

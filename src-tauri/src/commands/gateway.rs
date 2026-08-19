@@ -124,6 +124,25 @@ pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<Gate
         .collect())
 }
 
+#[tauri::command]
+pub async fn get_gateway_class(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<GatewayClassInfo> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let (api, api_resource) = gateway_api("GatewayClass", None, false, &state).await?;
+    let obj = api.get(&name).await?;
+    Ok(GatewayClassInfo::read(&with_types(obj, &api_resource)))
+}
+
+#[tauri::command]
+pub async fn delete_gateway_class(name: String, state: State<'_, AppState>) -> Result<()> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let (api, _) = gateway_api("GatewayClass", None, false, &state).await?;
+    api.delete(&name, &DeleteParams::default()).await?;
+    Ok(())
+}
+
 /// Every ListenerSet in the cluster, or nothing where the kind is not
 /// installed. Absence is ordinary — the kind graduated in Gateway API 1.5
 /// and most bundles in the wild predate it — so "cannot list" reads as

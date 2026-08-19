@@ -755,6 +755,14 @@ export async function listGatewayClasses(): Promise<GatewayClassInfo[]> {
   return invoke<GatewayClassInfo[]>("list_gateway_classes");
 }
 
+export async function getGatewayClass(name: string): Promise<GatewayClassInfo> {
+  return invoke<GatewayClassInfo>("get_gateway_class", { name });
+}
+
+export async function deleteGatewayClass(name: string): Promise<void> {
+  return invoke<void>("delete_gateway_class", { name });
+}
+
 export async function listGateways(
   namespace: string | null
 ): Promise<GatewayInfo[]> {

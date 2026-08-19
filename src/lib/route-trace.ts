@@ -66,14 +66,11 @@ export interface TraceStep {
   addresses?: string[];
   /** The object {@link say} names, where it exists — so the UI can make
    *  the name a peek like every other reference in the app. Absent on a
-   *  missing object: a link to a 404 is worse than plain text. `group` is
-   *  set for kinds with no native page (GatewayClass), where the address
-   *  goes through the cluster's CRD index instead. */
+   *  missing object: a link to a 404 is worse than plain text. */
   subject?: {
     kind: string;
     name: string;
     namespace: string | null;
-    group?: string;
   };
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
@@ -166,13 +163,10 @@ function classStep(
       who: "infra",
     };
   }
-  // Cluster-scoped and pageless: the reference resolves through the CRD
-  // index, so the UI needs the group to ask with.
   const subject = {
     kind: "GatewayClass",
     name: gateway.className,
     namespace: null,
-    group: "gateway.networking.k8s.io",
   };
   const cls = classes.find((c) => c.name === gateway.className);
   if (!cls) {

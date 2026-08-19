@@ -82,6 +82,11 @@ const IngressDetail = lazy(() =>
 const GatewayDetail = lazy(() =>
   import("@/pages/GatewayDetail").then((m) => ({ default: m.GatewayDetail }))
 );
+const GatewayClassDetail = lazy(() =>
+  import("@/pages/GatewayClassDetail").then((m) => ({
+    default: m.GatewayClassDetail,
+  }))
+);
 const GatewayRouteDetail = lazy(() =>
   import("@/pages/GatewayRouteDetail").then((m) => ({
     default: m.GatewayRouteDetail,
@@ -287,6 +292,10 @@ export default function App() {
             <Route
               path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}
               element={<GatewayDetail />}
+            />
+            <Route
+              path={`${toPlural(ResourceType.GatewayClass)}/:name`}
+              element={<GatewayClassDetail />}
             />
             {[
               ResourceType.HTTPRoute,

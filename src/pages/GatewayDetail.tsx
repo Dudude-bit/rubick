@@ -302,31 +302,44 @@ export function GatewayDetail() {
   const programmed = gateway?.conditions.find((c) => c.type === "Programmed");
 
   const classFact: KeyValue = (() => {
-    const value = gateway?.className || "—";
-    if (!classes.data || !gateway) return { label: "Class", value };
+    // The name is a reference only where the object is there to open —
+    // "no such GatewayClass" linking to a 404 would undercut its own words.
+    const named = (tail: string) => (
+      <span className="inline-flex flex-wrap items-baseline gap-x-1">
+        <ResourceRef
+          kind={ResourceType.GatewayClass}
+          name={gateway?.className ?? ""}
+          showKind={false}
+        />
+        <span>{tail}</span>
+      </span>
+    );
+    if (!classes.data || !gateway) {
+      return { label: "Class", value: gateway?.className || "—" };
+    }
     if (!gatewayClass) {
       return {
         label: "Class",
-        value: `${value} — no such GatewayClass`,
+        value: `${gateway.className || "—"} — no such GatewayClass`,
         tone: "err" as const,
       };
     }
     if (gatewayClass.accepted === true) {
       return {
         label: "Class",
-        value: `${value} — claimed by ${gatewayClass.controllerName}`,
+        value: named(`— claimed by ${gatewayClass.controllerName}`),
       };
     }
     if (gatewayClass.accepted === false) {
       return {
         label: "Class",
-        value: `${value} — refused by ${gatewayClass.controllerName}`,
+        value: named(`— refused by ${gatewayClass.controllerName}`),
         tone: "err" as const,
       };
     }
     return {
       label: "Class",
-      value: `${value} — no controller has claimed this class`,
+      value: named("— no controller has claimed this class"),
       tone: "warn" as const,
     };
   })();

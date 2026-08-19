@@ -16,7 +16,6 @@ import {
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useBackingLists } from "@/integrations";
 import {
@@ -116,9 +115,6 @@ function StepDetail({ step }: { step: TraceStep }) {
  * with no page degrades to plain text inside the component itself.
  */
 function Say({ step }: { step: TraceStep }) {
-  // A pageless kind (GatewayClass) is addressed by its CRD, and only the
-  // cluster knows the plural — until the index answers, the name is text.
-  const { crdFor } = useCrdIndex();
   const subject = step.subject;
   const at = subject ? step.say.indexOf(subject.name) : -1;
   if (!subject || at < 0) {
@@ -131,11 +127,6 @@ function Say({ step }: { step: TraceStep }) {
         kind={subject.kind}
         name={subject.name}
         namespace={subject.namespace}
-        crd={
-          subject.group
-            ? (crdFor(subject.group, subject.kind) ?? undefined)
-            : undefined
-        }
         showKind={false}
       />
       {step.say.slice(at + subject.name.length)}
