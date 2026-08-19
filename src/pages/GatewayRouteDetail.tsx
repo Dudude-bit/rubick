@@ -157,8 +157,13 @@ function RuleRows({ route }: { route: RouteInfo }) {
                               backend.namespace !== route.namespace && (
                                 <span className="text-fg-fnt">
                                   {" "}
-                                  · in {backend.namespace} — needs a
-                                  ReferenceGrant
+                                  · in{" "}
+                                  <ResourceRef
+                                    kind="Namespace"
+                                    name={backend.namespace}
+                                    showKind={false}
+                                  />{" "}
+                                  — needs a ReferenceGrant
                                 </span>
                               )}
                           </TableCell>
