@@ -11,41 +11,32 @@
  * render-time concern, so it lives here in a `useMemo` and nowhere else.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, Map as MapGlyph, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { ResourceList } from "./ResourceList";
+import { ResourceType } from "@/lib/resource-registry";
 import {
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
 import { gatewayTopology } from "./gateway-topology";
-import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import {
+  GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
+  useGatewayRoutes,
+} from "@/hooks/useGatewayRoutes";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
 import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { RouteInfo } from "@/generated/types";
-
-const ROUTE_KINDS: ResourceKind[] = [
-  ResourceType.HTTPRoute,
-  ResourceType.GRPCRoute,
-  ResourceType.TLSRoute,
-  ResourceType.TCPRoute,
-  ResourceType.UDPRoute,
-];
 
 /**
  * What the controllers said, reduced honestly: every parent verdict that
@@ -137,123 +128,19 @@ function matchesVerdict(route: RouteInfo, verdict: Verdict): boolean {
   return tone === "mute";
 }
 
-/** One kind's list and its watch, alive only where the kind is served. */
-function useRouteKind(
-  kind: ResourceKind,
-  namespace: string | null,
-  served: boolean,
-  watchFailed: boolean,
-  onWatchError: (kind: string, message: string) => void,
-  onWatchRecovered: () => void
-) {
-  const queryKey = useMemo(
-    () => ["gateway-routes", kind, namespace ?? "all"],
-    [kind, namespace]
-  );
-  const query = useLiveQuery<RouteInfo[]>({
-    queryKey,
-    queryFn: () => commands.listGatewayRoutes(kind, namespace),
-    enabled: served,
-    staleTime: STALE_TIMES.resourceList,
-    // The watch feeds the cache; polling is only the fallback after it
-    // fails, same contract as every watched list page.
-    refresh: watchFailed ? "resourceList" : false,
-  });
-  const { resyncing } = useResourceWatch<RouteInfo>({
-    enabled: served,
-    subscribe: useCallback(
-      () => commands.subscribeGatewayRouteWatch(kind, namespace),
-      [kind, namespace]
-    ),
-    queryKey,
-    onError: useCallback(
-      (message: string) => onWatchError(kind, message),
-      [kind, onWatchError]
-    ),
-    onRecovered: onWatchRecovered,
-  });
-  return { query, resyncing, served };
-}
-
 export function GatewayRoutesList() {
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const detection = useGatewayApi().data;
-  const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
-
-  const [watchFailed, setWatchFailed] = useState(false);
-  const onWatchError = useCallback(
-    (kind: string, message: string) => {
-      setWatchFailed((failed) => {
-        if (!failed) {
-          toast({
-            title: `Live updates unavailable for ${kind}s`,
-            description: `${message} — the list falls back to polling.`,
-          });
-        }
-        return true;
-      });
-    },
-    [toast]
-  );
-  const onWatchRecovered = useCallback(() => setWatchFailed(false), []);
-
-  // Five fixed calls, not a loop: the kinds are a closed set and hooks
-  // must not be conditional. A kind the cluster does not serve costs
-  // nothing — its query and watch stay disabled.
-  const kinds = [
-    useRouteKind(
-      ROUTE_KINDS[0],
-      currentNamespace,
-      served.has(ROUTE_KINDS[0]),
-      watchFailed,
-      onWatchError,
-      onWatchRecovered
-    ),
-    useRouteKind(
-      ROUTE_KINDS[1],
-      currentNamespace,
-      served.has(ROUTE_KINDS[1]),
-      watchFailed,
-      onWatchError,
-      onWatchRecovered
-    ),
-    useRouteKind(
-      ROUTE_KINDS[2],
-      currentNamespace,
-      served.has(ROUTE_KINDS[2]),
-      watchFailed,
-      onWatchError,
-      onWatchRecovered
-    ),
-    useRouteKind(
-      ROUTE_KINDS[3],
-      currentNamespace,
-      served.has(ROUTE_KINDS[3]),
-      watchFailed,
-      onWatchError,
-      onWatchRecovered
-    ),
-    useRouteKind(
-      ROUTE_KINDS[4],
-      currentNamespace,
-      served.has(ROUTE_KINDS[4]),
-      watchFailed,
-      onWatchError,
-      onWatchRecovered
-    ),
-  ];
-
-  const active = kinds.filter((entry) => entry.served);
-  const [http, grpc, tls, tcp, udp] = kinds;
-  const routes = useMemo(
-    () =>
-      [http, grpc, tls, tcp, udp]
-        .filter((entry) => entry.served)
-        .flatMap((entry) => entry.query.data ?? []),
-    [http, grpc, tls, tcp, udp]
-  );
+  const {
+    detection,
+    served,
+    routes,
+    isLoading,
+    error,
+    dataUpdatedAt,
+    live,
+    resyncing,
+  } = useGatewayRoutes(currentNamespace);
 
   // The filters narrow the table and the map together: a map of everything
   // beside a table of one kind would be two answers to one question.
@@ -288,19 +175,6 @@ export function GatewayRoutesList() {
       ),
     [gateways.data, filtered, backing.data]
   );
-  const isLoading =
-    active.length > 0 && active.some((entry) => entry.query.isLoading);
-  // An error only speaks when it hides rows: one kind failing while four
-  // answer is the freshness reading's business, not a page-wide error.
-  const error =
-    active.length > 0 && active.every((entry) => entry.query.isError)
-      ? (active[0].query.error as Error)
-      : null;
-  const dataUpdatedAt = Math.max(
-    0,
-    ...active.map((entry) => entry.query.dataUpdatedAt ?? 0)
-  );
-
   const columns: ColumnDef<RouteInfo>[] = [
     {
       id: "kind",
@@ -367,8 +241,8 @@ export function GatewayRoutesList() {
       isLoading={isLoading}
       error={error}
       dataUpdatedAt={dataUpdatedAt}
-      live={active.length > 0 && !watchFailed}
-      resyncing={active.some((entry) => entry.resyncing)}
+      live={live}
+      resyncing={resyncing}
       columns={columns}
       emptyStateLabel="routes"
       emptyMessage={
