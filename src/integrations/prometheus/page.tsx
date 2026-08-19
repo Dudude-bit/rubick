@@ -24,18 +24,20 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
+import { useClusterStore } from "@/stores/clusterStore";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import prometheus from "./index";
 import { FAMILIES, coverage, verdict } from "./coverage";
 
 export default function PrometheusPage() {
+  const context = useClusterStore((state) => state.currentContext);
   // The tunnel died with the last app instance; opening this page is as
   // deliberate as pressing the sidebar row, so it wakes the saved forward.
   useWakeOnVisit("prometheus");
 
   const found = useQuery({
-    queryKey: ["prometheus", "coverage"],
+    queryKey: [context, "prometheus", "coverage"],
     queryFn: coverage,
     // A cluster's node set changes with a scale-up, not by the second, and
     // this is a diagnosis rather than a reading.
@@ -45,7 +47,7 @@ export default function PrometheusPage() {
   // The saved address, so every metric on this page is a doorway into the
   // Prometheus graph UI rather than a wall of names to retype there.
   const saved = useQuery({
-    queryKey: ["prometheus", "page-address"],
+    queryKey: [context, "prometheus", "page-address"],
     queryFn: () => prometheus.connect!.read(),
     staleTime: ROUTING_STALE,
   });

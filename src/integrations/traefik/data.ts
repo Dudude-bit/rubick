@@ -19,6 +19,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
   IngressClassSummary,
@@ -138,8 +139,9 @@ export function countHosts(sources: RouteSources): number {
 }
 
 export function useRouteSources() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ROUTE_SOURCES,
+    queryKey: [context, ...ROUTE_SOURCES],
     queryFn: fetchRouteSources,
     staleTime: ROUTE_STALE,
   });
@@ -256,8 +258,9 @@ export async function fetchController(): Promise<ControllerInfo> {
 }
 
 export function useController() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: CONTROLLER,
+    queryKey: [context, ...CONTROLLER],
     queryFn: fetchController,
     staleTime: ROUTE_STALE,
   });
@@ -272,6 +275,7 @@ export function useController() {
  * and is simply absent when nothing supplies it.
  */
 export function useRouteCertificates(routes: TraefikRoute[] | undefined) {
+  const context = useClusterStore((state) => state.currentContext);
   const byNamespace = new Map<string, string[]>();
   for (const route of routes ?? []) {
     if (!route.tlsSecret) continue;
@@ -287,7 +291,12 @@ export function useRouteCertificates(routes: TraefikRoute[] | undefined) {
 
   const results = useQueries({
     queries: batches.map((batch) => ({
-      queryKey: ["tls-certificates", batch.namespace, batch.names.join(",")],
+      queryKey: [
+        context,
+        "tls-certificates",
+        batch.namespace,
+        batch.names.join(","),
+      ],
       queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
       staleTime: ROUTE_STALE,
     })),

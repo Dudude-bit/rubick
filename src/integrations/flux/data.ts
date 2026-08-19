@@ -18,6 +18,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
 import { fluxPicture, type FluxPicture } from "./model";
 
@@ -85,8 +86,9 @@ export function countReconcilers(picture: FluxPicture): number {
 }
 
 export function usePicture() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: PICTURE_KEY,
+    queryKey: [context, ...PICTURE_KEY],
     queryFn: fetchPicture,
     staleTime: FLUX_STALE,
   });
@@ -101,8 +103,9 @@ export interface FluxController {
 }
 
 export function useControllers() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["flux", "controllers"],
+    queryKey: [context, "flux", "controllers"],
     queryFn: async (): Promise<FluxController[]> => {
       const deployments = await commands
         .listDeployments({

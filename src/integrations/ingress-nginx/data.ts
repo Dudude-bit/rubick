@@ -18,6 +18,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type {
   IngressClassSummary,
   IngressInfo,
@@ -68,8 +69,9 @@ export function countHosts(sources: RouteSources): number {
 export const ROUTE_SOURCES_KEY = ["ingress-nginx", "route-sources"] as const;
 
 export function useRouteSources() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ROUTE_SOURCES_KEY,
+    queryKey: [context, ...ROUTE_SOURCES_KEY],
     queryFn: fetchRouteSources,
     staleTime: ROUTING_STALE,
   });
@@ -222,8 +224,9 @@ async function fetchController(): Promise<ControllerInfo> {
 }
 
 export function useController() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["ingress-nginx", "controller"],
+    queryKey: [context, "ingress-nginx", "controller"],
     queryFn: fetchController,
     staleTime: ROUTING_STALE,
   });
@@ -231,6 +234,7 @@ export function useController() {
 
 /** The certificates behind the TLS Secrets these routes are served under. */
 export function useRouteCertificates(routes: NginxRoute[] | undefined) {
+  const context = useClusterStore((state) => state.currentContext);
   const byNamespace = new Map<string, string[]>();
   for (const route of routes ?? []) {
     if (!route.tlsSecret) continue;
@@ -246,7 +250,12 @@ export function useRouteCertificates(routes: NginxRoute[] | undefined) {
 
   const results = useQueries({
     queries: batches.map((batch) => ({
-      queryKey: ["tls-certificates", batch.namespace, batch.names.join(",")],
+      queryKey: [
+        context,
+        "tls-certificates",
+        batch.namespace,
+        batch.names.join(","),
+      ],
       queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
       staleTime: ROUTING_STALE,
     })),
