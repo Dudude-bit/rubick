@@ -12,6 +12,7 @@ import {
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
@@ -161,6 +162,7 @@ export function Sidebar() {
             {group.items.map((item) => (
               <NavRow key={item.path} item={item} overview={overview} />
             ))}
+            {group.caption === "Network" && <GatewayRows overview={overview} />}
           </div>
         ))}
         <IntegrationsGroup />
@@ -174,6 +176,45 @@ export function Sidebar() {
         ))}
       </div>
     </aside>
+  );
+}
+
+/**
+ * The Gateway API rows, drawn only where the cluster serves the kind.
+ *
+ * Not static entries in `GROUPS`, on purpose: the kinds are CRDs a cluster
+ * may not have, and six rows of empty lists on every Ingress-only cluster
+ * would be the rail claiming a routing layer that is not there. The scan is
+ * the same one-per-cluster answer every gateway surface reads — a row
+ * appears the moment `useGatewayApi` says its kind is served, and a typical
+ * cluster shows Gateways + HTTPRoutes only.
+ */
+function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
+  const detection = useGatewayApi().data;
+  if (!detection?.installed) return null;
+
+  const rows: ResourceKind[] = [
+    ResourceType.Gateway,
+    ResourceType.HTTPRoute,
+    ResourceType.GRPCRoute,
+    ResourceType.TLSRoute,
+    ResourceType.TCPRoute,
+    ResourceType.UDPRoute,
+  ];
+  const served = new Set(detection.kinds.map((k) => k.kind));
+
+  return (
+    <>
+      {rows
+        .filter((kind) => served.has(kind))
+        .map((kind) => (
+          <NavRow
+            key={getResourceListUrl(kind)}
+            item={resource(kind)}
+            overview={overview}
+          />
+        ))}
+    </>
   );
 }
 

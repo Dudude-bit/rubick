@@ -460,6 +460,34 @@ const verb = <V extends Relation["verb"]>(
 ): (ConnectionEdge & { relation: Extract<Relation, { verb: V }> })[] =>
   edges.filter((edge) => edge.relation.verb === which) as never;
 
+/**
+ * A Gateway API route's hop: hostnames rather than one host, and no URL —
+ * whether a hostname is served over TLS is the listener's fact, not the
+ * route's, and a scheme guessed here would be the chain inventing one.
+ */
+function gatewayRouteHop(
+  edges: (ConnectionEdge & {
+    relation: Extract<Relation, { verb: "ruleRoutes" }>;
+  })[],
+  object: ObjectRef
+): ChainHopObject {
+  const hostnames = [
+    ...new Set(edges.flatMap((edge) => edge.relation.hostnames)),
+  ];
+  const drained = edges.every((edge) => edge.relation.weight === 0);
+  return {
+    at: "object",
+    object,
+    self: false,
+    detail: hostnames.join(", ") || null,
+    via: drained
+      ? "weight 0 — deliberately receives no traffic"
+      : describeFacts(object.facts),
+    urls: [],
+    publishedAt: null,
+  };
+}
+
 function routeHop(
   edges: ConnectionEdge[],
   object: ObjectRef,
@@ -608,6 +636,8 @@ export function trafficChains(
 ): ChainPath[] {
   const subject = conns.subject;
   const routes = verb(conns.edges, "routes");
+  const ruleRoutes = verb(conns.edges, "ruleRoutes");
+  const attaches = verb(conns.edges, "attachesTo");
   const selects = verb(conns.edges, "selects");
   const tls = tlsSecrets(conns);
 
@@ -698,6 +728,40 @@ export function trafficChains(
           }
           hops.push(routeHop([edge], edge.from, known));
         }
+        // One Gateway API route at a time, its Gateway above it, and its own
+        // stops right where they happen — a refusal written by the
+        // controller belongs on the route, not at the far end of the path.
+        const byRoute = new Map<string, (typeof ruleRoutes)[number][]>();
+        for (const edge of ruleRoutes.filter((entry) =>
+          sameObject(entry.to, service)
+        )) {
+          const key = refKey(edge.from);
+          byRoute.set(key, [...(byRoute.get(key) ?? []), edge]);
+        }
+        for (const mine of byRoute.values()) {
+          const route = mine[0].from;
+          for (const up of attaches.filter((entry) =>
+            sameObject(entry.from, route)
+          )) {
+            hops.push({
+              at: "object",
+              object: up.to,
+              self: false,
+              detail: up.relation.sectionName
+                ? `section ${up.relation.sectionName}`
+                : null,
+              via: describeFacts(up.to.facts),
+              urls: [],
+              publishedAt: null,
+            });
+          }
+          hops.push(gatewayRouteHop(mine, route));
+          for (const entry of conns.stops) {
+            if ("route" in entry && sameObject(entry.route, route)) {
+              hops.push({ at: "stop", ...describeStop(entry) });
+            }
+          }
+        }
         hops.push(serviceHop(service, subject.kind === "Service"));
       }
 
@@ -728,6 +792,10 @@ export function trafficChains(
         });
       }
 
+      // A route-level refusal breaks the path even where the Service behind
+      // it is perfectly healthy — an unaccepted route serves nothing.
+      const routeBroken = hops.some((hop) => hop.at === "stop");
+
       if (stop) hops.push({ at: "stop", ...describeStop(stop) });
       else if (
         subject.kind !== "Pod" &&
@@ -736,7 +804,7 @@ export function trafficChains(
       )
         hops.push(publishedHop(published));
 
-      return { key: refKey(service), hops, broken: !!stop };
+      return { key: refKey(service), hops, broken: !!stop || routeBroken };
     })
     .filter((path) => path.hops.length > 1);
 }
