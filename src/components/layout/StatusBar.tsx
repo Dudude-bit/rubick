@@ -49,9 +49,15 @@ export function StatusBar() {
 
   return (
     <footer className="flex h-6 flex-none items-center gap-3.5 border-t border-hair px-3 text-[11px] text-fg-fnt">
-      <span>{"↵"} open</span>
-      <span>{"↑↓"} move</span>
-      <span>{formatShortcut("mod+K")} search</span>
+      <span>
+        {"↵"} {t("action", "hintOpen")}
+      </span>
+      <span>
+        {"↑↓"} {t("action", "hintMove")}
+      </span>
+      <span>
+        {formatShortcut("mod+K")} {t("action", "hintSearch")}
+      </span>
 
       <div className="flex-1" />
 
@@ -74,7 +80,7 @@ export function StatusBar() {
               }
               className="text-err transition-colors hover:text-fg"
             >
-              connection failed — retry
+              {t("cluster", "connectionFailedRetry")}
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" align="end" className="max-w-[420px]">
@@ -100,12 +106,13 @@ export function StatusBar() {
 }
 
 const THEMES = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
+  { value: "light", k: "themeLight", icon: Sun },
+  { value: "dark", k: "themeDark", icon: Moon },
+  { value: "system", k: "themeSystem", icon: Monitor },
 ] as const;
 
 function ThemeControl() {
+  const t = useT();
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
   const current = THEMES.find((t) => t.value === theme) ?? THEMES[2];
@@ -116,11 +123,13 @@ function ThemeControl() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Theme: ${current.label}`}
+          aria-label={t("settings", "themeNamed", {
+            theme: t("settings", current.k),
+          })}
           className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
         >
           <Icon className="h-3 w-3" />
-          {current.label.toLowerCase()}
+          {t("settings", current.k).toLowerCase()}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top">
@@ -130,7 +139,7 @@ function ThemeControl() {
             onClick={() => setTheme(option.value)}
           >
             <option.icon className="mr-2 h-4 w-4" />
-            {option.label}
+            {t("settings", option.k)}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    allIntegrations: "Все интеграции",
     infrastructureBuilder: "Конструктор инфраструктуры",
     visual: "Схема",
     overview: "Обзор",
@@ -81,6 +82,12 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    search: "Поиск",
+    hintOpen: "открыть",
+    hintMove: "выбрать",
+    hintSearch: "поиск",
+    chooseFile: "Выбрать файл…",
+    lookAgain: "Искать снова",
     error: "Ошибка",
     kindDeleted: "{kind} удалён",
     kindDeletedDetail: "{kind} {name} удалён.",
@@ -296,6 +303,8 @@ export const ru: Catalogue = {
     active: "активных: {n}",
   },
   cluster: {
+    connectionFailedRetry: "не удалось подключиться — повторить",
+    chooseCluster: "Выбрать кластер",
     signingIn: "Вход…",
     connectToValidate: "Подключитесь к кластеру, чтобы проверять манифесты.",
     connectToApply: "Подключитесь к кластеру, чтобы применять манифесты.",
@@ -318,6 +327,19 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    themeNamed: "Тема: {theme}",
+    sectionAppearance: "Внешний вид",
+    sectionAppearanceHint:
+      "Выбирается один раз, действует везде и принадлежит вам.",
+    sectionClusters: "Кластеры",
+    sectionClustersHint:
+      "Как приложение добирается до кластера: файл, который их перечисляет, личность, которой оно представляется, и бинарники, которые оно вызывает.",
+    sectionRegistries: "Реестры",
+    sectionRegistriesHint: "Откуда тянутся образы и что до них дотягивается.",
+    sectionDiagnostics: "Диагностика",
+    sectionDiagnosticsHint: "Что приложение видит на машине, где оно запущено.",
+    sectionAbout: "О программе",
+    sectionAboutHint: "Что это за сборка и как она себя обновляет.",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",
     searchSettings: "Поиск по настройкам",
     clearSearch: "Очистить поиск",
@@ -467,6 +489,12 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    getOneRunning: "Как поднять кластер",
+    dockerDesktopHint: "включите Kubernetes в его настройках",
+    localClusterHint: "локальный кластер одной командой",
+    haveOneElsewhere: "Кластер уже где-то есть?",
+    pointAtConfigHint: "укажите его файл конфигурации",
+    lookedAt: "Искали в",
     readingWhatServicePublishes: "Читаем, что публикует этот Service…",
     couldNotReadWhatServicePublishes:
       "Не удалось прочитать, что публикует этот Service:",

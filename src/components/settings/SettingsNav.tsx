@@ -110,10 +110,10 @@ export function SettingsNav({ activeId }: { activeId: string }) {
               aria-label={
                 searching
                   ? t("settings", "navMatching", {
-                      label: section.label,
+                      label: t("settings", section.label),
                       n: count,
                     })
-                  : section.label
+                  : t("settings", section.label)
               }
               className={cn(
                 "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-xs text-fg-mut no-underline transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
@@ -128,7 +128,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
                 )}
                 aria-hidden="true"
               />
-              <span className="truncate">{section.label}</span>
+              <span className="truncate">{t("settings", section.label)}</span>
               {searching && count > 0 && (
                 <span className="ml-auto pl-1 font-mono text-[11px] text-fg-fnt">
                   {count}

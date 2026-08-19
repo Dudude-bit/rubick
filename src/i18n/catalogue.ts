@@ -41,6 +41,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    allIntegrations: "All integrations",
     infrastructureBuilder: "Infrastructure Builder",
     visual: "Visual",
     overview: "Overview",
@@ -114,6 +115,12 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    search: "Search",
+    hintOpen: "open",
+    hintMove: "move",
+    hintSearch: "search",
+    chooseFile: "Choose a file…",
+    lookAgain: "Look again",
     error: "Error",
     kindDeleted: "{kind} deleted",
     kindDeletedDetail: "{kind} {name} has been deleted.",
@@ -311,6 +318,8 @@ export const en = {
     active: "{n} active",
   },
   cluster: {
+    connectionFailedRetry: "connection failed — retry",
+    chooseCluster: "Choose a cluster",
     signingIn: "Signing in…",
     connectToValidate: "Connect to a cluster to validate manifests.",
     connectToApply: "Connect to a cluster to apply manifests.",
@@ -323,6 +332,19 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    themeNamed: "Theme: {theme}",
+    sectionAppearance: "Appearance",
+    sectionAppearanceHint: "Chosen once, applies everywhere, belongs to you.",
+    sectionClusters: "Clusters",
+    sectionClustersHint:
+      "How the app reaches a cluster: the file that names them, the identity that authenticates, and the binaries it shells out to.",
+    sectionRegistries: "Registries",
+    sectionRegistriesHint:
+      "Where images are pulled from, and what reaches them.",
+    sectionDiagnostics: "Diagnostics",
+    sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
+    sectionAbout: "About",
+    sectionAboutHint: "What this build is, and how it replaces itself.",
     nothingHereMatches: "nothing here matches “{query}”",
     searchSettings: "Search settings",
     clearSearch: "Clear search",
@@ -464,6 +486,12 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    getOneRunning: "Get one running",
+    dockerDesktopHint: "enable Kubernetes in its settings",
+    localClusterHint: "a local cluster in one command",
+    haveOneElsewhere: "Already have one elsewhere?",
+    pointAtConfigHint: "point at its config file",
+    lookedAt: "Looked at",
     readingWhatServicePublishes: "Reading what this Service publishes…",
     couldNotReadWhatServicePublishes:
       "Could not read what this Service publishes:",

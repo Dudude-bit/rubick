@@ -73,6 +73,7 @@ import {
  * sliver. Nothing stretches, so one tab is one tab's worth of chrome.
  */
 export function ScopeTabs() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useClusterStore((s) => s.namespaceScope);
@@ -183,7 +184,7 @@ export function ScopeTabs() {
         }
         className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
       >
-        Search
+        {t("action", "search")}
         <Kbd shortcut="mod+K" className="leading-[13px]" />
       </button>
     </div>
@@ -279,6 +280,7 @@ function ScopeTabItem({
   /** The strip has somewhere to fall back to if this tab goes. */
   closable: boolean;
 }) {
+  const t = useT();
   const { context } = tab;
   const scope = tabScope(tab);
   const switchContext = useClusterStore((s) => s.switchContext);
@@ -356,7 +358,7 @@ function ScopeTabItem({
               provider="generic"
               className="h-[13px] w-[13px] flex-none"
             />
-            Choose a cluster
+            {t("cluster", "chooseCluster")}
           </button>
         </ContextPopover>
         {closable && (

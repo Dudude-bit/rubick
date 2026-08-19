@@ -77,7 +77,7 @@ function SettingsShell({ activeId }: { activeId: string }) {
         <div className="max-w-3xl">
           <div className="flex items-baseline gap-2.5">
             <h1 className="text-[13px] font-semibold text-fg">
-              {active.label}
+              {t("settings", active.label)}
             </h1>
             <span className="text-[11px] text-fg-fnt">
               {searching ? (
@@ -97,7 +97,7 @@ function SettingsShell({ activeId }: { activeId: string }) {
             </span>
           </div>
           <p className="mb-4 mt-0.5 max-w-[70ch] text-[11px] text-fg-fnt">
-            {active.description}
+            {t("settings", active.description)}
           </p>
 
           {SETTINGS_SECTIONS.map((section) => {

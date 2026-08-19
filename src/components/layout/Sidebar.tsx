@@ -236,7 +236,11 @@ function IntegrationsGroup() {
   // answer that page owns, not a reason to hide the way to it.
   const catalog = (
     <NavRow
-      item={{ label: "All integrations", path: "/integrations", icon: Plug }}
+      item={{
+        labelKey: "allIntegrations",
+        path: "/integrations",
+        icon: Plug,
+      }}
       overview={undefined}
       value={null}
       active={pathname === "/integrations" && vendor === null}

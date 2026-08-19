@@ -277,23 +277,27 @@ function NoClusters({
         sub={t("empty", "noKubeconfigFound")}
       />
       <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
-        Get one running
+        {t("empty", "getOneRunning")}
       </p>
-      <Route name="Docker Desktop" hint="enable Kubernetes in its settings" />
+      <Route name="Docker Desktop" hint={t("empty", "dockerDesktopHint")} />
       <Route
         name="minikube · kind · k3d"
-        hint="a local cluster in one command"
+        hint={t("empty", "localClusterHint")}
       />
       <Route
-        name="Already have one elsewhere?"
-        hint="point at its config file"
+        name={t("empty", "haveOneElsewhere")}
+        hint={t("empty", "pointAtConfigHint")}
       />
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
-        <Act onClick={() => void kubeconfig.choose()}>Choose a file…</Act>
-        <Act onClick={() => void kubeconfig.reload()}>Look again</Act>
+        <Act onClick={() => void kubeconfig.choose()}>
+          {t("action", "chooseFile")}
+        </Act>
+        <Act onClick={() => void kubeconfig.reload()}>
+          {t("action", "lookAgain")}
+        </Act>
       </div>
       <Machine>
-        <span>Looked at</span>
+        <span>{t("empty", "lookedAt")}</span>
         {source?.candidates.map((candidate) => (
           <Mono key={candidate.path}>{candidate.path}</Mono>
         ))}

@@ -1,18 +1,22 @@
 import { Info, Package, Palette, Server, Stethoscope } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import type { en } from "@/i18n/catalogue";
+
+type SettingsKey = keyof typeof en.settings;
+
 export interface SettingsSectionDef {
   /** The URL segment, and the id every row indexes itself under. */
   id: string;
-  label: string;
+  /**
+   * Catalogue keys rather than the words themselves: this is a module-level
+   * array, so it cannot call the hook, and both readers — the nav and the
+   * pane's heading — are components that can.
+   */
+  label: SettingsKey;
   icon: LucideIcon;
   /** One line under the pane's title, saying what kind of decision this is. */
-  description: string;
-  /**
-   * Words the section answers to that none of its rows print. Only the
-   * nav reads these; they never make a row match on their own.
-   */
-  keywords: string;
+  description: SettingsKey;
   /** True for a section whose answer is about the connected cluster. */
   clusterScoped?: boolean;
 }
@@ -36,42 +40,33 @@ export interface SettingsSectionDef {
 export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
   {
     id: "appearance",
-    label: "Appearance",
+    label: "sectionAppearance",
     icon: Palette,
-    description: "Chosen once, applies everywhere, belongs to you.",
-    keywords: "appearance theme colour color dark light display",
+    description: "sectionAppearanceHint",
   },
   {
     id: "clusters",
-    label: "Clusters",
+    label: "sectionClusters",
     icon: Server,
-    description:
-      "How the app reaches a cluster: the file that names them, the identity that authenticates, and the binaries it shells out to.",
-    keywords:
-      "clusters kubeconfig context cloud profile gcp azure aws cli helm kubectl binary path auth",
+    description: "sectionClustersHint",
   },
   {
     id: "registries",
-    label: "Registries",
+    label: "sectionRegistries",
     icon: Package,
-    description: "Where images are pulled from, and what reaches them.",
-    keywords:
-      "registries registry image pull credentials docker ecr gcr harbor auth token",
+    description: "sectionRegistriesHint",
   },
   {
     id: "diagnostics",
-    label: "Diagnostics",
+    label: "sectionDiagnostics",
     icon: Stethoscope,
-    description: "What this app can see of the machine it runs on.",
-    keywords:
-      "diagnostics path plugin plugins kubectl krew oidc environment troubleshoot debug report copy",
+    description: "sectionDiagnosticsHint",
   },
   {
     id: "about",
-    label: "About",
+    label: "sectionAbout",
     icon: Info,
-    description: "What this build is, and how it replaces itself.",
-    keywords: "about version tauri framework update updates release",
+    description: "sectionAboutHint",
   },
 ] as const;
 
