@@ -200,6 +200,7 @@ pub(super) fn is_cluster_scoped(kind: &str) -> bool {
             | "StorageClass"
             | "PriorityClass"
             | "IngressClass"
+            | "GatewayClass"
             | "RuntimeClass"
             | "CustomResourceDefinition"
             | "APIService"
@@ -213,6 +214,15 @@ pub(super) fn is_cluster_scoped(kind: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gateway_class_is_cluster_scoped() {
+        // getManifest built a namespaced path for it and got the
+        // apiserver mux's raw 404 - the detail page could not read
+        // the YAML of a perfectly real GatewayClass.
+        assert!(is_cluster_scoped("GatewayClass"));
+        assert!(!is_cluster_scoped("Gateway"));
+    }
 
     #[test]
     fn test_pluralize() {
