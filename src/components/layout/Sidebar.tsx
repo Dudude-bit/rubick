@@ -11,6 +11,7 @@ import {
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
@@ -177,10 +178,23 @@ export function Sidebar() {
   );
 }
 
-function GroupCaption({ children }: { children: string }) {
+function GroupCaption({
+  children,
+  busy = false,
+}: {
+  children: string;
+  /** A spinner at the caption's far end while the category is being read. */
+  busy?: boolean;
+}) {
   return (
-    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
       {children}
+      {busy && (
+        <Spinner
+          aria-label={`reading ${children.toLowerCase()}`}
+          className="h-2.5 w-2.5"
+        />
+      )}
     </div>
   );
 }
@@ -200,7 +214,7 @@ function GroupCaption({ children }: { children: string }) {
  */
 function IntegrationsGroup() {
   const { pathname, search } = useLocation();
-  const { pages, pending } = useIntegrationPages();
+  const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
@@ -227,7 +241,7 @@ function IntegrationsGroup() {
   if (pages.length === 0 && pending) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption busy={reading}>Integrations</GroupCaption>
         <div aria-hidden>
           {[0, 1].map((row) => (
             <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
@@ -244,7 +258,7 @@ function IntegrationsGroup() {
   if (pages.length === 0) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption busy={reading}>Integrations</GroupCaption>
         {catalog}
       </div>
     );
@@ -272,13 +286,14 @@ function IntegrationsGroup() {
 
   return (
     <div>
-      <GroupCaption>Integrations</GroupCaption>
+      <GroupCaption busy={reading}>Integrations</GroupCaption>
       {pages.map((page) => (
         <NavRow
           key={page.path}
           item={{ label: page.name, path: page.path, icon: page.icon }}
           overview={undefined}
           value={page.count}
+          mark={page.tone ?? undefined}
           // A tunnel that is down is not a count and not a fault: it is a
           // thing this row can do something about, and says so.
           note={
@@ -409,6 +424,7 @@ function NavRow({
   item,
   overview,
   value,
+  mark,
   note,
   onPress,
   active,
@@ -417,6 +433,12 @@ function NavRow({
   overview: ClusterOverview | undefined;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
+  /**
+   * A dot beside the count: the worst thing on the row's page, or nothing.
+   * The count itself stays quiet — inventory is not allowed to borrow a
+   * colour — so this one pixel is the row's whole opinion.
+   */
+  mark?: "warn" | "err";
   /**
    * A word at the end of the row instead of a count — for a state that is
    * neither a number nor a fault. A port-forward that is down is the case
@@ -488,7 +510,18 @@ function NavRow({
             <NavCount item={item} overview={overview} />
           ) : (
             value !== null && (
-              <span className="ml-auto text-[11px] text-fg-fnt">{value}</span>
+              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
+                {mark && (
+                  <span
+                    aria-label={mark === "err" ? "broken" : "worth a look"}
+                    className={cn(
+                      "h-1.5 w-1.5 flex-none rounded-full",
+                      mark === "err" ? "bg-err" : "bg-warn"
+                    )}
+                  />
+                )}
+                {value}
+              </span>
             )
           )}
         </>
