@@ -21,7 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CopyableAddresses } from "@/components/ui/copyable-value";
+import {
+  CopyableAddresses,
+  CopyableValue,
+} from "@/components/ui/copyable-value";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -173,7 +176,15 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                 <TableCell className="font-mono text-fg-mut">
                   {/* An unset hostname is the catch-all, and saying so beats
                       an empty cell that reads as "serves nothing". */}
-                  {listener.hostname ?? "all hosts"}
+                  {listener.hostname ? (
+                    <CopyableValue
+                      value={listener.hostname}
+                      label={`Listener hostname ${listener.hostname}`}
+                      className="text-xs"
+                    />
+                  ) : (
+                    "all hosts"
+                  )}
                 </TableCell>
                 <TableCell>
                   {listener.tlsMode === null ? (

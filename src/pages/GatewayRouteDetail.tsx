@@ -29,6 +29,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { EventRows } from "@/components/resources/detail-blocks";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { RouteTraceSection } from "@/components/resources/RouteTrace";
 import {
@@ -248,10 +249,13 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   const facts: KeyValue[] = [
     {
       label: "Hostnames",
-      value:
-        route && route.hostnames.length > 0
-          ? route.hostnames.join(", ")
-          : "all hosts the listener serves",
+      value: (
+        <CopyableAddresses
+          values={route?.hostnames ?? []}
+          label="Hostname"
+          empty="all hosts the listener serves"
+        />
+      ),
     },
     ...(route && !route.apiVersion.endsWith("/v1")
       ? [

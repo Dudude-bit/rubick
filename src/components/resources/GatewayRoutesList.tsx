@@ -16,6 +16,7 @@ import { Map as MapGlyph } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import { CopyableValue } from "@/components/ui/copyable-value";
 import {
   Tooltip,
   TooltipContent,
@@ -113,10 +114,20 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
       >
         ●
       </span>
-      <span className="truncate font-mono text-xs text-fg">
-        {row.serves}
+      <span className="flex min-w-0 items-baseline gap-1 font-mono text-xs text-fg">
+        {/* A listener port is not worth a clipboard; a hostname is what
+            gets pasted into curl, DNS lookups and browser bars all day. */}
+        {row.serves.startsWith(":") ? (
+          <span className="truncate">{row.serves}</span>
+        ) : (
+          <CopyableValue
+            value={row.serves}
+            label={`Host ${row.serves}`}
+            className="min-w-0 text-xs"
+          />
+        )}
         {row.more > 0 && (
-          <span className="font-sans text-fg-fnt"> +{row.more}</span>
+          <span className="flex-none font-sans text-fg-fnt">+{row.more}</span>
         )}
       </span>
       <span

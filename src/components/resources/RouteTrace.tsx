@@ -239,12 +239,21 @@ function ProbePanel({ trace }: { trace: RouteTrace }) {
             )}
             {probe.resolveError ? (
               <span>
-                <span className="font-mono">{target}</span> does not resolve
-                from here — {probe.resolveError}
+                <CopyableValue
+                  value={target}
+                  label={`Host ${target}`}
+                  quietMark
+                />{" "}
+                does not resolve from here — {probe.resolveError}
               </span>
             ) : (
               <span>
-                <span className="font-mono">{target}</span> resolves to{" "}
+                <CopyableValue
+                  value={target}
+                  label={`Host ${target}`}
+                  quietMark
+                />{" "}
+                resolves to{" "}
                 {probe.resolved.map((ip, index) => (
                   <span key={ip}>
                     {index > 0 && ", "}
@@ -316,7 +325,6 @@ function TraceCard({
   route: RouteInfo;
   named: boolean;
 }) {
-  const host = route.hostnames.join(", ");
   return (
     <div>
       <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-sm">
@@ -331,7 +339,11 @@ function TraceCard({
           {trace.serving ? "Serving" : "Not serving"}
         </span>
         <span className="text-xs text-fg-mut">
-          {host || "all hosts the listener serves"}
+          <CopyableAddresses
+            values={route.hostnames}
+            label="Hostname"
+            empty="all hosts the listener serves"
+          />
           {trace.stopStep != null &&
             ` — stops at step ${trace.stopStep} of ${trace.steps.length}`}
         </span>
