@@ -292,6 +292,28 @@ macro_rules! searchable {
     };
 }
 
+/// A Gateway API kind, asked for at `v1` — the version every kind serves
+/// on any current bundle. A cluster serving only the older versions
+/// answers this list with a 404, and the search already reports that per
+/// kind instead of inventing "no matches"; a per-cluster served-version
+/// lookup here would buy those clusters a hit list at the price of a
+/// detection call on every keystroke's fan-out.
+macro_rules! searchable_gateway {
+    ($label:literal, $plural:literal, $cluster_scoped:expr) => {
+        SearchableKind {
+            label: $label,
+            cluster_scoped: $cluster_scoped,
+            api_resource: || ApiResource {
+                group: "gateway.networking.k8s.io".to_string(),
+                version: "v1".to_string(),
+                api_version: "gateway.networking.k8s.io/v1".to_string(),
+                kind: $label.to_string(),
+                plural: $plural.to_string(),
+            },
+        }
+    };
+}
+
 /// Everything the search can look at. The `DEFAULT_KINDS` subset is
 /// what an unqualified query hits.
 pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
@@ -307,6 +329,14 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable!("CronJob", k8s_openapi::api::batch::v1::CronJob, false),
     searchable!("Service", k8s_openapi::api::core::v1::Service, false),
     searchable!("Ingress", k8s_openapi::api::networking::v1::Ingress, false),
+    searchable_gateway!("Gateway", "gateways", false),
+    searchable_gateway!("GatewayClass", "gatewayclasses", true),
+    searchable_gateway!("HTTPRoute", "httproutes", false),
+    searchable_gateway!("GRPCRoute", "grpcroutes", false),
+    searchable_gateway!("TLSRoute", "tlsroutes", false),
+    searchable_gateway!("TCPRoute", "tcproutes", false),
+    searchable_gateway!("UDPRoute", "udproutes", false),
+    searchable_gateway!("ListenerSet", "listenersets", false),
     searchable!("ConfigMap", k8s_openapi::api::core::v1::ConfigMap, false),
     searchable!("Secret", k8s_openapi::api::core::v1::Secret, false),
     searchable!(

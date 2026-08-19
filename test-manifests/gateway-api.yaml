@@ -1,0 +1,415 @@
+# Gateway API fixtures: one of everything the gateway surfaces draw, and
+# one of every way the path stops.
+#
+# Prerequisite — the CRDs are not vendored here, install a release bundle:
+#
+#   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+#
+# A controller (Envoy Gateway, Cilium, NGINX Gateway Fabric, ...) makes the
+# conditions real; without one, everything below still applies cleanly and
+# exercises the app's honest-absence states instead: an unclaimed
+# GatewayClass, routes with no status written, no addresses anywhere.
+#
+#   kubectl apply -f gateway-api.yaml
+#   kubectl delete -f gateway-api.yaml
+#
+# What each object exercises:
+#
+# | Object                        | State it proves                                      |
+# | ----------------------------- | ---------------------------------------------------- |
+# | GatewayClass gwtest-claimed   | claimed by a controller (when one runs)              |
+# | GatewayClass gwtest-orphan    | no controller ever answers — Accepted stays Unknown  |
+# | Gateway gwtest-edge           | listeners, TLS cert, catch-all + wildcard hostname   |
+# | Gateway gwtest-orphan         | names the unclaimed class — programmed by nothing    |
+# | HTTPRoute gwtest-healthy      | the whole chain: route -> service -> ready pod       |
+# | HTTPRoute gwtest-no-backend   | backendRef names a Service that does not exist       |
+# | HTTPRoute gwtest-no-grant     | cross-namespace backendRef without a ReferenceGrant  |
+# | HTTPRoute gwtest-wrong-host   | hostname intersecting no listener — Accepted: False  |
+# | HTTPRoute gwtest-ghost-parent | parentRef names a Gateway that does not exist        |
+# | HTTPRoute gwtest-mesh         | GAMMA: parentRef of kind Service — never "missing"   |
+# | HTTPRoute gwtest-redirect     | a RequestRedirect rule with no backends — not broken |
+# | HTTPRoute gwtest-weighted     | weight: 0 beside weight: 100 — drained, not down     |
+# | GRPCRoute gwtest-grpc         | service/method matches on the same chain             |
+# | TLSRoute gwtest-tls           | SNI passthrough (experimental pre-1.5 bundles: n/a)  |
+# | TCPRoute gwtest-tcp           | port attachment, no hostnames                        |
+# | UDPRoute gwtest-udp           | port attachment, no hostnames                        |
+# | ListenerSet gwtest-tenant     | listeners merged into gwtest-edge, marked by origin  |
+# | ReferenceGrant gwtest-grant   | makes gwtest-healthy's cert ref legal, read-only     |
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gwtest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gwtest-other
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: gwtest-claimed
+spec:
+  # Adjust to the controller actually installed; Envoy Gateway's spelling:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  description: claimed by the reference controller when one runs
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: gwtest-orphan
+spec:
+  controllerName: example.invalid/no-such-controller
+  description: no controller will ever claim this
+---
+# A self-signed cert for the TLS listener. Not a real key pair — the app
+# reports "not a certificate it could read" honestly, which is itself a
+# state worth having on screen; swap in a real pair to see expiry instead.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gwtest-cert
+  namespace: gwtest
+type: kubernetes.io/tls
+data:
+  tls.crt: LS0tIG5vdCBhIHJlYWwgY2VydCAtLS0=
+  tls.key: LS0tIG5vdCBhIHJlYWwga2V5IC0tLQ==
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gwtest-edge
+  namespace: gwtest
+spec:
+  gatewayClassName: gwtest-claimed
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "*.gwtest.example.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: gwtest-cert
+    - name: tls-passthrough
+      port: 8443
+      protocol: TLS
+      hostname: passthrough.gwtest.example.com
+      tls:
+        mode: Passthrough
+    - name: tcp
+      port: 9000
+      protocol: TCP
+    - name: udp
+      port: 9001
+      protocol: UDP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gwtest-orphan
+  namespace: gwtest
+spec:
+  gatewayClassName: gwtest-orphan
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gwtest-app
+  namespace: gwtest
+spec:
+  selector:
+    app: gwtest-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gwtest-app
+  namespace: gwtest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gwtest-app
+  template:
+    metadata:
+      labels:
+        app: gwtest-app
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/mendhak/http-https-echo:34
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gwtest-private
+  namespace: gwtest-other
+spec:
+  selector:
+    app: gwtest-app
+  ports:
+    - port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-healthy
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - healthy.gwtest.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-no-backend
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - no-backend.gwtest.example.com
+  rules:
+    - backendRefs:
+        - name: gwtest-nowhere
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-no-grant
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - no-grant.gwtest.example.com
+  rules:
+    - backendRefs:
+        # gwtest-other has no ReferenceGrant: ResolvedRefs: False,
+        # RefNotPermitted, and the controller must fail this traffic.
+        - name: gwtest-private
+          namespace: gwtest-other
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-wrong-host
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      # The https listener serves *.gwtest.example.com only; this hostname
+      # intersects nothing: Accepted: False, NoMatchingListenerHostname.
+      sectionName: https
+  hostnames:
+    - wrong.example.org
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-ghost-parent
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-ghost
+  hostnames:
+    - ghost.gwtest.example.com
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-mesh
+  namespace: gwtest
+spec:
+  # GAMMA: the parent is a Service. Not interpreted, and never misread as
+  # a Gateway that does not exist.
+  parentRefs:
+    - group: ""
+      kind: Service
+      name: gwtest-app
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-redirect
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - www.gwtest.example.com
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-weighted
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - weighted.gwtest.example.com
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+          weight: 100
+        # Drained on purpose: receives no traffic, and is not an outage.
+        - name: gwtest-app
+          port: 8080
+          weight: 0
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: gwtest-grpc
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  hostnames:
+    - grpc.gwtest.example.com
+  rules:
+    - matches:
+        - method:
+            service: gwtest.echo.v1.Echo
+            method: Say
+      backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: gwtest-tls
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: tls-passthrough
+  hostnames:
+    - passthrough.gwtest.example.com
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: TCPRoute
+metadata:
+  name: gwtest-tcp
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: tcp
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: UDPRoute
+metadata:
+  name: gwtest-udp
+  namespace: gwtest
+spec:
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: udp
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+# Listeners defined apart from the Gateway they attach to; the app merges
+# them into gwtest-edge's listener list, marked by origin. Requires a
+# bundle >= 1.5 (the kind is simply absent before that — no error).
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: gwtest-tenant
+  namespace: gwtest
+spec:
+  parentRef:
+    name: gwtest-edge
+  listeners:
+    - name: tenant-https
+      port: 8444
+      protocol: HTTPS
+      hostname: tenant.gwtest.example.com
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: gwtest-cert
+---
+# Lets routes in gwtest reference Secrets in gwtest — a no-op here, kept
+# as the read-only interpretation target. The deliberate *absence* of a
+# grant for gwtest-other is what gwtest-no-grant exercises.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: gwtest-grant
+  namespace: gwtest
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: gwtest
+  to:
+    - group: ""
+      kind: Service
