@@ -13,7 +13,7 @@ import {
   CopyableAddresses,
   CopyableValue,
 } from "@/components/ui/copyable-value";
-import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -109,31 +109,26 @@ function StepDetail({ step }: { step: TraceStep }) {
 }
 
 /**
- * The step's sentence, with the object it names rendered as the same
- * peekable reference every other surface draws — the name stays inside the
- * prose, the click opens the peek, a modified click opens a tab.
+ * The step's sentence, with the object it names drawn as the same peekable
+ * `ResourceRef` every other surface draws — the name stays inside the
+ * prose, a click opens the peek, a modified click opens a tab, and a kind
+ * with no page degrades to plain text inside the component itself.
  */
 function Say({ step }: { step: TraceStep }) {
   const subject = step.subject;
   const at = subject ? step.say.indexOf(subject.name) : -1;
-  if (
-    !subject ||
-    at < 0 ||
-    objectUrl(subject.kind, subject.name, subject.namespace) === null
-  ) {
+  if (!subject || at < 0) {
     return <>{step.say}</>;
   }
   return (
     <>
       {step.say.slice(0, at)}
-      <ObjectLink
+      <ResourceRef
         kind={subject.kind}
         name={subject.name}
         namespace={subject.namespace}
-        className="-mx-0.5 rounded-sm px-0.5 font-mono text-fg hover:bg-hover hover:underline hover:decoration-dotted hover:underline-offset-2"
-      >
-        {subject.name}
-      </ObjectLink>
+        showKind={false}
+      />
       {step.say.slice(at + subject.name.length)}
     </>
   );
