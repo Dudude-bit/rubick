@@ -5,13 +5,14 @@
  * stops at the first hundred is not a count, and being the real number is
  * the whole of what the line is worth.
  *
- * Expiry is not judged here. {@link expiryOf} already holds the app's two
- * thresholds — fourteen days to make a change, three to interrupt somebody
- * — and a second opinion about when a certificate is worth colouring would
- * disagree with the Secret page about the same certificate.
+ * Expiry is not judged here. {@link managedExpiryOf} already holds the
+ * app's thresholds *and* cert-manager's own renewal plan — a certificate
+ * whose `renewalTime` is still ahead is not news however short its life —
+ * and a second opinion about when a certificate is worth colouring would
+ * disagree with the Certificates page about the same certificate.
  */
 
-import { ACT_SOON_DAYS, expiryOf } from "@/lib/certificates";
+import { managedExpiryOf } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
 import type { CustomResourceInfo } from "@/generated/types";
 
@@ -63,10 +64,13 @@ export async function facts(): Promise<VendorFact[]> {
   const expiring = ready
     .map((certificate) => ({
       certificate,
-      expiry: expiryOf({
-        notAfter: textAt(certificate, "status.notAfter") ?? "",
-        notBefore: textAt(certificate, "status.notBefore") ?? "",
-      }),
+      expiry: managedExpiryOf(
+        {
+          notAfter: textAt(certificate, "status.notAfter") ?? "",
+          notBefore: textAt(certificate, "status.notBefore") ?? "",
+        },
+        textAt(certificate, "status.renewalTime") ?? null
+      ),
     }))
     .filter(({ expiry }) => expiry.tone !== null)
     .sort((a, b) => a.expiry.days - b.expiry.days);
@@ -77,11 +81,19 @@ export async function facts(): Promise<VendorFact[]> {
 
   if (expiring.length > 0) {
     const soonest = expiring[0].expiry;
+    const overdue = expiring.filter(({ expiry }) => expiry.renewalOverdue);
     lines.push({
+      // "Renewal overdue" is the diagnosis, so it beats reciting the date;
+      // the plain expiry sentence survives for the certificate nobody wrote
+      // a plan for.
       text:
         expiring.length === 1
-          ? `1 ${soonest.text}`
-          : `${expiring.length} expire within ${ACT_SOON_DAYS} days`,
+          ? soonest.renewalOverdue
+            ? "1 renewal overdue"
+            : `1 ${soonest.text}`
+          : overdue.length === expiring.length
+            ? `${expiring.length} renewals overdue`
+            : `${expiring.length} expiring soon`,
       tone: expiring.some(({ expiry }) => expiry.tone === "err")
         ? "err"
         : "warn",

@@ -34,6 +34,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
+import { overdueBy } from "@/lib/certificates";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -513,8 +514,15 @@ function Facts({ row }: { row: CertRow }) {
       {row.renewalTime && (
         <>
           <span className="text-fg-fnt">Renews</span>
-          <span className="font-mono text-fg-mid">
-            {new Date(row.renewalTime).toLocaleString()}
+          <span className="min-w-0">
+            <span className="font-mono text-fg-mid">
+              {new Date(row.renewalTime).toLocaleString()}
+            </span>
+            {row.expiry?.renewalOverdue && (
+              <span className="ml-2 text-warn">
+                {overdueBy(row.renewalTime)}
+              </span>
+            )}
           </span>
         </>
       )}
