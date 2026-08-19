@@ -1,16 +1,10 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { ServiceList } from "@/components/resources/ServiceList";
 import { IngressList } from "@/components/resources/IngressList";
 import { EndpointsList } from "@/components/resources/EndpointsList";
 import { GatewayList } from "@/components/resources/GatewayList";
-import {
-  GRPCRouteList,
-  HTTPRouteList,
-  TCPRouteList,
-  TLSRouteList,
-  UDPRouteList,
-} from "@/components/resources/GatewayRouteList";
+import { GatewayRoutesList } from "@/components/resources/GatewayRoutesList";
 
 export function Network() {
   return (
@@ -22,26 +16,23 @@ export function Network() {
           the sidebar are gated on detection, but a pasted or stale URL still
           deserves the page's own honest empty state over a 404. */}
       <Route path={toPlural(ResourceType.Gateway)} element={<GatewayList />} />
-      <Route
-        path={toPlural(ResourceType.HTTPRoute)}
-        element={<HTTPRouteList />}
-      />
-      <Route
-        path={toPlural(ResourceType.GRPCRoute)}
-        element={<GRPCRouteList />}
-      />
-      <Route
-        path={toPlural(ResourceType.TLSRoute)}
-        element={<TLSRouteList />}
-      />
-      <Route
-        path={toPlural(ResourceType.TCPRoute)}
-        element={<TCPRouteList />}
-      />
-      <Route
-        path={toPlural(ResourceType.UDPRoute)}
-        element={<UDPRouteList />}
-      />
+      {/* One list for all five route kinds — the reader's question is "what
+          routes into this cluster", not "which kind am I in". The per-kind
+          plurals stay valid as addresses and land on the same list. */}
+      <Route path="routes" element={<GatewayRoutesList />} />
+      {[
+        ResourceType.HTTPRoute,
+        ResourceType.GRPCRoute,
+        ResourceType.TLSRoute,
+        ResourceType.TCPRoute,
+        ResourceType.UDPRoute,
+      ].map((kind) => (
+        <Route
+          key={kind}
+          path={toPlural(kind)}
+          element={<Navigate to="/network/routes" replace />}
+        />
+      ))}
       <Route index element={<ServiceList />} />
     </Routes>
   );

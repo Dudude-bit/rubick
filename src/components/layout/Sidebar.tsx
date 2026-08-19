@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   Plug,
+  Route,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -180,40 +181,43 @@ export function Sidebar() {
 }
 
 /**
- * The Gateway API rows, drawn only where the cluster serves the kind.
+ * The Gateway API rows, drawn only where the cluster serves the kinds.
  *
  * Not static entries in `GROUPS`, on purpose: the kinds are CRDs a cluster
- * may not have, and six rows of empty lists on every Ingress-only cluster
+ * may not have, and rows of empty lists on every Ingress-only cluster
  * would be the rail claiming a routing layer that is not there. The scan is
- * the same one-per-cluster answer every gateway surface reads — a row
- * appears the moment `useGatewayApi` says its kind is served, and a typical
- * cluster shows Gateways + HTTPRoutes only.
+ * the same one-per-cluster answer every gateway surface reads.
+ *
+ * Two rows, not seven. The five route kinds share one list page — the
+ * reader's question is "what routes into this cluster", and five rows
+ * mostly holding zero each answered a question nobody asked. Each kind
+ * stays first-class past the door: its own detail page, its own address,
+ * its own name on every row.
  */
 function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   const detection = useGatewayApi().data;
   if (!detection?.installed) return null;
 
-  const rows: ResourceKind[] = [
-    ResourceType.Gateway,
-    ResourceType.HTTPRoute,
-    ResourceType.GRPCRoute,
-    ResourceType.TLSRoute,
-    ResourceType.TCPRoute,
-    ResourceType.UDPRoute,
-  ];
   const served = new Set(detection.kinds.map((k) => k.kind));
+  const routeKinds = [
+    "HTTPRoute",
+    "GRPCRoute",
+    "TLSRoute",
+    "TCPRoute",
+    "UDPRoute",
+  ];
 
   return (
     <>
-      {rows
-        .filter((kind) => served.has(kind))
-        .map((kind) => (
-          <NavRow
-            key={getResourceListUrl(kind)}
-            item={resource(kind)}
-            overview={overview}
-          />
-        ))}
+      {served.has("Gateway") && (
+        <NavRow item={resource(ResourceType.Gateway)} overview={overview} />
+      )}
+      {routeKinds.some((kind) => served.has(kind)) && (
+        <NavRow
+          item={{ label: "Routes", path: "/network/routes", icon: Route }}
+          overview={overview}
+        />
+      )}
     </>
   );
 }
