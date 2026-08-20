@@ -26,6 +26,8 @@ import {
   type TraceStep,
 } from "@/lib/route-trace";
 import { Spinner } from "@/components/ui/spinner";
+import { useT, type T } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import type {
@@ -54,27 +56,41 @@ const MARK_TONE: Record<TraceStep["state"], string> = {
   off: "border-hair text-fg-fnt",
 };
 
-const WHO: Record<TraceStep["who"], string> = {
-  infra: "infra",
-  yours: "your side",
-  controller: "controller",
-  machine: "this machine",
-};
+function whoLabel(who: TraceStep["who"], t: T): string {
+  switch (who) {
+    case "infra":
+      return t("columns", "whoInfra");
+    case "yours":
+      return t("columns", "whoYours");
+    case "controller":
+      return t("columns", "whoController");
+    case "machine":
+      return t("columns", "whoMachine");
+  }
+}
 
 /** The two sides of a quote, in each step's own vocabulary. */
-const QUOTE_LABELS: Record<string, [string, string]> = {
-  listener: ["the route asks for", "the listener serves"],
-  namespace: ["the route lives in", "the listener allows"],
-  backend: ["the ref asks for port", "the Service serves"],
-};
+function quoteLabels(id: TraceStep["id"], t: T): [string, string] {
+  switch (id) {
+    case "listener":
+      return [t("columns", "gwAsksListener"), t("columns", "gwServesListener")];
+    case "namespace":
+      return [
+        t("columns", "gwAsksNamespace"),
+        t("columns", "gwServesNamespace"),
+      ];
+    case "backend":
+      return [t("columns", "gwAsksPort"), t("columns", "gwServesPorts")];
+    default:
+      return [t("columns", "gwAsksGeneric"), t("columns", "gwServesGeneric")];
+  }
+}
 
 function StepDetail({ step }: { step: TraceStep }) {
   const copy = useCopyToClipboard();
+  const t = useT();
   if (!step.detail) return null;
-  const [asksLabel, servesLabel] = QUOTE_LABELS[step.id] ?? [
-    "asks for",
-    "serves",
-  ];
+  const [asksLabel, servesLabel] = quoteLabels(step.id, t);
   // No box: the diagnosis is the step continued, hanging on the same rail —
   // the rail's own red stretch carries the severity, not a border.
   return (
@@ -113,10 +129,10 @@ function StepDetail({ step }: { step: TraceStep }) {
               variant="outline"
               size="sm"
               onClick={() =>
-                copy(step.detail!.scaffold!, "ReferenceGrant manifest copied")
+                copy(step.detail!.scaffold!, t("action", "grantManifestCopied"))
               }
             >
-              Copy manifest
+              {t("action", "copyManifest")}
             </Button>
           </div>
         </>
@@ -170,6 +186,7 @@ function StepRow({
   /** A quiet line under the row — what a policy adds to this hop. */
   note?: React.ReactNode;
 }) {
+  const t = useT();
   const off = step.state === "off";
   return (
     <li className="relative">
@@ -211,18 +228,20 @@ function StepRow({
         {!off && step.addresses && step.addresses.length > 0 && (
           <CopyableAddresses
             values={step.addresses}
-            label="Gateway address"
+            label={t("columns", "gatewayAddress")}
             className="text-xs text-fg"
           />
         )}
         {step.freshness && (
           <span className="rounded-full border border-warn/45 px-1.5 text-[10px] text-warn">
-            about generation {step.freshness.observed} — you are on{" "}
-            {step.freshness.current}
+            {t("empty", "gwAboutGeneration", {
+              observed: step.freshness.observed,
+              current: step.freshness.current,
+            })}
           </span>
         )}
         <span className="ml-auto whitespace-nowrap rounded-full border border-hair px-1.5 text-[10px] uppercase tracking-wide text-fg-fnt">
-          {off ? "not reached" : WHO[step.who]}
+          {off ? t("empty", "gwNotReached") : whoLabel(step.who, t)}
         </span>
       </div>
       {!off && note && <div className="pb-2 pl-8 text-xs">{note}</div>}
@@ -248,6 +267,7 @@ function BackendPolicyNote({
   service: { name: string; namespace: string };
 }) {
   const { crdFor } = useCrdIndex();
+  const t = useT();
   const attached = policiesOnService(policies, service);
   if (attached.length === 0) return null;
   const crd =
@@ -255,13 +275,13 @@ function BackendPolicyNote({
   return (
     <div className="flex flex-col gap-0.5">
       {attached.map((policy) => {
-        const verdict = policyVerdict(policy);
+        const verdict = policyVerdict(policy, t);
         return (
           <p
             key={policy.name}
             className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
           >
-            <span>TLS to this backend:</span>
+            <span>{t("empty", "gwTlsToBackend")}</span>
             <ResourceRef
               kind="BackendTLSPolicy"
               name={policy.name}
@@ -277,9 +297,9 @@ function BackendPolicyNote({
                 quietMark
               />
               {policy.wellKnownCa
-                ? `, trusts the ${policy.wellKnownCa} bundle`
+                ? `, ${t("empty", "gwTrustsBundle", { ca: policy.wellKnownCa })}`
                 : policy.caCertRefs.length > 0
-                  ? `, CA from ${policy.caCertRefs.join(", ")}`
+                  ? `, ${t("empty", "gwCaFrom", { refs: policy.caCertRefs.join(", ") })}`
                   : ""}
             </span>
             <span
@@ -343,6 +363,7 @@ function StepMark({
  * real commands, not one call wearing a spinner.
  */
 function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
+  const t = useT();
   const [dns, setDns] = useState<ProbeStep<ResolveProbe>>({ status: "idle" });
   const [tcp, setTcp] = useState<ProbeStep<TcpProbe>>({ status: "idle" });
 
@@ -379,7 +400,7 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
     // that published none.
     const connectTo = address ?? resolvedFirst;
     if (connectTo == null) {
-      setTcp({ status: "error", message: "nothing to connect to" });
+      setTcp({ status: "error", message: t("empty", "gwNothingToConnect") });
       return;
     }
     setTcp({ status: "loading" });
@@ -407,10 +428,11 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
   return (
     <div className="mt-4 rounded-lg border border-hair bg-raise px-3 py-2.5">
       <div className="flex items-baseline gap-2.5">
-        <span className="text-xs font-semibold text-fg">From this machine</span>
+        <span className="text-xs font-semibold text-fg">
+          {t("nav", "fromThisMachine")}
+        </span>
         <span className="text-[11px] text-fg-fnt">
-          checked from your laptop, not from inside the cluster — a VPN or split
-          DNS can disagree
+          {t("empty", "gwProbeDisclaimer")}
         </span>
         {probeable && (
           <Button
@@ -420,7 +442,7 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
             disabled={running}
             onClick={run}
           >
-            {running ? "Probing…" : "Probe"}
+            {running ? t("action", "probing") : t("action", "probe")}
           </Button>
         )}
       </div>
@@ -429,37 +451,42 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
           <li className="flex items-baseline gap-2">
             <span className="relative top-px h-2 w-2 flex-none rounded-full bg-fg-fnt" />
             <span className="text-fg-fnt">
-              no hostname on this route — DNS has nothing to check; the
-              gateway&apos;s address is dialled directly
+              {t("empty", "gwNoHostnameDialDirect")}
             </span>
           </li>
         ) : (
           <li className="flex items-baseline gap-2">
             <StepMark status={dns.status} tone={dnsTone} />
             <span className={dns.status === "idle" ? "text-fg-fnt" : undefined}>
-              <CopyableValue value={host} label={`Host ${host}`} quietMark />{" "}
-              {dns.status === "idle" && "— DNS, not checked yet"}
-              {dns.status === "loading" && "— resolving…"}
+              <CopyableValue
+                value={host}
+                label={t("action", "copyHost", { host })}
+                quietMark
+              />{" "}
+              {dns.status === "idle" && `— ${t("empty", "gwDnsIdle")}`}
+              {dns.status === "loading" && `— ${t("empty", "gwResolving")}`}
               {dns.status === "error" && (
                 <span className="text-err">— {dns.message}</span>
               )}
               {dns.status === "finished" &&
                 (dns.result.error ? (
                   <>
-                    <span className="text-err">does not resolve from here</span>{" "}
+                    <span className="text-err">
+                      {t("empty", "gwNoResolveFromHere")}
+                    </span>{" "}
                     {/* The resolver's own words are jargon; they stay, but
                         quietly — the sentence before them is the finding. */}
                     <span className="text-fg-fnt">— {dns.result.error}</span>
                   </>
                 ) : (
                   <>
-                    resolves to{" "}
+                    {t("empty", "gwResolvesTo")}{" "}
                     {dns.result.resolved.map((ip, index) => (
                       <span key={ip}>
                         {index > 0 && ", "}
                         <CopyableValue
                           value={ip}
-                          label={`Resolved address ${ip}`}
+                          label={t("action", "copyResolvedIp", { ip })}
                           quietMark
                           className={
                             dns.result.matchesGateway === false
@@ -472,19 +499,23 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                     {dns.result.matchesGateway === false && address && (
                       <span className="text-err">
                         {" "}
-                        — not the gateway&apos;s{" "}
-                        <CopyableValue
-                          value={address}
-                          label={`Gateway address ${address}`}
-                          quietMark
-                          className="text-err"
-                        />
-                        . DNS still points somewhere else; traffic never arrives
-                        at this cluster.
+                        —{" "}
+                        {parts(t("empty", "gwNotTheGateways", {}), {
+                          address: (
+                            <CopyableValue
+                              value={address}
+                              label={t("action", "copyGatewayAddress", {
+                                address,
+                              })}
+                              quietMark
+                              className="text-err"
+                            />
+                          ),
+                        })}
                       </span>
                     )}
                     {dns.result.matchesGateway === true &&
-                      " — the gateway's address"}
+                      ` — ${t("empty", "gwGatewaysAddress")}`}
                   </>
                 ))}
             </span>
@@ -503,7 +534,9 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                         still what nc -u takes. */}
                     <CopyableValue
                       value={`${address}:${port}`}
-                      label={`Copy ${address}:${port}`}
+                      label={t("action", "copyPair", {
+                        pair: `${address}:${port}`,
+                      })}
                       quietMark
                     >
                       :{port}
@@ -512,8 +545,7 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                 ) : (
                   ` :${port}`
                 ))}{" "}
-              — a TCP connect proves nothing about a UDP listener, so this
-              machine does not pretend to check it
+              — {t("empty", "gwUdpNoCheck")}
             </span>
           </li>
         ) : (
@@ -530,21 +562,23 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
               {connectTarget && (
                 <>
                   {" "}
-                  to{" "}
+                  {t("action", "toInline")}{" "}
                   {/* The clipboard gets the dialable pair — the same rule
                       every hostless door follows. */}
                   <CopyableValue
                     value={`${connectTarget}:${port ?? 80}`}
-                    label={`Copy ${connectTarget}:${port ?? 80}`}
+                    label={t("action", "copyPair", {
+                      pair: `${connectTarget}:${port ?? 80}`,
+                    })}
                     quietMark
                   >
                     {connectTarget}
                   </CopyableValue>
                 </>
               )}{" "}
-              {tcp.status === "idle" && "— not checked yet"}
-              {tcp.status === "pending" && "— waiting for DNS"}
-              {tcp.status === "loading" && "— connecting…"}
+              {tcp.status === "idle" && `— ${t("empty", "gwNotCheckedYet")}`}
+              {tcp.status === "pending" && `— ${t("empty", "gwWaitingDns")}`}
+              {tcp.status === "loading" && `— ${t("empty", "gwConnecting")}`}
               {tcp.status === "error" && (
                 <span className="text-err">— {tcp.message}</span>
               )}
@@ -552,10 +586,9 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                 (tcp.result.error ? (
                   <span className="text-err">— {tcp.result.error}</span>
                 ) : (
-                  <>
-                    answers in{" "}
-                    <span className="tabular-nums">{tcp.result.ms} ms</span>
-                  </>
+                  parts(t("empty", "gwAnswersIn", {}), {
+                    ms: <span className="tabular-nums">{tcp.result.ms}</span>,
+                  })
                 ))}
             </span>
           </li>
@@ -576,6 +609,7 @@ function TraceCard({
   named: boolean;
   policies: BackendTlsPolicyInfo[];
 }) {
+  const t = useT();
   return (
     <div>
       <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-sm">
@@ -587,20 +621,23 @@ function TraceCard({
           }`}
         />
         <span className="font-semibold text-fg">
-          {trace.serving ? "Serving" : "Not serving"}
+          {trace.serving ? t("empty", "gwServing") : t("empty", "gwNotServing")}
         </span>
         <span className="text-xs text-fg-mut">
           <CopyableAddresses
             values={route.hostnames}
-            label="Hostname"
-            empty="all hosts the listener serves"
+            label={t("columns", "hostname")}
+            empty={t("empty", "gwAllHostsListenerServes")}
           />
           {trace.stopStep != null &&
-            ` — stops at step ${trace.stopStep} of ${trace.steps.length}`}
+            ` — ${t("empty", "gwStopsAtStep", {
+              n: trace.stopStep,
+              total: trace.steps.length,
+            })}`}
         </span>
         {named && (
           <span className="ml-auto inline-flex items-baseline gap-1 text-[11px] text-fg-fnt">
-            via Gateway
+            {t("action", "viaGateway")}
             <ResourceRef
               kind="Gateway"
               name={trace.gateway.name}
@@ -644,6 +681,7 @@ function TraceCard({
 }
 
 export function RouteTraceSection({ route }: { route: RouteInfo }) {
+  const t = useT();
   const detection = useGatewayApi().data;
   const served = useMemo(
     () => new Set(detection?.kinds.map((kind) => kind.kind) ?? []),
@@ -679,17 +717,21 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
 
   const traces = useMemo(
     () =>
-      routeTraces(route, {
-        gateways: gateways.data ?? [],
-        classes: classes.data ?? [],
-        topologyKnown: gateways.data !== undefined,
-        backing: {
-          services: backing.data?.services ?? [],
-          published: backing.data?.published ?? [],
-          backingKnown: backing.data !== undefined,
+      routeTraces(
+        route,
+        {
+          gateways: gateways.data ?? [],
+          classes: classes.data ?? [],
+          topologyKnown: gateways.data !== undefined,
+          backing: {
+            services: backing.data?.services ?? [],
+            published: backing.data?.published ?? [],
+            backingKnown: backing.data !== undefined,
+          },
         },
-      }),
-    [route, gateways.data, classes.data, backing.data]
+        t
+      ),
+    [route, gateways.data, classes.data, backing.data, t]
   );
 
   const mesh = route.parentRefs.filter((parent) => parent.kind !== "Gateway");
@@ -697,9 +739,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   return (
     <div className="mt-4">
       {route.parentRefs.length === 0 && (
-        <p className="text-xs text-err">
-          No parentRefs — this route attaches to nothing and serves no traffic.
-        </p>
+        <p className="text-xs text-err">{t("empty", "gwNoParentRefsPage")}</p>
       )}
       <div className="space-y-6">
         {traces.map((trace) => (
@@ -714,8 +754,11 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
       </div>
       {mesh.length > 0 && (
         <p className="mt-3 text-xs text-fg-fnt">
-          {mesh.map((parent) => `${parent.kind} ${parent.name}`).join(", ")} —
-          mesh routing (GAMMA), not interpreted by this app.
+          {t("empty", "gwMeshNotInterpreted", {
+            list: mesh
+              .map((parent) => `${parent.kind} ${parent.name}`)
+              .join(", "),
+          })}
         </p>
       )}
     </div>

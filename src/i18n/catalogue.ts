@@ -41,6 +41,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    fromThisMachine: "From this machine",
     relatedResources: "Related resources",
     trafficPath: "Traffic path",
     releases: "Releases",
@@ -106,6 +107,22 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    // The route trace (Gateway API): who vouches for a step, and the two
+    // sides of a mismatch quote.
+    hostname: "Hostname",
+    gatewayAddress: "Gateway address",
+    whoInfra: "infra",
+    whoYours: "your side",
+    whoController: "controller",
+    whoMachine: "this machine",
+    gwAsksListener: "the route asks for",
+    gwServesListener: "the listener serves",
+    gwAsksNamespace: "the route lives in",
+    gwServesNamespace: "the listener allows",
+    gwAsksPort: "the ref asks for port",
+    gwServesPorts: "the Service serves",
+    gwAsksGeneric: "asks for",
+    gwServesGeneric: "serves",
     reachableAt: "Reachable at",
     controlledBy: "Controlled by",
     objects: "Objects",
@@ -287,6 +304,16 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    probe: "Probe",
+    probing: "Probing…",
+    copyManifest: "Copy manifest",
+    grantManifestCopied: "ReferenceGrant manifest copied",
+    copyHost: "Host {host}",
+    copyResolvedIp: "Resolved address {ip}",
+    copyGatewayAddress: "Gateway address {address}",
+    copyPair: "Copy {pair}",
+    toInline: "to",
+    viaGateway: "via Gateway",
     readingGroup: "reading {group}",
     listAnd: " and ",
     listComma: ", ",
@@ -1418,6 +1445,152 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // The route trace (Gateway API), step by step: what each link says in
+    // each of its states. {said} carries the controller's own reason and
+    // message — the cluster's words, quoted rather than translated.
+    gwClassBlind: "GatewayClass — cannot be read from here",
+    gwClassNoGateway: "GatewayClass — unknown, the Gateway itself is missing",
+    gwClassMissingSay: "Class {name} does not exist",
+    gwClassMissingShort: "class {name} does not exist",
+    gwClassMissingTitle: "No GatewayClass named {name}",
+    gwClassMissingBody:
+      "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
+    gwClassUnclaimedSay: "Nothing claims class {name}",
+    gwClassUnclaimedShort: "nothing claims class {name}",
+    gwClassUnclaimedTitle: "No controller has accepted {name}",
+    gwClassRefusedBody:
+      "{said}. Everything through this gateway is dead until a controller claims the class.",
+    gwClassSilentBody:
+      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.",
+    gwClassClaimedSay: "Class {name} is claimed by {controller}",
+    gwGatewayBlind: "Gateway {name} — cannot be read from here",
+    gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
+    gwGatewayMissingShort: "{name} does not exist",
+    gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
+    gwGatewayMissingBody:
+      "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
+    gwNotProgrammedSay: "Gateway {name} is not programmed",
+    gwNotProgrammedShort: "{name} is not programmed",
+    gwNotProgrammedTitle: "The controller refuses this Gateway",
+    gwNotProgrammedBody:
+      "{said}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.",
+    gwNoAddressSay: "Gateway {name} has no address yet",
+    gwNoAddressShort: "{name} has no address yet",
+    gwNoAddressTitle: "No address to send traffic to",
+    gwNoAddressBody:
+      "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
+    gwProgrammedQuietSay:
+      "Gateway {name} — the controller has not reported Programmed",
+    gwProgrammedSay: "Gateway {name} is programmed",
+    gwListenerNamed: "Listener :{name}",
+    gwListenerAny: "A listener",
+    gwListenerNotFound: "unknown — the listener was not found",
+    gwAllHosts: "all hosts",
+    gwNoControllerForParentSay: "No controller answered for this parent",
+    gwNoControllerShort: "no controller answered",
+    gwNoStatusTitle: "No status was written for this route",
+    gwNoStatusBody:
+      "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
+    gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
+    gwListenerMatches: "{label} matches this route",
+    gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
+    gwNsNotAllowedShort: "namespace {namespace} not allowed",
+    gwNsNotAllowedTitle: "The namespace is outside what the listener allows",
+    gwNsNotAllowedBody:
+      "{said}. The listener's allowedRoutes decide which namespaces may attach — widen them on the Gateway, or move the route.",
+    gwListenerRefusesSay: "{label} does not accept this route",
+    gwHostnamesShort: "hostnames don't intersect",
+    gwHostnamesTitle: "Hostnames don't intersect",
+    gwRefusedWord: "refused",
+    gwRouteRefusedTitle: "The gateway does not accept this route",
+    gwRouteRefusedBody:
+      "{said}. An unaccepted route is never programmed — the YAML is valid, and nothing serves it.",
+    gwListenerAccepts: "{label} accepts this route",
+    gwStaleTitle: "This verdict is about the previous version of the route",
+    gwStaleBody:
+      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up — usually seconds. Nothing here is wrong yet; it is old.",
+    gwNsAllowedListSay:
+      "Namespace {namespace} is allowed by the listener ({list})",
+    gwNsAllowedSay: "Namespace {namespace} is allowed by the listener",
+    gwNsAllowedQuiet: "Namespace allowed by the listener",
+    gwRefNotPermittedSay: "Reference to {target} is not permitted",
+    gwRefNotPermittedAnon: "A reference is not permitted",
+    gwRefNotPermittedShort: "needs a ReferenceGrant in {namespace}",
+    gwRefNotPermittedTitle: "No ReferenceGrant in {namespace} allows it",
+    gwRefNotPermittedBody:
+      "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
+    gwRefUnresolvedSay: "A reference this route makes did not resolve",
+    gwRefUnresolvedShort: "a reference did not resolve",
+    gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
+    gwRefsResolve: "References resolve",
+    gwRedirectsOnly: "This route redirects — no backends, and none needed",
+    gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
+    gwNoBackendRefsShort:
+      "no backendRefs — matched requests have nowhere to go",
+    gwNoBackendRefsTitle: "The route matches traffic and drops it",
+    gwNoBackendRefsBody:
+      "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
+    gwBackendsReading: "Backend Services — still being read",
+    gwEndpointsReading: "Endpoints — still being read",
+    gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
+    gwBackendMissingShort: "Service {name} does not exist",
+    gwWrongPortSay: "Service {name} does not serve port {port}",
+    gwWrongPortTitle: "The Service exists, the port does not",
+    gwWrongPortBody:
+      "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
+    gwNoPortsAtAll: "no ports at all",
+    gwBackendServes: "Backend Service {name} serves",
+    gwBackendExists: "Backend Service {name} exists",
+    gwEndpointsQuiet: "Endpoints published and ready",
+    gwExternalName:
+      "Resolves elsewhere (ExternalName) — no endpoints by design",
+    gwReachableNothing: "Reachable from outside — nothing to probe",
+    gwReachableUnchecked:
+      "Reachable from outside — DNS · TCP · not checked yet",
+    // The trace drawn: the chips, the probe, the policies at the backend hop.
+    gwNotReached: "not reached",
+    gwAboutGeneration: "about generation {observed} — you are on {current}",
+    gwTlsToBackend: "TLS to this backend:",
+    gwTrustsBundle: "trusts the {ca} bundle",
+    gwCaFrom: "CA from {refs}",
+    gwPolicyUnknown: "unknown",
+    gwPolicyTruncated: "accepted — the ancestor list may be truncated",
+    gwPolicyAccepted: "accepted",
+    gwProbeDisclaimer:
+      "checked from your laptop, not from inside the cluster — a VPN or split DNS can disagree",
+    gwNothingToConnect: "nothing to connect to",
+    gwNoHostnameDialDirect:
+      "no hostname on this route — DNS has nothing to check; the gateway's address is dialled directly",
+    gwDnsIdle: "DNS, not checked yet",
+    gwResolving: "resolving…",
+    gwNoResolveFromHere: "does not resolve from here",
+    gwResolvesTo: "resolves to",
+    gwNotTheGateways:
+      "not the gateway's {address}. DNS still points somewhere else; traffic never arrives at this cluster.",
+    gwGatewaysAddress: "the gateway's address",
+    gwUdpNoCheck:
+      "a TCP connect proves nothing about a UDP listener, so this machine does not pretend to check it",
+    gwNotCheckedYet: "not checked yet",
+    gwWaitingDns: "waiting for DNS",
+    gwConnecting: "connecting…",
+    gwAnswersIn: "answers in {ms} ms",
+    gwServing: "Serving",
+    gwNotServing: "Not serving",
+    gwAllHostsListenerServes: "all hosts the listener serves",
+    gwStopsAtStep: "stops at step {n} of {total}",
+    gwNoParentRefsPage:
+      "No parentRefs — this route attaches to nothing and serves no traffic.",
+    gwRowClassMissing:
+      "names class {name}, which does not exist — anything attached to it is dead",
+    gwRowClassUnclaimed:
+      "nothing claims class {name} — anything attached to it is dead",
+    gwRowNotProgrammed: "is not programmed by its controller",
+    gwRowNoAddress: "has no address yet — traffic has nowhere to arrive",
+    gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
+    gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
+    gwRowRedirects: "redirects — no backends, none needed",
+    gwMeshNotInterpreted:
+      "{list} — mesh routing (GAMMA), not interpreted by this app.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
     noContainerToAttach: "No container is running to attach to",
     whichFailedTimes: "which has failed {n} times",
@@ -2588,6 +2761,11 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    gwBackendsAllExist: "All {n} backend Services exist, ports match",
+    gwEndpointsPublish: {
+      one: "Endpoints publish {n} ready",
+      other: "Endpoints publish {n} ready",
+    },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",
       other: "{n} reconcilers from {sources}",

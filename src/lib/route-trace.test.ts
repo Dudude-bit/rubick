@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { routeTraces } from "./route-trace";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The tests read the English catalogue — the same strings as before. */
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
 import type {
   ConditionInfo,
   GatewayClassInfo,
@@ -216,7 +223,7 @@ const ids = (trace: { steps: { id: string }[] }) =>
 
 describe("routeTraces", () => {
   it("walks a healthy route green, leaving only the last mile unchecked", () => {
-    const [trace] = routeTraces(route("healthy"), sources());
+    const [trace] = routeTraces(route("healthy"), sources(), t);
 
     expect(trace.gateway).toEqual({
       name: "edge",
@@ -295,7 +302,7 @@ describe("routeTraces", () => {
         ]),
       ],
     });
-    const [trace] = routeTraces(refused, sources());
+    const [trace] = routeTraces(refused, sources(), t);
 
     expect(trace.serving).toBe(false);
     expect(trace.stopStep).toBe(3);
@@ -326,7 +333,7 @@ describe("routeTraces", () => {
         ]),
       ],
     });
-    const [trace] = routeTraces(outsider, sources());
+    const [trace] = routeTraces(outsider, sources(), t);
 
     expect(trace.stopStep).toBe(4);
     expect(trace.steps[2].state).toBe("ok");
@@ -365,7 +372,7 @@ describe("routeTraces", () => {
         ]),
       ],
     });
-    const [trace] = routeTraces(denied, sources());
+    const [trace] = routeTraces(denied, sources(), t);
 
     expect(trace.stopStep).toBe(5);
     const scaffold = trace.steps[4].detail?.scaffold ?? "";
@@ -394,7 +401,8 @@ describe("routeTraces", () => {
           published: [published("edited", 1)],
           backingKnown: true,
         },
-      })
+      }),
+      t
     );
 
     expect(trace.serving).toBe(true);
@@ -405,7 +413,8 @@ describe("routeTraces", () => {
   it("stops at step 1 when nothing claims the gateway's class", () => {
     const [trace] = routeTraces(
       route("orphaned", { parents: [] }),
-      sources({ classes: [gatewayClass("envoy", null)] })
+      sources({ classes: [gatewayClass("envoy", null)] }),
+      t
     );
 
     expect(trace.stopStep).toBe(1);
@@ -427,7 +436,7 @@ describe("routeTraces", () => {
       ],
       parents: [],
     });
-    const [trace] = routeTraces(ghost, sources());
+    const [trace] = routeTraces(ghost, sources(), t);
 
     expect(trace.stopStep).toBe(2);
     expect(trace.steps[0].state).toBe("blind");
@@ -436,7 +445,7 @@ describe("routeTraces", () => {
   });
 
   it("stops at the listener when the controller stays silent about an existing gateway", () => {
-    const [trace] = routeTraces(route("silent", { parents: [] }), sources());
+    const [trace] = routeTraces(route("silent", { parents: [] }), sources(), t);
 
     expect(trace.stopStep).toBe(3);
     expect(trace.steps[2].detail?.body).toContain("No controller");
@@ -445,7 +454,8 @@ describe("routeTraces", () => {
   it("stops at the gateway while its address is still pending", () => {
     const [trace] = routeTraces(
       route("pending"),
-      sources({ gateways: [gateway("edge", { addresses: [] })] })
+      sources({ gateways: [gateway("edge", { addresses: [] })] }),
+      t
     );
 
     expect(trace.stopStep).toBe(2);
@@ -455,7 +465,8 @@ describe("routeTraces", () => {
   it("goes dashed, not red, where the gateway list cannot be read", () => {
     const [trace] = routeTraces(
       route("healthy"),
-      sources({ gateways: [], classes: [], topologyKnown: false })
+      sources({ gateways: [], classes: [], topologyKnown: false }),
+      t
     );
 
     expect(trace.serving).toBe(true);
@@ -469,7 +480,8 @@ describe("routeTraces", () => {
       route("healthy"),
       sources({
         backing: { services: [], published: [], backingKnown: true },
-      })
+      }),
+      t
     );
 
     expect(trace.stopStep).toBe(6);
@@ -487,7 +499,8 @@ describe("routeTraces", () => {
           published: [published("healthy", 1)],
           backingKnown: true,
         },
-      })
+      }),
+      t
     );
 
     expect(trace.stopStep).toBe(6);
@@ -506,7 +519,8 @@ describe("routeTraces", () => {
           published: [published("healthy", 0)],
           backingKnown: true,
         },
-      })
+      }),
+      t
     );
 
     expect(trace.stopStep).toBe(7);
@@ -519,7 +533,7 @@ describe("routeTraces", () => {
         { matches: [], backendRefs: [], hasRedirect: true, extensionRefs: [] },
       ],
     });
-    const [trace] = routeTraces(redirect, sources());
+    const [trace] = routeTraces(redirect, sources(), t);
 
     expect(trace.serving).toBe(true);
     expect(trace.steps[5].state).toBe("ok");
@@ -531,7 +545,8 @@ describe("routeTraces", () => {
       route("healthy"),
       sources({
         backing: { services: [], published: [], backingKnown: false },
-      })
+      }),
+      t
     );
 
     expect(trace.steps[5].state).toBe("blind");
@@ -573,7 +588,8 @@ describe("routeTraces", () => {
           published: [published("both", 1)],
           backingKnown: true,
         },
-      })
+      }),
+      t
     );
 
     expect(traces).toHaveLength(2);
@@ -614,7 +630,7 @@ describe("routeTraces", () => {
         },
       ],
     });
-    const traces = routeTraces(twin, sources());
+    const traces = routeTraces(twin, sources(), t);
 
     expect(traces).toHaveLength(2);
     expect(traces[1].gateway).toEqual({
@@ -629,7 +645,7 @@ describe("routeTraces", () => {
       kind: "TCPRoute",
       hostnames: [],
     });
-    const [trace] = routeTraces(tcp, sources());
+    const [trace] = routeTraces(tcp, sources(), t);
 
     expect(trace.probe).toEqual({
       host: null,

@@ -26,6 +26,7 @@ import type {
 } from "@/generated/types";
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop } from "@/lib/connections";
+import type { T } from "@/i18n/useT";
 
 export interface TraceQuote {
   asks: string;
@@ -201,13 +202,14 @@ function candidateListeners(
 function classStep(
   gateway: GatewayInfo | undefined,
   classes: GatewayClassInfo[],
-  topologyKnown: boolean
+  topologyKnown: boolean,
+  t: T
 ): TraceStep {
   if (!topologyKnown) {
     return {
       id: "class",
       state: "blind",
-      say: "GatewayClass — cannot be read from here",
+      say: t("empty", "gwClassBlind"),
       who: "infra",
     };
   }
@@ -215,7 +217,7 @@ function classStep(
     return {
       id: "class",
       state: "blind",
-      say: "GatewayClass — unknown, the Gateway itself is missing",
+      say: t("empty", "gwClassNoGateway"),
       who: "infra",
     };
   }
@@ -229,12 +231,12 @@ function classStep(
     return {
       id: "class",
       state: "err",
-      say: `Class ${gateway.className} does not exist`,
+      say: t("empty", "gwClassMissingSay", { name: gateway.className }),
       who: "infra",
-      short: `class ${gateway.className} does not exist`,
+      short: t("empty", "gwClassMissingShort", { name: gateway.className }),
       detail: {
-        title: `No GatewayClass named ${gateway.className}`,
-        body: "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
+        title: t("empty", "gwClassMissingTitle", { name: gateway.className }),
+        body: t("empty", "gwClassMissingBody"),
       },
     };
   }
@@ -245,22 +247,27 @@ function classStep(
     return {
       id: "class",
       state: "err",
-      say: `Nothing claims class ${gateway.className}`,
+      say: t("empty", "gwClassUnclaimedSay", { name: gateway.className }),
       who: "infra",
-      short: `nothing claims class ${gateway.className}`,
+      short: t("empty", "gwClassUnclaimedShort", { name: gateway.className }),
       subject,
       detail: {
-        title: `No controller has accepted ${gateway.className}`,
+        title: t("empty", "gwClassUnclaimedTitle", { name: gateway.className }),
         body: refused
-          ? `${said(refused)}. Everything through this gateway is dead until a controller claims the class.`
-          : `The class names controller ${cls.controllerName}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.`,
+          ? t("empty", "gwClassRefusedBody", { said: said(refused) })
+          : t("empty", "gwClassSilentBody", {
+              controller: cls.controllerName,
+            }),
       },
     };
   }
   return {
     id: "class",
     state: "ok",
-    say: `Class ${gateway.className} is claimed by ${cls.controllerName}`,
+    say: t("empty", "gwClassClaimedSay", {
+      name: gateway.className,
+      controller: cls.controllerName,
+    }),
     who: "infra",
     subject,
   };
@@ -270,14 +277,15 @@ function gatewayStep(
   gateway: GatewayInfo | undefined,
   parent: ParentRefInfo,
   routeNamespace: string,
-  topologyKnown: boolean
+  topologyKnown: boolean,
+  t: T
 ): TraceStep {
   const at = parent.namespace ?? routeNamespace;
   if (!topologyKnown) {
     return {
       id: "gateway",
       state: "blind",
-      say: `Gateway ${parent.name} — cannot be read from here`,
+      say: t("empty", "gwGatewayBlind", { name: parent.name }),
       who: "infra",
     };
   }
@@ -285,12 +293,15 @@ function gatewayStep(
     return {
       id: "gateway",
       state: "err",
-      say: `Gateway ${parent.name} does not exist in ${at}`,
+      say: t("empty", "gwGatewayMissingSay", {
+        name: parent.name,
+        namespace: at,
+      }),
       who: "yours",
-      short: `${parent.name} does not exist`,
+      short: t("empty", "gwGatewayMissingShort", { name: parent.name }),
       detail: {
-        title: "The parentRef names a Gateway that is not there",
-        body: "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
+        title: t("empty", "gwGatewayMissingTitle"),
+        body: t("empty", "gwGatewayMissingBody"),
       },
     };
   }
@@ -304,13 +315,13 @@ function gatewayStep(
     return {
       id: "gateway",
       state: "err",
-      say: `Gateway ${gateway.name} is not programmed`,
+      say: t("empty", "gwNotProgrammedSay", { name: gateway.name }),
       who: "infra",
-      short: `${gateway.name} is not programmed`,
+      short: t("empty", "gwNotProgrammedShort", { name: gateway.name }),
       subject,
       detail: {
-        title: "The controller refuses this Gateway",
-        body: `${said(programmed)}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.`,
+        title: t("empty", "gwNotProgrammedTitle"),
+        body: t("empty", "gwNotProgrammedBody", { said: said(programmed) }),
       },
     };
   }
@@ -318,13 +329,13 @@ function gatewayStep(
     return {
       id: "gateway",
       state: "err",
-      say: `Gateway ${gateway.name} has no address yet`,
+      say: t("empty", "gwNoAddressSay", { name: gateway.name }),
       who: "infra",
-      short: `${gateway.name} has no address yet`,
+      short: t("empty", "gwNoAddressShort", { name: gateway.name }),
       subject,
       detail: {
-        title: "No address to send traffic to",
-        body: "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
+        title: t("empty", "gwNoAddressTitle"),
+        body: t("empty", "gwNoAddressBody"),
       },
     };
   }
@@ -332,7 +343,7 @@ function gatewayStep(
     return {
       id: "gateway",
       state: "warn",
-      say: `Gateway ${gateway.name} — the controller has not reported Programmed`,
+      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
       who: "infra",
       subject,
     };
@@ -340,21 +351,25 @@ function gatewayStep(
   return {
     id: "gateway",
     state: "ok",
-    say: `Gateway ${gateway.name} is programmed`,
+    say: t("empty", "gwProgrammedSay", { name: gateway.name }),
     who: "infra",
     addresses: gateway.addresses,
     subject,
   };
 }
 
-function listenerLabel(listeners: ListenerInfo[]): string {
-  if (listeners.length === 1) return `Listener :${listeners[0].name}`;
-  return "A listener";
+function listenerLabel(listeners: ListenerInfo[], t: T): string {
+  if (listeners.length === 1) {
+    return t("empty", "gwListenerNamed", { name: listeners[0].name });
+  }
+  return t("empty", "gwListenerAny");
 }
 
-function servesOf(listeners: ListenerInfo[]): string {
-  if (listeners.length === 0) return "unknown — the listener was not found";
-  return listeners.map((l) => l.hostname ?? "all hosts").join(", ");
+function servesOf(listeners: ListenerInfo[], t: T): string {
+  if (listeners.length === 0) return t("empty", "gwListenerNotFound");
+  return listeners
+    .map((l) => l.hostname ?? t("empty", "gwAllHosts"))
+    .join(", ");
 }
 
 /** Steps 3 and 4 — both written by the controller as one Accepted verdict,
@@ -363,25 +378,26 @@ function acceptanceSteps(
   route: RouteInfo,
   gateway: GatewayInfo | undefined,
   parent: ParentRefInfo,
-  entries: RouteParentStatusInfo[]
+  entries: RouteParentStatusInfo[],
+  t: T
 ): [TraceStep, TraceStep] {
   const listeners = candidateListeners(gateway, parent);
-  const label = listenerLabel(listeners);
+  const label = listenerLabel(listeners, t);
 
   if (entries.length === 0) {
     return [
       {
         id: "listener",
         state: "err",
-        say: "No controller answered for this parent",
+        say: t("empty", "gwNoControllerForParentSay"),
         who: "controller",
-        short: "no controller answered",
+        short: t("empty", "gwNoControllerShort"),
         detail: {
-          title: "No status was written for this route",
-          body: "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
+          title: t("empty", "gwNoStatusTitle"),
+          body: t("empty", "gwNoStatusBody"),
         },
       },
-      namespaceQuiet(route, listeners, "off"),
+      namespaceQuiet(route, listeners, "off", t),
     ];
   }
 
@@ -395,11 +411,11 @@ function acceptanceSteps(
       {
         id: "listener",
         state: "warn",
-        say: "The controller wrote status but no Accepted verdict yet",
+        say: t("empty", "gwNoAcceptedYet"),
         who: "controller",
         freshness,
       },
-      namespaceQuiet(route, listeners, "ok"),
+      namespaceQuiet(route, listeners, "ok", t),
     ];
   }
 
@@ -409,16 +425,20 @@ function acceptanceSteps(
         {
           id: "listener",
           state: "ok",
-          say: `${label} matches this route`,
+          say: t("empty", "gwListenerMatches", { label }),
           who: "yours",
           freshness,
         },
         {
           id: "namespace",
           state: "err",
-          say: `The listener does not allow routes from ${route.namespace}`,
+          say: t("empty", "gwNsNotAllowedSay", {
+            namespace: route.namespace,
+          }),
           who: "yours",
-          short: `namespace ${route.namespace} not allowed`,
+          short: t("empty", "gwNsNotAllowedShort", {
+            namespace: route.namespace,
+          }),
           // The namespace's labels are the fix — a selector matches them.
           subject: {
             kind: "Namespace",
@@ -427,8 +447,8 @@ function acceptanceSteps(
           },
           freshness,
           detail: {
-            title: "The namespace is outside what the listener allows",
-            body: `${said(accepted)}. The listener's allowedRoutes decide which namespaces may attach — widen them on the Gateway, or move the route.`,
+            title: t("empty", "gwNsNotAllowedTitle"),
+            body: t("empty", "gwNsNotAllowedBody", { said: said(accepted) }),
             quote: {
               asks: route.namespace,
               serves: listeners
@@ -444,26 +464,26 @@ function acceptanceSteps(
       {
         id: "listener",
         state: "err",
-        say: `${label} does not accept this route`,
+        say: t("empty", "gwListenerRefusesSay", { label }),
         who: "yours",
         short: hostnameMiss
-          ? "hostnames don't intersect"
-          : (accepted.reason ?? "refused"),
+          ? t("empty", "gwHostnamesShort")
+          : (accepted.reason ?? t("empty", "gwRefusedWord")),
         freshness,
         detail: {
           title: hostnameMiss
-            ? "Hostnames don't intersect"
-            : "The gateway does not accept this route",
-          body: `${said(accepted)}. An unaccepted route is never programmed — the YAML is valid, and nothing serves it.`,
+            ? t("empty", "gwHostnamesTitle")
+            : t("empty", "gwRouteRefusedTitle"),
+          body: t("empty", "gwRouteRefusedBody", { said: said(accepted) }),
           quote: hostnameMiss
             ? {
-                asks: route.hostnames.join(", ") || "any host",
-                serves: servesOf(listeners),
+                asks: route.hostnames.join(", ") || t("empty", "anyHost"),
+                serves: servesOf(listeners, t),
               }
             : undefined,
         },
       },
-      namespaceQuiet(route, listeners, "off"),
+      namespaceQuiet(route, listeners, "off", t),
     ];
   }
 
@@ -471,24 +491,28 @@ function acceptanceSteps(
     {
       id: "listener",
       state: freshness ? "warn" : "ok",
-      say: `${label} accepts this route`,
+      say: t("empty", "gwListenerAccepts", { label }),
       who: "yours",
       freshness,
       detail: freshness
         ? {
-            title: "This verdict is about the previous version of the route",
-            body: `The controller last looked at generation ${freshness.observed}; you are on ${freshness.current}. Everything below may change when it catches up — usually seconds. Nothing here is wrong yet; it is old.`,
+            title: t("empty", "gwStaleTitle"),
+            body: t("empty", "gwStaleBody", {
+              observed: freshness.observed,
+              current: freshness.current,
+            }),
           }
         : undefined,
     },
-    namespaceQuiet(route, listeners, "ok"),
+    namespaceQuiet(route, listeners, "ok", t),
   ];
 }
 
 function namespaceQuiet(
   route: RouteInfo,
   listeners: ListenerInfo[],
-  state: "ok" | "off"
+  state: "ok" | "off",
+  t: T
 ): TraceStep {
   const allowed = listeners.map((l) => l.allowedNamespaces ?? "Same");
   return {
@@ -496,10 +520,13 @@ function namespaceQuiet(
     state,
     say:
       state === "ok"
-        ? `Namespace ${route.namespace} is allowed by the listener${
-            allowed.length > 0 ? ` (${allowed.join(", ")})` : ""
-          }`
-        : "Namespace allowed by the listener",
+        ? allowed.length > 0
+          ? t("empty", "gwNsAllowedListSay", {
+              namespace: route.namespace,
+              list: allowed.join(", "),
+            })
+          : t("empty", "gwNsAllowedSay", { namespace: route.namespace })
+        : t("empty", "gwNsAllowedQuiet"),
     who: "yours",
     subject:
       state === "ok"
@@ -530,7 +557,8 @@ function grantScaffold(route: RouteInfo, targetNamespace: string): string {
 
 function refsStep(
   route: RouteInfo,
-  entries: RouteParentStatusInfo[]
+  entries: RouteParentStatusInfo[],
+  t: T
 ): TraceStep {
   const resolved = entries
     .flatMap((entry) => entry.conditions)
@@ -550,10 +578,12 @@ function refsStep(
         id: "refs",
         state: "err",
         say: foreign
-          ? `Reference to ${target}/${foreign.name} is not permitted`
-          : "A reference is not permitted",
+          ? t("empty", "gwRefNotPermittedSay", {
+              target: `${target}/${foreign.name}`,
+            })
+          : t("empty", "gwRefNotPermittedAnon"),
         who: "yours",
-        short: `needs a ReferenceGrant in ${target}`,
+        short: t("empty", "gwRefNotPermittedShort", { namespace: target }),
         // The backend may well exist — only the *permission* is missing —
         // so its name stays a reference the reader can peek behind.
         subject: foreign
@@ -561,8 +591,8 @@ function refsStep(
           : undefined,
         freshness,
         detail: {
-          title: `No ReferenceGrant in ${target} allows it`,
-          body: `${said(resolved)}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:`,
+          title: t("empty", "gwRefNotPermittedTitle", { namespace: target }),
+          body: t("empty", "gwRefNotPermittedBody", { said: said(resolved) }),
           scaffold: grantScaffold(route, target),
         },
       };
@@ -570,10 +600,12 @@ function refsStep(
     return {
       id: "refs",
       state: "err",
-      say: "A reference this route makes did not resolve",
+      say: t("empty", "gwRefUnresolvedSay"),
       who: "yours",
       short:
-        resolved.message ?? resolved.reason ?? "a reference did not resolve",
+        resolved.message ??
+        resolved.reason ??
+        t("empty", "gwRefUnresolvedShort"),
       freshness,
       detail: {
         title: "ResolvedRefs: False",
@@ -587,8 +619,8 @@ function refsStep(
     state: freshness ? "warn" : "ok",
     say:
       resolved == null
-        ? "References resolve — nothing reported otherwise"
-        : "References resolve",
+        ? t("empty", "gwRefsResolveQuiet")
+        : t("empty", "gwRefsResolve"),
     who: "yours",
     freshness,
   };
@@ -603,13 +635,14 @@ interface BackendVerdict {
 /** Steps 6 and 7 — what the backends' Services say for themselves. */
 function backendSteps(
   route: RouteInfo,
-  backing: BackingSources
+  backing: BackingSources,
+  t: T
 ): [TraceStep, TraceStep] {
   const serviceRefs = route.rules.flatMap((rule) =>
     rule.backendRefs.filter((backend) => backend.kind === "Service")
   );
   if (serviceRefs.length === 0 && redirectOnly(route)) {
-    const say = "This route redirects — no backends, and none needed";
+    const say = t("empty", "gwRedirectsOnly");
     return [
       { id: "backend", state: "ok", say, who: "yours" },
       { id: "endpoints", state: "ok", say, who: "yours" },
@@ -620,18 +653,18 @@ function backendSteps(
       {
         id: "backend",
         state: "err",
-        say: "No backendRefs — a matched request has nowhere to go",
+        say: t("empty", "gwNoBackendRefsSay"),
         who: "yours",
-        short: "no backendRefs — matched requests have nowhere to go",
+        short: t("empty", "gwNoBackendRefsShort"),
         detail: {
-          title: "The route matches traffic and drops it",
-          body: "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
+          title: t("empty", "gwNoBackendRefsTitle"),
+          body: t("empty", "gwNoBackendRefsBody"),
         },
       },
       {
         id: "endpoints",
         state: "off",
-        say: "Endpoints published and ready",
+        say: t("empty", "gwEndpointsQuiet"),
         who: "yours",
       },
     ];
@@ -641,13 +674,13 @@ function backendSteps(
       {
         id: "backend",
         state: "blind",
-        say: "Backend Services — still being read",
+        say: t("empty", "gwBackendsReading"),
         who: "yours",
       },
       {
         id: "endpoints",
         state: "blind",
-        say: "Endpoints — still being read",
+        say: t("empty", "gwEndpointsReading"),
         who: "yours",
       },
     ];
@@ -677,9 +710,14 @@ function backendSteps(
     ? {
         id: "backend",
         state: "err",
-        say: `Backend Service ${missing.backend.name} does not exist in ${missing.namespace}`,
+        say: t("empty", "gwBackendMissingSay", {
+          name: missing.backend.name,
+          namespace: missing.namespace,
+        }),
         who: "yours",
-        short: `Service ${missing.backend.name} does not exist`,
+        short: t("empty", "gwBackendMissingShort", {
+          name: missing.backend.name,
+        }),
         detail: {
           title: describeStop(missing.state.stop!).title,
           body: describeStop(missing.state.stop!).note,
@@ -689,23 +727,29 @@ function backendSteps(
       ? {
           id: "backend",
           state: "err",
-          say: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
+          say: t("empty", "gwWrongPortSay", {
+            name: wrongPort.backend.name,
+            port: wrongPort.backend.port!,
+          }),
           who: "yours",
-          short: `Service ${wrongPort.backend.name} does not serve port ${wrongPort.backend.port}`,
+          short: t("empty", "gwWrongPortSay", {
+            name: wrongPort.backend.name,
+            port: wrongPort.backend.port!,
+          }),
           subject: {
             kind: "Service",
             name: wrongPort.backend.name,
             namespace: wrongPort.namespace,
           },
           detail: {
-            title: "The Service exists, the port does not",
-            body: "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
+            title: t("empty", "gwWrongPortTitle"),
+            body: t("empty", "gwWrongPortBody"),
             quote: {
               asks: String(wrongPort.backend.port),
               serves:
                 wrongPort.state
                   .service!.ports.map((p) => String(p.port))
-                  .join(", ") || "no ports at all",
+                  .join(", ") || t("empty", "gwNoPortsAtAll"),
             },
           },
         }
@@ -715,9 +759,13 @@ function backendSteps(
           say:
             verdicts.length === 1
               ? verdicts[0].backend.port != null
-                ? `Backend Service ${verdicts[0].backend.name} serves`
-                : `Backend Service ${verdicts[0].backend.name} exists`
-              : `All ${verdicts.length} backend Services exist, ports match`,
+                ? t("empty", "gwBackendServes", {
+                    name: verdicts[0].backend.name,
+                  })
+                : t("empty", "gwBackendExists", {
+                    name: verdicts[0].backend.name,
+                  })
+              : t("count", "gwBackendsAllExist", { n: verdicts.length }),
           who: "yours",
           subject:
             verdicts.length === 1
@@ -739,7 +787,7 @@ function backendSteps(
       {
         id: "endpoints",
         state: "off",
-        say: "Endpoints published and ready",
+        say: t("empty", "gwEndpointsQuiet"),
         who: "yours",
       },
     ];
@@ -779,8 +827,9 @@ function backendSteps(
       id: "endpoints",
       state: "ok",
       say: external
-        ? "Resolves elsewhere (ExternalName) — no endpoints by design"
-        : `Endpoints publish ${ready} ready${draining > 0 ? `, ${draining} draining` : ""}`,
+        ? t("empty", "gwExternalName")
+        : t("count", "gwEndpointsPublish", { n: ready }) +
+          (draining > 0 ? `, ${t("count", "nDraining", { n: draining })}` : ""),
       who: "yours",
     },
   ];
@@ -801,19 +850,19 @@ function probeOf(
   };
 }
 
-function reachableStep(probe: RouteTrace["probe"]): TraceStep {
+function reachableStep(probe: RouteTrace["probe"], t: T): TraceStep {
   if (probe.host == null && probe.address == null) {
     return {
       id: "reachable",
       state: "off",
-      say: "Reachable from outside — nothing to probe",
+      say: t("empty", "gwReachableNothing"),
       who: "machine",
     };
   }
   return {
     id: "reachable",
     state: "blind",
-    say: "Reachable from outside — DNS · TCP · not checked yet",
+    say: t("empty", "gwReachableUnchecked"),
     who: "machine",
   };
 }
@@ -821,24 +870,31 @@ function reachableStep(probe: RouteTrace["probe"]): TraceStep {
 function traceFor(
   route: RouteInfo,
   parent: ParentRefInfo,
-  sources: TraceSources
+  sources: TraceSources,
+  t: T
 ): RouteTrace {
   const namespace = parent.namespace ?? route.namespace;
   const gateway = findGateway(sources.gateways, parent.name, namespace);
   const entries = statusesFor(route, parent);
-  const [listener, allowed] = acceptanceSteps(route, gateway, parent, entries);
-  const [backend, endpoints] = backendSteps(route, sources.backing);
+  const [listener, allowed] = acceptanceSteps(
+    route,
+    gateway,
+    parent,
+    entries,
+    t
+  );
+  const [backend, endpoints] = backendSteps(route, sources.backing, t);
   const probe = probeOf(route, gateway, parent);
 
   const steps: TraceStep[] = [
-    classStep(gateway, sources.classes, sources.topologyKnown),
-    gatewayStep(gateway, parent, route.namespace, sources.topologyKnown),
+    classStep(gateway, sources.classes, sources.topologyKnown, t),
+    gatewayStep(gateway, parent, route.namespace, sources.topologyKnown, t),
     listener,
     allowed,
-    refsStep(route, entries),
+    refsStep(route, entries, t),
     backend,
     endpoints,
-    reachableStep(probe),
+    reachableStep(probe, t),
   ];
 
   const firstBroken = steps.findIndex((step) => step.state === "err");
@@ -873,9 +929,10 @@ function traceFor(
  */
 export function routeTraces(
   route: RouteInfo,
-  sources: TraceSources
+  sources: TraceSources,
+  t: T
 ): RouteTrace[] {
   return route.parentRefs
     .filter((parent) => parent.kind === "Gateway")
-    .map((parent) => traceFor(route, parent, sources));
+    .map((parent) => traceFor(route, parent, sources, t));
 }

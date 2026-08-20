@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The tests read the English catalogue — the same strings as before. */
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
 import { policiesOnService, policyVerdict } from "./gateway-policies";
 import type { BackendTlsPolicyInfo, ConditionInfo } from "@/generated/types";
 
@@ -70,7 +77,7 @@ describe("policiesOnService", () => {
 
 describe("policyVerdict", () => {
   it("reads accepted from every ancestor agreeing", () => {
-    expect(policyVerdict(policy("app-tls"))).toEqual({
+    expect(policyVerdict(policy("app-tls"), t)).toEqual({
       word: "accepted",
       tone: "ok",
     });
@@ -93,14 +100,14 @@ describe("policyVerdict", () => {
         },
       ],
     });
-    expect(policyVerdict(loser)).toEqual({
+    expect(policyVerdict(loser, t)).toEqual({
       word: "Conflicted",
       tone: "err",
     });
   });
 
   it("calls silence unclaimed, not healthy", () => {
-    expect(policyVerdict(policy("app-tls", { ancestors: [] }))).toEqual({
+    expect(policyVerdict(policy("app-tls", { ancestors: [] }), t)).toEqual({
       word: "no controller answered",
       tone: "warn",
     });
@@ -108,6 +115,6 @@ describe("policyVerdict", () => {
 
   it("says a full ancestors list may be cut short", () => {
     const full = policy("app-tls", { ancestorsMaybeTruncated: true });
-    expect(policyVerdict(full).word).toContain("may be truncated");
+    expect(policyVerdict(full, t).word).toContain("may be truncated");
   });
 });

@@ -19,6 +19,7 @@ import {
   type TraceStep,
   type TraceStepId,
 } from "@/lib/route-trace";
+import type { T } from "@/i18n/useT";
 
 export interface RouteRow {
   kind: string;
@@ -129,7 +130,7 @@ function staleOf(
 
 /** Class and address problems on the gateway itself — upstream of every
  *  route through it, and invisible on any single route's row. */
-function pulseOf(sources: TraceSources): GatewayPulse[] {
+function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
   if (!sources.topologyKnown) return [];
   const pulse: GatewayPulse[] = [];
   for (const gateway of sources.gateways) {
@@ -138,26 +139,26 @@ function pulseOf(sources: TraceSources): GatewayPulse[] {
     if (!cls) {
       pulse.push({
         ...at,
-        say: `names class ${gateway.className}, which does not exist — anything attached to it is dead`,
+        say: t("empty", "gwRowClassMissing", { name: gateway.className }),
       });
       continue;
     }
     if (cls.accepted !== true) {
       pulse.push({
         ...at,
-        say: `nothing claims class ${gateway.className} — anything attached to it is dead`,
+        say: t("empty", "gwRowClassUnclaimed", { name: gateway.className }),
       });
       continue;
     }
     const programmed = gatewayProgrammed(gateway);
     if (programmed?.status === "False") {
-      pulse.push({ ...at, say: "is not programmed by its controller" });
+      pulse.push({ ...at, say: t("empty", "gwRowNotProgrammed") });
       continue;
     }
     if (gateway.addresses.length === 0) {
       pulse.push({
         ...at,
-        say: "has no address yet — traffic has nowhere to arrive",
+        say: t("empty", "gwRowNoAddress"),
       });
     }
   }
@@ -166,7 +167,8 @@ function pulseOf(sources: TraceSources): GatewayPulse[] {
 
 export function routesBoard(
   routes: RouteInfo[],
-  sources: TraceSources
+  sources: TraceSources,
+  t: T
 ): RoutesBoard {
   const notServing: Array<{ row: RouteRow; depth: number }> = [];
   const serving: RouteRow[] = [];
@@ -226,7 +228,7 @@ export function routesBoard(
           ...servesOf(route, undefined),
           stop: {
             at: "route",
-            short: "no parentRefs — attaches to nothing and serves no traffic",
+            short: t("empty", "gwRowNoParents"),
           },
           via: "—",
           viaRef: null,
@@ -253,7 +255,9 @@ export function routesBoard(
         ...base,
         ...servesOf(route, undefined),
         stop: null,
-        tail: `attaches to ${parent.kind} ${parent.name} — GAMMA, not judged here`,
+        tail: t("empty", "gwRowMesh", {
+          parent: `${parent.kind} ${parent.name}`,
+        }),
         via: parent.name,
         viaRef: exists ? ref : null,
         viaGhost: settled && !exists ? ref : null,
@@ -263,7 +267,7 @@ export function routesBoard(
       continue;
     }
 
-    const traces = routeTraces(route, sources);
+    const traces = routeTraces(route, sources, t);
     const worst = traces.reduce((sofar, trace) =>
       (trace.stopStep ?? Infinity) < (sofar.stopStep ?? Infinity)
         ? trace
@@ -276,7 +280,7 @@ export function routesBoard(
       stop: broken
         ? { at: STEP_LABEL[broken.id], short: broken.short ?? broken.say }
         : null,
-      tail: redirectOnly(route) ? "redirects — no backends, none needed" : null,
+      tail: redirectOnly(route) ? t("empty", "gwRowRedirects") : null,
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),
@@ -313,6 +317,6 @@ export function routesBoard(
     notServing: notServing.map((entry) => entry.row),
     serving,
     mesh,
-    pulse: pulseOf(sources),
+    pulse: pulseOf(sources, t),
   };
 }

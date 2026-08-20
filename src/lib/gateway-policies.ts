@@ -7,6 +7,7 @@
  */
 
 import type { BackendTlsPolicyInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 
 /** Direct policies cannot cross namespaces, so the match never does. */
 export function policiesOnService(
@@ -27,32 +28,35 @@ export function policiesOnService(
  * verdict is always scoped to (ancestor, controller) pairs, so "accepted"
  * here means every pair that answered said so.
  */
-export function policyVerdict(policy: BackendTlsPolicyInfo): {
+export function policyVerdict(
+  policy: BackendTlsPolicyInfo,
+  t: T
+): {
   word: string;
   tone: "ok" | "warn" | "err";
 } {
   if (policy.ancestors.length === 0) {
-    return { word: "no controller answered", tone: "warn" };
+    return { word: t("empty", "gwNoControllerShort"), tone: "warn" };
   }
   const verdicts = policy.ancestors.flatMap((entry) =>
     entry.conditions.filter((c) => c.type === "Accepted")
   );
   const refused = verdicts.find((c) => c.status === "False");
   if (refused) {
-    return { word: refused.reason ?? "refused", tone: "err" };
+    return { word: refused.reason ?? t("empty", "gwRefusedWord"), tone: "err" };
   }
   // No Accepted verdict at all is unknown, however long the list — the
   // truncation caveat must never dress silence up as acceptance.
   if (!verdicts.some((c) => c.status === "True")) {
-    return { word: "unknown", tone: "warn" };
+    return { word: t("empty", "gwPolicyUnknown"), tone: "warn" };
   }
   // MaxItems=16 is the API's hard ceiling: a full list must be surfaced
   // as possible truncation, never read as the whole story.
   if (policy.ancestorsMaybeTruncated) {
     return {
-      word: "accepted — the ancestor list may be truncated",
+      word: t("empty", "gwPolicyTruncated"),
       tone: "warn",
     };
   }
-  return { word: "accepted", tone: "ok" };
+  return { word: t("empty", "gwPolicyAccepted"), tone: "ok" };
 }

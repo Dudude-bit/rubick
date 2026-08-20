@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The tests read the English catalogue — the same strings as before. */
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
 import { routesBoard } from "./route-rows";
 import type {
   ConditionInfo,
@@ -215,7 +222,7 @@ describe("routesBoard", () => {
         ]),
       ],
     });
-    const board = routesBoard([route("healthy"), refused], sources());
+    const board = routesBoard([route("healthy"), refused], sources(), t);
 
     expect(board.verdictsKnown).toBe(true);
     expect(board.serving.map((row) => row.name)).toEqual(["healthy"]);
@@ -265,7 +272,7 @@ describe("routesBoard", () => {
         ]),
       ],
     });
-    const board = routesBoard([denied, ghost], sources());
+    const board = routesBoard([denied, ghost], sources(), t);
 
     expect(board.notServing.map((row) => row.name)).toEqual([
       "ghost",
@@ -294,7 +301,7 @@ describe("routesBoard", () => {
       hostnames: [],
       parentRefs: [parentRef("edge", { sectionName: "tcp" })],
     });
-    const board = routesBoard([tcp], sources());
+    const board = routesBoard([tcp], sources(), t);
 
     expect(board.serving[0].serves).toBe(":9000 TCP");
     expect(board.serving[0].via).toBe("edge :tcp");
@@ -306,7 +313,7 @@ describe("routesBoard", () => {
     const wide = route("wide", {
       hostnames: ["a.example.com", "b.example.com", "c.example.com"],
     });
-    const board = routesBoard([wide], sources());
+    const board = routesBoard([wide], sources(), t);
 
     expect(board.serving[0].serves).toBe("a.example.com");
     expect(board.serving[0].more).toBe(2);
@@ -320,7 +327,7 @@ describe("routesBoard", () => {
       ],
       parents: [],
     });
-    const board = routesBoard([mesh], sources());
+    const board = routesBoard([mesh], sources(), t);
 
     expect(board.notServing).toHaveLength(0);
     expect(board.serving).toHaveLength(0);
@@ -336,7 +343,7 @@ describe("routesBoard", () => {
 
   it("calls a route with no parentRefs broken, not quiet", () => {
     const orphan = route("orphan", { parentRefs: [], parents: [] });
-    const board = routesBoard([orphan], sources());
+    const board = routesBoard([orphan], sources(), t);
 
     expect(board.notServing).toHaveLength(1);
     expect(board.notServing[0].stop?.short).toContain("no parentRefs");
@@ -348,7 +355,7 @@ describe("routesBoard", () => {
         { matches: [], backendRefs: [], hasRedirect: true, extensionRefs: [] },
       ],
     });
-    const board = routesBoard([redirect], sources());
+    const board = routesBoard([redirect], sources(), t);
 
     expect(board.serving[0].tail).toContain("redirect");
   });
@@ -363,7 +370,7 @@ describe("routesBoard", () => {
         ]),
       ],
     });
-    const board = routesBoard([edited], sources());
+    const board = routesBoard([edited], sources(), t);
 
     expect(board.serving[0].stale).toEqual({ observed: 3, current: 4 });
   });
@@ -374,7 +381,8 @@ describe("routesBoard", () => {
       sources({
         gateways: [gateway("edge"), gateway("orphan", { className: "nobody" })],
         classes: [gatewayClass("envoy", true), gatewayClass("nobody", null)],
-      })
+      }),
+      t
     );
 
     expect(board.pulse).toHaveLength(1);
@@ -383,7 +391,7 @@ describe("routesBoard", () => {
   });
 
   it("stays quiet on the pulse when every gateway is claimed and addressed", () => {
-    const board = routesBoard([route("healthy")], sources());
+    const board = routesBoard([route("healthy")], sources(), t);
     expect(board.pulse).toHaveLength(0);
   });
 
@@ -392,7 +400,8 @@ describe("routesBoard", () => {
       [route("healthy")],
       sources({
         backing: { services: [], published: [], backingKnown: false },
-      })
+      }),
+      t
     );
 
     expect(board.verdictsKnown).toBe(false);
@@ -401,7 +410,8 @@ describe("routesBoard", () => {
   it("does not call a gateway a ghost while the gateway list is unread", () => {
     const board = routesBoard(
       [route("healthy")],
-      sources({ gateways: [], classes: [], topologyKnown: false })
+      sources({ gateways: [], classes: [], topologyKnown: false }),
+      t
     );
 
     expect(board.serving[0].viaRef).toBeNull();
@@ -417,7 +427,7 @@ describe("routesBoard", () => {
       hostnames: ["contested.example.com"],
       createdAt: "2026-08-15T00:00:00Z",
     });
-    const board = routesBoard([younger, older], sources());
+    const board = routesBoard([younger, older], sources(), t);
 
     const by = (name: string) => board.serving.find((row) => row.name === name);
     expect(by("older")?.contested).toBeNull();
@@ -438,7 +448,8 @@ describe("routesBoard", () => {
     });
     const board = routesBoard(
       [onEdge, elsewhere],
-      sources({ gateways: [gateway("edge"), gateway("second")] })
+      sources({ gateways: [gateway("edge"), gateway("second")] }),
+      t
     );
 
     expect(board.serving.every((row) => row.contested === null)).toBe(true);
@@ -457,7 +468,7 @@ describe("routesBoard", () => {
         ]),
       ],
     });
-    const board = routesBoard([twin], sources());
+    const board = routesBoard([twin], sources(), t);
 
     expect(board.notServing).toHaveLength(1);
     expect(board.notServing[0].stop?.at).toBe("gateway");

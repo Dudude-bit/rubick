@@ -36,6 +36,7 @@ import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { routesBoard, type RouteRow } from "@/lib/route-rows";
+import { useT } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import { verbatim } from "@/lib/error-utils";
@@ -232,6 +233,7 @@ function GroupCap({
 }
 
 export function GatewayRoutesList() {
+  const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const {
@@ -278,17 +280,21 @@ export function GatewayRoutesList() {
 
   const board = useMemo(
     () =>
-      routesBoard(filtered, {
-        gateways: gateways.data ?? [],
-        classes: classes.data ?? [],
-        topologyKnown: gateways.data !== undefined,
-        backing: {
-          services: backing.data?.services ?? [],
-          published: backing.data?.published ?? [],
-          backingKnown: backing.data !== undefined,
+      routesBoard(
+        filtered,
+        {
+          gateways: gateways.data ?? [],
+          classes: classes.data ?? [],
+          topologyKnown: gateways.data !== undefined,
+          backing: {
+            services: backing.data?.services ?? [],
+            published: backing.data?.published ?? [],
+            backingKnown: backing.data !== undefined,
+          },
         },
-      }),
-    [filtered, gateways.data, classes.data, backing.data]
+        t
+      ),
+    [filtered, gateways.data, classes.data, backing.data, t]
   );
 
   const topology = useMemo(

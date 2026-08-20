@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    fromThisMachine: "С этой машины",
     relatedResources: "Связанные ресурсы",
     trafficPath: "Путь трафика",
     releases: "Релизы",
@@ -73,6 +74,20 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    hostname: "Хост",
+    gatewayAddress: "Адрес шлюза",
+    whoInfra: "инфра",
+    whoYours: "ваша сторона",
+    whoController: "контроллер",
+    whoMachine: "эта машина",
+    gwAsksListener: "маршрут просит",
+    gwServesListener: "слушатель обслуживает",
+    gwAsksNamespace: "маршрут живёт в",
+    gwServesNamespace: "слушатель допускает",
+    gwAsksPort: "ссылка просит порт",
+    gwServesPorts: "Service обслуживает",
+    gwAsksGeneric: "просит",
+    gwServesGeneric: "обслуживает",
     reachableAt: "Доступен по",
     controlledBy: "Контролируется",
     objects: "Объекты",
@@ -254,6 +269,16 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    probe: "Проверить",
+    probing: "Проверяем…",
+    copyManifest: "Скопировать манифест",
+    grantManifestCopied: "Манифест ReferenceGrant скопирован",
+    copyHost: "Хост {host}",
+    copyResolvedIp: "Разрешённый адрес {ip}",
+    copyGatewayAddress: "Адрес шлюза {address}",
+    copyPair: "Скопировать {pair}",
+    toInline: "к",
+    viaGateway: "через Gateway",
     readingGroup: "идёт чтение: {group}",
     listAnd: " и ",
     listComma: ", ",
@@ -1440,6 +1465,149 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    gwClassBlind: "GatewayClass — отсюда не прочитать",
+    gwClassNoGateway: "GatewayClass — неизвестен: самого Gateway нет",
+    gwClassMissingSay: "Класс {name} не существует",
+    gwClassMissingShort: "класс {name} не существует",
+    gwClassMissingTitle: "GatewayClass с именем {name} нет",
+    gwClassMissingBody:
+      "Gateway называет класс, который не установлен. Ни один контроллер его не запрограммирует — всё через этот шлюз мертво, пока класс не появится или Gateway не назовёт существующий.",
+    gwClassUnclaimedSay: "Класс {name} никто не заявил",
+    gwClassUnclaimedShort: "класс {name} никто не заявил",
+    gwClassUnclaimedTitle: "Ни один контроллер не принял {name}",
+    gwClassRefusedBody:
+      "{said}. Всё через этот шлюз мертво, пока контроллер не заявит класс.",
+    gwClassSilentBody:
+      "Класс называет контроллер {controller}, и никто за него не ответил. Обычно контроллер не установлен или не запущен — всё через этот шлюз мертво, пока он не ответит.",
+    gwClassClaimedSay: "Класс {name} заявлен контроллером {controller}",
+    gwGatewayBlind: "Gateway {name} — отсюда не прочитать",
+    gwGatewayMissingSay: "Gateway {name} не существует в {namespace}",
+    gwGatewayMissingShort: "{name} не существует",
+    gwGatewayMissingTitle: "parentRef называет Gateway, которого нет",
+    gwGatewayMissingBody:
+      "Принять этот маршрут некому. Обычно это опечатка в имени или неймспейсе, либо Gateway удалили после того, как маршрут был написан.",
+    gwNotProgrammedSay: "Gateway {name} не запрограммирован",
+    gwNotProgrammedShort: "{name} не запрограммирован",
+    gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",
+    gwNotProgrammedBody:
+      "{said}. Ничего за ним не обслуживается, пока не починен сам Gateway — это выше всех привязанных к нему маршрутов.",
+    gwNoAddressSay: "У Gateway {name} ещё нет адреса",
+    gwNoAddressShort: "у {name} ещё нет адреса",
+    gwNoAddressTitle: "Некуда отправлять трафик",
+    gwNoAddressBody:
+      "Контроллер принял Gateway, но адрес так и не назначен — на облачных LoadBalancer это ещё идущий provisioning, упор в квоту или отказ реализации выделить адрес. Пока адреса нет, трафику некуда приходить.",
+    gwProgrammedQuietSay:
+      "Gateway {name} — контроллер не отчитался о Programmed",
+    gwProgrammedSay: "Gateway {name} запрограммирован",
+    gwListenerNamed: "Слушатель :{name}",
+    gwListenerAny: "Слушатель",
+    gwListenerNotFound: "неизвестно — слушатель не найден",
+    gwAllHosts: "все хосты",
+    gwNoControllerForParentSay:
+      "Ни один контроллер не ответил за этого родителя",
+    gwNoControllerShort: "ни один контроллер не ответил",
+    gwNoStatusTitle: "Статус для этого маршрута никто не написал",
+    gwNoStatusBody:
+      "Ни один контроллер не вынес вердикт по этому родителю. Либо класс этого Gateway никем не заявлен, либо контроллер не запущен — в обоих случаях data plane этот маршрут не видит.",
+    gwNoAcceptedYet: "Контроллер написал статус, но вердикта Accepted ещё нет",
+    gwListenerMatches: "{label} подходит этому маршруту",
+    gwNsNotAllowedSay: "Слушатель не допускает маршруты из {namespace}",
+    gwNsNotAllowedShort: "неймспейс {namespace} не допущен",
+    gwNsNotAllowedTitle: "Неймспейс вне того, что допускает слушатель",
+    gwNsNotAllowedBody:
+      "{said}. allowedRoutes слушателя решают, каким неймспейсам можно привязываться — расширьте их на Gateway или перенесите маршрут.",
+    gwListenerRefusesSay: "{label} не принимает этот маршрут",
+    gwHostnamesShort: "хосты не пересекаются",
+    gwHostnamesTitle: "Хосты не пересекаются",
+    gwRefusedWord: "отказано",
+    gwRouteRefusedTitle: "Шлюз не принимает этот маршрут",
+    gwRouteRefusedBody:
+      "{said}. Непринятый маршрут никогда не программируется — YAML корректен, и никто его не обслуживает.",
+    gwListenerAccepts: "{label} принимает этот маршрут",
+    gwStaleTitle: "Этот вердикт — о предыдущей версии маршрута",
+    gwStaleBody:
+      "Контроллер в последний раз смотрел на generation {observed}; вы на {current}. Всё ниже может измениться, когда он догонит — обычно за секунды. Здесь пока ничего не сломано; оно просто устарело.",
+    gwNsAllowedListSay: "Неймспейс {namespace} допущен слушателем ({list})",
+    gwNsAllowedSay: "Неймспейс {namespace} допущен слушателем",
+    gwNsAllowedQuiet: "Неймспейс допущен слушателем",
+    gwRefNotPermittedSay: "Ссылка на {target} не разрешена",
+    gwRefNotPermittedAnon: "Одна из ссылок не разрешена",
+    gwRefNotPermittedShort: "нужен ReferenceGrant в {namespace}",
+    gwRefNotPermittedTitle:
+      "Ни один ReferenceGrant в {namespace} её не разрешает",
+    gwRefNotPermittedBody:
+      "{said}. Ссылка через границу неймспейсов требует согласия целевого неймспейса, и контроллер обязан ронять этот трафик, пока согласия нет. Вот грант, который это чинит:",
+    gwRefUnresolvedSay: "Одна из ссылок этого маршрута не разрешилась",
+    gwRefUnresolvedShort: "ссылка не разрешилась",
+    gwRefsResolveQuiet: "Ссылки разрешаются — обратного никто не сообщил",
+    gwRefsResolve: "Ссылки разрешаются",
+    gwRedirectsOnly:
+      "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
+    gwNoBackendRefsSay: "Нет backendRefs — совпавшему запросу некуда идти",
+    gwNoBackendRefsShort: "нет backendRefs — совпавшим запросам некуда идти",
+    gwNoBackendRefsTitle: "Маршрут ловит трафик и роняет его",
+    gwNoBackendRefsBody:
+      "Во всех правилах нет backendRefs (и нет редиректа). Совпавший запрос сразу получает ошибку от шлюза.",
+    gwBackendsReading: "Бэкенд-Service — ещё читаются",
+    gwEndpointsReading: "Эндпоинты — ещё читаются",
+    gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
+    gwBackendMissingShort: "Service {name} не существует",
+    gwWrongPortSay: "Service {name} не обслуживает порт {port}",
+    gwWrongPortTitle: "Service существует, порт — нет",
+    gwWrongPortBody:
+      "Порт backendRef обязан быть одним из портов самого Service — трафик на любой другой номер отклоняется, не дойдя до пода.",
+    gwNoPortsAtAll: "портов нет вовсе",
+    gwBackendServes: "Бэкенд-Service {name} обслуживает",
+    gwBackendExists: "Бэкенд-Service {name} существует",
+    gwEndpointsQuiet: "Эндпоинты опубликованы и готовы",
+    gwExternalName:
+      "Разрешается в другое место (ExternalName) — эндпоинтов нет по замыслу",
+    gwReachableNothing: "Достижим снаружи — проверять нечего",
+    gwReachableUnchecked: "Достижим снаружи — DNS · TCP · ещё не проверено",
+    gwNotReached: "не дошло",
+    gwAboutGeneration: "о generation {observed} — вы на {current}",
+    gwTlsToBackend: "TLS к этому бэкенду:",
+    gwTrustsBundle: "доверяет набору {ca}",
+    gwCaFrom: "CA из {refs}",
+    gwPolicyUnknown: "неизвестно",
+    gwPolicyTruncated: "принята — список предков может быть усечён",
+    gwPolicyAccepted: "принята",
+    gwProbeDisclaimer:
+      "проверено с вашего ноутбука, не изнутри кластера — VPN или split DNS могут не согласиться",
+    gwNothingToConnect: "не к чему подключаться",
+    gwNoHostnameDialDirect:
+      "на маршруте нет хоста — DNS проверять нечего; адрес шлюза набирается напрямую",
+    gwDnsIdle: "DNS, ещё не проверено",
+    gwResolving: "резолвится…",
+    gwNoResolveFromHere: "отсюда не резолвится",
+    gwResolvesTo: "резолвится в",
+    gwNotTheGateways:
+      "не адрес шлюза {address}. DNS всё ещё указывает в другое место; трафик в этот кластер так и не приходит.",
+    gwGatewaysAddress: "адрес шлюза",
+    gwUdpNoCheck:
+      "TCP-коннект ничего не доказывает про UDP-слушатель, поэтому эта машина не делает вид, что проверила",
+    gwNotCheckedYet: "ещё не проверено",
+    gwWaitingDns: "ждёт DNS",
+    gwConnecting: "подключается…",
+    gwAnswersIn: "отвечает за {ms} мс",
+    gwServing: "Обслуживает",
+    gwNotServing: "Не обслуживает",
+    gwAllHostsListenerServes: "все хосты, которые обслуживает слушатель",
+    gwStopsAtStep: "останавливается на шаге {n} из {total}",
+    gwNoParentRefsPage:
+      "Нет parentRefs — маршрут ни к чему не привязан и не обслуживает трафик.",
+    gwRowClassMissing:
+      "называет класс {name}, которого не существует — всё привязанное к нему мертво",
+    gwRowClassUnclaimed:
+      "класс {name} никто не заявил — всё привязанное к нему мертво",
+    gwRowNotProgrammed: "не запрограммирован своим контроллером",
+    gwRowNoAddress: "ещё без адреса — трафику некуда приходить",
+    gwRowNoParents:
+      "нет parentRefs — ни к чему не привязан и не обслуживает трафик",
+    gwRowMesh: "привязан к {parent} — GAMMA, здесь не судится",
+    gwRowRedirects: "перенаправляет — бэкендов нет, они не нужны",
+    gwMeshNotInterpreted:
+      "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     noRulesRoutesNothing:
       "Правил нет, поэтому этот Ingress ничего не маршрутизирует.",
     noContainerToAttach:
@@ -2678,6 +2846,13 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    gwBackendsAllExist: "Все {n} бэкенд-Service существуют, порты совпадают",
+    gwEndpointsPublish: {
+      one: "Эндпоинты публикуют {n} готовый",
+      few: "Эндпоинты публикуют {n} готовых",
+      many: "Эндпоинты публикуют {n} готовых",
+      other: "Эндпоинты публикуют {n} готовых",
+    },
     reconcilersFromSources: {
       one: "{n} реконсилятор из {sources}",
       few: "{n} реконсилятора из {sources}",

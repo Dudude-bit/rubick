@@ -440,6 +440,7 @@ function BackendPolicies({
   const served =
     detection?.kinds.some((kind) => kind.kind === "BackendTLSPolicy") ?? false;
   const { crdFor } = useCrdIndex();
+  const t = useT();
   const policiesQuery = useLiveQuery({
     queryKey: ["backend-tls-policies", service.namespace],
     queryFn: () => commands.listBackendTlsPolicies(service.namespace),
@@ -458,7 +459,7 @@ function BackendPolicies({
       <PeekHeading title="Policies" count={attached.length} />
       <div className="flex flex-col gap-1">
         {attached.map((policy) => {
-          const verdict = policyVerdict(policy);
+          const verdict = policyVerdict(policy, t);
           return (
             <p
               key={policy.name}
