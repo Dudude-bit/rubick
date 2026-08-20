@@ -150,14 +150,15 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
   return (
     <li className="relative pl-8">
       {index < 7 && (
-        <span className="absolute bottom-0 left-[9px] top-[22px] w-px bg-hair" />
+        <span className="absolute bottom-0 left-[9px] top-[24px] w-px bg-hair" />
       )}
+      {/* Centred on the row's 26px first line, as is everything in it. */}
       <span
-        className={`absolute left-0 top-0.5 flex h-5 w-5 items-center justify-center rounded-full border bg-raise text-[11px] ${MARK_TONE[step.state]}`}
+        className={`absolute left-0 top-[3px] flex h-5 w-5 items-center justify-center rounded-full border bg-raise text-[11px] ${MARK_TONE[step.state]}`}
       >
         {MARKS[step.state] ?? index + 1}
       </span>
-      <div className="flex min-h-[26px] flex-wrap items-baseline gap-2 pb-2">
+      <div className="flex min-h-[26px] flex-wrap items-center gap-2 pb-2">
         <span className={off ? "text-xs text-fg-fnt" : "text-xs text-fg-mid"}>
           <Say step={step} />
           {!off &&
