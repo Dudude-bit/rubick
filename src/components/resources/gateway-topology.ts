@@ -20,6 +20,7 @@ import {
   type MapTone,
 } from "@/integrations";
 import { describeStop } from "@/lib/connections";
+import type { T } from "@/i18n/useT";
 import type { GatewayInfo, RouteInfo } from "@/generated/types";
 
 function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
@@ -65,7 +66,8 @@ function refusedBy(
 export function gatewayTopology(
   gateways: GatewayInfo[],
   routes: RouteInfo[],
-  backing: BackingSources | undefined
+  backing: BackingSources | undefined,
+  t: T
 ): RoutingMapData {
   const gatewayNodes = new Map<string, MapNode>();
   const routeNodes: MapNode[] = [];
@@ -122,7 +124,7 @@ export function gatewayTopology(
           label: parent.name,
           sub: ns,
           tone: "err",
-          tag: { text: "missing", tone: "err" },
+          tag: { text: t("columns", "missingTag"), tone: "err" },
         });
       }
       link(
@@ -165,8 +167,11 @@ export function gatewayTopology(
                 ? describeStop(stop).title
                 : state?.known
                   ? state.service?.type === "ExternalName"
-                    ? "resolves elsewhere"
-                    : `${state.ready} ready${state.draining > 0 ? `, ${state.draining} draining` : ""}`
+                    ? t("empty", "resolvesElsewhere")
+                    : t("count", "nReady", { n: state.ready }) +
+                      (state.draining > 0
+                        ? `, ${t("count", "nDraining", { n: state.draining })}`
+                        : "")
                   : undefined,
               tone: stop ? "err" : state?.known ? "ok" : "mute",
               object: { kind: "Service", name: backend.name, namespace: ns },
@@ -185,8 +190,8 @@ export function gatewayTopology(
   return {
     columns: [
       { label: "Gateways", nodes: [...gatewayNodes.values()] },
-      { label: "Routes", nodes: routeNodes, width: 240 },
-      { label: "Backends", nodes: [...backendNodes.values()] },
+      { label: t("nav", "routes"), nodes: routeNodes, width: 240 },
+      { label: t("columns", "backends"), nodes: [...backendNodes.values()] },
     ],
     edges,
   };

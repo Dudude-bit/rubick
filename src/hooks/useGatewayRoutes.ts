@@ -15,6 +15,7 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
@@ -75,6 +76,7 @@ function useRouteKind(
 
 export function useGatewayRoutes(namespace: string | null) {
   const { toast } = useToast();
+  const t = useT();
   const detection = useGatewayApi().data;
   const served = useMemo(
     () => new Set(detection?.kinds.map((k) => k.kind) ?? []),
@@ -84,11 +86,11 @@ export function useGatewayRoutes(namespace: string | null) {
   const onWatchError = useCallback(
     (kind: string, message: string) => {
       toast({
-        title: `Live updates unavailable for ${kind}s`,
-        description: `${message} — the list falls back to polling.`,
+        title: t("action", "liveUnavailableFor", { kind }),
+        description: t("action", "fallsBackPolling", { message }),
       });
     },
-    [toast]
+    [toast, t]
   );
 
   // Five fixed calls, not a loop: the kinds are a closed set and hooks

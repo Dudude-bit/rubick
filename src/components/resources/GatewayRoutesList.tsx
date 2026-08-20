@@ -36,7 +36,8 @@ import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { routesBoard, type RouteRow } from "@/lib/route-rows";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import { verbatim } from "@/lib/error-utils";
@@ -58,6 +59,30 @@ const KIND_TONE: Record<string, string> = {
   UDPRoute: "border-[hsl(85_35%_55%/0.35)] text-[hsl(85_35%_55%)]",
 };
 
+/** The step a break lands on, in the reader's language. */
+function stepWord(at: string, t: T): string {
+  switch (at) {
+    case "class":
+      return t("columns", "stepClass");
+    case "gateway":
+      return t("columns", "stepGateway");
+    case "listener":
+      return t("columns", "stepListener");
+    case "namespace":
+      return t("columns", "stepNamespace");
+    case "refs":
+      return t("columns", "stepRefs");
+    case "backend":
+      return t("columns", "stepBackend");
+    case "endpoints":
+      return t("columns", "stepEndpoints");
+    case "reachable":
+      return t("columns", "stepReachable");
+    default:
+      return at;
+  }
+}
+
 /** One template for every row, so the columns align across rows. */
 const ROW_GRID =
   "grid grid-cols-[14px_minmax(200px,255px)_1fr_84px_minmax(140px,170px)_105px_38px] items-baseline gap-x-3";
@@ -74,6 +99,7 @@ function matchesQuery(route: RouteInfo, query: string): boolean {
 }
 
 function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
+  const t = useT();
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
   const href = getResourceDetailUrl(row.kind, row.name, row.namespace);
@@ -122,7 +148,7 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
         {row.servesCopy ? (
           <CopyableValue
             value={row.servesCopy}
-            label={`Copy ${row.servesCopy}`}
+            label={t("action", "copyPair", { pair: row.servesCopy })}
             className="min-w-0 text-xs"
           >
             {row.serves}
@@ -140,25 +166,28 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
           row.stop && !muted ? "text-err" : "text-fg-fnt"
         )}
       >
-        {row.stop ? (
-          <>
-            stops at <span className="font-semibold">{row.stop.at}</span> —{" "}
-            {row.stop.short}
-          </>
-        ) : (
-          (row.tail ?? "")
-        )}
+        {row.stop
+          ? parts(t("empty", "gwStopsAtPhrase", { short: row.stop.short }), {
+              at: (
+                <span className="font-semibold">
+                  {stepWord(row.stop.at, t)}
+                </span>
+              ),
+            })
+          : (row.tail ?? "")}
         {row.stale && (
           <span className="text-warn">
-            {" "}
-            · verdict about gen {row.stale.observed}, you are on{" "}
-            {row.stale.current}
+            {" · "}
+            {t("empty", "gwStaleChipRow", {
+              observed: row.stale.observed,
+              current: row.stale.current,
+            })}
           </span>
         )}
         {row.contested && (
           <span className="text-warn">
-            {" "}
-            · host also claimed by {row.contested.by} — the older route wins
+            {" · "}
+            {t("empty", "gwContestedBy", { by: row.contested.by })}
           </span>
         )}
       </span>
@@ -187,17 +216,21 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
             <TooltipTrigger className="inline-flex items-baseline gap-1.5">
               {row.via}
               <span
-                aria-label={`${row.viaGhost.kind} ${row.viaGhost.name} does not exist`}
+                aria-label={t("empty", "kindDoesNotExist", {
+                  kind: row.viaGhost.kind,
+                  name: row.viaGhost.name,
+                })}
                 className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
               >
                 ?
               </span>
             </TooltipTrigger>
             <TooltipContent className="max-w-[42ch]">
-              {row.viaGhost.kind} {row.viaGhost.name} does not exist in{" "}
-              {row.viaGhost.namespace} — this route names an object that is not
-              there, so nothing can accept it. Usually a typo, or it was deleted
-              after the route was written.
+              {t("empty", "gwGhostTooltip", {
+                kind: row.viaGhost.kind,
+                name: row.viaGhost.name,
+                namespace: row.viaGhost.namespace ?? "",
+              })}
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -302,9 +335,10 @@ export function GatewayRoutesList() {
       gatewayTopology(
         gateways.data ?? [],
         filtered,
-        backing.data ? { ...backing.data, backingKnown: true } : undefined
+        backing.data ? { ...backing.data, backingKnown: true } : undefined,
+        t
       ),
-    [gateways.data, filtered, backing.data]
+    [gateways.data, filtered, backing.data, t]
   );
 
   if (!isConnected) {
@@ -314,11 +348,9 @@ export function GatewayRoutesList() {
   if (detection && !detection.installed) {
     return (
       <div className="p-6">
-        <h1 className="text-sm font-semibold text-fg">Routes</h1>
+        <h1 className="text-sm font-semibold text-fg">{t("nav", "routes")}</h1>
         <p className="mt-2 max-w-[64ch] text-xs text-fg-fnt">
-          This cluster does not serve the Gateway API route kinds. Install the
-          CRDs (the standard channel is enough) and this page fills in on its
-          own.
+          {t("empty", "gwNoCrdsPage")}
         </p>
       </div>
     );
@@ -331,7 +363,7 @@ export function GatewayRoutesList() {
   return (
     <div className="flex h-full flex-col p-6">
       <ResourceListHeader
-        title="Routes"
+        title={t("nav", "routes")}
         count={
           <span className="tabular-nums">
             {total + board.mesh.length}
@@ -347,11 +379,13 @@ export function GatewayRoutesList() {
                     brokenOnly && "underline"
                   )}
                 >
-                  {board.notServing.length} not serving
+                  {t("count", "gwNotServingCount", {
+                    n: board.notServing.length,
+                  })}
                 </button>
               </>
             )}
-            {quietCluster && total > 0 && " · all serving"}
+            {quietCluster && total > 0 && ` · ${t("empty", "gwAllServing")}`}
           </span>
         }
         dataUpdatedAt={dataUpdatedAt}
@@ -361,17 +395,17 @@ export function GatewayRoutesList() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="name, host, gateway…"
-              aria-label="Filter routes"
+              placeholder={t("action", "gwFilterPlaceholder")}
+              aria-label={t("action", "filterRoutes")}
               className="h-7 w-52 rounded-md border border-hair bg-transparent px-2.5 text-xs text-fg placeholder:text-fg-fnt focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             />
             <select
               value={kind}
               onChange={(event) => setKind(event.target.value)}
-              aria-label="Filter by kind"
+              aria-label={t("action", "filterByKind")}
               className="h-7 rounded-md border border-hair bg-canvas px-2 text-xs text-fg-mid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
-              <option value="">All kinds</option>
+              <option value="">{t("action", "allKinds")}</option>
               {ROUTE_KINDS.filter((k) => served.has(k)).map((k) => (
                 <option key={k} value={k}>
                   {k}
@@ -385,7 +419,7 @@ export function GatewayRoutesList() {
               onClick={() => setShowMap((on) => !on)}
             >
               <MapGlyph className="mr-1.5 h-3.5 w-3.5" />
-              {showMap ? "Hide map" : "Map"}
+              {showMap ? t("action", "hideMap") : t("action", "map")}
             </Button>
           </div>
         }
@@ -398,14 +432,15 @@ export function GatewayRoutesList() {
         >
           <span className="text-[9px] text-warn">●</span>
           <span className="text-fg-mid">
-            Gateway <span className="font-mono text-fg">{entry.gateway}</span>{" "}
-            {entry.say}.
+            {parts(t("empty", "gwPulseLine", { say: entry.say }), {
+              name: <span className="font-mono text-fg">{entry.gateway}</span>,
+            })}
           </span>
           <Link
             to="/network/gateways"
             className="ml-auto whitespace-nowrap text-info hover:underline"
           >
-            Open Gateways →
+            {t("action", "openGateways")}
           </Link>
         </div>
       ))}
@@ -414,7 +449,7 @@ export function GatewayRoutesList() {
         <div className="mt-3 flex flex-col gap-1">
           {topology.columns[1].nodes.length === 0 ? (
             <p className="max-w-[64ch] text-xs text-fg-mut">
-              Nothing to draw for this filter — no route matches it.
+              {t("empty", "gwNothingToDraw")}
             </p>
           ) : (
             <RoutingMap data={topology} />
@@ -426,25 +461,26 @@ export function GatewayRoutesList() {
         {error && routes.length === 0 ? (
           <div className="max-w-[68ch] py-8">
             <p className="text-xs text-err">
-              Could not read routes in this scope.
+              {t("empty", "gwCouldNotReadRoutes")}
             </p>
             <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
               {verbatim(error.message)}
             </p>
           </div>
         ) : isLoading && routes.length === 0 ? (
-          <p className="py-8 text-xs text-fg-fnt">Reading routes…</p>
+          <p className="py-8 text-xs text-fg-fnt">
+            {t("empty", "readingRoutes")}
+          </p>
         ) : total + board.mesh.length === 0 ? (
           <p className="py-8 text-xs text-fg-fnt">
             {routes.length === 0
-              ? "No routes in the current scope."
-              : "Nothing matches the filter."}
+              ? t("empty", "gwNoRoutesInScope")
+              : t("empty", "nothingMatchesFilter")}
           </p>
         ) : !board.verdictsKnown ? (
           <>
             <p className="px-0.5 pb-1.5 pt-4 text-[11px] text-fg-fnt">
-              Reading verdicts — gateways, classes and endpoints are still on
-              their way…
+              {t("empty", "gwReadingVerdicts")}
             </p>
             <div className="border-t border-hair">
               {[...board.notServing, ...board.serving, ...board.mesh].map(
@@ -463,7 +499,7 @@ export function GatewayRoutesList() {
             {board.notServing.length > 0 && (
               <>
                 <GroupCap
-                  label="Not serving"
+                  label={t("empty", "gwNotServing")}
                   count={board.notServing.length}
                   tone="err"
                 />
@@ -483,7 +519,10 @@ export function GatewayRoutesList() {
                 {/* A healthy cluster is a flat inventory: no labels, no red
                     group — the chrome only exists alongside trouble. */}
                 {!quietCluster && (
-                  <GroupCap label="Serving" count={board.serving.length} />
+                  <GroupCap
+                    label={t("empty", "gwServing")}
+                    count={board.serving.length}
+                  />
                 )}
                 <div
                   className={cn("border-t border-hair", quietCluster && "mt-4")}
@@ -500,7 +539,10 @@ export function GatewayRoutesList() {
             )}
             {!brokenOnly && board.mesh.length > 0 && (
               <>
-                <GroupCap label="Mesh" count={board.mesh.length} />
+                <GroupCap
+                  label={t("empty", "gwMeshGroup")}
+                  count={board.mesh.length}
+                />
                 <div className="border-t border-hair">
                   {board.mesh.map((row) => (
                     <Row

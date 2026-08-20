@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The tests read the English catalogue — the same strings as before. */
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
 import { gatewayTopology } from "./gateway-topology";
 import type {
   ConditionInfo,
@@ -108,7 +115,8 @@ describe("the gateway topology map", () => {
           ],
         }),
       ],
-      undefined
+      undefined,
+      t
     );
 
     expect(data.columns.map((column) => column.label)).toEqual([
@@ -126,7 +134,7 @@ describe("the gateway topology map", () => {
   });
 
   it("draws a named-but-absent gateway as the missing thing", () => {
-    const data = gatewayTopology([], [route("promo")], undefined);
+    const data = gatewayTopology([], [route("promo")], undefined, t);
     const gateways = data.columns[0].nodes;
     expect(gateways).toHaveLength(1);
     expect(gateways[0].tone).toBe("err");
@@ -147,7 +155,8 @@ describe("the gateway topology map", () => {
           ],
         }),
       ],
-      undefined
+      undefined,
+      t
     );
     expect(data.columns[1].nodes[0].tone).toBe("err");
     const attachment = data.edges.find((edge) => edge.from.startsWith("gw/"));
@@ -171,7 +180,8 @@ describe("the gateway topology map", () => {
           ],
         }),
       ],
-      undefined
+      undefined,
+      t
     );
     expect(data.columns[0].nodes).toHaveLength(0);
     // The route and its backend still draw.
@@ -204,7 +214,8 @@ describe("the gateway topology map", () => {
       [gateway("edge")],
       [route("promo")],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      backing as any
+      backing as any,
+      t
     );
     const backend = data.columns[2].nodes[0];
     // A selector and nothing published: the Service's own stop, in its words.

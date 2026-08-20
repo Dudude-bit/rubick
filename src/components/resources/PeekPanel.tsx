@@ -52,6 +52,7 @@ import { PeekTabBody } from "./PeekTabs";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 /**
  * The right-hand drawer a reference opens.
@@ -456,7 +457,7 @@ function BackendPolicies({
 
   return (
     <div>
-      <PeekHeading title="Policies" count={attached.length} />
+      <PeekHeading title={t("nav", "policies")} count={attached.length} />
       <div className="flex flex-col gap-1">
         {attached.map((policy) => {
           const verdict = policyVerdict(policy, t);
@@ -473,12 +474,16 @@ function BackendPolicies({
                 showKind={false}
               />
               <span>
-                — the gateway speaks TLS to this backend, SNI{" "}
-                <CopyableValue
-                  value={policy.hostname}
-                  label={`SNI ${policy.hostname}`}
-                  quietMark
-                />
+                —{" "}
+                {parts(t("empty", "gwSpeaksTlsSni", {}), {
+                  sni: (
+                    <CopyableValue
+                      value={policy.hostname}
+                      label={`SNI ${policy.hostname}`}
+                      quietMark
+                    />
+                  ),
+                })}
               </span>
               <span
                 className={
@@ -505,6 +510,7 @@ function BackendPolicies({
  * worth peeking for, so the pods row splits out what is not ready.
  */
 function NamespaceContents({ namespace }: { namespace: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const { close } = usePeek();
@@ -522,7 +528,10 @@ function NamespaceContents({ namespace }: { namespace: string }) {
           close();
           navigate(`/${definition.category}/${definition.plural}`);
         }}
-        title={`Open ${definition.displayPlural} scoped to ${namespace}`}
+        title={t("action", "openScopedTo", {
+          plural: definition.displayPlural,
+          namespace,
+        })}
         className={cn(
           RESOURCE_NAME_SHELL,
           "hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
@@ -587,9 +596,9 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     label: kindDoor(kind),
     value:
       data === undefined ? (
-        "reading…"
+        t("action", "readingInline")
       ) : data.length === 0 ? (
-        "none"
+        t("empty", "noneCount")
       ) : (
         <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
           {data.length}
@@ -601,19 +610,19 @@ function NamespaceContents({ namespace }: { namespace: string }) {
 
   return (
     <div>
-      <PeekHeading title="Contents" />
+      <PeekHeading title={t("nav", "contents")} />
       <KeyValueList
         items={[
           count(
             pods.data,
             "Pod",
-            notReady > 0 ? `${notReady} not ready` : undefined
+            notReady > 0 ? t("count", "nNotReady", { n: notReady }) : undefined
           ),
           count(
             deployments.data,
             "Deployment",
             starving && starving.length > 0
-              ? `${starving.length} short of desired`
+              ? t("count", "shortOfDesired", { n: starving.length })
               : undefined
           ),
           count(services.data, "Service"),
@@ -683,9 +692,9 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   const doors = useMemo(
     () =>
       conns.data
-        ? trafficDoors(conns.data, gatewaysQuery.data ?? [])
+        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t)
         : { entries: [], mesh: [] },
-    [conns.data, gatewaysQuery.data]
+    [conns.data, gatewaysQuery.data, t]
   );
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.
@@ -774,7 +783,10 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             />
             {entry.ghost && (
               <span
-                aria-label={`${entry.object.kind} ${entry.object.name} does not exist`}
+                aria-label={t("empty", "kindDoesNotExist", {
+                  kind: entry.object.kind,
+                  name: entry.object.name,
+                })}
                 className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
               >
                 ?
@@ -783,11 +795,16 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             {entry.address && (
               <CopyableAddress
                 value={entry.address}
-                label={`${entry.object.kind} address`}
+                label={t("action", "copyKindAddress", {
+                  kind: entry.object.kind,
+                })}
               />
             )}
             <span className={entry.ghost ? "text-err" : undefined}>
-              — {entry.ghost ? `${entry.meta} that does not exist` : entry.meta}
+              —{" "}
+              {entry.ghost
+                ? t("empty", "metaMissing", { meta: entry.meta })
+                : entry.meta}
             </span>
           </p>
           <div className="mt-1 flex flex-col gap-0.5">
@@ -816,7 +833,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
                     // address:port while showing the listener's :port.
                     <CopyableValue
                       value={door.copy}
-                      label={`Copy ${door.copy}`}
+                      label={t("action", "copyPair", { pair: door.copy })}
                       quietMark
                     >
                       {door.host}
@@ -846,7 +863,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
             ))}
             {entry.moreDoors > 0 && (
               <p className="pl-[16px] text-[11px] text-fg-fnt">
-                and {entry.moreDoors} more…
+                {t("empty", "andMore", { n: entry.moreDoors })}…
               </p>
             )}
           </div>
@@ -980,8 +997,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
               />
             </span>
           ))}{" "}
-          also name{doors.mesh.length === 1 ? "s" : ""} this Service as a mesh
-          parent — GAMMA, not through any gateway.
+          {t("count", "gwMeshAlsoNames", { n: doors.mesh.length })}
         </p>
       )}
     </div>

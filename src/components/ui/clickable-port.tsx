@@ -117,6 +117,7 @@ export function ClickableServicePort({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
+  const t = useT();
 
   const open = async (event: React.MouseEvent) => {
     // The row underneath navigates; forwarding a port is not that.
@@ -155,13 +156,13 @@ export function ClickableServicePort({
         return;
       }
       toast({
-        title: `Nothing to forward to`,
-        description: `No ready pod stands behind ${serviceName} right now.`,
+        title: t("empty", "gwNothingToForward"),
+        description: t("empty", "gwNoReadyPodBehind", { name: serviceName }),
         variant: "destructive",
       });
     } catch (error) {
       toast({
-        title: `Could not resolve ${serviceName}`,
+        title: t("empty", "gwCouldNotResolve", { name: serviceName }),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -188,7 +189,7 @@ export function ClickableServicePort({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          Forward this port — through a pod behind {serviceName}
+          {t("empty", "gwForwardThrough", { name: serviceName })}
         </TooltipContent>
       </Tooltip>
 

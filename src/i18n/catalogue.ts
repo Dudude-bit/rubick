@@ -42,6 +42,8 @@ export const en = {
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
     fromThisMachine: "From this machine",
+    policies: "Policies",
+    contents: "Contents",
     relatedResources: "Related resources",
     trafficPath: "Traffic path",
     releases: "Releases",
@@ -109,6 +111,17 @@ export const en = {
   columns: {
     // The route trace (Gateway API): who vouches for a step, and the two
     // sides of a mismatch quote.
+    stepClass: "class",
+    stepGateway: "gateway",
+    stepListener: "listener",
+    stepNamespace: "namespace",
+    stepRefs: "refs",
+    stepBackend: "backend",
+    stepEndpoints: "endpoints",
+    stepReachable: "reachable",
+    missingTag: "missing",
+    backends: "Backends",
+    addresses: "Addresses",
     hostname: "Hostname",
     gatewayAddress: "Gateway address",
     whoInfra: "infra",
@@ -304,7 +317,18 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    gwFilterPlaceholder: "name, host, gateway…",
+    filterRoutes: "Filter routes",
+    filterByKind: "Filter by kind",
+    allKinds: "All kinds",
+    hideMap: "Hide map",
+    map: "Map",
+    openGateways: "Open Gateways →",
+    liveUnavailableFor: "Live updates unavailable for {kind}s",
+    fallsBackPolling: "{message} — the list falls back to polling.",
     probe: "Probe",
+    openScopedTo: "Open {plural} scoped to {namespace}",
+    copyKindAddress: "{kind} address",
     probing: "Probing…",
     copyManifest: "Copy manifest",
     grantManifestCopied: "ReferenceGrant manifest copied",
@@ -1589,6 +1613,37 @@ export const en = {
     gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
     gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
     gwRowRedirects: "redirects — no backends, none needed",
+    gwBrokenRefs: "broken refs",
+    gwGatewayMissingWord: "gateway missing",
+    gwDoorGatewayClass: "Gateway · class {name}",
+    gwSpeaksTlsSni: "the gateway speaks TLS to this backend, SNI {sni}",
+    kindDoesNotExist: "{kind} {name} does not exist",
+    metaMissing: "{meta} that does not exist",
+    noneCount: "none",
+    gwStopsAtPhrase: "stops at {at} — {short}",
+    gwStaleChipRow: "verdict about gen {observed}, you are on {current}",
+    gwContestedBy: "host also claimed by {by} — the older route wins",
+    gwGhostTooltip:
+      "{kind} {name} does not exist in {namespace} — this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
+    gwNoCrdsPage:
+      "This cluster does not serve the Gateway API route kinds. Install the CRDs (the standard channel is enough) and this page fills in on its own.",
+    gwAllServing: "all serving",
+    gwPulseLine: "Gateway {name} {say}.",
+    gwNothingToDraw: "Nothing to draw for this filter — no route matches it.",
+    gwCouldNotReadRoutes: "Could not read routes in this scope.",
+    readingRoutes: "Reading routes…",
+    gwNoRoutesInScope: "No routes in the current scope.",
+    nothingMatchesFilter: "Nothing matches the filter.",
+    gwReadingVerdicts:
+      "Reading verdicts — gateways, classes and endpoints are still on their way…",
+    gwMeshGroup: "Mesh",
+    resolvesElsewhere: "resolves elsewhere",
+    gwProgrammedWord: "programmed",
+    gwNotProgrammedWord: "not programmed",
+    gwNothingToForward: "Nothing to forward to",
+    gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
+    gwCouldNotResolve: "Could not resolve {name}",
+    gwForwardThrough: "Forward this port — through a pod behind {name}",
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
@@ -2761,7 +2816,24 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    gwNotServingCount: {
+      one: "{n} not serving",
+      other: "{n} not serving",
+    },
+    fromSets: {
+      one: "(+{n} from sets)",
+      other: "(+{n} from sets)",
+    },
     gwBackendsAllExist: "All {n} backend Services exist, ports match",
+    shortOfDesired: {
+      one: "{n} short of desired",
+      other: "{n} short of desired",
+    },
+    gwMeshAlsoNames: {
+      one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",
+      other:
+        "also name this Service as a mesh parent — GAMMA, not through any gateway.",
+    },
     gwEndpointsPublish: {
       one: "Endpoints publish {n} ready",
       other: "Endpoints publish {n} ready",

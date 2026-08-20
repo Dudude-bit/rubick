@@ -10,6 +10,7 @@
  */
 
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
+import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   GatewayInfo,
@@ -69,14 +70,14 @@ const key = (object: ObjectRef) =>
   `${object.kind}/${object.namespace ?? ""}/${object.name}`;
 
 /** The break, compressed to the one word a door line can carry. */
-function brokenWord(stop: ChainStop): string | null {
+function brokenWord(stop: ChainStop, t: T): string | null {
   switch (stop.reason) {
     case "routeNotAccepted":
-      return "refused";
+      return t("empty", "gwRefusedWord");
     case "routeRefsUnresolved":
-      return "broken refs";
+      return t("empty", "gwBrokenRefs");
     case "gatewayMissing":
-      return "gateway missing";
+      return t("empty", "gwGatewayMissingWord");
     default:
       return null;
   }
@@ -84,7 +85,8 @@ function brokenWord(stop: ChainStop): string | null {
 
 export function trafficDoors(
   conns: ResourceConnections,
-  gateways: GatewayInfo[]
+  gateways: GatewayInfo[],
+  t: T
 ): TrafficDoors {
   // What broke, and under which gateway. A refusal is a verdict about ONE
   // (route, gateway) pair — a route refused by one gateway may be serving
@@ -93,7 +95,7 @@ export function trafficDoors(
   const brokenPerGateway = new Map<string, string>();
   const brokenPerRoute = new Map<string, string>();
   for (const stop of conns.stops) {
-    const word = brokenWord(stop);
+    const word = brokenWord(stop, t);
     if (!word || !("route" in stop)) continue;
     if ("gateway" in stop) {
       brokenPerGateway.set(`${key(stop.route)}@${key(stop.gateway)}`, word);
@@ -154,12 +156,16 @@ export function trafficDoors(
           gateway.facts?.kind === "gateway" ? gateway.facts.className : null;
         const entry = entryFor(
           gateway,
-          className ? `Gateway · class ${className}` : "Gateway"
+          className
+            ? t("empty", "gwDoorGatewayClass", { name: className })
+            : "Gateway"
         );
         const broken =
           brokenPerGateway.get(`${key(edge.from)}@${key(gateway)}`) ??
           brokenPerRoute.get(key(edge.from)) ??
-          (gateway.existence === "missing" ? "gateway missing" : null);
+          (gateway.existence === "missing"
+            ? t("empty", "gwGatewayMissingWord")
+            : null);
         if (edge.relation.hostnames.length > 0) {
           for (const host of edge.relation.hostnames) {
             entry.doors.push({
@@ -204,7 +210,7 @@ export function trafficDoors(
     if (edge.relation.verb === "routes" && edge.from.kind === "Ingress") {
       const entry = entryFor(edge.from, "Ingress");
       entry.doors.push({
-        host: edge.relation.host ?? "all hosts",
+        host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,
         broken: null,
         route: null,

@@ -12,21 +12,62 @@ import {
 } from "./columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "./ResourceRef";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
 
-function programmed(gateway: GatewayInfo): {
-  text: string;
-  tone: "ok" | "err" | "mute";
-} {
+/** The controller's reason is quoted raw; only this app's own words are
+ *  spoken through the catalogue. */
+// eslint-disable-next-line react-refresh/only-export-components
+function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
+  const t = useT();
   const condition = gateway.conditions.find((c) => c.type === "Programmed");
-  if (!condition) return { text: "no controller answered", tone: "mute" };
-  if (condition.status === "True") return { text: "programmed", tone: "ok" };
-  if (condition.status === "False") {
-    return { text: condition.reason ?? "not programmed", tone: "err" };
-  }
-  return { text: "unknown", tone: "mute" };
+  const said = !condition
+    ? { text: t("empty", "gwNoControllerShort"), tone: "mute" as const }
+    : condition.status === "True"
+      ? { text: t("empty", "gwProgrammedWord"), tone: "ok" as const }
+      : condition.status === "False"
+        ? {
+            text: condition.reason ?? t("empty", "gwNotProgrammedWord"),
+            tone: "err" as const,
+          }
+        : { text: t("empty", "gwPolicyUnknown"), tone: "mute" as const };
+  return <span className={TONE_CLASS[said.tone]}>{said.text}</span>;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function ListenersCell({ gateway }: { gateway: GatewayInfo }) {
+  const t = useT();
+  const total = gateway.listeners.length;
+  const contributed = gateway.listeners.filter(
+    (l) => l.fromListenerSet !== null
+  ).length;
+  return (
+    <span className="text-fg-fnt">
+      {total}
+      {contributed > 0 && ` ${t("count", "fromSets", { n: contributed })}`}
+    </span>
+  );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function AddressesCell({ gateway }: { gateway: GatewayInfo }) {
+  const t = useT();
+  const addresses = gateway.addresses;
+  if (addresses.length === 0) return <span className="text-fg-fnt">—</span>;
+  return (
+    <span className="truncate">
+      <CopyableAddress
+        value={addresses[0]}
+        label={t("columns", "gatewayAddress")}
+      />
+      {addresses.length > 1 && (
+        <span className="text-fg-fnt"> +{addresses.length - 1}</span>
+      )}
+    </span>
+  );
 }
 
 const TONE_CLASS = {
@@ -47,7 +88,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     createNamespaceColumn<GatewayInfo>(),
     {
       accessorKey: "className",
-      header: "Class",
+      header: () => <T section="columns" k="class" />,
       size: 140,
       cell: ({ row }) =>
         row.original.className ? (
@@ -62,47 +103,21 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     },
     {
       id: "listeners",
-      header: "Listeners",
+      header: () => <T section="columns" k="listeners" />,
       size: 90,
-      cell: ({ row }) => {
-        const total = row.original.listeners.length;
-        const contributed = row.original.listeners.filter(
-          (l) => l.fromListenerSet !== null
-        ).length;
-        return (
-          <span className="text-fg-fnt">
-            {total}
-            {contributed > 0 && ` (+${contributed} from sets)`}
-          </span>
-        );
-      },
+      cell: ({ row }) => <ListenersCell gateway={row.original} />,
     },
     {
       id: "addresses",
-      header: "Addresses",
+      header: () => <T section="columns" k="addresses" />,
       size: 180,
-      cell: ({ row }) => {
-        const addresses = row.original.addresses;
-        if (addresses.length === 0)
-          return <span className="text-fg-fnt">—</span>;
-        return (
-          <span className="truncate">
-            <CopyableAddress value={addresses[0]} label="Gateway address" />
-            {addresses.length > 1 && (
-              <span className="text-fg-fnt"> +{addresses.length - 1}</span>
-            )}
-          </span>
-        );
-      },
+      cell: ({ row }) => <AddressesCell gateway={row.original} />,
     },
     {
       id: "programmed",
       header: "Programmed",
       size: 170,
-      cell: ({ row }) => {
-        const said = programmed(row.original);
-        return <span className={TONE_CLASS[said.tone]}>{said.text}</span>;
-      },
+      cell: ({ row }) => <ProgrammedCell gateway={row.original} />,
     },
     createAgeColumn<GatewayInfo>(),
   ],

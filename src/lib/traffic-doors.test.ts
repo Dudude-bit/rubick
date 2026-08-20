@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The tests read the English catalogue — the same strings as before. */
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
 import { trafficDoors } from "./traffic-doors";
 import type {
   GatewayInfo,
@@ -92,7 +99,8 @@ describe("trafficDoors", () => {
           }),
         ],
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [gateway("edge", ["203.0.113.10"])],
+      t
     );
 
     expect(model.entries).toHaveLength(1);
@@ -140,7 +148,8 @@ describe("trafficDoors", () => {
           },
         ],
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [gateway("edge", ["203.0.113.10"])],
+      t
     );
 
     expect(model.entries[0].doors[0].broken).toBe("refused");
@@ -169,7 +178,8 @@ describe("trafficDoors", () => {
           },
         ],
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [gateway("edge", ["203.0.113.10"])],
+      t
     );
 
     expect(model.entries[0].doors[0].broken).toBe("broken refs");
@@ -198,7 +208,8 @@ describe("trafficDoors", () => {
           },
         ],
       }),
-      []
+      [],
+      t
     );
 
     const entry = model.entries[0];
@@ -230,7 +241,8 @@ describe("trafficDoors", () => {
           ["203.0.113.10"],
           [{ name: "tcp", port: 9000, protocol: "TCP" }]
         ),
-      ]
+      ],
+      t
     );
 
     const door = model.entries[0].doors[0];
@@ -265,7 +277,8 @@ describe("trafficDoors", () => {
             { name: "tcp-b", port: 9001, protocol: "TCP" },
           ]
         ),
-      ]
+      ],
+      t
     );
 
     const door = model.entries[0].doors[0];
@@ -293,7 +306,8 @@ describe("trafficDoors", () => {
           }),
         ],
       }),
-      []
+      [],
+      t
     );
 
     expect(model.entries.map((entry) => entry.object.name).sort()).toEqual([
@@ -334,7 +348,8 @@ describe("trafficDoors", () => {
           },
         ],
       }),
-      []
+      [],
+      t
     );
 
     const doorOn = (name: string) =>
@@ -367,7 +382,8 @@ describe("trafficDoors", () => {
           }),
         ],
       }),
-      []
+      [],
+      t
     );
 
     expect(model.entries[0].doors).toHaveLength(2);
@@ -384,7 +400,8 @@ describe("trafficDoors", () => {
           ),
         ],
       }),
-      []
+      [],
+      t
     );
 
     expect(model.entries).toHaveLength(0);
@@ -407,7 +424,8 @@ describe("trafficDoors", () => {
           }),
         ],
       }),
-      []
+      [],
+      t
     );
 
     const entry = model.entries[0];
@@ -438,7 +456,8 @@ describe("trafficDoors", () => {
           }),
         ]),
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [gateway("edge", ["203.0.113.10"])],
+      t
     );
 
     expect(model.entries[0].doors).toHaveLength(6);
@@ -470,7 +489,8 @@ describe("trafficDoors", () => {
           },
         ],
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [gateway("edge", ["203.0.113.10"])],
+      t
     );
 
     const doors = model.entries[0].doors;
