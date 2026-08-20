@@ -260,32 +260,37 @@ function StepMark({
  * its own life — waiting, spinning, answered — because the two are two
  * real commands, not one call wearing a spinner.
  */
-function ProbePanel({ trace }: { trace: RouteTrace }) {
+function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
   const [dns, setDns] = useState<ProbeStep<ResolveProbe>>({ status: "idle" });
   const [tcp, setTcp] = useState<ProbeStep<TcpProbe>>({ status: "idle" });
 
   const { host, address, port } = trace.probe;
-  const target = host ?? address;
-  if (target == null) return null;
+  if (host == null && address == null) return null;
+  // A TCP connect to a UDP port times out on a perfectly healthy listener —
+  // the check would report a break that is not there, so it is not offered.
+  const udp = kind === "UDPRoute";
+  const probeable = host != null || (address != null && !udp);
 
   const running = dns.status === "loading" || tcp.status === "loading";
 
   const run = async () => {
-    setDns({ status: "loading" });
-    setTcp({ status: "pending" });
-
     let resolvedFirst: string | undefined;
-    try {
-      const result = await commands.probeResolveHost(
-        target,
-        address,
-        port ?? 80
-      );
-      resolvedFirst = result.resolved[0];
-      setDns({ status: "finished", result });
-    } catch (error) {
-      setDns({ status: "error", message: String(error) });
+    if (host != null) {
+      setDns({ status: "loading" });
+      if (!udp) setTcp({ status: "pending" });
+      try {
+        const result = await commands.probeResolveHost(
+          host,
+          address,
+          port ?? 80
+        );
+        resolvedFirst = result.resolved[0];
+        setDns({ status: "finished", result });
+      } catch (error) {
+        setDns({ status: "error", message: String(error) });
+      }
     }
+    if (udp) return;
 
     // The gateway's address is the thing traffic must reach; the resolved
     // one is the fallback so the probe still says *something* on a cluster
@@ -325,107 +330,129 @@ function ProbePanel({ trace }: { trace: RouteTrace }) {
           checked from your laptop, not from inside the cluster — a VPN or split
           DNS can disagree
         </span>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto"
-          disabled={running}
-          onClick={run}
-        >
-          {running ? "Probing…" : "Probe"}
-        </Button>
+        {probeable && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            disabled={running}
+            onClick={run}
+          >
+            {running ? "Probing…" : "Probe"}
+          </Button>
+        )}
       </div>
       <ul className="mt-2 space-y-1 text-xs" aria-live="polite">
-        <li className="flex items-baseline gap-2">
-          <StepMark status={dns.status} tone={dnsTone} />
-          <span className={dns.status === "idle" ? "text-fg-fnt" : undefined}>
-            <CopyableValue value={target} label={`Host ${target}`} quietMark />{" "}
-            {dns.status === "idle" && "— DNS, not checked yet"}
-            {dns.status === "loading" && "— resolving…"}
-            {dns.status === "error" && (
-              <span className="text-err">— {dns.message}</span>
-            )}
-            {dns.status === "finished" &&
-              (dns.result.error ? (
-                <span className="text-err">
-                  does not resolve from here — {dns.result.error}
-                </span>
-              ) : (
+        {host == null ? (
+          <li className="flex items-baseline gap-2">
+            <span className="relative top-px h-2 w-2 flex-none rounded-full bg-fg-fnt" />
+            <span className="text-fg-fnt">
+              no hostname on this route — DNS has nothing to check; the
+              gateway&apos;s address is dialled directly
+            </span>
+          </li>
+        ) : (
+          <li className="flex items-baseline gap-2">
+            <StepMark status={dns.status} tone={dnsTone} />
+            <span className={dns.status === "idle" ? "text-fg-fnt" : undefined}>
+              <CopyableValue value={host} label={`Host ${host}`} quietMark />{" "}
+              {dns.status === "idle" && "— DNS, not checked yet"}
+              {dns.status === "loading" && "— resolving…"}
+              {dns.status === "error" && (
+                <span className="text-err">— {dns.message}</span>
+              )}
+              {dns.status === "finished" &&
+                (dns.result.error ? (
+                  <span className="text-err">
+                    does not resolve from here — {dns.result.error}
+                  </span>
+                ) : (
+                  <>
+                    resolves to{" "}
+                    {dns.result.resolved.map((ip, index) => (
+                      <span key={ip}>
+                        {index > 0 && ", "}
+                        <CopyableValue
+                          value={ip}
+                          label={`Resolved address ${ip}`}
+                          quietMark
+                          className={
+                            dns.result.matchesGateway === false
+                              ? "text-err"
+                              : undefined
+                          }
+                        />
+                      </span>
+                    ))}
+                    {dns.result.matchesGateway === false && address && (
+                      <span className="text-err">
+                        {" "}
+                        — not the gateway&apos;s{" "}
+                        <CopyableValue
+                          value={address}
+                          label={`Gateway address ${address}`}
+                          quietMark
+                          className="text-err"
+                        />
+                        . DNS still points somewhere else; traffic never arrives
+                        at this cluster.
+                      </span>
+                    )}
+                    {dns.result.matchesGateway === true &&
+                      " — the gateway's address"}
+                  </>
+                ))}
+            </span>
+          </li>
+        )}
+        {udp ? (
+          <li className="flex items-baseline gap-2">
+            <span className="relative top-px h-2 w-2 flex-none rounded-full bg-fg-fnt" />
+            <span className="text-fg-fnt">
+              UDP{port != null && ` :${port}`} — a TCP connect proves nothing
+              about a UDP listener, so this machine does not pretend to check it
+            </span>
+          </li>
+        ) : (
+          <li className="flex items-baseline gap-2">
+            <StepMark status={tcp.status} tone={tcpTone} />
+            <span
+              className={
+                tcp.status === "idle" || tcp.status === "pending"
+                  ? "text-fg-fnt"
+                  : undefined
+              }
+            >
+              TCP :{port ?? 80}
+              {connectTarget && (
                 <>
-                  resolves to{" "}
-                  {dns.result.resolved.map((ip, index) => (
-                    <span key={ip}>
-                      {index > 0 && ", "}
-                      <CopyableValue
-                        value={ip}
-                        label={`Resolved address ${ip}`}
-                        quietMark
-                        className={
-                          dns.result.matchesGateway === false
-                            ? "text-err"
-                            : undefined
-                        }
-                      />
-                    </span>
-                  ))}
-                  {dns.result.matchesGateway === false && address && (
-                    <span className="text-err">
-                      {" "}
-                      — not the gateway&apos;s{" "}
-                      <CopyableValue
-                        value={address}
-                        label={`Gateway address ${address}`}
-                        quietMark
-                        className="text-err"
-                      />
-                      . DNS still points somewhere else; traffic never arrives
-                      at this cluster.
-                    </span>
-                  )}
-                  {dns.result.matchesGateway === true &&
-                    " — the gateway's address"}
+                  {" "}
+                  to{" "}
+                  <CopyableValue
+                    value={connectTarget}
+                    label={`Probe target ${connectTarget}`}
+                    quietMark
+                  />
                 </>
-              ))}
-          </span>
-        </li>
-        <li className="flex items-baseline gap-2">
-          <StepMark status={tcp.status} tone={tcpTone} />
-          <span
-            className={
-              tcp.status === "idle" || tcp.status === "pending"
-                ? "text-fg-fnt"
-                : undefined
-            }
-          >
-            TCP :{port ?? 80}
-            {connectTarget && (
-              <>
-                {" "}
-                to{" "}
-                <CopyableValue
-                  value={connectTarget}
-                  label={`Probe target ${connectTarget}`}
-                  quietMark
-                />
-              </>
-            )}{" "}
-            {tcp.status === "idle" && "— not checked yet"}
-            {tcp.status === "pending" && "— waiting for DNS"}
-            {tcp.status === "loading" && "— connecting…"}
-            {tcp.status === "error" && (
-              <span className="text-err">— {tcp.message}</span>
-            )}
-            {tcp.status === "finished" &&
-              (tcp.result.error ? (
-                <span className="text-err">— {tcp.result.error}</span>
-              ) : (
-                <>
-                  answers in{" "}
-                  <span className="tabular-nums">{tcp.result.ms} ms</span>
-                </>
-              ))}
-          </span>
-        </li>
+              )}{" "}
+              {tcp.status === "idle" && "— not checked yet"}
+              {tcp.status === "pending" && "— waiting for DNS"}
+              {tcp.status === "loading" && "— connecting…"}
+              {tcp.status === "error" && (
+                <span className="text-err">— {tcp.message}</span>
+              )}
+              {tcp.status === "finished" &&
+                (tcp.result.error ? (
+                  <span className="text-err">— {tcp.result.error}</span>
+                ) : (
+                  <>
+                    answers in{" "}
+                    <span className="tabular-nums">{tcp.result.ms} ms</span>
+                  </>
+                ))}
+            </span>
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -480,7 +507,9 @@ function TraceCard({
           <StepRow key={step.id} step={step} index={index} />
         ))}
       </ol>
-      {trace.steps.at(-1)?.state === "blind" && <ProbePanel trace={trace} />}
+      {trace.steps.at(-1)?.state === "blind" && (
+        <ProbePanel trace={trace} kind={route.kind} />
+      )}
     </div>
   );
 }
