@@ -11,6 +11,7 @@ use crate::error::{AuthError, Error, Result};
 use crate::state::{AppEvent, AppState};
 use kube::config::{ExecAuthCluster, ExecConfig, ExecInteractiveMode};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use tokio::time::{Duration, Instant};
 
@@ -468,12 +469,14 @@ fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
             b'\r' => out.push_str("\\r"),
             b'\t' => out.push_str("\\t"),
             0x20..=0x7e => out.push(b as char),
-            other => out.push_str(&format!("\\x{other:02x}")),
+            other => {
+                let _ = write!(out, "\\x{other:02x}");
+            }
         }
     }
     out.push('"');
     if truncated {
-        out.push_str(&format!(" (+{} more bytes)", data.len() - max_bytes));
+        let _ = write!(out, " (+{} more bytes)", data.len() - max_bytes);
     }
     out
 }

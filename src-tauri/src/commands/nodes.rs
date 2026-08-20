@@ -178,7 +178,10 @@ pub async fn drain_node(
                 // If force is enabled, try to delete the pod directly
                 if force {
                     tracing::info!("Force deleting pod {}/{}", namespace, pod_name);
-                    if let Err(delete_err) = pod_api.delete(&pod_name, &Default::default()).await {
+                    if let Err(delete_err) = pod_api
+                        .delete(&pod_name, &kube::api::DeleteParams::default())
+                        .await
+                    {
                         eviction_errors.push(format!(
                             "Failed to force delete pod {namespace}/{pod_name}: {delete_err}"
                         ));

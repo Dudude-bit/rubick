@@ -59,7 +59,7 @@ pub fn read_certificate(pem_bytes: &[u8]) -> Result<CertificateFacts, Certificat
             Ok(block) if block.label == "CERTIFICATE" => blocks.push(block),
             // A bundle that ends in trailing whitespace or a comment is
             // normal; only a total absence of certificates is a problem.
-            _ => continue,
+            _ => {}
         }
     }
 

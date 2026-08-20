@@ -431,7 +431,7 @@ mod tests {
                 "resultType": "matrix",
                 "result": [{
                     "metric": { "pod": "busy-demo-abc-def" },
-                    "values": [[1700000000.0, "12.5"], [1700000015.0, "NaN"]]
+                    "values": [[1_700_000_000.0, "12.5"], [1_700_000_015.0, "NaN"]]
                 }]
             }
         });
@@ -456,7 +456,7 @@ mod tests {
                 "resultType": "vector",
                 "result": [{
                     "metric": { "persistentvolumeclaim": "data-stateful-demo-0" },
-                    "value": [1700000000.0, "0.84"]
+                    "value": [1_700_000_000.0, "0.84"]
                 }]
             }
         });

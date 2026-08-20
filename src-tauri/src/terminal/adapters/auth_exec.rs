@@ -191,9 +191,8 @@ impl TerminalAdapter for AuthExecAdapter {
     }
 
     async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
-        let rx = match self.output_rx.as_mut() {
-            Some(rx) => rx,
-            None => return Ok(None),
+        let Some(rx) = self.output_rx.as_mut() else {
+            return Ok(None);
         };
 
         // Short timeout matches the manager's 50ms read tick — it lets

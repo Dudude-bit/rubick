@@ -65,9 +65,8 @@ async fn search_registry_catalog(
     let host = host_from_url(base_url);
     let mut results = Vec::new();
     for repo_value in repositories {
-        let repo = match repo_value.as_str() {
-            Some(value) => value,
-            None => continue,
+        let Some(repo) = repo_value.as_str() else {
+            continue;
         };
         if let Some(project) = project_filter {
             if !repo.starts_with(&format!("{project}/")) {
@@ -109,9 +108,8 @@ async fn search_docker_hub(client: &Client, query: &str) -> Result<Vec<RegistryI
         )));
     }
     let payload: serde_json::Value = response.json().await?;
-    let results = match payload.get("results").and_then(|value| value.as_array()) {
-        Some(value) => value,
-        None => return Ok(Vec::new()),
+    let Some(results) = payload.get("results").and_then(|value| value.as_array()) else {
+        return Ok(Vec::new());
     };
     let mut output = Vec::new();
     for entry in results.iter().take(RESULT_LIMIT) {
@@ -185,9 +183,8 @@ async fn search_harbor(
         )));
     }
     let payload: serde_json::Value = response.json().await?;
-    let repositories = match payload.get("repository").and_then(|value| value.as_array()) {
-        Some(value) => value,
-        None => return Ok(Vec::new()),
+    let Some(repositories) = payload.get("repository").and_then(|value| value.as_array()) else {
+        return Ok(Vec::new());
     };
     let host = host_from_url(base_url);
     let mut output = Vec::new();

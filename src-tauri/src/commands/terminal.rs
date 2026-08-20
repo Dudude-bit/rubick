@@ -52,7 +52,7 @@ pub async fn open_pod_shell(
     namespace: String,
     pod: String,
     container: Option<String>,
-    _shell: Option<String>,
+    shell: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
@@ -71,7 +71,7 @@ pub async fn open_pod_shell(
 
     // Create adapter and session
     // Use provided shell or smart shell detection
-    let shell_command = if let Some(shell) = _shell {
+    let shell_command = if let Some(shell) = shell {
         vec![shell]
     } else {
         // Smart shell detection: try fish, then zsh, then bash, then sh

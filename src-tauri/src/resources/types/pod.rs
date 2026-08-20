@@ -331,18 +331,15 @@ pub struct PodStatusInfo {
 impl PodStatusInfo {
     fn from_pod(pod: &Pod) -> Self {
         let display = display_status(pod);
-        let status = match pod.status.as_ref() {
-            Some(s) => s,
-            None => {
-                return Self {
-                    phase: "Unknown".to_string(),
-                    display,
-                    ready: false,
-                    conditions: vec![],
-                    message: None,
-                    reason: None,
-                }
-            }
+        let Some(status) = pod.status.as_ref() else {
+            return Self {
+                phase: "Unknown".to_string(),
+                display,
+                ready: false,
+                conditions: vec![],
+                message: None,
+                reason: None,
+            };
         };
 
         let ready = status.conditions.as_ref().is_some_and(|conds| {

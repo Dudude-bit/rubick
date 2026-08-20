@@ -93,6 +93,7 @@ impl ClusterContext {
     }
 
     /// Set the CA certificate data
+    #[must_use]
     pub fn with_ca_data(mut self, ca_data: impl Into<String>) -> Self {
         self.certificate_authority_data = Some(ca_data.into());
         self
@@ -106,6 +107,7 @@ impl ClusterContext {
     }
 
     /// Set the default namespace
+    #[must_use]
     pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
         self.default_namespace = namespace.into();
         self

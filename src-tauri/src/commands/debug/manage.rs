@@ -41,7 +41,8 @@ pub async fn delete_debug_pod(
     }
 
     // Delete the pod
-    api.delete(&pod_name, &Default::default()).await?;
+    api.delete(&pod_name, &kube::api::DeleteParams::default())
+        .await?;
 
     Ok(())
 }
@@ -156,7 +157,10 @@ pub async fn cancel_debug_operation(
             let api: Api<Pod> = ctx.namespaced_api();
 
             // Delete the pod, ignore if not found
-            match api.delete(&operation.pod_name, &Default::default()).await {
+            match api
+                .delete(&operation.pod_name, &kube::api::DeleteParams::default())
+                .await
+            {
                 Ok(_) => {}
                 Err(kube::Error::Api(e)) if e.code == 404 => {}
                 Err(e) => return Err(Error::from(e)),

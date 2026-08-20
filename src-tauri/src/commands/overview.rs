@@ -574,18 +574,18 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
         // Keep the newest occurrence as the representative sample.
         if entry.last_seen.is_none() || last_rfc > entry.last_seen {
             entry.last_seen = last_rfc;
-            entry.sample = event.message.clone();
-            entry.object_kind = event.involved_object.kind.clone();
-            entry.object_name = event.involved_object.name.clone();
+            entry.sample.clone_from(&event.message);
+            entry.object_kind.clone_from(&event.involved_object.kind);
+            entry.object_name.clone_from(&event.involved_object.name);
             // Deliberately not `event.metadata.namespace`, which is `default`
             // for an event about a Node — inheriting it would file a
             // cluster-scoped object inside a namespace it does not live in.
-            entry.namespace = event.involved_object.namespace.clone();
+            entry.namespace.clone_from(&event.involved_object.namespace);
         }
     }
 
     let mut groups: Vec<_> = grouped.into_values().collect();
-    groups.sort_by(|a, b| b.count.cmp(&a.count));
+    groups.sort_by_key(|group| std::cmp::Reverse(group.count));
     groups
 }
 
@@ -842,7 +842,7 @@ fn namespace_loads(pods: &[Pod]) -> Vec<NamespaceLoad> {
             pod_count,
         })
         .collect();
-    loads.sort_by(|a, b| b.pod_count.cmp(&a.pod_count));
+    loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
     loads
 }
 
@@ -1160,7 +1160,6 @@ mod tests {
                 phase: Some("Running".to_string()),
                 ..Default::default()
             }),
-            ..Default::default()
         }
     }
 

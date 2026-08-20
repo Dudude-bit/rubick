@@ -123,7 +123,7 @@ pub fn calculate_utilization(used: f64, total: f64) -> Option<f64> {
     if total <= 0.0 {
         return None;
     }
-    Some((used / total * 100.0).min(100.0).max(0.0))
+    Some((used / total * 100.0).clamp(0.0, 100.0))
 }
 
 #[cfg(test)]

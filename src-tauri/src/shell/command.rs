@@ -68,12 +68,14 @@ impl ShellCommand {
     }
 
     /// Add a single argument.
+    #[must_use]
     pub fn arg(mut self, arg: impl AsRef<OsStr>) -> Self {
         self.args.push(arg.as_ref().to_owned());
         self
     }
 
     /// Add multiple arguments.
+    #[must_use]
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -85,6 +87,7 @@ impl ShellCommand {
     }
 
     /// Set an environment variable.
+    #[must_use]
     pub fn env(mut self, key: impl Into<String>, val: impl Into<String>) -> Self {
         self.envs.insert(key.into(), val.into());
         self
@@ -98,6 +101,7 @@ impl ShellCommand {
     }
 
     /// Set the working directory.
+    #[must_use]
     pub fn current_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.current_dir = Some(dir.into());
         self

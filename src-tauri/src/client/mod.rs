@@ -119,7 +119,8 @@ impl K8sClientManager {
 
         let kubeconfig = Kubeconfig::read_from(&path).map_err(|e| {
             Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig from {path:?}: {e}"
+                "Failed to read kubeconfig from {}: {e}",
+                path.display()
             )))
         })?;
 
@@ -447,7 +448,8 @@ fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
 
     expanded.canonicalize().map_err(|e| {
         Error::Auth(AuthError::Kubeconfig(format!(
-            "Cannot resolve kubeconfig path {expanded:?}: {e}"
+            "Cannot resolve kubeconfig path {}: {e}",
+            expanded.display()
         )))
     })
 }
