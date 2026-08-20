@@ -74,7 +74,7 @@ import {
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import type { ChainStop } from "@/generated/types";
-import { crdObjectPath, plural } from "../kit";
+import { crdObjectPath } from "../kit";
 import {
   Chain,
   Cell,
@@ -112,11 +112,14 @@ import {
   type TraefikSources,
 } from "./model";
 import { describePath, fullyRead } from "./rule";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
 
 export default function TraefikPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
   const filter = params.get("q") ?? "";
@@ -239,12 +242,10 @@ export default function TraefikPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s routing
+          {t("empty", "couldNotReadRouting")}
         </h2>
         <p className="text-xs text-fg-mut">
-          The routes this page draws come from the Ingresses and IngressRoutes
-          in this API server, and that request failed — so the table would be a
-          guess rather than an answer.
+          {t("empty", "traefikRoutingRequestFailed")}
         </p>
         <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
       </Section>
@@ -260,9 +261,9 @@ export default function TraefikPage() {
   const tabs: DetailTab[] = [
     {
       id: "routes",
-      label: "Routes",
+      label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length),
+      mark: routesMark(groups, troubled.length, t),
       content: (
         <RoutesTab
           groups={groups}
@@ -276,7 +277,7 @@ export default function TraefikPage() {
     },
     {
       id: "map",
-      label: "Map",
+      label: t("nav", "map"),
       glyph: viewGlyph(Network),
       // A shape, not a verdict. The colour belongs on the tab the reader
       // lands on and triages from; a red mark on the tab beside it would
@@ -299,7 +300,7 @@ export default function TraefikPage() {
       glyph: viewGlyph(Filter),
       mark:
         unused > 0
-          ? severityMark("warn", `${plural(unused, "middleware")} unused`)
+          ? severityMark("warn", t("count", "middlewaresUnused", { n: unused }))
           : countMark(uses.length),
       content: <MiddlewaresTab uses={uses} />,
     },
@@ -315,7 +316,7 @@ export default function TraefikPage() {
     },
     {
       id: "controller",
-      label: "Controller",
+      label: t("nav", "controller"),
       glyph: viewGlyph(Box),
       content: <ControllerTab controller={controller.data} sources={sources} />,
     },
@@ -328,9 +329,9 @@ export default function TraefikPage() {
         count={
           routeSources.isPending
             ? undefined
-            : `${plural(groups.length, "host")} across every namespace`
+            : t("count", "hostsAcrossNamespaces", { n: groups.length })
         }
-        description="What this proxy serves, and where each hostname goes."
+        description={t("empty", "traefikPageDescription")}
       />
       <DetailTabs
         tabs={tabs}
@@ -356,14 +357,15 @@ function allRoutesOf(groups: HostGroup[]): TraefikRoute[] {
  */
 function routesMark(
   groups: HostGroup[],
-  troubled: number
+  troubled: number,
+  t: ReturnType<typeof useT>
 ): DetailTabMark | undefined {
   if (groups.length === 0) return undefined;
   const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
   return troubled > 0
     ? severityMark(
         worst,
-        `${troubled} of ${groups.length} hosts need attention`
+        t("count", "hostsNeedAttention", { n: troubled, total: groups.length })
       )
     : countMark(groups.length);
 }
@@ -389,13 +391,16 @@ function MapTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  const t = useT();
   const data = useMemo(
     () => (sources ? routingMap(groups, sources) : null),
     [groups, sources]
   );
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
+    );
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
@@ -406,17 +411,15 @@ function MapTab({
     <div className="flex flex-col gap-2">
       <p className="text-[11px] text-fg-fnt">
         {broken > 0
-          ? `${broken} of ${groups.length} hosts broken${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+          ? `${t("count", "hostsBrokenOfTotal", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
           : worthALook > 0
-            ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
-            : `${plural(groups.length, "host")}, none with a problem`}
-        {backingLoading && " · checking what is behind them…"}
+            ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
+            : t("count", "hostsNoneWithProblem", { n: groups.length })}
+        {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
       <RoutingMap data={data} />
       <p className="text-[11px] text-fg-fnt">
-        Rest on a node to light up everything one edge away. A host goes to its
-        own paths and their chain; a Service goes to its page — every line is
-        one object naming another.
+        {t("empty", "traefikRestOnNodeHint")}
       </p>
     </div>
   );
@@ -424,15 +427,14 @@ function MapTab({
 
 /** The one thing both the map and the list say when there is no routing. */
 function NothingRoutes() {
+  const t = useT();
   return (
     <div className="max-w-[64ch]">
       <p className="text-xs text-fg-mut">
-        Traefik is running here and nothing routes to it.
+        {t("empty", "traefikRunningNothingRoutes")}
       </p>
       <p className="mt-1.5 text-[11px] text-fg-fnt">
-        No IngressRoute exists, and no Ingress names an IngressClass this proxy
-        claims. An Ingress naming a class nothing serves is correct YAML with no
-        events and no error, and is simply never served.
+        {t("empty", "traefikNoRouteClaimsClass")}
       </p>
     </div>
   );
@@ -455,6 +457,7 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  const t = useT();
   // Once per table, not per row: the same set decides every row's spelling.
   const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
 
@@ -476,7 +479,9 @@ function RoutesTab({
   }, [groups, filter]);
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
+    );
   }
 
   if (groups.length === 0) return <NothingRoutes />;
@@ -490,27 +495,27 @@ function RoutesTab({
         <FilterBox
           value={filter}
           onChange={onFilter}
-          placeholder="Filter by host, service or object"
-          label="Filter hosts"
+          placeholder={t("action", "filterByHostServiceObject")}
+          label={t("action", "filterHosts")}
         />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
-            ? `${shown.length} of ${groups.length}`
+            ? t("count", "nOfTotal", { n: shown.length, total: groups.length })
             : broken > 0
-              ? `${broken} of ${groups.length} broken, and first${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
               : worthALook > 0
-                ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
-                : `${plural(groups.length, "host")}, none with a problem`}
+                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
+                : t("count", "hostsNoneWithProblem", { n: groups.length })}
         </span>
         {backingLoading && (
           <span className="text-[11px] text-fg-fnt">
-            checking what is behind them…
+            {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
-          No host, service or object here matches that.
+          {t("empty", "noHostServiceObjectMatches")}
         </p>
       ) : (
         shown.map((group, index) => (
@@ -531,9 +536,12 @@ function RoutesTab({
 }
 
 /** The word at the right of a host line: what is true of it right now. */
-function hostState(group: HostGroup): { text: string; tone: Tone } {
+function hostState(
+  group: HostGroup,
+  t: ReturnType<typeof useT>
+): { text: string; tone: Tone } {
   const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: "nothing behind it", tone: "err" };
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -541,18 +549,18 @@ function hostState(group: HostGroup): { text: string; tone: Tone } {
     return {
       text:
         certificate.kind === "certificate" && certificate.expiry?.expired
-          ? "certificate expired"
-          : "certificate running out",
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
       tone: "err",
     };
   }
   if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: "served in the clear", tone: "warn" };
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }
   if (group.findings.length > 0) {
-    return { text: "worth a look", tone: "warn" };
+    return { text: t("empty", "worthALook"), tone: "warn" };
   }
-  return { text: "serving", tone: "ok" };
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function HostRow({
@@ -566,7 +574,8 @@ function HostRow({
   openByDefault: boolean;
   duplicated: Set<string>;
 }) {
-  const state = hostState(group);
+  const t = useT();
+  const state = hostState(group, t);
   const tls = group.tlsSecrets[0];
   // Where the certificate is, when it is not here. Stated rather than merely
   // not warned about: a reader who knows TLS ends at the load balancer learns
@@ -575,7 +584,8 @@ function HostRow({
   const upstream =
     sources && !tls ? terminatedUpstream(group.host, sources) : null;
   const upstreamNamed =
-    upstream ?? (sources?.upstreamTls?.(group.host) ? "the edge" : null);
+    upstream ??
+    (sources?.upstreamTls?.(group.host) ? t("empty", "theEdge") : null);
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -593,18 +603,18 @@ function HostRow({
 
   return (
     <TroubleRow
-      title={group.host ?? "any host"}
+      title={group.host ?? t("empty", "anyHost")}
       copy={group.host ?? undefined}
       meta={
         <>
-          {plural(group.routes.length, "path")}
+          {t("count", "paths", { n: group.routes.length })}
           {entryPoints.length > 0 &&
-            ` · ${everywhere ? "every entry point" : summarise(entryPoints)}`}
+            ` · ${everywhere ? t("empty", "everyEntryPoint") : summarise(entryPoints)}`}
           {tls
-            ? ` · TLS from ${tls.secretName}`
+            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
             : upstreamNamed
-              ? ` · TLS ends at ${typeof upstreamNamed === "string" ? upstreamNamed : upstreamNamed.name}`
-              : " · no TLS"}
+              ? ` · ${t("empty", "tlsEndsAt", { name: typeof upstreamNamed === "string" ? upstreamNamed : upstreamNamed.name })}`
+              : ` · ${t("empty", "noTls")}`}
         </>
       }
       state={state}
@@ -660,6 +670,7 @@ function PathRow({
   sources: TraefikSources | null;
   duplicated: Set<string>;
 }) {
+  const t = useT();
   const backing = sources ? backingOf(route, sources) : null;
 
   return (
@@ -673,13 +684,13 @@ function PathRow({
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
         {route.middlewares.length > 0 && (
           <>
-            <span className="text-fg-fnt">through</span>
+            <span className="text-fg-fnt">{t("empty", "throughWord")}</span>
             <span className="font-mono text-fg-mid">
               {route.middlewares.map((m) => m.name).join(" → ")}
             </span>
           </>
         )}
-        <span className="text-fg-fnt">to</span>
+        <span className="text-fg-fnt">{t("empty", "toTarget")}</span>
         {route.service ? (
           <>
             {route.service.kubernetes ? (
@@ -708,21 +719,21 @@ function PathRow({
         ) : route.resourceBackend ? (
           <span className="font-mono text-fg-mid">{route.resourceBackend}</span>
         ) : (
-          <span className="text-err">no service</span>
+          <span className="text-err">{t("empty", "noServiceBackend")}</span>
         )}
         <SourceRef route={route} />
       </span>
       <span className="text-[11px] text-fg-fnt">
         {route.resourceBackend
-          ? "an API object"
+          ? t("empty", "anApiObject")
           : !route.service?.kubernetes
-            ? "inside the proxy"
+            ? t("empty", "insideTheProxy")
             : backing && !backing.known
               ? "…"
               : backing?.stop
                 ? "—"
                 : backing
-                  ? `${backing.ready} ready`
+                  ? t("count", "nReady", { n: backing.ready })
                   : ""}
       </span>
     </div>
@@ -777,6 +788,7 @@ function HostChain({
   group: HostGroup;
   sources: TraefikSources;
 }) {
+  const t = useT();
   const route = group.chainFor;
   const backing = backingOf(route, sources);
   const entryPoints = boundEntryPoints(route, sources.entryPoints);
@@ -786,19 +798,23 @@ function HostChain({
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
         <span className="text-[10px] text-fg-fnt">
-          the path through {describePath(route.clause.path)}
+          {t("empty", "thePathThrough", {
+            path: describePath(route.clause.path),
+          })}
         </span>
       )}
       <Chain>
-        <Column label="Entry point">
+        <Column label={t("columns", "entryPoint")}>
           {entryPoints.length === 0 ? (
-            <Cell under="not read">unknown</Cell>
+            <Cell under={t("empty", "notReadLower")}>
+              {t("empty", "unknownLower")}
+            </Cell>
           ) : route.entryPoints === null ? (
             // The object names none, which in Traefik means all of them.
             // Stacking four cells to say so makes the chain taller than the
             // answer is worth.
             <Cell under={entryPoints.map((entry) => entry.name).join(", ")}>
-              every entry point
+              {t("empty", "everyEntryPoint")}
             </Cell>
           ) : (
             entryPoints.map((entry) => (
@@ -811,24 +827,24 @@ function HostChain({
             ))
           )}
         </Column>
-        <Column label="Rule">
+        <Column label={t("columns", "rule")}>
           <Cell
             under={
               route.rule.raw === null
-                ? `${route.source.kind} rule`
+                ? t("empty", "kindRule", { kind: route.source.kind })
                 : fullyRead(route.rule)
                   ? undefined
-                  : "shown in full below"
+                  : t("empty", "shownInFullBelow")
             }
           >
-            {group.host ?? "any host"}
+            {group.host ?? t("empty", "anyHost")}
             {route.clause.path ? ` ${describePath(route.clause.path)}` : ""}
           </Cell>
         </Column>
         <Column label="Middleware">
           {route.middlewares.length === 0 ? (
             <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
-              none
+              {t("empty", "noneLower")}
             </div>
           ) : (
             route.middlewares.map((middleware) => (
@@ -837,7 +853,8 @@ function HostChain({
                 under={middlewareDetail(
                   sources,
                   middleware.name,
-                  middleware.namespace
+                  middleware.namespace,
+                  t
                 )}
               >
                 <ResourceRef
@@ -858,7 +875,7 @@ function HostChain({
               under={
                 route.service.kubernetes
                   ? `:${route.service.port || "?"} · ${route.service.namespace}`
-                  : "Traefik's own, not a Service"
+                  : t("empty", "traefiksOwnNotService")
               }
             >
               {route.service.kubernetes ? (
@@ -875,23 +892,25 @@ function HostChain({
           ) : route.resourceBackend ? (
             // An API object, not a Service. It has no endpoints by design
             // and the app cannot see inside it, so nothing is claimed.
-            <Cell under="an API object, not a Service">
+            <Cell under={t("empty", "apiObjectNotService")}>
               {route.resourceBackend}
             </Cell>
           ) : (
-            <Cell bad>none</Cell>
+            <Cell bad>{t("empty", "noneLower")}</Cell>
           )}
         </Column>
-        <Column label="Published">
+        <Column label={t("columns", "published")}>
           {route.resourceBackend ? (
-            <Cell under="not a Service">—</Cell>
+            <Cell under={t("empty", "notAService")}>—</Cell>
           ) : !route.service?.kubernetes ? (
-            <Cell under="inside the proxy">not pods</Cell>
+            <Cell under={t("empty", "insideTheProxy")}>
+              {t("empty", "notPods")}
+            </Cell>
           ) : !backing.known ? (
-            <Cell under="reading endpoints">—</Cell>
+            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
           ) : backing.stop ? (
-            <Cell bad under={STOP_UNDER[backing.stop.reason]}>
-              0 published
+            <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
+              {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (
             <Cell
@@ -900,20 +919,22 @@ function HostChain({
               warn={backing.ready === 0 && backing.draining > 0}
               under={
                 backing.draining > 0
-                  ? `${backing.draining} draining`
+                  ? t("count", "nDraining", { n: backing.draining })
                   : backing.notReady > 0
-                    ? `${backing.notReady} not ready`
-                    : `of ${backing.ready}`
+                    ? t("count", "nNotReady", { n: backing.notReady })
+                    : t("count", "ofN", { n: backing.ready })
               }
             >
-              {backing.ready + backing.draining} published
+              {t("count", "nPublished", {
+                n: backing.ready + backing.draining,
+              })}
             </Cell>
           )}
         </Column>
       </Chain>
       {tls && (
         <span className="text-[11px] text-fg-fnt">
-          served under{" "}
+          {t("empty", "servedUnder")}{" "}
           <ResourceRef
             kind="Secret"
             name={tls}
@@ -933,15 +954,17 @@ function HostChain({
 }
 
 function RawRule({ route }: { route: TraefikRoute }) {
+  const t = useT();
   const { rule } = route;
   return (
     <div className="mt-1 border-l-2 border-hair pl-2.5">
       <p className="text-[11px] text-fg-mut">
         {rule.refused
-          ? `This rule is shown exactly as written, because ${rule.refused}.`
-          : `Shown exactly as written: ${rule.unread.join(", ")} ${
-              rule.unread.length === 1 ? "is" : "are"
-            } not interpreted here.`}
+          ? t("empty", "ruleShownAsWrittenBecause", { reason: rule.refused })
+          : t("empty", "shownExactlyAsWritten", {
+              n: rule.unread.length,
+              list: rule.unread.join(", "),
+            })}
       </p>
       <p className="mt-0.5 select-text break-all font-mono text-[11px] text-fg-mid">
         {rule.raw}
@@ -953,19 +976,21 @@ function RawRule({ route }: { route: TraefikRoute }) {
 function middlewareDetail(
   sources: TraefikSources,
   name: string,
-  namespace: string
+  namespace: string,
+  t: ReturnType<typeof useT>
 ): string | undefined {
   const found = sources.middlewares.find(
     (middleware) =>
       middleware.name === name && (middleware.namespace ?? "") === namespace
   );
-  if (!found) return "not found in this cluster";
+  if (!found) return t("empty", "notFoundInThisCluster");
   return middlewareType(found) ?? undefined;
 }
 
 // --- findings -----------------------------------------------------------
 
 function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
+  const t = useT();
   const issuance = useCertificateIssuance(
     group.tlsSecrets[0]?.namespace,
     group.tlsSecrets.map((secret) => secret.secretName)
@@ -998,7 +1023,7 @@ function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
       ))}
       {hidden > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          and {hidden} more — open the row
+          {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
     </div>
@@ -1014,7 +1039,8 @@ function FindingLine({
   brief?: boolean;
   issuance: ReturnType<typeof useCertificateIssuance>;
 }) {
-  const said = describeFinding(finding);
+  const t = useT();
+  const said = describeFinding(finding, t);
   return (
     <FindingBlock tone={finding.severity} title={said.title}>
       {!brief && said.note}
@@ -1029,11 +1055,11 @@ function FindingLine({
 }
 
 /** What a stopped path says in the column, in four words or fewer. */
-const STOP_UNDER: Record<ChainStop["reason"], string> = {
-  backendMissing: "no service to send to",
-  selectsNothing: "selector matches nothing",
-  noneReady: "running, none ready",
-  publishesNothing: "no port to send to",
+const STOP_UNDER: Record<ChainStop["reason"], keyof typeof en.empty> = {
+  backendMissing: "stopNoServiceToSendTo",
+  selectsNothing: "stopSelectorMatchesNothing",
+  noneReady: "stopRunningNoneReady",
+  publishesNothing: "stopNoPortToSendTo",
 };
 
 /** One object, linked, the way the reader will go and edit it. */
@@ -1058,7 +1084,10 @@ function objectRef(route: TraefikRoute): ReactNode {
 }
 
 /** Each *object* once — two routers of one object are one thing to edit. */
-function objectRefs(routes: TraefikRoute[]): ReactNode {
+function objectRefs(
+  routes: TraefikRoute[],
+  t: ReturnType<typeof useT>
+): ReactNode {
   const unique = [
     ...new Map(
       routes.map((route) => [
@@ -1069,13 +1098,17 @@ function objectRefs(routes: TraefikRoute[]): ReactNode {
   ];
   return unique.map((route, index) => (
     <Fragment key={`${route.source.namespace}/${route.source.name}`}>
-      {index > 0 && (index === unique.length - 1 ? " and " : ", ")}
+      {index > 0 &&
+        (index === unique.length - 1 ? ` ${t("empty", "listAnd")} ` : ", ")}
       {objectRef(route)}
     </Fragment>
   ));
 }
 
-function describeFinding(finding: Finding): {
+function describeFinding(
+  finding: Finding,
+  t: ReturnType<typeof useT>
+): {
   title: string;
   note: ReactNode;
 } {
@@ -1086,60 +1119,58 @@ function describeFinding(finding: Finding): {
       // Deployment or from a hostname.
       const said = describeStop(finding.stop);
       return {
-        title: `This host answers, and every request gets a 502 — ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        title: t("empty", "everyRequest502", {
+          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        }),
         note: said.note,
       };
     }
     case "clear":
       return {
-        title: "Served in the clear — nothing offers this host over TLS",
-        note: `No route under this host carries a certificate, and it is bound to ${finding.entryPoints.join(
-          ", "
-        )}, which ${
-          finding.entryPoints.length === 1 ? "terminates" : "terminate"
-        } no TLS and ${
-          finding.entryPoints.length === 1 ? "carries" : "carry"
-        } no redirection. There is no encrypted way to reach it, even for a client that asks for one.`,
+        title: t("empty", "servedInClearTitle"),
+        note: t("empty", "traefikClearNote", {
+          n: finding.entryPoints.length,
+          list: finding.entryPoints.join(", "),
+        }),
       };
     case "duplicate":
       return {
-        title: `Two objects claim ${finding.path} on this host`,
+        title: t("empty", "twoObjectsClaimPath", { path: finding.path }),
         note: finding.winner ? (
           <>
-            {objectRef(finding.winner)} wins —{" "}
-            {finding.winner.priority !== null
-              ? `it declares priority ${finding.winner.priority}, above the others' declared or defaulted weight`
-              : "its rule is the longest, which is Traefik's default priority for a router that declares none"}{" "}
-            — and the rest never fire for this path.
+            {objectRef(finding.winner)}{" "}
+            {t("empty", "traefikDuplicateWinner", {
+              because:
+                finding.winner.priority !== null
+                  ? t("empty", "traefikPriorityDeclared", {
+                      n: finding.winner.priority,
+                    })
+                  : t("empty", "traefikPriorityLongest"),
+            })}
           </>
         ) : finding.tied ? (
           <>
-            {objectRefs(finding.routes)} carry the same priority, declared or
-            defaulted to their rule&rsquo;s length — Traefik&rsquo;s pick
-            between them is not something the objects state.
+            {objectRefs(finding.routes, t)} {t("empty", "traefikDuplicateTied")}
           </>
         ) : (
           <>
-            {objectRefs(finding.routes)} both match it. Traefik breaks the tie
-            by router priority — declared, or defaulting to the length of the
-            router&rsquo;s rule — and for an Ingress that rule is one Traefik
-            generates and this app never sees, so which of them serves the
-            request is not settled from here.
+            {objectRefs(finding.routes, t)}{" "}
+            {t("empty", "traefikDuplicateUnsettled")}
           </>
         ),
       };
     case "certificate": {
       if (!finding.expiry) {
         return {
-          title: `${finding.secretName} could not be read as a certificate`,
-          note:
-            finding.read?.problem ??
-            "The Secret is there and what is in it is not a certificate this app could parse.",
+          title: t("empty", "secretNotACertificate", {
+            name: finding.secretName,
+          }),
+          note: finding.read?.problem ?? t("empty", "secretNotParsable"),
         };
       }
       return {
         title: `${finding.secretName} ${finding.expiry.text}`,
-        note: "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
+        note: t("empty", "certExpiryBrowserNote"),
       };
     }
   }
@@ -1148,11 +1179,11 @@ function describeFinding(finding: Finding): {
 // --- middlewares --------------------------------------------------------
 
 function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
+  const t = useT();
   if (uses.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        This cluster has no Middleware objects. Traefik serves every route
-        without one, which is the ordinary case.
+        {t("empty", "noMiddlewareObjects")}
       </p>
     );
   }
@@ -1162,7 +1193,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
       <SectionHeader
         title="Middlewares"
         count={uses.length}
-        description="Every one, and who uses it. A middleware nothing references is doing nothing, and nowhere else in this app could tell you."
+        description={t("empty", "middlewaresDescription")}
       />
       <div className="flex flex-col">
         {uses.map((use) => (
@@ -1185,7 +1216,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
             </span>
             {use.usedBy.length === 0 ? (
               <span className="text-warn">
-                nothing references it — it is configuration that does nothing
+                {t("empty", "middlewareUnreferenced")}
               </span>
             ) : (
               <span className="truncate text-fg-mut">
@@ -1214,18 +1245,20 @@ function EntryPointsTab({
   controller: ControllerInfo | undefined;
   groups: HostGroup[];
 }) {
+  const t = useT();
   if (!controller) {
-    return <p className="text-xs text-fg-fnt">Reading the proxy…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
+    );
   }
   if (controller.entryPoints.length === 0) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          This cluster cannot say what Traefik listens on.
+          {t("empty", "cannotSayWhatTraefikListensOn")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ??
-            "Entry points are static configuration — they exist only in the flags the proxy was started with, and nothing in the API server carries them."}
+          {controller.problem ?? t("empty", "entryPointsAreStatic")}
         </p>
       </div>
     );
@@ -1234,9 +1267,9 @@ function EntryPointsTab({
   return (
     <Section>
       <SectionHeader
-        title="Entry points"
+        title={t("nav", "entryPoints")}
         count={controller.entryPoints.length}
-        description="What the proxy listens on, which of them terminate TLS, and which hosts land on each — the answer to “why is my route on :80”."
+        description={t("empty", "entryPointsDescription")}
       />
       <PlainEntryPointNote controller={controller} />
       <div className="flex flex-col">
@@ -1259,12 +1292,12 @@ function EntryPointsTab({
                 {entry.address ?? "—"}
               </span>
               <span className={entry.tls ? "text-ok" : "text-fg-fnt"}>
-                {entry.tls ? "TLS" : "plain"}
+                {entry.tls ? "TLS" : t("empty", "plainLower")}
               </span>
               <span className="truncate text-fg-mut">
                 {entry.redirectTo
-                  ? `redirects to ${entry.redirectTo}`
-                  : `${plural(landing.length, "host")} land here`}
+                  ? t("empty", "redirectsTo", { target: entry.redirectTo })
+                  : t("count", "hostsLandHere", { n: landing.length })}
               </span>
             </div>
           );
@@ -1283,6 +1316,7 @@ function EntryPointsTab({
  * certificate. Said once, here, rather than eighty times on the Routes tab.
  */
 function PlainEntryPointNote({ controller }: { controller: ControllerInfo }) {
+  const t = useT();
   const plain = controller.entryPoints.filter(
     (entry) => !entry.tls && entry.redirectTo === null
   );
@@ -1291,14 +1325,12 @@ function PlainEntryPointNote({ controller }: { controller: ControllerInfo }) {
   return (
     <p className="max-w-[92ch] border-l-2 border-warn pl-2.5 text-[11.5px] text-fg-mut">
       <span className="text-warn">
-        {plain.map((entry) => entry.name).join(", ")}{" "}
-        {plain.length === 1 ? "terminates" : "terminate"} no TLS and{" "}
-        {plain.length === 1 ? "redirects" : "redirect"} nowhere.
+        {t("empty", "plainEntryPointsHead", {
+          n: plain.length,
+          list: plain.map((entry) => entry.name).join(", "),
+        })}
       </span>{" "}
-      A route that names no entry point is bound to all of them, so every host
-      in this cluster is also reachable unencrypted — including the ones with a
-      certificate. Setting a redirection on the entry point fixes all of them at
-      once; a redirect middleware fixes one route.
+      {t("empty", "plainEntryPointsNote")}
     </p>
   );
 }
@@ -1312,8 +1344,11 @@ function ControllerTab({
   controller: ControllerInfo | undefined;
   sources: TraefikSources | null;
 }) {
+  const t = useT();
   if (!controller) {
-    return <p className="text-xs text-fg-fnt">Reading the proxy…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
+    );
   }
   const classes = sources ? traefikClasses(sources.classes) : [];
 
@@ -1321,8 +1356,8 @@ function ControllerTab({
     <div className="flex flex-col gap-[22px]">
       <Section>
         <SectionHeader
-          title="The proxy"
-          description="Where a Traefik problem is actually diagnosed: its own pods, and its own logs."
+          title={t("empty", "theProxyTitle")}
+          description={t("empty", "theProxyDescription")}
         />
         {controller.workload ? (
           <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
@@ -1334,8 +1369,11 @@ function ControllerTab({
                 showKind={false}
               />
               <span className="text-fg-fnt">
-                {controller.workload.ready} of {controller.workload.desired}{" "}
-                ready · {controller.workload.namespace}
+                {t("count", "ofTotalReady", {
+                  n: controller.workload.ready,
+                  total: controller.workload.desired,
+                })}{" "}
+                · {controller.workload.namespace}
               </span>
             </span>
             {controller.workload.image && (
@@ -1356,14 +1394,13 @@ function ControllerTab({
 
       <Section>
         <SectionHeader
-          title="Classes it claims"
+          title={t("empty", "classesItClaims")}
           count={classes.length}
-          description="An Ingress naming a class nothing claims is correct YAML with no events and no error, and is simply never served."
+          description={t("empty", "classesItClaimsDescription")}
         />
         {classes.length === 0 ? (
           <p className="text-[11px] text-warn">
-            Traefik is running and claims no IngressClass, so no Ingress in this
-            cluster can reach it by class.
+            {t("empty", "traefikClaimsNoClass")}
           </p>
         ) : (
           <div className="flex flex-col">
@@ -1375,7 +1412,7 @@ function ControllerTab({
                 <span className="font-mono text-fg-mid">{entry.name}</span>
                 {entry.isDefault && (
                   <span className="text-[11px] text-fg-fnt">
-                    this cluster&rsquo;s default
+                    {t("empty", "clustersDefault")}
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[11px] text-fg-fnt">
@@ -1390,9 +1427,9 @@ function ControllerTab({
       {controller.args.length > 0 && (
         <Section>
           <SectionHeader
-            title="Static configuration"
+            title={t("empty", "staticConfiguration")}
             count={controller.args.length}
-            description="The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself."
+            description={t("empty", "staticConfigurationDescription")}
           />
           <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
             {controller.args.map((arg, index) => (

@@ -16,6 +16,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
 import { logInfo, flushLogs } from "@/lib/logger";
+import { useT } from "@/i18n/useT";
 
 // Lazy load all pages for code splitting
 const ClusterOverview = lazy(() =>
@@ -146,6 +147,7 @@ const IntegrationPage = lazy(() =>
 );
 
 export default function App() {
+  const t = useT();
   const { theme } = useThemeStore();
   const location = useLocation();
   const { toast } = useToast();
@@ -211,12 +213,12 @@ export default function App() {
   const handleError = useCallback(
     (error: Error) => {
       toast({
-        title: "Unexpected error",
-        description: error.message || "Something went wrong while rendering.",
+        title: t("action", "unexpectedError"),
+        description: error.message || t("action", "renderFailed"),
         variant: "destructive",
       });
     },
-    [toast]
+    [t, toast]
   );
 
   return (

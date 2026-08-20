@@ -77,11 +77,40 @@ import {
   type ArgoResource,
   type ArgoSource,
 } from "./model";
+import { useT } from "@/i18n/useT";
 
 /** Past this many broken applications, nothing opens itself. */
 const AUTO_OPEN = 8;
 
+/**
+ * One catalogue sentence drawn around a monospace word.
+ *
+ * The word is a Kubernetes or Argo identifier and stays as it is spelled;
+ * only where it lands in the sentence changes with the language, which is why
+ * the string stays whole in the catalogue and the cut happens here.
+ */
+function Mono({
+  text,
+  slot,
+  word,
+}: {
+  text: string;
+  slot: string;
+  word: string;
+}) {
+  const at = text.indexOf(slot);
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="font-mono">{word}</span>
+      {text.slice(at + slot.length)}
+    </>
+  );
+}
+
 export default function ArgoCdPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "applications";
 
@@ -111,12 +140,14 @@ export default function ArgoCdPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s Applications
+          {t("empty", "couldNotReadApplications")}
         </h2>
         <p className="text-xs text-fg-mut">
-          Everything on this page comes from the <code>Application</code>{" "}
-          objects in this API server, and that request failed — so a list here
-          would be a guess rather than an answer.
+          <Mono
+            text={t("empty", "applicationsUnreadableBody")}
+            slot="{kind}"
+            word="Application"
+          />
         </p>
         <p className="text-[11px] text-fg-fnt">{applications.error.message}</p>
       </Section>
@@ -130,14 +161,14 @@ export default function ArgoCdPage() {
       id: "applications",
       label: "Applications",
       glyph: viewGlyph(GitBranch),
-      mark: applicationsMark(apps, troubled.length),
+      mark: applicationsMark(t, apps, troubled.length),
       content: (
         <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
       ),
     },
     {
       id: "appsets",
-      label: "App sets",
+      label: t("nav", "appSets"),
       glyph: viewGlyph(Layers),
       mark:
         sets.data && sets.data.length > 0
@@ -147,7 +178,7 @@ export default function ArgoCdPage() {
     },
     {
       id: "projects",
-      label: "Projects",
+      label: t("nav", "projects"),
       glyph: viewGlyph(Shield),
       mark:
         projects.data && projects.data.length > 0
@@ -157,7 +188,7 @@ export default function ArgoCdPage() {
     },
     {
       id: "controller",
-      label: "Controller",
+      label: t("nav", "controller"),
       glyph: viewGlyph(Box),
       content: (
         <ControllerTab
@@ -177,9 +208,11 @@ export default function ArgoCdPage() {
         count={
           applications.isPending
             ? undefined
-            : `${plural(apps.length, "Application")} across every namespace`
+            : t("empty", "acrossEveryNamespace", {
+                count: plural(apps.length, "Application"),
+              })
         }
-        description="Whether what is running is what git says should be running, and what is stopping it where it is not."
+        description={t("empty", "argoPageDescription")}
       />
       <DetailTabs
         tabs={tabs}
@@ -195,6 +228,7 @@ export default function ArgoCdPage() {
 }
 
 function applicationsMark(
+  t: ReturnType<typeof useT>,
   apps: ArgoApp[],
   troubled: number
 ): DetailTabMark | undefined {
@@ -203,7 +237,10 @@ function applicationsMark(
   const worst = apps.some((app) => app.worst === "err") ? "err" : "warn";
   return severityMark(
     worst,
-    `${troubled} of ${apps.length} applications need attention`
+    t("count", "applicationsNeedAttention", {
+      n: troubled,
+      total: apps.length,
+    })
   );
 }
 
@@ -218,6 +255,7 @@ function ApplicationsTab({
   loading: boolean;
   ui: string | null;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
 
   const shown = useMemo(() => {
@@ -238,19 +276,21 @@ function ApplicationsTab({
   }, [apps, filter]);
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the Applications…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingApplications")}</p>
+    );
   }
 
   if (apps.length === 0) {
     return (
       <div className="max-w-[64ch]">
-        <p className="text-xs text-fg-mut">
-          Argo CD is installed here and owns nothing yet.
-        </p>
+        <p className="text-xs text-fg-mut">{t("empty", "argoOwnsNothing")}</p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No <code>Application</code> exists in this cluster, so nothing is
-          being delivered from git. The controller is running and waiting for
-          one.
+          <Mono
+            text={t("empty", "argoNoApplicationsBody")}
+            slot="{kind}"
+            word="Application"
+          />
         </p>
       </div>
     );
@@ -265,22 +305,27 @@ function ApplicationsTab({
         <FilterBox
           value={filter}
           onChange={setFilter}
-          placeholder="Filter by name, project, repo or object"
-          label="Filter applications"
+          placeholder={t("action", "filterByNameProjectRepoObject")}
+          label={t("action", "filterApplications")}
         />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
-            ? `${shown.length} of ${apps.length}`
+            ? t("count", "shownOfTotal", {
+                n: shown.length,
+                total: apps.length,
+              })
             : broken > 0
-              ? `${broken} of ${apps.length} failing, and first${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+              ? `${t("count", "failingAndFirst", { n: broken, total: apps.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
               : worthALook > 0
-                ? `nothing failing · ${worthALook} of ${apps.length} worth a look`
-                : `${plural(apps.length, "Application")}, all in sync`}
+                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: apps.length })}`
+                : t("empty", "allInSync", {
+                    count: plural(apps.length, "Application"),
+                  })}
         </span>
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
-          No Application here matches that.
+          {t("empty", "noApplicationMatches")}
         </p>
       ) : (
         shown.map((app, index) => (
@@ -308,6 +353,7 @@ function AppRow({
   openByDefault: boolean;
   last: boolean;
 }) {
+  const t = useT();
   const state = appState(app);
   const changed = differing(app);
   const url = applicationUrl(ui, app);
@@ -323,8 +369,14 @@ function AppRow({
       }}
       meta={
         <>
-          project {app.project} → {destinationOf(app)}
-          {app.generatedBy && ` · generated by ${app.generatedBy.name}`}
+          {t("empty", "argoProjectDestination", {
+            project: app.project,
+            destination: destinationOf(app),
+          })}
+          {app.generatedBy &&
+            ` · ${t("empty", "generatedByName", {
+              name: app.generatedBy.name,
+            })}`}
         </>
       }
       state={state}
@@ -338,14 +390,16 @@ function AppRow({
     >
       <SourceLine app={app} />
       <Chain>
-        <Column label="Source">
+        <Column label={t("columns", "source")}>
           {app.sources.length === 0 ? (
-            <Cell under="no source declared">none</Cell>
+            <Cell under={t("empty", "noSourceDeclared")}>
+              {t("empty", "noneLower")}
+            </Cell>
           ) : (
             app.sources.map((source) => (
               <Cell
                 key={source.repoUrl + (source.path ?? source.chart ?? "")}
-                under={source.targetRevision ?? "default branch"}
+                under={source.targetRevision ?? t("empty", "defaultBranch")}
               >
                 {shortRevision(app.revision ?? source.targetRevision ?? "?")}
               </Cell>
@@ -358,33 +412,38 @@ function AppRow({
             under={
               app.autoSync
                 ? app.selfHeal
-                  ? "auto-sync, self-healing"
-                  : "auto-sync on"
-                : "auto-sync off"
+                  ? t("empty", "autoSyncSelfHealing")
+                  : t("empty", "autoSyncOn")
+                : t("empty", "autoSyncOff")
             }
           >
             {app.name}
           </Cell>
         </Column>
-        <Column label="Resources">
+        <Column label={t("columns", "resources")}>
           <Cell
             bad={changed.length > 0}
             under={
               app.resources.length === 0
-                ? "nothing compared yet"
-                : `${app.resources.length - changed.length} synced · ${changed.length} out of sync`
+                ? t("empty", "nothingComparedYet")
+                : t("count", "syncedOutOfSync", {
+                    synced: app.resources.length - changed.length,
+                    drifted: changed.length,
+                  })
             }
           >
-            {plural(app.resources.length, "object")}
+            {t("count", "objects", { n: app.resources.length })}
           </Cell>
         </Column>
-        <Column label="Health">
+        <Column label={t("columns", "health")}>
           <Cell
             bad={app.health === "Degraded" || app.health === "Missing"}
             under={
               app.lastSyncAt
-                ? `last synced ${formatAge(app.lastSyncAt)} ago`
-                : "never synced"
+                ? t("empty", "lastSyncedAgo", {
+                    age: formatAge(app.lastSyncAt),
+                  })
+                : t("empty", "neverSynced")
             }
           >
             {app.health.toLowerCase()}
@@ -400,6 +459,7 @@ function AppRow({
 
 /** Where the manifests come from, and when they were last applied. */
 function SourceLine({ app }: { app: ArgoApp }) {
+  const t = useT();
   if (app.sources.length === 0) return null;
   return (
     <div className="flex flex-col gap-0.5">
@@ -408,7 +468,9 @@ function SourceLine({ app }: { app: ArgoApp }) {
           key={source.repoUrl + (source.path ?? source.chart ?? "")}
           className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut"
         >
-          <span className="truncate font-mono text-fg-mid">from git</span>
+          <span className="truncate font-mono text-fg-mid">
+            {t("empty", "fromGit")}
+          </span>
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
             <RepoRef source={source} />
             {(source.path || source.chart) && (
@@ -423,12 +485,16 @@ function SourceLine({ app }: { app: ArgoApp }) {
             <RevisionRef app={app} source={source} />
             <span className="text-fg-fnt">
               {app.lastSyncAt
-                ? `— synced ${formatAge(app.lastSyncAt)} ago`
-                : "— never synced"}
+                ? `— ${t("empty", "syncedAgo", {
+                    age: formatAge(app.lastSyncAt),
+                  })}`
+                : `— ${t("empty", "neverSynced")}`}
             </span>
           </span>
           <span className="text-[11px] text-fg-fnt">
-            {app.autoSync ? "auto-sync on" : "auto-sync off"}
+            {app.autoSync
+              ? t("empty", "autoSyncOn")
+              : t("empty", "autoSyncOff")}
           </span>
         </div>
       ))}
@@ -489,13 +555,14 @@ function RevisionRef({ app, source }: { app: ArgoApp; source: ArgoSource }) {
 const SHOWN_PER_KIND = 12;
 
 function Manages({ app }: { app: ArgoApp }) {
+  const t = useT();
   const groups = byKind(app.resources);
   const { crdFor } = useCrdIndex();
 
   if (groups.length === 0) {
     return (
       <p className="text-[11px] text-fg-fnt">
-        Argo has not compared this Application yet, so it lists no objects.
+        {t("empty", "argoNotComparedYet")}
       </p>
     );
   }
@@ -519,7 +586,7 @@ function Manages({ app }: { app: ArgoApp }) {
                 {group.troubled > 0 && (
                   <span className="text-warn">
                     {" "}
-                    · {group.troubled} to look at
+                    · {t("count", "toLookAt", { n: group.troubled })}
                   </span>
                 )}
               </span>
@@ -533,7 +600,7 @@ function Manages({ app }: { app: ArgoApp }) {
             ))}
             {hidden > 0 && (
               <span className="text-[11px] text-fg-fnt">
-                and {hidden} more Argo reports as synced
+                {t("count", "andMoreSynced", { n: hidden })}
               </span>
             )}
           </div>
@@ -609,10 +676,11 @@ function ResourceLine({
  * that has no other way to find out.
  */
 function GeneratedNote({ app }: { app: ArgoApp }) {
+  const t = useT();
   if (!app.generatedBy) return null;
   return (
     <p className="text-[11px] text-fg-fnt">
-      Generated by ApplicationSet{" "}
+      {t("empty", "generatedByApplicationSet")}{" "}
       <ResourceRef
         kind="ApplicationSet"
         name={app.generatedBy.name}
@@ -620,8 +688,7 @@ function GeneratedNote({ app }: { app: ArgoApp }) {
         crd={APPLICATIONSETS_CRD}
         showKind={false}
       />
-      . Editing this Application is undone the next time the generator runs —
-      the file to change is the ApplicationSet.
+      {t("empty", "editingGeneratedAppUndone")}
     </p>
   );
 }
@@ -635,6 +702,7 @@ function Findings({
   url: string | null;
   brief?: boolean;
 }) {
+  const t = useT();
   if (app.findings.length === 0) return null;
   const shown = brief ? app.findings.slice(0, 1) : app.findings;
   const hidden = brief ? app.findings.length - 1 : 0;
@@ -652,7 +720,7 @@ function Findings({
       ))}
       {hidden > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          and {hidden} more — open the row
+          {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
     </div>
@@ -670,7 +738,8 @@ function FindingLine({
   url: string | null;
   brief?: boolean;
 }) {
-  const said = describeFinding(app, finding);
+  const t = useT();
+  const said = describeFinding(t, app, finding);
   return (
     <Finding
       tone={finding.severity}
@@ -697,14 +766,16 @@ function FindingLine({
  * a link into a connection error.
  */
 function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
+  const t = useT();
   if (!url) {
     return (
       <>
         {" "}
-        The line-by-line diff lives in Argo&rsquo;s own API, which needs a
-        credential this app does not hold — and no Ingress in this cluster
-        serves <span className="font-mono">argocd-server</span>, so there is no
-        address to send you to.
+        <Mono
+          text={t("empty", "argoDiffNoAddress")}
+          slot="{service}"
+          word={SERVER_SERVICE}
+        />
       </>
     );
   }
@@ -712,17 +783,15 @@ function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
     <>
       {" "}
       <OutLink href={url} site="Argo CD">
-        Open {app.name} in Argo CD
+        {t("action", "openInArgoCd", { name: app.name })}
       </OutLink>{" "}
-      <span className="text-fg-fnt">
-        for the line-by-line diff, which needs a credential this app does not
-        hold.
-      </span>
+      <span className="text-fg-fnt">{t("empty", "forLineByLineDiff")}</span>
     </>
   );
 }
 
 function describeFinding(
+  t: ReturnType<typeof useT>,
   app: ArgoApp,
   finding: ArgoFinding
 ): {
@@ -734,39 +803,55 @@ function describeFinding(
   switch (finding.kind) {
     case "syncFailing":
       return {
-        title: `Sync has been failing${finding.since ? ` for ${formatAge(finding.since)}` : ""}, and auto-sync is on`,
+        title: finding.since
+          ? t("empty", "syncFailingFor", { age: formatAge(finding.since) })
+          : t("empty", "syncFailing"),
         verbatim: finding.message,
-        note: `Argo retries and fails${finding.retries > 0 ? ` — ${finding.retries} attempts so far` : ""}; nothing will converge until the manifest changes.`,
+        note:
+          finding.retries > 0
+            ? t("count", "argoRetriesAfterAttempts", { n: finding.retries })
+            : t("empty", "argoRetries"),
         offerDiff: true,
       };
     case "syncFailedOnce":
       return {
-        title: `The last sync failed${finding.since ? `, ${formatAge(finding.since)} ago` : ""}, and auto-sync is off`,
+        title: finding.since
+          ? t("empty", "lastSyncFailedAgo", { age: formatAge(finding.since) })
+          : t("empty", "lastSyncFailed"),
         verbatim: finding.message,
-        note: "Nothing is retrying it. It will stay exactly as it is until somebody syncs it again.",
+        note: t("empty", "nothingRetryingSync"),
         offerDiff: true,
       };
     case "drifted":
       return {
-        title: `Out of sync${finding.since ? ` — last synced ${formatAge(finding.since)} ago` : " and never synced"}, and auto-sync is off`,
-        note: "Nothing is going to fix this on its own. Somebody either changed the cluster by hand and meant to, or changed git and nobody pressed sync.",
+        title: finding.since
+          ? t("empty", "outOfSyncLastSynced", {
+              age: formatAge(finding.since),
+            })
+          : t("empty", "outOfSyncNeverSynced"),
+        note: t("empty", "driftedNote"),
         offerDiff: true,
       };
     case "degraded":
       return {
         title:
           finding.resources.length > 0
-            ? `${finding.resources.map((resource) => resource.name).join(", ")} ${finding.resources.length === 1 ? "is" : "are"} degraded`
-            : `${app.name} is degraded`,
+            ? t("count", "resourcesDegraded", {
+                n: finding.resources.length,
+                list: finding.resources
+                  .map((resource) => resource.name)
+                  .join(", "),
+              })
+            : t("empty", "nameIsDegraded", { name: app.name }),
         verbatim:
           finding.message ??
           finding.resources.find((resource) => resource.message)?.message ??
           null,
-        note: "It is applied and it is not working, which the sync status says nothing about.",
+        note: t("empty", "degradedNote"),
       };
     case "condition":
       return {
-        title: `Argo reports ${finding.condition.type}`,
+        title: t("empty", "argoReports", { type: finding.condition.type }),
         verbatim: finding.condition.message ?? null,
       };
   }
@@ -781,11 +866,11 @@ function AppSetsTab({
   sets: CustomResourceInfo[];
   apps: ArgoApp[];
 }) {
+  const t = useT();
   if (sets.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        No ApplicationSet in this cluster. Every Application here was written by
-        hand, which means editing one is a change that stays.
+        {t("empty", "noApplicationSets")}
       </p>
     );
   }
@@ -793,9 +878,9 @@ function AppSetsTab({
   return (
     <Section>
       <SectionHeader
-        title="Application sets"
+        title={t("nav", "applicationSets")}
         count={sets.length}
-        description="A generator and the Applications it made. What it generated is a template's output — editing one of those Applications is undone the next time the generator runs."
+        description={t("empty", "applicationSetsDescription")}
       />
       <div className="flex flex-col">
         {sets.map((set) => {
@@ -823,7 +908,7 @@ function AppSetsTab({
                 </span>
                 <span className="truncate text-fg-mut">
                   {generated.length === 0
-                    ? "generated nothing in this cluster"
+                    ? t("empty", "generatedNothing")
                     : generated.map((app) => app.name).join(", ")}
                 </span>
                 <span className="text-[11px] text-fg-fnt">
@@ -852,13 +937,11 @@ function ProjectsTab({
   projects: CustomResourceInfo[];
   apps: ArgoApp[];
 }) {
+  const t = useT();
   if (projects.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        This cluster has no AppProject objects — not even{" "}
-        <span className="font-mono">default</span>, which Argo normally
-        installs. Every Application names a project, so one of them is naming
-        something that is not there.
+        <Mono text={t("empty", "noAppProjects")} slot="{name}" word="default" />
       </p>
     );
   }
@@ -866,9 +949,9 @@ function ProjectsTab({
   return (
     <Section>
       <SectionHeader
-        title="Projects"
+        title={t("nav", "projects")}
         count={projects.length}
-        description="What each project lets an Application do: which repositories it may deploy from, and where it may deploy to."
+        description={t("empty", "projectsDescription")}
       />
       <div className="flex flex-col">
         {projects.map((project) => {
@@ -893,26 +976,29 @@ function ProjectsTab({
               </span>
               <span className="truncate text-fg-mut">
                 {repos.length === 0
-                  ? "no repository allowed"
+                  ? t("empty", "noRepositoryAllowed")
                   : repos.includes("*")
-                    ? "any repository"
+                    ? t("empty", "anyRepository")
                     : repos.join(", ")}
               </span>
               <span className="truncate text-fg-mut">
                 {destinations.length === 0
-                  ? "no destination allowed"
+                  ? t("empty", "noDestinationAllowed")
                   : destinations
                       .map((destination) => {
                         const namespace =
                           !destination.namespace ||
                           destination.namespace === "*"
-                            ? "any namespace"
+                            ? t("empty", "anyNamespace")
                             : destination.namespace;
                         const cluster =
                           !destination.server || destination.server === "*"
-                            ? "any cluster"
+                            ? t("empty", "anyCluster")
                             : destination.server;
-                        return `${namespace} on ${cluster}`;
+                        return t("empty", "namespaceOnCluster", {
+                          namespace,
+                          cluster,
+                        });
                       })
                       .join(", ")}
               </span>
@@ -942,9 +1028,12 @@ function ControllerTab({
   /** What the routing capability answered, for the three sentences below. */
   routes: ServiceRoutes;
 }) {
+  const t = useT();
   if (!controller) {
     return (
-      <p className="text-xs text-fg-fnt">Reading Argo&rsquo;s own workloads…</p>
+      <p className="text-xs text-fg-fnt">
+        {t("empty", "readingArgoWorkloads")}
+      </p>
     );
   }
 
@@ -952,9 +1041,9 @@ function ControllerTab({
     <div className="flex flex-col gap-[22px]">
       <Section>
         <SectionHeader
-          title="Argo's own workloads"
+          title={t("nav", "argoOwnWorkloads")}
           count={controller.components.length || undefined}
-          description="Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status."
+          description={t("empty", "argoWorkloadsDescription")}
         />
         {controller.components.length === 0 ? (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
@@ -985,7 +1074,10 @@ function ControllerTab({
                       : "text-[11px] text-fg-fnt"
                   }
                 >
-                  {component.ready} of {component.desired} ready
+                  {t("count", "ofTotalReady", {
+                    n: component.ready,
+                    total: component.desired,
+                  })}
                 </span>
               </div>
             ))}
@@ -995,43 +1087,51 @@ function ControllerTab({
 
       <Section>
         <SectionHeader
-          title="Argo's own UI"
-          description="Half of what Argo knows needs a credential this app does not hold — the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over."
+          title={t("nav", "argoOwnUi")}
+          description={t("empty", "argoUiDescription")}
         />
         {ui ? (
           <p className="text-[11.5px] text-fg-mut">
             {routed.via && !controller.ui ? (
-              <>
-                {routed.via.kind}{" "}
-                <span className="font-mono">{routed.via.name}</span> serves
-              </>
+              <Mono
+                text={t("empty", "kindNameServes", { kind: routed.via.kind })}
+                slot="{name}"
+                word={routed.via.name}
+              />
             ) : (
-              <>An Ingress serves</>
+              <>{t("empty", "anIngressServes")}</>
             )}{" "}
-            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span>{" "}
+            {t("action", "atInline")}{" "}
             <OutLink href={ui} site="Argo CD" className="font-mono">
               {ui}
             </OutLink>
-            , so every Application above offers a way into it.
+            {t("empty", "soEveryApplicationOffersWayIn")}
           </p>
         ) : routes.isPending ? (
           <p className="text-[11.5px] text-fg-fnt">
-            Reading what routes{" "}
-            <span className="font-mono">{SERVER_SERVICE}</span>…
+            <Mono
+              text={t("empty", "readingWhatRoutes")}
+              slot="{service}"
+              word={SERVER_SERVICE}
+            />
           </p>
         ) : routed.host ? (
           // The middle state, and the whole reason `tls` may be `null`: the
           // host is known and the scheme is not, so the host is named and the
           // link withheld rather than guessed at.
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            {routed.via?.kind ?? "Something"}{" "}
-            <span className="font-mono">{routed.via?.name}</span> serves{" "}
-            <span className="font-mono">{SERVER_SERVICE}</span> at{" "}
-            <span className="font-mono text-fg">{routed.host}</span>, but
-            nothing in the API server says whether that host is served over TLS
-            — the proxy&rsquo;s entry points are start-up flags and this app
-            could not read them. Rather than guess a scheme and hand you a link
-            that may refuse the connection, the host is stated and left to you.
+            <Mono
+              text={t("empty", "kindNameServes", {
+                kind: routed.via?.kind ?? t("empty", "somethingWord"),
+              })}
+              slot="{name}"
+              word={routed.via?.name ?? ""}
+            />{" "}
+            <span className="font-mono">{SERVER_SERVICE}</span>{" "}
+            {t("action", "atInline")}{" "}
+            <span className="font-mono text-fg">{routed.host}</span>
+            {t("empty", "hostNotKnownTls")}
           </p>
         ) : (
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
@@ -1039,21 +1139,26 @@ function ControllerTab({
                 sentence used to claim the whole cluster routed nothing to
                 argocd-server, from a reading of Ingresses alone, on clusters
                 whose entire edge is a routing CRD. */}
-            Nothing this app can read routes{" "}
-            <span className="font-mono">{SERVER_SERVICE}</span> to a hostname
-            {routes.available
-              ? ""
-              : " — no Ingress, and no routing controller installed that could be asked about its own objects"}
-            . <span className="font-mono">{SERVER_SERVICE}</span> is a ClusterIP
-            with no route from this machine, so there is no address this app
-            could construct, and a link into a connection error is worse than no
-            link. Everything on this page is read from the{" "}
-            <span className="font-mono">Application</span> objects themselves
-            and needs no credential.
+            <Mono
+              text={t("empty", "nothingRoutesServiceToHostname")}
+              slot="{service}"
+              word={SERVER_SERVICE}
+            />
+            {routes.available ? "" : t("empty", "noIngressNoRoutingController")}
+            <Mono
+              text={t("empty", "serviceIsClusterIpNoRoute")}
+              slot="{service}"
+              word={SERVER_SERVICE}
+            />
+            <Mono
+              text={t("empty", "everythingReadFromObjects")}
+              slot="{kind}"
+              word="Application"
+            />
             {routes.error && (
               <>
                 {" "}
-                One routing controller was asked and did not answer:{" "}
+                {t("empty", "oneRoutingControllerDidNotAnswer")}{" "}
                 <span className="font-mono">{routes.error.message}</span>
               </>
             )}
@@ -1063,8 +1168,8 @@ function ControllerTab({
 
       <Section>
         <SectionHeader
-          title="Its objects"
-          description="The CRDs this page reads, for a reader who wants the raw thing."
+          title={t("nav", "itsObjects")}
+          description={t("empty", "itsObjectsDescription")}
         />
         <div className="flex flex-col gap-0.5 text-[11.5px]">
           {[APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD].map((crd) => (

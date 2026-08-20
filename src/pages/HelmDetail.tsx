@@ -308,12 +308,12 @@ export function HelmDetail() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Rev</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Chart</TableHead>
-                  <TableHead>App</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>{t("columns", "rev")}</TableHead>
+                  <TableHead>{t("columns", "status")}</TableHead>
+                  <TableHead>{t("columns", "chart")}</TableHead>
+                  <TableHead>{t("columns", "app")}</TableHead>
+                  <TableHead>{t("columns", "updated")}</TableHead>
+                  <TableHead>{t("columns", "description")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -371,18 +371,18 @@ export function HelmDetail() {
     },
     {
       id: "resources",
-      label: "Resources",
+      label: t("action", "paletteResources"),
       glyph: viewGlyph(Boxes),
       mark: countMark(installed.length),
       content: (
         <Section>
           <SectionHeader
-            title="Installed by this release"
+            title={t("action", "installedByRelease")}
             count={installed.length || undefined}
           />
           {installed.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              The stored manifest declares no objects.
+              {t("empty", "manifestDeclaresNoObjects")}
             </p>
           ) : (
             <div>
@@ -420,29 +420,35 @@ export function HelmDetail() {
     },
     {
       id: "values",
-      label: "Values",
+      label: t("action", "valuesTab"),
       glyph: viewGlyph(SlidersHorizontal),
       kind: "surface",
       content: (
         <YamlTabContent
-          title={`Values of ${release?.name ?? name ?? ""}`}
+          title={t("action", "valuesOf", { name: release?.name ?? name ?? "" })}
           yaml={values}
-          note="what this release overrides in the chart"
-          onCopy={() => copyToClipboard(values, "Release values copied.")}
+          note={t("action", "valuesNote")}
+          onCopy={() =>
+            copyToClipboard(values, t("action", "releaseValuesCopied"))
+          }
         />
       ),
     },
     {
       id: "manifest",
-      label: "Manifest",
+      label: t("action", "manifestTab"),
       glyph: viewGlyph(ScrollText),
       kind: "surface",
       content: (
         <YamlTabContent
-          title={`Manifest of ${release?.name ?? name ?? ""}`}
+          title={t("action", "manifestOf", {
+            name: release?.name ?? name ?? "",
+          })}
           yaml={manifest}
-          note="what the chart actually applied"
-          onCopy={() => copyToClipboard(manifest, "Rendered manifest copied.")}
+          note={t("action", "manifestNote")}
+          onCopy={() =>
+            copyToClipboard(manifest, t("action", "renderedManifestCopied"))
+          }
         />
       ),
     },
@@ -450,14 +456,14 @@ export function HelmDetail() {
       ? [
           {
             id: "notes",
-            label: "Notes",
+            label: t("action", "notesHeading"),
             glyph: viewGlyph(StickyNote),
             // Not a surface: NOTES.txt is usually four lines, and a pane
             // stretched to the window would be one sentence over a page of
             // canvas.
             content: (
               <Section>
-                <SectionHeader title="Notes" />
+                <SectionHeader title={t("action", "notesHeading")} />
                 <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap border-t border-hair pt-2 font-mono text-xs text-fg-mid">
                   {release.notes}
                 </pre>
@@ -492,7 +498,7 @@ export function HelmDetail() {
                 {release.chart}:{release.chartVersion}
               </span>
               <span className="text-[11px] text-fg-fnt">
-                rev {release.revision}
+                {t("columns", "revisionInline", { n: release.revision })}
               </span>
             </>
           )
@@ -534,8 +540,11 @@ export function HelmDetail() {
         onOpenChange={(open) => {
           if (!open) setRollbackTarget(null);
         }}
-        title="Roll back release?"
-        description={`"${release?.name}" will be rolled back to revision ${rollbackTarget}.`}
+        title={t("action", "rollBackReleaseQuestion")}
+        description={t("action", "rollBackReleaseDetail", {
+          name: release?.name ?? "",
+          revision: rollbackTarget ?? 0,
+        })}
         confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
@@ -549,8 +558,11 @@ export function HelmDetail() {
       <DangerousConfirmDialog
         open={showUninstall}
         onOpenChange={setShowUninstall}
-        title="Uninstall release"
-        description={`This permanently deletes the Helm release "${release?.name}" and every resource it created in namespace "${release?.namespace}". This cannot be undone.`}
+        title={t("action", "uninstallRelease")}
+        description={t("action", "uninstallReleaseDetail", {
+          name: release?.name ?? "",
+          namespace: release?.namespace ?? "",
+        })}
         confirmationText={release?.name ?? ""}
         confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}

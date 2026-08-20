@@ -49,17 +49,17 @@ export function HelmRepositoriesTab({
 
       {isLoading ? (
         <p className="py-8 text-center text-xs text-fg-fnt">
-          Reading repositories…
+          {t("empty", "readingRepositories")}
         </p>
       ) : repositories.length === 0 ? (
         <p className="py-8 text-center text-xs text-fg-fnt">
-          No repositories configured — add one to search for charts.
+          {t("empty", "noRepositoriesConfigured")}
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>{t("columns", "name")}</TableHead>
               <TableHead>URL</TableHead>
               <TableHead />
             </TableRow>

@@ -10,6 +10,7 @@
 import { memo } from "react";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 export interface RealtimeAgeProps {
   /** ISO timestamp string or null */
@@ -32,12 +33,17 @@ export interface RealtimeAgeProps {
 export const RealtimeAge = memo(function RealtimeAge({
   timestamp,
   className,
-  fallback = "Unknown",
+  fallback,
 }: RealtimeAgeProps) {
+  const t = useT();
   const age = useRealtimeAge(timestamp ?? null);
 
   if (!timestamp) {
-    return <span className={cn("text-fg-fnt", className)}>{fallback}</span>;
+    return (
+      <span className={cn("text-fg-fnt", className)}>
+        {fallback ?? t("cluster", "unknownAge")}
+      </span>
+    );
   }
 
   return <span className={className}>{age}</span>;

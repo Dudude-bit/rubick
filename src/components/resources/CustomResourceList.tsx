@@ -76,18 +76,18 @@ export function CustomResourceList({
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item: CustomResourceListItem) =>
           navigate(getDetailPath(item)),
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item: CustomResourceListItem) => setDeleteTarget(item),
         variant: "destructive" as const,
       },
     ],
-    [navigate, getDetailPath]
+    [navigate, getDetailPath, t]
   );
 
   // Build columns from the vendor's view, or from the CRD's printer columns
@@ -197,11 +197,14 @@ export function CustomResourceList({
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `${crdKind}: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: crdKind,
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed, crdKind]
+    [toast, watchFailed, crdKind, t]
   );
   const { resyncing } = useResourceWatch<CustomResourceListItem>({
     enabled: true,
@@ -213,7 +216,9 @@ export function CustomResourceList({
 
   return (
     <ResourceList<CustomResourceListItem>
-      title={(count) => `${crdKind} Instances (${count})`}
+      title={(count) =>
+        t("count", "kindInstances", { kind: crdKind, n: count })
+      }
       queryKey={[...queryKey]}
       getRowId={getResourceRowId}
       queryFn={async () => {
@@ -257,7 +262,9 @@ export function CustomResourceList({
       live={!watchFailed}
       resyncing={resyncing}
       searchKey="name"
-      searchPlaceholder={`Search ${crdKind}...`}
+      searchPlaceholder={t("action", "searchKindPlaceholder", {
+        kind: crdKind,
+      })}
       embedded={embedded}
       getRowHref={getDetailPath}
     />

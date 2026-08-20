@@ -25,6 +25,7 @@ import {
 } from "@/lib/delivery";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * Where this comes from, beside the status: quiet, and always when there is
@@ -126,6 +127,7 @@ function DeliveryWhere({
     repoUrl?: string | null;
   };
 }) {
+  const t = useT();
   const link = where.repoUrl
     ? gitRevisionLink(where.repoUrl, where.revision)
     : null;
@@ -136,14 +138,15 @@ function DeliveryWhere({
       {" "}
       {where.path && (
         <>
-          The manifests are at <span className="font-mono">{where.path}</span>
+          {t("empty", "manifestsAreAt")}{" "}
+          <span className="font-mono">{where.path}</span>
           {where.revision ? " " : "."}
         </>
       )}
       {where.revision &&
         (link ? (
           <>
-            in{" "}
+            {t("empty", "inRevision")}{" "}
             <button
               type="button"
               onClick={() => openExternal(link.url, link.site)}
@@ -156,7 +159,7 @@ function DeliveryWhere({
           </>
         ) : (
           <>
-            in{" "}
+            {t("empty", "inRevision")}{" "}
             <span className="font-mono">{shortRevision(where.revision)}</span>.
           </>
         ))}

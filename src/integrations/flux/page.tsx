@@ -28,7 +28,6 @@ import {
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { formatAge } from "@/lib/utils";
-import { plural } from "../kit";
 import { gitRepoLink } from "../gitops";
 import {
   Chain,
@@ -55,6 +54,7 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
+import { useT } from "@/i18n/useT";
 
 /** Past this many broken reconcilers, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -67,6 +67,7 @@ const crdOf = (kind: string): string | null =>
       : (SOURCE_KINDS.find(([name]) => name === kind)?.[1] ?? null);
 
 export default function FluxPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "reconcilers";
 
@@ -80,12 +81,10 @@ export default function FluxPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read what Flux is reconciling
+          {t("empty", "couldNotReadFlux")}
         </h2>
         <p className="text-xs text-fg-mut">
-          Everything on this page comes from Flux&rsquo;s own objects in this
-          API server, and that request failed — so a list here would be a guess
-          rather than an answer.
+          {t("empty", "couldNotReadFluxBody")}
         </p>
         <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
       </Section>
@@ -95,23 +94,29 @@ export default function FluxPage() {
   const tabs: DetailTab[] = [
     {
       id: "reconcilers",
-      label: "Reconcilers",
+      label: t("nav", "reconcilers"),
       glyph: viewGlyph(Layers),
-      mark: markFor(reconcilers.map((entry) => entry.worst)),
+      mark: markFor(
+        reconcilers.map((entry) => entry.worst),
+        t
+      ),
       content: (
         <ReconcilersTab reconcilers={reconcilers} loading={picture.isPending} />
       ),
     },
     {
       id: "sources",
-      label: "Sources",
+      label: t("nav", "sources"),
       glyph: viewGlyph(GitBranch),
-      mark: markFor(sources.map((entry) => entry.worst)),
+      mark: markFor(
+        sources.map((entry) => entry.worst),
+        t
+      ),
       content: <SourcesTab sources={sources} loading={picture.isPending} />,
     },
     {
       id: "controllers",
-      label: "Controllers",
+      label: t("nav", "controllers"),
       glyph: viewGlyph(Box),
       mark:
         controllers.data && controllers.data.length > 0
@@ -128,9 +133,12 @@ export default function FluxPage() {
         count={
           picture.isPending
             ? undefined
-            : `${plural(reconcilers.length, "reconciler")} from ${plural(sources.length, "source")}`
+            : t("count", "reconcilersFromSources", {
+                n: reconcilers.length,
+                sources: t("count", "sources", { n: sources.length }),
+              })
         }
-        description="What Flux is applying, what it is applying from, and where the two have come apart."
+        description={t("empty", "fluxPageDescription")}
       />
       <DetailTabs
         tabs={tabs}
@@ -146,14 +154,15 @@ export default function FluxPage() {
 }
 
 function markFor(
-  worsts: Array<"err" | "warn" | null>
+  worsts: Array<"err" | "warn" | null>,
+  t: ReturnType<typeof useT>
 ): DetailTabMark | undefined {
   if (worsts.length === 0) return undefined;
   const troubled = worsts.filter((worst) => worst !== null).length;
   if (troubled === 0) return countMark(worsts.length);
   return severityMark(
     worsts.includes("err") ? "err" : "warn",
-    `${troubled} of ${worsts.length} need attention`
+    t("count", "needAttentionOfTotal", { n: troubled, total: worsts.length })
   );
 }
 
@@ -166,6 +175,7 @@ function ReconcilersTab({
   reconcilers: FluxReconciler[];
   loading: boolean;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
 
   const shown = useMemo(() => {
@@ -181,18 +191,21 @@ function ReconcilersTab({
   }, [reconcilers, filter]);
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading what Flux applies…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">
+        {t("empty", "readingWhatFluxApplies")}
+      </p>
+    );
   }
 
   if (reconcilers.length === 0) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          Flux is installed here and applying nothing.
+          {t("empty", "fluxApplyingNothing")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No Kustomization and no HelmRelease exists in this cluster, so nothing
-          has been given to its controllers to apply.
+          {t("empty", "fluxNoReconcilers")}
         </p>
       </div>
     );
@@ -211,22 +224,31 @@ function ReconcilersTab({
         <FilterBox
           value={filter}
           onChange={setFilter}
-          placeholder="Filter by name, path, chart or source"
-          label="Filter reconcilers"
+          placeholder={t("action", "filterReconcilersPlaceholder")}
+          label={t("action", "filterReconcilers")}
         />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
-            ? `${shown.length} of ${reconcilers.length}`
+            ? t("count", "shownOfTotal", {
+                n: shown.length,
+                total: reconcilers.length,
+              })
             : broken > 0
-              ? `${broken} of ${reconcilers.length} not reconciling, and first${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+              ? `${t("count", "notReconcilingAndFirst", { n: broken, total: reconcilers.length })}${
+                  worthALook > 0
+                    ? ` · ${t("count", "worthALook", { n: worthALook })}`
+                    : ""
+                }`
               : worthALook > 0
-                ? `nothing failing · ${worthALook} of ${reconcilers.length} worth a look`
-                : `${plural(reconcilers.length, "reconciler")}, all applied`}
+                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: reconcilers.length })}`
+                : t("count", "reconcilersAllApplied", {
+                    n: reconcilers.length,
+                  })}
         </span>
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
-          No reconciler here matches that.
+          {t("empty", "noReconcilerMatches")}
         </p>
       ) : (
         shown.map((reconciler, index) => (
@@ -251,6 +273,7 @@ function ReconcilerRow({
   openByDefault: boolean;
   last: boolean;
 }) {
+  const t = useT();
   const state = reconcilerState(reconciler);
   const source = reconciler.source;
 
@@ -276,27 +299,27 @@ function ReconcilerRow({
       }
     >
       <Chain>
-        <Column label="Source">
+        <Column label={t("columns", "source")}>
           {reconciler.sourceRef ? (
             <Cell
               bad={source?.ready === false || !source}
               under={
                 !source
-                  ? "not in this cluster"
+                  ? t("empty", "notInThisCluster")
                   : source.ready === false
-                    ? "fetch failing"
-                    : (source.ref ?? "fetched")
+                    ? t("empty", "fetchFailingLower")
+                    : (source.ref ?? t("empty", "fetchedLower"))
               }
             >
               {reconciler.sourceRef.kind} {reconciler.sourceRef.name}
             </Cell>
           ) : (
-            <Cell bad under="nothing to apply from">
-              none
+            <Cell bad under={t("empty", "nothingToApplyFrom")}>
+              {t("empty", "noneLower")}
             </Cell>
           )}
         </Column>
-        <Column label="Revision">
+        <Column label={t("columns", "revision")}>
           <Cell
             under={
               // Only a Kustomization's revision is comparable to its source's:
@@ -306,38 +329,50 @@ function ReconcilerRow({
               reconciler.applied &&
               source?.artifact?.revision?.commit &&
               source.artifact.revision.commit !== reconciler.applied.commit
-                ? `the source has ${revisionText(source.artifact.revision)}`
+                ? t("empty", "sourceHasRevision", {
+                    revision: revisionText(source.artifact.revision),
+                  })
                 : reconciler.lastReconciledAt
-                  ? `${formatAge(reconciler.lastReconciledAt)} ago`
-                  : "never applied"
+                  ? t("action", "agoSuffix", {
+                      age: formatAge(reconciler.lastReconciledAt),
+                    })
+                  : t("empty", "neverApplied")
             }
           >
             {reconciler.applied
-              ? `applied ${revisionText(reconciler.applied)}`
-              : "nothing applied"}
+              ? t("empty", "appliedRevision", {
+                  revision: revisionText(reconciler.applied),
+                })
+              : t("empty", "nothingApplied")}
           </Cell>
         </Column>
         <Column label={reconciler.kind}>
           <Cell
             bad={state.tone === "err"}
-            under={reconciler.suspended ? "suspended" : reconciler.unit}
+            under={
+              reconciler.suspended
+                ? t("empty", "suspendedLower")
+                : reconciler.unit
+            }
           >
             {reconciler.name}
           </Cell>
         </Column>
-        <Column label="Objects">
+        <Column label={t("columns", "objects")}>
           <Cell
             under={
               reconciler.kind === "HelmRelease"
-                ? "held in Helm's own storage"
+                ? t("empty", "heldInHelmStorage")
                 : reconciler.applied
-                  ? `from ${revisionText(reconciler.applied)}`
-                  : "nothing applied yet"
+                  ? t("empty", "fromRevision", {
+                      revision: revisionText(reconciler.applied),
+                    })
+                  : t("empty", "nothingAppliedYet")
             }
           >
             {reconciler.kind === "HelmRelease"
-              ? "a Helm release"
-              : plural(reconciler.objects ?? 0, "object")}
+              ? t("empty", "aHelmRelease")
+              : t("count", "objects", { n: reconciler.objects ?? 0 })}
           </Cell>
         </Column>
       </Chain>
@@ -348,6 +383,7 @@ function ReconcilerRow({
 }
 
 function ObjectLinks({ reconciler }: { reconciler: FluxReconciler }) {
+  const t = useT();
   const crd = crdOf(reconciler.kind);
   const sourceCrd = reconciler.sourceRef
     ? crdOf(reconciler.sourceRef.kind)
@@ -372,8 +408,9 @@ function ObjectLinks({ reconciler }: { reconciler: FluxReconciler }) {
       )}
       {reconciler.dependsOn.length > 0 && (
         <span>
-          depends on{" "}
-          {reconciler.dependsOn.map((entry) => entry.name).join(", ")}
+          {t("empty", "dependsOn", {
+            list: reconciler.dependsOn.map((entry) => entry.name).join(", "),
+          })}
         </span>
       )}
     </div>
@@ -387,6 +424,7 @@ function Findings({
   reconciler: FluxReconciler;
   brief?: boolean;
 }) {
+  const t = useT();
   if (reconciler.findings.length === 0) return null;
   const shown = brief ? reconciler.findings.slice(0, 1) : reconciler.findings;
   const hidden = brief ? reconciler.findings.length - 1 : 0;
@@ -403,7 +441,7 @@ function Findings({
       ))}
       {hidden > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          and {hidden} more — open the row
+          {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
     </div>
@@ -419,7 +457,8 @@ function ReconcilerFinding({
   finding: FluxFinding;
   brief?: boolean;
 }) {
-  const said = describe(reconciler, finding);
+  const t = useT();
+  const said = describe(reconciler, finding, t);
   return (
     <Finding
       tone={finding.severity}
@@ -433,55 +472,69 @@ function ReconcilerFinding({
 
 function describe(
   reconciler: FluxReconciler,
-  finding: FluxFinding
+  finding: FluxFinding,
+  t: ReturnType<typeof useT>
 ): { title: string; verbatim?: string | null; note?: React.ReactNode } {
   switch (finding.kind) {
     case "suspended":
       return {
-        title: `Suspended${finding.at ? ` — ${formatAge(finding.at)} ago` : ""}: it is not reconciling and it is not failing`,
+        title: finding.at
+          ? t("empty", "fluxSuspendedTitleAgo", { age: formatAge(finding.at) })
+          : t("empty", "fluxSuspendedTitle"),
         note: finding.wasReady
-          ? `A suspended ${reconciler.kind} keeps the Ready condition from the last time it ran, so it reads as healthy in every list — Flux's own included. It last applied ${revisionText(finding.applied)}; whatever has been committed since is not here.`
-          : "It was suspended before it ever reconciled, so nothing it describes has been applied at all.",
+          ? t("empty", "fluxSuspendedWasReady", {
+              kind: reconciler.kind,
+              revision: revisionText(finding.applied),
+            })
+          : t("empty", "fluxSuspendedNeverRan"),
       };
     case "frozen":
       return {
-        title: `Its source stopped fetching; everything below it is frozen at ${revisionText(finding.applied)}`,
+        title: t("empty", "fluxFrozenTitle", {
+          revision: revisionText(finding.applied),
+        }),
         verbatim: finding.message,
         note: (
           <>
             {reconciler.kind === "HelmRelease"
-              ? "The release is installed and healthy — from a chart version the source can no longer refresh. "
-              : `The ${reconciler.objects ?? 0} objects are applied and healthy — from a revision the source can no longer refresh. `}
-            Nothing here says &ldquo;failed&rdquo; except{" "}
-            <span className="font-mono">{finding.source.name}</span>, and every
-            reconciler under it looks fine.
+              ? t("empty", "fluxFrozenHelm")
+              : t("empty", "fluxFrozenObjects", {
+                  n: reconciler.objects ?? 0,
+                })}{" "}
+            {t("empty", "fluxFrozenExceptPre")}{" "}
+            <span className="font-mono">{finding.source.name}</span>
+            {t("empty", "fluxFrozenExceptPost")}
           </>
         ),
       };
     case "noSource":
       return {
         title: !finding.source
-          ? "The source it names is not in this cluster"
+          ? t("empty", "fluxSourceMissing")
           : finding.everFetched
-            ? "Its source has stopped fetching, and this has never applied anything"
-            : "Its source has never fetched, so this has never applied anything",
+            ? t("empty", "fluxSourceStoppedNeverApplied")
+            : t("empty", "fluxSourceNeverFetched"),
         verbatim: finding.message,
       };
     case "notReady":
       return {
-        title: `Not reconciling${finding.reason ? ` — ${finding.reason}` : ""}`,
+        title: finding.reason
+          ? t("empty", "fluxNotReconcilingReason", { reason: finding.reason })
+          : t("empty", "fluxNotReconciling"),
         verbatim: finding.message,
       };
     case "stalled":
       return {
-        title:
-          "Stalled: it has stopped retrying and will not try again on its own",
+        title: t("empty", "fluxStalledTitle"),
         verbatim: finding.message,
-        note: "Flux gives up after its retry budget. Nothing changes until the spec does.",
+        note: t("empty", "fluxStalledNote"),
       };
     case "blocking":
       return {
-        title: `${finding.blocked.join(" and ")} ${finding.blocked.length === 1 ? "is" : "are"} waiting on this one`,
+        title: t("empty", "fluxBlockingTitle", {
+          n: finding.blocked.length,
+          list: finding.blocked.join(` ${t("empty", "listAnd")} `),
+        }),
         note: (
           <>
             {finding.blocked.map((name, index) => (
@@ -490,25 +543,24 @@ function describe(
                 <span className="font-mono text-fg-mid">{name}</span>
               </span>
             ))}{" "}
-            {finding.blocked.length === 1 ? "declares" : "both declare"}{" "}
-            <span className="font-mono">dependsOn: {reconciler.name}</span>, so{" "}
-            {finding.blocked.length === 1 ? "it has" : "neither has"} reconciled
-            either. Fixing this one releases{" "}
-            {finding.blocked.length === 1 ? "it" : "them"}.
+            {t("empty", "fluxBlockingDeclares", { n: finding.blocked.length })}{" "}
+            <span className="font-mono">dependsOn: {reconciler.name}</span>
+            {t("empty", "fluxBlockingTail", { n: finding.blocked.length })}
           </>
         ),
       };
     case "waiting":
       return {
-        title: `Waiting on ${finding.on}, which is not ready`,
+        title: t("empty", "fluxWaitingOn", { name: finding.on }),
         note: finding.because ? (
           <>
-            <span className="font-mono text-fg-mid">{finding.on}</span> says:{" "}
-            <span className="font-mono">{finding.because}</span> — nothing here
-            is wrong, and nothing here will move until that does.
+            <span className="font-mono text-fg-mid">{finding.on}</span>{" "}
+            {t("empty", "fluxWaitingSays")}{" "}
+            <span className="font-mono">{finding.because}</span>{" "}
+            {t("empty", "fluxWaitingTail")}
           </>
         ) : (
-          "Nothing here is wrong; it is in the queue behind something that is."
+          t("empty", "fluxWaitingQueue")
         ),
       };
     case "unused":
@@ -526,13 +578,16 @@ function SourcesTab({
   sources: FluxSource[];
   loading: boolean;
 }) {
+  const t = useT();
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the sources…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingSources")}</p>
+    );
   }
   if (sources.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        No source objects. Nothing is being fetched, so nothing can be applied.
+        {t("empty", "fluxNoSources")}
       </p>
     );
   }
@@ -542,10 +597,7 @@ function SourcesTab({
   return (
     <div className="flex flex-col">
       <p className="mb-1 max-w-[92ch] text-[11px] text-fg-fnt">
-        A source is fetched once and applied by everything that names it. This
-        is the half of Flux that fails quietly: a source that stops fetching
-        leaves every reconciler under it reporting the last revision it managed
-        to apply.
+        {t("empty", "fluxSourcesDescription")}
       </p>
       {sources.map((source, index) => (
         <SourceRow
@@ -568,6 +620,7 @@ function SourceRow({
   openByDefault: boolean;
   last: boolean;
 }) {
+  const t = useT();
   const state = sourceState(source);
   const link = source.url ? gitRepoLink(source.url) : null;
   const crd = crdOf(source.kind);
@@ -590,12 +643,12 @@ function SourceRow({
       last={last}
       brief={
         failing && failing.kind === "fetchFailing" ? (
-          <Finding tone="err" title={fetchTitle(failing.everFetched)} />
+          <Finding tone="err" title={fetchTitle(failing.everFetched, t)} />
         ) : undefined
       }
     >
       <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
-        <span className="font-mono text-fg-mid">from</span>
+        <span className="font-mono text-fg-mid">{t("empty", "mountFrom")}</span>
         <span className="min-w-0 break-all">
           {source.url ? (
             link ? (
@@ -606,19 +659,23 @@ function SourceRow({
               <span className="font-mono text-fg-mid">{source.url}</span>
             )
           ) : (
-            <span className="text-fg-fnt">no URL declared</span>
+            <span className="text-fg-fnt">{t("empty", "noUrlDeclared")}</span>
           )}
         </span>
-        <span className="font-mono text-fg-mid">last fetched</span>
+        <span className="font-mono text-fg-mid">
+          {t("columns", "lastFetched")}
+        </span>
         <span className="min-w-0 truncate">
           {source.artifact
-            ? `${revisionText(source.artifact.revision)}${source.artifact.at ? ` · ${formatAge(source.artifact.at)} ago` : ""}`
-            : "never"}
+            ? `${revisionText(source.artifact.revision)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at) })}` : ""}`
+            : t("action", "never")}
         </span>
-        <span className="font-mono text-fg-mid">applied by</span>
+        <span className="font-mono text-fg-mid">
+          {t("columns", "appliedBy")}
+        </span>
         <span className="min-w-0 truncate">
           {source.usedBy.length === 0
-            ? "nothing"
+            ? t("empty", "nothingLower")
             : source.usedBy
                 .map((key) => key.split("/").slice(1).join("/"))
                 .join(", ")}
@@ -639,10 +696,8 @@ function SourceRow({
   );
 }
 
-const fetchTitle = (everFetched: boolean) =>
-  everFetched
-    ? "It stopped fetching, and what it fetched before is what is running"
-    : "It has never fetched, so nothing under it has ever been applied";
+const fetchTitle = (everFetched: boolean, t: ReturnType<typeof useT>) =>
+  everFetched ? t("empty", "fluxFetchStopped") : t("empty", "fluxFetchNever");
 
 function SourceFinding({
   source,
@@ -651,12 +706,11 @@ function SourceFinding({
   source: FluxSource;
   finding: FluxFinding;
 }) {
+  const t = useT();
   if (finding.kind === "unused") {
     return (
-      <Finding tone="warn" title="Nothing applies this source">
-        It is fetched on its schedule and no Kustomization or HelmRelease names
-        it, so it is configuration doing nothing. Nowhere else in this app could
-        tell you that.
+      <Finding tone="warn" title={t("empty", "fluxSourceUnusedTitle")}>
+        {t("empty", "fluxSourceUnusedBody")}
       </Finding>
     );
   }
@@ -664,7 +718,7 @@ function SourceFinding({
   return (
     <Finding
       tone="err"
-      title={fetchTitle(finding.everFetched)}
+      title={fetchTitle(finding.everFetched, t)}
       verbatim={finding.message}
     >
       {finding.frozen.length > 0 ? (
@@ -676,11 +730,21 @@ function SourceFinding({
             </span>
           ))}{" "}
           {finding.everFetched
-            ? `${finding.frozen.length === 1 ? "is" : "are"} still applying ${revisionText(source.artifact?.revision ?? null)}${source.artifact?.at ? `, fetched ${formatAge(source.artifact.at)} ago` : ""}, and ${finding.frozen.length === 1 ? "reports" : "report"} Ready while doing it.`
-            : `${finding.frozen.length === 1 ? "has" : "have"} nothing to apply.`}
+            ? t("empty", "fluxFrozenStillApplying", {
+                n: finding.frozen.length,
+                revision: revisionText(source.artifact?.revision ?? null),
+                fetched: source.artifact?.at
+                  ? t("empty", "fluxFetchedAgo", {
+                      age: formatAge(source.artifact.at),
+                    })
+                  : "",
+              })
+            : t("empty", "fluxFrozenNothingToApply", {
+                n: finding.frozen.length,
+              })}
         </>
       ) : (
-        "Nothing names this source, so nothing is affected."
+        t("empty", "fluxSourceUnaffected")
       )}
     </Finding>
   );
@@ -693,26 +757,27 @@ function ControllersTab({
 }: {
   controllers: FluxController[] | undefined;
 }) {
+  const t = useT();
   if (!controllers) {
     return (
-      <p className="text-xs text-fg-fnt">Reading Flux&rsquo;s own workloads…</p>
+      <p className="text-xs text-fg-fnt">
+        {t("empty", "readingFluxWorkloads")}
+      </p>
     );
   }
 
   return (
     <Section>
       <SectionHeader
-        title="Flux's own workloads"
+        title={t("empty", "fluxWorkloadsTitle")}
         count={controllers.length || undefined}
-        description="One controller per kind of object, each with its own logs — which is where a Flux problem this page cannot see is actually diagnosed. Flux ships no dashboard, so there is nowhere else to go."
+        description={t("empty", "fluxWorkloadsDescription")}
       />
       {controllers.length === 0 ? (
         <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-          Nothing in this cluster carries{" "}
-          <span className="font-mono">app.kubernetes.io/part-of=flux</span>, so
-          Flux&rsquo;s own workloads could not be found. Its objects are still
-          read from the API server — but with no controller running, none of
-          them is being acted on.
+          {t("empty", "fluxNoControllersPre")}{" "}
+          <span className="font-mono">app.kubernetes.io/part-of=flux</span>
+          {t("empty", "fluxNoControllersPost")}
         </p>
       ) : (
         <div className="flex flex-col">
@@ -739,7 +804,10 @@ function ControllersTab({
                     : "text-[11px] text-fg-fnt"
                 }
               >
-                {controller.ready} of {controller.desired} ready
+                {t("count", "ofTotalReady", {
+                  n: controller.ready,
+                  total: controller.desired,
+                })}
               </span>
             </div>
           ))}

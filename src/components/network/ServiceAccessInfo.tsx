@@ -28,29 +28,29 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
     const port = service.ports[0]?.port;
     const url = `http://${service.loadBalancerIps[0]}${port && port !== 80 ? `:${port}` : ""}`;
     accessItems.push({
-      label: "External (LoadBalancer)",
+      label: t("empty", "accessExternalLb"),
       url,
       canOpen: true,
-      description: "Access via load balancer IP",
+      description: t("empty", "accessExternalLbHint"),
     });
   }
 
   if (service.type === "NodePort" && service.ports.some((p) => p.nodePort)) {
     const nodePort = service.ports.find((p) => p.nodePort)?.nodePort;
     accessItems.push({
-      label: "External (NodePort)",
+      label: t("empty", "accessExternalNodePort"),
       url: `<any-node-ip>:${nodePort}`,
       canOpen: false,
-      description: "Access via any cluster node IP",
+      description: t("empty", "accessExternalNodePortHint"),
     });
   }
 
   if (service.type === "ExternalName") {
     accessItems.push({
-      label: "External Name",
+      label: t("empty", "accessExternalName"),
       url: service.clusterIp || "N/A",
       canOpen: false,
-      description: "DNS alias to external service",
+      description: t("empty", "accessExternalNameHint"),
     });
   }
 
@@ -58,16 +58,16 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
   if (service.type !== "ExternalName") {
     const port = service.ports[0]?.port;
     accessItems.push({
-      label: "Internal (full DNS)",
+      label: t("empty", "accessInternalFullDns"),
       url: `${internalDns}${port ? `:${port}` : ""}`,
       canOpen: false,
-      description: "From any namespace in cluster",
+      description: t("empty", "accessInternalFullDnsHint"),
     });
     accessItems.push({
-      label: "Internal (short)",
+      label: t("empty", "accessInternalShort"),
       url: `${shortDns}${port ? `:${port}` : ""}`,
       canOpen: false,
-      description: "From same namespace only",
+      description: t("empty", "accessInternalShortHint"),
     });
   }
 
@@ -76,7 +76,7 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
       {/* "How to Access This Service" was the tab label padded out to six
           Title Case words. This names the thing under it instead, and says
           it the way the ingress page already says it. */}
-      <SectionHeader title="Reachable at" />
+      <SectionHeader title={t("nav", "reachableAt")} />
       <SectionBody className="flex flex-col divide-y divide-hair">
         {accessItems.map((item, idx) => (
           <div key={idx} className="flex items-center justify-between py-3">
@@ -113,8 +113,14 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
 
       {service.type === "ClusterIP" && (
         <p className="text-sm text-fg-mut">
-          <strong>ClusterIP</strong> services are only accessible from within
-          the cluster. Use port-forward for local development:
+          {t("empty", "clusterIpOnlyInside")
+            .split("{type}")
+            .map((part, i) => (
+              <span key={i}>
+                {i > 0 && <strong>ClusterIP</strong>}
+                {part}
+              </span>
+            ))}
           <code className="ml-1 text-xs bg-hover px-1 rounded">
             kubectl port-forward svc/{service.name}{" "}
             {service.ports[0]?.port || 8080}:{service.ports[0]?.port || 8080}

@@ -108,17 +108,17 @@ const CANNOT_PULL =
 
 function describeWaiting(
   container: ContainerInfo,
-  reason: string
+  reason: string,
+  t: ReturnType<typeof useT>
 ): Omit<PodProblem, "tab"> {
   if (CANNOT_PULL.test(reason)) {
     return {
       reason,
-      headline: `${container.name} cannot pull its image`,
+      headline: t("empty", "cannotPullImage", { container: container.name }),
       detail: (
         <>
-          <ImageRef image={container.image} inline /> — the kubelet is retrying,
-          waiting longer after each attempt. The name, the tag or the pull
-          credentials are what to check.
+          <ImageRef image={container.image} inline />{" "}
+          {t("empty", "imagePullRetrying")}
         </>
       ),
       tone: "err",
@@ -128,27 +128,29 @@ function describeWaiting(
     const last = container.lastTerminated;
     return {
       reason,
-      headline: `${container.name} starts and then exits, over and over`,
+      headline: t("empty", "startsAndExits", { container: container.name }),
       detail: last
-        ? `${container.restartCount} restarts so far; the last run ended ${describeTermination(last)}${
-            terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
-          }. What it printed before it died is in Logs.`
-        : `${container.restartCount} restarts so far. What it printed before it last died is in Logs.`,
+        ? t("empty", "crashRestartsWithLastRun", {
+            n: container.restartCount,
+            how: `${describeTermination(last)}${
+              terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
+            }`,
+          })
+        : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
       tone: "err",
     };
   }
   if (/^CreateContainer(Config)?Error$/i.test(reason)) {
     return {
       reason,
-      headline: `${container.name} cannot be built from this spec`,
-      detail:
-        "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
+      headline: t("empty", "cannotBeBuilt", { container: container.name }),
+      detail: t("empty", "missingConfigMapSecretOrVolume"),
       tone: "err",
     };
   }
   return {
     reason,
-    headline: `${container.name} is waiting to start`,
+    headline: t("empty", "waitingToStart", { container: container.name }),
     detail: reason,
     tone: statusRole(reason) === "err" ? "err" : "warn",
   };
@@ -162,7 +164,10 @@ function describeWaiting(
  * [app]` is the same fact with the answer taken out. The Ready family is
  * skipped for that reason: it can only ever restate the loop above it.
  */
-function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
+function podProblem(
+  pod: PodInfo | null | undefined,
+  t: ReturnType<typeof useT>
+): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
 
   // Init containers included, and first: a pod in `Init:CrashLoopBackOff`
@@ -178,7 +183,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       !STARTING.has(state.reason.toLowerCase())
     ) {
       return {
-        ...describeWaiting(container, state.reason),
+        ...describeWaiting(container, state.reason, t),
         tab: "containers",
       };
     }
@@ -186,8 +191,13 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       const { termination } = state;
       return {
         reason: termination.reason ?? "Error",
-        headline: `${container.name} exited with ${termination.exitCode}`,
-        detail: `${describeTermination(termination)} — the last run of this container did not finish cleanly.`,
+        headline: t("empty", "containerExitedWith", {
+          container: container.name,
+          code: termination.exitCode,
+        }),
+        detail: t("empty", "lastRunNotClean", {
+          how: describeTermination(termination),
+        }),
         tone: "err",
         tab: "containers",
       };
@@ -203,8 +213,11 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       reason: condition.reason ?? condition.type,
       headline:
         condition.type === "PodScheduled"
-          ? "No node will take this pod"
-          : `${condition.type} is ${condition.status}`,
+          ? t("empty", "noNodeWillTakePod")
+          : t("empty", "conditionIsStatus", {
+              type: condition.type,
+              status: condition.status,
+            }),
       detail: (
         <ResourceMessage
           message={condition.message ?? condition.reason ?? ""}
@@ -221,7 +234,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
   if (pod.status.reason || pod.status.message) {
     return {
       reason: pod.status.reason ?? "Failed",
-      headline: pod.status.reason ?? "This pod failed",
+      headline: pod.status.reason ?? t("empty", "thisPodFailed"),
       detail: (
         <ResourceMessage
           message={pod.status.message ?? ""}
@@ -507,12 +520,16 @@ export function PodDetail() {
         ]
       : []),
     {
-      label: "Pod IP",
-      value: <CopyableAddress value={pod?.podIp} label="Pod IP" />,
+      label: t("columns", "podIp"),
+      value: (
+        <CopyableAddress value={pod?.podIp} label={t("columns", "podIp")} />
+      ),
     },
     {
-      label: "Host IP",
-      value: <CopyableAddress value={pod?.hostIp} label="Host IP" />,
+      label: t("columns", "hostIp"),
+      value: (
+        <CopyableAddress value={pod?.hostIp} label={t("columns", "hostIp")} />
+      ),
     },
     {
       label: t("columns", "restarts"),
@@ -524,7 +541,7 @@ export function PodDetail() {
     // to check. Only when it disagrees with the header, which is the only
     // time the two are not the same word twice.
     ...(pod && pod.status.phase !== pod.status.display
-      ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+      ? [{ label: t("columns", "phase"), value: pod.status.phase, mono: true }]
       : []),
     {
       label: t("columns", "containers"),
@@ -558,7 +575,7 @@ export function PodDetail() {
     },
   ];
 
-  const problem = useMemo(() => podProblem(pod), [pod]);
+  const problem = useMemo(() => podProblem(pod, t), [pod, t]);
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -592,7 +609,9 @@ export function PodDetail() {
               status={pod.status.display}
               roleOverride={silence ? "neutral" : undefined}
               title={
-                silence ? silenceNote(silence) : `Phase ${pod.status.phase}`
+                silence
+                  ? silenceNote(silence)
+                  : `${t("columns", "phase")} ${pod.status.phase}`
               }
             />
           ) : null

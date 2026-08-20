@@ -85,7 +85,7 @@ export function CopyableValue({
       type="button"
       onClick={copy}
       title={copied ? t("action", "copied") : `${t("action", "copy")} ${value}`}
-      aria-label={`Copy ${label ?? value}`}
+      aria-label={t("action", "copyValue", { value: label ?? value })}
       className={cn(
         "group -mx-1 inline-flex min-w-0 items-center gap-1 rounded-sm px-1 font-mono",
         "hover:underline hover:decoration-dotted hover:underline-offset-2",
@@ -186,4 +186,23 @@ export function CopyableAddresses({
       ))}
     </span>
   );
+}
+
+/**
+ * An address whose copy label is a translated word rather than a literal.
+ *
+ * A hook cannot run inside a module-level column array, and a cell renderer is
+ * where one can — so the column passes the catalogue key and this looks it up.
+ * It lives here rather than beside the columns because that module exports
+ * definitions, not components, and mixing the two costs fast refresh.
+ */
+export function AddressCell({
+  value,
+  labelKey,
+}: {
+  value: string | null;
+  labelKey: "clusterIp" | "externalIp";
+}) {
+  const t = useT();
+  return <CopyableAddress value={value} label={t("columns", labelKey)} />;
 }

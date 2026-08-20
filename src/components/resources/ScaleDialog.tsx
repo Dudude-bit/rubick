@@ -45,7 +45,7 @@ export function ScaleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Scale {kind}</DialogTitle>
+          <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
@@ -88,7 +88,7 @@ function ScaleForm({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="replicas">Number of replicas</Label>
+        <Label htmlFor="replicas">{t("action", "replicasLabel")}</Label>
         <Input
           id="replicas"
           type="number"

@@ -20,6 +20,7 @@
 import { Link } from "react-router-dom";
 
 import type { ActionWarning } from "@/lib/governance";
+import { useT } from "@/i18n/useT";
 
 /** A small count in a sentence is a word. Past three there is no sentence. */
 const COUNT_WORD: Record<number, string> = { 2: "Two", 3: "Three" };
@@ -41,6 +42,7 @@ export function ActionWarnings({
   warnings,
   headingFor = DEFAULT_HEADING,
 }: ActionWarningsProps) {
+  const t = useT();
   if (warnings.length === 0) return null;
 
   if (warnings.length === 1) {
@@ -57,7 +59,7 @@ export function ActionWarnings({
           <>
             {" "}
             <Link to={only.to} className="text-info hover:underline">
-              Open what delivers it
+              {t("action", "openWhatDeliversIt")}
             </Link>
             .
           </>
@@ -79,7 +81,7 @@ export function ActionWarnings({
             <>
               {" "}
               <Link to={warning.to} className="text-info hover:underline">
-                Open it
+                {t("action", "openIt")}
               </Link>
               .
             </>

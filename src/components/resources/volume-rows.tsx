@@ -3,6 +3,7 @@ import { groupMounts, mountedBy } from "@/lib/mounts";
 import { ResourceRef } from "./ResourceRef";
 import type { PodVolumeInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * What a pod mounts, and what each mount is made of.
@@ -33,10 +34,11 @@ export function VolumeRows({
    *  lets the third column say "all containers" and mean it. */
   containerCount: number;
 }) {
+  const t = useT();
   if (volumes.length === 0) {
     return (
       <Section>
-        <SectionHeader title="Volumes" />
+        <SectionHeader title={t("nav", "volumes")} />
         <p className="py-1 text-xs text-fg-fnt">
           <T section="empty" k="podMountsNothing" />
         </p>
@@ -46,7 +48,7 @@ export function VolumeRows({
 
   return (
     <Section>
-      <SectionHeader title="Volumes" count={volumes.length} />
+      <SectionHeader title={t("nav", "volumes")} count={volumes.length} />
       <div>
         {volumes.map((volume) => (
           <div key={volume.name} className={VOLUME_ROW}>
@@ -109,10 +111,15 @@ function Mounts({
   volume: PodVolumeInfo;
   containerCount: number;
 }) {
+  const t = useT();
   if (volume.mounts.length === 0) {
     // Declared and read by no container. The YAML does not point at it and
     // nothing fails, so the pod runs without the config somebody added.
-    return <span className="text-[11px] text-warn">mounted by nothing</span>;
+    return (
+      <span className="text-[11px] text-warn">
+        {t("empty", "mountedByNothing")}
+      </span>
+    );
   }
   return (
     <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
@@ -129,11 +136,11 @@ function Mounts({
             <span className="font-mono text-fg-mid">{mount.path}</span>
             {mount.subPath && (
               <>
-                {" from "}
+                {` ${t("empty", "mountFrom")} `}
                 <span className="font-mono text-fg-mut">{mount.subPath}</span>
               </>
             )}
-            {mount.readOnly && ", read-only"}
+            {mount.readOnly && `, ${t("empty", "readOnly")}`}
           </span>
         );
       })}

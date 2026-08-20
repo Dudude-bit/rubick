@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useT } from "@/i18n/useT";
 
 /**
  * Which controller owns this release. The two sources differ in glyph and in
@@ -12,6 +13,7 @@ import {
  * every row of a table is the loudest thing on the screen.
  */
 export function SourceIcon({ source }: { source: string }) {
+  const t = useT();
   const isFlux = source === "flux";
   const Icon = isFlux ? Anchor : Package;
   return (
@@ -21,7 +23,7 @@ export function SourceIcon({ source }: { source: string }) {
         <span className="sr-only">{isFlux ? "Flux" : "Helm"}</span>
       </TooltipTrigger>
       <TooltipContent>
-        {isFlux ? "Flux CD HelmRelease" : "Native Helm release"}
+        {isFlux ? "Flux CD HelmRelease" : t("action", "nativeHelmRelease")}
       </TooltipContent>
     </Tooltip>
   );

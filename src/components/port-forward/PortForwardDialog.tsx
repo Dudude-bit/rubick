@@ -112,8 +112,8 @@ export function PortForwardDialog({
 
     if (!localPort || !remotePort) {
       toast({
-        title: "Invalid port",
-        description: "Please enter valid port numbers (1-65535)",
+        title: t("action", "invalidPort"),
+        description: t("action", "invalidPortHint"),
         variant: "destructive",
       });
       return;
@@ -140,13 +140,17 @@ export function PortForwardDialog({
         });
       }
       toast({
-        title: "Port forward started",
-        description: `Forwarding localhost:${localPort} → ${podName}:${remotePort}`,
+        title: t("activity", "forwardStarted"),
+        description: t("activity", "forwardingDetail", {
+          local: localPort,
+          pod: podName,
+          remote: remotePort,
+        }),
       });
       onOpenChange(false);
     } catch (error) {
       toast({
-        title: "Failed to start port forward",
+        title: t("activity", "startForwardFailed"),
         description: String(error),
         variant: "destructive",
       });
@@ -159,11 +163,11 @@ export function PortForwardDialog({
     try {
       await commands.stopPortForward(sessionId);
       toast({
-        title: "Port forward stopped",
+        title: t("activity", "forwardStopped"),
       });
     } catch (error) {
       toast({
-        title: "Failed to stop port forward",
+        title: t("activity", "stopForwardFailed"),
         description: String(error),
         variant: "destructive",
       });
@@ -174,15 +178,15 @@ export function PortForwardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Port forward</DialogTitle>
+          <DialogTitle>{t("action", "portForward")}</DialogTitle>
           <DialogDescription>
-            Forward traffic from your machine to this pod.
+            {t("activity", "forwardDialogHint")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="rounded-md border p-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-fg-mut">Target</span>
+              <span className="text-fg-mut">{t("columns", "target")}</span>
               <span className="font-medium">
                 {podNamespace}/{podName}
               </span>
@@ -191,7 +195,9 @@ export function PortForwardDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="pf-local-port">Local port</Label>
+              <Label htmlFor="pf-local-port">
+                {t("activity", "localPort")}
+              </Label>
               <Input
                 id="pf-local-port"
                 type="number"
@@ -206,7 +212,9 @@ export function PortForwardDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pf-remote-port">Remote port</Label>
+              <Label htmlFor="pf-remote-port">
+                {t("activity", "remotePort")}
+              </Label>
               <Input
                 id="pf-remote-port"
                 type="number"
@@ -225,9 +233,11 @@ export function PortForwardDialog({
           <div className="rounded-md border p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Auto reconnect</p>
+                <p className="text-sm font-medium">
+                  {t("activity", "autoReconnect")}
+                </p>
                 <p className="text-xs text-fg-mut">
-                  Retry when the pod or connection drops
+                  {t("activity", "autoReconnectHint")}
                 </p>
               </div>
               <Switch
@@ -239,9 +249,11 @@ export function PortForwardDialog({
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Save as config</p>
+                <p className="text-sm font-medium">
+                  {t("activity", "saveAsConfig")}
+                </p>
                 <p className="text-xs text-fg-mut">
-                  Keep this port-forward for quick reuse
+                  {t("activity", "saveAsConfigHint")}
                 </p>
               </div>
               <Switch
@@ -255,9 +267,11 @@ export function PortForwardDialog({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">Auto start</p>
+                    <p className="text-sm font-medium">
+                      {t("activity", "autoStartLabel")}
+                    </p>
                     <p className="text-xs text-fg-mut">
-                      Start automatically when this cluster connects
+                      {t("activity", "autoStartHint")}
                     </p>
                   </div>
                   <Switch
@@ -268,7 +282,9 @@ export function PortForwardDialog({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="pf-config-name">Config name</Label>
+                  <Label htmlFor="pf-config-name">
+                    {t("activity", "configName")}
+                  </Label>
                   <Input
                     id="pf-config-name"
                     value={form.name}
@@ -284,7 +300,7 @@ export function PortForwardDialog({
 
           {activePortForwards.length > 0 && (
             <div className="space-y-2">
-              <Label>Active port-forwards</Label>
+              <Label>{t("activity", "activeForwards")}</Label>
               {activePortForwards.map((session) => (
                 <div
                   key={session.id}
@@ -297,7 +313,7 @@ export function PortForwardDialog({
                     <div className="text-xs text-fg-mut">
                       {statusBySession[session.id]?.message ||
                         statusBySession[session.id]?.status ||
-                        "Active"}
+                        t("activity", "activeFallback")}
                     </div>
                   </div>
                   <Button

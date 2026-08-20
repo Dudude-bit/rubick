@@ -29,9 +29,11 @@ import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import prometheus from "./index";
 import { FAMILIES, coverage, verdict } from "./coverage";
+import { useT } from "@/i18n/useT";
 
 export default function PrometheusPage() {
   const context = useClusterStore((state) => state.currentContext);
+  const t = useT();
   // The tunnel died with the last app instance; opening this page is as
   // deliberate as pressing the sidebar row, so it wakes the saved forward.
   useWakeOnVisit("prometheus");
@@ -61,7 +63,7 @@ export default function PrometheusPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not ask this Prometheus anything
+          {t("empty", "promCouldNotAsk")}
         </h2>
         <p className="text-[11px] text-fg-fnt">{found.error.message}</p>
       </Section>
@@ -75,76 +77,75 @@ export default function PrometheusPage() {
       <SectionHeader
         title="Prometheus"
         count={state?.text}
-        description="Whether the Prometheus this cluster is pointed at is scraping this cluster — which a connection test cannot tell you — and whether it holds the metrics the app's history is built on."
+        description={t("empty", "promPageDescription")}
       />
 
       {found.isPending ? (
-        <p className="text-xs text-fg-fnt">Asking it what it knows…</p>
+        <p className="text-xs text-fg-fnt">{t("empty", "promAsking")}</p>
       ) : !found.data ? null : (
         <>
           <Section>
             <SectionHeader
-              title="Which cluster it is watching"
-              description="Node names, because nothing else identifies a cluster from the outside: a namespace called default exists everywhere and a pod name is gone by tomorrow."
+              title={t("empty", "promWhichCluster")}
+              description={t("empty", "promNodeNamesWhy")}
             />
             {found.data.problem ? (
-              <Finding tone="warn" title="The comparison could not be made">
+              <Finding tone="warn" title={t("empty", "promComparisonFailed")}>
                 {found.data.problem}
               </Finding>
             ) : (
               <div className="flex flex-col gap-3">
                 <Chain>
-                  <Column label="This cluster">
-                    <Cell>{found.data.clusterNodes} nodes</Cell>
+                  <Column label={t("columns", "thisCluster")}>
+                    <Cell>
+                      {t("count", "nodes", { n: found.data.clusterNodes })}
+                    </Cell>
                   </Column>
-                  <Column label="It knows">
+                  <Column label={t("columns", "itKnows")}>
                     <Cell
                       bad={found.data.matched === 0}
                       warn={found.data.unseen.length > 0}
                     >
-                      {found.data.matched} of them
+                      {t("count", "ofThem", { n: found.data.matched })}
                     </Cell>
                   </Column>
-                  <Column label="Also scraping">
+                  <Column label={t("columns", "alsoScraping")}>
                     <Cell
                       title={found.data.foreign.join(", ") || undefined}
                       under={
                         found.data.foreign.length > 0
-                          ? "other clusters, or nodes this one has lost"
+                          ? t("empty", "promForeignNodes")
                           : undefined
                       }
                     >
                       {found.data.foreign.length === 0
-                        ? "nothing else"
-                        : `${found.data.foreign.length} other nodes`}
+                        ? t("empty", "nothingElse")
+                        : t("count", "otherNodes", {
+                            n: found.data.foreign.length,
+                          })}
                     </Cell>
                   </Column>
                 </Chain>
 
                 {found.data.matched === 0 && (
-                  <Finding
-                    tone="err"
-                    title="This Prometheus is not watching this cluster"
-                  >
-                    Not one of this cluster&rsquo;s {found.data.clusterNodes}{" "}
-                    nodes appears in it. The address answers PromQL — which is
-                    all the connection test proved — and every history and
-                    volume figure the app draws from it is about somebody
-                    else&rsquo;s cluster.
+                  <Finding tone="err" title={t("empty", "promNotWatching")}>
+                    {t("empty", "promNotWatchingBody", {
+                      n: found.data.clusterNodes,
+                    })}
                   </Finding>
                 )}
 
                 {found.data.matched > 0 && found.data.unseen.length > 0 && (
                   <Finding
                     tone="warn"
-                    title={`${found.data.unseen.length} of this cluster's nodes are not scraped`}
+                    title={t("count", "nodesNotScraped", {
+                      n: found.data.unseen.length,
+                    })}
                   >
                     <span className="font-mono">
                       {found.data.unseen.join(", ")}
                     </span>{" "}
-                    are in the cluster and not in Prometheus, so a pod that
-                    happens to be scheduled on one of them draws an empty
-                    history — which looks exactly like a pod that used nothing.
+                    {t("empty", "promUnseenNodesBody")}
                   </Finding>
                 )}
               </div>
@@ -153,8 +154,8 @@ export default function PrometheusPage() {
 
           <Section>
             <SectionHeader
-              title="What the app asks it for"
-              description="The exact metric names the queries use. A family that is absent answers every query with an empty series, and an empty series is drawn as a flat chart rather than as a gap — so the absence is named here instead."
+              title={t("empty", "promWhatAppAsks")}
+              description={t("empty", "promFamiliesWhy")}
             />
             <div className="flex flex-col gap-1.5">
               {FAMILIES.map((family) => {
@@ -163,13 +164,15 @@ export default function PrometheusPage() {
                 );
                 return (
                   <Chain key={family.metric}>
-                    <Column label="Metric">
+                    <Column label={t("columns", "metric")}>
                       <Cell
                         bad={absent}
                         title={family.metric}
                         under={
                           typeof found.data.series[family.metric] === "number"
-                            ? `${found.data.series[family.metric]} series right now`
+                            ? t("count", "seriesRightNow", {
+                                n: Number(found.data.series[family.metric]),
+                              })
                             : undefined
                         }
                       >
@@ -187,11 +190,13 @@ export default function PrometheusPage() {
                         )}
                       </Cell>
                     </Column>
-                    <Column label="Powers">
+                    <Column label={t("columns", "powers")}>
                       <Cell title={family.powers}>{family.powers}</Cell>
                     </Column>
-                    <Column label="Scraped from">
-                      <Cell under={absent ? "no series at all" : undefined}>
+                    <Column label={t("columns", "scrapedFrom")}>
+                      <Cell
+                        under={absent ? t("empty", "noSeriesAtAll") : undefined}
+                      >
                         {family.from}
                       </Cell>
                     </Column>
@@ -203,17 +208,17 @@ export default function PrometheusPage() {
               <div className="mt-3">
                 <Finding
                   tone="err"
-                  title={`${found.data.missing.length} of the four families are absent`}
+                  title={t("count", "familiesAbsent", {
+                    n: found.data.missing.length,
+                  })}
                 >
-                  Nothing in this Prometheus carries{" "}
+                  {t("empty", "promNothingCarries")}{" "}
                   <span className="font-mono">
                     {found.data.missing
                       .map((family) => family.metric)
                       .join(", ")}
                   </span>
-                  . The surfaces built on them draw the window this app watched
-                  itself and dim the longer ranges — they do not report an
-                  error, because an empty answer is a valid one.
+                  {t("empty", "promMissingFamiliesTail")}
                 </Finding>
               </div>
             )}

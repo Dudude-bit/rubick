@@ -20,6 +20,16 @@ import type { en } from "./catalogue";
 
 type Section = keyof typeof en;
 
+/**
+ * The translator itself, for the plain functions a hook cannot reach.
+ *
+ * A helper that builds a sentence — `noShell(pod)` and its kind — is not a
+ * component, so it cannot call the hook. Taking `t` as a parameter is how it
+ * still speaks the reader's language: the component calls the hook once and
+ * hands it down.
+ */
+export type T = ReturnType<typeof useT>;
+
 export function useT() {
   const locale = useLocale();
   return useCallback(

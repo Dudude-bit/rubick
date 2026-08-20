@@ -132,15 +132,14 @@ function ConnectForm({
       <DialogHeader>
         <DialogTitle>{vendorName}</DialogTitle>
         <DialogDescription>
-          One address per cluster, because a {vendorName} is per cluster —
-          staging&rsquo;s is not production&rsquo;s. Gives {gives}.
+          {t("settings", "oneAddressPerCluster", { vendor: vendorName, gives })}
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-col gap-3 py-1">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="integration-url" className="text-xs text-fg-mut">
-            Address
+            {t("columns", "address")}
           </Label>
           <Input
             id="integration-url"
@@ -156,11 +155,19 @@ function ConnectForm({
               that works from inside the cluster resolves to nothing here, and
               that is the commonest way to get this field wrong. */}
           <p className="text-[11px] text-fg-fnt">
-            Asked from this machine, not from inside the cluster — so a
-            cluster-internal name like{" "}
-            <span className="font-mono">prometheus.monitoring</span> will not
-            resolve. Give an address that reaches it from here, or let the app
-            forward a port to it.
+            {/* One sentence in the catalogue, split here rather than there:
+                a translator moves the example wherever their word order wants
+                it, and the monospace still lands on it. */}
+            {splitAround(t("settings", "addressIsFromHere"), "{example}").map(
+              (part, i) =>
+                i === 1 ? (
+                  <span key="example" className="font-mono">
+                    prometheus.monitoring
+                  </span>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+            )}
           </p>
         </div>
 
@@ -198,16 +205,30 @@ function ConnectForm({
               className="mt-0.5"
             />
             <span>
-              Open the tunnel when I switch to this cluster
+              {t("settings", "openTunnelOnSwitch")}
               <span className="mt-0.5 block text-[11px] text-fg-fnt">
-                Forwarding{" "}
-                <span className="font-mono">
-                  {saved.namespace}/{saved.service}:{saved.remotePort}
-                </span>{" "}
-                to{" "}
-                <span className="font-mono">localhost:{saved.localPort}</span>.
-                Left off, the row stays in the sidebar and pressing it opens the
-                tunnel — kept per cluster, on this machine only.
+                {splitAround(
+                  t("settings", "forwardingTunnelNote"),
+                  "{target}"
+                ).map((part, i) =>
+                  i === 1 ? (
+                    <span key="target" className="font-mono">
+                      {saved.namespace}/{saved.service}:{saved.remotePort}
+                    </span>
+                  ) : (
+                    <React.Fragment key={i}>
+                      {splitAround(part, "{local}").map((sub, j) =>
+                        j === 1 ? (
+                          <span key="local" className="font-mono">
+                            localhost:{saved.localPort}
+                          </span>
+                        ) : (
+                          <span key={j}>{sub}</span>
+                        )
+                      )}
+                    </React.Fragment>
+                  )
+                )}
               </span>
             </span>
           </label>
@@ -218,13 +239,13 @@ function ConnectForm({
             checked={bearer}
             onCheckedChange={(value) => setBearer(value === true)}
           />
-          Send a bearer token
+          {t("settings", "sendBearerToken")}
         </label>
 
         {bearer && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="integration-token" className="text-xs text-fg-mut">
-              Token
+              {t("settings", "token")}
             </Label>
             <Input
               id="integration-token"
@@ -233,8 +254,8 @@ function ConnectForm({
               autoComplete="off"
               placeholder={
                 editor.saved?.hasToken
-                  ? "unchanged — type to replace it"
-                  : "pasted here, kept out of this window afterwards"
+                  ? t("settings", "tokenUnchangedPlaceholder")
+                  : t("settings", "tokenNewPlaceholder")
               }
               onChange={(event) => setToken(event.target.value)}
               className="font-mono text-xs"
@@ -242,9 +263,7 @@ function ConnectForm({
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
             <p className="text-[11px] leading-snug text-fg-fnt">
-              Stored in this app&rsquo;s config file in plain text, beside the
-              registry passwords it already keeps there, and sent only from the
-              backend — it is never handed back to this window.
+              {t("settings", "tokenStorageNote")}
             </p>
           </div>
         )}
@@ -254,7 +273,7 @@ function ConnectForm({
             checked={insecure}
             onCheckedChange={(value) => setInsecure(value === true)}
           />
-          Accept a certificate this machine does not trust
+          {t("settings", "acceptUntrustedCert")}
         </label>
 
         {tested && <TestResult result={tested} />}
@@ -321,6 +340,7 @@ function InCluster({
   vendorName: string;
   onPicked: (forwarded: Forwarded) => void;
 }) {
+  const t = useT();
   const [looking, setLooking] = React.useState(false);
   const [found, setFound] = React.useState<Candidate[] | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -360,14 +380,14 @@ function InCluster({
         disabled={looking}
         className="self-start text-xs"
       >
-        {looking ? "Looking…" : `Find ${vendorName} in this cluster`}
+        {looking
+          ? t("settings", "lookingEllipsis")
+          : t("settings", "findVendorInCluster", { vendor: vendorName })}
       </Button>
 
       {found !== null && found.length === 0 && (
         <p className="text-[11px] text-fg-fnt">
-          No Service in this cluster is labelled or named for {vendorName}. If
-          it is here under another name, forward it yourself and give the
-          address above.
+          {t("settings", "noServiceForVendor", { vendor: vendorName })}
         </p>
       )}
 
@@ -386,7 +406,9 @@ function InCluster({
               <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
             </span>
             <span className="flex-none text-[11px] text-fg-fnt">
-              {busy === key ? "forwarding…" : candidate.because}
+              {busy === key
+                ? t("settings", "forwardingEllipsis")
+                : candidate.because}
             </span>
           </button>
         );
@@ -398,17 +420,31 @@ function InCluster({
 }
 
 function TestResult({ result }: { result: ProbeResult }) {
+  const t = useT();
   if (result.ok) {
     return (
       <p className="text-[11px] text-ok" role="status">
-        Answered in {result.latencyMs}ms
+        {t("settings", "probeAnswered", { ms: result.latencyMs })}
         {result.version ? ` · ${result.version}` : ""}
       </p>
     );
   }
   return (
     <p className="text-[11px] text-err" role="status">
-      Did not answer — {result.reason}
+      {t("settings", "probeDidNotAnswer", { reason: result.reason })}
     </p>
   );
+}
+
+/**
+ * A sentence kept whole in the catalogue, cut where it is rendered.
+ *
+ * The alternative is two half-sentences either side of a styled span, and a
+ * language that puts the example first has nowhere to put it. One string with
+ * a placeholder travels; the cut happens here.
+ */
+function splitAround(text: string, token: string): string[] {
+  const at = text.indexOf(token);
+  if (at < 0) return [text];
+  return [text.slice(0, at), token, text.slice(at + token.length)];
 }

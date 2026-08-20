@@ -46,6 +46,7 @@ import { deliveryScopeOf } from "@/lib/delivery";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useT } from "@/i18n/useT";
 
 /** A resource that can show up in a list page. */
 type ListableResource = { name: string; namespace?: string | null };
@@ -98,6 +99,7 @@ export function createResourceListPage<T extends ListableResource>(
   config: ResourceListPageConfig<T>
 ) {
   const ListPage = function ResourceListPage() {
+    const t = useT();
     const currentNamespace = useClusterStore((s) => s.currentNamespace);
     const scope = useNamespaceScope();
     const navigate = useNavigate();
@@ -111,7 +113,7 @@ export function createResourceListPage<T extends ListableResource>(
           const actions: QuickAction<T>[] = [
             {
               icon: Eye,
-              label: "View Details",
+              label: t("action", "viewDetails"),
               onClick: (item) =>
                 navigate(
                   getResourceDetailUrl(
@@ -127,7 +129,7 @@ export function createResourceListPage<T extends ListableResource>(
           if (config.deleter) {
             actions.push({
               icon: Trash2,
-              label: "Delete",
+              label: t("action", "delete"),
               onClick: (item) => setDeleteTarget(item),
               variant: "destructive",
             });
@@ -135,7 +137,7 @@ export function createResourceListPage<T extends ListableResource>(
 
           return actions;
         },
-      [navigate]
+      [navigate, t]
     );
 
     const watchFactory = config.watch;
@@ -161,11 +163,14 @@ export function createResourceListPage<T extends ListableResource>(
         if (watchFailed) return;
         setWatchFailed(true);
         toast({
-          title: "Real-time updates unavailable",
-          description: `${config.title}: falling back to periodic refresh. ${err}`,
+          title: t("action", "realtimeUnavailable"),
+          description: t("action", "fallingBackToPolling", {
+            title: config.title,
+            error: err,
+          }),
         });
       },
-      [toast, watchFailed]
+      [t, toast, watchFailed]
     );
 
     const { resyncing } = useResourceWatch<T>({

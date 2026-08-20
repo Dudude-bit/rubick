@@ -3,6 +3,7 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import { useT } from "@/i18n/useT";
 
 /** Operation tag — mirrors backend `WatchOp`. */
 type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
@@ -86,16 +87,19 @@ export function useResourceWatch<
   onError,
   onRecovered,
 }: UseResourceWatchOptions): ResourceWatchState {
+  const t = useT();
   const queryClient = useQueryClient();
   const [resyncing, setResyncing] = useState(false);
   // Latest callbacks captured via refs so flipping a useState in
   // either callback doesn't tear down the subscription.
   const onErrorRef = useRef(onError);
   const onRecoveredRef = useRef(onRecovered);
+  const tRef = useRef(t);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
-  }, [onError, onRecovered]);
+    tRef.current = t;
+  }, [onError, onRecovered, t]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -156,7 +160,9 @@ export function useResourceWatch<
             if (payload.changes.some((change) => change.op === "failed")) {
               inFailedState = true;
               abandonResync();
-              onErrorRef.current?.(payload.error ?? "Resource watch failed");
+              onErrorRef.current?.(
+                payload.error ?? tRef.current("action", "resourceWatchFailed")
+              );
               return;
             }
             if (payload.changes.length === 0) return;
@@ -214,7 +220,7 @@ export function useResourceWatch<
           // state to swap in — committing it would delete rows that exist.
           abandonResync();
           onErrorRef.current?.(
-            `The event bridge fell behind and dropped ${event.payload} updates, so this list may be incomplete.`
+            tRef.current("action", "eventBridgeLagged", { n: event.payload })
           );
         });
 

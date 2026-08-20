@@ -25,6 +25,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -74,6 +75,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
 ];
 
 export function PersistentVolumeClaimList() {
+  const t = useT();
   const { currentNamespace } = useClusterStore();
   const scope = useNamespaceScope();
   const navigate = useNavigate();
@@ -95,11 +97,14 @@ export function PersistentVolumeClaimList() {
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `Persistent Volume Claims: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "fallingBackToPolling", {
+          title: "Persistent Volume Claims",
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed]
+    [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<PersistentVolumeClaimInfo>({
     enabled: true,
@@ -117,7 +122,7 @@ export function PersistentVolumeClaimList() {
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(
             getResourceDetailUrl(
@@ -129,12 +134,12 @@ export function PersistentVolumeClaimList() {
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item) => setDeleteTarget(item),
         variant: "destructive",
       },
     ],
-    [navigate]
+    [navigate, t]
   );
 
   return (

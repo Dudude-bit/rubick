@@ -22,12 +22,17 @@ import { cn } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
-const TYPE_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "Warning", label: "Warnings" },
-  { value: "Normal", label: "Normal" },
-] as const;
+const TYPE_FILTERS: Array<{
+  value: string;
+  label: keyof typeof en.action;
+}> = [
+  { value: "all", label: "all" },
+  { value: "Warning", label: "eventsWarnings" },
+  { value: "Normal", label: "eventsNormal" },
+];
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
 
@@ -55,6 +60,7 @@ function filtersFor(
 }
 
 export function Events() {
+  const t = useT();
   const { isConnected, currentNamespace } = useClusterStore();
   const scope = useNamespaceScope();
   const [eventType, setEventType] = useState<string>("all");
@@ -157,13 +163,18 @@ export function Events() {
     <div className="flex flex-col gap-2 animate-in fade-in duration-200">
       <SectionHeader
         title="Events"
-        count={summarise(warningCount, normalCount, capped ? eventLimit : null)}
+        count={summarise(
+          t,
+          warningCount,
+          normalCount,
+          capped ? eventLimit : null
+        )}
         actions={
           <>
             <div
               className="flex items-center gap-0.5"
               role="group"
-              aria-label="Event type"
+              aria-label={t("action", "eventType")}
             >
               {TYPE_FILTERS.map((filter) => (
                 <button
@@ -178,13 +189,13 @@ export function Events() {
                       : "text-fg-mut"
                   )}
                 >
-                  {filter.label}
+                  {t("action", filter.label)}
                 </button>
               ))}
             </div>
             <Select value={eventLimit} onValueChange={setEventLimit}>
               <SelectTrigger
-                aria-label="Events fetched"
+                aria-label={t("action", "eventsFetched")}
                 className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
               >
                 <SelectValue />
@@ -192,7 +203,9 @@ export function Events() {
               <SelectContent>
                 {LIMITS.map((limit) => (
                   <SelectItem key={limit} value={limit}>
-                    {limit === "all" ? "No limit" : `Latest ${limit}`}
+                    {limit === "all"
+                      ? t("action", "noLimit")
+                      : t("action", "latestN", { n: limit })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -215,7 +228,9 @@ export function Events() {
               events={events}
               showObject
               showNamespace={!currentNamespace}
-              emptyMessage={`No events in ${scope.inWords} yet.`}
+              emptyMessage={t("empty", "noEventsInScope", {
+                scope: scope.inWords,
+              })}
             />
           )}
         </SectionBody>
@@ -226,15 +241,16 @@ export function Events() {
 
 /** Worst first, and the healthy half stays a plain count. */
 function summarise(
+  t: ReturnType<typeof useT>,
   warnings: number,
   normal: number,
   cappedAt: string | null
 ): string {
   const parts: string[] = [];
-  if (warnings > 0) parts.push(`${warnings} warning`);
-  if (normal > 0) parts.push(`${normal} normal`);
-  if (parts.length === 0) parts.push("none");
-  if (cappedAt) parts.push(`latest ${cappedAt}`);
+  if (warnings > 0) parts.push(t("count", "warningEvents", { n: warnings }));
+  if (normal > 0) parts.push(t("count", "normalEvents", { n: normal }));
+  if (parts.length === 0) parts.push(t("empty", "noneInline"));
+  if (cappedAt) parts.push(t("count", "latestKept", { n: cappedAt }));
   return parts.join(" · ");
 }
 

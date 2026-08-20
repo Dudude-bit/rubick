@@ -64,7 +64,11 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     header: () => <T section="columns" k="expansion" />,
     cell: ({ row }) => (
       <span className="text-fg-mid">
-        {row.original.allowVolumeExpansion ? "allowed" : "disabled"}
+        {row.original.allowVolumeExpansion ? (
+          <T section="columns" k="allowed" />
+        ) : (
+          <T section="columns" k="disabled" />
+        )}
       </span>
     ),
   },
@@ -79,7 +83,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">
-            {params.length} params
+            <T section="count" k="params" values={{ n: params.length }} />
           </TooltipTrigger>
           <TooltipContent>
             {params.map(([key, value]) => (

@@ -134,7 +134,9 @@ export function YamlEditorToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>Recent Changes</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              {t("action", "recentChanges")}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {history.slice(0, 10).map((entry) => (
               <DropdownMenuItem

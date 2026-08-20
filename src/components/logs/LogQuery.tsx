@@ -92,6 +92,7 @@ export function LogQuery({
   onToggleIntake,
   fields,
 }: LogQueryProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   /** The key whose values are being offered; null while offering keys. */
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -297,9 +298,11 @@ export function LogQuery({
             onFocus={() => setOpen(true)}
             onBlur={close}
             placeholder={
-              active ? `value of ${active.key}` : "text, or key=value"
+              active
+                ? t("action", "valueOfKey", { key: active.key })
+                : t("action", "textOrKeyValue")
             }
-            aria-label="Filter the log"
+            aria-label={t("action", "filterTheLog")}
             role="combobox"
             aria-expanded={open}
             aria-controls={listId}
@@ -332,14 +335,14 @@ export function LogQuery({
               // Not a tab stop: focus stays in the input throughout, and
               // Backspace on an empty caret does exactly this.
               tabIndex={-1}
-              title="Back to all fields (backspace)"
+              title={t("action", "backToAllFields")}
               onClick={() => {
                 setActiveKey(null);
                 setCursor(-1);
               }}
               className="rounded px-1 hover:bg-hover hover:text-fg-mut"
             >
-              All fields
+              {t("action", "allFields")}
             </button>
             <ChevronRight aria-hidden="true" className="h-3 w-3" />
             <span className="font-mono text-fg-mut">{active.key}</span>
@@ -350,7 +353,9 @@ export function LogQuery({
           id={listId}
           role="listbox"
           aria-label={
-            active ? `Values of ${active.key}` : "Fields in the buffered log"
+            active
+              ? t("action", "valuesOfKey", { key: active.key })
+              : t("action", "fieldsInBufferedLog")
           }
           className="max-h-56 overflow-y-auto scrollbar-thin"
         >
@@ -433,28 +438,28 @@ function Hint({
   options: number;
   draft: string;
 }) {
+  const t = useT();
   let text: ReactNode = null;
 
   if (active?.wide) {
     text = (
       <>
-        <span className="font-mono">{active.key}</span> carries over{" "}
-        {MAX_TRACKED_VALUES} distinct values — too many to list. Type the one
-        you are after and press enter.
+        <span className="font-mono">{active.key}</span>{" "}
+        {t("empty", "fieldTooManyValues", { n: MAX_TRACKED_VALUES })}
       </>
     );
   } else if (options === 0) {
     text = active
-      ? `No value of ${active.key} matches “${draft}”.`
+      ? t("empty", "noValueMatches", { key: active.key, query: draft })
       : draft === ""
-        ? "Nothing buffered yet. The fields appear as lines arrive."
-        : `No field matches “${draft}”. Enter searches the text instead.`;
+        ? t("empty", "nothingBufferedYet")
+        : t("empty", "noFieldMatches", { query: draft });
   } else if (active && active.values.length > options) {
-    text = `Showing the ${options} most common. Type to narrow.`;
+    text = t("empty", "showingMostCommon", { n: options });
   } else if (!active && suggestions.length > 0 && suggestions.length <= 2) {
     // Only the two synthetic keys: the parser read nothing out of these
     // lines, which is a fact about the pod rather than a failure here.
-    text = "These lines carry no structured fields — only level and container.";
+    text = t("empty", "noStructuredFields");
   }
 
   if (text === null) return null;
@@ -493,6 +498,7 @@ function Chip({
   onToggleIntake: (term: QueryTerm) => void;
   onRemove: (term: QueryTerm) => void;
 }) {
+  const t = useT();
   const label = termLabel(term);
   return (
     <span
@@ -505,10 +511,10 @@ function Chip({
       // than left to the toggle beside it.
       title={
         intake
-          ? `${label} — intake: lines that do not match are discarded as they arrive`
+          ? t("action", "chipIntakeTitle", { label })
           : canBeIntake(term)
-            ? `${label} — a query over the buffered lines`
-            : `${label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.`
+            ? t("action", "chipQueryTitle", { label })
+            : t("action", "chipQueryTimeTitle", { label })
       }
     >
       <span className="flex items-center gap-1 pl-1.5">
@@ -543,13 +549,13 @@ function Chip({
           aria-pressed={intake}
           aria-label={
             intake
-              ? `Stop discarding lines that do not match ${label} — new lines are kept from now on, the ones already discarded do not come back`
-              : `Keep only lines matching ${label} — the rest are discarded as they arrive`
+              ? t("action", "stopIntakeLabel", { label })
+              : t("action", "startIntakeLabel", { label })
           }
           title={
             intake
-              ? `Back to a query. New lines are kept from now on; the ones already discarded do not come back.`
-              : `Keep only ${label}. Lines that do not match are discarded as they arrive, so the buffer holds more of what you asked for.`
+              ? t("action", "stopIntakeTitle")
+              : t("action", "startIntakeTitle", { label })
           }
           onClick={() => onToggleIntake(term)}
           className={`px-1 ${
@@ -565,7 +571,7 @@ function Chip({
       )}
       <button
         type="button"
-        title={`Remove ${label}`}
+        title={t("action", "removeTerm", { label })}
         onClick={() => onRemove(term)}
         className={`pr-1 ${
           canBeIntake(term) ? "" : "pl-1"

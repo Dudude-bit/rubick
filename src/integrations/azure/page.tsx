@@ -20,7 +20,6 @@ import { useMemo, useState } from "react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
-import { plural } from "../kit";
 import {
   Cell,
   Chain,
@@ -39,8 +38,10 @@ import {
   danglingBindings,
 } from "./model";
 import type { FederatedAccount } from "./workload-identity";
+import { useT } from "@/i18n/useT";
 
 export default function AksAddonsPage() {
+  const t = useT();
   const picture = useAksPicture();
   const [filter, setFilter] = useState("");
 
@@ -70,7 +71,7 @@ export default function AksAddonsPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s identities
+          {t("empty", "couldNotReadIdentities")}
         </h2>
         <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
       </Section>
@@ -80,11 +81,13 @@ export default function AksAddonsPage() {
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
-        title="AKS add-ons"
+        title={t("nav", "integrations") === "" ? "" : "AKS add-ons"}
         count={
-          picture.isPending ? undefined : plural(accounts.length, "identity")
+          picture.isPending
+            ? undefined
+            : t("count", "identities", { n: accounts.length })
         }
-        description="Which pods can become which Azure identity — and, where a cluster is still on it, what the retired pod-identity add-on was told."
+        description={t("empty", "aksAddonsHint")}
       />
 
       {orphans.map((finding, index) => (
@@ -93,19 +96,20 @@ export default function AksAddonsPage() {
           tone="err"
           title={
             <>
-              <span className="font-mono">{finding.pod.name}</span> asks for an
-              identity its ServiceAccount does not name
+              <span className="font-mono">{finding.pod.name}</span>{" "}
+              {t("empty", "podAsksForIdentity")}
             </>
           }
         >
-          It carries{" "}
-          <span className="font-mono">azure.workload.identity/use: true</span>,
-          so the webhook projects a token for it — but{" "}
-          <span className="font-mono">{finding.account}</span> in{" "}
-          <span className="font-mono">{finding.pod.namespace}</span> has no{" "}
-          <span className="font-mono">azure.workload.identity/client-id</span>{" "}
-          annotation, so the token is for no identity at all. Every call it
-          makes to Azure comes back 401 and nothing in Kubernetes says why.
+          {t("empty", "azureIdentityFinding1")}{" "}
+          <span className="font-mono">azure.workload.identity/use: true</span>
+          {t("empty", "azureIdentityFinding2")}{" "}
+          <span className="font-mono">{finding.account}</span>{" "}
+          {t("empty", "azureIdentityFinding3")}{" "}
+          <span className="font-mono">{finding.pod.namespace}</span>{" "}
+          {t("empty", "azureIdentityFinding4")}{" "}
+          <span className="font-mono">azure.workload.identity/client-id</span>
+          {t("empty", "azureIdentityFinding5")}
         </Finding>
       ))}
 
@@ -114,25 +118,28 @@ export default function AksAddonsPage() {
           <FilterBox
             value={filter}
             onChange={setFilter}
-            placeholder="Filter by identity, client id or pod…"
-            label="Filter identities"
+            placeholder={t("action", "filterIdentitiesPlaceholder")}
+            label={t("action", "filterIdentities")}
           />
         </div>
 
         {picture.isPending ? (
-          <p className="text-xs text-fg-fnt">Reading the identities…</p>
+          <p className="text-xs text-fg-fnt">
+            {t("empty", "readingIdentities")}
+          </p>
         ) : accounts.length === 0 ? (
           <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
-            No pod in this cluster carries{" "}
+            {t("empty", "noPodCarries")}{" "}
             <span className="font-mono">azure.workload.identity/use: true</span>
-            , so nothing here is federating to Azure through Workload ID.
+            {t("empty", "nothingFederatingToAzure")}
             {legacy
-              ? " The retired pod-identity add-on is still installed, and what it holds is below."
-              : " The retired pod-identity add-on is not installed either — its three kinds are not served by this API server."}
+              ? t("empty", "legacyAddonInstalled")
+              : t("empty", "legacyAddonNotInstalled")}
           </p>
         ) : shown.length === 0 ? (
           <p className="text-[11.5px] text-fg-fnt">
-            Nothing matches <span className="font-mono">{filter}</span>.
+            {t("empty", "nothingMatches")}{" "}
+            <span className="font-mono">{filter}</span>.
           </p>
         ) : (
           <div className="flex flex-col">
@@ -150,29 +157,32 @@ export default function AksAddonsPage() {
       {legacy && (
         <Section>
           <SectionHeader
-            title="Pod identity, which is retired"
+            title={t("empty", "podIdentityRetired")}
             count={picture.data?.bindings.length || undefined}
-            description="aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes."
+            description={t("empty", "podIdentityRetiredHint")}
           />
           {dangling.length > 0 && (
             <Finding
               tone="err"
               title={
                 dangling.length === 1
-                  ? `No AzureIdentity named ${bindingIdentity(dangling[0])}`
-                  : `${plural(dangling.length, "binding")} name an identity that does not exist`
+                  ? t("empty", "noAzureIdentityNamed", {
+                      name: bindingIdentity(dangling[0]) ?? "",
+                    })
+                  : t("count", "bindingsNameMissingIdentity", {
+                      n: dangling.length,
+                    })
               }
             >
-              The binding is accepted, no{" "}
-              <span className="font-mono">AzureAssignedIdentity</span> is ever
-              created, the pods run perfectly, and every call they make to Azure
-              comes back 403 with nothing in Kubernetes to say why.
+              {t("empty", "bindingAcceptedPrefix")}{" "}
+              <span className="font-mono">AzureAssignedIdentity</span>
+              {t("empty", "bindingAcceptedSuffix")}
             </Finding>
           )}
           <div className="mt-2 flex flex-col gap-1.5">
             {picture.data?.bindings.map((binding) => (
               <Chain key={`${binding.namespace}/${binding.name}`}>
-                <Column label="Binding">
+                <Column label={t("columns", "binding")}>
                   <Cell under={binding.namespace ?? undefined}>
                     <ResourceRef
                       kind="AzureIdentityBinding"
@@ -183,7 +193,7 @@ export default function AksAddonsPage() {
                     />
                   </Cell>
                 </Column>
-                <Column label="Says">
+                <Column label={t("columns", "says")}>
                   <Cell
                     bad={dangling.includes(binding)}
                     title={bindingSummary(binding)}
@@ -191,7 +201,7 @@ export default function AksAddonsPage() {
                     {bindingSummary(binding)}
                   </Cell>
                 </Column>
-                <Column label="Identity">
+                <Column label={t("columns", "identity")}>
                   <Cell bad={dangling.includes(binding)}>
                     {bindingIdentity(binding) ? (
                       <ResourceRef
@@ -202,7 +212,7 @@ export default function AksAddonsPage() {
                         showKind={false}
                       />
                     ) : (
-                      "names none"
+                      t("empty", "namesNone")
                     )}
                   </Cell>
                 </Column>
@@ -215,14 +225,20 @@ export default function AksAddonsPage() {
   );
 }
 
-function accountState(account: FederatedAccount): {
+function accountState(
+  account: FederatedAccount,
+  t: ReturnType<typeof useT>
+): {
   text: string;
   tone: Tone;
 } {
   if (account.pods.length === 0) {
-    return { text: "no pod uses it", tone: "warn" };
+    return { text: t("empty", "noPodUsesIt"), tone: "warn" };
   }
-  return { text: plural(account.pods.length, "pod"), tone: "ok" };
+  return {
+    text: t("cluster", "podCount", { n: account.pods.length }),
+    tone: "ok",
+  };
 }
 
 function AccountRow({
@@ -232,16 +248,18 @@ function AccountRow({
   account: FederatedAccount;
   last: boolean;
 }) {
+  const t = useT();
   return (
     <TroubleRow
       title={<span className="font-mono">{account.name}</span>}
       meta={
         <>
           {account.namespace}
-          {account.tenantId && ` · tenant ${account.tenantId}`}
+          {account.tenantId &&
+            t("empty", "tenantMeta", { id: account.tenantId })}
         </>
       }
-      state={accountState(account)}
+      state={accountState(account, t)}
       last={last}
     >
       <Chain>
@@ -250,15 +268,17 @@ function AccountRow({
             <span className="font-mono">{account.name}</span>
           </Cell>
         </Column>
-        <Column label="Client id">
+        <Column label={t("columns", "clientId")}>
           <Cell title={account.clientId}>
             <span className="font-mono">{account.clientId}</span>
           </Cell>
         </Column>
-        <Column label="Assumed by">
+        <Column label={t("columns", "assumedBy")}>
           {account.pods.length === 0 ? (
             <Cell warn>
-              <span className="text-fg-fnt">no pod carries the label</span>
+              <span className="text-fg-fnt">
+                {t("empty", "noPodCarriesLabel")}
+              </span>
             </Cell>
           ) : (
             account.pods.map((pod) => (

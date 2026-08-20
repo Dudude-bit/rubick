@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 
 import type { TerminalProps } from "./TerminalImpl";
+import { useT } from "@/i18n/useT";
 
 export type { TerminalProps, TerminalMetadata } from "./TerminalImpl";
 
@@ -17,6 +18,7 @@ const TerminalImpl = lazy(() =>
 );
 
 export function Terminal(props: TerminalProps) {
+  const t = useT();
   return (
     <Suspense
       fallback={
@@ -24,7 +26,7 @@ export function Terminal(props: TerminalProps) {
           className="flex h-full w-full items-center justify-center text-xs text-fg-mut"
           aria-busy="true"
         >
-          Loading terminal…
+          {t("empty", "loadingTerminal")}
         </div>
       }
     >

@@ -239,7 +239,7 @@ export function CrdDetail() {
                     {version.served ? t("action", "yes") : t("action", "no")}
                   </TableCell>
                   <TableCell className="text-fg-mut">
-                    {version.storage ? "yes" : "no"}
+                    {version.storage ? t("action", "yes") : t("action", "no")}
                   </TableCell>
                   <TableCell className="text-fg-fnt">
                     {version.additionalPrinterColumns.length || "default"}
@@ -248,7 +248,8 @@ export function CrdDetail() {
                     className={version.deprecated ? "text-warn" : "text-fg-fnt"}
                   >
                     {version.deprecated
-                      ? version.deprecationWarning || "deprecated"
+                      ? version.deprecationWarning ||
+                        t("empty", "deprecatedInline")
                       : "—"}
                   </TableCell>
                 </TableRow>
@@ -260,12 +261,12 @@ export function CrdDetail() {
     },
     {
       id: "schema",
-      label: "Schema",
+      label: t("nav", "schema"),
       glyph: viewGlyph(ListTree),
       content: (
         <Section>
           <SectionHeader
-            title="OpenAPI schema"
+            title={t("nav", "openApiSchema")}
             count={activeVersionName ?? undefined}
             actions={
               crd &&
@@ -296,8 +297,7 @@ export function CrdDetail() {
               <SchemaViewer schema={currentVersion.schema} />
             ) : (
               <p className="py-1 text-xs text-fg-fnt">
-                This version publishes no structural schema, so the API server
-                validates nothing beyond the object's metadata.
+                {t("empty", "noStructuralSchema")}
               </p>
             )}
           </div>
@@ -306,7 +306,7 @@ export function CrdDetail() {
     },
     {
       id: "instances",
-      label: "Instances",
+      label: t("nav", "instances"),
       // The CRD's own kind, so the tab carries whatever mark the list of
       // these objects carries everywhere else — a dashed circle and the
       // neutral hue for a kind the registry has never heard of.
@@ -331,7 +331,14 @@ export function CrdDetail() {
       mark: conditionsMark(conditions),
       content: (
         <Section>
-          <SectionHeader title="Conditions" count={conditions.length} />
+          <SectionHeader
+            title={t("nav", "conditions")}
+            count={
+              conditions.length > 0
+                ? t("count", "conditions", { n: conditions.length })
+                : undefined
+            }
+          />
           <ConditionRows conditions={conditions} />
         </Section>
       ),
@@ -413,8 +420,10 @@ export function CrdDetail() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Delete CRD?"
-        description={`Deleting "${decodedName}" also deletes every instance of this custom resource in the cluster.`}
+        title={t("action", "deleteKindQuestion", { kind: "CRD" })}
+        description={t("action", "deleteCrdWarning", {
+          name: decodedName ?? "",
+        })}
         confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}

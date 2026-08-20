@@ -243,7 +243,7 @@ export function DebugPodDialog({
               {t("action", "leave")}
             </Button>
             <Button variant="destructive" onClick={handleDeletePod}>
-              Delete Pod
+              {t("action", "deletePod")}
             </Button>
             <Button onClick={handleKeepWaiting}>
               {t("action", "keepWaiting")}
@@ -263,24 +263,24 @@ export function DebugPodDialog({
             <DialogTitle className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-fg-fnt" />
               {state === "creating"
-                ? "Creating debug container..."
-                : "Waiting for container..."}
+                ? t("action", "creatingDebugContainer")
+                : t("action", "waitingForContainer")}
             </DialogTitle>
             <DialogDescription>
-              Debug container for pod{" "}
+              {t("action", "debugContainerForPod")}{" "}
               <span className="font-mono text-fg">{podName}</span>
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-2 border-t border-hair pt-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-fg-mut">Status</span>
+              <span className="text-fg-mut">{t("columns", "status")}</span>
               <span className="font-mono text-fg">
-                {statusReason || "initializing…"}
+                {statusReason || t("action", "initializing")}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-fg-mut">Elapsed</span>
+              <span className="text-fg-mut">{t("action", "elapsed")}</span>
               <span className="font-mono text-fg">
                 {elapsedSeconds}s <span className="text-fg-fnt">/</span>{" "}
                 {timeoutSeconds}s
@@ -311,18 +311,20 @@ export function DebugPodDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bug className="h-4 w-4 text-fg-fnt" />
-            Debug Pod
+            {t("action", "debugPodTitle")}
           </DialogTitle>
           <DialogDescription>
-            Debug pod <span className="font-mono text-fg">{podName}</span> in
-            namespace <span className="font-mono text-fg">{namespace}</span>
+            {t("action", "debugPodPrefix")}{" "}
+            <span className="font-mono text-fg">{podName}</span>{" "}
+            {t("action", "inNamespace")}{" "}
+            <span className="font-mono text-fg">{namespace}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Debug Mode Selection */}
           <div className="space-y-3">
-            <Label>Debug Mode</Label>
+            <Label>{t("action", "debugMode")}</Label>
             <RadioGroup
               value={mode}
               onValueChange={(v) => setMode(v as DebugMode)}
@@ -353,7 +355,7 @@ export function DebugPodDialog({
                   <div className="flex items-center gap-2">
                     <Bug className="h-3.5 w-3.5 text-fg-fnt" />
                     <span className="font-medium text-fg">
-                      Ephemeral Container
+                      {t("action", "ephemeralContainerMode")}
                     </span>
                     {!supportsEphemeralContainers && (
                       <span className="text-[11px] text-fg-fnt">
@@ -362,7 +364,7 @@ export function DebugPodDialog({
                     )}
                   </div>
                   <p className="mt-0.5 text-[11px] text-fg-mut">
-                    Add debug container to existing pod without restart
+                    {t("action", "ephemeralModeHint")}
                   </p>
                 </Label>
               </div>
@@ -371,10 +373,12 @@ export function DebugPodDialog({
                 <Label htmlFor="copy" className="flex-1 cursor-pointer">
                   <div className="flex items-center gap-2">
                     <Copy className="h-3.5 w-3.5 text-fg-fnt" />
-                    <span className="font-medium text-fg">Copy Pod</span>
+                    <span className="font-medium text-fg">
+                      {t("action", "copyPodMode")}
+                    </span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-fg-mut">
-                    Create a copy of the pod with debug container
+                    {t("action", "copyPodModeHint")}
                   </p>
                 </Label>
               </div>
@@ -383,10 +387,10 @@ export function DebugPodDialog({
 
           {/* Debug Image Selection */}
           <div className="space-y-2">
-            <Label htmlFor="debug-image">Debug Image</Label>
+            <Label htmlFor="debug-image">{t("action", "debugImage")}</Label>
             <Select value={selectedImage} onValueChange={setSelectedImage}>
               <SelectTrigger>
-                <SelectValue placeholder="Select debug image" />
+                <SelectValue placeholder={t("action", "selectDebugImage")} />
               </SelectTrigger>
               <SelectContent>
                 {DEBUG_IMAGES.map((img) => (
@@ -398,7 +402,7 @@ export function DebugPodDialog({
             </Select>
             {selectedImage === "custom" && (
               <Input
-                placeholder="Enter custom image (e.g., myregistry/debug:latest)"
+                placeholder={t("action", "customImagePlaceholder")}
                 value={customImage}
                 onChange={(e) => setCustomImage(e.target.value)}
               />
@@ -408,13 +412,17 @@ export function DebugPodDialog({
           {/* Target Container (for ephemeral mode) */}
           {mode === "ephemeralContainer" && containers.length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="target-container">Target Container</Label>
+              <Label htmlFor="target-container">
+                {t("action", "targetContainer")}
+              </Label>
               <Select
                 value={targetContainer}
                 onValueChange={setTargetContainer}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select target container" />
+                  <SelectValue
+                    placeholder={t("action", "selectTargetContainer")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {containers.map((c) => (
@@ -425,7 +433,7 @@ export function DebugPodDialog({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-fg-mut">
-                Debug container will share process namespace with this container
+                {t("action", "targetContainerHint")}
               </p>
             </div>
           )}
@@ -434,9 +442,11 @@ export function DebugPodDialog({
           {mode === "copyPod" && (
             <div className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5">
               <div className="space-y-0.5">
-                <Label htmlFor="share-processes">Share Process Namespace</Label>
+                <Label htmlFor="share-processes">
+                  {t("action", "shareProcessNamespace")}
+                </Label>
                 <p className="text-[11px] text-fg-mut">
-                  Allow debug container to see processes from other containers
+                  {t("action", "shareProcessNamespaceHint")}
                 </p>
               </div>
               <Switch
@@ -451,9 +461,9 @@ export function DebugPodDialog({
           {!supportsEphemeralContainers && (
             <p className="flex items-start gap-2 border-t border-hair pt-2 text-[11px] text-fg-mut">
               <Info className="mt-px h-3.5 w-3.5 flex-none text-fg-fnt" />
-              Ephemeral containers require Kubernetes 1.25+. This cluster
-              reports {kubernetesVersion || "an unknown version"}, so use "Copy
-              Pod" instead.
+              {t("action", "ephemeralUnsupported", {
+                version: kubernetesVersion || t("action", "unknownVersion"),
+              })}
             </p>
           )}
         </div>

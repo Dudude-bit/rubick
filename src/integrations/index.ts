@@ -255,6 +255,7 @@ export type ConnectionState =
  * offering the staging Prometheus's answers for production.
  */
 function useConnections(): Map<string, ConnectionState> {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   // The same gate as detection, for the same launch-time beat.
   const isConnected = useClusterStore((state) => state.isConnected);
@@ -314,7 +315,10 @@ function useConnections(): Map<string, ConnectionState> {
           {
             state: "unreachable",
             saved: connection.data,
-            reason: probe?.data?.ok === false ? probe.data.reason : "no answer",
+            reason:
+              probe?.data?.ok === false
+                ? probe.data.reason
+                : t("empty", "noAnswer"),
           },
         ];
       }
@@ -651,6 +655,7 @@ export function useConnectionEditor(vendorId: string): {
   test: (draft: ConnectionDraft) => Promise<ProbeResult>;
   isSaving: boolean;
 } {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   const client = useQueryClient();
   const vendor = CONNECTED.find((candidate) => candidate.id === vendorId);
@@ -695,7 +700,7 @@ export function useConnectionEditor(vendorId: string): {
         : Promise.resolve({
             ok: false as const,
             at: Date.now(),
-            reason: "no such integration",
+            reason: t("empty", "noSuchIntegration"),
           }),
     isSaving: saving.isPending,
   };
@@ -1086,6 +1091,7 @@ export {
   type Forwarded,
   type InClusterHint,
 } from "./forwarded";
+import { useT } from "@/i18n/useT";
 
 /**
  * A configured vendor's connect record, outside React.

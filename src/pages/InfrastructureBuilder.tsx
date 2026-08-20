@@ -717,7 +717,9 @@ export function InfrastructureBuilder() {
                 {t("action", "yamlPaneHint")}
               </p>
               {!isConnected && (
-                <ConnectClusterEmptyState resourceLabel="Manifests" />
+                <ConnectClusterEmptyState
+                  resourceLabel={t("empty", "manifests")}
+                />
               )}
             </div>
           </div>

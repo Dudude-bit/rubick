@@ -77,14 +77,19 @@ export function ServiceDetail() {
       value: (
         <CopyableAddress
           value={service?.clusterIp}
-          label="Cluster IP"
+          label={t("columns", "clusterIp")}
           fallback="None"
         />
       ),
     },
     {
       label: t("columns", "externalIps"),
-      value: <CopyableAddresses values={externalIps} label="External IP" />,
+      value: (
+        <CopyableAddresses
+          values={externalIps}
+          label={t("columns", "externalIp")}
+        />
+      ),
     },
     ...(service?.type === "LoadBalancer"
       ? [
@@ -96,7 +101,7 @@ export function ServiceDetail() {
               loadBalancerIps.length > 0 ? (
                 <CopyableAddresses
                   values={loadBalancerIps}
-                  label="Load balancer address"
+                  label={t("columns", "loadBalancerAddress")}
                 />
               ) : (
                 t("empty", "pendingInline")

@@ -53,6 +53,7 @@ import { useT } from "@/i18n/useT";
  * instead of showing a confident wrong time.
  */
 function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
+  const t = useT();
   const lastAge = useRealtimeAge(cronJob.lastSchedule ?? null);
   const next = useMemo(
     () =>
@@ -67,25 +68,31 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
   return (
     <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">
       <Headline
-        label="Schedule"
+        label={t("columns", "schedule")}
         value={cronJob.schedule || "—"}
         mono
         note={
           <>
-            {description ?? "cron expression"}
+            {description ?? t("action", "cronExpression")}
             {cronJob.timezone && ` · ${cronJob.timezone}`}
           </>
         }
       />
       <Headline
-        label="Last run"
-        value={cronJob.lastSchedule ? `${lastAge} ago` : "never"}
+        label={t("columns", "lastRun")}
+        value={
+          cronJob.lastSchedule
+            ? t("action", "agoSuffix", { age: lastAge })
+            : t("action", "never")
+        }
         note={
           cronJob.lastSuccessfulTime
-            ? `last success ${formatDate(cronJob.lastSuccessfulTime)}`
+            ? t("action", "lastSuccessAt", {
+                when: formatDate(cronJob.lastSuccessfulTime) ?? "",
+              })
             : cronJob.lastSchedule
-              ? "no run has succeeded yet"
-              : "this CronJob has not fired"
+              ? t("action", "noRunSucceededYet")
+              : t("action", "cronJobNeverFired")
         }
         tone={
           cronJob.lastSchedule && !cronJob.lastSuccessfulTime
@@ -94,21 +101,21 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
         }
       />
       <Headline
-        label="Next run"
+        label={t("columns", "nextRun")}
         value={
           cronJob.suspend
-            ? "suspended"
+            ? t("action", "suspendedLower")
             : next
-              ? `in ${countdown.display}`
-              : "unknown"
+              ? t("action", "inTime", { time: countdown.display })
+              : t("action", "unknownLower")
         }
         tone={cronJob.suspend ? "warn" : undefined}
         note={
           cronJob.suspend
-            ? "nothing will start until the suspend flag is cleared"
+            ? t("action", "suspendFlagNote")
             : next
               ? (formatDate(next.toISOString()) ?? undefined)
-              : "the schedule could not be read"
+              : t("action", "scheduleUnreadable")
         }
       />
     </div>
@@ -199,7 +206,7 @@ export function CronJobDetail() {
     () => [
       {
         id: "overview",
-        label: "Overview",
+        label: t("nav", "overview"),
         glyph: viewGlyph(Info),
         content: (
           <>
@@ -208,34 +215,34 @@ export function CronJobDetail() {
             <WorkloadOverview
               count={
                 <CountBlock
-                  title="Runs"
+                  title={t("action", "runs")}
                   // What decides how many a CronJob has is the schedule and the
                   // history limits, and the schedule is already answered by the
                   // three headlines above — so this block counts what is there
                   // and says what keeps it.
-                  subject="jobs this CronJob still owns"
+                  subject={t("action", "runsSubject")}
                 >
                   <Composition
                     total={jobs.length}
-                    label={jobs.length === 1 ? "job kept" : "jobs kept"}
+                    label={t("count", "jobsKept", { n: jobs.length })}
                     // Every segment is counted off the same list as the total,
                     // so the bar cannot disagree with the rows under the Jobs
                     // tab.
                     segments={[
                       {
-                        label: "running",
+                        label: t("count", "runningSegment"),
                         count: jobs.filter((job) => job.status === "Running")
                           .length,
                         tone: "ok",
                       },
                       {
-                        label: "succeeded",
+                        label: t("count", "succeededSegment"),
                         count: jobs.filter((job) => job.status === "Complete")
                           .length,
                         tone: "neutral",
                       },
                       {
-                        label: "failed",
+                        label: t("count", "failedSegment"),
                         count: jobs.filter((job) => job.status === "Failed")
                           .length,
                         tone: "err",
@@ -243,10 +250,14 @@ export function CronJobDetail() {
                     ]}
                     note={
                       <>
-                        {cronJob?.successfulJobsHistoryLimit ?? 3} succeeded ·{" "}
-                        {cronJob?.failedJobsHistoryLimit ?? 1} failed kept
+                        {t("action", "historyLimits", {
+                          succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
+                          failed: cronJob?.failedJobsHistoryLimit ?? 1,
+                        })}
                         {cronJob?.active
-                          ? ` · ${cronJob.active} active per the controller`
+                          ? ` · ${t("action", "activePerController", {
+                              n: cronJob.active,
+                            })}`
                           : ""}
                       </>
                     }
@@ -269,7 +280,10 @@ export function CronJobDetail() {
                 />
               }
               declared={
-                <FactBlock title="How it is declared" items={policy(cronJob)} />
+                <FactBlock
+                  title={t("action", "howDeclared")}
+                  items={policy(cronJob, t)}
+                />
               }
             >
               {cronJob && (
@@ -281,13 +295,13 @@ export function CronJobDetail() {
             </WorkloadOverview>
 
             <KeyValueSection
-              title="Labels"
+              title={t("columns", "labels")}
               count={Object.keys(cronJob?.labels ?? {}).length}
               items={recordToKeyValues(cronJob?.labels ?? {})}
               emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
-              title="Annotations"
+              title={t("columns", "annotations")}
               count={Object.keys(cronJob?.annotations ?? {}).length}
               items={recordToKeyValues(cronJob?.annotations ?? {})}
               emptyMessage={t("empty", "noAnnotations")}
@@ -297,7 +311,7 @@ export function CronJobDetail() {
       },
       {
         id: "container-template",
-        label: "Template",
+        label: t("columns", "template"),
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={cronJob} namespace={namespace} />,
       },
@@ -310,7 +324,7 @@ export function CronJobDetail() {
           <Section>
             <SectionHeader
               title="Jobs"
-              count={`${jobs.length} kept · history limits decide how many`}
+              count={t("action", "keptHistoryLimits", { n: jobs.length })}
             />
             <JobRows jobs={jobs} />
           </Section>
@@ -368,19 +382,22 @@ export function CronJobDetail() {
 
 /** How it is declared: the settings that decide what a missed or overlapping
  *  run does, which nobody reads until one has happened. */
-function policy(cronJob: CronJobDetailInfo | undefined): KeyValue[] {
+function policy(
+  cronJob: CronJobDetailInfo | undefined,
+  t: ReturnType<typeof useT>
+): KeyValue[] {
   return [
     {
-      label: "Concurrency",
+      label: t("action", "concurrency"),
       value: cronJob?.concurrencyPolicy || "Allow",
     },
     {
-      label: "Starting deadline",
+      label: t("action", "startingDeadline"),
       value: cronJob?.startingDeadlineSeconds
         ? `${cronJob.startingDeadlineSeconds}s`
         : // Without a deadline a run missed during controller downtime is
           // skipped silently rather than started late.
-          "none — missed runs are skipped",
+          t("action", "noStartingDeadline"),
       mono: cronJob?.startingDeadlineSeconds != null,
     },
     serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),

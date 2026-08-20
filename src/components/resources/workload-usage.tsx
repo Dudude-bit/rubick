@@ -67,9 +67,6 @@ function runningPods(pods: readonly PodInfo[]): PodInfo[] {
   );
 }
 
-const NO_LIMITS_NOTE =
-  "No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take.";
-
 export interface WorkloadUsageProps {
   kind: string;
   uid: string | null | undefined;
@@ -106,9 +103,10 @@ export function WorkloadUsage({
   pods,
   idle,
   connections,
-  noLimitNote = NO_LIMITS_NOTE,
+  noLimitNote,
 }: WorkloadUsageProps) {
   const t = useT();
+  const limitNote = noLimitNote ?? t("empty", "noLimitsDeclared");
   const running = useMemo(() => runningPods(pods), [pods]);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
@@ -154,7 +152,7 @@ export function WorkloadUsage({
         // template does declare and print "no limits declared" under it.
         cpuLimit={ceiling.cpu}
         memoryLimit={ceiling.memory}
-        noLimitNote={noLimitNote}
+        noLimitNote={limitNote}
         sampledAt={null}
         status={null}
         connections={connections}
@@ -176,7 +174,7 @@ export function WorkloadUsage({
       memoryLimit={
         ceiling.memory === null ? null : ceiling.memory * running.length
       }
-      noLimitNote={noLimitNote}
+      noLimitNote={limitNote}
       restarts={withMetrics.reduce((total, pod) => total + pod.restartCount, 0)}
       sampledAt={podSampledAt}
       status={podStatus}
@@ -198,7 +196,10 @@ function IdleUsage({ says }: { says: string }) {
   const t = useT();
   return (
     <Section>
-      <SectionHeader title="Usage" count={t("empty", "nothingRunning")} />
+      <SectionHeader
+        title={t("columns", "usage")}
+        count={t("empty", "nothingRunning")}
+      />
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
         {says} {t("empty", "usageIdleNote")}
       </p>

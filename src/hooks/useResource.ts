@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
+import { useT } from "@/i18n/useT";
 
 // ============================================================================
 // Query Hooks
@@ -128,6 +129,7 @@ export function useResourceMutation<
   mutationFn: (variables: TVariables) => Promise<TData>,
   options: UseResourceMutationOptions<TData, TVariables, TError>
 ) {
+  const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -158,7 +160,7 @@ export function useResourceMutation<
     onError: (error, variables) => {
       const errorMessage = normalizeTauriError(error);
       toast({
-        title: "Error",
+        title: t("action", "error"),
         description: `${options.toast.errorPrefix}: ${errorMessage}`,
         variant: "destructive",
       });

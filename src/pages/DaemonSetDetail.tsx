@@ -112,15 +112,15 @@ export function DaemonSetDetail() {
     () => [
       {
         id: "overview",
-        label: "Overview",
+        label: t("nav", "overview"),
         glyph: viewGlyph(Info),
         content: (
           <>
             <WorkloadOverview
               count={
                 <CountBlock
-                  title="Rollout"
-                  subject="one pod per eligible node"
+                  title={t("columns", "rollout")}
+                  subject={t("action", "rolloutSubject")}
                   governance={connections}
                 >
                   {/* One fact, not five: desired/current/ready/up-to-date/
@@ -132,29 +132,37 @@ export function DaemonSetDetail() {
                   <div className="grid grid-cols-2 gap-[22px]">
                     <Composition
                       total={desired}
-                      label={desired === 1 ? "node wanted" : "nodes wanted"}
+                      label={t("count", "nodesWanted", { n: desired })}
                       segments={[
-                        { label: "ready", count: ready, tone: "ok" },
                         {
-                          label: "not ready",
+                          label: t("count", "readyWord"),
+                          count: ready,
+                          tone: "ok",
+                        },
+                        {
+                          label: t("count", "notReadyWord"),
                           count: Math.max(0, current - ready),
                           tone: "warn",
                         },
                         {
-                          label: "not scheduled",
+                          label: t("count", "notScheduledSegment"),
                           count: Math.max(0, desired - current),
                           tone: "err",
                         },
                       ]}
-                      note={`${available} available`}
+                      note={t("action", "nAvailable", { n: available })}
                     />
                     <Composition
                       total={desired}
-                      label="on the current spec"
+                      label={t("action", "onCurrentSpec")}
                       segments={[
-                        { label: "up to date", count: upToDate, tone: "ok" },
                         {
-                          label: "outdated",
+                          label: t("action", "barUpToDate"),
+                          count: upToDate,
+                          tone: "ok",
+                        },
+                        {
+                          label: t("action", "barOutdated"),
                           count: Math.max(0, desired - upToDate),
                           tone: "warn",
                         },
@@ -184,8 +192,8 @@ export function DaemonSetDetail() {
               traffic={<TrafficChain query={connections} />}
               declared={
                 <FactBlock
-                  title="How it is declared"
-                  items={declaration(daemonSet)}
+                  title={t("action", "howDeclared")}
+                  items={declaration(daemonSet, t)}
                 />
               }
             >
@@ -198,7 +206,7 @@ export function DaemonSetDetail() {
             </WorkloadOverview>
 
             <KeyValueSection
-              title="Selector"
+              title={t("columns", "selector")}
               items={
                 daemonSet?.selector
                   ? [
@@ -213,13 +221,13 @@ export function DaemonSetDetail() {
               emptyMessage={t("empty", "noSelectorDaemonSet")}
             />
             <KeyValueSection
-              title="Labels"
+              title={t("columns", "labels")}
               count={Object.keys(daemonSet?.labels ?? {}).length}
               items={recordToKeyValues(daemonSet?.labels ?? {})}
               emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
-              title="Annotations"
+              title={t("columns", "annotations")}
               count={Object.keys(daemonSet?.annotations ?? {}).length}
               items={recordToKeyValues(daemonSet?.annotations ?? {})}
               emptyMessage={t("empty", "noAnnotations")}
@@ -230,7 +238,7 @@ export function DaemonSetDetail() {
       connectionsTab(connections, deliveryQuery),
       {
         id: "container-template",
-        label: "Template",
+        label: t("columns", "template"),
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={daemonSet} namespace={namespace} />,
       },
@@ -304,13 +312,15 @@ export function DaemonSetDetail() {
       statusBadge={
         daemonSet && (
           <StatusBadge status={short ? "Degraded" : "Ready"}>
-            {ready}/{desired} ready
+            {t("count", "slashReady", { n: ready, total: desired })}
           </StatusBadge>
         )
       }
       badges={
         upToDate < desired && (
-          <span className="text-[11px] text-info">rolling out</span>
+          <span className="text-[11px] text-info">
+            {t("action", "rollingOut")}
+          </span>
         )
       }
       onBack={goBack}
@@ -332,10 +342,13 @@ export function DaemonSetDetail() {
 }
 
 /** How it is declared: read once, and never while the rollout is fine. */
-function declaration(daemonSet: DaemonSetDetailInfo | undefined): KeyValue[] {
+function declaration(
+  daemonSet: DaemonSetDetailInfo | undefined,
+  t: ReturnType<typeof useT>
+): KeyValue[] {
   return [
     {
-      label: "Update strategy",
+      label: t("action", "updateStrategy"),
       value: daemonSet?.updateStrategy || "RollingUpdate",
     },
     serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),

@@ -69,6 +69,7 @@ function useOpenEditor({
   fetchYaml,
   readOnly = false,
 }: YamlEditorActionProps) {
+  const t = useT();
   const { toast } = useToast();
   const openEditor = useYamlEditorStore((state) => state.openEditor);
 
@@ -77,7 +78,7 @@ function useOpenEditor({
       await openEditor({ title, resourceKey, fetchYaml, readOnly });
     } catch (error) {
       toast({
-        title: "Could not read the manifest",
+        title: t("empty", "couldNotReadManifest"),
         description: errorToShow(error),
         variant: "destructive",
       });
@@ -85,24 +86,32 @@ function useOpenEditor({
   };
 }
 
-const editorLabel = ({ menuLabel, readOnly }: YamlEditorActionProps) =>
-  menuLabel ?? (readOnly ? "View YAML" : "Edit YAML");
+const editorLabel = (
+  t: ReturnType<typeof useT>,
+  { menuLabel, readOnly }: YamlEditorActionProps
+) => menuLabel ?? t("action", readOnly ? "viewYaml" : "editYaml");
 
 // Button-based action for use in headers/toolbars
 export function YamlEditorAction(props: YamlEditorActionProps) {
+  const t = useT();
   const open = useOpenEditor(props);
   return (
-    <DetailAction label={editorLabel(props)} icon={FileJson} onClick={open} />
+    <DetailAction
+      label={editorLabel(t, props)}
+      icon={FileJson}
+      onClick={open}
+    />
   );
 }
 
 // DropdownMenuItem-based action for use in action menus
 export function YamlEditorMenuAction(props: YamlEditorActionProps) {
+  const t = useT();
   const open = useOpenEditor(props);
   return (
     <DropdownMenuItem onClick={open}>
       <FileJson className="mr-2 h-4 w-4" />
-      {editorLabel(props)}
+      {editorLabel(t, props)}
     </DropdownMenuItem>
   );
 }
@@ -179,7 +188,7 @@ export function YamlEditorDialog() {
     await navigator.clipboard.writeText(editedContent);
     toast({
       title: t("action", "copied"),
-      description: "YAML copied to clipboard.",
+      description: t("action", "yamlCopiedToClipboard"),
     });
   }, [editedContent, toast, t]);
 
@@ -196,8 +205,8 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         toast({
-          title: "Validation Passed",
-          description: "Manifest is valid and can be applied.",
+          title: t("action", "validationPassed"),
+          description: t("action", "manifestIsValid"),
         });
       }
     } catch (error) {
@@ -217,6 +226,7 @@ export function YamlEditorDialog() {
     setIsValidating,
     setValidationResult,
     toast,
+    t,
   ]);
 
   const handleApply = useCallback(async () => {
@@ -235,13 +245,13 @@ export function YamlEditorDialog() {
         addHistoryEntry(editedContent, "Applied");
 
         toast({
-          title: "Applied Successfully",
-          description: result.stdout || "Manifest applied to cluster.",
+          title: t("action", "applySucceeded"),
+          description: result.stdout || t("action", "manifestApplied"),
         });
       } else {
         toast({
-          title: "Apply Failed",
-          description: result.stderr || "Failed to apply manifest.",
+          title: t("action", "applyFailed"),
+          description: result.stderr || t("action", "failedToApplyManifest"),
           variant: "destructive",
         });
       }
@@ -255,7 +265,7 @@ export function YamlEditorDialog() {
       };
       setApplyResult(errorResult);
       toast({
-        title: "Apply Failed",
+        title: t("action", "applyFailed"),
         description: errorMessage,
         variant: "destructive",
       });
@@ -270,25 +280,26 @@ export function YamlEditorDialog() {
     setApplyResult,
     addHistoryEntry,
     toast,
+    t,
   ]);
 
   const handleFormat = useCallback(() => {
     formatYaml();
     toast({
-      title: "Formatted",
-      description: "YAML has been formatted.",
+      title: t("action", "formatted"),
+      description: t("action", "yamlFormatted"),
     });
-  }, [formatYaml, toast]);
+  }, [formatYaml, toast, t]);
 
   const handleRestoreHistory = useCallback(
     (timestamp: number) => {
       restoreFromHistory(timestamp);
       toast({
-        title: "Restored",
-        description: "Content restored from history.",
+        title: t("action", "restored"),
+        description: t("action", "contentRestoredFromHistory"),
       });
     },
-    [restoreFromHistory, toast]
+    [restoreFromHistory, toast, t]
   );
 
   return (
@@ -301,15 +312,15 @@ export function YamlEditorDialog() {
               {hasChanges && !readOnly && (
                 <Badge variant="outline" className="ml-2">
                   <AlertTriangle className="mr-1 h-3 w-3" />
-                  Unsaved Changes
+                  {t("action", "unsavedChanges")}
                 </Badge>
               )}
             </DialogTitle>
             <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>
                 {readOnly
-                  ? "View the YAML manifest"
-                  : "Edit the YAML manifest and apply changes to the cluster"}
+                  ? t("action", "viewYamlManifest")
+                  : t("action", "editYamlManifestHint")}
               </span>
               {/* The same quiet mark the page header carries, because the
                   editor is a modal that covers that header: "where does this
@@ -415,10 +426,11 @@ export function YamlEditorDialog() {
       <Dialog open={showApplyConfirm} onOpenChange={setShowApplyConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{intercept?.title ?? "Apply Changes?"}</DialogTitle>
+            <DialogTitle>
+              {intercept?.title ?? t("action", "applyChangesQuestion")}
+            </DialogTitle>
             <DialogDescription>
-              This will apply the manifest to your Kubernetes cluster. Make sure
-              you have reviewed the changes.
+              {t("action", "applyManifestConfirm")}
             </DialogDescription>
           </DialogHeader>
 
@@ -439,7 +451,9 @@ export function YamlEditorDialog() {
             // line of the manifest sets the column width and everything above
             // it, warning included, is dragged off the right of the screen.
             <div className="min-w-0 py-4">
-              <p className="mb-2 text-xs text-fg-mut">Changes to be applied:</p>
+              <p className="mb-2 text-xs text-fg-mut">
+                {t("action", "changesToBeApplied")}
+              </p>
               <ScrollArea className="h-[200px] w-full overflow-hidden rounded-md border">
                 <YamlDiffViewer
                   original={originalContent}

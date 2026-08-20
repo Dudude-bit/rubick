@@ -62,6 +62,7 @@ export function IntegrationPage() {
 }
 
 function Missing({ title, body }: { title: string; body: string }) {
+  const t = useT();
   return (
     <Section className="max-w-[64ch] py-8">
       <div className="flex items-center gap-2">
@@ -72,10 +73,18 @@ function Missing({ title, body }: { title: string; body: string }) {
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
       <p className="text-[11px] text-fg-fnt">
-        <Link to="/integrations" className="text-info hover:underline">
-          Integrations
-        </Link>{" "}
-        lists every extension this app knows about and what each one would give.
+        {t("empty", "integrationsPageLists")
+          .split("{link}")
+          .map((part, i) => (
+            <span key={i}>
+              {i > 0 && (
+                <Link to="/integrations" className="text-info hover:underline">
+                  {t("nav", "integrations")}
+                </Link>
+              )}
+              {part}
+            </span>
+          ))}
       </p>
     </Section>
   );

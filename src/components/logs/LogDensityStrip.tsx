@@ -157,6 +157,7 @@ export function LogDensityStrip({
   mode,
   onModeChange,
 }: LogDensityStripProps) {
+  const t = useT();
   const id = useId();
   const barsRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -338,8 +339,8 @@ export function LogDensityStrip({
 
   const spanMs = density.to - density.from;
   const summary = useMemo(
-    () => describe(density, headDropped, intake),
-    [density, headDropped, intake]
+    () => describe(density, headDropped, intake, t),
+    [density, headDropped, intake, t]
   );
 
   const band = mode === "band";
@@ -349,12 +350,15 @@ export function LogDensityStrip({
   // the strip is open and spoken in both states.
   const quiet =
     retained === 0
-      ? "Nothing to map yet — the strip fills in as lines arrive."
+      ? t("empty", "nothingToMapYet")
       : count === 0
-        ? "No line in the buffer matches the query, so there is no shape to show."
+        ? t("empty", "noLineMatchesInBuffer")
         : density.lines === 1
-          ? `One line so far, at ${sliceClock(density.from)} — nothing to map until there is a stretch of time to map.`
-          : `All ${formatCount(density.lines)} lines landed within ${formatSpan(spanMs)} of each other — too short a stretch to slice.`;
+          ? t("empty", "oneLineSoFar", { clock: sliceClock(density.from) })
+          : t("empty", "allLinesWithinSpan", {
+              count: formatCount(density.lines),
+              span: formatSpan(spanMs),
+            });
 
   // One bar over everything is not a map, and drawing it anyway would be
   // a chart pretending to be one.
@@ -367,7 +371,7 @@ export function LogDensityStrip({
       ref={barsRef}
       role="listbox"
       tabIndex={0}
-      aria-label="Log density over time"
+      aria-label={t("action", "logDensityOverTime")}
       aria-activedescendant={focused ? `${id}-${active}` : undefined}
       aria-describedby={`${id}-summary`}
       onFocus={() => setFocused(true)}
@@ -413,10 +417,12 @@ export function LogDensityStrip({
           {intake && (
             <span
               className="flex-none text-[9px] leading-none text-info"
-              title="Intake discarded the rest before they reached the buffer, so they are not on this band."
+              title={t("empty", "intakeNotOnBand")}
             >
               <span aria-hidden="true">⇣</span>
-              <span className="sr-only">maps kept lines only</span>
+              <span className="sr-only">
+                {t("action", "mapsKeptLinesOnly")}
+              </span>
             </span>
           )}
           {bars ?? (
@@ -440,7 +446,11 @@ export function LogDensityStrip({
   if (!hasShape) {
     return (
       <Frame mode={mode}>
-        <Head left="Density over time" intake={intake} toggle={toggle} />
+        <Head
+          left={t("action", "densityOverTime")}
+          intake={intake}
+          toggle={toggle}
+        />
         <Placeholder>{quiet}</Placeholder>
       </Frame>
     );
@@ -451,7 +461,10 @@ export function LogDensityStrip({
   return (
     <Frame mode={mode}>
       <Head
-        left={`${formatSpan(spanMs)} in ${stepLabel(step)} slices`}
+        left={t("count", "spanInSlices", {
+          span: formatSpan(spanMs),
+          step: stepLabel(step),
+        })}
         errors={density.errors}
         bursts={density.errorSlices}
         warnings={density.warnings}
@@ -466,11 +479,7 @@ export function LogDensityStrip({
         style={{ height: AXIS_PX }}
       >
         <span
-          title={
-            headDropped
-              ? "Older lines have been dropped — the log starts before this."
-              : undefined
-          }
+          title={headDropped ? t("empty", "olderLinesDroppedAxis") : undefined}
         >
           {/* The left edge is only the start of the log while nothing has
               been evicted. Once it has, saying so is the difference
@@ -503,10 +512,11 @@ function StripToggle({
   mode: Exclude<DensityStripMode, "off">;
   onModeChange: (mode: DensityStripMode) => void;
 }) {
+  const t = useT();
   const band = mode === "band";
   const label = band
-    ? "Expand the density strip"
-    : "Collapse the density strip to a band";
+    ? t("action", "expandDensityStrip")
+    : t("action", "collapseDensityStrip");
   return (
     <button
       type="button"
@@ -587,8 +597,10 @@ function Slice({
     sliceClock(bucket.start),
     stepLabel(step),
     `${formatCount(bucket.total)} ${t("count", "lineNoun", { n: bucket.total })}`,
-    bucket.err > 0 && `${formatCount(bucket.err)} errors`,
-    bucket.warn > 0 && `${formatCount(bucket.warn)} warnings`,
+    bucket.err > 0 &&
+      `${formatCount(bucket.err)} ${t("count", "errorNoun", { n: bucket.err })}`,
+    bucket.warn > 0 &&
+      `${formatCount(bucket.warn)} ${t("count", "warningNoun", { n: bucket.warn })}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -758,13 +770,14 @@ function Head({
       {intake && (
         <span
           className="ml-auto shrink-0 text-info"
-          title="Intake discarded the rest before they reached the buffer, so they are not on this map."
+          title={t("empty", "intakeNotOnMap")}
         >
-          <span aria-hidden="true">⇣ </span>maps kept lines only
+          <span aria-hidden="true">⇣ </span>
+          {t("action", "mapsKeptLinesOnly")}
         </span>
       )}
       <span className={`${intake ? "" : "ml-auto "}min-w-0 truncate`}>
-        click to jump · drag to filter
+        {t("action", "clickToJumpDragToFilter")}
       </span>
       {toggle}
     </div>
@@ -803,9 +816,10 @@ function Placeholder({ children }: { children: React.ReactNode }) {
 function describe(
   density: Density,
   headDropped: boolean,
-  intake: boolean
+  intake: boolean,
+  t: ReturnType<typeof useT>
 ): string {
-  if (density.buckets.length === 0) return "No lines to show.";
+  if (density.buckets.length === 0) return t("empty", "noLinesToShow");
 
   const bursts = density.buckets.filter((bucket) => bucket.err > 0);
   const spoken = bursts
@@ -817,22 +831,30 @@ function describe(
   );
 
   return [
-    `Density of the log over time: ${density.buckets.length} slices of ${stepLabel(
-      density.step
-    )}, from ${sliceClock(density.from)} to ${sliceClock(density.to)}.`,
-    `${formatCount(density.lines)} lines, ${formatCount(density.errors)} errors, ${formatCount(density.warnings)} warnings.`,
-    `Busiest slice ${sliceClock(busiest.start)} with ${formatCount(busiest.total)} lines.`,
+    t("count", "densitySummary", {
+      n: density.buckets.length,
+      step: stepLabel(density.step),
+      from: sliceClock(density.from),
+      to: sliceClock(density.to),
+    }),
+    t("count", "densityTotals", {
+      lines: formatCount(density.lines),
+      errors: formatCount(density.errors),
+      warnings: formatCount(density.warnings),
+    }),
+    t("count", "busiestSlice", {
+      clock: sliceClock(busiest.start),
+      n: formatCount(busiest.total),
+    }),
     bursts.length > 0 &&
-      `Errors in ${bursts.length} ${bursts.length === 1 ? "slice" : "slices"}: ${spoken}${
+      `${t("count", "errorsInSlices", { n: bursts.length, list: spoken })}${
         bursts.length > SPOKEN_BURSTS
-          ? `, and ${bursts.length - SPOKEN_BURSTS} more`
+          ? t("count", "andNMore", { n: bursts.length - SPOKEN_BURSTS })
           : ""
       }.`,
-    headDropped &&
-      "Older lines have been dropped, so the strip begins later than the log does.",
-    intake &&
-      "Intake is set, so this covers only the lines it kept; the rest were discarded before they reached the buffer.",
-    "Left and right arrows move between slices, Enter scrolls the log to one, shift with the arrows selects a time range, Escape clears it.",
+    headDropped && t("empty", "olderLinesDroppedSummary"),
+    intake && t("empty", "intakeCoversKeptOnly"),
+    t("action", "densityKeysHint"),
   ]
     .filter(Boolean)
     .join(" ");

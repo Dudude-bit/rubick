@@ -53,7 +53,7 @@ export function ConnectClusterEmptyState({
               to="/"
               className="text-fg-mut underline decoration-dotted underline-offset-2 hover:text-fg"
             >
-              See where it was read from
+              {t("empty", "seeWhereReadFrom")}
             </Link>
             .
           </p>

@@ -19,14 +19,16 @@ import {
   useClusterMark,
 } from "@/stores/clusterIdentityStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** What a hue is called, for the reader who is not looking at it. */
-const HUE_NAMES: Record<number, string> = {
-  132: "Green",
-  184: "Cyan",
-  224: "Blue",
-  274: "Violet",
-  318: "Pink",
+const HUE_NAMES: Record<number, keyof typeof en.cluster> = {
+  132: "hueGreen",
+  184: "hueCyan",
+  224: "hueBlue",
+  274: "hueViolet",
+  318: "huePink",
 };
 
 /**
@@ -60,6 +62,7 @@ export const ClusterMenu = forwardRef<
   // trigger — clones it with a ref and its own handlers, and both have to
   // reach the same button underneath.
 >(function ClusterMenu({ context, children, openKeys, ...rest }, ref) {
+  const t = useT();
   const mark = useClusterMark(context);
   const setAlias = useClusterIdentityStore((s) => s.setAlias);
   const setHue = useClusterIdentityStore((s) => s.setHue);
@@ -72,18 +75,18 @@ export const ClusterMenu = forwardRef<
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-[268px]">
-        <ContextMenuLabel>Called</ContextMenuLabel>
+        <ContextMenuLabel>{t("cluster", "called")}</ContextMenuLabel>
         <AliasField
           context={context}
           alias={mark.alias ?? ""}
           onChange={(value) => setAlias(context, value)}
         />
 
-        <ContextMenuLabel>Colour</ContextMenuLabel>
+        <ContextMenuLabel>{t("cluster", "colour")}</ContextMenuLabel>
         <div className="flex items-center gap-1 px-[7px] pb-2 pt-0.5">
           <Swatch
             color={clusterColor(context)}
-            name="Default"
+            name={t("cluster", "hueDefault")}
             derived
             checked={mark.hue === undefined}
             onPick={() => setHue(context, null)}
@@ -92,7 +95,7 @@ export const ClusterMenu = forwardRef<
             <Swatch
               key={hue}
               color={clusterHueColor(hue)}
-              name={HUE_NAMES[hue]}
+              name={t("cluster", HUE_NAMES[hue])}
               checked={mark.hue === hue}
               onPick={() => setHue(context, hue)}
             />
@@ -103,10 +106,10 @@ export const ClusterMenu = forwardRef<
         <ContextMenuItem
           onSelect={() => void navigator.clipboard.writeText(context)}
         >
-          Copy context name
+          {t("action", "copyContextName")}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => openTab({ context })}>
-          Open in a new tab
+          {t("action", "openInNewTab")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -130,6 +133,7 @@ function AliasField({
   alias: string;
   onChange: (value: string) => void;
 }) {
+  const t = useT();
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -147,7 +151,7 @@ function AliasField({
         value={alias}
         onChange={(event) => onChange(event.target.value)}
         placeholder={context}
-        aria-label={`What to call ${context}`}
+        aria-label={t("cluster", "whatToCall", { context })}
         // The menu's own typeahead reads single characters, so every key
         // that is text has to stop here. Down is let through on purpose: it
         // is the way out of the field and into the items.

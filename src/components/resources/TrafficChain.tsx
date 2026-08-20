@@ -47,6 +47,7 @@ import type {
   ObjectRef,
   TlsCertificate,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * A name at a hop. A missing object keeps its glyph and its hue and loses
@@ -160,20 +161,22 @@ function toneOf(hop: ChainHop): HopTone {
  * "it does not work" into a one-word fix.
  */
 function Controller({ binding }: { binding: IngressClassBinding }) {
+  const t = useT();
   if (!binding.resolved) {
     return (
       <>
         <p className="text-xs text-err">
           {binding.requested
-            ? `No IngressClass named ${binding.requested} in this cluster`
-            : "This Ingress names no class, and this cluster has no default one"}
+            ? t("empty", "noIngressClassNamed", { name: binding.requested })
+            : t("empty", "ingressNamesNoClass")}
         </p>
         <p className="max-w-[92ch] text-[11px] text-err/85">
-          Nothing has picked this Ingress up, so it has no address and never
-          will until a controller for that class exists.
+          {t("empty", "nothingPickedIngressUp")}{" "}
           {binding.available.length > 0
-            ? ` This cluster has ${binding.available.map((c) => c.name).join(", ")}.`
-            : " This cluster has no IngressClass at all."}
+            ? t("empty", "clusterHasClasses", {
+                list: binding.available.map((c) => c.name).join(", "),
+              })
+            : t("empty", "clusterHasNoIngressClass")}
         </p>
       </>
     );
@@ -189,8 +192,8 @@ function Controller({ binding }: { binding: IngressClassBinding }) {
           />
         </span>
         <span className="text-xs text-fg-mid">
-          serving class {binding.resolved}
-          {binding.viaDefault ? ", this cluster's default" : ""}
+          {t("action", "servingClass", { name: binding.resolved })}
+          {binding.viaDefault ? t("action", "andClusterDefault") : ""}
         </span>
       </span>
       {binding.controller && (
@@ -271,6 +274,7 @@ function EdgeNote({
  * the same way in the chain already shows as a hop, said twice.
  */
 export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
+  const t = useT();
   const vendors = (routes ?? []).filter(
     (route) => route.source.kind !== "Ingress"
   );
@@ -289,7 +293,7 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
       ))}
       {vendors.length > shown.length && (
         <p className="text-[11px] text-fg-fnt">
-          and {vendors.length - shown.length} more
+          {t("count", "andMore", { n: vendors.length - shown.length })}
         </p>
       )}
     </>
@@ -339,9 +343,13 @@ export function RouteSource({ route }: { route: ServiceRoute }) {
  * same parts object-first, because there a route is a hop of its own.
  */
 export function RouteLine({ route }: { route: ServiceRoute }) {
+  const t = useT();
   return (
     <>
-      <CopyableAddress value={routeAddress(route)} label="Address" />
+      <CopyableAddress
+        value={routeAddress(route)}
+        label={t("columns", "address")}
+      />
       {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
       <RouteSource route={route} />
     </>
@@ -363,6 +371,7 @@ function Hop({
   edge: ServiceEdges | undefined;
   routed: ServicesRoutes | undefined;
 }) {
+  const t = useT();
   const last = next === undefined;
   return (
     <div className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5">
@@ -398,7 +407,7 @@ function Hop({
               )}
               {hop.self && (
                 <span className="text-[11px] text-fg-fnt">
-                  — this {hop.object.kind}
+                  {t("action", "thisKindHere", { kind: hop.object.kind })}
                 </span>
               )}
             </span>
@@ -410,7 +419,10 @@ function Hop({
                 save. */}
             {hop.urls.length > 0 && (
               <p className="mt-0.5 text-[11px]">
-                <CopyableAddresses values={hop.urls} label="Address" />
+                <CopyableAddresses
+                  values={hop.urls}
+                  label={t("columns", "address")}
+                />
               </p>
             )}
             {/* And what that hostname has to resolve to. A URL on its own is
@@ -421,13 +433,15 @@ function Hop({
             {hop.publishedAt !== null &&
               (hop.publishedAt.length > 0 ? (
                 <p className="text-[11px] text-fg-fnt">
-                  at{" "}
-                  <CopyableAddresses values={hop.publishedAt} label="Address" />
+                  {t("action", "atInline")}{" "}
+                  <CopyableAddresses
+                    values={hop.publishedAt}
+                    label={t("columns", "address")}
+                  />
                 </p>
               ) : (
                 <p className="max-w-[92ch] text-[11px] text-warn">
-                  No address yet — the controller has published none, so nothing
-                  reaches this Ingress however its rules read.
+                  {t("empty", "noAddressYet")}
                 </p>
               ))}
             {hop.object.kind === "Service" && (
@@ -506,6 +520,7 @@ export function TrafficChain({
   /** Which controller claims this Ingress, where the page has resolved it. */
   controller?: IngressClassBinding;
 }) {
+  const t = useT();
   const { data, isPending, error } = query;
 
   // The three above are the Ingress page's, which has read them from its own
@@ -537,12 +552,16 @@ export function TrafficChain({
   const routed2 = useServicesRoutes(serviceHops);
 
   if (isPending) {
-    return <p className="text-xs text-fg-fnt">Following the path in…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "followingPathIn")}</p>
+    );
   }
   if (error || !data) {
     return (
       <p className="text-xs text-err">
-        Could not read what connects to this: {error?.message ?? "no answer"}
+        {t("empty", "couldNotReadConnections", {
+          reason: error?.message ?? t("empty", "noAnswer"),
+        })}
       </p>
     );
   }
@@ -557,9 +576,11 @@ export function TrafficChain({
   return (
     <Section>
       <SectionHeader
-        title="How traffic gets here"
+        title={t("nav", "howTrafficGetsHere")}
         count={
-          paths.length > 1 ? `${paths.length} Services front this` : undefined
+          paths.length > 1
+            ? t("count", "servicesFrontThis", { n: paths.length })
+            : undefined
         }
       />
       {/* A read that failed is not a chain that is still loading, and until
@@ -575,8 +596,12 @@ export function TrafficChain({
               className="max-w-[92ch] text-[11px] text-warn"
             >
               {unread.what === "ingress"
-                ? `Could not read Ingress ${unread.ingress.name}, so nothing below is complete for it`
-                : `Could not read which controller serves Ingress ${unread.ingress.name}`}
+                ? t("empty", "couldNotReadIngress", {
+                    name: unread.ingress.name,
+                  })
+                : t("empty", "couldNotReadIngressController", {
+                    name: unread.ingress.name,
+                  })}
               <span className="block select-text wrap-break-word font-mono text-fg-mut">
                 {unread.reason}
               </span>

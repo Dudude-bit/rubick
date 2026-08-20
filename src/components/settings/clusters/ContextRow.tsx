@@ -109,26 +109,29 @@ export function ContextRow({
             403 came for, so it is on the row rather than in a Bindings tab. */}
         {unbound && unbound !== "aws" && (
           <div className="mt-1 text-[11px] text-warn">
-            No {VENDOR_LABEL[unbound]} profile is bound, so it will use whatever{" "}
+            {t("settings", "noProfileBoundPrefix", {
+              vendor: VENDOR_LABEL[unbound],
+            })}{" "}
             <span className="font-mono">
               {binaryLabel(reading.needs ?? "")}
-            </span>{" "}
-            defaults to.{" "}
+            </span>
+            {t("settings", "noProfileBoundSuffix")}{" "}
             <button
               type="button"
               onClick={() => onBind(context.name)}
               className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
-              Bind one
+              {t("settings", "bindOne")}
             </button>
           </div>
         )}
         {unbound === "aws" && (
           <div className="mt-1 text-[11px] text-fg-fnt">
-            This app has no AWS profiles, so it will use whatever{" "}
-            <span className="font-mono">aws</span> defaults to —{" "}
-            <span className="font-mono">$AWS_PROFILE</span>, then the default
-            profile.
+            {t("settings", "awsNoProfilesPrefix")}{" "}
+            <span className="font-mono">aws</span>
+            {t("settings", "awsNoProfilesMid")}{" "}
+            <span className="font-mono">$AWS_PROFILE</span>
+            {t("settings", "awsNoProfilesSuffix")}
           </div>
         )}
       </div>

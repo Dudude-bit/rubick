@@ -26,6 +26,7 @@ import type {
   RegistryImageResult,
   RegistrySearchRequest,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -43,6 +44,7 @@ export function ImageSearchInput({
   onChange,
   placeholder,
 }: ImageSearchInputProps) {
+  const t = useT();
   const [results, setResults] = useState<RegistryImageResult[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [focused, setFocused] = useState(false);
@@ -156,13 +158,13 @@ export function ImageSearchInput({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label className="text-[11px] font-normal text-fg-mut">
-            Registry
+            {t("settings", "registryLabel")}
           </Label>
           <Link
             to="/settings/registries"
             className="text-[11px] text-info hover:underline"
           >
-            Manage
+            {t("action", "manage")}
           </Link>
         </div>
         <Select
@@ -170,7 +172,7 @@ export function ImageSearchInput({
           onValueChange={setSelectedRegistryId}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select registry" />
+            <SelectValue placeholder={t("settings", "selectRegistry")} />
           </SelectTrigger>
           <SelectContent>
             {availableRegistries.map((registry) => (
@@ -197,17 +199,19 @@ export function ImageSearchInput({
         <div className="rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop">
           {status === "loading" && (
             <div className="px-2 py-1 text-[11px] text-fg-mut">
-              Searching {selectedRegistry.label}…
+              {t("settings", "searchingRegistry", {
+                registry: selectedRegistry.label,
+              })}
             </div>
           )}
           {status === "error" && (
             <div className="px-2 py-1 text-[11px] text-err">
-              Search failed. Check registry settings.
+              {t("settings", "registrySearchFailed")}
             </div>
           )}
           {status === "idle" && results.length === 0 && (
             <div className="px-2 py-1 text-[11px] text-fg-mut">
-              No matches found.
+              {t("empty", "noMatchesFound")}
             </div>
           )}
           {results.map((result) => (
@@ -225,7 +229,7 @@ export function ImageSearchInput({
                 <span className="font-mono text-fg">{result.name}</span>
                 {result.isOfficial && (
                   <span className="text-[10px] uppercase tracking-wider text-fg-fnt">
-                    official
+                    {t("settings", "officialBadge")}
                   </span>
                 )}
               </span>

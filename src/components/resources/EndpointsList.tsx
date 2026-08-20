@@ -39,7 +39,11 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
       if (readyCount === 0 && notReadyCount === 0) {
         // No backing pods at all is the failure this column exists to
         // surface — it is the one state here that earns a colour.
-        return <span className="text-err">No endpoints</span>;
+        return (
+          <span className="text-err">
+            <T section="empty" k="noEndpoints" />
+          </span>
+        );
       }
 
       return (
@@ -49,7 +53,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
               <TooltipTrigger>
                 <Badge variant="success">
                   <CircleDot className="h-2.5 w-2.5" aria-hidden="true" />
-                  {readyCount} ready
+                  <T section="count" k="nReady" values={{ n: readyCount }} />
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
@@ -70,7 +74,13 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
           {notReadyCount > 0 && (
             <Tooltip>
               <TooltipTrigger>
-                <Badge variant="warning">{notReadyCount} not ready</Badge>
+                <Badge variant="warning">
+                  <T
+                    section="count"
+                    k="nNotReady"
+                    values={{ n: notReadyCount }}
+                  />
+                </Badge>
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1 text-xs">
@@ -121,7 +131,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     // A count, and the addresses themselves are in the tooltip.
     size: 70,
     id: "addresses",
-    header: "IPs",
+    header: () => <T section="columns" k="ips" />,
     cell: ({ row }) => {
       const addresses = row.original.subsets.flatMap((s) => s.addresses);
       if (addresses.length === 0) {

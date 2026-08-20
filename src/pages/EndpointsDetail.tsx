@@ -177,7 +177,10 @@ export function EndpointsDetail() {
                 {backends.map(({ address, ready, subset }) => (
                   <TableRow key={`${subset}/${address.ip}`} data-quiet>
                     <TableCell>
-                      <CopyableAddress value={address.ip} label="Address" />
+                      <CopyableAddress
+                        value={address.ip}
+                        label={t("columns", "address")}
+                      />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={ready ? "Ready" : "NotReady"}>
