@@ -413,3 +413,221 @@ spec:
   to:
     - group: ""
       kind: Service
+---
+# ============================================================================
+# The complex pack: realistic shapes a busy cluster actually has, so the
+# surfaces are judged against more than one-rule-one-backend routes.
+#
+# | Object                       | State it proves                                  |
+# | ---------------------------- | ------------------------------------------------ |
+# | Gateway gwtest-edge-2        | a second entry — split verdicts become possible  |
+# | HTTPRoute gwtest-canary      | header override + 90/10 split + catch-all        |
+# | HTTPRoute gwtest-multi-host  | three hostnames through two listeners            |
+# | HTTPRoute gwtest-split       | accepted by one gateway, refused by the other    |
+# | HTTPRoute gwtest-cross-ok    | cross-namespace backend WITH its ReferenceGrant  |
+# | Service gwtest-app-v2        | the canary's second pool                         |
+# | ns gwtest-partner            | the consenting namespace, grant and all          |
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gwtest-partner
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gwtest-app-v2
+  namespace: gwtest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gwtest-app-v2
+  template:
+    metadata:
+      labels:
+        app: gwtest-app-v2
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/mendhak/http-https-echo:34
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gwtest-app-v2
+  namespace: gwtest
+spec:
+  selector:
+    app: gwtest-app-v2
+  ports:
+    - port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gwtest-billing
+  namespace: gwtest-partner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gwtest-billing
+  template:
+    metadata:
+      labels:
+        app: gwtest-billing
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/mendhak/http-https-echo:34
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gwtest-billing
+  namespace: gwtest-partner
+spec:
+  selector:
+    app: gwtest-billing
+  ports:
+    - port: 8080
+---
+# The consent gwtest-no-grant deliberately lacks, granted here in a THIRD
+# namespace so the broken fixture stays broken.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gwtest-httproutes
+  namespace: gwtest-partner
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: gwtest
+  to:
+    - group: ""
+      kind: Service
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gwtest-edge-2
+  namespace: gwtest
+spec:
+  gatewayClassName: gwtest-claimed
+  listeners:
+    - name: api-only
+      port: 80
+      protocol: HTTP
+      hostname: api.gwtest.example.com
+---
+# A realistic canary: an override header pins you to v2, /api splits 90/10,
+# everything else stays on v1. The header-modifier filter is spec the app
+# does not read yet — deliberately present so the gap is visible.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-canary
+  namespace: gwtest
+spec:
+  hostnames:
+    - canary.gwtest.example.com
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+          headers:
+            - name: x-canary
+              value: always
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            add:
+              - name: x-canary-served
+                value: "true"
+      backendRefs:
+        - name: gwtest-app-v2
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: gwtest-app
+          port: 8080
+          weight: 90
+        - name: gwtest-app-v2
+          port: 8080
+          weight: 10
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-multi-host
+  namespace: gwtest
+spec:
+  hostnames:
+    - shop.gwtest.example.com
+    - www.shop.gwtest.example.com
+    - m.shop.gwtest.example.com
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+    - name: gwtest-edge
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+# One route, two gateways, two verdicts: edge takes it, edge-2 serves only
+# api.gwtest.example.com and refuses.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-split
+  namespace: gwtest
+spec:
+  hostnames:
+    - split.gwtest.example.com
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+    - name: gwtest-edge-2
+  rules:
+    - backendRefs:
+        - name: gwtest-app
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-cross-ok
+  namespace: gwtest
+spec:
+  hostnames:
+    - billing.gwtest.example.com
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  rules:
+    - backendRefs:
+        - name: gwtest-billing
+          namespace: gwtest-partner
+          port: 8080
