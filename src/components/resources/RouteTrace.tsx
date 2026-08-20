@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
+import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useBackingLists } from "@/integrations";
@@ -67,15 +68,10 @@ function StepDetail({ step }: { step: TraceStep }) {
     "asks for",
     "serves",
   ];
-  const warn = step.state === "warn";
+  // No box: the diagnosis is the step continued, hanging on the same rail —
+  // the rail's own red stretch carries the severity, not a border.
   return (
-    <div
-      className={
-        warn
-          ? "mb-3 mt-0.5 rounded-md border border-warn/45 border-l-2 bg-warn/6 px-3 py-2"
-          : "mb-3 mt-0.5 rounded-md border border-err/40 border-l-2 border-l-err bg-err/6 px-3 py-2"
-      }
-    >
+    <div className="mb-4 mt-0.5">
       <h4 className="text-xs font-semibold text-fg">{step.detail.title}</h4>
       {step.detail.quote && (
         <div className="my-2 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 text-xs">
@@ -150,7 +146,14 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
   return (
     <li className="relative">
       {index < 7 && (
-        <span className="absolute bottom-0 left-[9px] top-[24px] w-px bg-hair" />
+        <span
+          className={cn(
+            "absolute bottom-0 left-[9px] top-[24px] w-px",
+            // The broken stretch is red for exactly as long as its
+            // diagnosis runs — the rail carries the severity, no box.
+            step.state === "err" ? "bg-err/40" : "bg-hair"
+          )}
+        />
       )}
       {/* The mark is a flex sibling of the words and the chip, so the row's
           own centring lines all three up — no hand-tuned offsets to drift. */}
