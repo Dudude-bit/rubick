@@ -205,7 +205,7 @@ pub async fn subscribe_custom_resource_watch(
 
     Ok(state.watch_manager.subscribe_custom_resource(
         client,
-        api_resource,
+        &api_resource,
         &kind,
         namespace,
         |obj| Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj)),

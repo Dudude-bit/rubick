@@ -129,7 +129,7 @@ impl WatchManager {
     pub fn subscribe_custom_resource<F, U>(
         &self,
         client: Client,
-        api_resource: ApiResource,
+        api_resource: &ApiResource,
         kind_label: &str,
         namespace: Option<String>,
         transform: F,
@@ -139,8 +139,8 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<DynamicObject> = match &namespace {
-            Some(ns) => Api::namespaced_with(client, ns, &api_resource),
-            None => Api::all_with(client, &api_resource),
+            Some(ns) => Api::namespaced_with(client, ns, api_resource),
+            None => Api::all_with(client, api_resource),
         };
         self.spawn_watcher(api, kind_label, namespace, transform)
     }

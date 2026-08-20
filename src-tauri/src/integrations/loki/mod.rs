@@ -1,5 +1,10 @@
 //! Loki — the second integration that is configured rather than detected,
 //! and the one that closes the bigger hole.
+
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
 //!
 //! A crashed pod takes its logs with it. `kubectl logs --previous` reaches
 //! exactly one run back and only while the pod object still exists; once the
@@ -504,7 +509,7 @@ mod tests {
         })
     }
 
-    fn body(streams: Vec<serde_json::Value>) -> serde_json::Value {
+    fn body(streams: &[serde_json::Value]) -> serde_json::Value {
         json!({ "status": "success", "data": { "resultType": "streams", "result": streams } })
     }
 
@@ -514,7 +519,7 @@ mod tests {
     #[test]
     fn streams_are_merged_onto_one_clock_oldest_first() {
         let page = parse_streams(
-            &body(vec![
+            &body(&[
                 stream("p-1", "app", vec![("30", "third"), ("10", "first")]),
                 stream("p-1", "side", vec![("20", "second")]),
             ]),
@@ -539,7 +544,7 @@ mod tests {
             .map(|i| (format!("{}", 100 + i), format!("line {i}")))
             .collect();
         let page = parse_streams(
-            &body(vec![stream(
+            &body(&[stream(
                 "p-1",
                 "app",
                 values
@@ -556,8 +561,7 @@ mod tests {
         );
         assert_eq!(page.limit, 3);
         // And one line short of the limit is a whole answer, not a partial.
-        let page =
-            parse_streams(&body(vec![stream("p-1", "app", vec![("100", "only")])]), 3).unwrap();
+        let page = parse_streams(&body(&[stream("p-1", "app", vec![("100", "only")])]), 3).unwrap();
         assert!(!page.truncated);
     }
 
@@ -566,12 +570,12 @@ mod tests {
     /// facts and only one of them is the reader's to fix.
     #[test]
     fn no_stream_at_all_is_reported_as_no_stream_and_not_as_no_lines() {
-        let page = parse_streams(&body(vec![]), 100).unwrap();
+        let page = parse_streams(&body(&[]), 100).unwrap();
         assert_eq!(page.streams, 0);
         assert!(page.lines.is_empty());
 
         // A stream that answered with nothing in it is *not* the same thing.
-        let page = parse_streams(&body(vec![stream("p-1", "app", vec![])]), 100).unwrap();
+        let page = parse_streams(&body(&[stream("p-1", "app", vec![])]), 100).unwrap();
         assert_eq!(page.streams, 1);
     }
 
@@ -580,11 +584,7 @@ mod tests {
     #[test]
     fn the_timestamp_on_a_line_is_lokis_and_not_the_lines_own() {
         let page = parse_streams(
-            &body(vec![stream(
-                "p-1",
-                "app",
-                vec![("1700000000123456789", "hello")],
-            )]),
+            &body(&[stream("p-1", "app", vec![("1700000000123456789", "hello")])]),
             100,
         )
         .unwrap();

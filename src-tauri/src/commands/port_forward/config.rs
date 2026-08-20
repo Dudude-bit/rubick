@@ -25,7 +25,7 @@ pub fn create_port_forward_config(
     let mut app_config = AppConfig::load()?;
     let created_at = chrono::Utc::now().to_rfc3339();
     let id = crate::utils::generate_id("pf-config");
-    let config = normalize_port_forward_config(payload, id, created_at)?;
+    let config = normalize_port_forward_config(&payload, id, created_at)?;
 
     let key = config_key(&config);
     if app_config
@@ -59,7 +59,7 @@ pub fn update_port_forward_config(
         .ok_or_else(|| Error::InvalidInput("Port-forward config not found".to_string()))?;
 
     let created_at = app_config.port_forward.configs[index].created_at.clone();
-    let updated = normalize_port_forward_config(payload, id.clone(), created_at)?;
+    let updated = normalize_port_forward_config(&payload, id.clone(), created_at)?;
     let key = config_key(&updated);
     if app_config
         .port_forward

@@ -61,7 +61,7 @@ pub struct PortForwardConfigInfo {
 }
 
 pub(super) fn normalize_port_forward_config(
-    payload: PortForwardConfigPayload,
+    payload: &PortForwardConfigPayload,
     id: String,
     created_at: String,
 ) -> Result<StoredPortForwardConfig> {

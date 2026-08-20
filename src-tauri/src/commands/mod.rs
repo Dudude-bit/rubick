@@ -2,6 +2,11 @@
 //!
 //! This module exposes Rust functionality to the frontend via Tauri commands.
 
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
+
 pub mod filters;
 pub mod helpers;
 

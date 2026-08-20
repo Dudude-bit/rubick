@@ -17,7 +17,7 @@ pub struct SearchPathEntry {
 
 impl SearchPathEntry {
     #[must_use]
-    pub fn probe(path: PathBuf) -> Self {
+    pub fn probe(path: &std::path::Path) -> Self {
         Self {
             exists: path.is_dir(),
             path: path.to_string_lossy().into_owned(),
@@ -200,7 +200,7 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     let search_path = search_directories()
         .into_iter()
-        .map(SearchPathEntry::probe)
+        .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
 
@@ -292,10 +292,10 @@ users:
     #[test]
     fn a_search_path_entry_says_whether_the_directory_is_really_there() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let present = SearchPathEntry::probe(dir.path().to_path_buf());
+        let present = SearchPathEntry::probe(dir.path());
         assert!(present.exists, "a directory that exists should say so");
 
-        let absent = SearchPathEntry::probe(dir.path().join("nowhere"));
+        let absent = SearchPathEntry::probe(&dir.path().join("nowhere"));
         assert!(
             !absent.exists,
             "a directory in the path that does not exist is worth showing as such"

@@ -17,6 +17,11 @@
 //! unit-tested against the label shapes cAdvisor actually emits. This module
 //! is a credentialed HTTP client with a Prometheus-shaped response parser.
 
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
+
 use std::collections::HashMap;
 use std::time::Instant;
 

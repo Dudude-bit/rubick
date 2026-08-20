@@ -238,7 +238,7 @@ pub struct KubeconfigSource {
     pub error: Option<String>,
 }
 
-fn candidate(path: std::path::PathBuf, origin: &str) -> KubeconfigCandidate {
+fn candidate(path: &std::path::Path, origin: &str) -> KubeconfigCandidate {
     KubeconfigCandidate {
         exists: path.exists(),
         path: path.to_string_lossy().into_owned(),
@@ -255,21 +255,21 @@ fn kubeconfig_candidates(
     env: Option<&str>,
 ) -> Vec<KubeconfigCandidate> {
     if let Some(path) = override_path {
-        return vec![candidate(path, "override")];
+        return vec![candidate(&path, "override")];
     }
     if let Some(value) = env.filter(|v| !v.is_empty()) {
         let separator = if cfg!(windows) { ';' } else { ':' };
         return value
             .split(separator)
             .filter(|entry| !entry.is_empty())
-            .map(|entry| candidate(std::path::PathBuf::from(entry), "env"))
+            .map(|entry| candidate(std::path::Path::new(entry), "env"))
             .collect();
     }
     let default = dirs::home_dir().map_or_else(
         || std::path::PathBuf::from("~/.kube/config"),
         |home| home.join(".kube").join("config"),
     );
-    vec![candidate(default, "default")]
+    vec![candidate(&default, "default")]
 }
 
 /// Report the kubeconfig lookup and what it found.
