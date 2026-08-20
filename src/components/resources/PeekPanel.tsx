@@ -72,9 +72,12 @@ export function PeekPanel() {
       modal={false}
       onOpenChange={(next) => !next && close()}
     >
+      {/* No key on the panel itself: a reference clicked INSIDE the peek
+          swaps the target, and remounting the sheet replayed its slide-in
+          for what is a content change. The body below carries the key, so
+          scroll and per-object tab state still reset. */}
       {shown && (
         <PeekContent
-          key={`${shown.kind}/${shown.namespace ?? ""}/${shown.name}`}
           target={shown}
           requestedTab={requestedTab}
           onTabChange={setRequestedTab}
@@ -229,6 +232,10 @@ function PeekContent({
       </header>
 
       <Tabs
+        // The object's identity keys the body, not the panel: a new target
+        // resets scroll and any per-object state (a log stream, a probe)
+        // without the sheet replaying its open animation.
+        key={`${target.kind}/${namespace ?? ""}/${target.name}`}
         value={activeTab}
         onValueChange={(value) => onTabChange(value as PeekTabId)}
         className="flex min-h-0 flex-1 flex-col"
