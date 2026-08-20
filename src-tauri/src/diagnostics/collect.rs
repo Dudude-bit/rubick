@@ -1,7 +1,6 @@
 use kube::config::Kubeconfig;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use crate::commands::binaries::{kubectl_plugin_binary, locate_on_user_path, search_directories};
 

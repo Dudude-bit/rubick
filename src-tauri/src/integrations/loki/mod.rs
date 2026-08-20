@@ -336,7 +336,7 @@ fn retention_from_config(body: &str) -> Option<String> {
     Some(value.to_string())
 }
 
-async fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
+fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
     let context = context_of(state)?;
     entry_for(&context)?
         .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))
@@ -362,7 +362,7 @@ pub async fn loki_query_range(
     before: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<LokiPage> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let limit = limit.clamp(1, MAX_LINES);
     let end = match before.as_deref().map(str::trim) {
         Some(cursor) if !cursor.is_empty() => cursor.to_string(),

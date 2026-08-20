@@ -280,7 +280,7 @@ fn unreachable(reason: String) -> Error {
     Error::Connection(reason)
 }
 
-async fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
+fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
     let context = context_of(state)?;
     entry_for(&context)?
         .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))
@@ -292,7 +292,7 @@ pub async fn prometheus_query(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<PromSeries>> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let value = get_json(&entry, "/api/v1/query", &[("query", query)])
         .await
         .map_err(unreachable)?;
@@ -312,7 +312,7 @@ pub async fn prometheus_query_range(
     step: u32,
     state: State<'_, AppState>,
 ) -> Result<Vec<PromSeries>> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let value = get_json(
         &entry,
         "/api/v1/query_range",

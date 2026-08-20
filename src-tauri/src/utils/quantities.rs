@@ -25,27 +25,35 @@ pub const MEGABYTE: u64 = 1000 * 1000;
 pub const GIGABYTE: u64 = 1000 * 1000 * 1000;
 pub const TERABYTE: u64 = 1000 * 1000 * 1000 * 1000;
 
+/// Suffix to the divisor that turns the number in front of it into millicores.
+const CPU_UNITS: [(char, f64); 3] = [('m', 1.0), ('n', 1_000_000.0), ('u', 1_000.0)];
+
+/// Suffix to the number of bytes it stands for. Binary units are listed
+/// first, though nothing depends on the order: a value ending in `Ki` does
+/// not end in `K`.
+const MEMORY_UNITS: [(&str, u64); 8] = [
+    ("Ki", KIBIBYTE),
+    ("Mi", MEBIBYTE),
+    ("Gi", GIBIBYTE),
+    ("Ti", TEBIBYTE),
+    ("K", KILOBYTE),
+    ("M", MEGABYTE),
+    ("G", GIGABYTE),
+    ("T", TERABYTE),
+];
+
 /// Parse CPU quantity string to millicores (f64)
 /// Supports formats: "500m", "0.5", "2", "2.5", "100n" (nanocores)
 #[must_use]
 pub fn parse_cpu(cpu_str: &str) -> f64 {
     let cpu_str = cpu_str.trim();
-
-    if cpu_str.ends_with('m') {
-        // Millicores: "500m" -> 500.0 millicores
-        cpu_str[..cpu_str.len() - 1].parse::<f64>().unwrap_or(0.0)
-    } else if cpu_str.ends_with('n') {
-        // Nanocores: "100000000n" -> 100.0 millicores
-        let nanocores = cpu_str[..cpu_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        nanocores / 1_000_000.0
-    } else if cpu_str.ends_with('u') {
-        // Microcores: "1000000u" -> 1000 millicores
-        let microcores = cpu_str[..cpu_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        microcores / 1_000.0
-    } else {
-        // Cores: "2", "0.5", "2.5" -> convert to millicores
-        cpu_str.parse::<f64>().unwrap_or(0.0) * 1000.0
+    for (suffix, per_millicore) in CPU_UNITS {
+        if let Some(num) = cpu_str.strip_suffix(suffix) {
+            return num.parse::<f64>().unwrap_or(0.0) / per_millicore;
+        }
     }
+    // No suffix means cores: "2", "0.5", "2.5".
+    cpu_str.parse::<f64>().unwrap_or(0.0) * 1000.0
 }
 
 /// Parse memory quantity string to bytes (u64)
@@ -53,37 +61,13 @@ pub fn parse_cpu(cpu_str: &str) -> f64 {
 #[must_use]
 pub fn parse_memory(mem_str: &str) -> u64 {
     let mem_str = mem_str.trim();
-
-    // Binary units (Ki, Mi, Gi, Ti)
-    if mem_str.ends_with("Ki") {
-        let num = mem_str[..mem_str.len() - 2].parse::<f64>().unwrap_or(0.0);
-        (num * KIBIBYTE as f64) as u64
-    } else if mem_str.ends_with("Mi") {
-        let num = mem_str[..mem_str.len() - 2].parse::<f64>().unwrap_or(0.0);
-        (num * MEBIBYTE as f64) as u64
-    } else if mem_str.ends_with("Gi") {
-        let num = mem_str[..mem_str.len() - 2].parse::<f64>().unwrap_or(0.0);
-        (num * GIBIBYTE as f64) as u64
-    } else if mem_str.ends_with("Ti") {
-        let num = mem_str[..mem_str.len() - 2].parse::<f64>().unwrap_or(0.0);
-        (num * TEBIBYTE as f64) as u64
-    // Decimal units (K, M, G, T)
-    } else if mem_str.ends_with('K') && !mem_str.ends_with("Ki") {
-        let num = mem_str[..mem_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        (num * KILOBYTE as f64) as u64
-    } else if mem_str.ends_with('M') && !mem_str.ends_with("Mi") {
-        let num = mem_str[..mem_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        (num * MEGABYTE as f64) as u64
-    } else if mem_str.ends_with('G') && !mem_str.ends_with("Gi") {
-        let num = mem_str[..mem_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        (num * GIGABYTE as f64) as u64
-    } else if mem_str.ends_with('T') && !mem_str.ends_with("Ti") {
-        let num = mem_str[..mem_str.len() - 1].parse::<f64>().unwrap_or(0.0);
-        (num * TERABYTE as f64) as u64
-    } else {
-        // Assume bytes
-        mem_str.parse::<u64>().unwrap_or(0)
+    for (suffix, bytes) in MEMORY_UNITS {
+        if let Some(num) = mem_str.strip_suffix(suffix) {
+            return (num.parse::<f64>().unwrap_or(0.0) * bytes as f64) as u64;
+        }
     }
+    // No suffix means the quantity is already in bytes.
+    mem_str.parse::<u64>().unwrap_or(0)
 }
 
 /// Format millicores to string representation
@@ -162,8 +146,17 @@ mod tests {
         assert_eq!(parse_memory("1Ki"), 1024);
         assert_eq!(parse_memory("1Mi"), 1024 * 1024);
         assert_eq!(parse_memory("1Gi"), 1024 * 1024 * 1024);
+        assert_eq!(parse_memory("1Ti"), 1024_u64.pow(4));
+        assert_eq!(parse_memory("1K"), 1_000);
         assert_eq!(parse_memory("1M"), 1_000_000);
+        assert_eq!(parse_memory("1G"), 1_000_000_000);
+        assert_eq!(parse_memory("1T"), 1_000_000_000_000);
         assert_eq!(parse_memory("1024"), 1024);
+        assert_eq!(parse_memory("1.5Gi"), 1024 * 1024 * 1024 * 3 / 2);
+        assert_eq!(parse_memory("  512Mi  "), 512 * 1024 * 1024);
+        assert_eq!(parse_memory(""), 0);
+        assert_eq!(parse_memory("nonsense"), 0);
+        assert_eq!(parse_memory("Gi"), 0);
     }
 
     #[test]
