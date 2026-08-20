@@ -1090,6 +1090,7 @@ export {
   type Candidate,
   type Forwarded,
   type InClusterHint,
+  normalisedSubpath,
 } from "./forwarded";
 import { useT } from "@/i18n/useT";
 

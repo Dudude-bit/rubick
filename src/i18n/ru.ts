@@ -1183,6 +1183,17 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    pointAtServiceYourself: "Указать Service вручную",
+    pointAtServiceHint:
+      "Для всего, что говорит на этом API, но не носит имя вендора: VictoriaMetrics называется vmsingle и отвечает на те же запросы.",
+    serviceLabel: "Service",
+    chooseService: "Выберите Service",
+    portLabel: "Порт",
+    choosePort: "Выберите порт",
+    subpathLabel: "Подпуть",
+    subpathHint:
+      "То, что идёт после порта, когда API не в корне. VMSingle отдаёт его под /prometheus, vmselect у VMCluster — под /select/0/prometheus. Для обычного Prometheus оставьте пустым.",
+    forwardIt: "Пробросить",
     authRunsPlugin: "Запускает {plugin} за токеном.",
     aCredentialPlugin: "плагин учётных данных",
     authClientCertFrom:

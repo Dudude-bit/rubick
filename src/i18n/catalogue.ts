@@ -1169,6 +1169,17 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    pointAtServiceYourself: "Point at a Service yourself",
+    pointAtServiceHint:
+      "For anything that speaks this API without carrying the vendor's name — a VictoriaMetrics is called vmsingle and answers the same queries.",
+    serviceLabel: "Service",
+    chooseService: "Choose a Service",
+    portLabel: "Port",
+    choosePort: "Choose a port",
+    subpathLabel: "Subpath",
+    subpathHint:
+      "What comes after the port, when the API is not at the root. VMSingle serves it under /prometheus; a VMCluster's vmselect under /select/0/prometheus. Leave empty for a plain Prometheus.",
+    forwardIt: "Forward it",
     authRunsPlugin: "Runs {plugin} for a token.",
     aCredentialPlugin: "a credential plugin",
     authClientCertFrom:

@@ -34,6 +34,12 @@ export interface ForwardPreference {
   /** What the connection's `http://localhost:<port>` address is made of. */
   localPort: number;
   /**
+   * What follows the port, for an API that does not sit at the root — a
+   * VictoriaMetrics under `/prometheus`. Absent on everything saved before
+   * this existed, which is the same as empty.
+   */
+  subpath?: string;
+  /**
    * Bring it up when this cluster is opened.
    *
    * Off by default and asked for explicitly, because a forward is a listening

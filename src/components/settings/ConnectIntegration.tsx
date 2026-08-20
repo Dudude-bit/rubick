@@ -40,6 +40,8 @@ import type {
   ProbeResult,
 } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { commands } from "@/lib/commands";
+import type { ServiceInfo } from "@/generated/types";
 
 export function ConnectIntegration({
   vendorId,
@@ -184,6 +186,10 @@ function ConnectForm({
                   service: picked.service,
                   remotePort: picked.remotePort,
                   localPort: picked.localPort,
+                  // Carried, so waking this forward tomorrow rebuilds the
+                  // same address — an API under /prometheus is not reachable
+                  // at the port alone.
+                  subpath: picked.subpath,
                   // Off until asked for: a forward is a socket on this
                   // machine and a connection into the cluster, and neither is
                   // started on somebody's behalf because they pressed a
@@ -331,7 +337,8 @@ function ConnectForm({
  * for the reader would be this app guessing which of their monitoring stacks
  * they meant.
  */
-function InCluster({
+/** Exported for its own test: the dialog around it needs a live cluster. */
+export function InCluster({
   hint,
   vendorName,
   onPicked,
@@ -414,7 +421,159 @@ function InCluster({
         );
       })}
 
+      <ByHand hint={hint} onPicked={onPicked} onFailed={setFailed} />
+
       {failed && <p className="text-[11px] text-err">{failed}</p>}
+    </div>
+  );
+}
+
+/**
+ * Point at a Service this app did not recognise.
+ *
+ * The search above matches a Service by the vendor's own name and label,
+ * which is right for the thing it names and useless for everything that
+ * merely speaks its API — a VictoriaMetrics is called `vmsingle`, wears no
+ * Prometheus label, listens on 8428 and answers the same queries (#71).
+ *
+ * So: any Service in the cluster, any of its ports, and the subpath the API
+ * sits under. Namespace, Service and port are chosen from what the cluster
+ * actually has rather than typed, because three of the four fields are facts
+ * this app already holds and a typo in them is a connection that fails with
+ * nothing to point at. Only the subpath is typed, because only the subpath is
+ * something the cluster cannot tell us.
+ */
+function ByHand({
+  hint,
+  onPicked,
+  onFailed,
+}: {
+  hint: InClusterHint;
+  onPicked: (forwarded: Forwarded) => void;
+  onFailed: (message: string | null) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = React.useState(false);
+  const [services, setServices] = React.useState<ServiceInfo[] | null>(null);
+  const [chosen, setChosen] = React.useState("");
+  const [port, setPort] = React.useState("");
+  const [subpath, setSubpath] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const service = services?.find(
+    (candidate) => `${candidate.namespace}/${candidate.name}` === chosen
+  );
+
+  const reveal = async () => {
+    setOpen(true);
+    onFailed(null);
+    if (services !== null) return;
+    try {
+      setServices(await commands.listServices(null));
+    } catch (error) {
+      onFailed(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const go = async () => {
+    if (!service) return;
+    setBusy(true);
+    onFailed(null);
+    try {
+      onPicked(await forward(service, [Number(port)], undefined, subpath));
+    } catch (error) {
+      onFailed(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => void reveal()}
+        className="self-start text-[11px] text-fg-fnt underline underline-offset-2 hover:text-fg"
+      >
+        {t("settings", "pointAtServiceYourself")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded border border-hair p-2">
+      <p className="text-[11px] text-fg-fnt">
+        {t("settings", "pointAtServiceHint")}
+      </p>
+
+      <label className="flex flex-col gap-1 text-xs text-fg-mut">
+        {t("settings", "serviceLabel")}
+        <select
+          value={chosen}
+          onChange={(event) => {
+            setChosen(event.target.value);
+            setPort("");
+          }}
+          className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg"
+        >
+          <option value="">{t("settings", "chooseService")}</option>
+          {(services ?? []).map((candidate) => (
+            <option
+              key={`${candidate.namespace}/${candidate.name}`}
+              value={`${candidate.namespace}/${candidate.name}`}
+            >
+              {candidate.namespace}/{candidate.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-fg-mut">
+        {t("settings", "portLabel")}
+        <select
+          value={port}
+          onChange={(event) => setPort(event.target.value)}
+          disabled={!service}
+          className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg disabled:opacity-60"
+        >
+          <option value="">{t("settings", "choosePort")}</option>
+          {(service?.ports ?? []).map((exposed) => (
+            <option key={exposed.port} value={String(exposed.port)}>
+              {exposed.port}
+              {exposed.name ? ` · ${exposed.name}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="flex flex-col gap-1">
+        {/* The hint sits outside the label: inside it, the accessible name of
+            the field becomes the whole paragraph. */}
+        <label htmlFor="integration-subpath" className="text-xs text-fg-mut">
+          {t("settings", "subpathLabel")}
+        </label>
+        <Input
+          id="integration-subpath"
+          value={subpath}
+          onChange={(event) => setSubpath(event.target.value)}
+          placeholder={hint.subpathExample ?? "/prometheus"}
+          className="h-7 font-mono text-xs"
+        />
+        <span className="text-[11px] text-fg-fnt">
+          {t("settings", "subpathHint")}
+        </span>
+      </div>
+
+      <Button
+        size="sm"
+        onClick={() => void go()}
+        disabled={!service || !port || busy}
+        className="self-start text-xs"
+      >
+        {busy
+          ? t("settings", "forwardingEllipsis")
+          : t("settings", "forwardIt")}
+      </Button>
     </div>
   );
 }
