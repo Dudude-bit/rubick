@@ -36,7 +36,13 @@ import { PeekActions } from "./PeekActions";
 import { DeliveryMarks } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
-import { toKind } from "@/lib/resource-registry";
+import {
+  getResourceDefinition,
+  toKind,
+  type ResourceKind,
+} from "@/lib/resource-registry";
+import { kindHue } from "@/lib/resource-identity";
+import { useClusterStore } from "@/stores/clusterStore";
 import { resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -407,6 +413,41 @@ function PeekOverview({
  * worth peeking for, so the pods row splits out what is not ready.
  */
 function NamespaceContents({ namespace }: { namespace: string }) {
+  const navigate = useNavigate();
+  const switchNamespace = useClusterStore((s) => s.switchNamespace);
+  const { close } = usePeek();
+
+  /** The kind's own icon and hue in the resource shell, as a door: click
+   *  scopes the window to this namespace and opens the kind's list. */
+  const kindDoor = (kind: ResourceKind) => {
+    const definition = getResourceDefinition(kind);
+    const Icon = definition.icon;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void switchNamespace(namespace);
+          close();
+          navigate(`/${definition.category}/${definition.plural}`);
+        }}
+        title={`Open ${definition.displayPlural} scoped to ${namespace}`}
+        className={cn(
+          RESOURCE_NAME_SHELL,
+          "hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        )}
+      >
+        <Icon
+          className="h-2.5 w-2.5 flex-none self-center"
+          style={{
+            color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))`,
+          }}
+          aria-hidden="true"
+        />
+        <span className="truncate">{definition.displayPlural}</span>
+      </button>
+    );
+  };
+
   const filters = {
     namespace,
     labelSelector: null,
@@ -448,10 +489,10 @@ function NamespaceContents({ namespace }: { namespace: string }) {
 
   const count = (
     data: unknown[] | undefined,
-    word: string,
+    kind: ResourceKind,
     trouble?: string
   ): KeyValue => ({
-    label: word,
+    label: kindDoor(kind),
     value:
       data === undefined ? (
         "reading…"
@@ -473,17 +514,17 @@ function NamespaceContents({ namespace }: { namespace: string }) {
         items={[
           count(
             pods.data,
-            "Pods",
+            "Pod",
             notReady > 0 ? `${notReady} not ready` : undefined
           ),
           count(
             deployments.data,
-            "Deployments",
+            "Deployment",
             starving && starving.length > 0
               ? `${starving.length} short of desired`
               : undefined
           ),
-          count(services.data, "Services"),
+          count(services.data, "Service"),
         ]}
       />
     </div>
