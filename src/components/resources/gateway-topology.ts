@@ -21,6 +21,7 @@ import {
 } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
+import { KIND_TEXT } from "@/lib/route-kind-tone";
 import type { GatewayInfo, RouteInfo } from "@/generated/types";
 
 function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
@@ -109,7 +110,11 @@ export function gatewayTopology(
         name: route.name,
         namespace: route.namespace,
       },
-      tag: { text: route.kind, tone: "mute" },
+      tag: {
+        text: route.kind,
+        tone: "mute",
+        className: KIND_TEXT[route.kind],
+      },
     });
 
     for (const parent of route.parentRefs) {

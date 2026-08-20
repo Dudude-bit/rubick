@@ -35,6 +35,7 @@ import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { KIND_TONE } from "@/lib/route-kind-tone";
 import { routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -45,19 +46,6 @@ import type { RouteInfo } from "@/generated/types";
 
 /** Gateways change with a deploy, not by the second — same as the map. */
 const ROUTING_STALE = 60_000;
-
-/**
- * Kind hues sit away from the state colors (ok 152, warn 44, err 358,
- * info 212) and stay desaturated: the verdict dot outranks the kind, and
- * the label text still carries the meaning without the hue.
- */
-const KIND_TONE: Record<string, string> = {
-  HTTPRoute: "border-[hsl(190_45%_58%/0.35)] text-[hsl(190_45%_58%)]",
-  GRPCRoute: "border-[hsl(265_50%_70%/0.35)] text-[hsl(265_50%_70%)]",
-  TLSRoute: "border-[hsl(315_40%_64%/0.35)] text-[hsl(315_40%_64%)]",
-  TCPRoute: "border-[hsl(25_55%_60%/0.35)] text-[hsl(25_55%_60%)]",
-  UDPRoute: "border-[hsl(85_35%_55%/0.35)] text-[hsl(85_35%_55%)]",
-};
 
 /** The step a break lands on, in the reader's language. */
 function stepWord(at: string, t: T): string {

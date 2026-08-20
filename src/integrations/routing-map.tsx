@@ -58,8 +58,10 @@ export interface MapNode {
   object?: { kind: string; name: string; namespace?: string | null };
   /** Where clicking it goes, inside this app. Absent draws plain text. */
   to?: string;
-  /** A word at the top right of the node — `TLS`, `0 ready`. */
-  tag?: { text: string; tone: MapTone };
+  /** A word at the top right of the node — `TLS`, `0 ready`. The
+   *  className carries a hue of its own — a route kind's — and wins
+   *  over the tone's. */
+  tag?: { text: string; tone: MapTone; className?: string };
 }
 
 export interface MapEdge {
@@ -418,7 +420,7 @@ function Node({
           <span
             className={cn(
               "flex-none text-[9.5px] uppercase tracking-wider",
-              TONE_TEXT[node.tag.tone]
+              node.tag.className ?? TONE_TEXT[node.tag.tone]
             )}
           >
             {node.tag.text}
