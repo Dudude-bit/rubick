@@ -51,6 +51,48 @@ const routeColumns: CrdColumn[] = [
   },
 ];
 
+const backendTlsPolicyColumns: CrdColumn[] = [
+  {
+    id: "targets",
+    header: "Targets",
+    accessor: (resource) => {
+      const targets = getValueByPath(resource, "spec.targetRefs") as
+        Array<{ name?: string; kind?: string }> | undefined;
+      return (targets ?? []).map((target) =>
+        target.kind && target.kind !== "Service"
+          ? `${target.name} (${target.kind})`
+          : (target.name ?? "?")
+      );
+    },
+    cell: names,
+  },
+  {
+    id: "hostname",
+    header: "SNI",
+    accessor: (resource) =>
+      getValueByPath(resource, "spec.validation.hostname"),
+    cell: (value) => String(value ?? "—"),
+  },
+  {
+    id: "trust",
+    header: "Trusts",
+    accessor: (resource) => {
+      const wellKnown = getValueByPath(
+        resource,
+        "spec.validation.wellKnownCACertificates"
+      );
+      if (wellKnown) return `${wellKnown} bundle`;
+      const refs = getValueByPath(
+        resource,
+        "spec.validation.caCertificateRefs"
+      ) as Array<{ name?: string }> | undefined;
+      return (refs ?? []).map((ref) => ref.name ?? "?");
+    },
+    cell: (value) =>
+      Array.isArray(value) ? names(value) : String(value ?? "—"),
+  },
+];
+
 const gatewayColumns: CrdColumn[] = [
   {
     id: "class",
@@ -149,6 +191,8 @@ export const gatewayCrd: CrdView = {
         return listenerSetColumns;
       case "referencegrant":
         return referenceGrantColumns;
+      case "backendtlspolicy":
+        return backendTlsPolicyColumns;
       default:
         return routeColumns;
     }

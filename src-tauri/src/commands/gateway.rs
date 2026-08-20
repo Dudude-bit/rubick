@@ -184,8 +184,11 @@ pub async fn list_gateways(
     state: State<'_, AppState>,
 ) -> Result<Vec<GatewayInfo>> {
     let (api, api_resource) = gateway_api("Gateway", namespace, true, &state).await?;
-    let list = api.list(&build_list_params(None, None, None)).await?;
-    let sets = listener_sets(&state).await;
+    // The ListenerSet probe answers "none" on its own errors, so the two
+    // reads race instead of queuing — one round trip of latency, not two.
+    let params = build_list_params(None, None, None);
+    let (list, sets) = tokio::join!(api.list(&params), listener_sets(&state));
+    let list = list?;
     Ok(list
         .items
         .into_iter()
@@ -306,12 +309,17 @@ pub async fn probe_resolve_host(
     gateway_address: Option<String>,
     port: u16,
 ) -> Result<ResolveProbe> {
-    crate::validation::validate_dns_subdomain(&host)?;
+    validate_probe_target(&host)?;
 
     let (resolved, error) = match tokio::net::lookup_host((host.as_str(), port)).await {
         Ok(addrs) => {
-            let mut ips: Vec<String> = addrs.map(|a| a.ip().to_string()).collect();
-            ips.dedup();
+            // First-seen order, all duplicates gone — `dedup()` alone only
+            // drops neighbours and a round-robin answer is not sorted.
+            let mut seen = std::collections::HashSet::new();
+            let ips: Vec<String> = addrs
+                .map(|a| a.ip().to_string())
+                .filter(|ip| seen.insert(ip.clone()))
+                .collect();
             (ips, None)
         }
         Err(err) => (Vec::new(), Some(err.to_string())),
@@ -336,11 +344,21 @@ pub struct TcpProbe {
     pub error: Option<String>,
 }
 
+/// A probe target is a hostname OR an address literal — a Gateway's
+/// published address is often an IP, and IPv6 colons are no less valid
+/// for being un-DNS-like.
+fn validate_probe_target(target: &str) -> Result<()> {
+    if target.parse::<std::net::IpAddr>().is_ok() {
+        return Ok(());
+    }
+    crate::validation::validate_dns_subdomain(target)
+}
+
 #[tauri::command]
 pub async fn probe_tcp_connect(address: String, port: u16) -> Result<TcpProbe> {
     use std::time::{Duration, Instant};
 
-    crate::validation::validate_dns_subdomain(&address)?;
+    validate_probe_target(&address)?;
 
     let started = Instant::now();
     let (ms, error) = match tokio::time::timeout(

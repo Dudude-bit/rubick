@@ -64,6 +64,7 @@ function sayMatch(match: RouteMatchInfo): string {
     parts.push([match.grpcService ?? "*", match.grpcMethod ?? "*"].join("/"));
   }
   parts.push(...match.headers);
+  parts.push(...match.queryParams.map((param) => `?${param}`));
   return parts.length > 0 ? parts.join(" · ") : "everything";
 }
 

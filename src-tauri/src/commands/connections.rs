@@ -1274,26 +1274,32 @@ async fn gateway_lists(
     };
 
     let params = ListParams::default();
+    // Cluster-wide on purpose, twice over: a route in another namespace may
+    // cross-namespace-target this Service through a ReferenceGrant, and its
+    // gateway may live in a third namespace still. Scoping either list to
+    // the subject's namespace silently hid both. Kinds list concurrently —
+    // six serial round trips were pure latency.
+    let fetches = detection.kinds.iter().map(|served| {
+        let api_resource = served.api_resource();
+        let kind = served.kind.clone();
+        let api = ctx.dynamic_api_for_resource(&api_resource, true);
+        let params = params.clone();
+        async move { (kind, api_resource, api.list(&params).await) }
+    });
     let mut routes = Vec::new();
     let mut gateways = Vec::new();
-    for served in &detection.kinds {
-        let api_resource = served.api_resource();
-        match served.kind.as_str() {
+    for (kind, api_resource, list) in futures::future::join_all(fetches).await {
+        let Ok(list) = list else { continue };
+        match kind.as_str() {
             "HTTPRoute" | "GRPCRoute" | "TLSRoute" | "TCPRoute" | "UDPRoute" => {
-                let api = ctx.dynamic_api_for_resource(&api_resource, false);
-                if let Ok(list) = api.list(&params).await {
-                    routes.extend(list.items.into_iter().map(|obj| {
-                        RouteInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
-                    }));
-                }
+                routes.extend(list.items.into_iter().map(|obj| {
+                    RouteInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
+                }));
             }
             "Gateway" => {
-                let api = ctx.dynamic_api_for_resource(&api_resource, true);
-                if let Ok(list) = api.list(&params).await {
-                    gateways.extend(list.items.into_iter().map(|obj| {
-                        GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
-                    }));
-                }
+                gateways.extend(list.items.into_iter().map(|obj| {
+                    GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
+                }));
             }
             _ => {}
         }

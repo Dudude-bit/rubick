@@ -780,6 +780,7 @@ export interface RouteMatchInfo {
   grpcService: string | null;
   grpcMethod: string | null;
   headers: string[];
+  queryParams: string[];
 }
 
 export interface ParentRefInfo {

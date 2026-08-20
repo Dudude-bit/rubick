@@ -83,6 +83,8 @@ pub struct RouteMatchInfo {
     pub grpc_method: Option<String>,
     /// `name=value` per header match, order preserved.
     pub headers: Vec<String>,
+    /// `name=value` per query-parameter match, order preserved.
+    pub query_params: Vec<String>,
 }
 
 /// One `rules[]` entry.
@@ -595,6 +597,7 @@ mod schema {
         /// read as a value and told apart at conversion.
         pub method: Option<serde_json::Value>,
         pub headers: Vec<HeaderMatch>,
+        pub query_params: Vec<HeaderMatch>,
     }
 
     #[derive(Debug, Default, Deserialize)]
@@ -800,6 +803,14 @@ fn match_info(m: schema::RouteMatch) -> RouteMatchInfo {
             .map(|h| match h.value {
                 Some(value) => format!("{}={value}", h.name),
                 None => h.name,
+            })
+            .collect(),
+        query_params: m
+            .query_params
+            .into_iter()
+            .map(|q| match q.value {
+                Some(value) => format!("{}={value}", q.name),
+                None => q.name,
             })
             .collect(),
     }
@@ -1062,6 +1073,9 @@ spec:
       headers:
       - name: x-canary
         value: "on"
+      queryParams:
+      - name: canary
+        value: "true"
     backendRefs:
     - name: promo
       port: 8080
@@ -1109,6 +1123,7 @@ status:
         assert_eq!(m.path_type.as_deref(), Some("PathPrefix"));
         assert_eq!(m.method.as_deref(), Some("GET"));
         assert_eq!(m.headers, vec!["x-canary=on"]);
+        assert_eq!(m.query_params, vec!["canary=true"]);
     }
 
     #[test]
