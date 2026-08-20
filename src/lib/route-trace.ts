@@ -102,6 +102,48 @@ export interface TraceSources {
   backing: BackingSources;
 }
 
+/** The Programmed verdict, with the legacy `Ready` fallback some
+ *  controllers still write — one rule, so the trace, the pulse and the
+ *  topology map can never drift apart on it again. */
+export function gatewayProgrammed(
+  gateway: GatewayInfo
+): ConditionInfo | undefined {
+  return (
+    gateway.conditions.find((c) => c.type === "Programmed") ??
+    gateway.conditions.find((c) => c.type === "Ready")
+  );
+}
+
+/** One lookup for "this name+namespace, in the fetched list". */
+export function findGateway(
+  gateways: GatewayInfo[],
+  name: string,
+  namespace: string
+): GatewayInfo | undefined {
+  return gateways.find(
+    (candidate) => candidate.name === name && candidate.namespace === namespace
+  );
+}
+
+/** The protocol label a hostless route kind wears wherever it is drawn. */
+export const HOSTLESS_PROTO: Record<string, string> = {
+  TCPRoute: "TCP",
+  UDPRoute: "UDP",
+  TLSRoute: "TLS",
+};
+
+/** Redirect-only means every rule redirects and none names a Service —
+ *  configuration, not breakage, in the same words on every surface. */
+export function redirectOnly(route: RouteInfo): boolean {
+  return (
+    route.rules.length > 0 &&
+    route.rules.every((rule) => rule.hasRedirect) &&
+    !route.rules.some((rule) =>
+      rule.backendRefs.some((backend) => backend.kind === "Service")
+    )
+  );
+}
+
 const said = (c: ConditionInfo): string =>
   [c.reason, c.message].filter(Boolean).join(" — ") || `${c.type}: ${c.status}`;
 
@@ -257,9 +299,7 @@ function gatewayStep(
     name: gateway.name,
     namespace: gateway.namespace,
   };
-  const programmed =
-    gateway.conditions.find((c) => c.type === "Programmed") ??
-    gateway.conditions.find((c) => c.type === "Ready");
+  const programmed = gatewayProgrammed(gateway);
   if (programmed?.status === "False") {
     return {
       id: "gateway",
@@ -568,12 +608,7 @@ function backendSteps(
   const serviceRefs = route.rules.flatMap((rule) =>
     rule.backendRefs.filter((backend) => backend.kind === "Service")
   );
-  const redirectOnly =
-    serviceRefs.length === 0 &&
-    route.rules.length > 0 &&
-    route.rules.every((rule) => rule.hasRedirect);
-
-  if (redirectOnly) {
+  if (serviceRefs.length === 0 && redirectOnly(route)) {
     const say = "This route redirects — no backends, and none needed";
     return [
       { id: "backend", state: "ok", say, who: "yours" },
@@ -789,9 +824,7 @@ function traceFor(
   sources: TraceSources
 ): RouteTrace {
   const namespace = parent.namespace ?? route.namespace;
-  const gateway = sources.gateways.find(
-    (g) => g.name === parent.name && g.namespace === namespace
-  );
+  const gateway = findGateway(sources.gateways, parent.name, namespace);
   const entries = statusesFor(route, parent);
   const [listener, allowed] = acceptanceSteps(route, gateway, parent, entries);
   const [backend, endpoints] = backendSteps(route, sources.backing);

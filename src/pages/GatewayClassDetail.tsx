@@ -32,7 +32,11 @@ import type { GatewayClassInfo } from "@/generated/types";
 const ROUTING_STALE = 60_000;
 
 function GatewayRows({ className }: { className: string }) {
-  const { data: gateways } = useLiveQuery({
+  const {
+    data: gateways,
+    error,
+    isLoading,
+  } = useLiveQuery({
     queryKey: ["gateway-map-gateways"],
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
@@ -46,7 +50,11 @@ function GatewayRows({ className }: { className: string }) {
   return (
     <Section>
       <SectionHeader title="Gateways using it" count={users.length} />
-      {gateways === undefined ? (
+      {error && gateways === undefined ? (
+        <p className="text-xs text-err">
+          Could not read the gateways: {(error as Error).message}
+        </p>
+      ) : isLoading && gateways === undefined ? (
         <p className="text-xs text-fg-fnt">Reading gateways…</p>
       ) : users.length === 0 ? (
         <p className="text-xs text-fg-fnt">

@@ -29,6 +29,7 @@ import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
+import { redirectOnly } from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue, KeyValueTone } from "./key-values";
@@ -115,8 +116,7 @@ function gatewayRouteSource(kind: string): PeekSource {
       const accepted = verdicts.some(
         (c) => c.type === "Accepted" && c.status === "True"
       );
-      const redirectOnly =
-        route.rules.length > 0 && route.rules.every((rule) => rule.hasRedirect);
+      const redirects = redirectOnly(route);
       return {
         status: refused ? "Refused" : accepted ? "Accepted" : undefined,
         createdAt: route.createdAt,
@@ -199,7 +199,7 @@ function gatewayRouteSource(kind: string): PeekSource {
                 };
               })
             ),
-            emptyMessage: redirectOnly
+            emptyMessage: redirects
               ? "Redirects — no backends, and none needed."
               : "No backendRefs — a matched request has nowhere to go.",
           },
@@ -1361,23 +1361,11 @@ function walk(
           message: typeof entry.message === "string" ? entry.message : null,
           lastTransitionTime: null,
         };
-        const role = conditionRole(condition);
-        const spoken = [
-          condition.status,
-          condition.reason && condition.reason !== condition.type
-            ? condition.reason
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" — ");
+        // The same wording every condition row speaks — one implementation,
+        // relabelled with the dotted path.
         rows.push({
+          ...conditionItem(condition),
           label: `${path}.${condition.type}`,
-          value:
-            role !== "ok" && condition.message
-              ? `${spoken}: ${condition.message}`
-              : spoken,
-          mono: true,
-          tone: ROLE_TONE[role],
         });
       }
       return;

@@ -9,6 +9,7 @@
  * parents are named in their own place, explicitly unjudged.
  */
 
+import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import type {
   ChainStop,
   GatewayInfo,
@@ -66,12 +67,6 @@ const doorRef = (object: ObjectRef): DoorRef => ({
 
 const key = (object: ObjectRef) =>
   `${object.kind}/${object.namespace ?? ""}/${object.name}`;
-
-const HOSTLESS_PROTO: Record<string, string> = {
-  TCPRoute: "TCP",
-  UDPRoute: "UDP",
-  TLSRoute: "TLS",
-};
 
 /** The break, compressed to the one word a door line can carry. */
 function brokenWord(stop: ChainStop): string | null {
@@ -131,12 +126,8 @@ export function trafficDoors(
     const existing = entries.get(at);
     if (existing) return existing;
     const gateway =
-      object.kind === "Gateway"
-        ? gateways.find(
-            (candidate) =>
-              candidate.name === object.name &&
-              candidate.namespace === object.namespace
-          )
+      object.kind === "Gateway" && object.namespace != null
+        ? findGateway(gateways, object.name, object.namespace)
         : undefined;
     const entry: TrafficEntry = {
       object: doorRef(object),
@@ -185,10 +176,9 @@ export function trafficDoors(
           // No sectionName and several listeners means guessing, so no claim.
           const proto = HOSTLESS_PROTO[edge.from.kind];
           const listeners =
-            gateways.find(
-              (candidate) =>
-                candidate.name === gateway.name &&
-                candidate.namespace === gateway.namespace
+            (gateway.namespace != null
+              ? findGateway(gateways, gateway.name, gateway.namespace)
+              : undefined
             )?.listeners ?? [];
           const listener = sectionName
             ? listeners.find((entry) => entry.name === sectionName)

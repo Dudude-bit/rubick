@@ -10,7 +10,7 @@
  * reads, so a route broken here is broken there in the same words.
  */
 
-import { Info, Route as RouteGlyph, Tag } from "lucide-react";
+import { Info, Route as RouteGlyph, Tag, Trash2 } from "lucide-react";
 
 import {
   Table,
@@ -38,11 +38,14 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingOf, useBackingLists } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import type {
   EventFilters,
@@ -233,6 +236,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
     freshness,
   } = useResourceDetail<RouteInfo>({
     resourceKind: kind,
@@ -240,6 +244,9 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
     deleteResource: (name, ns) => commands.deleteGatewayRoute(kind, name, ns),
     defaultTab: "overview",
   });
+
+  const deliveryQuery = deliveryOfKind(kind, route ?? undefined);
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   const { data: events = [] } = useLiveQuery({
     queryKey: ["gateway-route-events", kind, namespace, name],
@@ -355,6 +362,17 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
+      delivery={deliveryQuery}
+      actions={
+        <InterceptedAction
+          intercept={intercept("Delete")}
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
     />
   );
 }

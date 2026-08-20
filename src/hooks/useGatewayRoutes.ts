@@ -28,15 +28,17 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
   ResourceType.UDPRoute,
 ];
 
-/** One kind's list and its watch, alive only where the kind is served. */
+/** One kind's list and its watch, alive only where the kind is served.
+ *  The failure flag is the kind's OWN: five watches share a page, and one
+ *  kind's recovery must not stop the polling that covers another's still
+ *  broken stream. */
 function useRouteKind(
   kind: ResourceKind,
   namespace: string | null,
   served: boolean,
-  watchFailed: boolean,
-  onWatchError: (kind: string, message: string) => void,
-  onWatchRecovered: () => void
+  onWatchError: (kind: string, message: string) => void
 ) {
+  const [watchFailed, setWatchFailed] = useState(false);
   const queryKey = useMemo(
     () => ["gateway-routes", kind, namespace ?? "all"],
     [kind, namespace]
@@ -58,12 +60,17 @@ function useRouteKind(
     ),
     queryKey,
     onError: useCallback(
-      (message: string) => onWatchError(kind, message),
+      (message: string) => {
+        setWatchFailed((failed) => {
+          if (!failed) onWatchError(kind, message);
+          return true;
+        });
+      },
       [kind, onWatchError]
     ),
-    onRecovered: onWatchRecovered,
+    onRecovered: useCallback(() => setWatchFailed(false), []),
   });
-  return { query, resyncing, served };
+  return { query, resyncing, served, watchFailed };
 }
 
 export function useGatewayRoutes(namespace: string | null) {
@@ -74,22 +81,15 @@ export function useGatewayRoutes(namespace: string | null) {
     [detection]
   );
 
-  const [watchFailed, setWatchFailed] = useState(false);
   const onWatchError = useCallback(
     (kind: string, message: string) => {
-      setWatchFailed((failed) => {
-        if (!failed) {
-          toast({
-            title: `Live updates unavailable for ${kind}s`,
-            description: `${message} — the list falls back to polling.`,
-          });
-        }
-        return true;
+      toast({
+        title: `Live updates unavailable for ${kind}s`,
+        description: `${message} — the list falls back to polling.`,
       });
     },
     [toast]
   );
-  const onWatchRecovered = useCallback(() => setWatchFailed(false), []);
 
   // Five fixed calls, not a loop: the kinds are a closed set and hooks
   // must not be conditional. A kind the cluster does not serve costs
@@ -98,41 +98,31 @@ export function useGatewayRoutes(namespace: string | null) {
     GATEWAY_ROUTE_KINDS[0],
     namespace,
     served.has(GATEWAY_ROUTE_KINDS[0]),
-    watchFailed,
-    onWatchError,
-    onWatchRecovered
+    onWatchError
   );
   const grpc = useRouteKind(
     GATEWAY_ROUTE_KINDS[1],
     namespace,
     served.has(GATEWAY_ROUTE_KINDS[1]),
-    watchFailed,
-    onWatchError,
-    onWatchRecovered
+    onWatchError
   );
   const tls = useRouteKind(
     GATEWAY_ROUTE_KINDS[2],
     namespace,
     served.has(GATEWAY_ROUTE_KINDS[2]),
-    watchFailed,
-    onWatchError,
-    onWatchRecovered
+    onWatchError
   );
   const tcp = useRouteKind(
     GATEWAY_ROUTE_KINDS[3],
     namespace,
     served.has(GATEWAY_ROUTE_KINDS[3]),
-    watchFailed,
-    onWatchError,
-    onWatchRecovered
+    onWatchError
   );
   const udp = useRouteKind(
     GATEWAY_ROUTE_KINDS[4],
     namespace,
     served.has(GATEWAY_ROUTE_KINDS[4]),
-    watchFailed,
-    onWatchError,
-    onWatchRecovered
+    onWatchError
   );
 
   const kinds = useMemo(
@@ -164,7 +154,7 @@ export function useGatewayRoutes(namespace: string | null) {
       0,
       ...active.map((entry) => entry.query.dataUpdatedAt ?? 0)
     ),
-    live: active.length > 0 && !watchFailed,
+    live: active.length > 0 && !active.some((entry) => entry.watchFailed),
     resyncing: active.some((entry) => entry.resyncing),
   };
 }

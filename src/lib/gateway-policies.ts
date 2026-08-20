@@ -41,6 +41,11 @@ export function policyVerdict(policy: BackendTlsPolicyInfo): {
   if (refused) {
     return { word: refused.reason ?? "refused", tone: "err" };
   }
+  // No Accepted verdict at all is unknown, however long the list — the
+  // truncation caveat must never dress silence up as acceptance.
+  if (!verdicts.some((c) => c.status === "True")) {
+    return { word: "unknown", tone: "warn" };
+  }
   // MaxItems=16 is the API's hard ceiling: a full list must be surfaced
   // as possible truncation, never read as the whole story.
   if (policy.ancestorsMaybeTruncated) {
@@ -49,8 +54,5 @@ export function policyVerdict(policy: BackendTlsPolicyInfo): {
       tone: "warn",
     };
   }
-  if (verdicts.every((c) => c.status === "True") && verdicts.length > 0) {
-    return { word: "accepted", tone: "ok" };
-  }
-  return { word: "unknown", tone: "warn" };
+  return { word: "accepted", tone: "ok" };
 }

@@ -5,6 +5,7 @@ import { IngressList } from "@/components/resources/IngressList";
 import { EndpointsList } from "@/components/resources/EndpointsList";
 import { GatewayList } from "@/components/resources/GatewayList";
 import { GatewayRoutesList } from "@/components/resources/GatewayRoutesList";
+import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 
 export function Network() {
   return (
@@ -25,13 +26,7 @@ export function Network() {
         path="routes/all"
         element={<Navigate to="/network/routes" replace />}
       />
-      {[
-        ResourceType.HTTPRoute,
-        ResourceType.GRPCRoute,
-        ResourceType.TLSRoute,
-        ResourceType.TCPRoute,
-        ResourceType.UDPRoute,
-      ].map((kind) => (
+      {GATEWAY_ROUTE_KINDS.map((kind) => (
         <Route
           key={kind}
           path={toPlural(kind)}

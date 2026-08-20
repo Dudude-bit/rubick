@@ -23,7 +23,9 @@ import { describeStop } from "@/lib/connections";
 import type { GatewayInfo, RouteInfo } from "@/generated/types";
 
 function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
-  const programmed = gateway.conditions.find((c) => c.type === "Programmed");
+  const programmed =
+    gateway.conditions.find((c) => c.type === "Programmed") ??
+    gateway.conditions.find((c) => c.type === "Ready");
   const sub = [gateway.className, gateway.addresses[0]]
     .filter(Boolean)
     .join(" · ");

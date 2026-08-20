@@ -11,7 +11,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Route as RouteGlyph, Tag } from "lucide-react";
+import { Info, Route as RouteGlyph, Tag, Trash2 } from "lucide-react";
 
 import {
   Table,
@@ -41,11 +41,15 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { CertificateLine } from "@/components/resources/CertificateFacts";
+import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
   EventFilters,
@@ -57,13 +61,7 @@ import type {
 /** A minute: routing changes with a deploy, not by the second. */
 const ROUTING_STALE = 60_000;
 
-const ROUTE_KINDS = new Set([
-  "HTTPRoute",
-  "GRPCRoute",
-  "TLSRoute",
-  "TCPRoute",
-  "UDPRoute",
-]);
+const ROUTE_KINDS = new Set<string>(GATEWAY_ROUTE_KINDS);
 
 /**
  * Whether this route names that Gateway as a parent — namespace resolved
@@ -248,6 +246,7 @@ export function GatewayDetail() {
     activeTab,
     setActiveTab,
     goBack,
+    deleteMutation,
     freshness,
   } = useResourceDetail<GatewayInfo>({
     resourceKind: ResourceType.Gateway,
@@ -256,7 +255,10 @@ export function GatewayDetail() {
     defaultTab: "overview",
   });
 
-  const detection = useGatewayApi().data;
+  const detectionQuery = useGatewayApi();
+  const detection = detectionQuery.data;
+  const deliveryQuery = deliveryOfKind(ResourceType.Gateway, gateway);
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   // The class claim, resolved the way IngressClass claiming is: the class
   // carries the controller that answers for it, and Accepted is that
@@ -430,7 +432,9 @@ export function GatewayDetail() {
       content: (
         <Section>
           <SectionHeader title="Attached routes" count={attached.length} />
-          {routeKinds.length === 0 ? (
+          {detectionQuery.isLoading ? (
+            <p className="text-xs text-fg-fnt">Reading routes…</p>
+          ) : routeKinds.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               The cluster serves no route kinds, so nothing can attach here.
             </p>
@@ -558,6 +562,17 @@ export function GatewayDetail() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
+      delivery={deliveryQuery}
+      actions={
+        <InterceptedAction
+          intercept={intercept("Delete")}
+          label="Delete"
+          icon={Trash2}
+          onClick={() => deleteMutation?.mutate()}
+          busy={deleteMutation?.isPending}
+          danger
+        />
+      }
     />
   );
 }

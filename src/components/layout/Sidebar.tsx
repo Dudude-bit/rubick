@@ -14,6 +14,7 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
@@ -199,13 +200,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   if (!detection?.installed) return null;
 
   const served = new Set(detection.kinds.map((k) => k.kind));
-  const routeKinds = [
-    "HTTPRoute",
-    "GRPCRoute",
-    "TLSRoute",
-    "TCPRoute",
-    "UDPRoute",
-  ];
+  const routeKinds = GATEWAY_ROUTE_KINDS;
 
   return (
     <>

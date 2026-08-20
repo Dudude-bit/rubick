@@ -9,6 +9,10 @@
 
 import type { ParentRefInfo, RouteInfo } from "@/generated/types";
 import {
+  findGateway,
+  gatewayProgrammed,
+  HOSTLESS_PROTO,
+  redirectOnly,
   routeTraces,
   type RouteTrace,
   type TraceSources,
@@ -78,12 +82,6 @@ const STEP_LABEL: Record<TraceStepId, string> = {
   reachable: "reachable",
 };
 
-const HOSTLESS_PROTO: Record<string, string> = {
-  TCPRoute: "TCP",
-  UDPRoute: "UDP",
-  TLSRoute: "TLS",
-};
-
 function servesOf(
   route: RouteInfo,
   trace: RouteTrace | undefined
@@ -129,16 +127,6 @@ function staleOf(
   return null;
 }
 
-function redirectOnly(route: RouteInfo): boolean {
-  return (
-    route.rules.length > 0 &&
-    route.rules.every((rule) => rule.hasRedirect) &&
-    !route.rules.some((rule) =>
-      rule.backendRefs.some((backend) => backend.kind === "Service")
-    )
-  );
-}
-
 /** Class and address problems on the gateway itself — upstream of every
  *  route through it, and invisible on any single route's row. */
 function pulseOf(sources: TraceSources): GatewayPulse[] {
@@ -161,9 +149,7 @@ function pulseOf(sources: TraceSources): GatewayPulse[] {
       });
       continue;
     }
-    const programmed =
-      gateway.conditions.find((c) => c.type === "Programmed") ??
-      gateway.conditions.find((c) => c.type === "Ready");
+    const programmed = gatewayProgrammed(gateway);
     if (programmed?.status === "False") {
       pulse.push({ ...at, say: "is not programmed by its controller" });
       continue;
@@ -299,9 +285,7 @@ export function routesBoard(
         const first = gatewayParents[0];
         const at = first.namespace ?? route.namespace;
         const ref = { kind: "Gateway", name: first.name, namespace: at };
-        const exists = sources.gateways.some(
-          (gateway) => gateway.name === first.name && gateway.namespace === at
-        );
+        const exists = findGateway(sources.gateways, first.name, at) != null;
         return {
           viaRef: exists ? ref : null,
           viaGhost: sources.topologyKnown && !exists ? ref : null,
