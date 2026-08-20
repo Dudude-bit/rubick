@@ -49,12 +49,25 @@ const conns = (
   ...over,
 });
 
-const gateway = (name: string, addresses: string[]): GatewayInfo => ({
+const gateway = (
+  name: string,
+  addresses: string[],
+  listeners: Array<{ name: string; port: number; protocol: string }> = []
+): GatewayInfo => ({
   name,
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
-  listeners: [],
+  listeners: listeners.map((listener) => ({
+    ...listener,
+    hostname: null,
+    tlsMode: null,
+    certificateRefs: [],
+    allowedNamespaces: null,
+    attachedRoutes: null,
+    conditions: [],
+    fromListenerSet: null,
+  })),
   addresses,
   conditions: [],
   generation: null,
@@ -194,14 +207,16 @@ describe("trafficDoors", () => {
     expect(entry.doors[0].broken).toBe("gateway missing");
   });
 
-  it("collapses a hostless route to its service port with the protocol", () => {
+  it("keys a hostless route by its LISTENER's port — the actual door", () => {
     const model = trafficDoors(
       conns({
         edges: [
           edge(
             ref("TCPRoute", "tcp-route"),
             ref("Service", "app"),
-            ruleRoutes([], "9000")
+            // The relation's port is the backendRef's — the service side,
+            // never the door. It must not leak into the label.
+            ruleRoutes([], "8080")
           ),
           edge(ref("TCPRoute", "tcp-route"), gatewayRef("edge"), {
             verb: "attachesTo",
@@ -209,12 +224,51 @@ describe("trafficDoors", () => {
           }),
         ],
       }),
-      [gateway("edge", ["203.0.113.10"])]
+      [
+        gateway(
+          "edge",
+          ["203.0.113.10"],
+          [{ name: "tcp", port: 9000, protocol: "TCP" }]
+        ),
+      ]
     );
 
     const door = model.entries[0].doors[0];
     expect(door.host).toBe(":9000 TCP");
     expect(door.copyable).toBe(false);
+  });
+
+  it("claims no port at all where the listener cannot be known", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("TCPRoute", "tcp-route"),
+            ref("Service", "app"),
+            ruleRoutes([], "8080")
+          ),
+          edge(ref("TCPRoute", "tcp-route"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+        ],
+      }),
+      // Two listeners and no sectionName — guessing would be a lie.
+      [
+        gateway(
+          "edge",
+          ["203.0.113.10"],
+          [
+            { name: "tcp-a", port: 9000, protocol: "TCP" },
+            { name: "tcp-b", port: 9001, protocol: "TCP" },
+          ]
+        ),
+      ]
+    );
+
+    const door = model.entries[0].doors[0];
+    expect(door.host).toBe("TCP");
+    expect(door.host).not.toContain("8080");
   });
 
   it("keeps mesh parents out of the entries, named in their own place", () => {

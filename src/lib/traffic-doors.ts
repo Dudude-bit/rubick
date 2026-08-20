@@ -97,11 +97,18 @@ export function trafficDoors(
     if (word && "route" in stop) brokenByRoute.set(key(stop.route), word);
   }
 
-  // Which gateway each route attaches to, and what the gateway is.
-  const gatewayOf = new Map<string, ObjectRef>();
+  // Which gateway each route attaches to — and through which listener,
+  // because the listener's port is the actual door for the hostless kinds.
+  const gatewayOf = new Map<
+    string,
+    { gateway: ObjectRef; sectionName: string | null }
+  >();
   for (const edge of conns.edges) {
     if (edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway") {
-      gatewayOf.set(key(edge.from), edge.to);
+      gatewayOf.set(key(edge.from), {
+        gateway: edge.to,
+        sectionName: edge.relation.sectionName,
+      });
     }
   }
 
@@ -134,12 +141,13 @@ export function trafficDoors(
 
   for (const edge of conns.edges) {
     if (edge.relation.verb === "ruleRoutes") {
-      const gateway = gatewayOf.get(key(edge.from));
-      if (!gateway) {
+      const attached = gatewayOf.get(key(edge.from));
+      if (!attached) {
         // No gateway parent in the graph: a mesh attachment (GAMMA).
         mesh.push(doorRef(edge.from));
         continue;
       }
+      const { gateway, sectionName } = attached;
       const className =
         gateway.facts?.kind === "gateway" ? gateway.facts.className : null;
       const entry = entryFor(
@@ -160,10 +168,24 @@ export function trafficDoors(
           });
         }
       } else {
+        // The door is the LISTENER's port — the relation's port is the
+        // backendRef's, the service side, and must never pose as the door.
+        // No sectionName and several listeners means guessing, so no claim.
         const proto = HOSTLESS_PROTO[edge.from.kind];
+        const listeners =
+          gateways.find(
+            (candidate) =>
+              candidate.name === gateway.name &&
+              candidate.namespace === gateway.namespace
+          )?.listeners ?? [];
+        const listener = sectionName
+          ? listeners.find((entry) => entry.name === sectionName)
+          : listeners.length === 1
+            ? listeners[0]
+            : undefined;
         entry.doors.push({
-          host: edge.relation.port
-            ? `:${edge.relation.port}${proto ? ` ${proto}` : ""}`
+          host: listener
+            ? `:${listener.port}${proto ? ` ${proto}` : ""}`
             : (proto ?? edge.from.kind),
           copyable: false,
           broken,
