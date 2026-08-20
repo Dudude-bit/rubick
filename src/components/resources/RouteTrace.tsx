@@ -363,9 +363,12 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
               )}
               {dns.status === "finished" &&
                 (dns.result.error ? (
-                  <span className="text-err">
-                    does not resolve from here — {dns.result.error}
-                  </span>
+                  <>
+                    <span className="text-err">does not resolve from here</span>{" "}
+                    {/* The resolver's own words are jargon; they stay, but
+                        quietly — the sentence before them is the finding. */}
+                    <span className="text-fg-fnt">— {dns.result.error}</span>
+                  </>
                 ) : (
                   <>
                     resolves to{" "}

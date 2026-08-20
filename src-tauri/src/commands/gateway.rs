@@ -335,8 +335,21 @@ pub async fn probe_tcp_connect(address: String, port: u16) -> Result<TcpProbe> {
             Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)),
             None,
         ),
+        // A refusal and a timeout are different diagnoses: refused means the
+        // address answers and nothing listens on the port; a timeout means
+        // the packets go unanswered — a firewall, or the address is wrong.
+        Ok(Err(err)) if err.kind() == std::io::ErrorKind::ConnectionRefused => (
+            None,
+            Some("refused — the address answers, but nothing listens on this port".to_string()),
+        ),
         Ok(Err(err)) => (None, Some(err.to_string())),
-        Err(_) => (None, Some("timed out after 3s".to_string())),
+        Err(_) => (
+            None,
+            Some(
+                "timed out after 3s — packets go unanswered; a firewall, or the wrong address"
+                    .to_string(),
+            ),
+        ),
     };
 
     Ok(TcpProbe { ms, error })
