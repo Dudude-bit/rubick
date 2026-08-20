@@ -2,7 +2,7 @@
 //!
 //! Everything else in this app that says who is behind a Service is a
 //! deduction: match the selector, read each pod's own `Ready` condition,
-//! count. The EndpointSlice is what the Service actually hands to kube-proxy
+//! count. The `EndpointSlice` is what the Service actually hands to kube-proxy
 //! and to every ingress controller, and the two come apart in ways nothing on
 //! screen could show — a `targetPort` no container names publishes nothing
 //! while every pod stays perfectly Ready, and a pod draining with
@@ -124,7 +124,7 @@ pub struct UnpublishedPod {
 pub struct ServicePublished {
     pub service: ObjectRef,
     pub source: EndpointSource,
-    /// How many EndpointSlices carried the answer. Zero for the other two
+    /// How many `EndpointSlices` carried the answer. Zero for the other two
     /// sources, which have no slices to count.
     pub slices: i32,
     pub ready: i32,
@@ -344,7 +344,7 @@ pub fn from_slices(
             }
         }
 
-        for endpoint in slice.endpoints.iter() {
+        for endpoint in &slice.endpoints {
             let read = endpoint_of(endpoint, &numbers, &ns);
             if let Some(target) = read.target.as_ref().filter(|t| t.kind == "Pod") {
                 let entry = held.entry(target.name.clone()).or_insert(false);

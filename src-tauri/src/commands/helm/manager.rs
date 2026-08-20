@@ -4,13 +4,13 @@
 
 use crate::cli::helm::HelmTool;
 use crate::cli::CliToolManager;
-use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 
-static HELM: Lazy<Mutex<CliToolManager<HelmTool>>> = Lazy::new(|| {
-    let tool = HelmTool::with_default_config();
-    Mutex::new(CliToolManager::new(tool))
-});
+static HELM: std::sync::LazyLock<Mutex<CliToolManager<HelmTool>>> =
+    std::sync::LazyLock::new(|| {
+        let tool = HelmTool::with_default_config();
+        Mutex::new(CliToolManager::new(tool))
+    });
 
 /// Get the global helm manager for internal use
 pub async fn helm_manager() -> tokio::sync::MutexGuard<'static, CliToolManager<HelmTool>> {

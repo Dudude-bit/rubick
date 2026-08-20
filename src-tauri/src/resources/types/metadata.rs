@@ -1,4 +1,4 @@
-//! Lighter resource types — Namespace, ConfigMap, Secret, Event.
+//! Lighter resource types — Namespace, `ConfigMap`, Secret, Event.
 //! Grouped because each is a single struct with one `From` impl,
 //! all driven by the same metadata-extraction pattern.
 

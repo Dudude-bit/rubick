@@ -8,7 +8,7 @@ use crate::client::{ClusterInfo, ContextInfo};
 use crate::error::Result;
 use crate::state::AppState;
 
-/// Read the persisted kubeconfig override path from AppConfig. Returns
+/// Read the persisted kubeconfig override path from `AppConfig`. Returns
 /// None on read failure (treated as "no override") so a corrupted
 /// config file doesn't lock the user out of the default `~/.kube/config`
 /// path entirely.
@@ -126,7 +126,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
 
     // Test connection and get cluster info (timeout to avoid hanging auth flows)
     let info = match timeout(
-        Duration::from_secs(120),
+        Duration::from_mins(2),
         state.client_manager.test_connection(&context),
     )
     .await
@@ -265,9 +265,10 @@ fn kubeconfig_candidates(
             .map(|entry| candidate(std::path::PathBuf::from(entry), "env"))
             .collect();
     }
-    let default = dirs::home_dir()
-        .map(|home| home.join(".kube").join("config"))
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.kube/config"));
+    let default = dirs::home_dir().map_or_else(
+        || std::path::PathBuf::from("~/.kube/config"),
+        |home| home.join(".kube").join("config"),
+    );
     vec![candidate(default, "default")]
 }
 

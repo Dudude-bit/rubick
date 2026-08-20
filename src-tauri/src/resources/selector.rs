@@ -6,11 +6,11 @@
 //! cannot afford to say it stops at a selector that is working.
 //!
 //! Two shapes, because Kubernetes has two and they disagree about the empty
-//! case. `metav1.LabelSelector` — a PodDisruptionBudget's, a workload's —
+//! case. `metav1.LabelSelector` — a `PodDisruptionBudget`'s, a workload's —
 //! matches **everything** when it is `{}` and nothing when it is absent. A
 //! Service's `spec.selector` is a plain `map[string]string` with no
 //! expressions at all, and an empty one selects **nothing**: the endpoints are
-//! written by hand, or the Service is an ExternalName. Collapsing the second
+//! written by hand, or the Service is an `ExternalName`. Collapsing the second
 //! onto the first is the one way a shared helper gets this wrong, so the
 //! shapes stay apart and the caller says which it has.
 

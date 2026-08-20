@@ -4,7 +4,7 @@
 //! per (cluster, kind, namespace) tuple. The watcher streams `applied`
 //! / `deleted` / `restarted` events; we collect them into ~50ms batches
 //! and forward those to the frontend over the same broadcast channel as
-//! the rest of the app's events. The frontend updates the TanStack
+//! the rest of the app's events. The frontend updates the `TanStack`
 //! Query cache directly via `setQueryData` — no refetch round-trip.
 //!
 //! Same deferred-start handshake as terminal-auth and log-stream lives
@@ -15,8 +15,8 @@
 //! (which the watcher always emits before its first applied burst)
 //! could land in the void.
 //!
-//! - `session`: WatchSession bookkeeping + RAII cleanup guard
-//! - `event`:   kube watcher Events → batched AppEvent::ResourceWatchEvent
+//! - `session`: `WatchSession` bookkeeping + RAII cleanup guard
+//! - `event`:   kube watcher Events → batched `AppEvent::ResourceWatchEvent`
 
 mod event;
 mod failure;
@@ -91,7 +91,7 @@ impl WatchManager {
     ///
     /// `K` is the typed resource kind from `k8s_openapi`.
     /// `transform` converts each watched resource into the shape the
-    /// frontend's TanStack Query cache holds (e.g. `ConfigMapInfo`,
+    /// frontend's `TanStack` Query cache holds (e.g. `ConfigMapInfo`,
     /// `PodInfo`). Returning `None` drops the event — used for
     /// resources the UI doesn't care about (system pods, etc.).
     ///
@@ -146,7 +146,7 @@ impl WatchManager {
     }
 
     /// Cluster-scoped sibling of `subscribe`. For resources like
-    /// Node, Namespace, PersistentVolume, StorageClass that don't
+    /// Node, Namespace, `PersistentVolume`, `StorageClass` that don't
     /// belong to any single namespace.
     pub fn subscribe_cluster<K, F, U>(
         &self,
@@ -235,7 +235,7 @@ impl WatchManager {
                     );
                     return;
                 }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                () = tokio::time::sleep(std::time::Duration::from_mins(1)) => {
                     tracing::warn!(
                         "Resource watch {} subscribe gate timed out after 60s; \
                          starting watcher anyway",

@@ -271,7 +271,7 @@ pub const WITHHELD_MARKER: &str = "<withheld — the app never shows a private k
 /// Not gated on the kind. A `data` map holding a PEM private key is a leak
 /// whether the object calls itself a Secret or not, and `kind` is a field
 /// the app would have to trust the response to carry. `binaryData` is walked
-/// for the same reason: it is a ConfigMap's base64 map, and a key put there
+/// for the same reason: it is a `ConfigMap`'s base64 map, and a key put there
 /// is no less a key than one in `data`.
 ///
 /// Returns the keys it blanked, so the surface can say what is missing
@@ -418,7 +418,7 @@ mod tests {
             .is_err());
     }
 
-    /// A ConfigMap is not a Secret, but people paste keys into them, and its
+    /// A `ConfigMap` is not a Secret, but people paste keys into them, and its
     /// YAML tab goes through the same door. No `type` field to lean on, and
     /// `binaryData` rather than `data` — both of which used to be a way past.
     #[test]

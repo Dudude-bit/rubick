@@ -10,7 +10,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
-/// Basic DaemonSet info for list views
+/// Basic `DaemonSet` info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DaemonSetInfo {
@@ -30,15 +30,15 @@ impl From<&DaemonSet> for DaemonSetInfo {
         Self {
             name: meta.name.clone().unwrap_or_default(),
             namespace: meta.namespace.clone().unwrap_or_default(),
-            desired: status.map(|s| s.desired_number_scheduled).unwrap_or(0),
-            current: status.map(|s| s.current_number_scheduled).unwrap_or(0),
-            ready: status.map(|s| s.number_ready).unwrap_or(0),
+            desired: status.map_or(0, |s| s.desired_number_scheduled),
+            current: status.map_or(0, |s| s.current_number_scheduled),
+            ready: status.map_or(0, |s| s.number_ready),
             created_at: meta.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }
 }
 
-/// Detailed DaemonSet info for detail view
+/// Detailed `DaemonSet` info for detail view
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DaemonSetDetailInfo {
@@ -60,7 +60,7 @@ pub struct DaemonSetDetailInfo {
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     /// `spec.selector` in the API's own text form — `app=demo`, and
-    /// `tier in (web,api)` where the DaemonSet claims its pods by a set-based
+    /// `tier in (web,api)` where the `DaemonSet` claims its pods by a set-based
     /// requirement. A map of match labels could not carry the second, and the
     /// page reading it listed no pods at all.
     pub selector: String,
@@ -89,9 +89,9 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             name: ds.name_any(),
             namespace: ds.namespace().unwrap_or_default(),
             uid: ds.uid().unwrap_or_default(),
-            desired: status.map(|s| s.desired_number_scheduled).unwrap_or(0),
-            current: status.map(|s| s.current_number_scheduled).unwrap_or(0),
-            ready: status.map(|s| s.number_ready).unwrap_or(0),
+            desired: status.map_or(0, |s| s.desired_number_scheduled),
+            current: status.map_or(0, |s| s.current_number_scheduled),
+            ready: status.map_or(0, |s| s.number_ready),
             up_to_date: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
             available: status.and_then(|s| s.number_available).unwrap_or(0),
             update_strategy: spec

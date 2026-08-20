@@ -177,7 +177,7 @@ pub enum AppEvent {
         lines: Vec<LogLineEvent>,
     },
     /// A batch of Kubernetes watch changes for one stream. Forwarded
-    /// to the frontend so it can update the TanStack Query cache
+    /// to the frontend so it can update the `TanStack` Query cache
     /// directly, replacing the old 2s polling refresh model. Each
     /// `resource` JSON is the typed resource serialized via the same
     /// path the existing list/get commands use.

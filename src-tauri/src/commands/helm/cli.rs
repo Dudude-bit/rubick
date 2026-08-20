@@ -36,7 +36,7 @@ async fn exec_helm_cli_with_context(
     let manager = helm_manager().await;
     let mut cmd = manager.command().await?;
     cmd = cmd
-        .args(args.iter().map(|s| s.to_string()))
+        .args(args.iter().map(std::string::ToString::to_string))
         .timeout(Duration::from_secs(timeout_secs));
 
     if let Some(ctx) = context {
@@ -189,7 +189,9 @@ async fn helm_install_or_upgrade(
 
     // Handle values - write to temp file if provided
     let temp_file = if let Some(values) = &options.values {
-        if !values.trim().is_empty() {
+        if values.trim().is_empty() {
+            None
+        } else {
             let temp_dir = std::env::temp_dir();
             let temp_path = temp_dir.join(format!("helm-values-{}.yaml", uuid::Uuid::new_v4()));
             std::fs::write(&temp_path, values).map_err(|e| {
@@ -200,14 +202,12 @@ async fn helm_install_or_upgrade(
             args.push("-f".to_string());
             args.push(temp_path.to_string_lossy().to_string());
             Some(temp_path)
-        } else {
-            None
         }
     } else {
         None
     };
 
-    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
     let result = exec_helm_cli_with_context(&args_refs, 300, context).await;
 
     // Clean up temp file

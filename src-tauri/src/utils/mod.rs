@@ -71,7 +71,7 @@ static DNS_SUBDOMAIN_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::ne
 });
 
 /// Check if a string is a valid DNS-1123 label (no dots allowed, max 63 chars)
-/// Used for: Pod, Deployment, Service, StatefulSet, DaemonSet, Job, CronJob, Namespace, Endpoints
+/// Used for: Pod, Deployment, Service, `StatefulSet`, `DaemonSet`, Job, `CronJob`, Namespace, Endpoints
 pub fn is_valid_dns_label(name: &str) -> bool {
     if name.is_empty() || name.len() > 63 {
         return false;
@@ -80,7 +80,7 @@ pub fn is_valid_dns_label(name: &str) -> bool {
 }
 
 /// Check if a string is a valid DNS-1123 subdomain (dots allowed, max 253 chars, each segment max 63 chars)
-/// Used for: CRD names, Node names, ConfigMap, Secret, PV, PVC, StorageClass, Ingress, Helm releases
+/// Used for: CRD names, Node names, `ConfigMap`, Secret, PV, PVC, `StorageClass`, Ingress, Helm releases
 pub fn is_valid_dns_subdomain(name: &str) -> bool {
     if name.is_empty() || name.len() > 253 {
         return false;
@@ -159,7 +159,7 @@ mod tests {
         );
         // Empty string falls back to fallback
         assert_eq!(
-            normalize_namespace(Some("".to_string()), "default".to_string()),
+            normalize_namespace(Some(String::new()), "default".to_string()),
             Some("default".to_string())
         );
         assert_eq!(
@@ -167,9 +167,9 @@ mod tests {
             Some("default".to_string())
         );
         // Both empty - returns None
-        assert_eq!(normalize_namespace(None, "".to_string()), None);
+        assert_eq!(normalize_namespace(None, String::new()), None);
         assert_eq!(
-            normalize_namespace(Some("".to_string()), "".to_string()),
+            normalize_namespace(Some(String::new()), String::new()),
             None
         );
     }
@@ -196,11 +196,11 @@ mod tests {
         );
         // Empty namespace falls back to fallback successfully
         assert_eq!(
-            require_namespace(Some("".to_string()), "default".to_string()).unwrap(),
+            require_namespace(Some(String::new()), "default".to_string()).unwrap(),
             "default".to_string()
         );
         // Both empty - error
-        assert!(require_namespace(None, "".to_string()).is_err());
-        assert!(require_namespace(Some("".to_string()), "".to_string()).is_err());
+        assert!(require_namespace(None, String::new()).is_err());
+        assert!(require_namespace(Some(String::new()), String::new()).is_err());
     }
 }

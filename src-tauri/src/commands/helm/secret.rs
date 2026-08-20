@@ -149,7 +149,7 @@ pub async fn list_helm_releases_native(
                         // Keep only the latest revision for each release
                         let should_insert = releases_map
                             .get(&key)
-                            .map_or(true, |existing| release.version > existing.revision);
+                            .is_none_or(|existing| release.version > existing.revision);
 
                         if should_insert {
                             let helm_release = HelmRelease {

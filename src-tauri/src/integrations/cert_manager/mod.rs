@@ -35,6 +35,7 @@ pub const ID: &str = "cert-manager";
 const MARKER_CRD: &str = "certificates.cert-manager.io";
 
 /// Is cert-manager installed, and which version.
+#[must_use]
 pub fn detect(crds: &[CustomResourceDefinition]) -> DetectedExtension {
     let installed = crds.iter().any(|crd| crd.name_any() == MARKER_CRD);
     DetectedExtension {

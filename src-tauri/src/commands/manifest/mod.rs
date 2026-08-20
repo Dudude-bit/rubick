@@ -3,7 +3,7 @@
 //! Provides Kubernetes API-based manifest operations for applying and
 //! validating YAML manifests.
 //!
-//! - `parse`:    multi-document YAML → DynamicObject + ApiResource
+//! - `parse`:    multi-document YAML → `DynamicObject` + `ApiResource`
 //! - `commands`: validate / apply / delete / get manifest
 
 mod commands;

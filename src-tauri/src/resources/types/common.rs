@@ -13,6 +13,7 @@ use crate::resources::serialization::OwnerReference;
 use super::pod_display::is_sidecar;
 
 /// Extract owner references from Kubernetes metadata
+#[must_use]
 pub fn extract_owner_references(
     owner_refs: Option<&Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference>>,
 ) -> Vec<OwnerReference> {
@@ -65,7 +66,7 @@ pub enum EnvVarSourceType {
     ResourceFieldRef,
 }
 
-/// EnvFrom source reference (bulk import from ConfigMap/Secret)
+/// `EnvFrom` source reference (bulk import from ConfigMap/Secret)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvFromInfo {
@@ -264,6 +265,7 @@ pub struct ContainerInfo {
 
 impl ContainerInfo {
     /// A `.spec.containers` entry, matched to `.status.containerStatuses`.
+    #[must_use]
     pub fn from_container(container: &Container, pod_status: Option<&PodStatus>) -> Self {
         Self::build(
             container,
@@ -275,6 +277,7 @@ impl ContainerInfo {
     /// A `.spec.initContainers` entry, matched to
     /// `.status.initContainerStatuses` — a different list, which is why
     /// init containers were invisible while this only read one of them.
+    #[must_use]
     pub fn from_init_container(container: &Container, pod_status: Option<&PodStatus>) -> Self {
         let phase = if is_sidecar(container) {
             ContainerPhase::Sidecar

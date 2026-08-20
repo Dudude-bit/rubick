@@ -16,6 +16,7 @@ pub struct SearchPathEntry {
 }
 
 impl SearchPathEntry {
+    #[must_use]
     pub fn probe(path: PathBuf) -> Self {
         Self {
             exists: path.is_dir(),
@@ -71,6 +72,7 @@ pub struct InstallationInfo {
 }
 
 impl InstallationInfo {
+    #[must_use]
     pub fn collect() -> Self {
         Self {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -117,6 +119,7 @@ fn user_for(raw: &Kubeconfig, context: &str) -> Option<String> {
 }
 
 /// How each context authenticates.
+#[must_use]
 pub fn contexts_from(raw: &Kubeconfig) -> Vec<DiagnosticContext> {
     raw.contexts
         .iter()
@@ -160,6 +163,7 @@ pub fn contexts_from(raw: &Kubeconfig) -> Vec<DiagnosticContext> {
 /// Keyed in name order: two reads of an unchanged machine must produce the
 /// same list in the same order, or the panel appears to change when nothing
 /// did.
+#[must_use]
 pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<PluginStatus> {
     let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -214,11 +218,10 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
     };
 
-    let path = client
-        .kubeconfig_path()
-        .await
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "unknown — loaded before the path was recorded".to_string());
+    let path = client.kubeconfig_path().await.map_or_else(
+        || "unknown — loaded before the path was recorded".to_string(),
+        |p| p.to_string_lossy().into_owned(),
+    );
 
     let contexts = contexts_from(&raw);
     let plugins = plugins_from(&contexts, &raw);

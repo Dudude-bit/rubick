@@ -22,6 +22,7 @@ impl PathResolver {
     /// assert_eq!(PathResolver::separator(), ':');
     /// ```
     #[inline]
+    #[must_use]
     pub fn separator() -> char {
         if cfg!(windows) {
             ';'
@@ -47,21 +48,22 @@ impl PathResolver {
     /// let paths = PathResolver::search_paths("kubectl");
     /// assert!(!paths.is_empty());
     /// ```
+    #[must_use]
     pub fn search_paths(binary_name: &str) -> Vec<PathBuf> {
         let mut paths = Vec::new();
 
         #[cfg(not(windows))]
         {
             // Homebrew paths (macOS)
-            paths.push(PathBuf::from(format!("/opt/homebrew/bin/{}", binary_name))); // ARM macOS
-            paths.push(PathBuf::from(format!("/usr/local/bin/{}", binary_name))); // Intel macOS, Linux
+            paths.push(PathBuf::from(format!("/opt/homebrew/bin/{binary_name}"))); // ARM macOS
+            paths.push(PathBuf::from(format!("/usr/local/bin/{binary_name}"))); // Intel macOS, Linux
 
             // System paths
-            paths.push(PathBuf::from(format!("/usr/bin/{}", binary_name)));
-            paths.push(PathBuf::from(format!("/bin/{}", binary_name)));
+            paths.push(PathBuf::from(format!("/usr/bin/{binary_name}")));
+            paths.push(PathBuf::from(format!("/bin/{binary_name}")));
 
             // Snap (Linux)
-            paths.push(PathBuf::from(format!("/snap/bin/{}", binary_name)));
+            paths.push(PathBuf::from(format!("/snap/bin/{binary_name}")));
 
             // User local paths
             if let Some(home) = dirs::home_dir() {
@@ -107,7 +109,7 @@ impl PathResolver {
     /// # Arguments
     ///
     /// * `shell_path` - Optional PATH string from shell (e.g., from `$PATH` env var)
-    /// * `fallback_paths` - Fallback paths to include if not in shell_path
+    /// * `fallback_paths` - Fallback paths to include if not in `shell_path`
     ///
     /// # Returns
     ///
@@ -125,6 +127,7 @@ impl PathResolver {
     /// assert!(merged.contains("/usr/bin"));
     /// assert!(merged.contains("/opt/homebrew/bin"));
     /// ```
+    #[must_use]
     pub fn merge_paths(shell_path: Option<&str>, fallback_paths: &[PathBuf]) -> String {
         let separator = Self::separator();
         let mut all_paths: Vec<PathBuf> = Vec::new();
@@ -158,6 +161,7 @@ impl PathResolver {
     /// Get the standard fallback directories for CLI tools.
     ///
     /// Returns common installation directories based on platform conventions.
+    #[must_use]
     pub fn fallback_directories() -> Vec<PathBuf> {
         let mut paths = Vec::new();
 

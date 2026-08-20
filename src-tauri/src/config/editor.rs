@@ -46,10 +46,10 @@ pub struct InfrastructureBuilderConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct InfrastructureBuilderState {
-    /// ReactFlow nodes as JSON
+    /// `ReactFlow` nodes as JSON
     #[serde(default)]
     pub nodes: Vec<serde_json::Value>,
-    /// ReactFlow edges as JSON
+    /// `ReactFlow` edges as JSON
     #[serde(default)]
     pub edges: Vec<serde_json::Value>,
     /// YAML text content

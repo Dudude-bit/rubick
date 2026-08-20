@@ -3,7 +3,7 @@
 //!
 //! A crashed pod takes its logs with it. `kubectl logs --previous` reaches
 //! exactly one run back and only while the pod object still exists; once the
-//! ReplicaSet has replaced it there is nothing left to ask, and no amount of
+//! `ReplicaSet` has replaced it there is nothing left to ask, and no amount of
 //! client-side buffering brings it back. Loki is where those lines went, if
 //! anybody was shipping them.
 //!
@@ -15,7 +15,7 @@
 //!
 //! What is **not** here is the app's own log query. The viewer's chips, its
 //! intake filter and its level thresholds stay what they are — evaluated in
-//! `logs::filter` over lines this app holds. LogQL is only the selector this
+//! `logs::filter` over lines this app holds. `LogQL` is only the selector this
 //! module sends to fetch a range, and rebuilding the reader's query on top
 //! of it would mean two filter languages that must agree and one that
 //! silently would not.
@@ -340,7 +340,7 @@ async fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
 /// One page of a range, newest-first on the wire and oldest-first on the way
 /// out.
 ///
-/// `selector` is the LogQL stream selector built in
+/// `selector` is the `LogQL` stream selector built in
 /// `src/integrations/loki/queries.ts`, where it is pure and unit-tested.
 /// This module does not know what a pod is.
 ///

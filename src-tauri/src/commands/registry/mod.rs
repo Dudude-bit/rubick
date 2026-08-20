@@ -1,7 +1,7 @@
 //! Container/image registry commands — credentials + image search.
 //!
 //! - `types`:  frontend DTOs + Docker `config.json` decoding shapes
-//! - `auth`:   credential storage on AppConfig + import_docker_config
+//! - `auth`:   credential storage on `AppConfig` + `import_docker_config`
 //! - `search`: per-provider image search dispatcher
 
 mod auth;

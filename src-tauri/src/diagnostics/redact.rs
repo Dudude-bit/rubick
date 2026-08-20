@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use super::Diagnostics;
 
 /// Replace every identifying string in the report.
+#[must_use]
 pub fn redacted(mut d: Diagnostics) -> Diagnostics {
     // Longest first: a context named `prod` is a substring of `prod-eu`, and
     // replacing the short one first would leave `context-1-eu` behind.

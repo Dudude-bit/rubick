@@ -30,10 +30,13 @@ pub async fn delete_debug_pod(
     let pod = api.get(&pod_name).await?;
     let labels = pod.metadata.labels.unwrap_or_default();
 
-    if labels.get("k8s-gui/debug-pod").map(|v| v.as_str()) != Some("true") {
+    if labels
+        .get("k8s-gui/debug-pod")
+        .map(std::string::String::as_str)
+        != Some("true")
+    {
         return Err(Error::InvalidInput(format!(
-            "Pod '{}' is not a debug pod created by k8s-gui",
-            pod_name
+            "Pod '{pod_name}' is not a debug pod created by k8s-gui"
         )));
     }
 
@@ -54,7 +57,7 @@ pub async fn get_debug_status(
         .debug_operations
         .get(&operation_id)
         .map(|r| r.clone())
-        .ok_or_else(|| Error::InvalidInput(format!("Operation {} not found", operation_id)))?;
+        .ok_or_else(|| Error::InvalidInput(format!("Operation {operation_id} not found")))?;
 
     // Check timeout
     let now = SystemTime::now()
@@ -62,7 +65,7 @@ pub async fn get_debug_status(
         .unwrap_or_default()
         .as_secs();
 
-    if now > operation.created_at + operation.timeout_seconds as u64 {
+    if now > operation.created_at + u64::from(operation.timeout_seconds) {
         // Don't remove on timeout - user may choose "Keep Waiting"
         return Ok(DebugStatus::Timeout);
     }
@@ -128,8 +131,7 @@ pub async fn extend_debug_timeout(
         Ok(())
     } else {
         Err(Error::InvalidInput(format!(
-            "Operation {} not found",
-            operation_id
+            "Operation {operation_id} not found"
         )))
     }
 }
@@ -145,7 +147,7 @@ pub async fn cancel_debug_operation(
         .debug_operations
         .remove(&operation_id)
         .map(|(_, op)| op)
-        .ok_or_else(|| Error::InvalidInput(format!("Operation {} not found", operation_id)))?;
+        .ok_or_else(|| Error::InvalidInput(format!("Operation {operation_id} not found")))?;
 
     // For CopyPod and NodeDebug, delete the created pod
     match operation.operation_type {

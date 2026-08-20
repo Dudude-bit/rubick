@@ -35,17 +35,15 @@ async fn crd_to_dynamic_api(
         crate::commands::helpers::get_cluster_resource(crd_name.to_string(), state.clone()).await?;
 
     let spec = &crd.spec;
-    let version = spec
-        .versions
-        .iter()
-        .find(|v| v.storage)
-        .map(|v| v.name.clone())
-        .unwrap_or_else(|| {
+    let version = spec.versions.iter().find(|v| v.storage).map_or_else(
+        || {
             spec.versions
                 .first()
                 .map(|v| v.name.clone())
                 .unwrap_or_default()
-        });
+        },
+        |v| v.name.clone(),
+    );
 
     let api_version = if spec.group.is_empty() {
         version.clone()

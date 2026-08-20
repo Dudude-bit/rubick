@@ -19,7 +19,7 @@ pub struct StatefulSetReplicaInfo {
     pub current: i32,
 }
 
-/// Basic StatefulSet info for list views
+/// Basic `StatefulSet` info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatefulSetInfo {
@@ -48,7 +48,7 @@ impl From<&StatefulSet> for StatefulSetInfo {
     }
 }
 
-/// Detailed StatefulSet info for detail view
+/// Detailed `StatefulSet` info for detail view
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatefulSetDetailInfo {

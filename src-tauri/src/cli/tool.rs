@@ -10,7 +10,7 @@ use tokio::sync::OnceCell;
 /// Universal CLI tool abstraction.
 ///
 /// Implement this trait to define a new CLI tool (kubectl, helm, gcloud, etc.).
-/// The CliToolManager will handle path resolution, caching, and availability checks.
+/// The `CliToolManager` will handle path resolution, caching, and availability checks.
 pub trait CliTool: Send + Sync {
     /// Human-readable name of the tool (e.g., "kubectl", "helm")
     fn name(&self) -> &'static str;
@@ -60,7 +60,7 @@ pub struct CliAvailability {
 /// Generic CLI tool manager with path resolution and caching.
 ///
 /// Manages path resolution, availability checking, and command execution
-/// for any CLI tool implementing the CliTool trait.
+/// for any CLI tool implementing the `CliTool` trait.
 pub struct CliToolManager<T: CliTool> {
     tool: T,
     resolved_path: OnceCell<PathBuf>,
@@ -95,14 +95,13 @@ impl<T: CliTool> CliToolManager<T> {
                     // Cache the result
                     let _ = self.resolved_path.set(path.clone());
                     return Ok(path);
-                } else {
-                    // Custom path was specified but is invalid
-                    return Err(Error::Plugin(PluginError::NotFound(format!(
-                        "{} not found at custom path: {}. Check your Settings.",
-                        self.tool.name(),
-                        custom_path
-                    ))));
                 }
+                // Custom path was specified but is invalid
+                return Err(Error::Plugin(PluginError::NotFound(format!(
+                    "{} not found at custom path: {}. Check your Settings.",
+                    self.tool.name(),
+                    custom_path
+                ))));
             }
         }
 
@@ -146,20 +145,19 @@ impl<T: CliTool> CliToolManager<T> {
                         path: Some(custom_path),
                         searched_paths,
                     };
-                } else {
-                    // Custom path was specified but is invalid - return error immediately
-                    return CliAvailability {
-                        available: false,
-                        version: None,
-                        error: Some(format!(
-                            "{} not found at custom path: {}",
-                            self.tool.name(),
-                            custom_path
-                        )),
-                        path: None,
-                        searched_paths,
-                    };
                 }
+                // Custom path was specified but is invalid - return error immediately
+                return CliAvailability {
+                    available: false,
+                    version: None,
+                    error: Some(format!(
+                        "{} not found at custom path: {}",
+                        self.tool.name(),
+                        custom_path
+                    )),
+                    path: None,
+                    searched_paths,
+                };
             }
         }
 
@@ -234,7 +232,7 @@ impl<T: CliTool> CliToolManager<T> {
     }
 }
 
-/// Convert ShellError to our Error type for convenience
+/// Convert `ShellError` to our Error type for convenience
 impl From<ShellError> for Error {
     fn from(err: ShellError) -> Self {
         Error::Plugin(PluginError::ExecutionFailed(err.to_string()))
@@ -309,13 +307,10 @@ mod tests {
         let result = manager.resolve_path().await;
 
         // This might succeed or fail depending on system, but shouldn't panic
-        match result {
-            Ok(path) => {
-                assert!(!path.to_string_lossy().is_empty());
-            }
-            Err(_) => {
-                // Expected on some systems
-            }
+        if let Ok(path) = result {
+            assert!(!path.to_string_lossy().is_empty());
+        } else {
+            // Expected on some systems
         }
     }
 
@@ -372,13 +367,10 @@ mod tests {
         // Second resolution should use cache
         let result2 = manager.resolve_path().await;
 
-        match (result1, result2) {
-            (Ok(path1), Ok(path2)) => {
-                assert_eq!(path1, path2, "Cached path should match");
-            }
-            _ => {
-                // Both should have same result (both Ok or both Err)
-            }
+        if let (Ok(path1), Ok(path2)) = (result1, result2) {
+            assert_eq!(path1, path2, "Cached path should match");
+        } else {
+            // Both should have same result (both Ok or both Err)
         }
     }
 

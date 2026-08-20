@@ -39,6 +39,7 @@ pub struct CommandOutput {
 
 impl CommandOutput {
     /// Returns true if the command exited with code 0.
+    #[must_use]
     pub fn success(&self) -> bool {
         self.exit_code == Some(0)
     }
@@ -55,7 +56,7 @@ pub struct ShellCommand {
 
 impl ShellCommand {
     /// Create a new shell command.
-    /// Accepts any type that can be converted to `OsStr` (String, &str, PathBuf, &Path, OsString, etc.)
+    /// Accepts any type that can be converted to `OsStr` (String, &str, `PathBuf`, &Path, `OsString`, etc.)
     pub fn new(program: impl AsRef<OsStr>) -> Self {
         Self {
             program: program.as_ref().to_owned(),
@@ -90,6 +91,7 @@ impl ShellCommand {
     }
 
     /// Set the command timeout (default: 30s).
+    #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
@@ -183,7 +185,7 @@ mod tests {
             .arg("hello")
             .args(["world", "!"])
             .env("FOO", "bar")
-            .timeout(Duration::from_secs(60));
+            .timeout(Duration::from_mins(1));
 
         assert_eq!(cmd.program, OsString::from("echo"));
         assert_eq!(
@@ -195,7 +197,7 @@ mod tests {
             ]
         );
         assert_eq!(cmd.envs.get("FOO"), Some(&"bar".to_string()));
-        assert_eq!(cmd.timeout, Duration::from_secs(60));
+        assert_eq!(cmd.timeout, Duration::from_mins(1));
     }
 
     #[tokio::test]

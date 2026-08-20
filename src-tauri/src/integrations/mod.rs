@@ -203,7 +203,7 @@ mod tests {
     /// its CRDs rather than on any one of them. A GKE cluster that has never
     /// been given a Google-managed certificate has no
     /// `managedcertificates.networking.gke.io` at all, and reporting the
-    /// Ingress stack absent there would hide the BackendConfigs it does have.
+    /// Ingress stack absent there would hide the `BackendConfigs` it does have.
     #[test]
     fn any_one_of_a_clouds_crds_is_the_install() {
         let by_id = |id: &str| MARKERS.iter().find(|(name, _)| *name == id).unwrap().1;

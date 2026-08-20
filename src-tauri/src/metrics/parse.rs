@@ -133,7 +133,7 @@ fn parse_usage_memory(usage: &ContainerUsage) -> Option<u64> {
 
 /// Generic fetch+parse for the Metrics API. Used by both
 /// `get_pod_metrics` and `get_node_metrics` — they differ only in
-/// the kind string (PodMetrics vs NodeMetrics) and the parser
+/// the kind string (`PodMetrics` vs `NodeMetrics`) and the parser
 /// function. On API error returns `(metrics_status_from_error, vec![])`
 /// so the frontend can render a "Metrics API not installed / forbidden"
 /// banner without seeing the call as a hard failure.

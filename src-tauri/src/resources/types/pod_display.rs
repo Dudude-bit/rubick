@@ -98,6 +98,7 @@ fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
 }
 
 /// The status kubectl would print for this pod.
+#[must_use]
 pub fn display_status(pod: &Pod) -> String {
     let status = pod.status.as_ref();
     let phase = status
@@ -122,7 +123,7 @@ pub fn display_status(pod: &Pod) -> String {
         .spec
         .as_ref()
         .and_then(|s| s.init_containers.as_ref())
-        .map_or(0, |c| c.len());
+        .map_or(0, std::vec::Vec::len);
 
     let blocking = blocking_init(pod);
     if let Some((index, cs)) = blocking {
@@ -194,6 +195,7 @@ pub fn display_status(pod: &Pod) -> String {
 /// Not a plain sum over `containerStatuses`: a sidecar's restarts count
 /// too, and while a pod is still initializing the number that matters is
 /// the init containers' own.
+#[must_use]
 pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
     fn note(slot: &mut Option<DateTime<Utc>>, cs: &ContainerStatus) {
         if let Some(at) = last_terminated(cs).and_then(|t| t.finished_at.as_ref()) {

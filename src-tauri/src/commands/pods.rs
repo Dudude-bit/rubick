@@ -14,11 +14,11 @@ use crate::state::AppState;
 ///
 /// Supports filtering by:
 /// - namespace: Kubernetes namespace
-/// - label_selector: Label selector string (e.g., "app=nginx,env=prod")
-/// - selector: Label selector as key-value map (alternative to label_selector)
-/// - field_selector: Field selector string
-/// - node_name: Filter pods running on a specific node
-/// - status_filter: Filter by pod phase (Running, Pending, Failed, etc.)
+/// - `label_selector`: Label selector string (e.g., "app=nginx,env=prod")
+/// - selector: Label selector as key-value map (alternative to `label_selector`)
+/// - `field_selector`: Field selector string
+/// - `node_name`: Filter pods running on a specific node
+/// - `status_filter`: Filter by pod phase (Running, Pending, Failed, etc.)
 /// - limit: Maximum number of pods to return
 #[tauri::command]
 pub async fn list_pods(

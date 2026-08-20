@@ -14,11 +14,13 @@ pub struct HelmTool {
 
 impl HelmTool {
     /// Create a new Helm tool instance
+    #[must_use]
     pub fn new(config: Arc<AppConfig>) -> Self {
         Self { config }
     }
 
     /// Create with default config
+    #[must_use]
     pub fn with_default_config() -> Self {
         let config = AppConfig::load().unwrap_or_default();
         Self {

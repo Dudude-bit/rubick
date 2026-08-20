@@ -15,17 +15,15 @@ impl From<&CustomResourceDefinition> for CrdInfo {
         let names = &spec.names;
 
         // Find storage version
-        let storage_version = spec
-            .versions
-            .iter()
-            .find(|v| v.storage)
-            .map(|v| v.name.clone())
-            .unwrap_or_else(|| {
+        let storage_version = spec.versions.iter().find(|v| v.storage).map_or_else(
+            || {
                 spec.versions
                     .first()
                     .map(|v| v.name.clone())
                     .unwrap_or_default()
-            });
+            },
+            |v| v.name.clone(),
+        );
 
         CrdInfo {
             name: crd.name_any(),
@@ -101,24 +99,24 @@ impl From<&CustomResourceDefinition> for CrdDetailInfo {
             })
             .unwrap_or_default();
 
-        let accepted = status
-            .and_then(|s| s.accepted_names.as_ref())
-            .map(|a| CrdAcceptedNames {
-                kind: a.kind.clone(),
-                plural: a.plural.clone(),
-                singular: a.singular.clone(),
-                short_names: a.short_names.clone().unwrap_or_default(),
-                categories: a.categories.clone().unwrap_or_default(),
-                list_kind: a.list_kind.clone(),
-            })
-            .unwrap_or_else(|| CrdAcceptedNames {
+        let accepted = status.and_then(|s| s.accepted_names.as_ref()).map_or_else(
+            || CrdAcceptedNames {
                 kind: names.kind.clone(),
                 plural: names.plural.clone(),
                 singular: names.singular.clone(),
                 short_names: names.short_names.clone().unwrap_or_default(),
                 categories: names.categories.clone().unwrap_or_default(),
                 list_kind: names.list_kind.clone(),
-            });
+            },
+            |a| CrdAcceptedNames {
+                kind: a.kind.clone(),
+                plural: a.plural.clone(),
+                singular: a.singular.clone(),
+                short_names: a.short_names.clone().unwrap_or_default(),
+                categories: a.categories.clone().unwrap_or_default(),
+                list_kind: a.list_kind.clone(),
+            },
+        );
 
         CrdDetailInfo {
             name: crd.name_any(),
@@ -211,6 +209,7 @@ fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
     }
 }
 
+#[must_use]
 pub fn dynamic_object_to_custom_resource_info(obj: &DynamicObject) -> CustomResourceInfo {
     let f = extract_common_fields(obj);
     CustomResourceInfo {

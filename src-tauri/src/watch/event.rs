@@ -1,6 +1,6 @@
 //! Collect `kube::runtime::watcher::Event<K>` into the frontend-facing
 //! `AppEvent::ResourceWatchEvent` batches. Centralised here so the
-//! op-tag mapping (Apply / Delete / Init* / InitDone) and the batching
+//! op-tag mapping (Apply / Delete / Init* / `InitDone`) and the batching
 //! rule live in one place.
 
 use crate::state::{AppEvent, WatchChange, WatchOp};

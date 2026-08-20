@@ -34,6 +34,7 @@ pub struct PodExecAdapter {
 
 impl PodExecAdapter {
     /// Create new pod exec adapter
+    #[must_use]
     pub fn new(
         client: Client,
         namespace: String,

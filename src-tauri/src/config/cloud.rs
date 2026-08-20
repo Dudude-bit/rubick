@@ -186,6 +186,7 @@ impl AzureProfile {
 impl CloudConfig {
     /// Get GCP profile for a context
     /// Returns the profile if bound, or None to use ADC
+    #[must_use]
     pub fn get_gcp_profile_for_context(&self, context: &str) -> Option<&GcpProfile> {
         self.context_bindings
             .get(context)
@@ -195,6 +196,7 @@ impl CloudConfig {
 
     /// Get Azure profile for a context
     /// Returns the profile if bound, or None to use default az login
+    #[must_use]
     pub fn get_azure_profile_for_context(&self, context: &str) -> Option<&AzureProfile> {
         self.context_bindings
             .get(context)

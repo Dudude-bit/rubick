@@ -247,7 +247,7 @@ pub async fn debug_node(
     let api: Api<Pod> = ctx.namespaced_api();
     let ns = require_namespace(ctx.namespace.clone(), "default".to_string())?;
 
-    let debug_pod_name = generate_debug_pod_name(&format!("node-{}", node_name));
+    let debug_pod_name = generate_debug_pod_name(&format!("node-{node_name}"));
     let container_name = "debugger".to_string();
 
     // Build command - default to shell if not specified

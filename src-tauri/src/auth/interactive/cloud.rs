@@ -11,22 +11,22 @@ use crate::cli::CliToolManager;
 use crate::config::AppConfig;
 use crate::error::Result;
 use kube::config::ExecConfig;
-use once_cell::sync::Lazy;
 use std::path::PathBuf;
 
 use super::cred::ExecCredentialStatus;
 
 // Global cloud CLI managers
-static GCLOUD: Lazy<CliToolManager<GcloudTool>> =
-    Lazy::new(|| CliToolManager::new(GcloudTool::new()));
+static GCLOUD: std::sync::LazyLock<CliToolManager<GcloudTool>> =
+    std::sync::LazyLock::new(|| CliToolManager::new(GcloudTool::new()));
 
-static GKE_AUTH_PLUGIN: Lazy<CliToolManager<GkeAuthPluginTool>> =
-    Lazy::new(|| CliToolManager::new(GkeAuthPluginTool::new()));
+static GKE_AUTH_PLUGIN: std::sync::LazyLock<CliToolManager<GkeAuthPluginTool>> =
+    std::sync::LazyLock::new(|| CliToolManager::new(GkeAuthPluginTool::new()));
 
-static AZ: Lazy<CliToolManager<AzTool>> = Lazy::new(|| CliToolManager::new(AzTool::new()));
+static AZ: std::sync::LazyLock<CliToolManager<AzTool>> =
+    std::sync::LazyLock::new(|| CliToolManager::new(AzTool::new()));
 
-static KUBELOGIN: Lazy<CliToolManager<KubeloginTool>> =
-    Lazy::new(|| CliToolManager::new(KubeloginTool::new()));
+static KUBELOGIN: std::sync::LazyLock<CliToolManager<KubeloginTool>> =
+    std::sync::LazyLock::new(|| CliToolManager::new(KubeloginTool::new()));
 
 /// Try native authentication for cloud providers (GKE, AKS).
 /// Returns `None` if native auth is not applicable or disabled.
@@ -41,7 +41,7 @@ pub(super) async fn try_native_cloud_auth(
     if is_gke_exec_command(command) {
         // Get profile for this context, or use defaults (ADC)
         let gcp_profile = config.cloud.get_gcp_profile_for_context(context);
-        let prefer_native = gcp_profile.map(|p| p.prefer_native_auth).unwrap_or(true);
+        let prefer_native = gcp_profile.is_none_or(|p| p.prefer_native_auth);
 
         if prefer_native {
             tracing::info!(
@@ -79,7 +79,7 @@ pub(super) async fn try_native_cloud_auth(
     if is_aks_exec_command(command) {
         // Get profile for this context, or use defaults
         let azure_profile = config.cloud.get_azure_profile_for_context(context);
-        let prefer_native = azure_profile.map(|p| p.prefer_native_auth).unwrap_or(true);
+        let prefer_native = azure_profile.is_none_or(|p| p.prefer_native_auth);
 
         if prefer_native {
             tracing::info!(
@@ -96,7 +96,7 @@ pub(super) async fn try_native_cloud_auth(
                 .and_then(|i| i.tenant_id.clone())
                 .or_else(|| azure_profile.and_then(|p| p.tenant_id.clone()));
 
-            let use_cli_fallback = azure_profile.map(|p| p.use_cli_fallback).unwrap_or(false);
+            let use_cli_fallback = azure_profile.is_some_and(|p| p.use_cli_fallback);
             let auth = AzureAksAuth::new(use_cli_fallback, tenant_id);
 
             match auth.authenticate().await {

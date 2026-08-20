@@ -87,12 +87,14 @@ fn read_backend(backend: &IngressBackend) -> (String, String, Option<String>) {
         .service
         .as_ref()
         .and_then(|s| s.port.as_ref())
-        .map(|p| {
-            p.name
-                .clone()
-                .unwrap_or_else(|| p.number.map_or_else(|| "?".to_string(), |n| n.to_string()))
-        })
-        .unwrap_or_else(|| "?".to_string());
+        .map_or_else(
+            || "?".to_string(),
+            |p| {
+                p.name
+                    .clone()
+                    .unwrap_or_else(|| p.number.map_or_else(|| "?".to_string(), |n| n.to_string()))
+            },
+        );
 
     (backend_service, backend_port, resource_backend)
 }
@@ -328,8 +330,7 @@ impl From<&Endpoints> for EndpointsInfo {
 
         let subsets = ep
             .subsets
-            .as_ref()
-            .map(|s| s.clone()) // Endpoints subsets are already structured, but we need to map to our structs
+            .clone() // Endpoints subsets are already structured, but we need to map to our structs
             .unwrap_or_default()
             .into_iter()
             .map(|subset| {

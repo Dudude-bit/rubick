@@ -23,7 +23,7 @@ pub async fn init_user_path() {
 
 /// Get the cached user PATH.
 pub fn get_user_path() -> &'static str {
-    USER_PATH.get().map(|s| s.as_str()).unwrap_or("")
+    USER_PATH.get().map_or("", std::string::String::as_str)
 }
 
 /// Resolve user PATH by merging shell PATH with known common locations.

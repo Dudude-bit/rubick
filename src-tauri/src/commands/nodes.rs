@@ -139,13 +139,11 @@ pub async fn drain_node(
             .metadata
             .owner_references
             .as_ref()
-            .map(|refs| refs.is_empty())
-            .unwrap_or(true);
+            .is_none_or(std::vec::Vec::is_empty);
 
         if is_unmanaged && !force {
             eviction_errors.push(format!(
-                "Pod {}/{} is not managed by a controller. Use --force to delete.",
-                namespace, pod_name
+                "Pod {namespace}/{pod_name} is not managed by a controller. Use --force to delete."
             ));
             continue;
         }
@@ -155,13 +153,11 @@ pub async fn drain_node(
             .spec
             .as_ref()
             .and_then(|s| s.volumes.as_ref())
-            .map(|volumes| volumes.iter().any(|v| v.empty_dir.is_some()))
-            .unwrap_or(false);
+            .is_some_and(|volumes| volumes.iter().any(|v| v.empty_dir.is_some()));
 
         if has_local_storage && !force {
             eviction_errors.push(format!(
-                "Pod {}/{} has local storage (emptyDir). Use --force to delete.",
-                namespace, pod_name
+                "Pod {namespace}/{pod_name} has local storage (emptyDir). Use --force to delete."
             ));
             continue;
         }
@@ -176,7 +172,7 @@ pub async fn drain_node(
                 tracing::info!("Successfully evicted pod {}/{}", namespace, pod_name);
             }
             Err(e) => {
-                let error_msg = format!("Failed to evict pod {}/{}: {}", namespace, pod_name, e);
+                let error_msg = format!("Failed to evict pod {namespace}/{pod_name}: {e}");
                 tracing::warn!("{}", error_msg);
 
                 // If force is enabled, try to delete the pod directly
@@ -184,8 +180,7 @@ pub async fn drain_node(
                     tracing::info!("Force deleting pod {}/{}", namespace, pod_name);
                     if let Err(delete_err) = pod_api.delete(&pod_name, &Default::default()).await {
                         eviction_errors.push(format!(
-                            "Failed to force delete pod {}/{}: {}",
-                            namespace, pod_name, delete_err
+                            "Failed to force delete pod {namespace}/{pod_name}: {delete_err}"
                         ));
                     }
                 } else {

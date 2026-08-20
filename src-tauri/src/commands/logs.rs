@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 /// never loses a batch; short enough that a frontend which crashed
 /// between starting a stream and subscribing to it does not pin one open
 /// for the life of the process.
-const SUBSCRIBE_TIMEOUT: Duration = Duration::from_secs(60);
+const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// How many lines to read when the caller does not say.
 ///

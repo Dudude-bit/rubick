@@ -38,7 +38,7 @@ impl GcpGkeAuth {
         }
     }
 
-    /// Get an access token using gcp_auth
+    /// Get an access token using `gcp_auth`
     async fn get_token(&self) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
         let provider = self.create_auth_provider().await?;
 
@@ -125,6 +125,7 @@ impl AuthProvider for GcpGkeAuth {
 /// Detect if an exec command is for GKE authentication
 ///
 /// Returns true if the command appears to be a GKE auth plugin
+#[must_use]
 pub fn is_gke_exec_command(command: &str) -> bool {
     let cmd_lower = command.to_lowercase();
     cmd_lower.contains("gke-gcloud-auth-plugin")

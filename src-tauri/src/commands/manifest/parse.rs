@@ -160,9 +160,9 @@ pub(super) fn pluralize(kind: &str) -> String {
         "priorityclass" => "priorityclasses".to_string(),
         _ => {
             // Standard pluralization rules
-            if lower.ends_with("s") || lower.ends_with("x") || lower.ends_with("ch") {
+            if lower.ends_with('s') || lower.ends_with('x') || lower.ends_with("ch") {
                 format!("{lower}es")
-            } else if lower.ends_with("y") {
+            } else if lower.ends_with('y') {
                 format!("{}ies", &lower[..lower.len() - 1])
             } else {
                 format!("{lower}s")
@@ -175,7 +175,7 @@ pub(super) fn pluralize(kind: &str) -> String {
 fn split_yaml_documents(manifest: &str) -> Vec<String> {
     manifest
         .split("\n---")
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty() && !s.starts_with('#'))
         .map(String::from)
         .collect()

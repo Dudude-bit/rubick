@@ -1,4 +1,4 @@
-//! The one door a ConfigMap's or a Secret's values come through.
+//! The one door a `ConfigMap`'s or a Secret's values come through.
 //!
 //! Both kinds hold arbitrary bytes under string keys, and both are read by
 //! the same component, so both are decoded by the same code. Withholding and
@@ -19,7 +19,7 @@ pub struct BinaryValue {
     pub base64: String,
 }
 
-/// A ConfigMap's or a Secret's values, split by what can honestly be said
+/// A `ConfigMap`'s or a Secret's values, split by what can honestly be said
 /// about each one.
 ///
 /// Three maps rather than one with holes in it. A key absent because the
@@ -142,7 +142,7 @@ mod tests {
         assert!(!data.values.contains_key("tls.key"));
     }
 
-    /// The gap this closed: a ConfigMap has no `type`, so only the PEM label
+    /// The gap this closed: a `ConfigMap` has no `type`, so only the PEM label
     /// and the key-name nets can catch a key pasted into one.
     #[test]
     fn configmap_has_no_type_and_still_withholds_a_pem_key() {

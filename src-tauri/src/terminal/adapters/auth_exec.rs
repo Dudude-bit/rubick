@@ -50,7 +50,7 @@ pub struct AuthExecAdapter {
     /// "plugin produced no JSON because it exited 0 with empty output."
     last_exit_status: Arc<Mutex<Option<i32>>>,
 
-    /// Collected output for ExecCredential JSON parsing. The PTY stream
+    /// Collected output for `ExecCredential` JSON parsing. The PTY stream
     /// contains both prompts and the final JSON; downstream `serde_json`
     /// extracts the credential payload from the buffer's tail.
     collected_stdout: Arc<Mutex<Vec<u8>>>,
@@ -58,6 +58,7 @@ pub struct AuthExecAdapter {
 
 impl AuthExecAdapter {
     /// Create new auth exec adapter
+    #[must_use]
     pub fn new(command: String, args: Vec<String>, env: HashMap<String, String>) -> Self {
         Self {
             command,
@@ -76,6 +77,7 @@ impl AuthExecAdapter {
     /// Get collected stdout (for JSON parsing after process completes).
     /// Synchronous lock — the auth flow grabs this once after the
     /// process exits, so contention is nil.
+    #[must_use]
     pub fn collected_stdout(&self) -> Arc<Mutex<Vec<u8>>> {
         self.collected_stdout.clone()
     }
@@ -84,6 +86,7 @@ impl AuthExecAdapter {
     /// child has terminated. Used by the auth flow to enrich error
     /// messages when JSON extraction fails ("plugin exited 1 with 6
     /// bytes: \"foo\\n\\r\"" is debuggable; "no JSON" alone is not).
+    #[must_use]
     pub fn last_exit_status(&self) -> Arc<Mutex<Option<i32>>> {
         self.last_exit_status.clone()
     }

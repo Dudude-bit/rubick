@@ -36,7 +36,7 @@ fn is_runnable(path: &std::path::Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        return meta.permissions().mode() & 0o111 != 0;
+        meta.permissions().mode() & 0o111 != 0
     }
     #[cfg(not(unix))]
     true
@@ -44,9 +44,9 @@ fn is_runnable(path: &std::path::Path) -> bool {
 
 fn expand_home(name: &str) -> std::path::PathBuf {
     match name.strip_prefix("~/") {
-        Some(rest) => dirs::home_dir()
-            .map(|home| home.join(rest))
-            .unwrap_or_else(|| std::path::PathBuf::from(name)),
+        Some(rest) => {
+            dirs::home_dir().map_or_else(|| std::path::PathBuf::from(name), |home| home.join(rest))
+        }
         None => std::path::PathBuf::from(name),
     }
 }
@@ -159,7 +159,7 @@ mod tests {
     use super::*;
 
     fn args(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
+        list.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

@@ -67,6 +67,7 @@ impl ConnectionEntry {
     /// Reading `token` directly would send a stale credential from a config
     /// that was switched back to `none` — the field is kept on purpose so
     /// toggling auth off and on again does not make the reader retype it.
+    #[must_use]
     pub fn bearer(&self) -> Option<&str> {
         if self.auth_type != "bearer" {
             return None;

@@ -118,16 +118,19 @@ impl PluginDiscovery {
     }
 
     /// List all discovered plugins
+    #[must_use]
     pub fn list(&self) -> Vec<&PluginInfo> {
         self.plugins.values().collect()
     }
 
     /// Get a plugin by name
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&PluginInfo> {
         self.plugins.get(name)
     }
 
     /// Check if a plugin exists
+    #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         self.plugins.contains_key(name)
     }

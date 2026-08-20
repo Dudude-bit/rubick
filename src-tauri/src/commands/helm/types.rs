@@ -14,7 +14,7 @@ pub struct HelmRelease {
     pub chart: String,
     pub app_version: Option<String>,
     pub updated: String,
-    /// Source: "native" for helm CLI releases, "flux" for Flux HelmReleases
+    /// Source: "native" for helm CLI releases, "flux" for Flux `HelmReleases`
     pub source: String,
     /// Additional info for Flux releases
     pub suspended: Option<bool>,

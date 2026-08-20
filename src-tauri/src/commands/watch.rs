@@ -8,11 +8,11 @@
 //! Each typed command is ~10 lines because all the heavy lifting
 //! lives in `WatchManager::subscribe` / `subscribe_cluster`.
 //! Adding a new kind:
-//!   1. import `K8sType` from k8s_openapi and `KindInfo` from
+//!   1. import `K8sType` from `k8s_openapi` and `KindInfo` from
 //!      `crate::resources`
 //!   2. write `subscribe_<kind>_watch(...)` calling
 //!      `state.watch_manager.subscribe[_cluster]::<K8sType, _, _>(...)`
-//!   3. register in main.rs invoke_handler
+//!   3. register in main.rs `invoke_handler`
 //!   4. add binding to `src/generated/commands.ts`
 //!   5. set `watch:` field on the page's `createResourceListPage`
 //!      / `createWorkloadListPage` config.
@@ -36,7 +36,7 @@ use k8s_openapi::api::storage::v1::StorageClass;
 use tauri::State;
 
 /// Resolve the `(context, client)` pair for a watch command. Returns
-/// the standard NO_CLUSTER / NO_CLIENT errors so the frontend hook
+/// the standard `NO_CLUSTER` / `NO_CLIENT` errors so the frontend hook
 /// can report a real failure instead of a wedged stream.
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
     let context = state

@@ -23,7 +23,7 @@ use super::types::{emit_port_forward_status, PortForwardRequest, PortForwardSess
 /// inside the spawned listener task. Without this, a panic in
 /// `listener.accept()` (or anywhere else in the outer loop) leaves
 /// orphaned entries in `state.port_forward_sessions` /
-/// `state.port_forward_controls` forever. Mirrors the LogStreamCleanup
+/// `state.port_forward_controls` forever. Mirrors the `LogStreamCleanup`
 /// pattern in commands/logs.rs.
 struct PortForwardCleanup {
     sessions: Arc<DashMap<String, PortForwardSession>>,

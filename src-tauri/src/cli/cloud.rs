@@ -10,6 +10,7 @@ pub struct GcloudTool;
 
 impl GcloudTool {
     /// Create a new gcloud tool instance
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -72,6 +73,7 @@ pub struct GkeAuthPluginTool;
 
 impl GkeAuthPluginTool {
     /// Create a new gke-gcloud-auth-plugin tool instance
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -130,6 +132,7 @@ pub struct AzTool;
 
 impl AzTool {
     /// Create a new az tool instance
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -168,7 +171,7 @@ impl CliTool for AzTool {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(output) {
             json.get("azure-cli")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
         } else {
             None
         }
@@ -188,6 +191,7 @@ pub struct KubeloginTool;
 
 impl KubeloginTool {
     /// Create a new kubelogin tool instance
+    #[must_use]
     pub fn new() -> Self {
         Self
     }

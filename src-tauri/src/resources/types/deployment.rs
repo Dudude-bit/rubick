@@ -69,7 +69,7 @@ pub struct DeploymentContainerInfo {
 
 /// A pod template's containers, split the way `PodInfo` splits a pod's.
 ///
-/// Five kinds — Deployment, StatefulSet, DaemonSet, Job, CronJob — reach
+/// Five kinds — Deployment, `StatefulSet`, `DaemonSet`, Job, `CronJob` — reach
 /// their template through a different path and then want the identical
 /// thing from it. Doing it once is also what stops the next kind being
 /// added with `.containers` alone, which is how all five came to hide

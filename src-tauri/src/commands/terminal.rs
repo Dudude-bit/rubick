@@ -66,7 +66,7 @@ pub async fn open_pod_shell(
         pod_obj
             .spec
             .and_then(|s| s.containers.first().map(|c| c.name.clone()))
-            .unwrap_or_else(String::new)
+            .unwrap_or_default()
     };
 
     // Create adapter and session

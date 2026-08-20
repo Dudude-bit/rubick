@@ -7,12 +7,12 @@
 //! would need that Prometheus to have been configured with CORS headers for
 //! an app it has never heard of, which no cluster operator has done.
 //!
-//! So the webview sends PromQL and gets numbers back. It never sends, sees,
-//! or stores the credential — {@link PrometheusConnection} is deliberately
+//! So the webview sends `PromQL` and gets numbers back. It never sends, sees,
+//! or stores the credential — {@link `PrometheusConnection`} is deliberately
 //! missing the token field, and `get_prometheus_connection` answers with
 //! `has_token` rather than with the token.
 //!
-//! What is *not* here is any knowledge of what the queries mean. The PromQL
+//! What is *not* here is any knowledge of what the queries mean. The `PromQL`
 //! is built in `src/integrations/prometheus/queries.ts`, where it is pure and
 //! unit-tested against the label shapes cAdvisor actually emits. This module
 //! is a credentialed HTTP client with a Prometheus-shaped response parser.

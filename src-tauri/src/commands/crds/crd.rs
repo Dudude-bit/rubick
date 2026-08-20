@@ -1,4 +1,4 @@
-//! Tauri commands operating on CRDs themselves (the CustomResourceDefinition
+//! Tauri commands operating on CRDs themselves (the `CustomResourceDefinition`
 //! kind), not the instances of those CRDs.
 
 use std::collections::BTreeMap;

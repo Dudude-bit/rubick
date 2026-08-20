@@ -2751,7 +2751,6 @@ dependencies = [
  "k8s-gui-common",
  "k8s-openapi",
  "kube",
- "once_cell",
  "parking_lot",
  "portable-pty",
  "rand 0.10.2",

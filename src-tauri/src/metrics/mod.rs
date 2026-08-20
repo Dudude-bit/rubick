@@ -4,7 +4,7 @@
 //! from the Kubernetes Metrics API (`/apis/metrics.k8s.io/v1beta1/`).
 //!
 //! - `types`: frontend Metrics types + internal serde shapes
-//! - `parse`: kube DynamicObject → frontend types, status mapping,
+//! - `parse`: kube `DynamicObject` → frontend types, status mapping,
 //!           shared `fetch_metrics` generic helper
 
 mod parse;

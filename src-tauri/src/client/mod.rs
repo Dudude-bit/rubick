@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn every_user_shape_is_classified_or_admitted() {
         let kubeconfig: Kubeconfig = serde_yaml::from_str(
-            r#"
+            r"
 apiVersion: v1
 kind: Config
 users:
@@ -512,7 +512,7 @@ users:
   - name: key-only
     user:
       client-key: /home/u/only.key
-"#,
+",
         )
         .expect("parse");
 

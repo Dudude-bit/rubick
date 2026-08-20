@@ -19,7 +19,7 @@ enum Gate {
 }
 
 /// Seconds to wait for the frontend before giving up on the gate.
-const SUBSCRIBE_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(60);
+const SUBSCRIBE_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_mins(1);
 
 /// Terminal manager for handling multiple sessions
 pub struct TerminalManager {
@@ -85,6 +85,7 @@ impl TerminalManager {
     }
 
     /// Get number of active sessions
+    #[must_use]
     pub fn session_count(&self) -> usize {
         self.sessions.len()
     }
@@ -95,7 +96,7 @@ impl TerminalManager {
     /// and doesn't know about pods, processes, or any specific session types.
     /// The caller is responsible for creating the appropriate adapter.
     ///
-    /// Returns the session_id for tracking.
+    /// Returns the `session_id` for tracking.
     pub async fn create_session(
         &self,
         mut adapter: Box<dyn crate::terminal::TerminalAdapter>,
@@ -144,7 +145,7 @@ impl TerminalManager {
             let gate = tokio::select! {
                 _ = subscribe_rx => Gate::Released,
                 _ = &mut cancel_rx => Gate::Cancelled,
-                _ = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => {
+                () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => {
                     tracing::warn!(
                         "Terminal session {} subscribe gate timed out after {}s",
                         session_id_clone,
@@ -236,7 +237,7 @@ impl TerminalManager {
                             }
                         }
                     }
-                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
+                    () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
                         // Read output
                         match adapter.read_output().await {
                             Ok(Some(data)) => {

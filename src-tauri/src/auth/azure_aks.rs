@@ -163,6 +163,7 @@ pub fn is_aks_exec_command(command: &str) -> bool {
 }
 
 /// Extract AKS cluster info from exec args if present
+#[must_use]
 pub fn parse_aks_exec_args(args: &[String]) -> Option<AksClusterInfo> {
     let mut server_id = None;
     let mut tenant_id = None;

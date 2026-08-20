@@ -1,8 +1,8 @@
 //! Workload resource types — split per Kubernetes kind.
 //!
 //! `resources/types/deployment.rs` already covers Deployment + its
-//! container shapes; this module adds ReplicaSet / StatefulSet /
-//! DaemonSet / Job / CronJob and the small `DeploymentCondition` +
+//! container shapes; this module adds `ReplicaSet` / `StatefulSet` /
+//! `DaemonSet` / Job / `CronJob` and the small `DeploymentCondition` +
 //! `RolloutStatus` helpers used by
 //! `commands::deployments::get_deployment_rollout`.
 

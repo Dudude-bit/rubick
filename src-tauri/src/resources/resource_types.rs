@@ -30,6 +30,7 @@ pub enum ResourceType {
 
 impl ResourceType {
     /// Parse resource type from string (Strict Kind matching)
+    #[must_use]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "Pod" => Some(Self::Pod),
@@ -55,6 +56,7 @@ impl ResourceType {
     }
 
     /// Get the Kind name (CamelCase singular)
+    #[must_use]
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Pod => "Pod",
@@ -79,6 +81,7 @@ impl ResourceType {
     }
 
     /// Get the plural name (lowercase plural for API paths)
+    #[must_use]
     pub fn plural(&self) -> &'static str {
         match self {
             Self::Pod => "pods",
@@ -103,6 +106,7 @@ impl ResourceType {
     }
 
     /// Check if this is a cluster-scoped resource (not namespaced)
+    #[must_use]
     pub fn is_cluster_scoped(&self) -> bool {
         matches!(
             self,
@@ -115,6 +119,7 @@ impl ResourceType {
     }
 
     /// Get all supported resource types
+    #[must_use]
     pub fn all() -> &'static [ResourceType] {
         &[
             Self::Pod,

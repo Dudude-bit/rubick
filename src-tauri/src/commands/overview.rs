@@ -52,7 +52,7 @@ const MAX_EVENT_PAGES: usize = 4;
 const COUNT_PAGE_SIZE: u32 = 500;
 
 /// Longest a pod may sit Pending before it counts as a problem. Scheduling
-/// and image pulls take seconds; without this grace every CronJob tick
+/// and image pulls take seconds; without this grace every `CronJob` tick
 /// paints the panel red and the signal is gone.
 const PENDING_GRACE_SECONDS: i64 = 60;
 
@@ -650,12 +650,10 @@ fn summarize_nodes(
         let allocatable = node.status.as_ref().and_then(|s| s.allocatable.as_ref());
         let cpu_allocatable = allocatable
             .and_then(|a| a.get("cpu"))
-            .map(|q| parse_cpu(&q.0))
-            .unwrap_or(0.0);
+            .map_or(0.0, |q| parse_cpu(&q.0));
         let memory_allocatable = allocatable
             .and_then(|a| a.get("memory"))
-            .map(|q| parse_memory(&q.0) as f64)
-            .unwrap_or(0.0);
+            .map_or(0.0, |q| parse_memory(&q.0) as f64);
         let pod_capacity = allocatable
             .and_then(|a| a.get("pods"))
             .and_then(|q| q.0.parse::<i64>().ok());
@@ -1365,7 +1363,7 @@ mod tests {
 
     /// Every pod is Pending for its first seconds. Reporting that made the
     /// "N problems need attention" panel permanently red on any cluster with
-    /// CronJobs, which is the same as having no panel at all.
+    /// `CronJobs`, which is the same as having no panel at all.
     #[test]
     fn pending_pod_is_reported_only_after_the_grace_period() {
         let now = Utc::now();

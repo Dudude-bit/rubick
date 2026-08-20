@@ -28,7 +28,7 @@ pub struct BatchLogResult {
 
 fn log_frontend(level: &str, message: &str, context: Option<&str>, data: Option<Value>) {
     let message = match context {
-        Some(ctx) if !ctx.is_empty() => format!("[{}] {}", ctx, message),
+        Some(ctx) if !ctx.is_empty() => format!("[{ctx}] {message}"),
         _ => message.to_string(),
     };
 
