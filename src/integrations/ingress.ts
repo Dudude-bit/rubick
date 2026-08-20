@@ -278,7 +278,7 @@ export const ROUTING_STALE = 60_000;
  * Traefik's page and then at nginx's should not pay for the same two
  * cluster-wide reads twice.
  */
-export function useBackingLists() {
+export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "routing", "backing"],
@@ -290,6 +290,7 @@ export function useBackingLists() {
       return { services, published };
     },
     staleTime: ROUTING_STALE,
+    enabled,
   });
 }
 

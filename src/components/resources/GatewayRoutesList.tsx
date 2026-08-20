@@ -318,7 +318,9 @@ export function GatewayRoutesList() {
         {
           gateways: gateways.data ?? [],
           classes: classes.data ?? [],
-          topologyKnown: gateways.data !== undefined,
+          topologyKnown:
+            gateways.data !== undefined &&
+            (classes.data !== undefined || !served.has("GatewayClass")),
           backing: {
             services: backing.data?.services ?? [],
             published: backing.data?.published ?? [],
@@ -327,7 +329,7 @@ export function GatewayRoutesList() {
         },
         t
       ),
-    [filtered, gateways.data, classes.data, backing.data, t]
+    [filtered, gateways.data, classes.data, backing.data, served, t]
   );
 
   const topology = useMemo(

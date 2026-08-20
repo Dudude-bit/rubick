@@ -7,7 +7,7 @@ import type { T } from "@/i18n/useT";
 const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
-import { routesBoard } from "./route-rows";
+import { boardMark, gatewaysMark, routesBoard } from "./route-rows";
 import type {
   ConditionInfo,
   GatewayClassInfo,
@@ -473,5 +473,52 @@ describe("routesBoard", () => {
     expect(board.notServing).toHaveLength(1);
     expect(board.notServing[0].stop?.at).toBe("gateway");
     expect(board.notServing[0].via).toBe("edge +1");
+  });
+});
+
+describe("the sidebar marks", () => {
+  it("stays silent while the verdicts are unknown", () => {
+    const board = routesBoard(
+      [route("healthy")],
+      sources({ topologyKnown: false }),
+      t
+    );
+    expect(boardMark(board)).toBeUndefined();
+  });
+
+  it("goes red when anything is dead, yellow for stale or contested", () => {
+    const dead = route("dead", {
+      parents: [parentStatus("edge", [condition("Accepted", "False")])],
+    });
+    expect(boardMark(routesBoard([dead], sources(), t))).toBe("err");
+
+    const stale = route("stale", {
+      generation: 4,
+      parents: [
+        parentStatus("edge", [
+          condition("Accepted", "True", null, null, 3),
+          condition("ResolvedRefs", "True", null, null, 3),
+        ]),
+      ],
+    });
+    expect(boardMark(routesBoard([stale], sources(), t))).toBe("warn");
+
+    expect(
+      boardMark(routesBoard([route("healthy")], sources(), t))
+    ).toBeUndefined();
+  });
+
+  it("marks the gateways row from the pulse, then from silence", () => {
+    const board = routesBoard(
+      [],
+      sources({ gateways: [gateway("edge", { className: "ghost" })] }),
+      t
+    );
+    expect(gatewaysMark([gateway("edge")], board.pulse, true)).toBe("err");
+
+    const silent = gateway("quiet", { conditions: [] });
+    expect(gatewaysMark([silent], [], true)).toBe("warn");
+    expect(gatewaysMark([silent], [], false)).toBeUndefined();
+    expect(gatewaysMark([gateway("edge")], [], true)).toBeUndefined();
   });
 });

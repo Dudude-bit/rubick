@@ -7,7 +7,7 @@
  * zooms; this module owns the zoom-out and nothing else.
  */
 
-import type { ParentRefInfo, RouteInfo } from "@/generated/types";
+import type { GatewayInfo, ParentRefInfo, RouteInfo } from "@/generated/types";
 import {
   findGateway,
   gatewayProgrammed,
@@ -69,6 +69,37 @@ export interface RoutesBoard {
   mesh: RouteRow[];
   /** Gateway-level breaks the route rows cannot carry. */
   pulse: GatewayPulse[];
+}
+
+/**
+ * The routes row's one-pixel opinion for the sidebar: err while anything
+ * is dead, warn while a verdict is stale or a host contested — and
+ * nothing at all before the verdicts are known, because a guess in the
+ * rail is worse than silence.
+ */
+export function boardMark(board: RoutesBoard): "warn" | "err" | undefined {
+  if (!board.verdictsKnown) return undefined;
+  if (board.notServing.length > 0) return "err";
+  if (board.serving.some((row) => row.stale != null || row.contested != null)) {
+    return "warn";
+  }
+  return undefined;
+}
+
+/**
+ * The gateways row's: err for the pulse problems — each one means
+ * everything through that gateway is dead — and warn for a controller
+ * that has not spoken a Programmed verdict at all.
+ */
+export function gatewaysMark(
+  gateways: GatewayInfo[],
+  pulse: GatewayPulse[],
+  topologyKnown: boolean
+): "warn" | "err" | undefined {
+  if (pulse.length > 0) return "err";
+  if (!topologyKnown) return undefined;
+  if (gateways.some((gateway) => !gatewayProgrammed(gateway))) return "warn";
+  return undefined;
 }
 
 /** The step ids in the reader's words — "refs" is jargon, "references" is not. */
