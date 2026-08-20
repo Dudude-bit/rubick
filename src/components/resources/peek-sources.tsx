@@ -773,12 +773,26 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           },
           {
             label: "Ports",
-            value: list(
-              service.ports.map(
-                (port) => `${port.port}→${port.targetPort}/${port.protocol}`
-              )
-            ),
-            mono: true,
+            // Every port forwards, like everywhere else — the service-side
+            // number is the click, the target and protocol stay prose.
+            value:
+              service.ports.length === 0 ? (
+                "none"
+              ) : (
+                <span className="inline-flex flex-wrap items-baseline gap-x-2 font-mono">
+                  {service.ports.map((port, index) => (
+                    <span key={`${port.port}-${index}`}>
+                      <ClickableServicePort
+                        port={port.port}
+                        serviceName={service.name}
+                        namespace={service.namespace}
+                        className="text-xs"
+                      />
+                      →{port.targetPort}/{port.protocol}
+                    </span>
+                  ))}
+                </span>
+              ),
           },
           {
             label: "External",
