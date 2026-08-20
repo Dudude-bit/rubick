@@ -29,6 +29,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { trafficDoors } from "@/lib/traffic-doors";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
+import type { KeyValue } from "./key-values";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
@@ -392,7 +393,99 @@ function PeekOverview({
         ))
       )}
       {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
+      {target.kind === "Namespace" && (
+        <NamespaceContents namespace={target.name} />
+      )}
       <PeekEvents target={target} />
+    </div>
+  );
+}
+
+/**
+ * What actually lives in a namespace — the question its peek exists for.
+ * Three cheap namespace-scoped lists; a count alone would hide the part
+ * worth peeking for, so the pods row splits out what is not ready.
+ */
+function NamespaceContents({ namespace }: { namespace: string }) {
+  const filters = {
+    namespace,
+    labelSelector: null,
+    fieldSelector: null,
+    limit: null,
+  };
+  const pods = useLiveQuery({
+    queryKey: ["peek-ns-pods", namespace],
+    queryFn: () =>
+      commands.listPods({
+        ...filters,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      }),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: "resourceDetail",
+    retry: false,
+  });
+  const deployments = useLiveQuery({
+    queryKey: ["peek-ns-deployments", namespace],
+    queryFn: () => commands.listDeployments(filters),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    retry: false,
+  });
+  const services = useLiveQuery({
+    queryKey: ["peek-ns-services", namespace],
+    queryFn: () => commands.listServices({ ...filters, serviceType: null }),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    retry: false,
+  });
+
+  const notReady = pods.data?.filter((pod) => !pod.status.ready).length ?? 0;
+  const starving = deployments.data?.filter(
+    (deployment) => deployment.replicas.ready < deployment.replicas.desired
+  );
+
+  const count = (
+    data: unknown[] | undefined,
+    word: string,
+    trouble?: string
+  ): KeyValue => ({
+    label: word,
+    value:
+      data === undefined ? (
+        "reading…"
+      ) : data.length === 0 ? (
+        "none"
+      ) : (
+        <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
+          {data.length}
+          {trouble && <span className="text-err">— {trouble}</span>}
+        </span>
+      ),
+    tone: trouble ? ("err" as const) : undefined,
+  });
+
+  return (
+    <div>
+      <PeekHeading title="Contents" />
+      <KeyValueList
+        items={[
+          count(
+            pods.data,
+            "Pods",
+            notReady > 0 ? `${notReady} not ready` : undefined
+          ),
+          count(
+            deployments.data,
+            "Deployments",
+            starving && starving.length > 0
+              ? `${starving.length} short of desired`
+              : undefined
+          ),
+          count(services.data, "Services"),
+        ]}
+      />
     </div>
   );
 }
