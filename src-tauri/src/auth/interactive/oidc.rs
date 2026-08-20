@@ -89,7 +89,7 @@ pub(super) async fn run_oidc_auth(
             });
             return Err(Error::Auth(AuthError::Oidc("Authentication cancelled".to_string())));
         }
-        () = tokio::time::sleep(Duration::from_secs(180)) => {
+        () = tokio::time::sleep(Duration::from_mins(3)) => {
             state.remove_auth_session(&session_id);
             // A provider that refuses the redirect never reaches this
             // listener, so the wait simply runs out — and the reader is
