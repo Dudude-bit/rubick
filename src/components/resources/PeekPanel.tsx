@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
@@ -520,8 +520,13 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           showKind={false}
         />{" "}
         {hosts.length > 0 && (
-          <span className="font-mono text-xs text-fg-mid">
-            {hosts.join(", ")}{" "}
+          <span className="text-xs text-fg-mid">
+            {hosts.map((host, index) => (
+              <span key={host}>
+                {index > 0 && ", "}
+                <CopyableValue value={host} label={`Host ${host}`} quietMark />
+              </span>
+            ))}{" "}
           </span>
         )}
         — Ingress
@@ -539,8 +544,13 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           showKind={false}
         />{" "}
         {hosts.length > 0 && (
-          <span className="font-mono text-xs text-fg-mid">
-            {hosts.join(", ")}{" "}
+          <span className="text-xs text-fg-mid">
+            {hosts.map((host, index) => (
+              <span key={host}>
+                {index > 0 && ", "}
+                <CopyableValue value={host} label={`Host ${host}`} quietMark />
+              </span>
+            ))}{" "}
           </span>
         )}
         — {object.kind}
