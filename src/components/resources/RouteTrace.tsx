@@ -72,7 +72,19 @@ function StepDetail({ step }: { step: TraceStep }) {
   // the rail's own red stretch carries the severity, not a border.
   return (
     <div className="mb-4 mt-0.5">
-      <h4 className="text-xs font-semibold text-fg">{step.detail.title}</h4>
+      {/* The box is gone, so the title carries the severity itself. */}
+      <h4
+        className={cn(
+          "text-xs font-semibold",
+          step.state === "err"
+            ? "text-err"
+            : step.state === "warn"
+              ? "text-warn"
+              : "text-fg"
+        )}
+      >
+        {step.detail.title}
+      </h4>
       {step.detail.quote && (
         <div className="my-2 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 text-xs">
           <span className="text-fg-fnt">{asksLabel}</span>
