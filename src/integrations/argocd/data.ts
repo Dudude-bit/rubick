@@ -15,6 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { covers } from "@/lib/certificates";
 import type { ServiceRoute } from "../registry";
@@ -44,16 +45,18 @@ export async function fetchApplications(): Promise<ArgoApp[]> {
 }
 
 export function useApplications() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: APPLICATIONS_KEY,
+    queryKey: [context, ...APPLICATIONS_KEY],
     queryFn: fetchApplications,
     staleTime: ARGO_STALE,
   });
 }
 
 export function useApplicationSets() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["argocd", "applicationsets"],
+    queryKey: [context, "argocd", "applicationsets"],
     queryFn: () =>
       commands
         .listCustomResources(APPLICATIONSETS_CRD, null, null, null)
@@ -66,8 +69,9 @@ export function useApplicationSets() {
 }
 
 export function useProjects() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["argocd", "projects"],
+    queryKey: [context, "argocd", "projects"],
     queryFn: () => commands.listCustomResources(PROJECTS_CRD, null, null, null),
     staleTime: ARGO_STALE,
   });
@@ -171,8 +175,9 @@ export function uiAddress(
 }
 
 export function useController() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["argocd", "controller"],
+    queryKey: [context, "argocd", "controller"],
     queryFn: async (): Promise<ControllerInfo> => {
       const filters = {
         namespace: null,

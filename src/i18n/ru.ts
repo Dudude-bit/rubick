@@ -254,6 +254,7 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    readingGroup: "идёт чтение: {group}",
     listAnd: " и ",
     listComma: ", ",
     readLastRunOf: "Открыть лог последнего запуска {name}",
@@ -1059,6 +1060,8 @@ export const ru: Catalogue = {
     active: "активных: {n}",
   },
   cluster: {
+    markBroken: "сломано",
+    markWorthALook: "стоит взглянуть",
     connectToImport:
       "Подключитесь к кластеру, чтобы импортировать из него ресурсы.",
     spotNodeWarning:

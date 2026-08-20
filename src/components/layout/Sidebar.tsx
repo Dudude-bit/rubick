@@ -1,5 +1,4 @@
 import * as React from "react";
-import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -12,6 +11,7 @@ import {
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
@@ -173,11 +173,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
         {GROUPS.map((group, index) => (
           <div key={group.caption ?? `ungrouped-${index}`}>
-            {group.caption && (
-              <GroupCaption>
-                <T section="nav" k={group.caption} />
-              </GroupCaption>
-            )}
+            {group.caption && <GroupCaption k={group.caption} />}
             {group.items.map((item) => (
               <NavRow key={item.path} item={item} overview={overview} />
             ))}
@@ -188,9 +184,7 @@ export function Sidebar() {
       {/* The app's own strip, outside the scroll: the rows above are the
           cluster's and travel with it; these stay put on every screen. */}
       <div className="border-t border-hair px-1.5 pb-2.5">
-        <GroupCaption>
-          <T section="nav" k="app" />
-        </GroupCaption>
+        <GroupCaption k="app" />
         {APP_ROWS.map((item) => (
           <NavRow key={item.path} item={item} overview={overview} />
         ))}
@@ -199,10 +193,27 @@ export function Sidebar() {
   );
 }
 
-function GroupCaption({ children }: { children: ReactNode }) {
+/**
+ * A caption takes the catalogue key rather than the finished words.
+ *
+ * The spinner needs the caption twice — once drawn, once spoken — and a
+ * translated caption arrives as an element, which cannot be lowercased for
+ * the label. Holding the key instead means both come from the same lookup
+ * and neither can drift from the other.
+ */
+function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
+  const t = useT();
   return (
-    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
-      {children}
+    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+      <T section="nav" k={k} />
+      {busy && (
+        <Spinner
+          aria-label={t("action", "readingGroup", {
+            group: t("nav", k).toLowerCase(),
+          })}
+          className="h-2.5 w-2.5"
+        />
+      )}
     </div>
   );
 }
@@ -223,7 +234,7 @@ function GroupCaption({ children }: { children: ReactNode }) {
 function IntegrationsGroup() {
   const t = useT();
   const { pathname, search } = useLocation();
-  const { pages, pending } = useIntegrationPages();
+  const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
@@ -254,9 +265,7 @@ function IntegrationsGroup() {
   if (pages.length === 0 && pending) {
     return (
       <div>
-        <GroupCaption>
-          <T section="nav" k="integrations" />
-        </GroupCaption>
+        <GroupCaption k="integrations" busy={reading} />
         <div aria-hidden>
           {[0, 1].map((row) => (
             <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
@@ -273,9 +282,7 @@ function IntegrationsGroup() {
   if (pages.length === 0) {
     return (
       <div>
-        <GroupCaption>
-          <T section="nav" k="integrations" />
-        </GroupCaption>
+        <GroupCaption k="integrations" busy={reading} />
         {catalog}
       </div>
     );
@@ -303,15 +310,14 @@ function IntegrationsGroup() {
 
   return (
     <div>
-      <GroupCaption>
-        <T section="nav" k="integrations" />
-      </GroupCaption>
+      <GroupCaption k="integrations" busy={reading} />
       {pages.map((page) => (
         <NavRow
           key={page.path}
           item={{ label: page.name, path: page.path, icon: page.icon }}
           overview={undefined}
           value={page.count}
+          mark={page.tone ?? undefined}
           // A tunnel that is down is not a count and not a fault: it is a
           // thing this row can do something about, and says so.
           note={
@@ -445,6 +451,7 @@ function NavRow({
   item,
   overview,
   value,
+  mark,
   note,
   onPress,
   active,
@@ -453,6 +460,12 @@ function NavRow({
   overview: ClusterOverview | undefined;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
+  /**
+   * A dot beside the count: the worst thing on the row's page, or nothing.
+   * The count itself stays quiet — inventory is not allowed to borrow a
+   * colour — so this one pixel is the row's whole opinion.
+   */
+  mark?: "warn" | "err";
   /**
    * A word at the end of the row instead of a count — for a state that is
    * neither a number nor a fault. A port-forward that is down is the case
@@ -472,6 +485,7 @@ function NavRow({
    */
   active?: boolean;
 }) {
+  const t = useT();
   const { pathname } = useLocation();
   const updateAvailable = useUpdaterStore((state) => state.available);
   const badge = item.updateBadge === true && updateAvailable;
@@ -524,7 +538,22 @@ function NavRow({
             <NavCount item={item} overview={overview} />
           ) : (
             value !== null && (
-              <span className="ml-auto text-[11px] text-fg-fnt">{value}</span>
+              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
+                {mark && (
+                  <span
+                    aria-label={
+                      mark === "err"
+                        ? t("cluster", "markBroken")
+                        : t("cluster", "markWorthALook")
+                    }
+                    className={cn(
+                      "h-1.5 w-1.5 flex-none rounded-full",
+                      mark === "err" ? "bg-err" : "bg-warn"
+                    )}
+                  />
+                )}
+                {value}
+              </span>
             )
           )}
         </>

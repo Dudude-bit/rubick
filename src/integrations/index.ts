@@ -547,6 +547,7 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
 } {
   const { data, isPending, error } = useDetected();
   const connections = useConnections();
+  const context = useClusterStore((state) => state.currentContext);
 
   const detected = EXTENSIONS.map((vendor) => {
     const connection = vendor.connect
@@ -575,7 +576,11 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
 
   const results = useQueries({
     queries: asking.map(({ vendor }) => ({
-      queryKey: ["integration-facts", vendor.id],
+      // The context first, like every other integration read: a fact is a
+      // sentence about *this* cluster ("2 renewals overdue"), and one kept
+      // from the last cluster is not stale inventory, it is an accusation
+      // aimed at the wrong place.
+      queryKey: [context, "integration-facts", vendor.id],
       queryFn: () => vendor.extension.facts!(),
       enabled: facts,
       staleTime: FACTS_STALE_TIME,
@@ -756,6 +761,12 @@ export interface IntegrationPageEntry {
   /** `null` while it is being read, and where the cluster refused to say. */
   count: number | null;
   /**
+   * The dot beside the count — the worst thing on the vendor's page, or
+   * nothing. `null` wherever {@link count} is, and for a vendor whose page
+   * declares no opinion.
+   */
+  tone: "warn" | "err" | null;
+  /**
    * Whether {@link path} is the vendor's own screen or its Settings row.
    * The caller needs it because the second kind shares one route between
    * several rows, and "which of these is the open one" is then a question
@@ -797,6 +808,13 @@ export function useIntegrationPages(): {
    * integrations — the one state this list must never claim by accident.
    */
   pending: boolean;
+  /**
+   * Anything in the category still being read — detection or any row's
+   * number. Wider than {@link pending} on purpose: the rows may already
+   * stand while their counts are on the wire, and the caption is what says
+   * the picture is not finished yet.
+   */
+  reading: boolean;
 } {
   const { data, isPending } = useDetected();
   const connections = useConnections();
@@ -830,27 +848,46 @@ export function useIntegrationPages(): {
   // all, and asking for one would run a query to display nothing.
   const withCounts = withPages.filter((vendor) => vendor.page.count);
 
-  // The page's own query, verbatim. Two observers on one cache entry, so a
-  // reader who opens the page finds it already answered and the app makes
-  // one set of reads instead of two.
+  // The page's own query, its `select` widened to carry the dot beside the
+  // number. Still one cache entry per vendor: a reader who opens the page
+  // finds it already answered and the app makes one set of reads, not two.
   const counts = useQueries({
-    // `select` is declared over the payload the vendor's own query returns and
-    // erased at the registry boundary, so the list can hold every vendor's
-    // count without this file knowing what any of them reads.
-    queries: withCounts.map(
-      (vendor) =>
-        vendor.page.count as unknown as UseQueryOptions<
-          unknown,
-          Error,
-          number | null
-        >
-    ),
+    // `select` and `tone` are declared over the payload the vendor's own
+    // query returns and erased at the registry boundary, so the list can
+    // hold every vendor's count without this file knowing what any of them
+    // reads.
+    queries: withCounts.map((vendor) => {
+      const declared = vendor.page.count!;
+      return {
+        // The context first, the vendor's key after: cluster B must never
+        // read cluster A's numbers, which is the same rule the detection
+        // scan states. A page sharing this cache entry prefixes the same
+        // way — see PageCount.
+        queryKey: [context, ...declared.queryKey],
+        queryFn: declared.queryFn,
+        staleTime: declared.staleTime,
+        select: (data: unknown) => ({
+          count: declared.select(data as never),
+          tone: declared.tone?.(data as never) ?? null,
+        }),
+      } as UseQueryOptions<
+        unknown,
+        Error,
+        { count: number | null; tone: "warn" | "err" | null }
+      >;
+    }),
   });
 
   const pages = here.map((vendor): IntegrationPageEntry => {
     const index = withPages.findIndex(
       (candidate) => candidate.id === vendor.id
     );
+    const measured =
+      index === -1
+        ? undefined
+        : counts[
+            withCounts.findIndex((candidate) => candidate.id === vendor.id)
+          ]?.data;
     return {
       id: vendor.id,
       name: vendor.name,
@@ -862,12 +899,8 @@ export function useIntegrationPages(): {
       asleep:
         forwarded.has(vendor.id) &&
         connections.get(vendor.id)?.state !== "connected",
-      count:
-        index === -1
-          ? null
-          : (counts[
-              withCounts.findIndex((candidate) => candidate.id === vendor.id)
-            ]?.data ?? null),
+      count: measured?.count ?? null,
+      tone: measured?.tone ?? null,
       own: index !== -1,
     };
   });
@@ -877,7 +910,13 @@ export function useIntegrationPages(): {
   // A configured-only row still pops in when its connection read lands.
   // No cluster is not "still detecting" — a disabled query is pending
   // forever, and the front door would shimmer an answer that cannot come.
-  return { pages, pending: context !== null && isPending };
+  return {
+    pages,
+    pending: context !== null && isPending,
+    reading:
+      context !== null &&
+      (isPending || counts.some((query) => query.isPending)),
+  };
 }
 
 /**

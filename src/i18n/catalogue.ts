@@ -287,6 +287,7 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    readingGroup: "reading {group}",
     listAnd: " and ",
     listComma: ", ",
     readLastRunOf: "Read {name}'s last run",
@@ -1055,6 +1056,8 @@ export const en = {
     active: "{n} active",
   },
   cluster: {
+    markBroken: "broken",
+    markWorthALook: "worth a look",
     connectToImport: "Connect to a cluster to import live resources.",
     spotNodeWarning:
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",

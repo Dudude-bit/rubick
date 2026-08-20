@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
@@ -36,6 +37,7 @@ import { useT } from "@/i18n/useT";
 const SAMPLE = 12;
 
 export default function LokiPage() {
+  const context = useClusterStore((state) => state.currentContext);
   const t = useT();
   const scope = useNamespaceScope();
   const { namespaces } = useClusterSummary();
@@ -46,7 +48,7 @@ export default function LokiPage() {
   const skipped = Math.max(0, namespaces.length - asked.length);
 
   const found = useQuery({
-    queryKey: ["loki", "coverage", asked.join(",")],
+    queryKey: [context, "loki", "coverage", asked.join(",")],
     queryFn: () => coverage(asked),
     enabled: asked.length > 0,
     staleTime: ROUTING_STALE,

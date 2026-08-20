@@ -44,6 +44,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { errorToShow } from "@/lib/error-utils";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
@@ -155,13 +156,17 @@ export function usePicture(): {
   isPending: boolean;
   error: Error | null;
 } {
+  // The context first, the page's key after — the same composed key the
+  // sidebar row uses, so the two still share one cache entry and cluster B
+  // never reads cluster A's certificates.
+  const context = useClusterStore((state) => state.currentContext);
   const certificates = useQuery({
-    queryKey: CERTIFICATES_KEY,
+    queryKey: [context, ...CERTIFICATES_KEY],
     queryFn: fetchCertificates,
     staleTime: CERT_MANAGER_STALE,
   });
   const walk = useQuery({
-    queryKey: WALK_SOURCES_KEY,
+    queryKey: [context, ...WALK_SOURCES_KEY],
     queryFn: fetchWalkSources,
     staleTime: CERT_MANAGER_STALE,
   });

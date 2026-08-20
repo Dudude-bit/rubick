@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { certificateRows, issuerRows } from "./model";
+import { certificateRows, issuerRows, worstCertificateTone } from "./model";
 import type { CustomResourceInfo } from "@/generated/types";
 
 const DAY = 86_400_000;
@@ -36,6 +36,8 @@ function certificate(over: {
   ready?: boolean;
   issuing?: boolean;
   notAfter?: string | null;
+  notBefore?: string;
+  renewalTime?: string;
   readyMessage?: string;
   attempts?: number;
 }): CustomResourceInfo {
@@ -68,6 +70,10 @@ function certificate(over: {
       ...(over.notAfter === null
         ? {}
         : { notAfter: over.notAfter ?? inDays(60) }),
+      ...(over.notBefore !== undefined ? { notBefore: over.notBefore } : {}),
+      ...(over.renewalTime !== undefined
+        ? { renewalTime: over.renewalTime }
+        : {}),
       ...(over.attempts !== undefined
         ? { failedIssuanceAttempts: over.attempts }
         : {}),
@@ -118,6 +124,35 @@ describe("ordering by trouble", () => {
   });
 
   /**
+   * Would break if the rows ranked by whole days: two certificates expiring
+   * today tie there and fall back to the alphabet, so the one with two hours
+   * left could sit under the one with twenty — in the hour the order is the
+   * only thing the page is for.
+   */
+  it("ranks certificates expiring today by the hour, not the alphabet", () => {
+    const rows = certificateRows(
+      [
+        certificate({
+          name: "alpha",
+          ready: true,
+          notBefore: inDays(-6.4),
+          notAfter: inDays(0.6),
+        }),
+        certificate({
+          name: "omega",
+          ready: true,
+          notBefore: inDays(-6.8),
+          notAfter: inDays(0.2),
+        }),
+      ],
+      [],
+      [],
+      []
+    );
+    expect(rows.map((row) => row.name)).toEqual(["omega", "alpha"]);
+  });
+
+  /**
    * A certificate whose Secret does not exist and one that is merely failing
    * to renew are different outages: the second is still serving traffic, and
    * calling both "broken" would send somebody to the wrong one first.
@@ -151,6 +186,98 @@ describe("ordering by trouble", () => {
     );
     expect(row.state.tone).toBe("ok");
     expect(row.steps).toEqual([]);
+  });
+
+  /**
+   * Would break if a seven-day certificate went back to wearing a warning
+   * its whole life (#68). Its renewal is cert-manager's job, the plan is
+   * still ahead, and the verdict states the plan.
+   */
+  it("trusts a short certificate that is renewing on schedule", () => {
+    const [row] = certificateRows(
+      [
+        certificate({
+          ready: true,
+          notBefore: inDays(-4.75),
+          notAfter: inDays(2.25),
+          renewalTime: inDays(1.5),
+        }),
+      ],
+      [],
+      [],
+      []
+    );
+    expect(row.state).toEqual({ text: "renews in 1 day", tone: "ok" });
+  });
+
+  /** Would break if a renewal cert-manager has quietly missed read as fine. */
+  it("marks a certificate whose renewal time has come and gone", () => {
+    const [row] = certificateRows(
+      [
+        certificate({
+          ready: true,
+          notBefore: inDays(-4.75),
+          notAfter: inDays(2.25),
+          renewalTime: inDays(-0.5),
+        }),
+      ],
+      [],
+      [],
+      []
+    );
+    expect(row.state).toEqual({
+      text: "renewal overdue — expires in 2 days",
+      tone: "warn",
+    });
+  });
+});
+
+describe("worstCertificateTone", () => {
+  /**
+   * The sidebar dot's whole contract: silence while everything is on
+   * schedule, however short the certificates' lives are.
+   */
+  it("stays quiet over certificates that are simply fine", () => {
+    expect(
+      worstCertificateTone([
+        certificate({ ready: true, notAfter: inDays(60) }),
+        certificate({
+          ready: true,
+          notBefore: inDays(-4.75),
+          notAfter: inDays(2.25),
+          renewalTime: inDays(1.5),
+        }),
+      ])
+    ).toBeNull();
+  });
+
+  it("says warn for a renewal that has been missed", () => {
+    expect(
+      worstCertificateTone([
+        certificate({ ready: true, notAfter: inDays(60) }),
+        certificate({
+          ready: true,
+          notBefore: inDays(-4.75),
+          notAfter: inDays(2.25),
+          renewalTime: inDays(-0.5),
+        }),
+      ])
+    ).toBe("warn");
+  });
+
+  /** Would break if a dead certificate could hide behind a merely late one. */
+  it("says err once something cannot serve at all", () => {
+    expect(
+      worstCertificateTone([
+        certificate({
+          ready: true,
+          notBefore: inDays(-4.75),
+          notAfter: inDays(2.25),
+          renewalTime: inDays(-0.5),
+        }),
+        certificate({ ready: false, notAfter: null }),
+      ])
+    ).toBe("err");
   });
 });
 

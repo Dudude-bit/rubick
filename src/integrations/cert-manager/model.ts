@@ -19,7 +19,7 @@
  * the reader will paste into a search.
  */
 
-import { expiryOf, type Expiry } from "@/lib/certificates";
+import { managedExpiryOf, type Expiry } from "@/lib/certificates";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 import { conditionOf, getValueByPath, type VendorCondition } from "../kit";
@@ -334,6 +334,7 @@ export function certificateRows(
       const issuing = conditionOf(certificate, "Issuing");
       const notAfter = text(certificate, "status.notAfter");
       const notBefore = text(certificate, "status.notBefore");
+      const renewalTime = text(certificate, "status.renewalTime");
       const isReady = ready?.status === "True";
       const inFlight = issuing?.status === "True" || !isReady;
 
@@ -347,7 +348,10 @@ export function certificateRows(
         inFlight,
         expiry:
           notAfter !== null
-            ? expiryOf({ notAfter, notBefore: notBefore ?? "" })
+            ? managedExpiryOf(
+                { notAfter, notBefore: notBefore ?? "" },
+                renewalTime
+              )
             : null,
         failure,
       };
@@ -373,7 +377,7 @@ export function certificateRows(
             }
           : null,
         dnsNames,
-        renewalTime: text(certificate, "status.renewalTime"),
+        renewalTime,
         failedAttempts:
           typeof getValueByPath(
             certificate,
@@ -393,7 +397,9 @@ export function certificateRows(
     .sort(
       (a, b) =>
         a.rank - b.rank ||
-        (a.expiry?.days ?? Infinity) - (b.expiry?.days ?? Infinity) ||
+        // The exact remaining time: whole days tie for everything expiring
+        // inside one day, and the alphabet is not a measure of urgency.
+        (a.expiry?.left ?? Infinity) - (b.expiry?.left ?? Infinity) ||
         a.name.localeCompare(b.name)
     );
 }
@@ -481,4 +487,20 @@ export function issuerRows(
 /** How many certificates are a reason to open the page. */
 export function troubled(rows: CertRow[]): CertRow[] {
   return rows.filter((row) => row.state.tone !== "ok");
+}
+
+/**
+ * The one colour a whole page of certificates is worth in the rail.
+ *
+ * Judged from the certificates alone — the sidebar's query — so a failure
+ * whose sentence lives three objects down the walk still registers here:
+ * `Ready=False` is on the Certificate itself, whatever the Challenge says.
+ */
+export function worstCertificateTone(
+  certificates: CustomResourceInfo[]
+): "warn" | "err" | null {
+  const rows = certificateRows(certificates, [], [], []);
+  if (rows.some((row) => row.state.tone === "err")) return "err";
+  if (rows.some((row) => row.state.tone === "warn")) return "warn";
+  return null;
 }

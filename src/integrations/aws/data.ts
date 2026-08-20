@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { ROUTING_STALE } from "../ingress";
 import { INGRESS_CLASS_PARAMS_CRD, TARGET_GROUP_BINDING_CRD } from "./model";
@@ -110,8 +111,9 @@ export async function fetchAlbSources(): Promise<AlbSources> {
 export const ALB_SOURCES_KEY = ["aws-lbc", "sources"] as const;
 
 export function useAlbSources() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ALB_SOURCES_KEY,
+    queryKey: [context, ...ALB_SOURCES_KEY],
     queryFn: fetchAlbSources,
     staleTime: ROUTING_STALE,
   });

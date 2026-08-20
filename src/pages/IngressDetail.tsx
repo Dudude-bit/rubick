@@ -255,7 +255,9 @@ export function IngressDetail() {
     )
     .filter((cert) => cert != null)
     .map((cert) => expiryOf(cert))
-    .sort((a, b) => a.days - b.days)[0];
+    // Exact remaining time rather than whole days: several certificates
+    // expiring today all tie on `days`, and this picks the one to show.
+    .sort((a, b) => a.left - b.left)[0];
 
   const {
     data: events = [],

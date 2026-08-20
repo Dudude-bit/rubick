@@ -9,6 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
 import { ROUTING_STALE, useBackingLists, type BackingLists } from "../ingress";
 import { hostGroups, type IstioSources } from "./model";
@@ -55,8 +56,9 @@ export function countHosts(mesh: MeshSources): number {
 export const MESH_KEY = ["istio", "mesh"] as const;
 
 export function useMesh() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: MESH_KEY,
+    queryKey: [context, ...MESH_KEY],
     queryFn: fetchMesh,
     staleTime: ROUTING_STALE,
   });

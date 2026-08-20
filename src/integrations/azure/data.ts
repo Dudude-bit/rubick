@@ -13,6 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
 import { ROUTING_STALE } from "../ingress";
 import {
@@ -75,8 +76,9 @@ export async function fetchAksPicture(): Promise<AksPicture> {
 export const AKS_PICTURE_KEY = ["aks-addons", "picture"] as const;
 
 export function useAksPicture() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: AKS_PICTURE_KEY,
+    queryKey: [context, ...AKS_PICTURE_KEY],
     queryFn: fetchAksPicture,
     staleTime: ROUTING_STALE,
   });
