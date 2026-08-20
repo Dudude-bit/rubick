@@ -337,6 +337,7 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable_gateway!("TCPRoute", "tcproutes", false),
     searchable_gateway!("UDPRoute", "udproutes", false),
     searchable_gateway!("ListenerSet", "listenersets", false),
+    searchable_gateway!("BackendTLSPolicy", "backendtlspolicies", false),
     searchable!("ConfigMap", k8s_openapi::api::core::v1::ConfigMap, false),
     searchable!("Secret", k8s_openapi::api::core::v1::Secret, false),
     searchable!(
