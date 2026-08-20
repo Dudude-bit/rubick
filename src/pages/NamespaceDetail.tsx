@@ -17,11 +17,13 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { NamespaceInfo } from "@/generated/types";
 
 export function NamespaceDetail() {
+  const t = useT();
   const {
     name,
     resource: ns,
@@ -42,7 +44,7 @@ export function NamespaceDetail() {
 
   const facts: KeyValue[] = [
     {
-      label: "Status",
+      label: t("columns", "status"),
       value: ns?.status ?? "—",
       // Terminating is the state people come to diagnose — a namespace
       // wedged on a finalizer looks exactly like this, for days.
@@ -53,7 +55,7 @@ export function NamespaceDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -63,10 +65,10 @@ export function NamespaceDetail() {
             className="max-w-lg"
           />
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(ns?.labels ?? {}).length}
             items={recordToKeyValues(ns?.labels ?? {})}
-            emptyMessage="No labels — no namespaceSelector anywhere matches this namespace."
+            emptyMessage={t("empty", "nsNoLabelsSelector")}
           />
         </>
       ),

@@ -41,6 +41,8 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    attachedRoutes: "Attached routes",
+    gatewaysUsingIt: "Gateways using it",
     fromThisMachine: "From this machine",
     policies: "Policies",
     contents: "Contents",
@@ -122,6 +124,15 @@ export const en = {
     missingTag: "missing",
     backends: "Backends",
     addresses: "Addresses",
+    routesFrom: "Routes from",
+    attached: "Attached",
+    hostnames: "Hostnames",
+    readAt: "Read at",
+    crdBundle: "CRD bundle",
+    controller: "Controller",
+    weight: "Weight",
+    behindIt: "Behind it",
+    claim: "Claim",
     hostname: "Hostname",
     gatewayAddress: "Gateway address",
     whoInfra: "infra",
@@ -326,6 +337,8 @@ export const en = {
     openGateways: "Open Gateways →",
     liveUnavailableFor: "Live updates unavailable for {kind}s",
     fallsBackPolling: "{message} — the list falls back to polling.",
+    copyListenerHostname: "Listener hostname {host}",
+    inInline: "in",
     probe: "Probe",
     openScopedTo: "Open {plural} scoped to {namespace}",
     copyKindAddress: "{kind} address",
@@ -1644,6 +1657,43 @@ export const en = {
     gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
     gwCouldNotResolve: "Could not resolve {name}",
     gwForwardThrough: "Forward this port — through a pod behind {name}",
+    gwNoListeners:
+      "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
+    fromListenerSet: "from {name}",
+    brokenWord: "broken",
+    crossNsNeedsGrant: "cross-namespace, needs a ReferenceGrant",
+    sameDefault: "Same (default)",
+    noSuchGatewayClass: "no such GatewayClass",
+    claimedBy: "claimed by {name}",
+    refusedBy: "refused by {name}",
+    noControllerClaimed: "no controller has claimed this class",
+    nonePublished: "none published",
+    mixedCrdBundle:
+      "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
+    gwNoRouteKinds:
+      "The cluster serves no route kinds, so nothing can attach here.",
+    gwRoutesUnreadable:
+      'The routes could not be read — whether anything attaches here is not known, which is not the same as "nothing does".',
+    gwNoRouteNames:
+      "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
+    gwAcceptedWord: "accepted",
+    couldNotReadGateways: "Could not read the gateways: {message}",
+    readingGateways: "Reading gateways…",
+    gwClassUnused:
+      "No Gateway names this class — deleting it breaks nothing today.",
+    noAddressShort: "no address",
+    gwClassNoAnswer:
+      "no controller has answered — everything through this class is dead",
+    nsNoLabelsSelector:
+      "No labels — no namespaceSelector anywhere matches this namespace.",
+    matchesEverythingWord: "everything",
+    matchesEverything: "matches everything",
+    gwNoRules: "No rules — nothing is matched.",
+    gwUninterpretedFilters: "filters this app does not interpret:",
+    gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
+    needsReferenceGrant: "needs a ReferenceGrant",
+    zeroWeight: "0 — receives no traffic",
+    resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",

@@ -40,6 +40,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
+import { useT, type T } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingOf, useBackingLists } from "@/integrations";
@@ -55,7 +56,7 @@ import type {
 } from "@/generated/types";
 
 /** One match, in the kind's own vocabulary. */
-function sayMatch(match: RouteMatchInfo): string {
+function sayMatch(match: RouteMatchInfo, t: T): string {
   const parts: string[] = [];
   if (match.path) {
     parts.push(
@@ -68,28 +69,33 @@ function sayMatch(match: RouteMatchInfo): string {
   }
   parts.push(...match.headers);
   parts.push(...match.queryParams.map((param) => `?${param}`));
-  return parts.length > 0 ? parts.join(" · ") : "everything";
+  return parts.length > 0
+    ? parts.join(" · ")
+    : t("empty", "matchesEverythingWord");
 }
 
 function RuleRows({ route }: { route: RouteInfo }) {
+  const t = useT();
   const backing = useBackingLists();
 
   return (
     <Section>
-      <SectionHeader title="Rules" count={route.rules.length} />
+      <SectionHeader title={t("columns", "rules")} count={route.rules.length} />
       {route.rules.length === 0 ? (
-        <p className="text-xs text-fg-fnt">No rules — nothing is matched.</p>
+        <p className="text-xs text-fg-fnt">{t("empty", "gwNoRules")}</p>
       ) : (
         <div className="space-y-3">
           {route.rules.map((rule: RouteRuleInfo, index: number) => (
             <div key={index} className="rounded border border-hair px-3 py-2">
               <div className="text-xs text-fg-mut">
                 {rule.matches.length === 0 ? (
-                  <span className="text-fg-fnt">matches everything</span>
+                  <span className="text-fg-fnt">
+                    {t("empty", "matchesEverything")}
+                  </span>
                 ) : (
                   rule.matches.map((match, at) => (
                     <span key={at} className="mr-2 font-mono">
-                      {sayMatch(match)}
+                      {sayMatch(match, t)}
                     </span>
                   ))
                 )}
@@ -98,7 +104,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
                 <p className="pt-1 text-xs text-fg-fnt">
                   {/* Named, never guessed at: what a vendor filter means is
                       the vendor's business; that it is here is ours. */}
-                  filters this app does not interpret:{" "}
+                  {t("empty", "gwUninterpretedFilters")}{" "}
                   <span className="font-mono">
                     {rule.extensionRefs
                       .map((ref) => `${ref.kind}.${ref.group}/${ref.name}`)
@@ -108,20 +114,20 @@ function RuleRows({ route }: { route: RouteInfo }) {
               )}
               {rule.hasRedirect && rule.backendRefs.length === 0 ? (
                 <p className="pt-1 text-xs text-fg-mut">
-                  Redirects — no backends, and none needed.
+                  {t("empty", "gwRedirectsNoBackends")}
                 </p>
               ) : rule.backendRefs.length === 0 ? (
                 <p className="pt-1 text-xs text-warn">
-                  No backendRefs — a matched request has nowhere to go.
+                  {t("empty", "gwNoBackendRefsSay")}.
                 </p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Backend</TableHead>
-                      <TableHead>Port</TableHead>
-                      <TableHead>Weight</TableHead>
-                      <TableHead>Behind it</TableHead>
+                      <TableHead>{t("columns", "backend")}</TableHead>
+                      <TableHead>{t("columns", "port")}</TableHead>
+                      <TableHead>{t("columns", "weight")}</TableHead>
+                      <TableHead>{t("columns", "behindIt")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -161,14 +167,14 @@ function RuleRows({ route }: { route: RouteInfo }) {
                             {backend.namespace &&
                               backend.namespace !== route.namespace && (
                                 <span className="text-fg-fnt">
-                                  {" "}
-                                  · in{" "}
+                                  {" · "}
+                                  {t("action", "inInline")}{" "}
                                   <ResourceRef
                                     kind="Namespace"
                                     name={backend.namespace}
                                     showKind={false}
                                   />{" "}
-                                  — needs a ReferenceGrant
+                                  — {t("empty", "needsReferenceGrant")}
                                 </span>
                               )}
                           </TableCell>
@@ -186,27 +192,31 @@ function RuleRows({ route }: { route: RouteInfo }) {
                           </TableCell>
                           <TableCell className="text-fg-fnt">
                             {backend.weight === 0
-                              ? "0 — receives no traffic"
+                              ? t("empty", "zeroWeight")
                               : (backend.weight ?? "—")}
                           </TableCell>
                           <TableCell className="text-xs">
                             {state === null ? (
                               <span className="text-fg-fnt">—</span>
                             ) : !state.known ? (
-                              <span className="text-fg-fnt">reading…</span>
+                              <span className="text-fg-fnt">
+                                {t("action", "readingInline")}
+                              </span>
                             ) : state.stop ? (
                               <span className="text-err">
                                 {describeStop(state.stop).title}
                               </span>
                             ) : state.service?.type === "ExternalName" ? (
                               <span className="text-fg-mut">
-                                resolves elsewhere (ExternalName)
+                                {t("empty", "resolvesElsewhereExternal")}
                               </span>
                             ) : (
                               <span className="text-ok">
-                                {state.ready} ready
+                                {t("count", "nReady", { n: state.ready })}
                                 {state.draining > 0 &&
-                                  `, ${state.draining} draining`}
+                                  `, ${t("count", "nDraining", {
+                                    n: state.draining,
+                                  })}`}
                               </span>
                             )}
                           </TableCell>
@@ -225,6 +235,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
 }
 
 export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
+  const t = useT();
   const {
     name,
     namespace,
@@ -271,19 +282,19 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
 
   const facts: KeyValue[] = [
     {
-      label: "Hostnames",
+      label: t("columns", "hostnames"),
       value: (
         <CopyableAddresses
           values={route?.hostnames ?? []}
-          label="Hostname"
-          empty="all hosts the listener serves"
+          label={t("columns", "hostname")}
+          empty={t("empty", "gwAllHostsListenerServes")}
         />
       ),
     },
     ...(route && !route.apiVersion.endsWith("/v1")
       ? [
           {
-            label: "Read at",
+            label: t("columns", "readAt"),
             value: route.apiVersion,
             tone: "warn" as const,
           },
@@ -294,7 +305,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -305,28 +316,28 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
     },
     {
       id: "rules",
-      label: "Rules",
+      label: t("columns", "rules"),
       glyph: viewGlyph(RouteGlyph),
       mark: countMark(route?.rules.length ?? 0),
       content: route ? <RuleRows route={route} /> : null,
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(route?.labels ?? {}).length}
             items={recordToKeyValues(route?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(route?.annotations ?? {}).length}
             items={recordToKeyValues(route?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -366,7 +377,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

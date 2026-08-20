@@ -43,6 +43,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { CertificateLine } from "@/components/resources/CertificateFacts";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
+import { useT, type T } from "@/i18n/useT";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -80,7 +81,8 @@ function attachesTo(route: RouteInfo, gateway: GatewayInfo): boolean {
 /** The Accepted verdict this Gateway's controllers gave one route. */
 function acceptedBy(
   route: RouteInfo,
-  gateway: GatewayInfo
+  gateway: GatewayInfo,
+  t: T
 ): { text: string; tone: "ok" | "err" | "mute" } {
   const verdicts = route.parents
     .filter(
@@ -92,12 +94,13 @@ function acceptedBy(
       parent.conditions.filter((c) => c.type === "Accepted")
     );
   if (verdicts.length === 0)
-    return { text: "no controller answered", tone: "mute" };
+    return { text: t("empty", "gwNoControllerShort"), tone: "mute" };
   const refused = verdicts.find((c) => c.status === "False");
-  if (refused) return { text: refused.reason ?? "refused", tone: "err" };
+  if (refused)
+    return { text: refused.reason ?? t("empty", "gwRefusedWord"), tone: "err" };
   if (verdicts.every((c) => c.status === "True"))
-    return { text: "accepted", tone: "ok" };
-  return { text: "unknown", tone: "mute" };
+    return { text: t("empty", "gwAcceptedWord"), tone: "ok" };
+  return { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
 }
 
 const TONE_CLASS = {
@@ -107,6 +110,7 @@ const TONE_CLASS = {
 } as const;
 
 function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
+  const t = useT();
   // Certificates a listener names in the Gateway's own namespace are read;
   // a cross-namespace ref is named and left to the listener's ResolvedRefs
   // condition — whether a ReferenceGrant allows it is the controller's
@@ -123,23 +127,23 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
 
   return (
     <Section>
-      <SectionHeader title="Listeners" count={gateway.listeners.length} />
+      <SectionHeader
+        title={t("columns", "listeners")}
+        count={gateway.listeners.length}
+      />
       {gateway.listeners.length === 0 ? (
-        <p className="text-xs text-fg-fnt">
-          No listeners — this Gateway accepts no traffic, and no route can
-          attach to it.
-        </p>
+        <p className="text-xs text-fg-fnt">{t("empty", "gwNoListeners")}</p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Protocol</TableHead>
-              <TableHead>Port</TableHead>
-              <TableHead>Hostname</TableHead>
+              <TableHead>{t("columns", "name")}</TableHead>
+              <TableHead>{t("columns", "protocol")}</TableHead>
+              <TableHead>{t("columns", "port")}</TableHead>
+              <TableHead>{t("columns", "hostname")}</TableHead>
               <TableHead>TLS</TableHead>
-              <TableHead>Routes from</TableHead>
-              <TableHead>Attached</TableHead>
+              <TableHead>{t("columns", "routesFrom")}</TableHead>
+              <TableHead>{t("columns", "attached")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -152,8 +156,10 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   {listener.name}
                   {listener.fromListenerSet && (
                     <span className="text-fg-fnt">
-                      {" "}
-                      · from {listener.fromListenerSet}
+                      {" · "}
+                      {t("empty", "fromListenerSet", {
+                        name: listener.fromListenerSet,
+                      })}
                     </span>
                   )}
                   {broken(listener) && (
@@ -161,7 +167,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                       {" "}
                       ·{" "}
                       {listener.conditions.find((c) => c.status === "False")
-                        ?.reason ?? "broken"}
+                        ?.reason ?? t("empty", "brokenWord")}
                     </span>
                   )}
                 </TableCell>
@@ -177,11 +183,13 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   {listener.hostname ? (
                     <CopyableValue
                       value={listener.hostname}
-                      label={`Listener hostname ${listener.hostname}`}
+                      label={t("action", "copyListenerHostname", {
+                        host: listener.hostname,
+                      })}
                       className="text-xs"
                     />
                   ) : (
-                    "all hosts"
+                    t("empty", "gwAllHosts")
                   )}
                 </TableCell>
                 <TableCell>
@@ -220,7 +228,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   {/* The spec default is Same; kept as written, because an
                       absent field is the API's default and not something a
                       controller said. */}
-                  {listener.allowedNamespaces ?? "Same (default)"}
+                  {listener.allowedNamespaces ?? t("empty", "sameDefault")}
                 </TableCell>
                 <TableCell className="font-mono text-fg-mut">
                   {listener.attachedRoutes ?? "—"}
@@ -235,6 +243,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
 }
 
 export function GatewayDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -334,31 +343,35 @@ export function GatewayDetail() {
       </span>
     );
     if (!classes.data || !gateway) {
-      return { label: "Class", value: gateway?.className || "—" };
+      return { label: t("columns", "class"), value: gateway?.className || "—" };
     }
     if (!gatewayClass) {
       return {
-        label: "Class",
-        value: `${gateway.className || "—"} — no such GatewayClass`,
+        label: t("columns", "class"),
+        value: `${gateway.className || "—"} — ${t("empty", "noSuchGatewayClass")}`,
         tone: "err" as const,
       };
     }
     if (gatewayClass.accepted === true) {
       return {
-        label: "Class",
-        value: named(`— claimed by ${gatewayClass.controllerName}`),
+        label: t("columns", "class"),
+        value: named(
+          `— ${t("empty", "claimedBy", { name: gatewayClass.controllerName })}`
+        ),
       };
     }
     if (gatewayClass.accepted === false) {
       return {
-        label: "Class",
-        value: named(`— refused by ${gatewayClass.controllerName}`),
+        label: t("columns", "class"),
+        value: named(
+          `— ${t("empty", "refusedBy", { name: gatewayClass.controllerName })}`
+        ),
         tone: "err" as const,
       };
     }
     return {
-      label: "Class",
-      value: named("— no controller has claimed this class"),
+      label: t("columns", "class"),
+      value: named(`— ${t("empty", "noControllerClaimed")}`),
       tone: "warn" as const,
     };
   })();
@@ -369,9 +382,9 @@ export function GatewayDetail() {
       label: "Programmed",
       value: programmed
         ? programmed.status === "True"
-          ? "yes"
+          ? t("action", "yes")
           : (programmed.reason ?? programmed.status)
-        : "no controller answered",
+        : t("empty", "gwNoControllerShort"),
       tone: programmed
         ? programmed.status === "True"
           ? undefined
@@ -379,12 +392,12 @@ export function GatewayDetail() {
         : ("warn" as const),
     },
     {
-      label: "Addresses",
+      label: t("columns", "addresses"),
       value: (
         <CopyableAddresses
           values={gateway?.addresses ?? []}
-          label="Gateway address"
-          empty="none published"
+          label={t("columns", "gatewayAddress")}
+          empty={t("empty", "nonePublished")}
         />
       ),
     },
@@ -394,7 +407,7 @@ export function GatewayDetail() {
     ...(gateway && !gateway.apiVersion.endsWith("/v1")
       ? [
           {
-            label: "Read at",
+            label: t("columns", "readAt"),
             value: gateway.apiVersion,
             tone: "warn" as const,
           },
@@ -403,9 +416,8 @@ export function GatewayDetail() {
     ...(detection?.mixedBundle
       ? [
           {
-            label: "CRD bundle",
-            value:
-              "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
+            label: t("columns", "crdBundle"),
+            value: t("empty", "mixedCrdBundle"),
             tone: "warn" as const,
           },
         ]
@@ -415,7 +427,7 @@ export function GatewayDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -426,46 +438,46 @@ export function GatewayDetail() {
     },
     {
       id: "routes",
-      label: "Routes",
+      label: t("nav", "routes"),
       glyph: viewGlyph(RouteGlyph),
       mark: countMark(attached.length),
       content: (
         <Section>
-          <SectionHeader title="Attached routes" count={attached.length} />
+          <SectionHeader
+            title={t("nav", "attachedRoutes")}
+            count={attached.length}
+          />
           {detectionQuery.isLoading ? (
-            <p className="text-xs text-fg-fnt">Reading routes…</p>
+            <p className="text-xs text-fg-fnt">{t("empty", "readingRoutes")}</p>
           ) : routeKinds.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              The cluster serves no route kinds, so nothing can attach here.
+              {t("empty", "gwNoRouteKinds")}
             </p>
           ) : routes.isLoading ? (
-            <p className="text-xs text-fg-fnt">Reading routes…</p>
+            <p className="text-xs text-fg-fnt">{t("empty", "readingRoutes")}</p>
           ) : routes.isError ? (
             <p className="text-xs text-err">
-              The routes could not be read — whether anything attaches here is
-              not known, which is not the same as "nothing does".
+              {t("empty", "gwRoutesUnreadable")}
             </p>
           ) : attached.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No route names this Gateway. Its listeners answer, and every
-              request meets whatever the controller serves for an unmatched
-              host.
+              {t("empty", "gwNoRouteNames")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Kind</TableHead>
+                  <TableHead>{t("columns", "kind")}</TableHead>
                   <TableHead>Route</TableHead>
-                  <TableHead>Hostnames</TableHead>
+                  <TableHead>{t("columns", "hostnames")}</TableHead>
                   <TableHead>Accepted</TableHead>
-                  <TableHead>Rules</TableHead>
+                  <TableHead>{t("columns", "rules")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {attached.map((route) => {
                   const verdict = gateway
-                    ? acceptedBy(route, gateway)
+                    ? acceptedBy(route, gateway, t)
                     : ({ text: "—", tone: "mute" } as const);
                   return (
                     <TableRow
@@ -507,21 +519,21 @@ export function GatewayDetail() {
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(gateway?.labels ?? {}).length}
             items={recordToKeyValues(gateway?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(gateway?.annotations ?? {}).length}
             items={recordToKeyValues(gateway?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -566,7 +578,7 @@ export function GatewayDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

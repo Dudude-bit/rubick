@@ -15,6 +15,8 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    attachedRoutes: "Привязанные маршруты",
+    gatewaysUsingIt: "Gateways, которые его используют",
     fromThisMachine: "С этой машины",
     policies: "Политики",
     contents: "Содержимое",
@@ -87,6 +89,15 @@ export const ru: Catalogue = {
     missingTag: "отсутствует",
     backends: "Бэкенды",
     addresses: "Адреса",
+    routesFrom: "Маршруты из",
+    attached: "Привязано",
+    hostnames: "Хосты",
+    readAt: "Прочитан как",
+    crdBundle: "Набор CRD",
+    controller: "Контроллер",
+    weight: "Вес",
+    behindIt: "За ним",
+    claim: "Заявка",
     hostname: "Хост",
     gatewayAddress: "Адрес шлюза",
     whoInfra: "инфра",
@@ -291,6 +302,8 @@ export const ru: Catalogue = {
     openGateways: "Открыть Gateways →",
     liveUnavailableFor: "Живые обновления для {kind} недоступны",
     fallsBackPolling: "{message} — список переходит на опрос.",
+    copyListenerHostname: "Хост слушателя {host}",
+    inInline: "в",
     probe: "Проверить",
     openScopedTo: "Открыть {plural} в неймспейсе {namespace}",
     copyKindAddress: "Адрес {kind}",
@@ -1662,6 +1675,43 @@ export const ru: Catalogue = {
     gwNoReadyPodBehind: "За {name} сейчас не стоит ни одного готового пода.",
     gwCouldNotResolve: "Не удалось разрешить {name}",
     gwForwardThrough: "Пробросить этот порт — через под за {name}",
+    gwNoListeners:
+      "Слушателей нет — этот Gateway не принимает трафик, и ни один маршрут к нему не привяжется.",
+    fromListenerSet: "из {name}",
+    brokenWord: "сломан",
+    crossNsNeedsGrant: "через неймспейс, нужен ReferenceGrant",
+    sameDefault: "Same (по умолчанию)",
+    noSuchGatewayClass: "такого GatewayClass нет",
+    claimedBy: "заявлен {name}",
+    refusedBy: "отвергнут {name}",
+    noControllerClaimed: "ни один контроллер не заявил этот класс",
+    nonePublished: "не опубликованы",
+    mixedCrdBundle:
+      "версии смешаны — частичный апгрейд оставил CRD Gateway API из разных релизов",
+    gwNoRouteKinds:
+      "Кластер не обслуживает ни один route-kind, поэтому привязываться здесь нечему.",
+    gwRoutesUnreadable:
+      "Маршруты не удалось прочитать — привязано ли сюда что-то, неизвестно, а это не то же самое, что «ничего».",
+    gwNoRouteNames:
+      "Ни один маршрут не называет этот Gateway. Его слушатели отвечают, и каждый запрос получает то, что контроллер отдаёт для несовпавшего хоста.",
+    gwAcceptedWord: "принят",
+    couldNotReadGateways: "Не удалось прочитать шлюзы: {message}",
+    readingGateways: "Читаем шлюзы…",
+    gwClassUnused:
+      "Ни один Gateway не называет этот класс — его удаление сегодня ничего не сломает.",
+    noAddressShort: "адреса нет",
+    gwClassNoAnswer:
+      "ни один контроллер не ответил — всё через этот класс мертво",
+    nsNoLabelsSelector:
+      "Меток нет — ни один namespaceSelector нигде не совпадает с этим неймспейсом.",
+    matchesEverythingWord: "всё",
+    matchesEverything: "ловит всё",
+    gwNoRules: "Правил нет — ничего не матчится.",
+    gwUninterpretedFilters: "фильтры, которые это приложение не трактует:",
+    gwRedirectsNoBackends: "Перенаправляет — бэкендов нет, и они не нужны.",
+    needsReferenceGrant: "нужен ReferenceGrant",
+    zeroWeight: "0 — трафик не получает",
+    resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     noRulesRoutesNothing:

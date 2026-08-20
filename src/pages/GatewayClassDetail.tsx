@@ -21,6 +21,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
+import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
@@ -32,6 +33,7 @@ import type { GatewayClassInfo } from "@/generated/types";
 const ROUTING_STALE = 60_000;
 
 function GatewayRows({ className }: { className: string }) {
+  const t = useT();
   const {
     data: gateways,
     error,
@@ -49,17 +51,17 @@ function GatewayRows({ className }: { className: string }) {
 
   return (
     <Section>
-      <SectionHeader title="Gateways using it" count={users.length} />
+      <SectionHeader title={t("nav", "gatewaysUsingIt")} count={users.length} />
       {error && gateways === undefined ? (
         <p className="text-xs text-err">
-          Could not read the gateways: {(error as Error).message}
+          {t("empty", "couldNotReadGateways", {
+            message: (error as Error).message,
+          })}
         </p>
       ) : isLoading && gateways === undefined ? (
-        <p className="text-xs text-fg-fnt">Reading gateways…</p>
+        <p className="text-xs text-fg-fnt">{t("empty", "readingGateways")}</p>
       ) : users.length === 0 ? (
-        <p className="text-xs text-fg-fnt">
-          No Gateway names this class — deleting it breaks nothing today.
-        </p>
+        <p className="text-xs text-fg-fnt">{t("empty", "gwClassUnused")}</p>
       ) : (
         <div className="space-y-1">
           {users.map((gateway) => (
@@ -75,8 +77,8 @@ function GatewayRows({ className }: { className: string }) {
               />
               <CopyableAddresses
                 values={gateway.addresses}
-                label="Gateway address"
-                empty="no address"
+                label={t("columns", "gatewayAddress")}
+                empty={t("empty", "noAddressShort")}
                 className="text-fg-fnt"
               />
             </div>
@@ -88,6 +90,7 @@ function GatewayRows({ className }: { className: string }) {
 }
 
 export function GatewayClassDetail() {
+  const t = useT();
   const {
     name,
     resource: cls,
@@ -110,25 +113,31 @@ export function GatewayClassDetail() {
 
   const claim: KeyValue =
     cls?.accepted === true
-      ? { label: "Claim", value: `claimed by ${cls.controllerName}` }
+      ? {
+          label: t("columns", "claim"),
+          value: t("empty", "claimedBy", { name: cls.controllerName }),
+        }
       : cls?.accepted === false
         ? {
-            label: "Claim",
-            value: `refused by ${cls.controllerName}`,
+            label: t("columns", "claim"),
+            value: t("empty", "refusedBy", { name: cls.controllerName }),
             tone: "err",
           }
         : {
-            label: "Claim",
-            value:
-              "no controller has answered — everything through this class is dead",
+            label: t("columns", "claim"),
+            value: t("empty", "gwClassNoAnswer"),
             tone: "warn",
           };
 
   const facts: KeyValue[] = [
-    { label: "Controller", value: cls?.controllerName ?? "—", mono: true },
+    {
+      label: t("columns", "controller"),
+      value: cls?.controllerName ?? "—",
+      mono: true,
+    },
     claim,
     ...(cls?.description
-      ? [{ label: "Description", value: cls.description }]
+      ? [{ label: t("columns", "description"), value: cls.description }]
       : []),
   ];
 
@@ -146,7 +155,7 @@ export function GatewayClassDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -157,7 +166,7 @@ export function GatewayClassDetail() {
           />
           {conditions.length > 0 && (
             <KeyValueSection
-              title="Conditions"
+              title={t("columns", "conditions")}
               items={conditions}
               className="max-w-lg"
             />
@@ -168,21 +177,21 @@ export function GatewayClassDetail() {
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(cls?.labels ?? {}).length}
             items={recordToKeyValues(cls?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(cls?.annotations ?? {}).length}
             items={recordToKeyValues(cls?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -221,7 +230,7 @@ export function GatewayClassDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}
