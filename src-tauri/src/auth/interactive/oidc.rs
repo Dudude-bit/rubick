@@ -217,39 +217,38 @@ async fn wait_for_oidc_callback(listener: TcpListener) -> Result<OidcCallback> {
 mod tests {
     use super::*;
 
-    /// The whole of #67: a redirect URI has to be registered with the provider,
-    /// so the port cannot be one the kernel picked. Dex answered
-    /// `Unregistered redirect_uri ("http://127.0.0.1:58884/callback")` and
-    /// showed that to the reader instead of signing them in.
+    /// The whole of #67, and both halves of the rule in one test on purpose.
+    ///
+    /// These were two tests and they raced: the fallback one binds 8000 and
+    /// 18000 and holds them, so the other — asking for a registered port —
+    /// got a kernel-assigned one and failed. It passed locally on timing and
+    /// went red on CI. Ports are process-wide state; the phases have to be
+    /// ordered, not merely written next to each other.
     #[tokio::test]
-    async fn binds_a_port_a_provider_could_have_registered() {
+    async fn asks_for_a_registered_port_and_settles_for_any() {
         let listener = bind_redirect().await.expect("a listener");
         let port = listener.local_addr().expect("an address").port();
         assert!(
             REDIRECT_PORTS.contains(&port),
             "bound {port}, which no provider was told about"
         );
-    }
+        drop(listener);
 
-    /// Both busy is not a reason to refuse: a provider that honours RFC 8252
-    /// takes any loopback port, and one that does not at least names the URI
-    /// it refused.
-    #[tokio::test]
-    async fn falls_back_to_any_port_when_both_are_taken() {
+        // Both busy is not a reason to refuse: a provider honouring RFC 8252
+        // takes any loopback port, and one that does not at least names the
+        // URI it refused.
         let mut held = Vec::new();
         for port in REDIRECT_PORTS {
-            if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)).await {
-                held.push(listener);
+            match TcpListener::bind(("127.0.0.1", port)).await {
+                Ok(listener) => held.push(listener),
+                // Something else on this machine holds it; the second phase
+                // cannot be set up, and the first has already said its piece.
+                Err(_) => return,
             }
         }
-        if held.len() < REDIRECT_PORTS.len() {
-            // Something else on this machine holds one of them; the case this
-            // test is about cannot be set up, so it has nothing to say.
-            return;
-        }
 
-        let listener = bind_redirect().await.expect("a listener");
-        let port = listener.local_addr().expect("an address").port();
+        let fallback = bind_redirect().await.expect("a listener");
+        let port = fallback.local_addr().expect("an address").port();
         assert!(!REDIRECT_PORTS.contains(&port));
         assert_ne!(port, 0);
     }
