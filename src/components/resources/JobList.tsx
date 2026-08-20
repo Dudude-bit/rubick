@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 
 import type { JobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -25,14 +26,14 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     // "1/1", under a header that is the widest thing in the column.
     size: 110,
     id: "completions",
-    header: "Completions",
+    header: () => <T section="columns" k="completions" />,
     cell: ({ row }) =>
       `${row.original.succeeded}/${row.original.completions || "∞"}`,
   },
   {
     size: 110,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   createAgeColumn<JobInfoWithMetrics>(),

@@ -7,6 +7,8 @@ import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
 import type { BinaryValue } from "@/generated/types";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 /**
  * The body of a ConfigMap or a Secret.
@@ -47,15 +49,16 @@ export interface DataSectionProps {
 }
 
 export function DataSection({
-  title = "Data",
+  title,
   data,
   keys = [],
   sensitive = false,
   withheld = {},
   binary = {},
   isLoading = false,
-  emptyMessage = "No data keys",
+  emptyMessage,
 }: DataSectionProps) {
+  const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const copyToClipboard = useCopyToClipboard();
 
@@ -100,17 +103,22 @@ export function DataSection({
     copyToClipboard(
       JSON.stringify(payload, null, 2),
       blobCount > 0
-        ? `${readable.length} values copied, ${blobCount} binary as base64.`
-        : `All ${readable.length} values copied.`
+        ? t("count", "valuesCopiedWithBinary", {
+            n: readable.length,
+            binary: blobCount,
+          })
+        : t("count", "allValuesCopied", { n: readable.length })
     );
   };
 
   if (entries.length === 0) {
     return (
       <Section>
-        <SectionHeader title={title} count={0} />
+        <SectionHeader title={title ?? t("columns", "data")} count={0} />
         <p className="py-1 text-xs text-fg-fnt">
-          {isLoading ? "Reading…" : emptyMessage}
+          {isLoading
+            ? t("action", "readingEllipsis")
+            : (emptyMessage ?? <T section="empty" k="noDataKeys" />)}
         </p>
       </Section>
     );
@@ -119,12 +127,15 @@ export function DataSection({
   return (
     <Section>
       <SectionHeader
-        title={title}
+        title={title ?? t("columns", "data")}
         count={
           <>
-            {entries.length} {entries.length === 1 ? "key" : "keys"}
+            {t("count", "keys", { n: entries.length })}
             {sensitive && (
-              <span className="text-fg-fnt"> · values hidden by default</span>
+              <span className="text-fg-fnt">
+                {" · "}
+                {t("empty", "valuesHiddenByDefault")}
+              </span>
             )}
           </>
         }
@@ -133,7 +144,11 @@ export function DataSection({
             <>
               {sensitive && readable.length > 0 && (
                 <DetailAction
-                  label={allRevealed ? "Hide all" : "Reveal all"}
+                  label={
+                    allRevealed
+                      ? t("action", "hideAll")
+                      : t("action", "revealAll")
+                  }
                   icon={allRevealed ? EyeOff : Eye}
                   onClick={() =>
                     setRevealed(
@@ -144,7 +159,11 @@ export function DataSection({
                   }
                 />
               )}
-              <DetailAction label="Copy all" icon={Copy} onClick={copyAll} />
+              <DetailAction
+                label={t("action", "copyAll")}
+                icon={Copy}
+                onClick={copyAll}
+              />
             </>
           )
         }
@@ -170,12 +189,14 @@ export function DataSection({
                   {refusal
                     ? refusal
                     : blob
-                      ? `binary, not text — ${formatBytes(blob.bytes, 0)}`
+                      ? t("empty", "binaryNotText", {
+                          size: formatBytes(blob.bytes, 0),
+                        })
                       : value === undefined
                         ? isLoading
-                          ? "reading…"
-                          : "not readable with this access"
-                        : `${value.length} chars`}
+                          ? t("action", "readingInline")
+                          : t("empty", "notReadableWithAccess")
+                        : t("count", "chars", { n: value.length })}
                 </span>
                 {(value !== undefined || blob) && (
                   <div className="ml-auto flex items-center gap-1">
@@ -199,11 +220,14 @@ export function DataSection({
                         blob
                           ? copyToClipboard(
                               blob.base64,
-                              `Base64 of ${key} copied — ${formatBytes(blob.bytes, 0)} of binary.`
+                              t("action", "base64Copied", {
+                                key,
+                                size: formatBytes(blob.bytes, 0),
+                              })
                             )
                           : copyToClipboard(
                               value as string,
-                              `Value of ${key} copied.`
+                              t("action", "valueCopied", { key })
                             )
                       }
                     />

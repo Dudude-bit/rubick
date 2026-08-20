@@ -44,6 +44,7 @@ vi.mock("@/hooks/useClusterOverview", () => ({
 const { Sidebar } = await import("./Sidebar");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useUpdaterStore } = await import("@/stores/updaterStore");
+const { useLocaleStore } = await import("@/stores/localeStore");
 
 function wrap(node: ReactNode, route: string[] = ["/"]) {
   const client = new QueryClient({
@@ -64,7 +65,43 @@ beforeEach(() => {
   overview = undefined;
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   useUpdaterStore.setState({ available: false });
+  // A test that fails mid-way must not leave the next one reading Russian.
+  useLocaleStore.setState({ choice: "en" });
 });
+
+const DAY = 86_400_000;
+const inDays = (days: number) =>
+  new Date(Date.now() + days * DAY).toISOString();
+
+/** A cert-manager Certificate as `listCustomResources` would hand it back. */
+function demoCertificate(status: Record<string, unknown>) {
+  return {
+    name: "web-cert",
+    namespace: "shop",
+    uid: "cert-1",
+    apiVersion: "cert-manager.io/v1",
+    kind: "Certificate",
+    spec: { secretName: "web-tls" },
+    status: {
+      conditions: [{ type: "Ready", status: "True" }],
+      ...status,
+    },
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+  };
+}
+
+const healthyCertificate = () =>
+  demoCertificate({ notAfter: inDays(60), notBefore: inDays(-30) });
+
+const overdueCertificate = (renewalTime: string) =>
+  demoCertificate({
+    notAfter: inDays(2.25),
+    notBefore: inDays(-4.75),
+    renewalTime,
+  });
 
 /** An overview carrying one recognisable number and nothing else. */
 function overviewWithPods(pods: number): OverviewStub {
@@ -217,6 +254,105 @@ describe("the Integrations category", () => {
   });
 
   /**
+   * The dot beside the number. A row that is all inventory stays quiet; a
+   * page with something worth opening says so in one pixel, because the
+   * count itself is not allowed to borrow a colour.
+   */
+  it("puts a dot on a vendor row whose page has something worth a look", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([
+      overdueCertificate("2026-01-01T00:00:00Z"),
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /cert-manager/i });
+    expect(await screen.findByLabelText("worth a look")).toBeInTheDocument();
+  });
+
+  it("draws no dot while every certificate is fine", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([healthyCertificate()]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /cert-manager/i });
+    expect(await screen.findByText("1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("worth a look")).toBeNull();
+    expect(screen.queryByLabelText("broken")).toBeNull();
+  });
+
+  /**
+   * Would break if the rail went back to showing cluster A's certificate
+   * count while pointed at cluster B. The detection scan is keyed on the
+   * context and always was; the numbers must be too, or a switch keeps a
+   * minute of the old cluster's arithmetic.
+   */
+  it("forgets the previous cluster's numbers on switch", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([
+      healthyCertificate(),
+      healthyCertificate(),
+    ]);
+
+    wrap(<Sidebar />);
+    expect(await screen.findByText("2")).toBeInTheDocument();
+
+    listCustomResources.mockResolvedValue([healthyCertificate()]);
+    useClusterStore.setState({ currentContext: "staging" });
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("2")).toBeNull();
+  });
+
+  /**
+   * The caption says the category is still being read rather than letting
+   * a half-arrived list pass for the whole answer.
+   */
+  it("spins beside the caption while the integrations are being read", async () => {
+    let answer!: (extensions: DetectedExtension[]) => void;
+    detectInClusterExtensions.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+
+    wrap(<Sidebar />);
+
+    expect(
+      await screen.findByLabelText("reading integrations")
+    ).toBeInTheDocument();
+
+    answer([]);
+    await waitFor(() =>
+      expect(screen.queryByLabelText("reading integrations")).toBeNull()
+    );
+  });
+
+  /**
+   * The label is spoken, not drawn, and a screen reader is the one reader
+   * who cannot see that the rest of the rail is in their language. It is
+   * built from the same catalogue key the caption draws, so the two cannot
+   * drift apart.
+   */
+  it("says it in the reader's language too", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    detectInClusterExtensions.mockReturnValue(new Promise(() => {}));
+
+    wrap(<Sidebar />);
+
+    expect(
+      await screen.findByLabelText("идёт чтение: интеграции")
+    ).toBeInTheDocument();
+  });
+
+  /**
    * Would break if a vendor the cluster does not have started appearing.
    * The category is a claim about what this cluster *has*, not about what
    * the app knows how to read.
@@ -231,5 +367,22 @@ describe("the Integrations category", () => {
 
     await screen.findByRole("link", { name: /Traefik/ });
     expect(screen.queryByRole("link", { name: /cert-manager/ })).toBeNull();
+  });
+});
+
+describe("the rail in another language", () => {
+  it("translates its own captions and leaves the kinds alone", () => {
+    useLocaleStore.setState({ choice: "ru" });
+
+    wrap(<Sidebar />);
+
+    expect(screen.getByText("Нагрузки")).toBeInTheDocument();
+    expect(screen.getByText("Обзор")).toBeInTheDocument();
+    expect(screen.getByText("Настройки")).toBeInTheDocument();
+
+    // The point of the split: a Kubernetes kind is a proper noun, and
+    // "Поды" would be this app inventing a word no cluster answers to.
+    expect(screen.getByText("Pods")).toBeInTheDocument();
+    expect(screen.getByText("Helm")).toBeInTheDocument();
   });
 });

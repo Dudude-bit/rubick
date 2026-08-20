@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
 import { DetailAction } from "./detail-blocks";
+import { useT } from "@/i18n/useT";
 
 export interface YamlTabContentProps {
   /**
@@ -34,9 +35,10 @@ export function YamlTabContent({
   resourceKind,
   resourceName,
   namespace,
-  note = "the object as the API server has it",
+  note,
   onCopy,
 }: YamlTabContentProps) {
+  const t = useT();
   const isYamlLoading = yaml == null;
 
   const handleFetchYaml = useCallback(() => {
@@ -49,11 +51,16 @@ export function YamlTabContent({
           the rhythm, and the line the title used to occupy says something
           the reader did not already know. */}
       <div className="flex flex-none items-center gap-2 pb-2">
-        <p className="text-[11px] text-fg-fnt">{note}</p>
+        <p className="text-[11px] text-fg-fnt">
+          {note ?? t("empty", "yamlNoteDefault")}
+        </p>
         <div className="ml-auto flex items-center gap-1">
           {resourceKind && resourceName && (
             <YamlEditorAction
-              title={`Edit ${resourceKind}: ${resourceName}`}
+              title={t("action", "editResourceTitle", {
+                kind: resourceKind,
+                name: resourceName,
+              })}
               resourceKey={{
                 kind: resourceKind,
                 name: resourceName,
@@ -63,7 +70,7 @@ export function YamlTabContent({
             />
           )}
           <DetailAction
-            label="Copy"
+            label={t("action", "copy")}
             icon={Copy}
             onClick={onCopy}
             disabled={isYamlLoading}

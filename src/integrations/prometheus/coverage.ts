@@ -135,7 +135,7 @@ export async function coverage(): Promise<Coverage> {
   // reduced to presence — it is the row's own evidence of what is there.
   const [seen, ...counts] = await Promise.all([
     commands
-      .prometheusQuery("count by (node) (kube_node_info)")
+      .prometheusQuery("count by (node, instance) (kube_node_info)")
       .catch(() => null),
     ...FAMILIES.map((family) =>
       commands
@@ -154,25 +154,58 @@ export async function coverage(): Promise<Coverage> {
     FAMILIES.map((family, index) => [family.metric, counts[index]])
   );
 
-  if (seen === null) {
+  const ours = new Set(nodes.map((node) => shortName(node.name)));
+  const namesIn = (answer: PromSeries[] | null) =>
+    new Set(
+      (answer ?? []).flatMap((series) => {
+        const name = nameFrom(series);
+        return name ? [shortName(name)] : [];
+      })
+    );
+
+  // An empty answer is not evidence of a foreign cluster, and saying so was
+  // this panel's own worst finding: a VictoriaMetrics scraping cAdvisor and
+  // nothing else reported "not watching this cluster" while three of the four
+  // families held hundreds of series from that very cluster. Silence about
+  // node names means the question cannot be answered, not that the answer
+  // is no.
+  //
+  // kube-state-metrics is not everywhere; cAdvisor is, wherever this app has
+  // any history at all. Asked only when the first came back empty, so the
+  // ordinary cluster still costs one query, and grouped by both labels
+  // because which one carries the name is the scrape config's choice.
+  //
+  // Read one way only, and that asymmetry is the point. `instance` is
+  // routinely `10.0.0.4:10250`, which `shortName` reduces to "10" — a name no
+  // cluster has. From this source a match is evidence that this cluster is
+  // being scraped; a non-match is evidence of nothing at all, and must never
+  // become a foreign node. `kube_node_info` is the only source trusted in
+  // both directions, because there the label *is* the node's name.
+  const authoritative = namesIn(seen);
+  const known =
+    authoritative.size > 0
+      ? authoritative
+      : new Set(
+          [
+            ...namesIn(
+              await commands
+                .prometheusQuery(
+                  "count by (node, instance) (container_cpu_usage_seconds_total)"
+                )
+                .catch(() => null)
+            ),
+          ].filter((name) => ours.has(name))
+        );
+  if (known.size === 0) {
     return {
       ...empty,
       clusterNodes: nodes.length,
       missing,
       series,
       problem:
-        "kube_node_info returned nothing — kube-state-metrics is not among what this Prometheus scrapes, so which cluster it is watching cannot be established from here.",
+        "Nothing here carries a node name — neither kube_node_info nor cAdvisor's node label — so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
     };
   }
-
-  const known = new Set(
-    seen.flatMap((series) => {
-      const name = nameFrom(series);
-      return name ? [shortName(name)] : [];
-    })
-  );
-  const ours = new Set(nodes.map((node) => shortName(node.name)));
-
   const unseen = nodes
     .filter((node) => !known.has(shortName(node.name)))
     .map((node) => node.name);

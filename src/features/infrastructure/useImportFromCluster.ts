@@ -7,6 +7,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useInfrastructureBuilderStore } from "@/stores/infrastructureBuilderStore";
+import { useT } from "@/i18n/useT";
 
 import type { ResourceNodeData, ServiceResourceData } from "./types";
 import { buildEdgesFromResources } from "./utils";
@@ -32,6 +33,7 @@ interface UseImportFromClusterResult {
 export function useImportFromCluster(
   onAfterImport?: () => void
 ): UseImportFromClusterResult {
+  const t = useT();
   const { toast } = useToast();
   const { isConnected, currentNamespace } = useClusterStore();
   const { replaceResources } = useInfrastructureBuilderStore();
@@ -40,8 +42,8 @@ export function useImportFromCluster(
   const importFromCluster = useCallback(async () => {
     if (!isConnected) {
       toast({
-        title: "Cluster not connected",
-        description: "Connect to a cluster to import live resources.",
+        title: t("cluster", "notConnected"),
+        description: t("cluster", "connectToImport"),
         variant: "destructive",
       });
       return;
@@ -215,20 +217,27 @@ export function useImportFromCluster(
       const newEdges = buildEdgesFromResources(nodes);
       replaceResources(nodes, newEdges);
       toast({
-        title: "Imported from cluster",
-        description: `Loaded ${nodes.length} resources from the cluster.`,
+        title: t("action", "importedFromCluster"),
+        description: t("count", "loadedResources", { n: nodes.length }),
       });
       onAfterImport?.();
     } catch (error) {
       toast({
-        title: "Import failed",
+        title: t("settings", "importFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
     } finally {
       setIsImporting(false);
     }
-  }, [currentNamespace, isConnected, replaceResources, toast, onAfterImport]);
+  }, [
+    currentNamespace,
+    isConnected,
+    replaceResources,
+    toast,
+    onAfterImport,
+    t,
+  ]);
 
   return { importFromCluster, isImporting };
 }

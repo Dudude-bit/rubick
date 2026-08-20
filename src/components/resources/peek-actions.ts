@@ -39,12 +39,7 @@ import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
  */
 
 export type PeekActionId =
-  | "shell"
-  | "debug"
-  | "portForward"
-  | "restart"
-  | "scale"
-  | "delete";
+  "shell" | "debug" | "portForward" | "restart" | "scale" | "delete";
 
 export interface PeekAction {
   id: PeekActionId;

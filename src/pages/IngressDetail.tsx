@@ -51,6 +51,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface AccessUrl {
   fullUrl: string;
@@ -69,6 +70,8 @@ function generateAccessUrls(
   rules: IngressRule[],
   tlsHosts: string[],
   hasCatchAllTls: boolean,
+  /** What a wildcard rule reads as in the host column. */
+  allHosts: string,
   /**
    * What a cloud controller says about a host `spec.tls` is silent on. All
    * three managed clouds keep the certificate off the Ingress — an ACM ARN,
@@ -95,7 +98,7 @@ function generateAccessUrls(
           ? `${scheme}://${actualHost}${path.path}`
           : `${scheme}://<host>${path.path}`,
         host: rule.host,
-        displayHost: isWildcard ? "All hosts" : rule.host,
+        displayHost: isWildcard ? allHosts : rule.host,
         path: path.path,
         backendService: path.backendService,
         backendPort: path.backendPort,
@@ -107,11 +110,6 @@ function generateAccessUrls(
   }
 
   return urls;
-}
-
-/** "1 host", "2 hosts" — the count and its noun agree. */
-function countOf(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 const ACCESS_ROW =
@@ -140,6 +138,7 @@ function IconAction({
 }
 
 export function IngressDetail() {
+  const t = useT();
   const copyToClipboard = useCopyToClipboard();
   const {
     name,
@@ -212,6 +211,7 @@ export function IngressDetail() {
     rules,
     tlsHosts,
     hasCatchAllTls,
+    t("empty", "allHosts"),
     terminatedByVendor
   );
   // "no TLS" is a claim about the whole way in, and `spec.tls` is only part
@@ -255,7 +255,9 @@ export function IngressDetail() {
     )
     .filter((cert) => cert != null)
     .map((cert) => expiryOf(cert))
-    .sort((a, b) => a.days - b.days)[0];
+    // Exact remaining time rather than whole days: several certificates
+    // expiring today all tie on `days`, and this picks the one to show.
+    .sort((a, b) => a.left - b.left)[0];
 
   const {
     data: events = [],
@@ -283,43 +285,48 @@ export function IngressDetail() {
     {
       // The class is a request; the controller is who answers it. Naming
       // only the request is how an Ingress nothing serves reads as fine.
-      label: "Class",
+      label: t("columns", "class"),
       value: controller
         ? controller.resolved
           ? `${controller.resolved}${controller.controller ? ` · ${controller.controller}` : ""}`
-          : `${ingress?.className ?? "no class"} — nothing serves it`
-        : ingress?.className || "cluster default",
+          : t("empty", "nothingServesClass", {
+              name: ingress?.className ?? t("empty", "noClassNamed"),
+            })
+        : ingress?.className || t("empty", "clusterDefault"),
       mono: !!ingress?.className,
       tone: controller && !controller.resolved ? ("err" as const) : undefined,
     },
     {
-      label: "Load balancer",
+      label: t("columns", "loadBalancer"),
       // Until the controller assigns an address nothing reaches this ingress,
       // which is the single most common reason it "does not work".
       // The empty state keeps its own tone, so it stays plain text rather
       // than the component's faint fallback.
       value:
         loadBalancerIps.length > 0 ? (
-          <CopyableAddresses values={loadBalancerIps} label="Ingress address" />
+          <CopyableAddresses
+            values={loadBalancerIps}
+            label={t("columns", "ingressAddress")}
+          />
         ) : (
-          "pending"
+          t("empty", "pendingInline")
         ),
       tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
     },
-    { label: "Rules", value: rules.length, mono: true },
-    { label: "Paths", value: accessUrls.length, mono: true },
+    { label: t("columns", "rules"), value: rules.length, mono: true },
+    { label: t("columns", "paths"), value: accessUrls.length, mono: true },
     {
       label: "TLS",
       // Once the certificate has been read, how long it has left is a more
       // useful answer than how many hosts it covers — the host count is a
       // shape, and the expiry is a date somebody has to act on.
       value: !hasTls
-        ? "none — traffic is unencrypted"
+        ? t("empty", "noneTrafficUnencrypted")
         : soonest
           ? soonest.text
           : hasCatchAllTls
-            ? "catch-all certificate"
-            : `${tlsHosts.length} host${tlsHosts.length === 1 ? "" : "s"}`,
+            ? t("empty", "catchAllCertificate")
+            : t("count", "hosts", { n: tlsHosts.length }),
       tone: !hasTls
         ? "warn"
         : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
@@ -331,7 +338,7 @@ export function IngressDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -353,16 +360,20 @@ export function IngressDetail() {
       content: (
         <Section>
           <SectionHeader
-            title="Reachable at"
+            title={t("columns", "reachableAt")}
             count={
               plainHttp > 0
-                ? `${countOf(accessUrls.length, "path")} · ${plainHttp} over plain HTTP`
-                : countOf(accessUrls.length, "path")
+                ? `${t("count", "paths", { n: accessUrls.length })} · ${t(
+                    "empty",
+                    "overPlainHttp",
+                    { n: plainHttp }
+                  )}`
+                : t("count", "paths", { n: accessUrls.length })
             }
           />
           {accessUrls.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No rules, so this ingress routes nothing.
+              {t("empty", "noRulesRoutesNothing")}
             </p>
           ) : (
             <div>
@@ -394,12 +405,12 @@ export function IngressDetail() {
                         <span className="font-mono">:{url.backendPort}</span>
                       </>
                     ) : (
-                      "no backend"
+                      t("empty", "noBackend")
                     )}
                   </span>
                   <span className="flex justify-end gap-0.5">
                     <IconAction
-                      label="Copy URL"
+                      label={t("action", "copyUrl")}
                       icon={Copy}
                       onClick={() =>
                         copyToClipboard(
@@ -409,7 +420,7 @@ export function IngressDetail() {
                     />
                     {url.host && url.host !== "*" && (
                       <IconAction
-                        label="Open in browser"
+                        label={t("action", "openInBrowser")}
                         icon={ExternalLink}
                         onClick={() =>
                           window.open(url.fullUrl, "_blank", "noreferrer")
@@ -427,18 +438,20 @@ export function IngressDetail() {
     connectionsTab(connections, deliveryQuery),
     {
       id: "rules",
-      label: "Rules",
+      label: t("columns", "rules"),
       glyph: viewGlyph(Route),
       mark: countMark(rules.length),
       content: (
         <Section>
-          <SectionHeader title="Rules" count={countOf(rules.length, "host")} />
+          <SectionHeader
+            title={t("columns", "rules")}
+            count={t("count", "hosts", { n: rules.length })}
+          />
           {rules.length === 0 ? (
             fallback?.backendService ? (
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs text-fg-mut">
-                  No rules — every request reaching this load balancer goes to
-                  the default backend:{" "}
+                  {t("empty", "ingressDefaultBackendOnly")}{" "}
                   <ResourceRef
                     kind={ResourceType.Service}
                     name={fallback.backendService}
@@ -451,15 +464,15 @@ export function IngressDetail() {
                 </p>
                 {behind && (
                   <p className="max-w-[80ch] text-[11px] text-fg-fnt">
-                    That Service is {behind.vendor}&rsquo;s own proxy — this
-                    Ingress is its front door, and the{" "}
-                    {countOf(behind.hosts, "host")} it serves{" "}
-                    {behind.hosts === 1 ? "is" : "are"} on{" "}
+                    {t("count", "ingressProxyHosts", {
+                      vendor: behind.vendor,
+                      n: behind.hosts,
+                    })}{" "}
                     <Link
                       to={behind.to}
                       className="text-info underline-offset-2 hover:underline"
                     >
-                      its page
+                      {t("empty", "itsPage")}
                     </Link>
                     .
                   </p>
@@ -467,7 +480,7 @@ export function IngressDetail() {
               </div>
             ) : (
               <p className="text-xs text-fg-fnt">
-                No rules and no default backend, so this ingress routes nothing.
+                {t("empty", "ingressNoRulesNoDefault")}
               </p>
             )
           ) : (
@@ -532,7 +545,9 @@ export function IngressDetail() {
                               </span>
                             </>
                           ) : (
-                            <span className="text-warn">no backend</span>
+                            <span className="text-warn">
+                              {t("empty", "noBackend")}
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -554,7 +569,7 @@ export function IngressDetail() {
           <SectionHeader title="TLS" count={tlsConfigs.length || undefined} />
           {tlsConfigs.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No TLS configured — this ingress serves plain HTTP.
+              {t("empty", "noTlsConfigured")}
             </p>
           ) : (
             <KeyValueList
@@ -572,14 +587,14 @@ export function IngressDetail() {
                     showKind={false}
                   />
                 ) : (
-                  "(auto-generated)"
+                  t("empty", "autoGenerated")
                 ),
                 value: (
                   <span className="flex flex-col gap-0.5">
                     <span className={cn(!config.isCatchAll && "font-mono")}>
                       {config.isCatchAll
-                        ? "catch-all · applies to every host not listed"
-                        : config.hosts.join(", ") || "no hosts"}
+                        ? t("empty", "catchAllAppliesToRest")
+                        : config.hosts.join(", ") || t("empty", "noHosts")}
                     </span>
                     {config.secretName && (
                       <CertificateLine
@@ -611,21 +626,21 @@ export function IngressDetail() {
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(ingress?.labels ?? {}).length}
             items={recordToKeyValues(ingress?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(ingress?.annotations ?? {}).length}
             items={recordToKeyValues(ingress?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -642,13 +657,16 @@ export function IngressDetail() {
             count={events.length || undefined}
             actions={
               eventsError && (
-                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+                <DetailAction
+                  label={t("action", "retry")}
+                  onClick={() => refetchEvents()}
+                />
               )
             }
           />
           {eventsError ? (
             <p className="text-xs text-warn">
-              Could not read events for this ingress.
+              {t("empty", "couldNotReadEvents")}
             </p>
           ) : eventsLoading ? (
             <div className="flex flex-col gap-1.5">

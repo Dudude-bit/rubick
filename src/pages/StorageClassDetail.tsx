@@ -15,8 +15,10 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function StorageClassDetail() {
+  const t = useT();
   const {
     name,
     resource: sc,
@@ -42,20 +44,28 @@ export function StorageClassDetail() {
   const facts: KeyValue[] = [
     { label: "Provisioner", value: sc?.provisioner ?? "—", mono: true },
     {
-      label: "Default class",
+      label: t("columns", "defaultClass"),
       // The one question people open this page to answer: does a claim that
       // names no class land here?
       value: sc?.isDefault
-        ? "yes — claims that name no class use this one"
-        : "no",
+        ? t("empty", "claimsUseThisClass")
+        : t("empty", "noLower"),
     },
-    { label: "Reclaim policy", value: sc?.reclaimPolicy ?? "—", mono: true },
-    { label: "Binding mode", value: sc?.volumeBindingMode ?? "—", mono: true },
     {
-      label: "Volume expansion",
+      label: t("columns", "reclaimPolicy"),
+      value: sc?.reclaimPolicy ?? "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "bindingMode"),
+      value: sc?.volumeBindingMode ?? "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "volumeExpansion"),
       value: sc?.allowVolumeExpansion
-        ? "allowed"
-        : "not allowed — claims cannot grow",
+        ? t("empty", "expansionAllowed")
+        : t("empty", "expansionNotAllowed"),
     },
   ];
 
@@ -65,7 +75,7 @@ export function StorageClassDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection
@@ -77,15 +87,15 @@ export function StorageClassDetail() {
     },
     {
       id: "parameters",
-      label: "Parameters",
+      label: t("columns", "parameters"),
       glyph: viewGlyph(SlidersHorizontal),
       mark: countMark(Object.keys(parameters).length),
       content: (
         <KeyValueSection
-          title="Parameters"
+          title={t("columns", "parameters")}
           count={Object.keys(parameters).length || undefined}
           items={recordToKeyValues(parameters)}
-          emptyMessage="No parameters — the provisioner uses its own defaults."
+          emptyMessage={t("empty", "noParameters")}
         />
       ),
     },
@@ -113,7 +123,7 @@ export function StorageClassDetail() {
           <>
             {sc.isDefault && (
               <span className="text-[11px] font-medium text-fg">
-                default class
+                {t("empty", "defaultClassBadge")}
               </span>
             )}
             <span className="font-mono text-[11px] text-fg-mut">
@@ -129,7 +139,7 @@ export function StorageClassDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

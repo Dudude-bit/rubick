@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
+import { useT } from "@/i18n/useT";
 
 export interface ScaleDialogProps {
   open: boolean;
@@ -39,11 +40,12 @@ export function ScaleDialog({
   onSubmit,
   warnings = [],
 }: ScaleDialogProps) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Scale {kind}</DialogTitle>
+          <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
@@ -54,7 +56,11 @@ export function ScaleDialog({
         <ScaleForm
           current={current}
           busy={busy}
-          confirmLabel={warnings.length > 0 ? "Scale anyway" : "Scale"}
+          confirmLabel={
+            warnings.length > 0
+              ? t("action", "scaleAnyway")
+              : t("action", "scale")
+          }
           onCancel={() => onOpenChange(false)}
           onSubmit={onSubmit}
         />
@@ -76,12 +82,13 @@ function ScaleForm({
   onCancel: () => void;
   onSubmit: (replicas: number) => void;
 }) {
+  const t = useT();
   const [replicas, setReplicas] = useState(current);
 
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="replicas">Number of replicas</Label>
+        <Label htmlFor="replicas">{t("action", "replicasLabel")}</Label>
         <Input
           id="replicas"
           type="number"
@@ -94,7 +101,7 @@ function ScaleForm({
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("action", "cancel")}
         </Button>
         <Button onClick={() => onSubmit(replicas)} disabled={busy}>
           {confirmLabel}

@@ -24,6 +24,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { legacyNote, publishedSummary } from "@/lib/published";
 import type { EndpointAddress, EndpointsInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /** Every address in the object, flattened, carrying its readiness. */
 type Backend = {
@@ -34,6 +35,7 @@ type Backend = {
 };
 
 export function EndpointsDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -96,20 +98,20 @@ export function EndpointsDetail() {
         />
       ),
     },
-    { label: "Ready", value: totalReady, mono: true },
+    { label: t("columns", "ready"), value: totalReady, mono: true },
     {
-      label: "Not ready",
+      label: t("columns", "notReadyCount"),
       value: totalNotReady,
       mono: true,
       // An endpoints object with backends that are not ready is the reason a
       // service is dropping traffic, so this row is the one that gets colour.
       tone: totalNotReady > 0 ? "warn" : undefined,
     },
-    { label: "Ports", value: allPorts.length, mono: true },
+    { label: t("columns", "ports"), value: allPorts.length, mono: true },
     ...(published
       ? [
           {
-            label: "Published",
+            label: t("nav", "published"),
             value: publishedSummary(published),
             tone:
               published.draining > 0 || published.unrouted > 0
@@ -123,7 +125,7 @@ export function EndpointsDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection title="Endpoints" items={facts} className="max-w-lg" />
@@ -131,17 +133,20 @@ export function EndpointsDetail() {
     },
     {
       id: "addresses",
-      label: "Backends",
+      label: t("nav", "backends"),
       glyph: viewGlyph(Waypoints),
       mark: countMark(backends.length),
       content: (
         <Section>
           <SectionHeader
-            title="Backends"
+            title={t("nav", "backends")}
             count={
               totalNotReady > 0
-                ? `${totalReady} ready · ${totalNotReady} not ready`
-                : `${totalReady} ready`
+                ? t("count", "readyNotReadySummary", {
+                    n: totalReady,
+                    notReady: totalNotReady,
+                  })
+                : t("count", "readySummary", { n: totalReady })
             }
             description={
               slices.isPending
@@ -154,29 +159,34 @@ export function EndpointsDetail() {
             }
           />
           {backends.length === 0 ? (
-            <p className="text-xs text-fg-fnt">
-              No backends — nothing is behind this service right now.
-            </p>
+            <p className="text-xs text-fg-fnt">{t("empty", "noBackends")}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Address</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Node</TableHead>
-                  {showSubset && <TableHead>Subset</TableHead>}
+                  <TableHead>{t("columns", "address")}</TableHead>
+                  <TableHead>{t("columns", "state")}</TableHead>
+                  <TableHead>{t("columns", "target")}</TableHead>
+                  <TableHead>{t("columns", "node")}</TableHead>
+                  {showSubset && (
+                    <TableHead>{t("columns", "subset")}</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {backends.map(({ address, ready, subset }) => (
                   <TableRow key={`${subset}/${address.ip}`} data-quiet>
                     <TableCell>
-                      <CopyableAddress value={address.ip} label="Address" />
+                      <CopyableAddress
+                        value={address.ip}
+                        label={t("columns", "address")}
+                      />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={ready ? "Ready" : "NotReady"}>
-                        {ready ? "Ready" : "Not ready"}
+                        {ready
+                          ? t("empty", "readyOne")
+                          : t("empty", "notReadyOne")}
                       </StatusBadge>
                     </TableCell>
                     <TableCell>
@@ -221,24 +231,26 @@ export function EndpointsDetail() {
     },
     {
       id: "ports",
-      label: "Ports",
+      label: t("columns", "ports"),
       glyph: viewGlyph(Plug),
       mark: countMark(allPorts.length),
       content: (
         <Section>
-          <SectionHeader title="Ports" count={allPorts.length} />
+          <SectionHeader
+            title={t("columns", "ports")}
+            count={allPorts.length || undefined}
+          />
           {allPorts.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No ports across any subset — the backends above, if there are any,
-              are reachable on nothing.
+              {t("empty", "noPortsInSubsets")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Port</TableHead>
-                  <TableHead>Protocol</TableHead>
+                  <TableHead>{t("columns", "name")}</TableHead>
+                  <TableHead>{t("columns", "port")}</TableHead>
+                  <TableHead>{t("columns", "protocol")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -292,8 +304,9 @@ export function EndpointsDetail() {
               : "text-[11px] text-fg-mut"
           }
         >
-          {totalReady} ready
-          {totalNotReady > 0 && ` · ${totalNotReady} not ready`}
+          {t("count", "readySummary", { n: totalReady })}
+          {totalNotReady > 0 &&
+            ` · ${t("count", "notReadySummary", { n: totalNotReady })}`}
         </span>
       }
       onBack={goBack}

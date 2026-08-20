@@ -12,6 +12,7 @@ import {
 } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 export interface ResourceDetailHeaderProps {
   /** The object's own name — an identifier, so it reads as mono. */
@@ -83,6 +84,7 @@ function NamespaceSegment({
   to: string | null;
   label: string;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const scope = useClusterStore((state) => state.currentNamespace);
   const switchNamespace = useClusterStore((state) => state.switchNamespace);
@@ -95,8 +97,8 @@ function NamespaceSegment({
 
   if (to) {
     const says = narrows
-      ? `Show ${label} in ${namespace} — narrows this tab to that namespace`
-      : `Show ${label} in ${namespace}`;
+      ? t("action", "showInNamespaceNarrows", { label, namespace })
+      : t("action", "showInNamespace", { label, namespace });
     const handle = (event: MouseEvent<HTMLAnchorElement>) =>
       gesture(
         event,
@@ -124,7 +126,7 @@ function NamespaceSegment({
   if (!narrows)
     return <span className="truncate px-1 py-0.5 font-mono">{namespace}</span>;
 
-  const says = `Scope this tab to ${namespace}`;
+  const says = t("action", "scopeTabTo", { namespace });
   // The new tab a modified gesture opens has no list to land on either, so it
   // starts where a new tab always starts — the overview, under this scope.
   const handle = (event: MouseEvent<HTMLButtonElement>) =>
@@ -174,6 +176,7 @@ export function ResourceDetailHeader({
   dataUpdatedAt,
   slowed,
 }: ResourceDetailHeaderProps) {
+  const t = useT();
   const segment = {
     to: listUrl === null ? null : (listUrl ?? getResourceListUrl(kind)),
     label: listLabel ?? toPlural(kind as ResourceKind),
@@ -184,7 +187,7 @@ export function ResourceDetailHeader({
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back"
+        aria-label={t("action", "back")}
         className="-ml-1 flex h-5 w-5 flex-none items-center justify-center rounded transition-colors hover:bg-hover hover:text-fg"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -243,7 +246,8 @@ export function ResourceDetailHeader({
           className="text-[11px] text-fg-fnt"
           title={formatDate(createdAt) ?? undefined}
         >
-          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" /> old
+          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}
+          {t("action", "ageOldSuffix")}
         </span>
       )}
       <div className="ml-auto flex flex-none items-center">

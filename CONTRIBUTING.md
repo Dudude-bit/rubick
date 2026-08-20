@@ -139,6 +139,53 @@ is drawn first and stays drawn, so a page is never worse for having an
 integration that is down. And a capability whose absence has no good answer
 does not belong behind an integration at all.
 
+## Adding a language
+
+A language costs **one file and no code**. Copy `src/i18n/ru.ts` to
+`src/i18n/<code>.ts`, translate the values, and add it to `CATALOGUES` in
+`src/i18n/index.ts`. The picker in Settings finds it from there.
+
+The `Catalogue` type is derived from the English catalogue rather than declared
+beside it, so a key you have not translated is a **build error**, not a blank
+label at runtime. That is the whole safety net: `bun run build` is the check.
+
+Two rules decide what is in the catalogue at all, and they are the reason a
+half-translated Rubick still makes sense:
+
+- **The app's own words are translated** — buttons, captions, column headers,
+  empty states, settings.
+- **The cluster's words are not.** A Kubernetes kind is a proper noun (`Pods`,
+  not `Поды`), and a status string is a lookup key: `statusRole()` in
+  `src/lib/status-role.ts` decides a badge's colour by matching the raw text,
+  so translating `CrashLoopBackOff` turns every badge grey. A lint rule rejects
+  `<StatusBadge status={t(...)}>` for exactly this reason. Put the translation
+  in the children and leave `status` as the code.
+
+A sentence that carries markup — a container name in mono, a status the reader
+has to pick out — stays **one** catalogue string with a `{placeholder}`, and the
+component substitutes the element with `parts()` from `src/i18n/parts.tsx`. Two
+half-sentences either side of a `<span>` are fixed in place by the markup
+between them, and a language that wants the fragment elsewhere has nowhere to
+put it.
+
+A helper that builds a sentence but is not a component takes the translator as a
+parameter: `function noShell(pod: PodInfo, t: T)`, with `T` from
+`src/i18n/useT.ts`. The component calls the hook once and hands it down.
+
+Counted strings are objects, not sentences glued together:
+
+```ts
+podCount: { one: "{n} под", few: "{n} пода", many: "{n} подов", other: "{n} пода" },
+```
+
+`Intl.PluralRules` picks the form, so a language with six of them needs no code
+either — just the six keys. English declares `one` and `other`; supply whatever
+categories your language actually uses.
+
+A language with no file at all is still offered in the picker, marked _not
+translated yet_, and falls back to English **per key** — so a partial
+contribution shows its translated half rather than refusing to render.
+
 ## Commit convention
 
 [Conventional Commits](https://www.conventionalcommits.org/):

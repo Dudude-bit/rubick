@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { RealtimeAge } from "./realtime-age";
+import { useT } from "@/i18n/useT";
 
 export interface DataFreshnessProps {
   /** Timestamp of the last successful fetch, from React Query. */
@@ -55,28 +56,28 @@ export interface DataFreshnessProps {
 
 const STATES = {
   live: {
-    label: "live",
+    label: "freshLive",
     dot: "bg-ok",
-    note: "The cluster is pushing changes to this view as they happen.",
+    note: "freshLiveNote",
   },
   polling: {
-    label: "polling",
+    label: "freshPolling",
     dot: "bg-fg-fnt",
-    note: "No watch on this view — it re-reads the cluster on a timer.",
+    note: "freshPollingNote",
   },
   slowed: {
-    label: "slowed",
+    label: "freshSlowed",
     // Hollow, like offline: both are states where the number on screen may
     // no longer be the cluster's, and neither may rely on a hue to say so.
     dot: "border border-fg-fnt",
-    note: "Nothing here has changed for a while, so it is being re-read less often. Anything you do on this page brings it back up to rate.",
+    note: "freshSlowedNote",
   },
   offline: {
     // A ring, not a fill: offline is the one state a reader must not miss,
     // and it is the one that cannot rely on a hue to say so.
-    label: "offline",
+    label: "freshOffline",
     dot: "border border-fg-fnt",
-    note: "Not connected. Nothing on this screen is updating.",
+    note: "freshOfflineNote",
   },
 } as const;
 
@@ -86,6 +87,7 @@ export const DataFreshness = memo(function DataFreshness({
   slowed = false,
   className,
 }: DataFreshnessProps) {
+  const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
 
   // Nothing has arrived yet, so there is no freshness to report — the
@@ -112,7 +114,7 @@ export const DataFreshness = memo(function DataFreshness({
           )}
         >
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-          <span>{label}</span>
+          <span>{t("cluster", label)}</span>
           {/* The two readings that need an age on the face of them: they are
               the states where how old the data is changes what the reader
               should do with it. */}
@@ -125,11 +127,13 @@ export const DataFreshness = memo(function DataFreshness({
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {note}
+        {t("cluster", note)}
         {state !== "offline" && (
           <>
             {" "}
-            Last read <RealtimeAge timestamp={stamp} fallback="just now" /> ago.
+            {t("cluster", "lastRead")}{" "}
+            <RealtimeAge timestamp={stamp} fallback={t("cluster", "justNow")} />{" "}
+            {t("cluster", "agoSuffix")}
           </>
         )}
       </TooltipContent>

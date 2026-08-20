@@ -19,8 +19,10 @@ import { PackageOpen } from "lucide-react";
 import { Section } from "@/components/ui/section";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { useIntegrationPage } from "@/integrations";
+import { useT } from "@/i18n/useT";
 
 export function IntegrationPage() {
+  const t = useT();
   const { slug } = useParams<{ slug: string }>();
   const page = useIntegrationPage(slug);
 
@@ -29,8 +31,8 @@ export function IntegrationPage() {
   if (page.state === "unknown") {
     return (
       <Missing
-        title="No integration by that name"
-        body={`This app has no page for “${slug ?? ""}”. The name may have changed, or the link may be from a newer version.`}
+        title={t("empty", "noIntegrationByName")}
+        body={t("empty", "noIntegrationByNameBody", { slug: slug ?? "" })}
       />
     );
   }
@@ -38,8 +40,8 @@ export function IntegrationPage() {
   if (page.state === "absent") {
     return (
       <Missing
-        title={`${page.name} is not installed in this cluster`}
-        body={`Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional — the cluster works exactly as it does now.`}
+        title={t("empty", "integrationNotInstalled", { name: page.name })}
+        body={t("empty", "integrationNotInstalledBody")}
       />
     );
   }
@@ -49,8 +51,8 @@ export function IntegrationPage() {
   if (page.state === "notConfigured") {
     return (
       <Missing
-        title={`${page.name} is not connected`}
-        body={`It installs nothing in a cluster, so there is nothing to detect — it works from an address you give this app, kept per cluster. Give it one and this page comes alive.`}
+        title={t("empty", "integrationNotConnected", { name: page.name })}
+        body={t("empty", "integrationNotConnectedBody")}
       />
     );
   }
@@ -60,6 +62,7 @@ export function IntegrationPage() {
 }
 
 function Missing({ title, body }: { title: string; body: string }) {
+  const t = useT();
   return (
     <Section className="max-w-[64ch] py-8">
       <div className="flex items-center gap-2">
@@ -70,10 +73,18 @@ function Missing({ title, body }: { title: string; body: string }) {
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
       <p className="text-[11px] text-fg-fnt">
-        <Link to="/integrations" className="text-info hover:underline">
-          Integrations
-        </Link>{" "}
-        lists every extension this app knows about and what each one would give.
+        {t("empty", "integrationsPageLists")
+          .split("{link}")
+          .map((part, i) => (
+            <span key={i}>
+              {i > 0 && (
+                <Link to="/integrations" className="text-info hover:underline">
+                  {t("nav", "integrations")}
+                </Link>
+              )}
+              {part}
+            </span>
+          ))}
       </p>
     </Section>
   );

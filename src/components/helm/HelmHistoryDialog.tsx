@@ -18,6 +18,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, HelmRevision } from "@/generated/types";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 interface HelmHistoryDialogProps {
   release: HelmRelease;
@@ -36,12 +37,13 @@ export function HelmHistoryDialog({
   onClose,
   onRollback,
 }: HelmHistoryDialogProps) {
+  const t = useT();
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[80vh] max-w-3xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>
-            History
+            {t("action", "history")}
             <span className="ml-2 font-mono text-[11px] font-normal text-fg-fnt">
               {release.namespace}/{release.name}
             </span>
@@ -50,21 +52,21 @@ export function HelmHistoryDialog({
         <div className="max-h-[60vh] overflow-y-auto">
           {isLoading ? (
             <p className="py-6 text-center text-xs text-fg-fnt">
-              Reading history…
+              {t("empty", "readingHistory")}
             </p>
           ) : history.length === 0 ? (
             <p className="py-6 text-center text-xs text-fg-fnt">
-              Helm keeps no history for this release.
+              {t("empty", "noHelmHistory")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Rev</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("columns", "rev")}</TableHead>
+                  <TableHead>{t("columns", "status")}</TableHead>
                   <TableHead>Chart</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>{t("columns", "updated")}</TableHead>
+                  <TableHead>{t("columns", "description")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -108,7 +110,7 @@ export function HelmHistoryDialog({
                         <span className="flex justify-end">
                           {!current && helmCliAvailable && (
                             <DetailAction
-                              label="Roll back"
+                              label={t("action", "rollBack")}
                               icon={RotateCcw}
                               onClick={() => onRollback(rev.revision)}
                             />

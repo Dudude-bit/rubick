@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Terminal as TerminalIcon } from "lucide-react";
 import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
 import type { StatusRole } from "@/lib/status-role";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** Used only if `--canvas` cannot be read; matches the dark canvas token. */
 const CANVAS_FALLBACK = "rgb(26, 28, 30)";
@@ -76,6 +78,7 @@ export interface TerminalProps {
  * Completely decoupled from Kubernetes - just renders a terminal for a given session ID.
  */
 export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
+  const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -86,13 +89,18 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     xtermRef.current?.write(data);
   }, []);
 
-  const onSessionClose = useCallback((closureStatus?: string | null) => {
-    if (xtermRef.current && closureStatus) {
-      xtermRef.current.writeln(
-        `\r\n\x1b[33mSession ended: ${closureStatus}\x1b[0m`
-      );
-    }
-  }, []);
+  const onSessionClose = useCallback(
+    (closureStatus?: string | null) => {
+      if (xtermRef.current && closureStatus) {
+        xtermRef.current.writeln(
+          `\r\n\x1b[33m${t("empty", "terminalSessionEnded", {
+            status: closureStatus,
+          })}\x1b[0m`
+        );
+      }
+    },
+    [t]
+  );
 
   const { status, error, send, resize, disconnect } = useGenericTerminalSession(
     {
@@ -230,18 +238,22 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
    * given rather than derived: `statusRole` reads Kubernetes words, and
    * "Connected" is not one of them.
    */
-  const [statusLabel, statusRoleOverride]: [string, StatusRole] = (() => {
+  const [statusCode, statusLabelKey, statusRoleOverride]: [
+    string,
+    keyof typeof en.action,
+    StatusRole,
+  ] = (() => {
     switch (status) {
       case "connecting":
-        return ["Connecting", "pending"];
+        return ["Connecting", "connecting", "pending"];
       case "connected":
-        return ["Connected", "ok"];
+        return ["Connected", "connected", "ok"];
       case "closed":
-        return ["Ended", "neutral"];
+        return ["Ended", "ended", "neutral"];
       case "error":
-        return ["Error", "err"];
+        return ["Error", "error", "err"];
       default:
-        return ["Idle", "neutral"];
+        return ["Idle", "idle", "neutral"];
     }
   })();
 
@@ -265,7 +277,9 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={statusLabel} roleOverride={statusRoleOverride} />
+          <StatusBadge status={statusCode} roleOverride={statusRoleOverride}>
+            {t("action", statusLabelKey)}
+          </StatusBadge>
           {error && status !== "connected" && (
             <span className="max-w-[240px] truncate text-xs text-fg-mut">
               {error}
@@ -276,7 +290,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              aria-label="Close terminal"
+              aria-label={t("action", "closeTerminal")}
             >
               ×
             </Button>

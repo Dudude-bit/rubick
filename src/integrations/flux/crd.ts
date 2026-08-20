@@ -15,8 +15,7 @@ import type { CrdView } from "../registry";
 const fluxStatusConfig: CrdStatus = {
   getStatus: (resource) => {
     const conditions = getValueByPath(resource, "status.conditions") as
-      | Array<{ type: string; status: string; reason?: string }>
-      | undefined;
+      Array<{ type: string; status: string; reason?: string }> | undefined;
 
     if (!Array.isArray(conditions)) return null;
 
@@ -60,8 +59,7 @@ const helmReleaseColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string; reason?: string }>
-        | undefined;
+        Array<{ type: string; status: string; reason?: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -150,8 +148,7 @@ const helmRepositoryColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -179,8 +176,7 @@ const helmRepositoryColumns: CrdColumn[] = [
     header: "Type",
     accessor: (resource) => {
       const repoType = getValueByPath(resource, "spec.type") as
-        | string
-        | undefined;
+        string | undefined;
       return repoType ?? "default";
     },
     cell: (value) => String(value ?? "-"),
@@ -214,8 +210,7 @@ const helmChartColumns: CrdColumn[] = [
     header: "Ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
+        Array<{ type: string; status: string }> | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 

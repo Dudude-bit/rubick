@@ -59,6 +59,7 @@ import {
   type PeekActionId,
   type PeekActionPlan,
 } from "./peek-actions";
+import { useT } from "@/i18n/useT";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
 type ScalableInfo = DeploymentInfo | StatefulSetDetailInfo;
@@ -104,6 +105,7 @@ export function useObjectActions({
   detail,
   onGone,
 }: ObjectActionsOptions): ObjectActions {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -162,9 +164,12 @@ export function useObjectActions({
     }
   };
 
-  const failed = (verb: string) => (error: unknown) =>
+  const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) =>
     toast({
-      title: `Could not ${verb} ${name}`,
+      title: t("action", "couldNotDo", {
+        action: t("action", verb).toLowerCase(),
+        name,
+      }),
       description: normalizeTauriError(error),
       variant: "destructive",
     });
@@ -330,7 +335,7 @@ export function useObjectActions({
         title={deletion.title}
         description={warned(deletion.description, intercept("Delete"))}
         confirmationText={name}
-        confirmLabel="Delete"
+        confirmLabel={t("action", "delete")}
         isLoading={remove.isPending}
         onConfirm={() => remove.mutate()}
       />
@@ -341,7 +346,7 @@ export function useObjectActions({
         title={bareRestart.title}
         description={warned(bareRestart.description, intercept("Restart"))}
         confirmationText={name}
-        confirmLabel="Restart"
+        confirmLabel={t("action", "restart")}
         isLoading={restart.isPending}
         onConfirm={() => restart.mutate()}
       />

@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
 import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
+import type { en } from "@/i18n/catalogue";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * What a context row is allowed to claim, read from the file and from PATH.
@@ -63,6 +66,38 @@ export function vendorOf(binary: string | null): ProfileVendor | "aws" | null {
 const MONO = "font-mono text-fg-mid";
 
 /**
+ * One catalogue sentence, cut where it is rendered rather than stored in
+ * halves.
+ *
+ * `describeAuth` is a plain function and cannot call the hook — but what it
+ * returns is rendered inside the row, and a component put there can. The
+ * sentence stays one catalogue string with a placeholder, which is what lets a
+ * translator move the monospace word wherever their word order wants it.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+function Sentence({
+  k,
+  token,
+  children,
+}: {
+  k: keyof typeof en.settings;
+  token: string;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const text = t("settings", k);
+  const at = text.indexOf(token);
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      {children}
+      {text.slice(at + token.length)}
+    </>
+  );
+}
+
+/**
  * How this context proves who it is, in one sentence.
  *
  * The exec row names the binary rather than the whole command line: an
@@ -76,63 +111,54 @@ export function describeAuth(context: ContextInfo): ReactNode {
     case "exec": {
       const binary = execBinary(context.exec_command);
       return (
-        <>
-          Runs{" "}
+        <Sentence k="authRunsPlugin" token="{plugin}">
           <span className={MONO} title={context.exec_command ?? undefined}>
-            {binary ? binaryLabel(binary) : "a credential plugin"}
-          </span>{" "}
-          for a token.
-        </>
+            {binary ? (
+              binaryLabel(binary)
+            ) : (
+              <T section="settings" k="aCredentialPlugin" />
+            )}
+          </span>
+        </Sentence>
       );
     }
     case "clientCertificate":
       return auth.source ? (
-        <>
-          Client certificate, from <span className={MONO}>{auth.source}</span> —
-          nothing else needed.
-        </>
+        <Sentence k="authClientCertFrom" token="{source}">
+          <span className={MONO}>{auth.source}</span>
+        </Sentence>
       ) : (
-        <>Client certificate, embedded in the file — nothing else needed.</>
+        <T section="settings" k="authClientCertEmbedded" />
       );
     case "token":
       return auth.source ? (
-        <>
-          A bearer token, read from <span className={MONO}>{auth.source}</span>.
-        </>
+        <Sentence k="authTokenFrom" token="{source}">
+          <span className={MONO}>{auth.source}</span>
+        </Sentence>
       ) : (
-        <>A bearer token, written in the file — nothing else needed.</>
+        <T section="settings" k="authTokenInFile" />
       );
     case "basic":
       return auth.username ? (
-        <>
-          Username and password, as{" "}
-          <span className={MONO}>{auth.username}</span>.
-        </>
+        <Sentence k="authBasicAs" token="{username}">
+          <span className={MONO}>{auth.username}</span>
+        </Sentence>
       ) : (
-        <>Username and password, stored in the file.</>
+        <T section="settings" k="authBasicInFile" />
       );
     case "authProvider":
       return (
-        <>
-          The <span className={MONO}>{auth.name}</span> auth provider,
-          configured in the file.
-        </>
+        <Sentence k="authProviderNamed" token="{name}">
+          <span className={MONO}>{auth.name}</span>
+        </Sentence>
       );
     case "unrecognised":
-      return (
-        <>
-          The file does not say how this context authenticates — this app cannot
-          tell.
-        </>
-      );
+      return <T section="settings" k="authUnrecognised" />;
   }
 }
 
 export type ContextStatus =
-  | "connected"
-  | "ready"
-  | "cannot connect"
-  | "cannot tell";
+  "connected" | "ready" | "cannot connect" | "cannot tell";
 
 export interface ContextReading {
   how: ReactNode;

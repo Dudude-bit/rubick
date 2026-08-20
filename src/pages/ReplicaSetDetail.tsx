@@ -37,6 +37,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { ReplicaSetInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * One revision of a Deployment.
@@ -48,6 +49,7 @@ import type { ReplicaSetInfo } from "@/generated/types";
  * revision is this, and what is it doing.*
  */
 export function ReplicaSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -116,17 +118,17 @@ export function ReplicaSetDetail() {
   // under the bar — so neither is a verbatim echo of the other.
   const superseded = standing === "superseded";
   const whyEmpty = superseded
-    ? `Superseded by revision ${currentRevision}. The Deployment keeps this one at zero so a rollback can bring it straight back.`
-    : "The Deployment is scaled to zero, so its current revision runs no pods.";
+    ? t("empty", "supersededByRevision", { revision: currentRevision ?? "" })
+    : t("empty", "deploymentScaledToZeroNote");
   const noPods = superseded
-    ? `No pods — revision ${currentRevision} took over from this one.`
-    : "No pods — the Deployment is scaled to zero.";
+    ? t("empty", "noPodsSuperseded", { revision: currentRevision ?? "" })
+    : t("empty", "noPodsScaledToZero");
 
   const emptyPods = desired === 0 && current === 0;
 
   const facts: KeyValue[] = [
     {
-      label: "Owned by",
+      label: t("columns", "ownedBy"),
       value: owner ? (
         <ResourceRef
           kind={ResourceType.Deployment}
@@ -135,22 +137,21 @@ export function ReplicaSetDetail() {
           showKind={false}
         />
       ) : (
-        "nothing — no Deployment is rolling this out"
+        t("empty", "noDeploymentRollingOut")
       ),
     },
     {
-      label: "Revision",
+      label: t("columns", "revision"),
       value:
         revision === null ? (
-          "none"
+          t("empty", "noneLower")
         ) : (
           <>
             {revision}
             {retired > 0 && (
               <span className="text-fg-fnt">
                 {" "}
-                · {retired} other{" "}
-                {retired === 1 ? "revision is" : "revisions are"} scaled to zero
+                · {t("count", "otherRevisionsAtZero", { n: retired })}
               </span>
             )}
           </>
@@ -163,30 +164,37 @@ export function ReplicaSetDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
           <WorkloadOverview
             count={
-              <CountBlock title="Replicas" subject="what this revision runs">
+              <CountBlock
+                title={t("columns", "replicas")}
+                subject={t("columns", "whatThisRevisionRuns")}
+              >
                 <Composition
                   total={desired}
-                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  label={t("count", "replicasWanted", { n: desired })}
                   segments={[
-                    { label: "ready", count: ready, tone: "ok" },
                     {
-                      label: "starting",
+                      label: t("count", "readySegment"),
+                      count: ready,
+                      tone: "ok",
+                    },
+                    {
+                      label: t("count", "startingSegment"),
                       count: Math.max(0, current - ready),
                       tone: "warn",
                     },
                     {
-                      label: "not created",
+                      label: t("count", "notCreatedSegment"),
                       count: Math.max(0, desired - current),
                       tone: "err",
                     },
                   ]}
-                  emptyMessage="scaled to zero"
+                  emptyMessage={t("empty", "scaledToZero")}
                   // A bar of nothing is the picture of a fault. The end of a
                   // rollout looks identical, and only the sentence tells them
                   // apart — so the empty case never renders without one.
@@ -194,27 +202,29 @@ export function ReplicaSetDetail() {
                 />
               </CountBlock>
             }
-            declared={<FactBlock title="Revision" items={facts} />}
+            declared={
+              <FactBlock title={t("columns", "revision")} items={facts} />
+            }
           />
 
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(replicaSet?.labels ?? {}).length}
             items={recordToKeyValues(replicaSet?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(replicaSet?.annotations ?? {}).length}
             items={recordToKeyValues(replicaSet?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
     },
     {
       id: "container-template",
-      label: "Template",
+      label: t("nav", "template"),
       glyph: viewGlyph(Layers2),
       content: <ContainerRows template={replicaSet} namespace={namespace} />,
     },
@@ -228,26 +238,24 @@ export function ReplicaSetDetail() {
           pods={pods}
           // "No pods" on a superseded revision reads as a fault. It is the
           // ordinary end of a rollout, and the page has to say so.
-          emptyMessage={
-            emptyPods ? noPods : "This revision has no pods right now"
-          }
+          emptyMessage={emptyPods ? noPods : t("empty", "revisionHasNoPods")}
         />
       ),
     },
     {
       id: "conditions",
-      label: "Conditions",
+      label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
       mark: conditionsMark(replicaSet?.conditions),
       content: (
         <Section>
           <SectionHeader
-            title="Conditions"
+            title={t("columns", "conditions")}
             count={replicaSet?.conditions.length}
           />
           <ConditionRows
             conditions={replicaSet?.conditions ?? []}
-            emptyMessage="This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod."
+            emptyMessage={t("empty", "noConditionsReplicaSet")}
             subject={{ kind: ResourceType.ReplicaSet, name, namespace }}
           />
         </Section>
@@ -298,13 +306,15 @@ export function ReplicaSetDetail() {
         replicaSet &&
         (standing === "unversioned" ? (
           <StatusBadge status={ready < desired ? "Degraded" : "Ready"}>
-            {ready}/{desired} ready
+            {t("count", "slashReady", { n: ready, total: desired })}
           </StatusBadge>
         ) : (
           <StatusBadge
             status={standing === "current" ? "Current" : "Superseded"}
           >
-            {standing === "current" ? "current revision" : "superseded"}
+            {standing === "current"
+              ? t("empty", "currentRevisionLower")
+              : t("empty", "supersededLower")}
           </StatusBadge>
         ))
       }
@@ -312,7 +322,9 @@ export function ReplicaSetDetail() {
         replicaSet &&
         standing !== "unversioned" && (
           <span className="text-[11px] text-fg-fnt">
-            {emptyPods ? "scaled to zero" : `${ready}/${desired} ready`}
+            {emptyPods
+              ? t("empty", "scaledToZero")
+              : t("count", "slashReady", { n: ready, total: desired })}
           </span>
         )
       }

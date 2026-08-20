@@ -15,6 +15,7 @@ import {
   WarningsPanel,
   WorkloadsPanel,
 } from "@/components/overview/health";
+import { useT } from "@/i18n/useT";
 
 /**
  * The overview answers one question — "do I need to do something right
@@ -27,6 +28,7 @@ import {
  * largest block on a screen whose first row is the point.
  */
 export function ClusterOverview() {
+  const t = useT();
   const { isConnected, namespaceScope } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
@@ -54,13 +56,13 @@ export function ClusterOverview() {
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
           <h2 className="text-[13px] font-semibold tracking-tight text-err">
-            Could not read cluster state
+            {t("empty", "couldNotReadClusterState")}
           </h2>
         </div>
         <p className="text-xs text-fg-mut">{error.message}</p>
         <div className="flex items-center gap-2 pt-2">
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Retry
+            {t("action", "retry")}
           </Button>
         </div>
       </Section>

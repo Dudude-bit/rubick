@@ -29,6 +29,7 @@ import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 import { useDelivery } from "@/hooks/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
+import { useT } from "@/i18n/useT";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
 export type { DetailTab } from "./detail-tab";
@@ -51,6 +52,7 @@ export function DetailError({
   isSearching,
   additionalMessage,
 }: DetailErrorProps) {
+  const t = useT();
   const isNotFound = isResourceNotFoundError(error);
   const kind = resourceKind.toLowerCase();
 
@@ -75,7 +77,11 @@ export function DetailError({
         <p className="text-xs text-fg-mut">{additionalMessage}</p>
       )}
       <div className="flex items-center gap-1 pt-1">
-        <DetailAction label="Go back" icon={ArrowLeft} onClick={onBack} />
+        <DetailAction
+          label={t("action", "goBack")}
+          icon={ArrowLeft}
+          onClick={onBack}
+        />
         {isNotFound && onFindReplacement && (
           <DetailAction
             label={isSearching ? "Searching…" : "Find replacement"}

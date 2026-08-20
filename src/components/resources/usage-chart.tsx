@@ -34,6 +34,7 @@ import {
   type UsagePoint,
   type UsageSample,
 } from "@/lib/usage-history";
+import { useT } from "@/i18n/useT";
 
 /**
  * Tall enough to read a shape off. The 42px band this replaces turned every
@@ -131,6 +132,7 @@ export function UsageChart({
   suppressNote = false,
   live = true,
 }: UsageChartProps) {
+  const t = useT();
   const channel = type === "cpu" ? "cpuMillicores" : "memoryBytes";
   const points = React.useMemo(
     () => bucketize(samples, channel),
@@ -173,7 +175,7 @@ export function UsageChart({
             // about this object — usually a container that is not running.
             <span
               className="text-fg-fnt"
-              title="metrics-server has no reading for this object — its containers may not be running"
+              title={t("empty", "noMetricsReading")}
             >
               not reporting
             </span>

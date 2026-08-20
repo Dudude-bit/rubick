@@ -15,7 +15,14 @@
  * - **3 days** is past the next weekend. There is no process left at that
  *   point, only an interrupt, and that is a different colour.
  *
- * Above fourteen days there is no mark at all. The fact is still stated
+ * Both are *caps*, not the rule. A seven-day Let's Encrypt certificate is
+ * born inside the fourteen-day window, and a mark it wears from birth is a
+ * mark nobody reads (#68) — so on a short certificate the thresholds
+ * shrink to a third and a tenth of its lifetime, which for the seven-day
+ * case lands the warn exactly where cert-manager's default renewal point
+ * is. A ninety-day certificate never notices the difference.
+ *
+ * Outside the thresholds there is no mark at all. The fact is still stated
  * where the certificate is the subject — a Secret page that would not say
  * when its certificate expires is absurd — but it is stated in the same
  * tone as everything else on the page.
@@ -23,12 +30,14 @@
 
 import type { CertificateFacts } from "@/generated/types";
 
-/** The last point a normal change still fits. */
-export const ACT_SOON_DAYS = 14;
-/** Past the weekend: an interrupt rather than a change. */
+/** The last point a normal change still fits, or a third of the lifetime. */
+const ACT_SOON_DAYS = 14;
+/** Past the weekend — an interrupt — or a tenth of the lifetime. */
 const NO_PROCESS_LEFT_DAYS = 3;
 
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
+const MINUTE = 60_000;
 
 export type ExpiryTone = "warn" | "err" | null;
 
@@ -39,11 +48,38 @@ export interface Expiry {
   text: string;
   /** Whole days from now until `notAfter`; negative once it has passed. */
   days: number;
+  /**
+   * Milliseconds until `notAfter`, negative once it has passed — the same
+   * quantity {@link days} rounds off.
+   *
+   * Ranking by whole days used to decide the order of everything expiring
+   * inside one day by name, which is the hour the order matters most. `0`
+   * where there is no readable date, so an unreadable one keeps the place
+   * `days: 0` gave it rather than silently moving.
+   */
+  left: number;
   expired: boolean;
+  /** cert-manager's own renewal plan has come and gone — see {@link managedExpiryOf}. */
+  renewalOverdue: boolean;
 }
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * A span in the largest unit that still gives it a number.
+ *
+ * Every step down exists because the one above it rounds to zero, and "0
+ * days" — or "0 hours" in the last hour of a certificate's life — reads as
+ * a rendering bug at exactly the moment the reader most needs a number.
+ * The floor is a minute: below that the number stops being useful before
+ * it stops being true.
+ */
+export function span(ms: number): string {
+  if (ms >= DAY) return plural(Math.floor(ms / DAY), "day");
+  if (ms >= HOUR) return plural(Math.floor(ms / HOUR), "hour");
+  return plural(Math.max(1, Math.floor(ms / MINUTE)), "minute");
 }
 
 /**
@@ -52,7 +88,8 @@ function plural(count: number, noun: string): string {
  * `notBefore` is checked as well as `notAfter`: a certificate issued with a
  * clock skew, or restored from a backup of a future cluster, is refused by
  * browsers exactly as an expired one is, and it is the failure nobody
- * thinks to look for.
+ * thinks to look for. It also supplies the lifetime the thresholds scale
+ * by; without a readable one the absolute caps are the only honest rule.
  */
 export function expiryOf(
   facts: Pick<CertificateFacts, "notAfter" | "notBefore">,
@@ -66,7 +103,9 @@ export function expiryOf(
       tone: "warn",
       text: "no readable expiry date",
       days: 0,
+      left: 0,
       expired: false,
+      renewalOverdue: false,
     };
   }
 
@@ -76,7 +115,9 @@ export function expiryOf(
       tone: "err",
       text: `not valid for another ${plural(days, "day")}`,
       days: Math.floor((notAfter - now) / DAY),
+      left: notAfter - now,
       expired: false,
+      renewalOverdue: false,
     };
   }
 
@@ -87,37 +128,105 @@ export function expiryOf(
       tone: "err",
       text: days === 0 ? "expired today" : `expired ${plural(days, "day")} ago`,
       days: -days,
+      left,
       expired: true,
+      renewalOverdue: false,
     };
   }
 
+  const lifetime =
+    !Number.isNaN(notBefore) && notBefore < notAfter
+      ? notAfter - notBefore
+      : null;
+  const interruptAt =
+    lifetime === null
+      ? NO_PROCESS_LEFT_DAYS * DAY
+      : Math.min(NO_PROCESS_LEFT_DAYS * DAY, lifetime / 10);
+  const actAt =
+    lifetime === null
+      ? ACT_SOON_DAYS * DAY
+      : Math.min(ACT_SOON_DAYS * DAY, lifetime / 3);
+
   const days = Math.floor(left / DAY);
-  if (days <= NO_PROCESS_LEFT_DAYS) {
-    const hours = Math.floor(left / 3_600_000);
+  if (left <= interruptAt) {
     return {
       tone: "err",
-      text:
-        hours < 24
-          ? `expires in ${plural(hours, "hour")}`
-          : `expires in ${plural(days, "day")}`,
+      text: `expires in ${span(left)}`,
       days,
+      left,
       expired: false,
+      renewalOverdue: false,
     };
   }
-  if (days <= ACT_SOON_DAYS) {
+  if (left <= actAt) {
     return {
       tone: "warn",
-      text: `expires in ${plural(days, "day")}`,
+      text: `expires in ${span(left)}`,
       days,
+      left,
       expired: false,
+      renewalOverdue: false,
     };
   }
   return {
     tone: null,
-    text: `valid for ${plural(days, "day")}`,
+    text: `valid for ${span(left)}`,
     days,
+    left,
     expired: false,
+    renewalOverdue: false,
   };
+}
+
+/**
+ * {@link expiryOf}, told what cert-manager intends to do about it.
+ *
+ * A managed certificate is not renewed by the reader, so "expires in 2
+ * days" is not their call to action — `status.renewalTime` is. While the
+ * plan is still ahead a would-be warn is not news and the verdict states
+ * the plan instead; once the plan has come and gone the silence is over,
+ * because cert-manager said it would have renewed by now and has not.
+ *
+ * The err threshold is a backstop no schedule argues with: hours from an
+ * outage is an interrupt whatever the plan says. Expired, not-yet-valid
+ * and unreadable certificates keep their plain verdicts too.
+ */
+export function managedExpiryOf(
+  facts: Pick<CertificateFacts, "notAfter" | "notBefore">,
+  renewalTime: string | null,
+  now: number = Date.now()
+): Expiry {
+  const base = expiryOf(facts, now);
+  const renewal = renewalTime === null ? NaN : Date.parse(renewalTime);
+  const notAfter = Date.parse(facts.notAfter);
+  const notBefore = Date.parse(facts.notBefore);
+  if (
+    Number.isNaN(renewal) ||
+    Number.isNaN(notAfter) ||
+    base.expired ||
+    (!Number.isNaN(notBefore) && notBefore > now)
+  ) {
+    return base;
+  }
+
+  if (renewal > now) {
+    if (base.tone !== "warn") return base;
+    return { ...base, tone: null, text: `renews in ${span(renewal - now)}` };
+  }
+  return {
+    ...base,
+    tone: base.tone === "err" ? "err" : "warn",
+    text: `renewal overdue — expires in ${span(notAfter - now)}`,
+    renewalOverdue: true,
+  };
+}
+
+/** How far past its own plan a renewal is: "11 hours overdue". */
+export function overdueBy(
+  renewalTime: string,
+  now: number = Date.now()
+): string {
+  return `${span(now - Date.parse(renewalTime))} overdue`;
 }
 
 /** Who vouched for it, in the words the certificate itself uses. */

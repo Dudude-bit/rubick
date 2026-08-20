@@ -18,6 +18,7 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import { DetailAction } from "./detail-blocks";
 import type { PeekAction, PeekActionId } from "./peek-actions";
 import { useObjectActions } from "./useObjectActions";
+import { useT } from "@/i18n/useT";
 
 /**
  * The peek panel's action row.
@@ -47,6 +48,7 @@ export function PeekActions({
   onOpenFullPage,
   onClose,
 }: PeekActionsProps) {
+  const t = useT();
   const copy = useCopyToClipboard();
   const { plan, busy, run, dialogs } = useObjectActions({
     kind: target.kind,
@@ -62,7 +64,7 @@ export function PeekActions({
         {onOpenFullPage && (
           <>
             <DetailAction
-              label="Open full page"
+              label={t("action", "openFullPage")}
               icon={ExternalLink}
               onClick={onOpenFullPage}
             />
@@ -70,9 +72,11 @@ export function PeekActions({
           </>
         )}
         <DetailAction
-          label="Copy name"
+          label={t("action", "copyName")}
           icon={Copy}
-          onClick={() => copy(target.name, `${target.name} copied`)}
+          onClick={() =>
+            copy(target.name, t("action", "nameCopied", { name: target.name }))
+          }
         />
         {plan.inline.map((action) => (
           <PeekActionButton
@@ -136,16 +140,17 @@ function PeekActionMenu({
   busy: Partial<Record<PeekActionId, boolean>>;
   onRun: (id: PeekActionId) => void;
 }) {
+  const t = useT();
   return (
     // Not modal: the panel it sits in is not modal either, and a menu that
     // makes the list behind it inert would undo that.
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <DetailAction
-          label="More"
+          label={t("action", "more")}
           icon={MoreHorizontal}
           onClick={() => {}}
-          aria-label="More actions"
+          aria-label={t("action", "moreActions")}
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[180px]">

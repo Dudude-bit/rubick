@@ -15,6 +15,7 @@ import { expiryOf, issuedBy, uncoveredHosts } from "@/lib/certificates";
 import { TONE_CLASS } from "./key-values";
 import { KeyValueList } from "./detail-kv";
 import type { CertificateFacts, TlsCertificate } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /** The tone classes, with "no mark" as a real option rather than a colour. */
 function toneClass(tone: "warn" | "err" | null): string {
@@ -36,9 +37,12 @@ export function CertificateLine({
   read: TlsCertificate | undefined;
   hosts?: string[];
 }) {
+  const t = useT();
   if (!read) {
     return (
-      <span className="text-[11px] text-fg-fnt">reading the certificate…</span>
+      <span className="text-[11px] text-fg-fnt">
+        {t("empty", "readingCertificate")}
+      </span>
     );
   }
   if (!read.certificate) {
@@ -57,17 +61,19 @@ export function CertificateLine({
       <span className="text-[11px] text-fg-fnt">{issuedBy(cert)}</span>
       {uncovered.length > 0 && (
         <span className="text-[11px] text-err">
-          does not cover {uncovered.join(", ")}
+          {t("empty", "doesNotCover", { names: uncovered.join(", ") })}
         </span>
       )}
     </span>
   );
 }
 
-function chainNote(cert: CertificateFacts): string | null {
+function chainNote(
+  cert: CertificateFacts,
+  t: ReturnType<typeof useT>
+): string | null {
   if (cert.chainLength <= 1) return null;
-  const rest = cert.chainLength - 1;
-  return `with ${rest} more certificate${rest === 1 ? "" : "s"} in the bundle`;
+  return t("count", "moreCertificatesInBundle", { n: cert.chainLength - 1 });
 }
 
 /**
@@ -84,12 +90,13 @@ export function CertificateSection({
   read: TlsCertificate | undefined;
   hosts?: string[];
 }) {
+  const t = useT();
   if (!read) return null;
 
   if (!read.certificate) {
     return (
       <Section>
-        <SectionHeader title="Certificate" />
+        <SectionHeader title={t("columns", "certificate")} />
         <p className="text-xs text-warn">{read.problem}</p>
       </Section>
     );
@@ -104,36 +111,41 @@ export function CertificateSection({
 
   return (
     <Section>
-      <SectionHeader title="Certificate" count={chainNote(cert) ?? undefined} />
+      <SectionHeader
+        title={t("columns", "certificate")}
+        count={chainNote(cert, t) ?? undefined}
+      />
       <KeyValueList
         className="max-w-lg"
         items={[
           {
-            label: "Covers",
+            label: t("columns", "covers"),
             value:
               cert.dnsNames.length > 0
                 ? cert.dnsNames.join(", ")
-                : (cert.subject ?? "no names — it serves nothing"),
+                : (cert.subject ?? t("empty", "certNoNames")),
             mono: cert.dnsNames.length > 0,
             tone: cert.dnsNames.length > 0 ? undefined : ("warn" as const),
           },
           ...(uncovered.length > 0
             ? [
                 {
-                  label: "Not covered",
-                  value: `${uncovered.join(", ")} — browsers refuse a name the certificate does not carry`,
+                  label: t("columns", "notCovered"),
+                  value: t("empty", "certNotCoveredNote", {
+                    names: uncovered.join(", "),
+                  }),
                   tone: "err" as const,
                 },
               ]
             : []),
           {
-            label: "Serving now",
+            label: t("columns", "servingNow"),
             value: expiry.text,
             tone: expiry.tone ?? undefined,
           },
-          { label: "Valid", value: dates },
-          { label: "Issued by", value: issuedBy(cert) },
-          { label: "Serial", value: cert.serial, mono: true },
+          { label: t("columns", "valid"), value: dates },
+          { label: t("columns", "issuedBy"), value: issuedBy(cert) },
+          { label: t("columns", "serial"), value: cert.serial, mono: true },
         ]}
       />
     </Section>

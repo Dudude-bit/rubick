@@ -33,6 +33,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The AUR package rubick-kubernetes-bin
+          # (https://aur.archlinux.org/packages/rubick-kubernetes-bin)
+          # downloads releases/download/v${pkgver}/Rubick_${pkgver}_amd64.deb
+          # from every release. The .deb asset name is a public contract —
+          # renaming the product, the target, or the bundle format breaks
+          # the package.
           - name: linux-x64
             os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu

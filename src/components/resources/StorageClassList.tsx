@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
@@ -15,7 +16,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // The name plus the "default" marker that sits beside it.
     size: 300,
     accessorKey: "name",
-    header: "Name",
+    header: () => <T section="columns" k="name" />,
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">
         <ResourceRef
@@ -43,7 +44,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     size: 120,
     accessorKey: "reclaimPolicy",
-    header: "Reclaim Policy",
+    header: () => <T section="columns" k="reclaimPolicy" />,
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
     ),
@@ -52,7 +53,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // "WaitForFirstConsumer" is one unbreakable word.
     size: 170,
     accessorKey: "volumeBindingMode",
-    header: "Binding Mode",
+    header: () => <T section="columns" k="bindingMode" />,
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.volumeBindingMode}</span>
     ),
@@ -60,10 +61,14 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     size: 100,
     accessorKey: "allowVolumeExpansion",
-    header: "Expansion",
+    header: () => <T section="columns" k="expansion" />,
     cell: ({ row }) => (
       <span className="text-fg-mid">
-        {row.original.allowVolumeExpansion ? "allowed" : "disabled"}
+        {row.original.allowVolumeExpansion ? (
+          <T section="columns" k="allowed" />
+        ) : (
+          <T section="columns" k="disabled" />
+        )}
       </span>
     ),
   },
@@ -71,14 +76,14 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // "4 params", with the pairs themselves in the tooltip.
     size: 110,
     accessorKey: "parameters",
-    header: "Parameters",
+    header: () => <T section="columns" k="parameters" />,
     cell: ({ row }) => {
       const params = Object.entries(row.original.parameters);
       if (params.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">
-            {params.length} params
+            <T section="count" k="params" values={{ n: params.length }} />
           </TooltipTrigger>
           <TooltipContent>
             {params.map(([key, value]) => (
@@ -96,7 +101,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     size: 80,
     accessorKey: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
   },
 ];
 

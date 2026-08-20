@@ -1,5 +1,6 @@
 import { AzureProfilesSection } from "../cloud/AzureProfilesSection";
 import { GcpProfilesSection } from "../cloud/GcpProfilesSection";
+import { useT } from "@/i18n/useT";
 
 /**
  * The profile manager, which is not the thing anyone comes here to read.
@@ -13,11 +14,11 @@ import { GcpProfilesSection } from "../cloud/GcpProfilesSection";
  * dialog is a dialog that does not open.
  */
 export function CloudProfilesPanel() {
+  const t = useT();
   return (
     <div className="mt-3 border-t border-hair pt-2">
       <p className="pb-1 text-[11px] text-fg-mut">
-        Named credentials for GKE and AKS. A context with none of them
-        authenticates the way its plugin does by default.
+        {t("settings", "cloudProfilesIntro")}
       </p>
       <GcpProfilesSection />
       <AzureProfilesSection />

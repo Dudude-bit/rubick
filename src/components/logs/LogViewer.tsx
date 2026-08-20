@@ -38,6 +38,7 @@ import { LogList } from "./LogList";
 import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
+import { useT } from "@/i18n/useT";
 import {
   countCollapsed,
   expandRuns,
@@ -111,6 +112,7 @@ function StreamFailureNotice({
   /** The way out of an earlier run that does not exist. */
   onShowCurrentRun: () => void;
 }) {
+  const t = useT();
   const gone = failure.kind === "gone";
   // A container that has never started has no log, and the apiserver
   // says so in 300 characters of `BadRequest (ErrorResponse { ... })`.
@@ -143,16 +145,16 @@ function StreamFailureNotice({
           className={`text-xs ${gone || absent || unstarted ? "text-warn" : "text-err"}`}
         >
           {absent
-            ? `No previous run of ${container} — it has not restarted.`
+            ? t("empty", "noPreviousRunOf", { container })
             : unstarted
-              ? `${container} has not started, so it has nothing to say yet.`
+              ? t("empty", "containerNotStarted", { container })
               : gone
-                ? `Stream ended — ${podName}/${container} is gone.`
-                : `Lost the log stream from ${podName}/${container}.`}
+                ? t("empty", "streamEndedGone", { pod: podName, container })
+                : t("empty", "streamLost", { pod: podName, container })}
         </p>
         {unstarted && info.state.type === "waiting" && info.state.reason && (
           <p className="mt-0.5 text-[11px] text-fg-mut">
-            The kubelet is holding it at{" "}
+            {t("empty", "kubeletHoldingAt")}{" "}
             <span className="font-mono">{info.state.reason}</span>.
           </p>
         )}
@@ -162,10 +164,10 @@ function StreamFailureNotice({
             data-testid="log-stream-termination"
             title={terminationAt(termination)}
           >
-            It exited {describeTermination(termination)}
+            {t("empty", "itExited")} {describeTermination(termination)}
             {when ? `, ${when}` : ""}
             {info && info.restartCount > 0
-              ? ` · ${info.restartCount} ${info.restartCount === 1 ? "restart" : "restarts"} so far`
+              ? ` · ${t("count", "restartsSoFar", { n: info.restartCount })}`
               : ""}
             .
           </p>
@@ -180,8 +182,7 @@ function StreamFailureNotice({
             that. Reconnecting closes neither. */}
         {intake && !gone && !absent && (
           <p className="mt-0.5 text-[11px] text-fg-fnt">
-            Intake is still set — reconnecting resumes from now, and what the
-            stream missed is not fetched back.
+            {t("empty", "intakeStillSet")}
           </p>
         )}
       </div>
@@ -189,11 +190,11 @@ function StreamFailureNotice({
           happened. The way out is the run that does exist. */}
       {absent ? (
         <NoticeAction onClick={onShowCurrentRun}>
-          Show the current run
+          {t("action", "showCurrentRun")}
         </NoticeAction>
       ) : gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-          Nothing left to reconnect to
+          {t("empty", "nothingToReconnectTo")}
         </span>
       ) : (
         <Button
@@ -203,7 +204,7 @@ function StreamFailureNotice({
           onClick={onRetry}
         >
           <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-          Reconnect
+          {t("action", "reconnect")}
         </Button>
       )}
     </div>
@@ -229,6 +230,8 @@ function DroppedNotice({
   limit: number;
   onDownload: () => void;
 }) {
+  const t = useT();
+
   return (
     <div
       role="status"
@@ -236,17 +239,18 @@ function DroppedNotice({
       className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px]"
     >
       <p className="text-warn">
-        {formatCount(dropped)} older {dropped === 1 ? "line has" : "lines have"}{" "}
-        been dropped.
+        {t("count", "olderLinesDropped", {
+          n: dropped,
+          count: formatCount(dropped),
+        })}
         <span className="text-fg-mut">
           {" "}
-          The buffer holds the newest {formatCount(limit)}; what came before is
-          no longer here.
+          {t("empty", "bufferHoldsNewest", { count: formatCount(limit) })}
         </span>
       </p>
       <Button variant="outline" size="sm" onClick={onDownload}>
         <Download aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-        Download the full log
+        {t("action", "downloadFullLog")}
       </Button>
     </div>
   );
@@ -278,6 +282,8 @@ function GroupedNotice({
   collapsed: number;
   onShowEveryLine: () => void;
 }) {
+  const t = useT();
+
   return (
     <div
       role="status"
@@ -285,20 +291,19 @@ function GroupedNotice({
       className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
     >
       <p>
-        {rows === 1 ? "This row stands" : `These ${rows} rows stand`} for{" "}
-        {formatCount(rows + collapsed)} lines.
-        <span className="text-fg-fnt">
-          {" "}
-          Repeats is on, so a line that says what the one above it said is
-          folded into it.
-        </span>
+        {t("count", "rowsStandFor", { n: rows })}{" "}
+        {t("count", "forLines", {
+          n: rows + collapsed,
+          count: formatCount(rows + collapsed),
+        })}
+        <span className="text-fg-fnt"> {t("empty", "repeatsOnNote")}</span>
       </p>
       <button
         type="button"
         onClick={onShowEveryLine}
         className="shrink-0 rounded px-1.5 py-0.5 text-info hover:bg-hover"
       >
-        Show every line
+        {t("action", "showEveryLine")}
       </button>
     </div>
   );
@@ -329,6 +334,7 @@ function IntakeQuietNotice({
   since: number;
   terms: QueryTerm[];
 }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -347,16 +353,12 @@ function IntakeQuietNotice({
       <span aria-hidden="true" className="text-info">
         ⇣{" "}
       </span>
-      Nothing has matched{" "}
+      {t("empty", "nothingHasMatched")}{" "}
       <span className="font-mono text-info">
         {terms.map(termLabel).join(" and ")}
       </span>{" "}
-      for {formatSpan(quiet)}.
-      <span className="text-fg-fnt">
-        {" "}
-        The stream is attached and reading — this is intake being narrow, not
-        the log stopping.
-      </span>
+      {t("empty", "forSpan", { span: formatSpan(quiet) })}
+      <span className="text-fg-fnt"> {t("empty", "intakeNarrowNote")}</span>
     </div>
   );
 }
@@ -378,6 +380,7 @@ function FocusNotice({
   onShowAll: () => void;
   onShowCurrentRun: () => void;
 }) {
+  const t = useT();
   const split = reason.kind === "phase-split";
   const readingPrevious =
     reason.kind === "previous-run" ||
@@ -392,41 +395,36 @@ function FocusNotice({
     >
       {reason.kind === "failing-init" && (
         <p>
-          Opened on <span className="font-mono">{reason.container}</span> alone
-          — the pod is stuck in init, so nothing after it has written a line.
-          {reason.previous && (
-            <span>
-              {" "}
-              These are the lines of the run that failed, not of the current
-              one.
-            </span>
-          )}
+          {t("empty", "openedOn")}{" "}
+          <span className="font-mono">{reason.container}</span>{" "}
+          {t("empty", "openedOnAloneInit")}
+          {reason.previous && <span> {t("empty", "linesOfFailedRun")}</span>}
         </p>
       )}
       {reason.kind === "previous-run" && (
         <p>
-          Showing the run of{" "}
-          <span className="font-mono">{reason.container}</span> that failed, not
-          the current one — it has restarted since, and the current run has
-          printed nothing yet.
+          {t("empty", "showingRunOf")}{" "}
+          <span className="font-mono">{reason.container}</span>{" "}
+          {t("empty", "thatFailedNotCurrent")}
         </p>
       )}
       {reason.kind === "phase-split" && (
         <p>
-          <span className="font-mono">{reason.containers.join(", ")}</span> ran
-          before the pod started, minutes older than everything else here — held
-          out rather than interleaved at the top of the buffer.
+          <span className="font-mono">{reason.containers.join(", ")}</span>{" "}
+          {t("empty", "ranBeforePodStarted")}
         </p>
       )}
       <div className="ml-auto flex items-center gap-3">
         {readingPrevious && (
           <NoticeAction onClick={onShowCurrentRun}>
-            Show the current run
+            {t("action", "showCurrentRun")}
           </NoticeAction>
         )}
         {reason.kind !== "previous-run" && (
           <NoticeAction onClick={onShowAll}>
-            {split ? "Interleave them anyway" : "Show every container"}
+            {split
+              ? t("action", "interleaveAnyway")
+              : t("action", "showEveryContainer")}
           </NoticeAction>
         )}
       </div>
@@ -443,10 +441,13 @@ function FocusNotice({
  * is stated above it.
  */
 function FinishedNotice({ container }: { container: ContainerInfo }) {
+  const t = useT();
   const termination = lastTermination(container);
   const when = termination ? terminationWhen(termination) : null;
   const kind =
-    container.phase === "sidecar" ? "a sidecar" : "an init container";
+    container.phase === "sidecar"
+      ? t("empty", "aSidecar")
+      : t("empty", "anInitContainer");
   return (
     <div
       role="status"
@@ -454,9 +455,11 @@ function FinishedNotice({ container }: { container: ContainerInfo }) {
       className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
       title={termination ? terminationAt(termination) : undefined}
     >
-      Reading <span className="font-mono">{container.name}</span>, {kind}. It
-      finished{when ? ` ${when}` : ""}, so this log is complete and will not
-      grow.
+      {t("empty", "reading")}{" "}
+      <span className="font-mono">{container.name}</span>, {kind}.{" "}
+      {t("empty", "itFinished")}
+      {when ? ` ${when}` : ""}
+      {t("empty", "soLogIsComplete")}
     </div>
   );
 }
@@ -477,6 +480,8 @@ function NoEarlierRunNotice({
   containers: string[];
   onShowCurrentRun: () => void;
 }) {
+  const t = useT();
+
   return (
     <div
       role="status"
@@ -484,13 +489,13 @@ function NoEarlierRunNotice({
       className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] text-warn"
     >
       <p>
-        No earlier run of{" "}
-        <span className="font-mono">{containers.join(", ")}</span> — none of
-        them has restarted, so there is nothing before the run they are on.
+        {t("empty", "noEarlierRunOf")}{" "}
+        <span className="font-mono">{containers.join(", ")}</span>{" "}
+        {t("empty", "noneHasRestarted")}
       </p>
       <div className="ml-auto">
         <NoticeAction onClick={onShowCurrentRun}>
-          Show the current run
+          {t("action", "showCurrentRun")}
         </NoticeAction>
       </div>
     </div>
@@ -598,6 +603,7 @@ export function LogViewer({
   soloContainer,
   workload,
 }: LogViewerProps) {
+  const t = useT();
   const { toast } = useToast();
   const containers = useMemo(
     () => containerInfos.map((container) => container.name),
@@ -1005,9 +1011,12 @@ export function LogViewer({
     if (visibleLogs.length === 0) return;
     copyToClipboard(
       logsToText(visibleLogs),
-      `${formatCount(visibleLogs.length)} ${visibleLogs.length === 1 ? "line" : "lines"} copied`
+      t("count", "linesCopied", {
+        n: visibleLogs.length,
+        count: formatCount(visibleLogs.length),
+      })
     );
-  }, [copyToClipboard, visibleLogs]);
+  }, [copyToClipboard, visibleLogs, t]);
 
   const shownContainers = useMemo(
     () => containers.filter((name) => !hidden.has(name)),
@@ -1047,12 +1056,12 @@ export function LogViewer({
     } catch (err) {
       console.error("Failed to download logs:", err);
       toast({
-        title: "Download failed",
-        description: "Could not read the log from the API",
+        title: t("action", "downloadFailed"),
+        description: t("action", "downloadFailedDetail"),
         variant: "destructive",
       });
     }
-  }, [containers, namespace, podName, previousRun, shownContainers, toast]);
+  }, [containers, namespace, podName, previousRun, shownContainers, t, toast]);
 
   // What the reader is not being shown: dropped by the query or by the
   // legend, plus the lines standing behind a collapsed run.
@@ -1370,6 +1379,8 @@ function EmptyState({
   onClearQuery: () => void;
   onShowAll: () => void;
 }) {
+  const t = useT();
+
   // The failure notice above already said what happened; a second verdict
   // under it would only compete with it.
   if (failed && retained === 0) return null;
@@ -1381,12 +1392,15 @@ function EmptyState({
   if (allHidden) {
     return (
       <Note>
-        Every container is hidden.
+        {t("empty", "everyContainerHidden")}
         <span className="text-fg-fnt">
           {" "}
-          {formatCount(retained)} lines are buffered behind the legend.
+          {t("count", "linesBufferedBehindLegend", {
+            n: retained,
+            count: formatCount(retained),
+          })}
         </span>
-        <Action onClick={onShowAll}>Show all containers</Action>
+        <Action onClick={onShowAll}>{t("action", "showAllContainers")}</Action>
       </Note>
     );
   }
@@ -1394,15 +1408,27 @@ function EmptyState({
   if (retained > 0) {
     return (
       <Note>
-        {filtered ? "No line matches the query." : "Nothing left to show."}
+        {filtered
+          ? t("empty", "noLineMatchesQuery")
+          : t("empty", "nothingLeftToShow")}
         <span className="text-fg-fnt">
           {" "}
           {/* Under intake these are not the lines the container wrote:
               the rest were discarded before they got here, and clearing
               the query cannot bring them back. */}
-          {formatCount(retained)} lines {intake ? "kept" : "received"}.
+          {intake
+            ? t("count", "linesKept", {
+                n: retained,
+                count: formatCount(retained),
+              })
+            : t("count", "linesReceived", {
+                n: retained,
+                count: formatCount(retained),
+              })}
         </span>
-        {filtered && <Action onClick={onClearQuery}>Clear the query</Action>}
+        {filtered && (
+          <Action onClick={onClearQuery}>{t("action", "clearQuery")}</Action>
+        )}
       </Note>
     );
   }
@@ -1410,15 +1436,14 @@ function EmptyState({
   if (streaming) {
     return (
       <Note>
-        No output yet.
+        {t("empty", "noOutputYet")}
         {/* Safe to claim the stream is attached now: a stream that dies
             emits `stream-failed`, which replaces this with the notice
             above. Before that event existed this branch also covered a
             broken connection and could not say so. */}
         <span className="text-fg-fnt">
           {" "}
-          The stream is attached; nothing has been written since these
-          containers started.
+          {t("empty", "streamAttachedNothingWritten")}
         </span>
       </Note>
     );
@@ -1426,11 +1451,8 @@ function EmptyState({
 
   return (
     <Note>
-      Not streaming.
-      <span className="text-fg-fnt">
-        {" "}
-        Use the stream control in the toolbar to attach.
-      </span>
+      {t("empty", "notStreaming")}
+      <span className="text-fg-fnt"> {t("empty", "useStreamControl")}</span>
     </Note>
   );
 }

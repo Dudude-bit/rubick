@@ -1,4 +1,5 @@
 import { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
 import { useMemo } from "react";
@@ -27,6 +28,7 @@ import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import type { QuickAction } from "@/components/ui/quick-actions";
+import { useT } from "@/i18n/useT";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -42,7 +44,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // is the one nobody should have to guess at from a truncation.
     size: 150,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
@@ -68,9 +70,9 @@ export const columns: ColumnDef<PodRow>[] = [
   createCpuColumn<PodRow>(),
   createMemoryColumn<PodRow>(),
   {
-    size: 70,
+    size: 110,
     id: "ready",
-    header: "Ready",
+    header: () => <T section="columns" k="ready" />,
     // The number people compare against `kubectl get pod` in the next
     // window, so it is kubectl's number: sidecars in both halves,
     // finished init containers in neither.
@@ -87,7 +89,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // The count and the age of the last one: "653 (2h ago)".
     size: 130,
     id: "restarts",
-    header: "Restarts",
+    header: () => <T section="columns" k="restarts" />,
     // kubectl prints the count with the age of the last one, and it is
     // the half that carries the news: 653 an hour ago and 653 last
     // week are the same number and not the same pod.
@@ -103,7 +105,13 @@ export const columns: ColumnDef<PodRow>[] = [
         {row.original.restartCount > 0 && row.original.lastRestartAt && (
           <span className="text-fg-fnt">
             {" "}
-            ({formatAge(row.original.lastRestartAt)} ago)
+            (
+            <T
+              section="action"
+              k="agoSuffix"
+              values={{ age: formatAge(row.original.lastRestartAt) }}
+            />
+            )
           </span>
         )}
       </span>
@@ -113,7 +121,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
     size: 220,
     id: "node",
-    header: "Node",
+    header: () => <T section="columns" k="node" />,
     cell: ({ row }) =>
       row.original.nodeName ? (
         <ResourceRef
@@ -142,6 +150,7 @@ export const columns: ColumnDef<PodRow>[] = [
 ];
 
 export function PodList() {
+  const t = useT();
   const navigate = useNavigate();
   const {
     data: podsWithMetrics,
@@ -161,7 +170,7 @@ export function PodList() {
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(
             getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)
@@ -169,7 +178,7 @@ export function PodList() {
       },
       {
         icon: FileText,
-        label: "View Logs",
+        label: t("action", "viewLogs"),
         onClick: (item) =>
           navigate(
             `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=logs`
@@ -177,7 +186,7 @@ export function PodList() {
       },
       {
         icon: Terminal,
-        label: "Shell",
+        label: t("action", "shell"),
         onClick: (item) =>
           navigate(
             `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=terminal`
@@ -185,12 +194,12 @@ export function PodList() {
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item) => setDeleteTarget(item),
         variant: "destructive",
       },
     ],
-    [navigate]
+    [t, navigate]
   );
 
   return (

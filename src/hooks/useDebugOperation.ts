@@ -7,12 +7,7 @@ import type {
 } from "@/generated/types";
 
 export type DebugOperationState =
-  | "idle"
-  | "creating"
-  | "polling"
-  | "ready"
-  | "failed"
-  | "timeout";
+  "idle" | "creating" | "polling" | "ready" | "failed" | "timeout";
 
 interface UseDebugOperationOptions {
   onReady: (result: DebugResult) => void;

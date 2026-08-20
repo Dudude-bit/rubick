@@ -15,6 +15,7 @@ import { ArrowDown } from "lucide-react";
 import { LogLineComponent, LogRunRow } from "./LogLine";
 import type { LogRun } from "./grouping";
 import { logsToText, type StreamedLogLine, type ViewMode } from "./types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The output itself, windowed.
@@ -111,6 +112,7 @@ export function LogList({
   onLevelClick,
   children,
 }: LogListProps) {
+  const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [viewportPx, setViewportPx] = useState(0);
@@ -388,7 +390,7 @@ export function LogList({
           className="absolute bottom-3 right-4 flex items-center gap-1.5 rounded-full border border-hair bg-raise px-2.5 py-1 text-[11px] text-fg-mid shadow-md hover:bg-hover"
         >
           <ArrowDown className="h-3 w-3" />
-          Jump to latest
+          {t("action", "jumpToLatest")}
         </button>
       )}
     </div>

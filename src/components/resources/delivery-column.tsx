@@ -17,6 +17,8 @@ import type { Delivery } from "@/integrations";
 import { delivered, type DeliveryFilter } from "@/lib/delivery";
 import { cn } from "@/lib/utils";
 import { DeliveryCell } from "./delivery";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 const DeliveryRows = createContext<((row: unknown) => Delivery[]) | null>(null);
 
@@ -42,10 +44,10 @@ export function DeliveryColumnCell({ row }: { row: unknown }) {
   return <DeliveryCell deliveries={of?.(row) ?? []} />;
 }
 
-const OPTIONS: Array<{ id: DeliveryFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "notDelivered", label: "Not delivered" },
-  { id: "trouble", label: "Needs attention" },
+const OPTIONS: Array<{ id: DeliveryFilter; label: keyof typeof en.action }> = [
+  { id: "all", label: "all" },
+  { id: "notDelivered", label: "notDelivered" },
+  { id: "trouble", label: "needsAttention" },
 ];
 
 /**
@@ -68,6 +70,7 @@ export function DeliveryFilterControl({
   onChange: (value: DeliveryFilter) => void;
   deliveries: Delivery[][];
 }) {
+  const t = useT();
   const blind = [
     ...new Set(
       deliveries
@@ -80,7 +83,7 @@ export function DeliveryFilterControl({
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
-        Delivery
+        {t("columns", "delivery")}
       </span>
       {OPTIONS.map((option) => (
         <button
@@ -92,14 +95,15 @@ export function DeliveryFilterControl({
             option.id === value ? "text-fg" : "text-fg-fnt hover:text-fg-mut"
           )}
         >
-          {option.label}
+          {t("action", option.label)}
         </button>
       ))}
       {value === "trouble" && blind.length > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          {blind.join(" and ")} report{blind.length === 1 ? "s" : ""} no
-          per-object drift — it corrects silently, so its objects appear here
-          only when the reconciler itself has stopped.
+          {t("empty", "blindReconcilers", {
+            n: blind.length,
+            vendors: blind.join(` ${t("empty", "listAnd")} `),
+          })}
         </span>
       )}
     </div>

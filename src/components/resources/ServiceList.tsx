@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "@/components/network";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { AddressCell } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -27,7 +28,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // "ExternalName" is the longest word this column ever holds.
     size: 120,
     accessorKey: "type",
-    header: "Type",
+    header: () => <T section="columns" k="type" />,
     cell: ({ row }) => (
       <span
         className={
@@ -43,16 +44,16 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   {
     size: 130,
     accessorKey: "clusterIp",
-    header: "Cluster IP",
+    header: () => <T section="columns" k="clusterIp" />,
     cell: ({ row }) => (
-      <CopyableAddress value={row.original.clusterIp} label="Cluster IP" />
+      <AddressCell value={row.original.clusterIp} labelKey="clusterIp" />
     ),
   },
   {
     // An address per line, each behind an icon.
     size: 160,
     accessorKey: "externalIps",
-    header: "External IPs",
+    header: () => <T section="columns" k="externalIps" />,
     cell: ({ row }) => {
       const ips = row.original.externalIps;
       if (!ips || ips.length === 0)
@@ -62,7 +63,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
           {ips.map((ip, i) => (
             <div key={i} className="flex items-center gap-1 text-xs">
               <ExternalLink className="h-3 w-3 flex-none" aria-hidden="true" />
-              <CopyableAddress value={ip} label="External IP" />
+              <AddressCell value={ip} labelKey="externalIp" />
             </div>
           ))}
         </div>
@@ -73,7 +74,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // Two `80:30080/TCP` mappings and a "+3" after them.
     size: 180,
     accessorKey: "ports",
-    header: "Ports",
+    header: () => <T section="columns" k="ports" />,
     cell: ({ row }) => (
       <PortsDisplay ports={row.original.ports} maxDisplay={2} />
     ),

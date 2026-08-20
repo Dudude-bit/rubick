@@ -20,8 +20,7 @@ const ingressRouteColumns: CrdColumn[] = [
     header: "Entry Points",
     accessor: (resource) => {
       const entryPoints = getValueByPath(resource, "spec.entryPoints") as
-        | string[]
-        | undefined;
+        string[] | undefined;
       return entryPoints ?? [];
     },
     cell: (value) => {
@@ -34,8 +33,7 @@ const ingressRouteColumns: CrdColumn[] = [
     header: "Hosts",
     accessor: (resource) => {
       const routes = getValueByPath(resource, "spec.routes") as
-        | Array<{ match?: string }>
-        | undefined;
+        Array<{ match?: string }> | undefined;
       if (!routes) return [];
 
       // Extract hosts from match rules like "Host(`example.com`)"
@@ -138,8 +136,7 @@ const middlewareColumns: CrdColumn[] = [
     header: "Type",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!spec) return "Unknown";
 
       // Detect middleware type based on spec fields
@@ -182,8 +179,7 @@ const middlewareColumns: CrdColumn[] = [
     header: "Details",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!spec) return null;
 
       // Extract relevant details based on type
@@ -247,8 +243,7 @@ const tlsOptionColumns: CrdColumn[] = [
     header: "Cipher Suites",
     accessor: (resource) => {
       const cipherSuites = getValueByPath(resource, "spec.cipherSuites") as
-        | string[]
-        | undefined;
+        string[] | undefined;
       return cipherSuites?.length ?? 0;
     },
     cell: (value) =>

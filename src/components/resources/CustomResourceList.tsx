@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash2 } from "lucide-react";
@@ -19,6 +20,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 import { useState } from "react";
+import { useT } from "@/i18n/useT";
 
 interface CustomResourceListProps {
   crdName: string;
@@ -44,6 +46,7 @@ export function CustomResourceList({
   printerColumns = [],
   embedded = false,
 }: CustomResourceListProps) {
+  const t = useT();
   const { currentNamespace } = useClusterStore();
 
   // How the vendor that installed this CRD draws it, if the app knows one.
@@ -73,18 +76,18 @@ export function CustomResourceList({
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item: CustomResourceListItem) =>
           navigate(getDetailPath(item)),
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item: CustomResourceListItem) => setDeleteTarget(item),
         variant: "destructive" as const,
       },
     ],
-    [navigate, getDetailPath]
+    [navigate, getDetailPath, t]
   );
 
   // Build columns from the vendor's view, or from the CRD's printer columns
@@ -97,7 +100,7 @@ export function CustomResourceList({
     cols.push({
       size: 320,
       accessorKey: "name",
-      header: "Name",
+      header: () => <T section="columns" k="name" />,
       cell: ({ row }) => (
         <RouteLink
           to={getDetailPath(row.original)}
@@ -194,11 +197,14 @@ export function CustomResourceList({
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `${crdKind}: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: crdKind,
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed, crdKind]
+    [toast, watchFailed, crdKind, t]
   );
   const { resyncing } = useResourceWatch<CustomResourceListItem>({
     enabled: true,
@@ -210,7 +216,9 @@ export function CustomResourceList({
 
   return (
     <ResourceList<CustomResourceListItem>
-      title={(count) => `${crdKind} Instances (${count})`}
+      title={(count) =>
+        t("count", "kindInstances", { kind: crdKind, n: count })
+      }
       queryKey={[...queryKey]}
       getRowId={getResourceRowId}
       queryFn={async () => {
@@ -231,9 +239,14 @@ export function CustomResourceList({
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.
-      emptyMessage={`The CRD is installed, but no ${crdKind} has been created${
-        namespace ? ` in ${namespace}` : ""
-      } yet.`}
+      emptyMessage={
+        namespace
+          ? t("empty", "crdNoInstancesInNamespace", {
+              kind: crdKind,
+              namespace,
+            })
+          : t("empty", "crdNoInstances", { kind: crdKind })
+      }
       deleteConfig={{
         mutationFn: (item) =>
           commands.deleteCustomResource(
@@ -249,7 +262,9 @@ export function CustomResourceList({
       live={!watchFailed}
       resyncing={resyncing}
       searchKey="name"
-      searchPlaceholder={`Search ${crdKind}...`}
+      searchPlaceholder={t("action", "searchKindPlaceholder", {
+        kind: crdKind,
+      })}
       embedded={embedded}
       getRowHref={getDetailPath}
     />

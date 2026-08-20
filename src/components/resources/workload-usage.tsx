@@ -24,6 +24,7 @@ import {
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import type { UsageScope } from "@/integrations";
+import { useT } from "@/i18n/useT";
 import type {
   DeploymentContainerInfo,
   PodInfo,
@@ -66,9 +67,6 @@ function runningPods(pods: readonly PodInfo[]): PodInfo[] {
   );
 }
 
-const NO_LIMITS_NOTE =
-  "No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take.";
-
 export interface WorkloadUsageProps {
   kind: string;
   uid: string | null | undefined;
@@ -105,8 +103,10 @@ export function WorkloadUsage({
   pods,
   idle,
   connections,
-  noLimitNote = NO_LIMITS_NOTE,
+  noLimitNote,
 }: WorkloadUsageProps) {
+  const t = useT();
+  const limitNote = noLimitNote ?? t("empty", "noLimitsDeclared");
   const running = useMemo(() => runningPods(pods), [pods]);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
@@ -144,7 +144,7 @@ export function WorkloadUsage({
       <UsageBlock
         kind={kind}
         uid={uid}
-        scope="nothing running"
+        scope={t("empty", "nothingRunning")}
         cpu={null}
         memory={null}
         // The template's ceiling for one replica, unmultiplied: there are no
@@ -152,7 +152,7 @@ export function WorkloadUsage({
         // template does declare and print "no limits declared" under it.
         cpuLimit={ceiling.cpu}
         memoryLimit={ceiling.memory}
-        noLimitNote={noLimitNote}
+        noLimitNote={limitNote}
         sampledAt={null}
         status={null}
         connections={connections}
@@ -167,14 +167,14 @@ export function WorkloadUsage({
     <UsageBlock
       kind={kind}
       uid={uid}
-      scope={`summed over ${running.length} pod${running.length === 1 ? "" : "s"}`}
+      scope={t("count", "summedOverPods", { n: running.length })}
       cpu={summed.cpuMillicores}
       memory={summed.memoryBytes}
       cpuLimit={ceiling.cpu === null ? null : ceiling.cpu * running.length}
       memoryLimit={
         ceiling.memory === null ? null : ceiling.memory * running.length
       }
-      noLimitNote={noLimitNote}
+      noLimitNote={limitNote}
       restarts={withMetrics.reduce((total, pod) => total + pod.restartCount, 0)}
       sampledAt={podSampledAt}
       status={podStatus}
@@ -193,13 +193,15 @@ export function WorkloadUsage({
  * to ask why the workload is idle, when the answer is that it is not there.
  */
 function IdleUsage({ says }: { says: string }) {
+  const t = useT();
   return (
     <Section>
-      <SectionHeader title="Usage" count="nothing running" />
+      <SectionHeader
+        title={t("columns", "usage")}
+        count={t("empty", "nothingRunning")}
+      />
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-        {says} Usage is summed from running pods, and metrics-server keeps
-        nothing about a pod that has exited — so there is no line rather than a
-        line at zero.
+        {says} {t("empty", "usageIdleNote")}
       </p>
     </Section>
   );

@@ -18,16 +18,18 @@ import {
 } from "@/components/settings/settings-search";
 import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 
 export function IntegrationsList() {
+  const t = useT();
   const currentContext = useClusterStore((state) => state.currentContext);
 
   return (
     <SettingsSearchProvider>
       <div className="flex max-w-3xl flex-col gap-[18px]">
         <SectionHeader
-          title="Integrations"
-          description="What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster."
+          title={t("nav", "integrations")}
+          description={t("settings", "integrationsHint")}
         />
         {currentContext ? (
           <SettingsSectionScope id="integrations">
@@ -39,12 +41,10 @@ export function IntegrationsList() {
           // the other that nothing was asked.
           <div className="max-w-[64ch]">
             <h3 className="text-xs font-medium text-fg">
-              No cluster connected
+              {t("cluster", "notConnected")}
             </h3>
             <p className="mt-1.5 text-xs text-fg-mut">
-              Connect a cluster and this will say what it has. Every extension
-              here is detected by asking the API server for its CRDs, and there
-              is no API server to ask.
+              {t("empty", "integrationsNoCluster")}
             </p>
           </div>
         )}

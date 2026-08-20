@@ -31,6 +31,7 @@ import type {
   ConfigData,
   SecretInfo,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The peek's work surfaces.
@@ -131,14 +132,19 @@ function TabError({
   error: Error;
   onRetry: () => void;
 }) {
+  const t = useT();
   return (
     <div className="px-3.5 py-4">
-      <p className="text-xs text-warn">Could not read {what}.</p>
+      <p className="text-xs text-warn">{what}</p>
       <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
         {error.message}
       </p>
       <div className="mt-2">
-        <DetailAction label="Retry" icon={RefreshCw} onClick={onRetry} />
+        <DetailAction
+          label={t("action", "retry")}
+          icon={RefreshCw}
+          onClick={onRetry}
+        />
       </div>
     </div>
   );
@@ -150,8 +156,11 @@ function TabError({
  * most common way a live view reads as broken.
  */
 function Refreshing({ busy }: { busy: boolean }) {
+  const t = useT();
   if (!busy) return null;
-  return <span className="text-[11px] text-fg-fnt">updating…</span>;
+  return (
+    <span className="text-[11px] text-fg-fnt">{t("action", "updating")}</span>
+  );
 }
 
 function RowsSkeleton({ rows = 6 }: { rows?: number }) {
@@ -184,7 +193,8 @@ function RowsSkeleton({ rows = 6 }: { rows?: number }) {
  * broken" — the two look identical in an empty black box.
  */
 function describeSilence(
-  pod: PodInfo
+  pod: PodInfo,
+  t: ReturnType<typeof useT>
 ): { title: string; detail: string } | null {
   // Init containers count. A pod in `Init:CrashLoopBackOff` has no app
   // container that has ever started and one init container that has
@@ -206,12 +216,17 @@ function describeSilence(
   const explanation =
     pod.status.message ||
     pod.status.reason ||
-    (reason ? `${waiting?.name} is waiting · ${reason}` : null) ||
-    "The scheduler has not placed it on a node yet.";
+    (reason
+      ? t("empty", "containerIsWaiting", {
+          container: waiting?.name ?? "",
+          reason,
+        })
+      : null) ||
+    t("empty", "schedulerHasNotPlacedIt");
 
   return {
-    title: `No container has started — this pod is ${pod.status.display}.`,
-    detail: `${explanation} Recent events on the Overview tab say more.`,
+    title: t("empty", "noContainerHasStarted", { status: pod.status.display }),
+    detail: t("empty", "recentEventsSayMore", { explanation }),
   };
 }
 
@@ -224,11 +239,12 @@ function PeekLogsTab({
   pod: PodInfo | undefined;
   isLoading: boolean;
 }) {
+  const t = useT();
   if (isLoading || !pod) {
     return <RowsSkeleton rows={8} />;
   }
 
-  const silence = describeSilence(pod);
+  const silence = describeSilence(pod, t);
   if (silence) {
     return (
       <TabNote title={silence.title} detail={silence.detail} tone="warn" />
@@ -254,12 +270,13 @@ function PeekContainersTab({
   pod: PodInfo | undefined;
   isLoading: boolean;
 }) {
+  const t = useT();
   if (isLoading || !pod) return <RowsSkeleton rows={5} />;
   if (podContainers(pod).length === 0) {
     return (
       <TabNote
-        title="This pod declares no containers."
-        detail="Nothing to inspect until its spec is fixed."
+        title={t("empty", "podDeclaresNoContainers")}
+        detail={t("empty", "nothingToInspectUntilSpecFixed")}
       />
     );
   }
@@ -279,6 +296,7 @@ function PeekDataTab({
   target: PeekTarget;
   detail: unknown;
 }) {
+  const t = useT();
   const kind = toKind(target.kind);
   const namespace = target.namespace ?? null;
   const isSecret = kind === "Secret";
@@ -304,7 +322,7 @@ function PeekDataTab({
   if (error) {
     return (
       <TabError
-        what={`this ${target.kind}'s data`}
+        what={t("empty", "couldNotReadKindData", { kind: target.kind })}
         error={error}
         onRetry={() => refetch()}
       />
@@ -320,7 +338,7 @@ function PeekDataTab({
         keys={keys}
         sensitive={isSecret}
         isLoading={isPending || (isFetching && !data)}
-        emptyMessage={`This ${target.kind} holds no keys`}
+        emptyMessage={t("empty", "kindHoldsNoKeys", { kind: target.kind })}
       />
     </div>
   );
@@ -385,6 +403,7 @@ function PeekPodsTab({
   target: PeekTarget;
   detail: unknown;
 }) {
+  const t = useT();
   const namespace = target.namespace ?? null;
   const kind = toKind(target.kind);
   const selector =
@@ -407,7 +426,11 @@ function PeekPodsTab({
 
   if (error) {
     return (
-      <TabError what="this workload's pods" error={error} onRetry={refetch} />
+      <TabError
+        what={t("empty", "couldNotReadWorkloadPods")}
+        error={error}
+        onRetry={refetch}
+      />
     );
   }
   if (isPending || !data) return <RowsSkeleton />;
@@ -421,13 +444,14 @@ function PeekPodsTab({
     >
       <PodListCard
         pods={data}
-        emptyMessage={`This ${target.kind} has no pods right now`}
+        emptyMessage={t("empty", "kindHasNoPods", { kind: target.kind })}
       />
     </ChildrenSection>
   );
 }
 
 function PeekJobsTab({ target }: { target: PeekTarget }) {
+  const t = useT();
   const namespace = target.namespace ?? null;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
@@ -455,7 +479,11 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
 
   if (error) {
     return (
-      <TabError what="this CronJob's runs" error={error} onRetry={refetch} />
+      <TabError
+        what={t("empty", "couldNotReadCronJobRuns")}
+        error={error}
+        onRetry={refetch}
+      />
     );
   }
   if (isPending || !data) return <RowsSkeleton />;
@@ -467,7 +495,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
       busy={isFetching}
       empty={data.length === 0}
     >
-      <JobRows jobs={data} emptyMessage="This CronJob has not run yet" />
+      <JobRows jobs={data} emptyMessage={t("empty", "cronJobNotRunYet")} />
     </ChildrenSection>
   );
 }
@@ -537,6 +565,7 @@ function PeekRelatedTab({
 /* ---------- YAML ---------- */
 
 function PeekYamlTab({ target }: { target: PeekTarget }) {
+  const t = useT();
   const copy = useCopyToClipboard();
   const namespace = target.namespace ?? null;
 
@@ -565,13 +594,14 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   });
 
   const handleCopy = useCallback(() => {
-    if (data) copy(data, `${target.name} manifest copied`);
-  }, [copy, data, target.name]);
+    if (data)
+      copy(data, t("action", "manifestCopiedNamed", { name: target.name }));
+  }, [copy, data, t, target.name]);
 
   if (error) {
     return (
       <TabError
-        what={`this ${target.kind}'s manifest`}
+        what={t("empty", "couldNotReadKindManifest", { kind: target.kind })}
         error={error}
         onRetry={() => refetch()}
       />
@@ -589,10 +619,16 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-none items-center gap-2 px-2 py-1">
-        <span className="text-[11px] text-fg-mut">{target.kind} manifest</span>
+        <span className="text-[11px] text-fg-mut">
+          {t("action", "kindManifest", { kind: target.kind })}
+        </span>
         <Refreshing busy={isFetching} />
         <div className="ml-auto">
-          <DetailAction label="Copy" icon={Copy} onClick={handleCopy} />
+          <DetailAction
+            label={t("action", "copy")}
+            icon={Copy}
+            onClick={handleCopy}
+          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">

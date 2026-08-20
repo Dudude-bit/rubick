@@ -6,6 +6,7 @@ import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useSettingSearchMatch } from "../settings-search";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * The file every other line on this screen is downstream of, and how it
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
  * resolved value is the text; the field only appears when you ask for it.
  */
 export function SourceLine() {
+  const t = useT();
   const kubeconfig = useKubeconfigPath();
   const [editing, setEditing] = React.useState(false);
   const [typed, setTyped] = React.useState("");
@@ -65,7 +67,7 @@ export function SourceLine() {
         <span className="flex flex-1 items-center gap-1.5">
           <Input
             autoFocus
-            aria-label="Kubeconfig file"
+            aria-label={t("settings", "kubeconfigFile")}
             placeholder={primary?.path ?? "/path/to/kubeconfig"}
             value={typed}
             disabled={busy}
@@ -87,7 +89,7 @@ export function SourceLine() {
           />
           <button
             type="button"
-            aria-label="Browse for a kubeconfig file"
+            aria-label={t("settings", "browseKubeconfig")}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
               setEditing(false);
@@ -101,18 +103,18 @@ export function SourceLine() {
       ) : (
         <>
           <span className="font-mono text-xs text-fg-mid">
-            {primary?.path ?? "no kubeconfig"}
+            {primary?.path ?? t("settings", "noKubeconfig")}
           </span>
           <span className="text-[11px] text-fg-fnt">
             {contexts != null && (
-              <>
-                · {contexts} context{contexts === 1 ? "" : "s"}{" "}
-              </>
+              <>· {t("count", "contexts", { n: contexts })} </>
             )}
             · {provenance}
           </span>
           {primary && !primary.exists && (
-            <span className="text-[11px] text-err">this file is not there</span>
+            <span className="text-[11px] text-err">
+              {t("settings", "fileNotThere")}
+            </span>
           )}
           {source?.error && (
             <span className="text-[11px] text-err">{source.error}</span>
@@ -125,7 +127,7 @@ export function SourceLine() {
                 disabled={busy}
                 className="text-fg-mut transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
               >
-                Use the default lookup
+                {t("settings", "useDefaultLookup")}
               </button>
             )}
             <button
@@ -136,7 +138,7 @@ export function SourceLine() {
               }}
               className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
-              Use another file
+              {t("settings", "useAnotherFile")}
             </button>
           </span>
         </>

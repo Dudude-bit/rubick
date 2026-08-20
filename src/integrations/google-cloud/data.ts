@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { ROUTING_STALE, useBackingLists } from "../ingress";
 import {
@@ -75,8 +76,9 @@ export async function fetchIngressSources(): Promise<IngressSources> {
 export const INGRESS_SOURCES_KEY = ["gke-ingress", "sources"] as const;
 
 export function useIngressSources() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: INGRESS_SOURCES_KEY,
+    queryKey: [context, ...INGRESS_SOURCES_KEY],
     queryFn: fetchIngressSources,
     staleTime: ROUTING_STALE,
   });

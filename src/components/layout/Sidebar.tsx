@@ -12,6 +12,7 @@ import {
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
@@ -26,14 +27,29 @@ import {
   getResourceListUrl,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import type { en } from "@/i18n/catalogue";
+import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
-type NavItem = {
-  label: string;
+type NavKey = keyof typeof en.nav;
+
+/**
+ * A row names itself one of two ways, and must pick exactly one.
+ *
+ * A resource row's label is the kind's own plural — a proper noun that reads
+ * the same in every language, so it stays a literal. The app's own rows are
+ * ordinary words and carry a catalogue key. The union is what stops a third
+ * case: a row with neither, which renders as a clickable blank.
+ */
+type NavName =
+  { label: string; labelKey?: never } | { labelKey: NavKey; label?: never };
+
+type NavItem = NavName & {
   path: string;
   icon: LucideIcon;
   /** Which of the backend's counts belongs at the end of this row. */
@@ -69,15 +85,15 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
  * on every launch made the panel a list of four words. Captioned groups
  * cost one line each and keep every destination one click away.
  */
-const GROUPS: { caption?: string; items: NavItem[] }[] = [
+const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   {
     items: [
-      { label: "Overview", path: "/", icon: LayoutDashboard },
+      { labelKey: "overview", path: "/", icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
     ],
   },
   {
-    caption: "Workloads",
+    caption: "workloads",
     items: [
       resource(ResourceType.Pod, "pods"),
       resource(ResourceType.Deployment, "deployments"),
@@ -88,7 +104,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Cluster",
+    caption: "cluster",
     items: [
       resource(ResourceType.Node, "nodes"),
       resource(ResourceType.Namespace, "namespaces"),
@@ -97,7 +113,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Network",
+    caption: "network",
     items: [
       resource(ResourceType.Service, "services"),
       // Services name the endpoints behind each one; this is the only place
@@ -109,7 +125,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Storage",
+    caption: "storage",
     items: [
       resource(ResourceType.PersistentVolumeClaim),
       resource(ResourceType.PersistentVolume),
@@ -117,7 +133,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
     ],
   },
   {
-    caption: "Config",
+    caption: "config",
     items: [
       resource(ResourceType.ConfigMap, "configMaps"),
       resource(ResourceType.Secret, "secrets"),
@@ -135,7 +151,7 @@ const GROUPS: { caption?: string; items: NavItem[] }[] = [
  */
 const APP_ROWS: NavItem[] = [
   {
-    label: "Settings",
+    labelKey: "settings",
     path: "/settings",
     icon: Settings,
     section: "/settings",
@@ -160,11 +176,11 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
         {GROUPS.map((group, index) => (
           <div key={group.caption ?? `ungrouped-${index}`}>
-            {group.caption && <GroupCaption>{group.caption}</GroupCaption>}
+            {group.caption && <GroupCaption k={group.caption} />}
             {group.items.map((item) => (
               <NavRow key={item.path} item={item} overview={overview} />
             ))}
-            {group.caption === "Network" && <GatewayRows overview={overview} />}
+            {group.caption === "network" && <GatewayRows overview={overview} />}
           </div>
         ))}
         <IntegrationsGroup />
@@ -172,7 +188,7 @@ export function Sidebar() {
       {/* The app's own strip, outside the scroll: the rows above are the
           cluster's and travel with it; these stay put on every screen. */}
       <div className="border-t border-hair px-1.5 pb-2.5">
-        <GroupCaption>App</GroupCaption>
+        <GroupCaption k="app" />
         {APP_ROWS.map((item) => (
           <NavRow key={item.path} item={item} overview={overview} />
         ))}
@@ -209,7 +225,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       )}
       {routeKinds.some((kind) => served.has(kind)) && (
         <NavRow
-          item={{ label: "Routes", path: "/network/routes", icon: Route }}
+          item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
           overview={overview}
         />
       )}
@@ -217,10 +233,27 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   );
 }
 
-function GroupCaption({ children }: { children: string }) {
+/**
+ * A caption takes the catalogue key rather than the finished words.
+ *
+ * The spinner needs the caption twice — once drawn, once spoken — and a
+ * translated caption arrives as an element, which cannot be lowercased for
+ * the label. Holding the key instead means both come from the same lookup
+ * and neither can drift from the other.
+ */
+function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
+  const t = useT();
   return (
-    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
-      {children}
+    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+      <T section="nav" k={k} />
+      {busy && (
+        <Spinner
+          aria-label={t("action", "readingGroup", {
+            group: t("nav", k).toLowerCase(),
+          })}
+          className="h-2.5 w-2.5"
+        />
+      )}
     </div>
   );
 }
@@ -239,8 +272,9 @@ function GroupCaption({ children }: { children: string }) {
  * `NavLink` light all of them at once.
  */
 function IntegrationsGroup() {
+  const t = useT();
   const { pathname, search } = useLocation();
-  const { pages, pending } = useIntegrationPages();
+  const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
@@ -255,7 +289,11 @@ function IntegrationsGroup() {
   // answer that page owns, not a reason to hide the way to it.
   const catalog = (
     <NavRow
-      item={{ label: "All integrations", path: "/integrations", icon: Plug }}
+      item={{
+        labelKey: "allIntegrations",
+        path: "/integrations",
+        icon: Plug,
+      }}
       overview={undefined}
       value={null}
       active={pathname === "/integrations" && vendor === null}
@@ -267,7 +305,7 @@ function IntegrationsGroup() {
   if (pages.length === 0 && pending) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption k="integrations" busy={reading} />
         <div aria-hidden>
           {[0, 1].map((row) => (
             <div key={row} className="flex items-center gap-2 px-2 py-[5px]">
@@ -284,7 +322,7 @@ function IntegrationsGroup() {
   if (pages.length === 0) {
     return (
       <div>
-        <GroupCaption>Integrations</GroupCaption>
+        <GroupCaption k="integrations" busy={reading} />
         {catalog}
       </div>
     );
@@ -312,20 +350,21 @@ function IntegrationsGroup() {
 
   return (
     <div>
-      <GroupCaption>Integrations</GroupCaption>
+      <GroupCaption k="integrations" busy={reading} />
       {pages.map((page) => (
         <NavRow
           key={page.path}
           item={{ label: page.name, path: page.path, icon: page.icon }}
           overview={undefined}
           value={page.count}
+          mark={page.tone ?? undefined}
           // A tunnel that is down is not a count and not a fault: it is a
           // thing this row can do something about, and says so.
           note={
             page.asleep
               ? waking === page.id
-                ? "connecting…"
-                : "asleep"
+                ? t("cluster", "tunnelWaking")
+                : t("cluster", "tunnelAsleep")
               : undefined
           }
           onPress={page.asleep ? () => press(page.id) : undefined}
@@ -366,6 +405,7 @@ function IntegrationsGroup() {
  * else a click could mean — the cluster is already the one you are on.
  */
 function ClusterRow() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const alias = useClusterMark(currentContext).alias?.trim();
   const isConnected = useClusterStore((s) => s.isConnected);
@@ -433,7 +473,9 @@ function ClusterRow() {
       <button
         type="button"
         aria-haspopup="menu"
-        aria-label={`${alias ?? currentContext} — rename or recolour`}
+        aria-label={t("cluster", "renameOrRecolour", {
+          name: alias ?? currentContext,
+        })}
         className={cn(
           row,
           "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden"
@@ -449,6 +491,7 @@ function NavRow({
   item,
   overview,
   value,
+  mark,
   note,
   onPress,
   active,
@@ -457,6 +500,12 @@ function NavRow({
   overview: ClusterOverview | undefined;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
+  /**
+   * A dot beside the count: the worst thing on the row's page, or nothing.
+   * The count itself stays quiet — inventory is not allowed to borrow a
+   * colour — so this one pixel is the row's whole opinion.
+   */
+  mark?: "warn" | "err";
   /**
    * A word at the end of the row instead of a count — for a state that is
    * neither a number nor a fault. A port-forward that is down is the case
@@ -476,6 +525,7 @@ function NavRow({
    */
   active?: boolean;
 }) {
+  const t = useT();
   const { pathname } = useLocation();
   const updateAvailable = useUpdaterStore((state) => state.available);
   const badge = item.updateBadge === true && updateAvailable;
@@ -521,14 +571,29 @@ function NavRow({
               <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
             )}
           </div>
-          {item.label}
+          {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (
             <NavCount item={item} overview={overview} />
           ) : (
             value !== null && (
-              <span className="ml-auto text-[11px] text-fg-fnt">{value}</span>
+              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
+                {mark && (
+                  <span
+                    aria-label={
+                      mark === "err"
+                        ? t("cluster", "markBroken")
+                        : t("cluster", "markWorthALook")
+                    }
+                    className={cn(
+                      "h-1.5 w-1.5 flex-none rounded-full",
+                      mark === "err" ? "bg-err" : "bg-warn"
+                    )}
+                  />
+                )}
+                {value}
+              </span>
             )
           )}
         </>

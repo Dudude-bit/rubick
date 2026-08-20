@@ -36,6 +36,7 @@ import {
   ActivityEmpty,
   ActivityGroup,
 } from "./primitives";
+import { useT } from "@/i18n/useT";
 
 /** Same shape the store keys sessions by; do not reorder the parts. */
 const forwardKey = (item: {
@@ -73,6 +74,7 @@ function SessionRow({
   onStop: () => void;
   namesCluster?: boolean;
 }) {
+  const t = useT();
   const isError = status?.status === "error";
   const isReconnecting =
     status?.status === "reconnecting" || status?.status === "reconnected";
@@ -104,12 +106,12 @@ function SessionRow({
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
-          {isError && " · failed"}
-          {isReconnecting && " · reconnecting"}
+          {isError && ` · ${t("cluster", "failedInline")}`}
+          {isReconnecting && ` · ${t("activity", "reconnectingInline")}`}
         </span>
       </span>
       <ActivityAction
-        aria-label={`Stop forwarding ${session.pod}`}
+        aria-label={t("activity", "stopForwarding", { pod: session.pod })}
         onClick={onStop}
         disabled={isBusy}
       >
@@ -132,6 +134,7 @@ function SessionRow({
  * only the Settings copy could do came with it.
  */
 export function PortForwardsTab() {
+  const t = useT();
   const { toast } = useToast();
   const currentContext = useClusterStore((state) => state.currentContext);
   const configs = usePortForwardStore((state) => state.configs);
@@ -206,7 +209,7 @@ export function PortForwardsTab() {
         await startConfig(configId);
       } catch (error) {
         toast({
-          title: "Failed to start port forward",
+          title: t("activity", "startForwardFailed"),
           description: normalizeTauriError(error),
           variant: "destructive",
         });
@@ -219,7 +222,7 @@ export function PortForwardsTab() {
         await stopSession(sessionId);
       } catch (error) {
         toast({
-          title: "Failed to stop port forward",
+          title: t("activity", "stopForwardFailed"),
           description: normalizeTauriError(error),
           variant: "destructive",
         });
@@ -232,7 +235,7 @@ export function PortForwardsTab() {
         await removeConfig(config.id);
       } catch (error) {
         toast({
-          title: "Failed to delete port forward",
+          title: t("activity", "deleteForwardFailed"),
           description: normalizeTauriError(error),
           variant: "destructive",
         });
@@ -245,12 +248,16 @@ export function PortForwardsTab() {
     try {
       const result = await startAllForContext(currentContext);
       toast({
-        title: "Started port forwards",
-        description: `${result.started} started, ${result.skipped} already running, ${result.failed} failed.`,
+        title: t("activity", "startedForwards"),
+        description: t("activity", "startedForwardsDetail", {
+          started: result.started,
+          skipped: result.skipped,
+          failed: result.failed,
+        }),
       });
     } catch (error) {
       toast({
-        title: "Failed to start port forwards",
+        title: t("activity", "startAllFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -263,7 +270,7 @@ export function PortForwardsTab() {
     return (
       <ActivityEmpty
         icon={AlertCircle}
-        title="Connect to a cluster to manage port forwards"
+        title={t("activity", "connectToManageForwards")}
       />
     );
   }
@@ -279,7 +286,10 @@ export function PortForwardsTab() {
   return (
     <div className="pb-3">
       {contextSessions.length > 0 && (
-        <ActivityGroup title="Running" count={contextSessions.length}>
+        <ActivityGroup
+          title={t("activity", "running")}
+          count={contextSessions.length}
+        >
           {contextSessions.map((session) => (
             <SessionRow
               key={session.id}
@@ -293,7 +303,10 @@ export function PortForwardsTab() {
       )}
 
       {otherSessions.length > 0 && (
-        <ActivityGroup title="Running elsewhere" count={otherSessions.length}>
+        <ActivityGroup
+          title={t("activity", "runningElsewhere")}
+          count={otherSessions.length}
+        >
           {otherSessions.map((session) => (
             <SessionRow
               key={session.id}
@@ -308,19 +321,21 @@ export function PortForwardsTab() {
       )}
 
       <ActivityGroup
-        title="Saved"
+        title={t("activity", "saved")}
         count={contextConfigs.length}
         action={
           <span className="flex items-center gap-0.5">
             {idleCount > 1 && (
               <ActivityAction onClick={handleStartAll} disabled={startingAll}>
                 <Play className="h-3 w-3" />
-                {startingAll ? "Starting…" : "Start all"}
+                {startingAll
+                  ? t("action", "starting")
+                  : t("activity", "startAll")}
               </ActivityAction>
             )}
             <ActivityAction onClick={() => setEditing(null)}>
               <Plus className="h-3 w-3" />
-              New
+              {t("activity", "new")}
             </ActivityAction>
           </span>
         }
@@ -333,11 +348,13 @@ export function PortForwardsTab() {
           // scope instead of naming it again.
           <ActivityEmpty
             icon={Network}
-            title={`No port forwards saved for ${currentContext}`}
+            title={t("activity", "noForwardsSaved", {
+              context: currentContext,
+            })}
             hint={
               configs.length > 0
-                ? `${configs.length} saved against other clusters, reachable by switching to them.`
-                : "A forward saved here can be started again without retyping the pod and ports."
+                ? t("activity", "forwardsSavedElsewhere", { n: configs.length })
+                : t("activity", "forwardSavedHint")
             }
           />
         ) : (
@@ -352,7 +369,7 @@ export function PortForwardsTab() {
                     {config.name}
                     {config.autoStart && (
                       <span className="ml-1.5 text-[11px] text-fg-fnt">
-                        auto
+                        {t("activity", "autoStart")}
                       </span>
                     )}
                   </span>
@@ -367,7 +384,11 @@ export function PortForwardsTab() {
                   </span>
                 </span>
                 <ActivityAction
-                  aria-label={`${activeSession ? "Stop" : "Start"} ${config.name}`}
+                  aria-label={
+                    activeSession
+                      ? t("activity", "stopNamed", { name: config.name })
+                      : t("activity", "startNamed", { name: config.name })
+                  }
                   onClick={() =>
                     activeSession
                       ? handleStop(activeSession.id)
@@ -389,7 +410,9 @@ export function PortForwardsTab() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <ActivityAction
-                      aria-label={`More actions for ${config.name}`}
+                      aria-label={t("activity", "moreActionsFor", {
+                        name: config.name,
+                      })}
                     >
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </ActivityAction>
@@ -397,14 +420,14 @@ export function PortForwardsTab() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => setEditing(config)}>
                       <Pencil className="mr-2 h-3.5 w-3.5" />
-                      Edit
+                      {t("action", "edit")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-err"
                       onSelect={() => handleDelete(config)}
                     >
                       <Trash2 className="mr-2 h-3.5 w-3.5" />
-                      Delete
+                      {t("action", "delete")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

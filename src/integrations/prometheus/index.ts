@@ -60,6 +60,7 @@ export default defineVendor({
     inCluster: {
       names: ["prometheus", "thanos-query", "thanos-querier"],
       ports: [9090, 10902],
+      subpathExample: "/prometheus",
       prefer: ["thanos-query", "operated", "server"],
       avoid: [
         "alertmanager",

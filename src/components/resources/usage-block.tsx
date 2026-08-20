@@ -25,6 +25,7 @@ import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface UsageBlockProps {
   /** "Usage" on a workload, "Headroom" on a node. */
@@ -89,7 +90,7 @@ export interface UsageBlockProps {
 }
 
 export function UsageBlock({
-  title = "Usage",
+  title,
   kind,
   uid,
   scope,
@@ -108,6 +109,7 @@ export function UsageBlock({
   live = true,
   idleNote,
 }: UsageBlockProps) {
+  const t = useT();
   const available = status === null || status.status === "available";
   /** Nothing declares a ceiling for either measure. */
   const neither =
@@ -165,7 +167,11 @@ export function UsageBlock({
       ? `no ${limitNoun}s declared`
       : `against declared ${limitNoun}s`
     : past.window !== null
-      ? [scope, `from ${past.endpoint}`, past.window.resolution]
+      ? [
+          scope,
+          t("count", "fromEndpoint", { endpoint: past.endpoint }),
+          past.window.resolution,
+        ]
           .filter(Boolean)
           .join(" · ")
       : [
@@ -178,8 +184,8 @@ export function UsageBlock({
           !live
             ? null
             : watched === null
-              ? "watching from now"
-              : `watched since you opened this page · ${watched} so far`,
+              ? t("count", "watchingFromNow")
+              : t("count", "watchedSincePageOpen", { span: watched }),
         ]
           .filter(Boolean)
           .join(" · ");
@@ -187,7 +193,7 @@ export function UsageBlock({
   return (
     <Section>
       <SectionHeader
-        title={title}
+        title={title ?? t("columns", "usage")}
         count={caption}
         actions={
           available ? (
@@ -215,7 +221,7 @@ export function UsageBlock({
               live={live}
             />
             <UsageChart
-              label="Memory"
+              label={t("columns", "memory")}
               type="memory"
               samples={drawing.samples}
               limit={memoryLimit}
@@ -235,10 +241,16 @@ export function UsageBlock({
               <p className="px-1.5 pb-1 pt-1 text-[11px] leading-snug text-fg-fnt">
                 {idleNote}{" "}
                 {kept === null
-                  ? `Reading what ${past.vendor} kept from while it was running.`
+                  ? t("empty", "readingWhatVendorKept", {
+                      vendor: past.vendor,
+                    })
                   : kept
-                    ? `There is no live line to draw — this is what ${past.vendor} kept from while it was running.`
-                    : `${past.vendor} has nothing for it in this window either — try a longer one, or it ran before this one was watching.`}
+                    ? t("empty", "noLiveLineVendorKept", {
+                        vendor: past.vendor,
+                      })
+                    : t("empty", "vendorNothingInWindow", {
+                        vendor: past.vendor,
+                      })}
               </p>
             )}
             <HistoryNote state={past} />
@@ -249,7 +261,7 @@ export function UsageBlock({
              *  reader can fix, and the row that says so already exists. */}
             <UsageRow label="CPU" used={null} total={cpuLimit} type="cpu" />
             <UsageRow
-              label="Memory"
+              label={t("columns", "memory")}
               used={null}
               total={memoryLimit}
               type="memory"
@@ -273,20 +285,23 @@ export function UsageBlock({
  * Prometheus is. Saying which one it is costs a line.
  */
 function HistoryNote({ state }: { state: RangedHistory }) {
+  const t = useT();
   if (state.status === "unreachable") {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-warn">
-        {state.vendor} did not answer — {state.reason}. This is the window the
-        app watched itself; the longer ranges are gone until it is back.
+        {t("empty", "vendorDidNotAnswer", {
+          vendor: state.vendor,
+          reason: state.reason,
+        })}
       </p>
     );
   }
   if (state.status === "absent" && state.offerable) {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
-        Longer than this needs a Prometheus —{" "}
+        {t("empty", "longerNeedsPrometheus")}{" "}
         <Link to="/integrations" className="text-info hover:underline">
-          connect one
+          {t("action", "connectOne")}
         </Link>
         .
       </p>
@@ -314,10 +329,13 @@ function RangePicker({
   onSelect: (range: UsageRange | null) => void;
   loading: boolean;
 }) {
+  const t = useT();
   return (
     <span className="flex items-center gap-0.5">
       {loading && (
-        <span className="mr-1 text-[10px] text-fg-fnt">reading…</span>
+        <span className="mr-1 text-[10px] text-fg-fnt">
+          {t("action", "readingInline")}
+        </span>
       )}
       {USAGE_RANGES.map((range) => (
         <button
@@ -328,8 +346,8 @@ function RangePicker({
           onClick={() => onSelect(selected === range ? null : range)}
           title={
             enabled
-              ? `Ask for the last ${range}`
-              : "Needs a Prometheus — metrics-server keeps no history to range over"
+              ? t("action", "askForLastRange", { range })
+              : t("action", "rangeNeedsPrometheus")
           }
           className={
             enabled
@@ -506,6 +524,7 @@ function StorageRow({
 }: {
   summary: NonNullable<ReturnType<typeof storageSummary>>;
 }) {
+  const t = useT();
   const { claims, declared, unbound } = summary;
   const fullness = useFullness(summary);
   // The fallback sentence is not replaced wholesale: a cluster where the
@@ -515,20 +534,23 @@ function StorageRow({
   return (
     <div className="mt-1 border-t border-hair pt-2">
       <div className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-3 px-1.5">
-        <span className="text-[11px] text-fg-mut">Storage</span>
+        <span className="text-[11px] text-fg-mut">{t("nav", "storage")}</span>
         <span className="text-[11px] text-fg-mut">
-          {claims.length} volume{claims.length === 1 ? "" : "s"}
+          {t("count", "volumes", { n: claims.length })}
           {declared && (
             <>
               {" · "}
               <span className="font-mono tabular-nums text-fg-mid">
                 {declared}
               </span>{" "}
-              declared
+              {t("count", "declaredWord")}
             </>
           )}
           {unbound > 0 && (
-            <span className="text-warn"> · {unbound} not bound</span>
+            <span className="text-warn">
+              {" · "}
+              {t("count", "notBound", { n: unbound })}
+            </span>
           )}
         </span>
       </div>
@@ -558,8 +580,10 @@ function StorageRow({
       {measured < claims.length && (
         <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
           {measured === 0
-            ? "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot."
-            : `Declared size, not how full, for the ${claims.length - measured} of these the kubelet does not report on.`}
+            ? t("empty", "declaredSizeNotFullness")
+            : t("empty", "declaredSizeForUnreported", {
+                n: claims.length - measured,
+              })}
         </p>
       )}
     </div>
@@ -576,6 +600,7 @@ function StorageRow({
  * the declared size beside it visible instead of confusing.
  */
 function Fullness({ measured }: { measured?: VolumeFullness }) {
+  const t = useT();
   if (!measured) return null;
   const share = Math.round((measured.usedBytes / measured.capacityBytes) * 100);
   const tone =
@@ -584,8 +609,12 @@ function Fullness({ measured }: { measured?: VolumeFullness }) {
     <>
       {" · "}
       <span className={tone}>
-        {formatQuantity(measured.usedBytes, "memory")} used of{" "}
-        {formatQuantity(measured.capacityBytes, "memory")} · {share}%
+        {t("count", "usedOfTotal", {
+          used: formatQuantity(measured.usedBytes, "memory"),
+          total: formatQuantity(measured.capacityBytes, "memory"),
+        })}
+        {" · "}
+        {share}%
       </span>
     </>
   );

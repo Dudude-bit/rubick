@@ -39,6 +39,8 @@ import {
 import { useState } from "react";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
@@ -57,33 +59,37 @@ export function PublishedEndpoints({
   query: ConnectionsQuery;
   service: ObjectRef;
 }) {
+  const t = useT();
   const { data, isPending, error } = query;
 
   if (isPending) {
     return (
       <p className="text-xs text-fg-fnt">
-        Reading what this Service publishes…
+        {t("empty", "readingWhatServicePublishes")}
       </p>
     );
   }
   if (error || !data) {
     return (
       <p className="text-xs text-err">
-        Could not read what this Service publishes:{" "}
-        {error?.message ?? "no answer"}
+        {t("empty", "couldNotReadWhatServicePublishes")}{" "}
+        {error?.message ?? t("empty", "noAnswer")}
       </p>
     );
   }
   const published = publishedFor(data, service);
   if (!published) {
     return (
-      <p className="text-xs text-fg-fnt">Nothing was read for this Service.</p>
+      <p className="text-xs text-fg-fnt">
+        <T section="empty" k="nothingReadForService" />
+      </p>
     );
   }
   return <Lists published={published} />;
 }
 
 function Lists({ published }: { published: ServicePublished }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const rows = all ? published.endpoints : published.endpoints.slice(0, SHOWN);
   const hidden = published.endpoints.length - rows.length;
@@ -95,7 +101,7 @@ function Lists({ published }: { published: ServicePublished }) {
     <div className="flex flex-col gap-6">
       <Section>
         <SectionHeader
-          title="Published"
+          title={t("nav", "published")}
           count={publishedSummary(published)}
           description={source ?? undefined}
           actions={
@@ -106,24 +112,26 @@ function Lists({ published }: { published: ServicePublished }) {
                 className="h-6 text-[11px]"
                 onClick={() => setAll(!all)}
               >
-                {all ? "Show fewer" : `Show all ${published.endpoints.length}`}
+                {all
+                  ? t("action", "showFewer")
+                  : t("action", "showAll", { n: published.endpoints.length })}
               </Button>
             ) : undefined
           }
         />
         {published.endpoints.length === 0 ? (
           <p className="text-xs text-fg-fnt">
-            This Service publishes no address at all — nothing reaches it.
+            <T section="empty" k="servicePublishesNothing" />
           </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Address</TableHead>
+                <TableHead>{t("columns", "address")}</TableHead>
                 <TableHead>Pod</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Node</TableHead>
-                {zoned && <TableHead>Zone</TableHead>}
+                <TableHead>{t("columns", "state")}</TableHead>
+                <TableHead>{t("columns", "node")}</TableHead>
+                {zoned && <TableHead>{t("columns", "zone")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -134,7 +142,7 @@ function Lists({ published }: { published: ServicePublished }) {
                     <TableCell>
                       <CopyableAddress
                         value={endpointAddress(endpoint)}
-                        label="Address"
+                        label={t("columns", "address")}
                       />
                     </TableCell>
                     <TableCell>
@@ -148,7 +156,9 @@ function Lists({ published }: { published: ServicePublished }) {
                       ) : (
                         // A hand-written slice names no pod, and that is a
                         // state rather than a gap in the reading.
-                        <span className="text-fg-fnt">registered by hand</span>
+                        <span className="text-fg-fnt">
+                          {t("empty", "registeredByHand")}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className={cn("text-[11px]", TONE[state.tone])}>
@@ -178,7 +188,7 @@ function Lists({ published }: { published: ServicePublished }) {
         )}
         {hidden > 0 && (
           <p className="text-[11px] text-fg-fnt">
-            {hidden} more not drawn — the counts above are the whole of it.
+            {t("count", "moreNotDrawn", { n: hidden })}
           </p>
         )}
       </Section>
@@ -186,7 +196,7 @@ function Lists({ published }: { published: ServicePublished }) {
       {published.unpublished.length > 0 && (
         <Section>
           <SectionHeader
-            title="Matches the selector, not published"
+            title={t("nav", "matchesSelectorNotPublished")}
             count={
               <span className="text-err">{published.unpublished.length}</span>
             }
@@ -215,7 +225,7 @@ function Lists({ published }: { published: ServicePublished }) {
 
       {topology && (
         <Section>
-          <SectionHeader title="Topology" />
+          <SectionHeader title={t("nav", "topology")} />
           <p className="text-xs text-fg-mut">{topology}</p>
         </Section>
       )}
@@ -223,14 +233,15 @@ function Lists({ published }: { published: ServicePublished }) {
       {published.ports.some((port) => !port.exposed) && (
         <Section>
           <SectionHeader
-            title="Ports the Service does not expose"
-            description="A slice carries a port by the Service port's name. These name none it declares, so nothing routes to them."
+            title={t("nav", "portsNotExposed")}
+            description={t("empty", "portsNotExposedHint")}
           />
           <p className="font-mono text-xs text-fg-mut">
             {published.ports
               .filter((port) => !port.exposed)
               .map(
-                (port) => `${port.name ?? "unnamed"} → ${port.port ?? "all"}`
+                (port) =>
+                  `${port.name ?? t("empty", "unnamedInline")} → ${port.port ?? t("empty", "allInline")}`
               )
               .join(" · ")}
           </p>

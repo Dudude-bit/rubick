@@ -29,8 +29,10 @@ import type {
   EventFilters,
   PersistentVolumeClaimInfo,
 } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function PersistentVolumeClaimDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -86,14 +88,16 @@ export function PersistentVolumeClaimDetail() {
 
   const facts: KeyValue[] = [
     {
-      label: "Capacity",
-      value: pvc?.capacity || "not provisioned yet",
+      label: t("columns", "capacity"),
+      value: pvc?.capacity || t("empty", "notProvisionedYet"),
       mono: !!pvc?.capacity,
       tone: pvc?.capacity ? undefined : "warn",
     },
     {
-      label: "Access modes",
-      value: pvc?.accessModes.length ? pvc.accessModes.join(" · ") : "none",
+      label: t("columns", "accessModes"),
+      value: pvc?.accessModes.length
+        ? pvc.accessModes.join(" · ")
+        : t("empty", "noneLower"),
       mono: true,
     },
     {
@@ -105,7 +109,7 @@ export function PersistentVolumeClaimDetail() {
           showKind={false}
         />
       ) : (
-        "not bound — nothing has satisfied this claim"
+        t("empty", "notBoundNothingSatisfied")
       ),
       tone: pvc?.volume ? undefined : "warn",
     },
@@ -118,7 +122,7 @@ export function PersistentVolumeClaimDetail() {
           showKind={false}
         />
       ) : (
-        "cluster default"
+        t("empty", "clusterDefault")
       ),
     },
   ];
@@ -129,7 +133,7 @@ export function PersistentVolumeClaimDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
@@ -148,13 +152,16 @@ export function PersistentVolumeClaimDetail() {
             count={events.length || undefined}
             actions={
               eventsError && (
-                <DetailAction label="Retry" onClick={() => refetchEvents()} />
+                <DetailAction
+                  label={t("action", "retry")}
+                  onClick={() => refetchEvents()}
+                />
               )
             }
           />
           {eventsError ? (
             <p className="text-xs text-warn">
-              Could not read events for this claim.
+              {t("empty", "couldNotReadClaimEvents")}
             </p>
           ) : eventsLoading ? (
             <div className="flex flex-col gap-1.5">
@@ -166,8 +173,8 @@ export function PersistentVolumeClaimDetail() {
               events={events}
               emptyMessage={
                 pending
-                  ? "No events yet — no provisioner has picked this claim up."
-                  : "No events for this claim"
+                  ? t("empty", "noEventsUnprovisioned")
+                  : t("empty", "noEventsForClaim")
               }
             />
           )}
@@ -204,10 +211,12 @@ export function PersistentVolumeClaimDetail() {
               </span>
             )}
             <span className="text-[11px] text-fg-fnt">
-              {pvc.accessModes.join(" · ") || "no access modes"}
+              {pvc.accessModes.join(" · ") || t("empty", "noAccessModes")}
             </span>
             {pending && (
-              <span className="text-[11px] text-warn">no volume bound</span>
+              <span className="text-[11px] text-warn">
+                {t("empty", "noVolumeBound")}
+              </span>
             )}
           </>
         )
@@ -219,7 +228,7 @@ export function PersistentVolumeClaimDetail() {
       actions={
         <InterceptedAction
           intercept={intercept("Delete")}
-          label="Delete"
+          label={t("action", "delete")}
           icon={Trash2}
           onClick={() => deleteMutation?.mutate()}
           busy={deleteMutation?.isPending}

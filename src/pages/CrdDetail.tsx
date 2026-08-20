@@ -47,8 +47,10 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 export function CrdDetail() {
+  const t = useT();
   const { name } = useParams<{ name: string }>();
   const decodedName = name ? decodeURIComponent(name) : undefined;
   const navigate = useNavigate();
@@ -109,15 +111,18 @@ export function CrdDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "CRD deleted",
-        description: `${decodedName} has been deleted.`,
+        title: t("action", "kindDeleted", { kind: "CRD" }),
+        description: t("action", "kindDeletedDetail", {
+          kind: "CRD",
+          name: decodedName ?? "",
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["crds"] });
       navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
     },
     onError: (err: Error) => {
       toast({
-        title: "Failed to delete CRD",
+        title: t("action", "deleteKindFailed", { kind: "CRD" }),
         description: err.message,
         variant: "destructive",
       });
@@ -144,25 +149,33 @@ export function CrdDetail() {
   const deprecatedVersions = (crd?.versions ?? []).filter((v) => v.deprecated);
 
   const facts: KeyValue[] = [
-    { label: "Group", value: crd?.group || "core", mono: true },
-    { label: "Kind", value: crd?.kind ?? "—", mono: true },
-    { label: "Scope", value: crd?.scope ?? "—" },
+    { label: t("columns", "group"), value: crd?.group || "core", mono: true },
+    { label: t("columns", "kind"), value: crd?.kind ?? "—", mono: true },
+    { label: t("columns", "scope"), value: crd?.scope ?? "—" },
     {
-      label: "Storage version",
-      value: storageVersion?.name ?? "none declared",
+      label: t("columns", "storageVersion"),
+      value: storageVersion?.name ?? t("empty", "noneDeclared"),
       mono: !!storageVersion,
       tone: storageVersion ? undefined : "warn",
     },
-    { label: "Plural", value: crd?.plural ?? "—", mono: true },
-    { label: "Singular", value: crd?.singular || "—", mono: true },
+    { label: t("columns", "plural"), value: crd?.plural ?? "—", mono: true },
     {
-      label: "Short names",
-      value: crd?.shortNames.length ? crd.shortNames.join(" · ") : "none",
+      label: t("columns", "singular"),
+      value: crd?.singular || "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "shortNames"),
+      value: crd?.shortNames.length
+        ? crd.shortNames.join(" · ")
+        : t("empty", "noneInline"),
       mono: !!crd?.shortNames.length,
     },
     {
-      label: "Categories",
-      value: crd?.categories.length ? crd.categories.join(" · ") : "none",
+      label: t("columns", "categories"),
+      value: crd?.categories.length
+        ? crd.categories.join(" · ")
+        : t("empty", "noneInline"),
       mono: !!crd?.categories.length,
     },
   ];
@@ -176,11 +189,11 @@ export function CrdDetail() {
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection
-          title="Definition"
+          title={t("nav", "definition")}
           items={facts}
           className="max-w-lg"
         />
@@ -188,27 +201,30 @@ export function CrdDetail() {
     },
     {
       id: "versions",
-      label: "Versions",
+      label: t("nav", "versions"),
       glyph: viewGlyph(GitBranch),
       mark: countMark(crd?.versions.length ?? 0),
       content: (
         <Section>
           <SectionHeader
-            title="Versions"
+            title={t("nav", "versions")}
             count={
               deprecatedVersions.length > 0
-                ? `${crd?.versions.length ?? 0} · ${deprecatedVersions.length} deprecated`
+                ? t("count", "versionsWithDeprecated", {
+                    n: crd?.versions.length ?? 0,
+                    deprecated: deprecatedVersions.length,
+                  })
                 : (crd?.versions.length ?? 0)
             }
           />
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Version</TableHead>
-                <TableHead>Served</TableHead>
-                <TableHead>Storage</TableHead>
-                <TableHead>Printer columns</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>{t("columns", "version")}</TableHead>
+                <TableHead>{t("columns", "served")}</TableHead>
+                <TableHead>{t("columns", "storage")}</TableHead>
+                <TableHead>{t("columns", "printerColumns")}</TableHead>
+                <TableHead>{t("columns", "note")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -220,10 +236,10 @@ export function CrdDetail() {
                   <TableCell
                     className={version.served ? "text-fg-mut" : "text-warn"}
                   >
-                    {version.served ? "yes" : "no"}
+                    {version.served ? t("action", "yes") : t("action", "no")}
                   </TableCell>
                   <TableCell className="text-fg-mut">
-                    {version.storage ? "yes" : "no"}
+                    {version.storage ? t("action", "yes") : t("action", "no")}
                   </TableCell>
                   <TableCell className="text-fg-fnt">
                     {version.additionalPrinterColumns.length || "default"}
@@ -232,7 +248,8 @@ export function CrdDetail() {
                     className={version.deprecated ? "text-warn" : "text-fg-fnt"}
                   >
                     {version.deprecated
-                      ? version.deprecationWarning || "deprecated"
+                      ? version.deprecationWarning ||
+                        t("empty", "deprecatedInline")
                       : "—"}
                   </TableCell>
                 </TableRow>
@@ -244,12 +261,12 @@ export function CrdDetail() {
     },
     {
       id: "schema",
-      label: "Schema",
+      label: t("nav", "schema"),
       glyph: viewGlyph(ListTree),
       content: (
         <Section>
           <SectionHeader
-            title="OpenAPI schema"
+            title={t("nav", "openApiSchema")}
             count={activeVersionName ?? undefined}
             actions={
               crd &&
@@ -280,8 +297,7 @@ export function CrdDetail() {
               <SchemaViewer schema={currentVersion.schema} />
             ) : (
               <p className="py-1 text-xs text-fg-fnt">
-                This version publishes no structural schema, so the API server
-                validates nothing beyond the object's metadata.
+                {t("empty", "noStructuralSchema")}
               </p>
             )}
           </div>
@@ -290,7 +306,7 @@ export function CrdDetail() {
     },
     {
       id: "instances",
-      label: "Instances",
+      label: t("nav", "instances"),
       // The CRD's own kind, so the tab carries whatever mark the list of
       // these objects carries everywhere else — a dashed circle and the
       // neutral hue for a kind the registry has never heard of.
@@ -310,33 +326,40 @@ export function CrdDetail() {
     },
     {
       id: "conditions",
-      label: "Conditions",
+      label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
       mark: conditionsMark(conditions),
       content: (
         <Section>
-          <SectionHeader title="Conditions" count={conditions.length} />
+          <SectionHeader
+            title={t("nav", "conditions")}
+            count={
+              conditions.length > 0
+                ? t("count", "conditions", { n: conditions.length })
+                : undefined
+            }
+          />
           <ConditionRows conditions={conditions} />
         </Section>
       ),
     },
     {
       id: "metadata",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(crd?.labels ?? {}).length}
             items={recordToKeyValues(crd?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(crd?.annotations ?? {}).length}
             items={recordToKeyValues(crd?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -382,7 +405,7 @@ export function CrdDetail() {
         actions={
           <InterceptedAction
             intercept={intercept("Delete")}
-            label="Delete"
+            label={t("action", "delete")}
             icon={Trash2}
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
@@ -397,9 +420,11 @@ export function CrdDetail() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Delete CRD?"
-        description={`Deleting "${decodedName}" also deletes every instance of this custom resource in the cluster.`}
-        confirmLabel="Delete"
+        title={t("action", "deleteKindQuestion", { kind: "CRD" })}
+        description={t("action", "deleteCrdWarning", {
+          name: decodedName ?? "",
+        })}
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

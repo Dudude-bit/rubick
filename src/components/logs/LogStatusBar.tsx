@@ -12,6 +12,7 @@ import {
   type QueryTerm,
   type StreamedLogLine,
 } from "./types";
+import { useT } from "@/i18n/useT";
 
 /**
  * Lines the rate is measured over. Long enough that one slow second does
@@ -55,11 +56,12 @@ export function LogStatusBar({
   unfilteredFrom,
   isStreaming,
 }: LogStatusBarProps) {
-  const formatInfo = useMemo(() => describeFormat(logs), [logs]);
+  const t = useT();
+  const formatInfo = useMemo(() => describeFormat(logs, t), [logs, t]);
   const rate = useMemo(() => measureRate(logs), [logs]);
   const fill = limit > 0 ? Math.min(100, (retained / limit) * 100) : 0;
 
-  const intakeKey = intake.map(termLabel).join(" and ");
+  const intakeKey = intake.map(termLabel).join(` ${t("empty", "listAnd")} `);
 
   /**
    * Both sides of the discard, read off the one buffer.
@@ -88,7 +90,9 @@ export function LogStatusBar({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-[11px] text-fg-mut">
       <span className="whitespace-nowrap">
         {formatCount(retained)}{" "}
-        <span className="text-fg-fnt">of {formatCount(limit)} kept</span>
+        <span className="text-fg-fnt">
+          {t("count", "ofLimitKept", { limit: formatCount(limit) })}
+        </span>
       </span>
       <span
         className="h-[3px] w-14 overflow-hidden rounded-sm bg-hair"
@@ -96,7 +100,7 @@ export function LogStatusBar({
         aria-valuenow={retained}
         aria-valuemin={0}
         aria-valuemax={limit}
-        aria-label="Buffer fill"
+        aria-label={t("action", "bufferFill")}
       >
         <span
           className={`block h-full ${fill >= 100 ? "bg-warn" : "bg-fg-fnt"}`}
@@ -112,7 +116,7 @@ export function LogStatusBar({
                   twice; the segment beside it says both instead. */}
               {intakeKey === "" &&
                 rate !== null &&
-                ` · ${formatRate(rate)} lines/s`}
+                ` · ${t("count", "linesPerSecond", { rate: formatRate(rate) })}`}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">{formatInfo.description}</TooltipContent>
@@ -124,27 +128,32 @@ export function LogStatusBar({
           <TooltipTrigger asChild>
             <span className="cursor-help whitespace-nowrap text-info">
               <span aria-hidden="true">⇣ </span>
-              intake {intakeKey} ·{" "}
+              {t("action", "intake")} {intakeKey} ·{" "}
               {kept !== null
-                ? `${formatRate(kept)} kept/s${arriving === null ? "" : ` of ${formatRate(arriving)}/s`}`
+                ? `${t("count", "keptPerSecond", { rate: formatRate(kept) })}${
+                    arriving === null
+                      ? ""
+                      : t("count", "ofPerSecond", {
+                          rate: formatRate(arriving),
+                        })
+                  }`
                 : arriving !== null
-                  ? `${formatRate(arriving)}/s arriving before it was set`
-                  : "keeping only what matches"}
+                  ? t("count", "arrivingBefore", { rate: formatRate(arriving) })
+                  : t("action", "keepingOnlyMatches")}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            Lines that do not match are discarded before they reach the viewer,
-            so they cannot be counted here
+            {t("empty", "intakeDiscardNote")}
             {arriving !== null &&
-              ` — ${formatRate(arriving)} a second is what the lines still held from before intake were arriving at`}
+              t("empty", "intakeArrivingRate", { rate: formatRate(arriving) })}
             .
           </TooltipContent>
         </Tooltip>
       )}
       <span className="ml-auto whitespace-nowrap text-fg-fnt">
-        {formatCount(shownCount)} shown
+        {t("count", "shown", { n: formatCount(shownCount) })}
         {hiddenCount > 0 &&
-          ` · ${formatCount(hiddenCount)} hidden by filter and grouping`}
+          ` · ${t("count", "hiddenByFilter", { n: formatCount(hiddenCount) })}`}
       </span>
       {isStreaming && (
         <span className="flex items-center gap-1 whitespace-nowrap">
@@ -152,14 +161,14 @@ export function LogStatusBar({
             aria-hidden="true"
             className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok"
           />
-          Streaming
+          {t("action", "streaming")}
         </span>
       )}
     </div>
   );
 }
 
-function describeFormat(logs: StreamedLogLine[]) {
+function describeFormat(logs: StreamedLogLine[], t: ReturnType<typeof useT>) {
   if (logs.length === 0) return null;
 
   const counts = new Map<LogFormat, number>();
@@ -192,8 +201,8 @@ function describeFormat(logs: StreamedLogLine[]) {
     };
   }
   return {
-    label: "mixed",
-    description: "These containers write in more than one log format",
+    label: t("action", "mixedFormat"),
+    description: t("empty", "mixedFormatNote"),
   };
 }
 

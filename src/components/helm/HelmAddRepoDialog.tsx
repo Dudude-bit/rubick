@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/i18n/useT";
 
 export interface HelmAddRepoDialogProps {
   /** Whether dialog is open */
@@ -37,30 +38,31 @@ export function HelmAddRepoDialog({
   onAdd,
   isAdding,
 }: HelmAddRepoDialogProps) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Helm Repository</DialogTitle>
+          <DialogTitle>{t("action", "addHelmRepository")}</DialogTitle>
           <DialogDescription>
-            Add a new Helm chart repository to search and install charts from.
+            {t("action", "addHelmRepositoryHint")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="repo-name">Repository Name</Label>
+            <Label htmlFor="repo-name">{t("action", "repositoryName")}</Label>
             <Input
               id="repo-name"
-              placeholder="e.g., bitnami"
+              placeholder={t("action", "repositoryNamePlaceholder")}
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="repo-url">Repository URL</Label>
+            <Label htmlFor="repo-url">{t("action", "repositoryUrl")}</Label>
             <Input
               id="repo-url"
-              placeholder="e.g., https://charts.bitnami.com/bitnami"
+              placeholder={t("action", "repositoryUrlPlaceholder")}
               value={url}
               onChange={(e) => onUrlChange(e.target.value)}
             />
@@ -68,10 +70,10 @@ export function HelmAddRepoDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={onAdd} disabled={!name || !url || isAdding}>
-            {isAdding ? "Adding..." : "Add Repository"}
+            {isAdding ? t("action", "adding") : t("action", "addRepository")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
+import { useT } from "@/i18n/useT";
 
 interface DangerousConfirmDialogProps {
   open: boolean;
@@ -34,12 +35,13 @@ export function DangerousConfirmDialog({
   description,
   confirmationText,
   confirmationPlaceholder,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   onOpenChange,
   onConfirm,
   isLoading = false,
 }: DangerousConfirmDialogProps) {
+  const t = useT();
   const [inputValue, setInputValue] = useState("");
 
   const isConfirmEnabled = inputValue === confirmationText && !isLoading;
@@ -65,17 +67,17 @@ export function DangerousConfirmDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription className={description ? "" : "sr-only"}>
-            {description || "Confirm this action by typing the required text"}
+            {description || t("action", "confirmByTyping")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">
           <Label htmlFor="confirmation-input" className="text-sm">
-            Type{" "}
+            {t("action", "typeWord")}{" "}
             <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
               {confirmationText}
             </code>{" "}
-            to confirm
+            {t("action", "toConfirm")}
           </Label>
           <Input
             id="confirmation-input"
@@ -89,14 +91,16 @@ export function DangerousConfirmDialog({
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>
-            {cancelLabel}
+            {cancelLabel ?? t("action", "cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             className={buttonVariants({ variant: "destructive" })}
             onClick={handleConfirm}
             disabled={!isConfirmEnabled}
           >
-            {isLoading ? "Processing..." : confirmLabel}
+            {isLoading
+              ? t("action", "processing")
+              : (confirmLabel ?? t("action", "confirm"))}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

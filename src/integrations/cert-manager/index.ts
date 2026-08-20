@@ -9,6 +9,7 @@ import {
   fetchCertificates,
 } from "./data";
 import { facts } from "./facts";
+import { worstCertificateTone } from "./model";
 import { relatedTo } from "./related";
 
 /**
@@ -58,6 +59,7 @@ export default defineVendor({
       queryKey: CERTIFICATES_KEY,
       queryFn: fetchCertificates,
       select: (certificates) => certificates.length,
+      tone: worstCertificateTone,
       staleTime: CERT_MANAGER_STALE,
     }),
     load: () => import("./page"),

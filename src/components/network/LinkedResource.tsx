@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceKind } from "@/lib/resource-registry";
+import { useT } from "@/i18n/useT";
 
 interface LinkedResourceProps {
   resourceType: ResourceKind;
@@ -25,6 +26,7 @@ export function LinkedResource({
   exists = true,
   className = "",
 }: LinkedResourceProps) {
+  const t = useT();
   const displayText = port ? `${name}:${port}` : name;
   const url = getResourceDetailUrl(resourceType, name, namespace);
 
@@ -38,7 +40,7 @@ export function LinkedResource({
           </span>
         </TooltipTrigger>
         <TooltipContent>
-          <p className="text-xs">Resource not found in cluster</p>
+          <p className="text-xs">{t("empty", "resourceNotFoundInCluster")}</p>
         </TooltipContent>
       </Tooltip>
     );
@@ -56,7 +58,9 @@ export function LinkedResource({
         </Link>
       </TooltipTrigger>
       <TooltipContent>
-        <p className="text-xs">View {resourceType} details</p>
+        <p className="text-xs">
+          {t("action", "viewKindDetails", { kind: resourceType })}
+        </p>
       </TooltipContent>
     </Tooltip>
   );

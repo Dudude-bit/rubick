@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ColumnDef } from "@tanstack/react-table";
@@ -27,6 +28,7 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { useT } from "@/i18n/useT";
 
 /**
  * Nodes, grouped by the pool the cloud says made them.
@@ -51,6 +53,18 @@ const poolGrouping: RowGrouping<NodeInfo> = {
   },
 };
 
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function InternalIpCell({ address }: { address: string | undefined }) {
+  const t = useT();
+  return (
+    <CopyableAddress
+      value={address}
+      label={t("columns", "internalIp")}
+      fallback="-"
+    />
+  );
+}
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -62,7 +76,7 @@ export const columns = (
   {
     size: 110,
     id: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
       const ready = row.original.status.ready;
       return <StatusBadge status={ready ? "Ready" : "NotReady"} />;
@@ -72,7 +86,7 @@ export const columns = (
     // "control-plane master etcd" on a single-node cluster.
     size: 170,
     accessorKey: "roles",
-    header: "Roles",
+    header: () => <T section="columns" k="roles" />,
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -87,23 +101,17 @@ export const columns = (
     // A kubelet version with its distro suffix: `v1.31.4+k3s1`.
     size: 120,
     accessorKey: "version",
-    header: "Version",
+    header: () => <T section="columns" k="version" />,
   },
   {
     size: 130,
     id: "internal_ip",
-    header: "Internal IP",
+    header: () => <T section="columns" k="internalIp" />,
     cell: ({ row }) => {
       const address = row.original.status.addresses.find(
         (a) => a.type === "InternalIP"
       );
-      return (
-        <CopyableAddress
-          value={address?.address}
-          label="Internal IP"
-          fallback="-"
-        />
-      );
+      return <InternalIpCell address={address?.address} />;
     },
   },
   // Wider than the pod table's CPU and Memory: these carry a usage bar
@@ -111,7 +119,7 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: "CPU Usage",
+    header: () => <T section="columns" k="cpuUsage" />,
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity ? row.original.capacity.cpu : null;
@@ -127,7 +135,7 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: "Memory Usage",
+    header: () => <T section="columns" k="memoryUsage" />,
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity
@@ -143,20 +151,21 @@ export const columns = (
     },
   },
   {
-    size: 80,
+    size: 120,
     id: "capacity_pods",
-    header: "Pod Cap",
+    header: () => <T section="columns" k="podCap" />,
     cell: ({ row }) => row.original.capacity?.pods || "-",
   },
   {
     size: 80,
     id: "age",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
     cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
   },
 ];
 
 export function NodeList() {
+  const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -174,11 +183,14 @@ export function NodeList() {
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `Nodes: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: toPlural(ResourceType.Node),
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed]
+    [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<NodeInfo>({
     enabled: isConnected,
@@ -208,14 +220,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node cordoned",
-        description: `Node ${nodeName} has been cordoned.`,
+        title: t("action", "nodeCordoned"),
+        description: t("action", "nodeCordonedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to cordon node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "cordonFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -228,14 +240,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node uncordoned",
-        description: `Node ${nodeName} has been uncordoned.`,
+        title: t("action", "nodeUncordoned"),
+        description: t("action", "nodeUncordonedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to uncordon node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "uncordonFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -248,14 +260,14 @@ export function NodeList() {
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
       toast({
-        title: "Node drained",
-        description: `Node ${nodeName} has been drained.`,
+        title: t("action", "nodeDrained"),
+        description: t("action", "nodeDrainedDetail", { name: nodeName }),
       });
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: `Failed to drain node: ${error}`,
+        title: t("action", "error"),
+        description: t("action", "drainFailed", { error: String(error) }),
         variant: "destructive",
       });
     },
@@ -272,23 +284,23 @@ export function NodeList() {
     () => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(getResourceDetailUrl(ResourceType.Node, item.name)),
       },
       {
         icon: ShieldOff,
-        label: "Cordon",
+        label: t("action", "cordon"),
         onClick: (item) => cordonMutation.mutate(item.name),
       },
       {
         icon: Shield,
-        label: "Uncordon",
+        label: t("action", "uncordon"),
         onClick: (item) => uncordonMutation.mutate(item.name),
       },
       {
         icon: AlertTriangle,
-        label: "Drain",
+        label: t("action", "drain"),
         // Straight to the dialog rather than to the mutation: a drain is the
         // one action here that can be refused by something the reader cannot
         // see from this row.
@@ -296,7 +308,7 @@ export function NodeList() {
         variant: "destructive",
       },
     ],
-    [navigate, cordonMutation, uncordonMutation]
+    [t, navigate, cordonMutation, uncordonMutation]
   );
 
   return (

@@ -44,8 +44,6 @@ import { describeStop } from "@/lib/connections";
 import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
-
-import { plural } from "../kit";
 import {
   Chain,
   Cell,
@@ -76,11 +74,15 @@ import {
   type NginxRoute,
   type NginxSources,
 } from "./model";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
 
 export default function IngressNginxPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
 
@@ -173,11 +175,10 @@ export default function IngressNginxPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s routing
+          {t("empty", "couldNotReadRouting")}
         </h2>
         <p className="text-xs text-fg-mut">
-          Every route this page draws is an Ingress in this API server, and that
-          request failed — so the table would be a guess rather than an answer.
+          {t("empty", "routingRequestFailed")}
         </p>
         <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
       </Section>
@@ -192,9 +193,9 @@ export default function IngressNginxPage() {
   const tabs: DetailTab[] = [
     {
       id: "routes",
-      label: "Routes",
+      label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length),
+      mark: routesMark(groups, troubled.length, t),
       content: (
         <RoutesTab
           groups={groups}
@@ -206,7 +207,7 @@ export default function IngressNginxPage() {
     },
     {
       id: "map",
-      label: "Map",
+      label: t("nav", "map"),
       glyph: viewGlyph(Network),
       content: (
         <MapTab
@@ -218,21 +219,21 @@ export default function IngressNginxPage() {
     },
     {
       id: "annotations",
-      label: "Annotations",
+      label: t("columns", "annotations"),
       glyph: viewGlyph(FileCode2),
-      mark: annotationsMark(groups),
+      mark: annotationsMark(groups, t),
       content: <AnnotationsTab groups={groups} />,
     },
     {
       id: "settings",
-      label: "Global settings",
+      label: t("nav", "globalSettings"),
       glyph: viewGlyph(SlidersHorizontal),
       mark: settings.length > 0 ? countMark(settings.length) : undefined,
       content: <SettingsTab controller={controller.data} settings={settings} />,
     },
     {
       id: "controller",
-      label: "Controller",
+      label: t("nav", "controller"),
       glyph: viewGlyph(Box),
       content: <ControllerTab controller={controller.data} sources={sources} />,
     },
@@ -245,9 +246,9 @@ export default function IngressNginxPage() {
         count={
           routeSources.isPending
             ? undefined
-            : `${plural(groups.length, "host")} across every namespace`
+            : t("count", "hostsAcrossNamespaces", { n: groups.length })
         }
-        description="What this controller serves, where each hostname goes, and what its annotations actually do."
+        description={t("empty", "nginxPageDescription")}
       />
       <DetailTabs
         tabs={tabs}
@@ -275,18 +276,21 @@ function MapTab({
   sources: NginxSources | null;
   loading: boolean;
 }) {
+  const t = useT();
   const data = useMemo(
     () => (sources ? routingMap(groups, sources) : null),
     [groups, sources]
   );
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
+    );
   }
   if (!data || groups.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        Nothing routes through this controller, so there is no shape to draw.
+        <T section="empty" k="nothingRoutesThroughController" />
       </p>
     );
   }
@@ -294,25 +298,25 @@ function MapTab({
   return (
     <div className="flex flex-col gap-2">
       <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">
-        Rest on a node to light up everything one edge away. A host goes to its
-        own routes; a Service goes to its page — every line is one object naming
-        another.
-      </p>
+      <p className="text-[11px] text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
     </div>
   );
 }
 
 function routesMark(
   groups: NginxHostGroup[],
-  troubled: number
+  troubled: number,
+  t: ReturnType<typeof useT>
 ): DetailTabMark | undefined {
   if (groups.length === 0) return undefined;
   const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
   return troubled > 0
     ? severityMark(
         worst,
-        `${troubled} of ${groups.length} hosts need attention`
+        t("count", "hostsNeedAttention", {
+          n: troubled,
+          total: groups.length,
+        })
       )
     : countMark(groups.length);
 }
@@ -324,14 +328,17 @@ function routesMark(
  * is the one thing on this tab worth going and looking at, because it is
  * where the page stops being able to answer.
  */
-function annotationsMark(groups: NginxHostGroup[]): DetailTabMark | undefined {
+function annotationsMark(
+  groups: NginxHostGroup[],
+  t: ReturnType<typeof useT>
+): DetailTabMark | undefined {
   const readings = allAnnotations(groups);
   if (readings.length === 0) return undefined;
   const snippets = readings.filter((reading) => reading.raw === "snippet");
   if (snippets.length > 0) {
     return severityMark(
       "warn",
-      `${plural(snippets.length, "snippet")} of raw nginx config`
+      t("count", "snippetsOfRawNginx", { n: snippets.length })
     );
   }
   return countMark(readings.length);
@@ -367,6 +374,7 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
 
   const shown = useMemo(() => {
@@ -385,21 +393,19 @@ function RoutesTab({
   }, [groups, filter]);
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the routing table…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
+    );
   }
 
   if (groups.length === 0) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          ingress-nginx is running here and nothing routes to it.
+          {t("empty", "nginxRunningNothingRoutes")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No Ingress in this cluster names an IngressClass this controller
-          claims. An Ingress naming a class nothing serves is correct YAML with
-          no events and no error, and is simply never served — which is the
-          usual outcome of installing a second controller beside the one the
-          cluster shipped with.
+          {t("empty", "nginxNoIngressClaimsClass")}
         </p>
       </div>
     );
@@ -414,27 +420,30 @@ function RoutesTab({
         <FilterBox
           value={filter}
           onChange={setFilter}
-          placeholder="Filter by host, service or object"
-          label="Filter hosts"
+          placeholder={t("action", "filterByHostServiceObject")}
+          label={t("action", "filterHosts")}
         />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
-            ? `${shown.length} of ${groups.length}`
+            ? t("count", "nOfTotal", {
+                n: shown.length,
+                total: groups.length,
+              })
             : broken > 0
-              ? `${broken} of ${groups.length} broken, and first${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
               : worthALook > 0
-                ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
-                : `${plural(groups.length, "host")}, none with a problem`}
+                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
+                : t("count", "hostsNoneWithProblem", { n: groups.length })}
         </span>
         {backingLoading && (
           <span className="text-[11px] text-fg-fnt">
-            checking what is behind them…
+            {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
-          No host, service or object here matches that.
+          {t("empty", "noHostServiceObjectMatches")}
         </p>
       ) : (
         shown.map((group, index) => (
@@ -450,9 +459,12 @@ function RoutesTab({
   );
 }
 
-function hostState(group: NginxHostGroup): { text: string; tone: Tone } {
+function hostState(
+  group: NginxHostGroup,
+  t: ReturnType<typeof useT>
+): { text: string; tone: Tone } {
   const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: "nothing behind it", tone: "err" };
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -460,21 +472,21 @@ function hostState(group: NginxHostGroup): { text: string; tone: Tone } {
     return {
       text:
         certificate.kind === "certificate" && certificate.expiry?.expired
-          ? "certificate expired"
-          : "certificate running out",
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
       tone: "err",
     };
   }
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
-    return { text: "canary shadowing nothing", tone: "warn" };
+    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: "served in the clear", tone: "warn" };
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }
   if (group.findings.length > 0) {
-    return { text: "worth a look", tone: "warn" };
+    return { text: t("empty", "worthALook"), tone: "warn" };
   }
-  return { text: "serving", tone: "ok" };
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function HostRow({
@@ -486,18 +498,22 @@ function HostRow({
   sources: NginxSources | null;
   openByDefault: boolean;
 }) {
-  const state = hostState(group);
+  const t = useT();
+  const state = hostState(group, t);
   const tls = group.tlsSecrets[0];
 
   return (
     <TroubleRow
-      title={group.host ?? "any host"}
+      title={group.host ?? t("empty", "anyHost")}
       copy={group.host ?? undefined}
       meta={
         <>
-          {plural(group.routes.length, "path")}
-          {group.split && ` · split ${splitSummary(group)}`}
-          {tls ? ` · TLS from ${tls.secretName}` : " · no TLS"}
+          {t("count", "paths", { n: group.routes.length })}
+          {group.split &&
+            ` · ${t("empty", "splitShares", { shares: splitSummary(group) })}`}
+          {tls
+            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
+            : ` · ${t("empty", "noTls")}`}
         </>
       }
       state={state}
@@ -557,6 +573,7 @@ function PathRow({
   group: NginxHostGroup;
   sources: NginxSources | null;
 }) {
+  const t = useT();
   const backing = sources ? backingOf(route, sources) : null;
   const decoded = route.annotations.filter((reading) => reading.said !== null);
 
@@ -572,10 +589,10 @@ function PathRow({
         <Share route={route} group={group} />
         {decoded.length > 0 && (
           <span className="text-fg-fnt">
-            {plural(decoded.length, "annotation")} ·
+            {t("count", "annotations", { n: decoded.length })} ·
           </span>
         )}
-        <span className="text-fg-fnt">to</span>
+        <span className="text-fg-fnt">{t("empty", "toTarget")}</span>
         {route.service ? (
           <>
             <ResourceRef
@@ -591,7 +608,7 @@ function PathRow({
         ) : route.resourceBackend ? (
           <span className="font-mono text-fg-mid">{route.resourceBackend}</span>
         ) : (
-          <span className="text-err">no service</span>
+          <span className="text-err">{t("empty", "noServiceBackend")}</span>
         )}
         <span className="text-fg-fnt">
           ·{" "}
@@ -605,13 +622,13 @@ function PathRow({
       </span>
       <span className="text-[11px] text-fg-fnt">
         {route.service === null
-          ? "not a Service"
+          ? t("empty", "notAService")
           : backing && !backing.known
             ? "…"
             : backing?.stop
               ? "—"
               : backing
-                ? `${backing.ready} ready`
+                ? t("count", "nReady", { n: backing.ready })
                 : ""}
       </span>
     </div>
@@ -626,6 +643,7 @@ function PathRow({
  * they get, rather than both looking like they get all of it.
  */
 function Share({ route, group }: { route: NginxRoute; group: NginxHostGroup }) {
+  const t = useT();
   const split = group.split;
   if (!split) return null;
 
@@ -634,24 +652,31 @@ function Share({ route, group }: { route: NginxRoute; group: NginxHostGroup }) {
     if (canary.byHeader) {
       return (
         <span className="text-info">
-          canary · when {canary.byHeader}
-          {canary.byHeaderValue ? `: ${canary.byHeaderValue}` : ": always"}
+          {t("empty", "canaryWhenHeader", { header: canary.byHeader })}
+          {canary.byHeaderValue
+            ? `: ${canary.byHeaderValue}`
+            : `: ${t("empty", "canaryAlways")}`}
         </span>
       );
     }
     if (canary.byCookie) {
       return (
-        <span className="text-info">canary · cookie {canary.byCookie}</span>
+        <span className="text-info">
+          {t("empty", "canaryCookie", { cookie: canary.byCookie })}
+        </span>
       );
     }
     return (
       <span className="text-info">
         canary ·{" "}
         {canary.weight === null
-          ? "no weight set, so nothing goes here"
+          ? t("empty", "canaryNoWeight")
           : canary.weightTotal === 100
             ? `${canary.weight}%`
-            : `${canary.weight} of ${canary.weightTotal}`}
+            : t("count", "nOfTotal", {
+                n: canary.weight,
+                total: canary.weightTotal,
+              })}
       </span>
     );
   }
@@ -660,10 +685,13 @@ function Share({ route, group }: { route: NginxRoute; group: NginxHostGroup }) {
   return (
     <span className="text-fg-fnt">
       {split.primaryShare === null
-        ? "the rest"
+        ? t("empty", "theRest")
         : split.weightTotal === 100
           ? `${split.primaryShare}%`
-          : `${split.primaryShare} of ${split.weightTotal}`}{" "}
+          : t("count", "nOfTotal", {
+              n: split.primaryShare,
+              total: split.weightTotal,
+            })}{" "}
       ·
     </span>
   );
@@ -678,6 +706,7 @@ function HostChain({
   group: NginxHostGroup;
   sources: NginxSources;
 }) {
+  const t = useT();
   const route = group.chainFor;
   const backing = backingOf(route, sources);
   const decoded = route.annotations.filter((reading) => reading.said !== null);
@@ -687,38 +716,47 @@ function HostChain({
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
         <span className="text-[10px] text-fg-fnt">
-          the path through {route.path} on {route.source.name}
+          {t("empty", "pathThroughOn", {
+            path: route.path,
+            name: route.source.name,
+          })}
         </span>
       )}
       <Chain>
-        <Column label="Listener">
-          <Cell under={route.tlsSecret ? "TLS terminated here" : "no TLS here"}>
+        <Column label={t("columns", "listener")}>
+          <Cell
+            under={
+              route.tlsSecret
+                ? t("empty", "tlsTerminatedHere")
+                : t("empty", "noTlsHere")
+            }
+          >
             {route.tlsSecret ? ":443" : ":80"}
           </Cell>
         </Column>
-        <Column label="Rule">
+        <Column label={t("columns", "rule")}>
           <Cell under={route.pathType ?? undefined}>
-            {group.host ?? "any host"} {route.path}
+            {group.host ?? t("empty", "anyHost")} {route.path}
           </Cell>
         </Column>
-        <Column label="Annotations">
+        <Column label={t("columns", "annotations")}>
           {route.annotations.length === 0 ? (
             <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
-              none
+              {t("empty", "noneLower")}
             </div>
           ) : (
             <>
               {decoded.length > 0 && (
-                <Cell under={plural(decoded.length, "decoded")}>
-                  behaviour set here
+                <Cell under={t("count", "nDecoded", { n: decoded.length })}>
+                  {t("empty", "behaviourSetHere")}
                 </Cell>
               )}
               {raw.length > 0 && (
                 <Cell
                   warn={raw.some((reading) => reading.raw === "snippet")}
-                  under="shown raw below"
+                  under={t("empty", "shownRawBelow")}
                 >
-                  {plural(raw.length, "not read")}
+                  {t("count", "nNotRead", { n: raw.length })}
                 </Cell>
               )}
             </>
@@ -735,41 +773,43 @@ function HostChain({
           ) : route.resourceBackend ? (
             // An API object, not a Service. It has no endpoints by design
             // and the app cannot see inside it, so nothing is claimed.
-            <Cell under="an API object, not a Service">
+            <Cell under={t("empty", "apiObjectNotService")}>
               {route.resourceBackend}
             </Cell>
           ) : (
-            <Cell bad>none</Cell>
+            <Cell bad>{t("empty", "noneLower")}</Cell>
           )}
         </Column>
-        <Column label="Published">
+        <Column label={t("columns", "published")}>
           {route.service === null ? (
-            <Cell under="not a Service">—</Cell>
+            <Cell under={t("empty", "notAService")}>—</Cell>
           ) : !backing.known ? (
-            <Cell under="reading endpoints">—</Cell>
+            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
           ) : backing.stop ? (
-            <Cell bad under={STOP_UNDER[backing.stop.reason]}>
-              0 published
+            <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
+              {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (
             <Cell
               warn={backing.ready === 0 && backing.draining > 0}
               under={
                 backing.draining > 0
-                  ? `${backing.draining} draining`
+                  ? t("count", "nDraining", { n: backing.draining })
                   : backing.notReady > 0
-                    ? `${backing.notReady} not ready`
-                    : `of ${backing.ready}`
+                    ? t("count", "nNotReady", { n: backing.notReady })
+                    : t("count", "ofN", { n: backing.ready })
               }
             >
-              {backing.ready + backing.draining} published
+              {t("count", "nPublished", {
+                n: backing.ready + backing.draining,
+              })}
             </Cell>
           )}
         </Column>
       </Chain>
       {route.tlsSecret && (
         <span className="text-[11px] text-fg-fnt">
-          served under{" "}
+          {t("empty", "servedUnder")}{" "}
           <ResourceRef
             kind="Secret"
             name={route.tlsSecret}
@@ -804,6 +844,7 @@ function Annotations({ readings }: { readings: AnnotationReading[] }) {
 }
 
 function AnnotationLine({ reading }: { reading: AnnotationReading }) {
+  const t = useT();
   const snippet = reading.raw === "snippet";
 
   return (
@@ -827,8 +868,8 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
       >
         {reading.said ??
           (snippet
-            ? "Raw nginx configuration, injected verbatim"
-            : "Shown as written")}
+            ? t("empty", "rawNginxConfig")
+            : t("empty", "shownAsWritten"))}
       </p>
       <p className="mt-0.5 select-text break-all font-mono text-[11px] text-fg-fnt">
         {reading.key}
@@ -857,6 +898,7 @@ function Findings({
   group: NginxHostGroup;
   brief?: boolean;
 }) {
+  const t = useT();
   const issuance = useCertificateIssuance(
     group.tlsSecrets[0]?.namespace,
     group.tlsSecrets.map((secret) => secret.secretName)
@@ -874,7 +916,7 @@ function Findings({
   return (
     <div className="flex flex-col gap-2">
       {shown.map((finding, index) => {
-        const said = describeFinding(finding);
+        const said = describeFinding(finding, t);
         return (
           <FindingBlock key={index} tone={finding.severity} title={said.title}>
             {!brief && said.note}
@@ -889,60 +931,69 @@ function Findings({
       })}
       {hidden > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          and {hidden} more — open the row
+          {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
     </div>
   );
 }
 
-const STOP_UNDER: Record<ServiceStop["reason"], string> = {
-  backendMissing: "no service to send to",
-  selectsNothing: "selector matches nothing",
-  noneReady: "running, none ready",
-  publishesNothing: "no port to send to",
+const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
+  backendMissing: "stopNoServiceToSendTo",
+  selectsNothing: "stopSelectorMatchesNothing",
+  noneReady: "stopRunningNoneReady",
+  publishesNothing: "stopNoPortToSendTo",
 };
 
-function describeFinding(finding: Finding): { title: string; note: string } {
+function describeFinding(
+  finding: Finding,
+  t: ReturnType<typeof useT>
+): { title: string; note: string } {
   switch (finding.kind) {
     case "stop": {
       const said = describeStop(finding.stop);
       return {
-        title: `This host answers, and every request gets a 503 — ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        title: t("empty", "everyRequest503", {
+          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        }),
         note: said.note,
       };
     }
     case "clear":
       return {
-        title: "Served in the clear — nothing offers this host over TLS",
+        title: t("empty", "servedInClearTitle"),
         note: finding.redirectAnyway
-          ? "No Ingress under this host declares a certificate, so nginx serves it on :80 and nothing else. One of them does carry ssl-redirect, which reads like protection and is doing nothing: nginx applies that redirect only where the Ingress has a certificate to redirect to."
-          : "No Ingress under this host declares a certificate, so nginx serves it on :80 and there is no encrypted way to reach it, even for a client that asks for one.",
+          ? t("empty", "nginxClearRedirectAnyway")
+          : t("empty", "nginxClearNote"),
       };
     case "duplicate":
       return {
-        title: `Two Ingresses claim ${finding.path} on this host`,
+        title: t("empty", "twoIngressesClaimPath", { path: finding.path }),
         note: finding.winner
-          ? `nginx serves ${finding.winner.source.namespace}/${finding.winner.source.name} — the older object wins a conflict — and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.`
-          : `nginx breaks the tie by creation time and serves the older object; these do not both state one, so which of them is serving the request is not something this app can say from here.`,
+          ? t("empty", "nginxDuplicateWinner", {
+              object: `${finding.winner.source.namespace}/${finding.winner.source.name}`,
+            })
+          : t("empty", "nginxDuplicateTie"),
       };
     case "orphanCanary":
       return {
-        title: `${finding.route.source.name} is a canary shadowing nothing`,
-        note: "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it — the object is correct YAML that does nothing at all.",
+        title: t("empty", "canaryShadowingNothingTitle", {
+          name: finding.route.source.name,
+        }),
+        note: t("empty", "canaryShadowingNothingNote"),
       };
     case "certificate": {
       if (!finding.expiry) {
         return {
-          title: `${finding.secretName} could not be read as a certificate`,
-          note:
-            finding.read?.problem ??
-            "The Secret is there and what is in it is not a certificate this app could parse.",
+          title: t("empty", "secretNotACertificate", {
+            name: finding.secretName,
+          }),
+          note: finding.read?.problem ?? t("empty", "secretNotParsable"),
         };
       }
       return {
         title: `${finding.secretName} ${finding.expiry.text}`,
-        note: "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
+        note: t("empty", "certExpiryBrowserNote"),
       };
     }
   }
@@ -958,6 +1009,7 @@ function describeFinding(finding: Finding): { title: string; note: string } {
  * particular where the app had to give up and print a string.
  */
 function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
+  const t = useT();
   const byObject = new Map<string, AnnotationReading[]>();
   for (const group of groups) {
     for (const route of group.routes) {
@@ -972,9 +1024,7 @@ function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
   if (objects.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        No Ingress this controller serves carries an nginx annotation. Every
-        route is being served with the controller&rsquo;s own defaults, which
-        the Global settings tab lists.
+        {t("empty", "noNginxAnnotations")}
       </p>
     );
   }
@@ -985,15 +1035,14 @@ function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
   return (
     <Section>
       <SectionHeader
-        title="Annotations"
+        title={t("columns", "annotations")}
         count={readings.length}
-        description="What each one does, with the key it came from beside it. The ones this app will not paraphrase say so and print the value instead."
+        description={t("empty", "annotationsDescription")}
       />
       {raw.length > 0 && (
         <p className="max-w-[92ch] border-l-2 border-hair pl-2.5 text-[11.5px] text-fg-mut">
-          {plural(raw.length, "line")} here {raw.length === 1 ? "is" : "are"}{" "}
-          shown as written. A wrong paraphrase of a routing rule is worse than
-          the annotation nobody read, because this time somebody believed it.
+          {t("count", "linesShownAsWritten", { n: raw.length })}{" "}
+          {t("empty", "wrongParaphraseNote")}
         </p>
       )}
       <div className="flex flex-col gap-4">
@@ -1026,18 +1075,20 @@ function SettingsTab({
   controller: ControllerInfo | undefined;
   settings: SettingReading[];
 }) {
+  const t = useT();
   if (!controller) {
-    return <p className="text-xs text-fg-fnt">Reading the controller…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingController")}</p>
+    );
   }
   if (!controller.config) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          This cluster has no global nginx settings to show.
+          {t("empty", "noGlobalNginxSettings")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ??
-            "The controller names no ConfigMap, so every setting comes from its own defaults."}
+          {controller.problem ?? t("empty", "controllerNamesNoConfigMap")}
         </p>
       </div>
     );
@@ -1048,9 +1099,9 @@ function SettingsTab({
   return (
     <Section>
       <SectionHeader
-        title="Settings that apply to every route"
+        title={t("empty", "settingsEveryRouteTitle")}
         count={settings.length}
-        description="The ConfigMap the controller was started with. A key set here changes the behaviour of every host on the Routes tab at once, unless an Ingress overrides it with the annotation of the same name."
+        description={t("empty", "settingsEveryRouteDescription")}
       />
       <p className="text-[11px] text-fg-fnt">
         <ResourceRef
@@ -1059,15 +1110,15 @@ function SettingsTab({
           namespace={config.namespace}
           showKind={false}
         />{" "}
-        — named in the controller&rsquo;s own <code>--configmap</code> flag,
-        which is the only place in this cluster that says which ConfigMap is the
-        global one.
+        {t("empty", "namedInConfigmapFlagPre")}
+        <code>--configmap</code>
+        {t("empty", "namedInConfigmapFlagPost")}
       </p>
       {config.problem ? (
         <p className="text-[11px] text-warn">{config.problem}</p>
       ) : settings.length === 0 ? (
         <p className="text-[11px] text-fg-fnt">
-          It is empty, so every setting is the controller&rsquo;s own default.
+          {t("empty", "configMapEmptyDefaults")}
         </p>
       ) : (
         <div className="flex flex-col">
@@ -1096,8 +1147,7 @@ function SettingsTab({
                 </span>
                 {setting.overridable && (
                   <span className="text-[11px] text-fg-fnt">
-                    an Ingress may override this one with the annotation of the
-                    same name
+                    {t("empty", "ingressMayOverride")}
                   </span>
                 )}
               </div>
@@ -1118,8 +1168,11 @@ function ControllerTab({
   controller: ControllerInfo | undefined;
   sources: NginxSources | null;
 }) {
+  const t = useT();
   if (!controller) {
-    return <p className="text-xs text-fg-fnt">Reading the controller…</p>;
+    return (
+      <p className="text-xs text-fg-fnt">{t("empty", "readingController")}</p>
+    );
   }
   const classes = sources ? nginxClasses(sources.classes) : [];
 
@@ -1127,8 +1180,8 @@ function ControllerTab({
     <div className="flex flex-col gap-[22px]">
       <Section>
         <SectionHeader
-          title="The controller"
-          description="Where an nginx problem is actually diagnosed: its own pods, and its own logs."
+          title={t("empty", "theControllerTitle")}
+          description={t("empty", "theControllerDescription")}
         />
         {controller.workload ? (
           <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
@@ -1140,8 +1193,11 @@ function ControllerTab({
                 showKind={false}
               />
               <span className="text-fg-fnt">
-                {controller.workload.ready} of {controller.workload.desired}{" "}
-                ready · {controller.workload.namespace}
+                {t("count", "ofTotalReady", {
+                  n: controller.workload.ready,
+                  total: controller.workload.desired,
+                })}{" "}
+                · {controller.workload.namespace}
               </span>
             </span>
             {controller.workload.image && (
@@ -1162,14 +1218,13 @@ function ControllerTab({
 
       <Section>
         <SectionHeader
-          title="Classes it claims"
+          title={t("empty", "classesItClaims")}
           count={classes.length}
-          description="An Ingress naming a class nothing claims is correct YAML with no events and no error, and is simply never served."
+          description={t("empty", "classesItClaimsDescription")}
         />
         {classes.length === 0 ? (
           <p className="text-[11px] text-warn">
-            ingress-nginx is running and claims no IngressClass, so no Ingress
-            in this cluster can reach it by class.
+            {t("empty", "nginxClaimsNoClass")}
           </p>
         ) : (
           <div className="flex flex-col">
@@ -1181,7 +1236,7 @@ function ControllerTab({
                 <span className="font-mono text-fg-mid">{entry.name}</span>
                 {entry.isDefault && (
                   <span className="text-[11px] text-fg-fnt">
-                    this cluster&rsquo;s default
+                    {t("empty", "clustersDefault")}
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[11px] text-fg-fnt">
@@ -1193,11 +1248,11 @@ function ControllerTab({
         )}
         {controller.watching.controllerClass && (
           <p className="text-[11px] text-fg-fnt">
-            Started with{" "}
+            {t("empty", "startedWithPre")}
             <span className="font-mono">
               --controller-class={controller.watching.controllerClass}
             </span>
-            , which is the string it looks for in an IngressClass.
+            {t("empty", "startedWithPost")}
           </p>
         )}
       </Section>
@@ -1205,9 +1260,9 @@ function ControllerTab({
       {controller.args.length > 0 && (
         <Section>
           <SectionHeader
-            title="Static configuration"
+            title={t("empty", "staticConfiguration")}
             count={controller.args.length}
-            description="The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself."
+            description={t("empty", "staticConfigurationDescription")}
           />
           <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
             {controller.args.map((arg, index) => (

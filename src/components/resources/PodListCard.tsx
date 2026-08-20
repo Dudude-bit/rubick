@@ -2,6 +2,7 @@ import { podReadiness } from "@/lib/container-sequence";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
 import type { PodInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface PodListCardProps {
   pods: PodInfo[];
@@ -9,13 +10,11 @@ interface PodListCardProps {
 }
 
 /** The pods a workload owns. */
-export function PodListCard({
-  pods,
-  emptyMessage = "No pods for this workload",
-}: PodListCardProps) {
+export function PodListCard({ pods, emptyMessage }: PodListCardProps) {
+  const t = useT();
   return (
     <ChildRows
-      emptyMessage={emptyMessage}
+      emptyMessage={emptyMessage ?? t("empty", "noPodsForWorkload")}
       rows={pods.map((pod) => {
         const { ready, total } = podReadiness(pod);
         const restarts = pod.restartCount ?? 0;

@@ -6,6 +6,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type { KubeconfigSource } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 /**
  * The first screen anyone sees.
@@ -26,6 +27,7 @@ import type { KubeconfigSource } from "@/generated/types";
  * fact is not available the line is absent rather than plausible.
  */
 export function ClusterFrontDoor() {
+  const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
   const pendingContext = useClusterStore((s) => s.pendingContext);
@@ -74,7 +76,7 @@ export function ClusterFrontDoor() {
       <Door>
         <div className="flex items-center gap-2.5 text-xs text-fg-mut">
           <Spinner size="sm" aria-hidden />
-          Reading your kubeconfig…
+          {t("cluster", "readingKubeconfig")}
         </div>
       </Door>
     );
@@ -91,8 +93,8 @@ export function ClusterFrontDoor() {
   return (
     <Door>
       <Heading
-        title="Connect a cluster"
-        sub={`${count(contexts.length, "context")} in your kubeconfig. Pick one to start.`}
+        title={t("cluster", "connectACluster")}
+        sub={`${t("count", "contexts", { n: contexts.length })} ${t("cluster", "pickOneToStart")}`}
       />
       <div className="mt-5">
         <ClusterList onSelect={connect} />
@@ -199,27 +201,30 @@ function SourceLine({
 }: {
   kubeconfig: ReturnType<typeof useKubeconfigPath>;
 }) {
+  const t = useT();
   const read = readFile(kubeconfig.source);
 
   return (
     <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-[11px] text-fg-fnt">
-      <span>Read from</span>
+      <span>{t("cluster", "readFrom")}</span>
       <span className="break-all font-mono text-fg-mut">
-        {read ?? "the default lookup"}
+        {read ?? t("cluster", "defaultLookup")}
       </span>
       <Act
         onClick={() => void kubeconfig.choose()}
         disabled={kubeconfig.isPending}
       >
-        Change…
+        {t("action", "change")}
       </Act>
-      <Act onClick={() => void kubeconfig.reload()}>Reload</Act>
+      <Act onClick={() => void kubeconfig.reload()}>
+        {t("action", "reload")}
+      </Act>
       {kubeconfig.overridePath && (
         <Act
           onClick={() => kubeconfig.clearPath()}
           disabled={kubeconfig.isPending}
         >
-          Use the default
+          {t("action", "useTheDefault")}
         </Act>
       )}
     </div>
@@ -236,6 +241,7 @@ function NoClusters({
 }: {
   kubeconfig: ReturnType<typeof useKubeconfigPath>;
 }) {
+  const t = useT();
   const source = kubeconfig.source;
   const found = source?.candidates.some((c) => c.exists) ?? false;
   const counts = source?.counts;
@@ -244,22 +250,25 @@ function NoClusters({
     return (
       <>
         <Heading
-          title="The config file has no clusters in it"
-          sub="It was read, but it lists no context to connect with."
+          title={t("empty", "configHasNoClusters")}
+          sub={t("empty", "configHasNoClustersSub")}
         />
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
           <Act onClick={() => void kubeconfig.choose()}>
-            Choose a different file…
+            {t("action", "chooseDifferentFile")}
           </Act>
-          <Act onClick={() => void kubeconfig.reload()}>Reload</Act>
+          <Act onClick={() => void kubeconfig.reload()}>
+            {t("action", "reload")}
+          </Act>
         </div>
         <Machine>
-          <span>Read</span>
+          <span>{t("cluster", "wasRead")}</span>
           <Mono>{readFile(source)}</Mono>
           {counts && (
             <span>
-              · {count(counts.contexts, "context")},{" "}
-              {count(counts.clusters, "cluster")}, {count(counts.users, "user")}
+              · {t("count", "contexts", { n: counts.contexts })},{" "}
+              {t("count", "clusters", { n: counts.clusters })},{" "}
+              {t("count", "users", { n: counts.users })}
             </span>
           )}
           {source?.error && <Mono>{source.error}</Mono>}
@@ -271,47 +280,54 @@ function NoClusters({
   return (
     <>
       <Heading
-        title="You are not connected to a cluster yet"
-        sub="No cluster configuration was found on this machine."
+        title={t("empty", "notConnectedYet")}
+        sub={t("empty", "noKubeconfigFound")}
       />
       <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
-        Get one running
+        {t("empty", "getOneRunning")}
       </p>
-      <Route name="Docker Desktop" hint="enable Kubernetes in its settings" />
+      <Route name="Docker Desktop" hint={t("empty", "dockerDesktopHint")} />
       <Route
         name="minikube · kind · k3d"
-        hint="a local cluster in one command"
+        hint={t("empty", "localClusterHint")}
       />
       <Route
-        name="Already have one elsewhere?"
-        hint="point at its config file"
+        name={t("empty", "haveOneElsewhere")}
+        hint={t("empty", "pointAtConfigHint")}
       />
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
-        <Act onClick={() => void kubeconfig.choose()}>Choose a file…</Act>
-        <Act onClick={() => void kubeconfig.reload()}>Look again</Act>
+        <Act onClick={() => void kubeconfig.choose()}>
+          {t("action", "chooseFile")}
+        </Act>
+        <Act onClick={() => void kubeconfig.reload()}>
+          {t("action", "lookAgain")}
+        </Act>
       </div>
       <Machine>
-        <span>Looked at</span>
+        <span>{t("empty", "lookedAt")}</span>
         {source?.candidates.map((candidate) => (
           <Mono key={candidate.path}>{candidate.path}</Mono>
         ))}
         {/* Which of the three lookups produced that list is the fact
             that explains it — an unset $KUBECONFIG is why there is only
             one path, and a set one is why there is not. */}
-        <span>· {origin(source)}</span>
+        <span>· {origin(source, t)}</span>
       </Machine>
     </>
   );
 }
 
-function origin(source: KubeconfigSource | undefined) {
+function origin(
+  source: KubeconfigSource | undefined,
+  t: ReturnType<typeof useT>
+) {
   switch (source?.candidates[0]?.origin) {
     case "override":
-      return "pinned in Settings";
+      return t("cluster", "originOverride");
     case "env":
-      return "from $KUBECONFIG";
+      return t("cluster", "originEnv");
     default:
-      return "$KUBECONFIG unset";
+      return t("cluster", "originUnset");
   }
 }
 
@@ -339,6 +355,7 @@ function Connecting({
   startedAt: number | null;
   onCancel: () => void;
 }) {
+  const t = useT();
   const elapsed = useRealtimeAge(
     startedAt ? new Date(startedAt).toISOString() : null
   );
@@ -353,16 +370,16 @@ function Connecting({
             it says so with motion, not just with an ellipsis. */}
         <Spinner size="sm" aria-hidden className="mt-0.5 text-fg-fnt" />
         <Heading
-          title={`Connecting to ${context}…`}
+          title={t("cluster", "connectingTo", { context })}
           sub={
             info?.exec_command
-              ? "Your cluster is asking who you are. This can open a browser window."
-              : "Waiting for the cluster's API server to answer."
+              ? t("cluster", "authPrompt")
+              : t("cluster", "waitingForApiServer")
           }
         />
       </div>
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
-        <Act onClick={onCancel}>Cancel</Act>
+        <Act onClick={onCancel}>{t("action", "cancel")}</Act>
         {startedAt && <span className="font-mono">{elapsed}</span>}
       </div>
       {/* Either fact is the machine's own; neither is invented, and when
@@ -371,12 +388,12 @@ function Connecting({
         <Machine>
           {info.exec_command ? (
             <>
-              <span>Running</span>
+              <span>{t("cluster", "runningCommand")}</span>
               <Mono>{info.exec_command}</Mono>
             </>
           ) : (
             <>
-              <span>Reaching</span>
+              <span>{t("cluster", "reaching")}</span>
               <Mono>{info.server}</Mono>
             </>
           )}
@@ -395,6 +412,7 @@ function Failed({
   message: string;
   onRetry: () => void;
 }) {
+  const t = useT();
   const server = useClusterStore(
     (s) => s.contexts.find((ctx) => ctx.name === context)?.server
   );
@@ -402,19 +420,19 @@ function Failed({
   return (
     <>
       <Heading
-        title="The cluster did not answer"
-        sub={`${context} is not reachable from this machine — it may be off, or behind a VPN.`}
+        title={t("cluster", "didNotAnswer")}
+        sub={t("cluster", "notReachable", { context })}
       />
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
-        <Act onClick={onRetry}>Retry</Act>
-        <span>or pick another below</span>
+        <Act onClick={onRetry}>{t("action", "retry")}</Act>
+        <span>{t("cluster", "orPickAnother")}</span>
       </div>
       <Machine tone="error">
         <Mono>{verbatim(message)}</Mono>
       </Machine>
       {server && (
         <Machine>
-          <span>Server</span>
+          <span>{t("cluster", "server")}</span>
           <Mono>{server}</Mono>
         </Machine>
       )}
@@ -428,8 +446,4 @@ function Failed({
  */
 function readFile(source: KubeconfigSource | undefined) {
   return source?.candidates.find((candidate) => candidate.exists)?.path ?? null;
-}
-
-function count(n: number, noun: string) {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

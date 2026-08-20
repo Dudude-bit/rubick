@@ -143,3 +143,130 @@ describe("whether this Prometheus is watching this cluster", () => {
     expect(verdict(found)).toMatchObject({ tone: "warn" });
   });
 });
+
+describe("a Prometheus that carries no node names", () => {
+  /**
+   * The panel's own worst finding, reported from a real cluster: a
+   * VictoriaMetrics scraping cAdvisor and kube-state-metrics answered
+   * `kube_node_info` with nothing, and the panel said "This Prometheus is not
+   * watching this cluster" — while three of the four families held hundreds
+   * of series from that very cluster. Silence about node names means the
+   * question cannot be answered, not that the answer is no.
+   */
+  /**
+   * Which label carries the node name is the scrape config's choice —
+   * `NODE_LABELS` lists the three this app reads — so both queries must group
+   * by more than `node`, or they discard the name in exactly the setups that
+   * need them.
+   *
+   * This asserts the query text, not the result: the mock hands back whatever
+   * labels it is told to and does not implement `by (...)`, so a test written
+   * against its answer would pass with either grouping. The query string is
+   * the only part of this a unit test can actually hold.
+   */
+  it("groups by every label a node name lands in", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("talos-1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.startsWith("count by") ? [] : familiesPresent()
+    );
+
+    await coverage();
+    const grouped = vi
+      .mocked(commands.prometheusQuery)
+      .mock.calls.map(([query]) => query)
+      .filter((query) => query.startsWith("count by"));
+
+    expect(grouped).toHaveLength(2);
+    for (const query of grouped) {
+      expect(query).toContain("by (node, instance)");
+    }
+  });
+
+  /**
+   * Found by running the real thing rather than by reading it. cAdvisor's
+   * `instance` is routinely `10.0.0.4:10250`, and `shortName` reduces that to
+   * "10" — a name no cluster has. Trusted in both directions it would produce
+   * exactly the false accusation this whole change removes.
+   */
+  it("does not turn an ip:port instance into a foreign cluster", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("talos-1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? []
+        : query.startsWith("count by")
+          ? [{ labels: { instance: "10.0.0.4:10250" }, points: [] }]
+          : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.foreign).toEqual([]);
+    expect(found.unseen).toEqual([]);
+    expect(found.problem).toContain("cannot be established");
+  });
+
+  it("reads a name that arrived under instance rather than node", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("talos-1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? []
+        : query.startsWith("count by")
+          ? [{ labels: { instance: "talos-1" }, points: [] }]
+          : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.problem).toBeNull();
+    expect(found.matched).toBe(1);
+  });
+
+  /** One query on an ordinary cluster; the second is asked only when needed. */
+  it("does not ask cAdvisor when kube_node_info answered", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("n1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info") ? series(["n1"]) : familiesPresent()
+    );
+
+    await coverage();
+    const asked = vi
+      .mocked(commands.prometheusQuery)
+      .mock.calls.map(([query]) => query);
+    expect(
+      asked.some(
+        (query) =>
+          query.startsWith("count by") &&
+          query.includes("container_cpu_usage_seconds_total")
+      )
+    ).toBe(false);
+  });
+
+  it("falls back to cAdvisor's node label before giving up", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("talos-1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? []
+        : query.includes("container_cpu_usage_seconds_total") &&
+            query.startsWith("count by")
+          ? series(["talos-1"])
+          : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.problem).toBeNull();
+    expect(found.matched).toBe(1);
+    expect(found.unseen).toEqual([]);
+  });
+
+  it("says it cannot tell rather than blaming the cluster", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([node("talos-1")]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.startsWith("count by") ? [] : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.problem).toContain("cannot be established");
+    // Not reported as a cluster it does not watch: `unseen` drives that
+    // sentence, and an unanswerable question must not fill it.
+    expect(found.unseen).toEqual([]);
+    expect(found.matched).toBe(0);
+  });
+});

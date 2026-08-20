@@ -29,6 +29,7 @@ import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { useT } from "@/i18n/useT";
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -126,6 +127,7 @@ export function TroubleRow({
   children: ReactNode;
   last?: boolean;
 }) {
+  const t = useT();
   const [chosen, setChosen] = useState<boolean | null>(null);
   const open = chosen ?? openByDefault;
 
@@ -184,7 +186,9 @@ export function TroubleRow({
             type="button"
             onClick={() => setChosen(!open)}
             aria-expanded={open}
-            aria-label={`${copy ?? reference?.name} — expand`}
+            aria-label={t("action", "expandRow", {
+              name: copy ?? reference?.name ?? "",
+            })}
             className="flex-none"
           >
             {chevron}
@@ -288,6 +292,7 @@ export function OutLink({
   children: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const go = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -299,7 +304,7 @@ export function OutLink({
       href={href}
       onClick={go}
       onAuxClick={(event) => event.button === 1 && go(event)}
-      title={`Open on ${site}`}
+      title={t("action", "openOnSite", { site })}
       className={cn(
         "inline-flex items-baseline gap-0.5 text-info hover:underline",
         className

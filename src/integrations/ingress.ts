@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   ChainStop,
@@ -278,8 +279,9 @@ export const ROUTING_STALE = 60_000;
  * cluster-wide reads twice.
  */
 export function useBackingLists() {
+  const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: ["routing", "backing"],
+    queryKey: [context, "routing", "backing"],
     queryFn: async (): Promise<BackingLists> => {
       const [services, published] = await Promise.all([
         commands.listServices(null),
@@ -372,9 +374,11 @@ export interface CertificateProblem extends SecretRef {
 /**
  * The TLS Secrets these routes are served under that are worth a finding.
  *
- * Silent above fourteen days on purpose — the same two thresholds the
- * certificate facts already use. Colouring a certificate with sixty days
- * left teaches the reader to stop looking at the one that says four.
+ * Silent outside {@link expiryOf}'s thresholds on purpose — the same rule
+ * every certificate surface uses, scaled to the certificate's lifetime so a
+ * seven-day one is not a permanent finding. Colouring a certificate with
+ * sixty days left teaches the reader to stop looking at the one that says
+ * four.
  */
 export function certificateProblems(
   secrets: SecretRef[],

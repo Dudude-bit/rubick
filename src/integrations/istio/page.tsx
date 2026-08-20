@@ -34,7 +34,6 @@ import { describeStop } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import type { CustomResourceInfo } from "@/generated/types";
-import { plural } from "../kit";
 import {
   Chain,
   Cell,
@@ -56,10 +55,13 @@ import {
   type IstioRoute,
   type IstioSources,
 } from "./model";
+import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 const AUTO_OPEN = 8;
 
 export default function IstioPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
 
@@ -80,12 +82,10 @@ export default function IstioPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this mesh&rsquo;s routing
+          {t("empty", "couldNotReadMeshRouting")}
         </h2>
         <p className="text-xs text-fg-mut">
-          Every route this page draws is a Gateway, a VirtualService or a
-          DestinationRule in this API server, and that request failed — so the
-          chain would be a guess rather than an answer.
+          {t("empty", "meshRoutingRequestFailed")}
         </p>
         <p className="text-[11px] text-fg-fnt">{mesh.error.message}</p>
       </Section>
@@ -97,9 +97,9 @@ export default function IstioPage() {
   const tabs: DetailTab[] = [
     {
       id: "routes",
-      label: "Routes",
+      label: t("nav", "routes"),
       glyph: viewGlyph(Waypoints),
-      mark: routesMark(groups, troubled.length),
+      mark: routesMark(groups, troubled.length, t),
       content: (
         <RoutesTab
           groups={groups}
@@ -111,7 +111,7 @@ export default function IstioPage() {
     },
     {
       id: "map",
-      label: "Map",
+      label: t("nav", "map"),
       glyph: viewGlyph(Network),
       content: (
         <MapTab groups={groups} sources={sources} loading={mesh.isPending} />
@@ -132,9 +132,9 @@ export default function IstioPage() {
     },
     {
       id: "subsets",
-      label: "Subsets",
+      label: t("nav", "subsets"),
       glyph: viewGlyph(Split),
-      mark: subsetsMark(groups),
+      mark: subsetsMark(groups, t),
       content: (
         <SubsetsTab
           rules={mesh.data?.destinationRules ?? []}
@@ -153,9 +153,9 @@ export default function IstioPage() {
         count={
           mesh.isPending
             ? undefined
-            : `${plural(groups.length, "host")} across every namespace`
+            : t("count", "hostsAcrossNamespaces", { n: groups.length })
         }
-        description="What this mesh routes, and where each hostname stops."
+        description={t("empty", "istioPageDescription")}
       />
       <DetailTabs
         tabs={tabs}
@@ -172,27 +172,28 @@ export default function IstioPage() {
 
 function routesMark(
   groups: IstioHostGroup[],
-  troubled: number
+  troubled: number,
+  t: ReturnType<typeof useT>
 ): DetailTabMark | undefined {
   if (groups.length === 0) return undefined;
   const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
   return troubled > 0
     ? severityMark(
         worst,
-        `${troubled} of ${groups.length} hosts need attention`
+        t("count", "hostsNeedAttention", { n: troubled, total: groups.length })
       )
     : countMark(groups.length);
 }
 
-function subsetsMark(groups: IstioHostGroup[]): DetailTabMark | undefined {
+function subsetsMark(
+  groups: IstioHostGroup[],
+  t: ReturnType<typeof useT>
+): DetailTabMark | undefined {
   const missing = groups.flatMap((group) =>
     group.findings.filter((finding) => finding.kind === "noSubset")
   ).length;
   return missing > 0
-    ? severityMark(
-        "err",
-        `${plural(missing, "route")} to a subset nothing defines`
-      )
+    ? severityMark("err", t("count", "routesToUndefinedSubset", { n: missing }))
     : undefined;
 }
 
@@ -212,18 +213,19 @@ function MapTab({
   sources: IstioSources | null;
   loading: boolean;
 }) {
+  const t = useT();
   const data = useMemo(
     () => (sources ? routingMap(groups, sources) : null),
     [groups, sources]
   );
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the mesh…</p>;
+    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   }
   if (!data || groups.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        No VirtualService routes anything here, so there is no shape to draw.
+        {t("empty", "noVirtualServiceRoutes")}
       </p>
     );
   }
@@ -231,11 +233,7 @@ function MapTab({
   return (
     <div className="flex flex-col gap-2">
       <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">
-        Rest on a node to light up everything one edge away. A host goes to its
-        own routes; a Service goes to its page — every line is one object naming
-        another.
-      </p>
+      <p className="text-[11px] text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
     </div>
   );
 }
@@ -251,6 +249,7 @@ function RoutesTab({
   loading: boolean;
   backingLoading: boolean;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
 
   const shown = useMemo(() => {
@@ -270,19 +269,17 @@ function RoutesTab({
   }, [groups, filter]);
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">Reading the mesh…</p>;
+    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   }
 
   if (groups.length === 0) {
     return (
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">
-          Istio is installed here and nothing routes through it.
+          {t("empty", "istioNothingRoutes")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          No VirtualService declares a host. The mesh will still carry traffic
-          between the workloads that have a sidecar — that is the default and
-          needs no object — but there is no routing rule to draw.
+          {t("empty", "istioNoVirtualServiceHost")}
         </p>
       </div>
     );
@@ -297,27 +294,27 @@ function RoutesTab({
         <FilterBox
           value={filter}
           onChange={setFilter}
-          placeholder="Filter by host, VirtualService or destination"
-          label="Filter hosts"
+          placeholder={t("action", "filterByHostVirtualServiceDestination")}
+          label={t("action", "filterHosts")}
         />
         <span className="text-[11px] text-fg-fnt">
           {filter.trim() !== ""
-            ? `${shown.length} of ${groups.length}`
+            ? t("count", "nOfTotal", { n: shown.length, total: groups.length })
             : broken > 0
-              ? `${broken} of ${groups.length} broken, and first${worthALook > 0 ? ` · ${worthALook} worth a look` : ""}`
+              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
               : worthALook > 0
-                ? `nothing broken · ${worthALook} of ${groups.length} worth a look`
-                : `${plural(groups.length, "host")}, none with a problem`}
+                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
+                : t("count", "hostsNoneWithProblem", { n: groups.length })}
         </span>
         {backingLoading && (
           <span className="text-[11px] text-fg-fnt">
-            checking what is behind them…
+            {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
-          No host, VirtualService or destination here matches that.
+          {t("empty", "noHostVirtualServiceMatches")}
         </p>
       ) : (
         shown.map((group) => (
@@ -333,21 +330,25 @@ function RoutesTab({
   );
 }
 
-function hostState(group: IstioHostGroup): { text: string; tone: Tone } {
+function hostState(
+  group: IstioHostGroup,
+  t: ReturnType<typeof useT>
+): { text: string; tone: Tone } {
   if (group.findings.some((finding) => finding.kind === "noGateway")) {
-    return { text: "no Gateway serves it", tone: "err" };
+    return { text: t("empty", "noGatewayServesIt"), tone: "err" };
   }
   if (group.findings.some((finding) => finding.kind === "noSubset")) {
-    return { text: "subset not defined", tone: "err" };
+    return { text: t("empty", "subsetNotDefined"), tone: "err" };
   }
   if (group.findings.some((finding) => finding.kind === "stop")) {
-    return { text: "nothing behind it", tone: "err" };
+    return { text: t("empty", "nothingBehindIt"), tone: "err" };
   }
   if (group.findings.some((finding) => finding.kind === "weights")) {
-    return { text: "weights do not add up", tone: "warn" };
+    return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
   }
-  if (group.findings.length > 0) return { text: "worth a look", tone: "warn" };
-  return { text: "routing", tone: "ok" };
+  if (group.findings.length > 0)
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  return { text: t("empty", "routingState"), tone: "ok" };
 }
 
 function HostRow({
@@ -359,6 +360,7 @@ function HostRow({
   sources: IstioSources | null;
   openByDefault: boolean;
 }) {
+  const t = useT();
   const serving = group.gateways.filter((gateway) => gateway.serves);
 
   return (
@@ -366,15 +368,15 @@ function HostRow({
       title={group.host}
       meta={
         <>
-          {plural(group.routes.length, "rule")}
+          {t("count", "rules", { n: group.routes.length })}
           {group.meshOnly
-            ? " · in-mesh only"
+            ? ` · ${t("empty", "inMeshOnly")}`
             : serving.length > 0
-              ? ` · through ${serving.map((gateway) => gateway.named).join(", ")}`
-              : ` · ${plural(group.gateways.length, "gateway")} named`}
+              ? ` · ${t("empty", "throughGateways", { list: serving.map((gateway) => gateway.named).join(", ") })}`
+              : ` · ${t("count", "gatewaysNamed", { n: group.gateways.length })}`}
         </>
       }
-      state={hostState(group)}
+      state={hostState(group, t)}
       openByDefault={openByDefault}
       brief={
         group.findings.length > 0 ? <Findings group={group} brief /> : undefined
@@ -410,20 +412,21 @@ function RuleRow({
   route: IstioRoute;
   sources: IstioSources | null;
 }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
         {route.matches.length === 0
-          ? "every request"
+          ? t("empty", "everyRequest")
           : route.matches.map(describeMatch).join(" or ")}
         {route.protocol !== "http" && (
           <span className="ml-1 text-fg-fnt">{route.protocol}</span>
         )}
       </span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-        <span className="text-fg-fnt">to</span>
+        <span className="text-fg-fnt">{t("empty", "toTarget")}</span>
         {route.destinations.length === 0 ? (
-          <span className="text-err">nowhere</span>
+          <span className="text-err">{t("empty", "nowhere")}</span>
         ) : (
           route.destinations.map((destination, index) => (
             <span key={index} className="flex items-baseline gap-x-1">
@@ -475,6 +478,7 @@ function HostChain({
   group: IstioHostGroup;
   sources: IstioSources;
 }) {
+  const t = useT();
   const route = group.chainFor;
   const destination = route.destinations[0];
   const backing = destination
@@ -495,27 +499,29 @@ function HostChain({
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
         <span className="text-[10px] text-fg-fnt">
-          the rule for{" "}
+          {t("empty", "theRuleFor")}{" "}
           {route.matches.length === 0
-            ? "every request"
+            ? t("empty", "everyRequest")
             : describeMatch(route.matches[0])}
         </span>
       )}
       <Chain>
         <Column label="Gateway">
           {group.meshOnly ? (
-            <Cell under="no edge listener">in-mesh only</Cell>
+            <Cell under={t("empty", "noEdgeListener")}>
+              {t("empty", "inMeshOnly")}
+            </Cell>
           ) : group.gateways.length === 0 ? (
-            <Cell bad under="named none">
-              none
+            <Cell bad under={t("empty", "namesNone")}>
+              {t("empty", "noneLower")}
             </Cell>
           ) : serving.length === 0 ? (
             <Cell
               bad
               under={
                 group.gateways.some((gateway) => gateway.gateway === null)
-                  ? "not in this cluster"
-                  : "serves other hosts"
+                  ? t("empty", "notInThisCluster")
+                  : t("empty", "servesOtherHosts")
               }
             >
               {group.gateways.map((gateway) => gateway.named).join(", ")}
@@ -532,9 +538,9 @@ function HostChain({
           <Cell
             under={
               route.matches.length === 0
-                ? "every request"
+                ? t("empty", "everyRequest")
                 : unread.length > 0
-                  ? "shown in full below"
+                  ? t("empty", "shownInFullBelow")
                   : describeMatch(route.matches[0])
             }
           >
@@ -544,17 +550,20 @@ function HostChain({
         <Column label="DestinationRule">
           {!destination?.subset ? (
             <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
-              no subset
+              {t("empty", "noSubset")}
             </div>
           ) : (
             <Cell
               bad={!subsets.defined.includes(destination.subset)}
               under={
                 subsets.defined.includes(destination.subset)
-                  ? `of ${subsets.defined.join(", ")}`
+                  ? t("count", "ofN", { n: subsets.defined.join(", ") })
                   : subsets.anyRule
-                    ? `defines ${subsets.defined.join(", ") || "no subsets"}`
-                    : "no rule names this host"
+                    ? t("empty", "definesList", {
+                        list:
+                          subsets.defined.join(", ") || t("empty", "noSubsets"),
+                      })
+                    : t("empty", "noRuleNamesThisHost")
               }
             >
               {destination.subset}
@@ -563,9 +572,11 @@ function HostChain({
         </Column>
         <Column label="Service">
           {!destination ? (
-            <Cell bad>none</Cell>
+            <Cell bad>{t("empty", "noneLower")}</Cell>
           ) : destination.external ? (
-            <Cell under="outside this cluster">{destination.host}</Cell>
+            <Cell under={t("empty", "outsideThisCluster")}>
+              {destination.host}
+            </Cell>
           ) : (
             <Cell
               bad={backing?.stop?.reason === "backendMissing"}
@@ -575,27 +586,29 @@ function HostChain({
             </Cell>
           )}
         </Column>
-        <Column label="Published">
+        <Column label={t("columns", "published")}>
           {!destination || destination.external ? (
-            <Cell under="not this cluster's pods">—</Cell>
+            <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
-            <Cell under="reading endpoints">—</Cell>
+            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
           ) : backing.stop ? (
-            <Cell bad under={STOP_UNDER[backing.stop.reason]}>
-              0 published
+            <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
+              {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (
             <Cell
               warn={backing.ready === 0 && backing.draining > 0}
               under={
                 backing.draining > 0
-                  ? `${backing.draining} draining`
+                  ? t("count", "nDraining", { n: backing.draining })
                   : backing.notReady > 0
-                    ? `${backing.notReady} not ready`
-                    : `of ${backing.ready}`
+                    ? t("count", "nNotReady", { n: backing.notReady })
+                    : t("count", "ofN", { n: backing.ready })
               }
             >
-              {backing.ready + backing.draining} published
+              {t("count", "nPublished", {
+                n: backing.ready + backing.draining,
+              })}
             </Cell>
           )}
         </Column>
@@ -613,18 +626,22 @@ function HostChain({
  * this time somebody believed it.
  */
 function RawMatches({ matches }: { matches: MatchReading[] }) {
+  const t = useT();
   return (
     <div className="mt-1 flex flex-col gap-1.5">
       {matches.map((match, index) => (
         <div key={index} className="border-l-2 border-hair pl-2.5">
           <p className="text-[11px] text-fg-mut">
             {match.refused
-              ? `This match is shown exactly as written, because ${match.refused}.`
-              : `Shown exactly as written: ${match.unread
-                  .map((line) => line.split(":")[0])
-                  .join(", ")} ${
-                  match.unread.length === 1 ? "is" : "are"
-                } not interpreted here.`}
+              ? t("empty", "matchShownAsWrittenBecause", {
+                  reason: match.refused,
+                })
+              : t("empty", "matchFieldsNotInterpreted", {
+                  n: match.unread.length,
+                  list: match.unread
+                    .map((line) => line.split(":")[0])
+                    .join(", "),
+                })}
           </p>
           <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid">
             {match.raw}
@@ -637,11 +654,11 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
 
 // --- findings -----------------------------------------------------------
 
-const STOP_UNDER: Record<ServiceStop["reason"], string> = {
-  backendMissing: "no service to send to",
-  selectsNothing: "selector matches nothing",
-  noneReady: "running, none ready",
-  publishesNothing: "no port to send to",
+const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
+  backendMissing: "stopNoServiceToSendTo",
+  selectsNothing: "stopSelectorMatchesNothing",
+  noneReady: "stopRunningNoneReady",
+  publishesNothing: "stopNoPortToSendTo",
 };
 
 function Findings({
@@ -651,6 +668,7 @@ function Findings({
   group: IstioHostGroup;
   brief?: boolean;
 }) {
+  const t = useT();
   if (group.findings.length === 0) return null;
   const shown = brief ? group.findings.slice(0, 1) : group.findings;
   const hidden = brief ? group.findings.length - 1 : 0;
@@ -658,7 +676,7 @@ function Findings({
   return (
     <div className="flex flex-col gap-2">
       {shown.map((finding, index) => {
-        const said = describeFinding(finding);
+        const said = describeFinding(finding, t);
         return (
           <FindingBlock key={index} tone={finding.severity} title={said.title}>
             {!brief && said.note}
@@ -667,60 +685,77 @@ function Findings({
       })}
       {hidden > 0 && (
         <span className="text-[11px] text-fg-fnt">
-          and {hidden} more — open the row
+          {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
     </div>
   );
 }
 
-function describeFinding(finding: Finding): { title: string; note: string } {
+function describeFinding(
+  finding: Finding,
+  t: ReturnType<typeof useT>
+): { title: string; note: string } {
   switch (finding.kind) {
     case "noGateway": {
       const missing = finding.gateways.filter(
         (gateway) => gateway.gateway === null
       );
       return {
-        title: `No Gateway serves ${finding.host}`,
+        title: t("empty", "istioNoGatewayServes", { host: finding.host }),
         note:
           missing.length > 0
-            ? `${missing
-                .map((gateway) => gateway.named)
-                .join(
-                  ", "
-                )} ${missing.length === 1 ? "is" : "are"} named here and ${missing.length === 1 ? "does" : "do"} not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge — there is no status, no event and no condition anywhere that says so.`
-            : `${finding.gateways
-                .map((gateway) => gateway.named)
-                .join(
-                  ", "
-                )} exist${finding.gateways.length === 1 ? "s" : ""} and no server on ${finding.gateways.length === 1 ? "it" : "them"} covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.`,
+            ? t("empty", "istioGatewaysAbsentNote", {
+                n: missing.length,
+                list: missing.map((gateway) => gateway.named).join(", "),
+              })
+            : t("empty", "istioGatewaysCoverNothingNote", {
+                n: finding.gateways.length,
+                list: finding.gateways
+                  .map((gateway) => gateway.named)
+                  .join(", "),
+              }),
       };
     }
     case "noSubset":
       return {
-        title: `${finding.route.source.name} routes to a subset called ${finding.destination.subset}, and nothing defines it`,
+        title: t("empty", "istioSubsetUndefinedTitle", {
+          name: finding.route.source.name,
+          subset: finding.destination.subset ?? "",
+        }),
         note: finding.anyRule
-          ? `A DestinationRule names ${finding.destination.host} and declares ${
-              finding.defined.length > 0
-                ? `${finding.defined.join(", ")} — not ${finding.destination.subset}`
-                : "no subsets at all"
-            }. Istio has no endpoints to send this route to, and every request on it is answered with a 503.`
-          : `No DestinationRule in this cluster names ${finding.destination.host} at all, so the subset ${finding.destination.subset} is defined nowhere. A subset is a label selector that has to exist before it can be routed to; every request on this route gets a 503.`,
+          ? t("empty", "istioSubsetRuleDeclaresNote", {
+              host: finding.destination.host,
+              declares:
+                finding.defined.length > 0
+                  ? t("empty", "istioSubsetDeclaredNot", {
+                      list: finding.defined.join(", "),
+                      subset: finding.destination.subset ?? "",
+                    })
+                  : t("empty", "istioNoSubsetsAtAll"),
+            })
+          : t("empty", "istioNoRuleNamesHostNote", {
+              host: finding.destination.host,
+              subset: finding.destination.subset ?? "",
+            }),
       };
     case "weights": {
       return {
-        title: `The weights on this rule add up to ${finding.sum}, not 100`,
-        note: `Istio divides a route's traffic by a hundred, so ${
-          finding.sum < 100
-            ? `${100 - finding.sum}% of the requests matching this rule are not covered by any destination it names`
-            : "the shares written here are not the shares that will be served"
-        }. The proportion actually served is not something these objects state.`,
+        title: t("empty", "istioWeightsTitle", { sum: finding.sum }),
+        note: t("empty", "istioWeightsNote", {
+          detail:
+            finding.sum < 100
+              ? t("empty", "istioWeightsUnder", { percent: 100 - finding.sum })
+              : t("empty", "istioWeightsOver"),
+        }),
       };
     }
     case "stop": {
       const said = describeStop(finding.stop);
       return {
-        title: `This route resolves and every request gets a 503 — ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        title: t("empty", "istioRouteResolves503", {
+          detail: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+        }),
         note: said.note,
       };
     }
@@ -746,13 +781,13 @@ function GatewaysTab({
   groups: IstioHostGroup[];
   loading: boolean;
 }) {
-  if (loading) return <p className="text-xs text-fg-fnt">Reading the mesh…</p>;
+  const t = useT();
+  if (loading)
+    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (gateways.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        This cluster has no Gateway objects, so nothing in the mesh is exposed
-        at the edge. Traffic between workloads that have a sidecar still flows,
-        which needs no Gateway.
+        {t("empty", "istioNoGatewayObjects")}
       </p>
     );
   }
@@ -762,7 +797,7 @@ function GatewaysTab({
       <SectionHeader
         title="Gateways"
         count={gateways.length}
-        description="What the mesh listens on at its edge, and which hosts bind to each. A Gateway nothing binds to is a listener with no routes behind it."
+        description={t("empty", "istioGatewaysDescription")}
       />
       <div className="flex flex-col">
         {gateways.map((gateway) => {
@@ -806,17 +841,17 @@ function GatewaysTab({
                         server.hosts?.join(", ") ?? "*"
                       }`
                   )
-                  .join(" · ") || "no servers"}
+                  .join(" · ") || t("empty", "noServers")}
               </span>
               {bound.length === 0 ? (
                 <span className="text-warn">
                   {named.length > 0
-                    ? `${plural(named.length, "host")} names it, none covered`
-                    : "nothing binds to it"}
+                    ? t("count", "hostsNameItNoneCovered", { n: named.length })
+                    : t("empty", "nothingBindsToIt")}
                 </span>
               ) : (
                 <span className="truncate text-fg-mut">
-                  {plural(bound.length, "host")}
+                  {t("count", "hosts", { n: bound.length })}
                 </span>
               )}
             </div>
@@ -847,13 +882,13 @@ function SubsetsTab({
   sources: IstioSources | null;
   loading: boolean;
 }) {
-  if (loading) return <p className="text-xs text-fg-fnt">Reading the mesh…</p>;
+  const t = useT();
+  if (loading)
+    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (rules.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        This cluster has no DestinationRule objects. Every route reaches its
-        Service&rsquo;s pods with no subset in between, which is the ordinary
-        case.
+        {t("empty", "istioNoDestinationRules")}
       </p>
     );
   }
@@ -883,9 +918,9 @@ function SubsetsTab({
       {missing.length > 0 && (
         <Section>
           <SectionHeader
-            title="Routed to, and defined nowhere"
+            title={t("nav", "routedDefinedNowhere")}
             count={missing.length}
-            description="A subset is a label selector that has to exist before a route can name it. Istio accepts the reference and answers every request on that route with a 503."
+            description={t("empty", "istioRoutedDefinedNowhereNote")}
           />
           <div className="flex flex-col">
             {missing.map((destination, index) => (
@@ -904,9 +939,9 @@ function SubsetsTab({
 
       <Section>
         <SectionHeader
-          title="Subsets"
+          title={t("nav", "subsets")}
           count={rules.length}
-          description="Every DestinationRule, the subsets it defines, and whether anything routes to them."
+          description={t("empty", "istioSubsetsDescription")}
         />
         <div className="flex flex-col">
           {rules.map((rule) => {
@@ -942,12 +977,14 @@ function SubsetsTab({
                 <span className="truncate text-fg-mut">
                   {subsets.length === 0 ? (
                     <span className="text-fg-fnt">
-                      no subsets — traffic policy only
+                      {t("empty", "noSubsetsTrafficPolicyOnly")}
                     </span>
                   ) : unused.length === subsets.length ? (
                     <span className="text-warn">
-                      {subsets.join(", ")} — nothing routes to{" "}
-                      {subsets.length === 1 ? "it" : "them"}
+                      {t("count", "subsetsNothingRoutesTo", {
+                        n: subsets.length,
+                        list: subsets.join(", "),
+                      })}
                     </span>
                   ) : (
                     subsets.join(", ")
@@ -959,7 +996,7 @@ function SubsetsTab({
         </div>
         {sources === null && (
           <p className="text-[11px] text-fg-fnt">
-            reading what is behind them…
+            {t("empty", "checkingWhatIsBehind")}
           </p>
         )}
       </Section>

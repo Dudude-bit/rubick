@@ -336,8 +336,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
       // overview rather than being thrown away with the workspace.
       migrate: (persisted) => {
         const state = persisted as
-          | { tabs?: Partial<ScopeTab>[]; activeId?: string }
-          | undefined;
+          { tabs?: Partial<ScopeTab>[]; activeId?: string } | undefined;
         const tabs = (state?.tabs ?? [])
           .filter((tab) => typeof tab?.id === "string")
           .map((tab) =>

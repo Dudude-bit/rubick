@@ -51,6 +51,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { installedObjects } from "@/lib/helm-manifest";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -66,13 +68,13 @@ const INSTALLED_ROW =
  * is off because a wrapped value in a values file is a value nobody can copy
  * a line of.
  */
-function valuesAsYaml(values: unknown): string {
+function valuesAsYaml(values: unknown, empty: string): string {
   if (typeof values === "string") return values;
   if (
     values == null ||
     (typeof values === "object" && Object.keys(values).length === 0)
   ) {
-    return "# No values set — the chart's defaults apply.";
+    return empty;
   }
   try {
     return dump(values, { indent: 2, lineWidth: -1, noRefs: true });
@@ -82,6 +84,7 @@ function valuesAsYaml(values: unknown): string {
 }
 
 export function HelmDetail() {
+  const t = useT();
   const { source, namespace, name } = useParams<{
     source: string;
     namespace: string;
@@ -133,8 +136,8 @@ export function HelmDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Rollback initiated",
-        description: "The release is being rolled back.",
+        title: t("action", "rollbackInitiated"),
+        description: t("action", "rollbackInitiatedDetail"),
       });
       queryClient.invalidateQueries({ queryKey: ["helm-release-detail"] });
       queryClient.invalidateQueries({ queryKey: ["helm-history"] });
@@ -142,7 +145,7 @@ export function HelmDetail() {
     },
     onError: (error) => {
       toast({
-        title: "Rollback failed",
+        title: t("action", "rollbackFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -156,14 +159,14 @@ export function HelmDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Release uninstalled",
-        description: "The Helm release has been successfully uninstalled.",
+        title: t("action", "releaseUninstalled"),
+        description: t("action", "releaseUninstalledDetail"),
       });
       navigate("/helm");
     },
     onError: (error) => {
       toast({
-        title: "Uninstall failed",
+        title: t("action", "uninstallFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -171,17 +174,19 @@ export function HelmDetail() {
   });
 
   const values = useMemo(
-    () => valuesAsYaml(release?.values),
-    [release?.values]
+    () => valuesAsYaml(release?.values, t("empty", "noValuesSet")),
+    [release?.values, t]
   );
-  const manifest = release?.manifest || "# The release stored no manifest.";
+  const manifest = release?.manifest || t("empty", "noStoredManifest");
   const installed = useMemo(
     () => installedObjects(release?.manifest ?? "", release?.namespace ?? ""),
     [release?.manifest, release?.namespace]
   );
 
   if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel="Helm releases" />;
+    return (
+      <ConnectClusterEmptyState resourceLabel={t("empty", "helmReleases")} />
+    );
   }
 
   // Flux owns its releases through a CRD; this page only speaks to Helm's
@@ -189,15 +194,20 @@ export function HelmDetail() {
   if (!isNative) {
     return (
       <Section className="max-w-lg">
-        <SectionHeader title="Managed by Flux" count={`${namespace}/${name}`} />
+        <SectionHeader
+          title={t("action", "managedByFlux")}
+          count={`${namespace}/${name}`}
+        />
         <p className="text-xs text-fg-mut">
-          This release is a Flux CD HelmRelease. Its spec, status and
-          reconciliation history live on the custom resource.
+          {t("empty", "fluxManagedRelease")}
         </p>
         <div className="flex items-center gap-1 pt-1">
-          <DetailAction label="Back to releases" onClick={goBack} />
           <DetailAction
-            label="Open the HelmRelease"
+            label={t("action", "backToReleases")}
+            onClick={goBack}
+          />
+          <DetailAction
+            label={t("action", "openHelmRelease")}
             icon={ExternalLink}
             onClick={() =>
               navigate(fluxHelmReleasePath(namespace ?? "", name ?? ""))
@@ -215,24 +225,32 @@ export function HelmDetail() {
 
   const facts: KeyValue[] = [
     {
-      label: "Chart",
+      label: t("columns", "chart"),
       value: `${release?.chart ?? "—"}:${release?.chartVersion ?? "—"}`,
       mono: true,
     },
-    { label: "App version", value: release?.appVersion || "—", mono: true },
-    { label: "Revision", value: release?.revision ?? "—", mono: true },
     {
-      label: "Last deployed",
+      label: t("columns", "appVersion"),
+      value: release?.appVersion || "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "revision"),
+      value: release?.revision ?? "—",
+      mono: true,
+    },
+    {
+      label: t("columns", "lastDeployed"),
       value: formatDate(release?.lastDeployed) ?? "—",
     },
     {
-      label: "First deployed",
+      label: t("columns", "firstDeployed"),
       value: formatDate(release?.firstDeployed) ?? "—",
     },
     ...(release?.description
       ? [
           {
-            label: "Description",
+            label: t("columns", "description"),
             value: release.description,
             tone: failed ? ("err" as const) : undefined,
           },
@@ -243,14 +261,18 @@ export function HelmDetail() {
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
-          <KeyValueSection title="Release" items={facts} className="max-w-lg" />
+          <KeyValueSection
+            title={t("action", "releaseHeading")}
+            items={facts}
+            className="max-w-lg"
+          />
           {!helmCliAvailable && (
             <p className="text-[11px] text-warn">
-              Helm CLI not found — rollback and uninstall are unavailable.
+              {t("empty", "helmCliMissing")}
             </p>
           )}
         </>
@@ -258,35 +280,40 @@ export function HelmDetail() {
     },
     {
       id: "history",
-      label: "History",
+      label: t("action", "history"),
       glyph: viewGlyph(History),
       mark: countMark(history.length),
       content: (
         <Section>
           <SectionHeader
-            title="Revisions"
+            title={t("action", "revisionsHeading")}
             count={
               failedRevisions > 0
-                ? `${history.length} · ${failedRevisions} failed`
+                ? t("count", "withFailed", {
+                    total: history.length,
+                    n: failedRevisions,
+                  })
                 : history.length || undefined
             }
           />
           {historyLoading ? (
-            <p className="text-xs text-fg-fnt">Reading history…</p>
+            <p className="text-xs text-fg-fnt">
+              {t("empty", "readingHistory")}
+            </p>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No history — Helm keeps none for this release.
+              <T section="empty" k="noHelmHistory" />
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Rev</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Chart</TableHead>
-                  <TableHead>App</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>{t("columns", "rev")}</TableHead>
+                  <TableHead>{t("columns", "status")}</TableHead>
+                  <TableHead>{t("columns", "chart")}</TableHead>
+                  <TableHead>{t("columns", "app")}</TableHead>
+                  <TableHead>{t("columns", "updated")}</TableHead>
+                  <TableHead>{t("columns", "description")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -326,7 +353,7 @@ export function HelmDetail() {
                         <span className="flex justify-end">
                           {!current && helmCliAvailable && (
                             <DetailAction
-                              label="Roll back"
+                              label={t("action", "rollBack")}
                               icon={RotateCcw}
                               onClick={() => setRollbackTarget(rev.revision)}
                             />
@@ -344,18 +371,18 @@ export function HelmDetail() {
     },
     {
       id: "resources",
-      label: "Resources",
+      label: t("action", "paletteResources"),
       glyph: viewGlyph(Boxes),
       mark: countMark(installed.length),
       content: (
         <Section>
           <SectionHeader
-            title="Installed by this release"
+            title={t("action", "installedByRelease")}
             count={installed.length || undefined}
           />
           {installed.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              The stored manifest declares no objects.
+              {t("empty", "manifestDeclaresNoObjects")}
             </p>
           ) : (
             <div>
@@ -393,29 +420,35 @@ export function HelmDetail() {
     },
     {
       id: "values",
-      label: "Values",
+      label: t("action", "valuesTab"),
       glyph: viewGlyph(SlidersHorizontal),
       kind: "surface",
       content: (
         <YamlTabContent
-          title={`Values of ${release?.name ?? name ?? ""}`}
+          title={t("action", "valuesOf", { name: release?.name ?? name ?? "" })}
           yaml={values}
-          note="what this release overrides in the chart"
-          onCopy={() => copyToClipboard(values, "Release values copied.")}
+          note={t("action", "valuesNote")}
+          onCopy={() =>
+            copyToClipboard(values, t("action", "releaseValuesCopied"))
+          }
         />
       ),
     },
     {
       id: "manifest",
-      label: "Manifest",
+      label: t("action", "manifestTab"),
       glyph: viewGlyph(ScrollText),
       kind: "surface",
       content: (
         <YamlTabContent
-          title={`Manifest of ${release?.name ?? name ?? ""}`}
+          title={t("action", "manifestOf", {
+            name: release?.name ?? name ?? "",
+          })}
           yaml={manifest}
-          note="what the chart actually applied"
-          onCopy={() => copyToClipboard(manifest, "Rendered manifest copied.")}
+          note={t("action", "manifestNote")}
+          onCopy={() =>
+            copyToClipboard(manifest, t("action", "renderedManifestCopied"))
+          }
         />
       ),
     },
@@ -423,14 +456,14 @@ export function HelmDetail() {
       ? [
           {
             id: "notes",
-            label: "Notes",
+            label: t("action", "notesHeading"),
             glyph: viewGlyph(StickyNote),
             // Not a surface: NOTES.txt is usually four lines, and a pane
             // stretched to the window would be one sentence over a page of
             // canvas.
             content: (
               <Section>
-                <SectionHeader title="Notes" />
+                <SectionHeader title={t("action", "notesHeading")} />
                 <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap border-t border-hair pt-2 font-mono text-xs text-fg-mid">
                   {release.notes}
                 </pre>
@@ -465,7 +498,7 @@ export function HelmDetail() {
                 {release.chart}:{release.chartVersion}
               </span>
               <span className="text-[11px] text-fg-fnt">
-                rev {release.revision}
+                {t("columns", "revisionInline", { n: release.revision })}
               </span>
             </>
           )
@@ -474,7 +507,7 @@ export function HelmDetail() {
         actions={
           <>
             <DetailAction
-              label="Refresh"
+              label={t("action", "refresh")}
               icon={RefreshCw}
               onClick={() => refetch()}
               busy={isFetching}
@@ -482,13 +515,13 @@ export function HelmDetail() {
             {helmCliAvailable && release && (
               <>
                 <DetailAction
-                  label="Roll back"
+                  label={t("action", "rollBack")}
                   icon={RotateCcw}
                   onClick={() => setRollbackTarget(release.revision - 1)}
                   disabled={release.revision <= 1}
                 />
                 <DetailAction
-                  label="Uninstall"
+                  label={t("action", "uninstall")}
                   icon={Trash2}
                   onClick={() => setShowUninstall(true)}
                   danger
@@ -507,9 +540,12 @@ export function HelmDetail() {
         onOpenChange={(open) => {
           if (!open) setRollbackTarget(null);
         }}
-        title="Roll back release?"
-        description={`"${release?.name}" will be rolled back to revision ${rollbackTarget}.`}
-        confirmLabel="Roll back"
+        title={t("action", "rollBackReleaseQuestion")}
+        description={t("action", "rollBackReleaseDetail", {
+          name: release?.name ?? "",
+          revision: rollbackTarget ?? 0,
+        })}
+        confirmLabel={t("action", "rollBack")}
         confirmVariant="default"
         confirmDisabled={rollbackMutation.isPending}
         onConfirm={() => {
@@ -522,10 +558,13 @@ export function HelmDetail() {
       <DangerousConfirmDialog
         open={showUninstall}
         onOpenChange={setShowUninstall}
-        title="Uninstall release"
-        description={`This permanently deletes the Helm release "${release?.name}" and every resource it created in namespace "${release?.namespace}". This cannot be undone.`}
+        title={t("action", "uninstallRelease")}
+        description={t("action", "uninstallReleaseDetail", {
+          name: release?.name ?? "",
+          namespace: release?.namespace ?? "",
+        })}
         confirmationText={release?.name ?? ""}
-        confirmLabel="Uninstall"
+        confirmLabel={t("action", "uninstall")}
         isLoading={uninstallMutation.isPending}
         onConfirm={() => uninstallMutation.mutate()}
       />

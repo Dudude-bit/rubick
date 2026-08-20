@@ -19,8 +19,10 @@ import {
 } from "@/stores/registryStore";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
 
 export function RegistrySettings() {
+  const t = useT();
   const { toast } = useToast();
   const registries = useRegistryStore((state) => state.registries);
   const selectedRegistryId = useRegistryStore(
@@ -66,7 +68,7 @@ export function RegistrySettings() {
   const handleRegistrySave = async () => {
     const labelValue = newRegistryLabel.trim();
     if (newRegistryProvider === "docker-hub") {
-      setRegistryEditorError("Docker Hub is already available.");
+      setRegistryEditorError(t("settings", "dockerHubAlreadyAvailable"));
       return;
     }
     if (
@@ -75,7 +77,7 @@ export function RegistrySettings() {
     ) {
       const urlValue = newRegistryUrl.trim();
       if (!urlValue) {
-        setRegistryEditorError("Registry URL is required.");
+        setRegistryEditorError(t("settings", "registryUrlRequired"));
         return;
       }
       const baseUrl = ensureRegistryUrl(urlValue);
@@ -116,7 +118,7 @@ export function RegistrySettings() {
       const accountId = newRegistryAccountId.trim();
       const region = newRegistryRegion.trim();
       if (!accountId || !region) {
-        setRegistryEditorError("ECR account ID and region are required.");
+        setRegistryEditorError(t("settings", "ecrFieldsRequired"));
         return;
       }
       await addRegistry({
@@ -176,8 +178,8 @@ export function RegistrySettings() {
       const entries = await commands.importDockerConfig();
       if (!entries.length) {
         toast({
-          title: "Docker config import",
-          description: "No registries found in the Docker config.",
+          title: t("settings", "dockerConfigImportTitle"),
+          description: t("settings", "noRegistriesInDockerConfig"),
         });
         return;
       }
@@ -241,12 +243,15 @@ export function RegistrySettings() {
       await refreshRegistries();
 
       toast({
-        title: "Docker config imported",
-        description: `Added ${added}, updated ${updated} registries with credentials.`,
+        title: t("settings", "dockerConfigImported"),
+        description: t("settings", "dockerConfigImportSummary", {
+          added,
+          updated,
+        }),
       });
     } catch (error) {
       toast({
-        title: "Import failed",
+        title: t("settings", "importFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -275,9 +280,9 @@ export function RegistrySettings() {
       await updateRegistry(selectedRegistryId, updates);
       setEditPassword("");
       setEditToken("");
-      setAuthStatusMessage("Credentials saved.");
+      setAuthStatusMessage(t("settings", "credentialsSaved"));
     } catch {
-      setAuthStatusMessage("Failed to save credentials.");
+      setAuthStatusMessage(t("settings", "credentialsSaveFailed"));
     }
   };
 
@@ -292,9 +297,9 @@ export function RegistrySettings() {
       });
       setEditPassword("");
       setEditToken("");
-      setAuthStatusMessage("Credentials cleared.");
+      setAuthStatusMessage(t("settings", "credentialsCleared"));
     } catch {
-      setAuthStatusMessage("Failed to clear credentials.");
+      setAuthStatusMessage(t("settings", "credentialsClearFailed"));
     }
   };
 
@@ -305,13 +310,13 @@ export function RegistrySettings() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[220px] flex-1 space-y-1.5">
-            <Label>Registry</Label>
+            <Label>{t("settings", "registryLabel")}</Label>
             <Select
               value={selectedRegistryId}
               onValueChange={setSelectedRegistryId}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select registry" />
+                <SelectValue placeholder={t("settings", "selectRegistry")} />
               </SelectTrigger>
               <SelectContent>
                 {registries.map((registry) => (
@@ -323,7 +328,7 @@ export function RegistrySettings() {
             </Select>
           </div>
           <Button type="button" variant="outline" onClick={handleRegistryOpen}>
-            Add registry
+            {t("action", "addRegistry")}
           </Button>
           <Button
             type="button"
@@ -331,7 +336,7 @@ export function RegistrySettings() {
             onClick={() => removeRegistry(selectedRegistryId)}
             disabled={selectedRegistryId === "docker-hub"}
           >
-            Remove
+            {t("action", "remove")}
           </Button>
           <Button
             type="button"
@@ -339,20 +344,22 @@ export function RegistrySettings() {
             onClick={handleImportDockerConfig}
             disabled={importing}
           >
-            {importing ? "Importing..." : "Import Docker config"}
+            {importing
+              ? t("settings", "importing")
+              : t("settings", "importDockerConfig")}
           </Button>
         </div>
 
         <p className="text-xs text-fg-mut">
-          Docker config import reads ~/.docker/config.json (or
-          %USERPROFILE%\\.docker\\config.json on Windows). Credential helpers
-          are not imported.
+          {t("settings", "dockerConfigNote")}
         </p>
 
         {showRegistryEditor && (
           <div className="space-y-2 border-t border-hair pt-3">
             <div className="space-y-1">
-              <Label className="text-xs text-fg-mut">Provider</Label>
+              <Label className="text-xs text-fg-mut">
+                {t("settings", "registryProvider")}
+              </Label>
               <Select
                 value={newRegistryProvider}
                 onValueChange={(value) =>
@@ -360,7 +367,7 @@ export function RegistrySettings() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select provider" />
+                  <SelectValue placeholder={t("settings", "selectProvider")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="registry-v2">Registry V2</SelectItem>
@@ -371,9 +378,11 @@ export function RegistrySettings() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-fg-mut">Display name</Label>
+              <Label className="text-xs text-fg-mut">
+                {t("settings", "displayName")}
+              </Label>
               <Input
-                placeholder="My private registry"
+                placeholder={t("settings", "registryLabelPlaceholder")}
                 value={newRegistryLabel}
                 onChange={(event) => setNewRegistryLabel(event.target.value)}
               />
@@ -381,7 +390,9 @@ export function RegistrySettings() {
             {(newRegistryProvider === "registry-v2" ||
               newRegistryProvider === "harbor") && (
               <div className="space-y-1">
-                <Label className="text-xs text-fg-mut">Registry URL</Label>
+                <Label className="text-xs text-fg-mut">
+                  {t("settings", "registryUrl")}
+                </Label>
                 <Input
                   placeholder="registry.example.com"
                   value={newRegistryUrl}
@@ -392,7 +403,7 @@ export function RegistrySettings() {
             {newRegistryProvider === "harbor" && (
               <div className="space-y-1">
                 <Label className="text-xs text-fg-mut">
-                  Project (optional)
+                  {t("settings", "projectOptional")}
                 </Label>
                 <Input
                   placeholder="project-name"
@@ -406,7 +417,9 @@ export function RegistrySettings() {
             {newRegistryProvider === "gcr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Host</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("columns", "host")}
+                  </Label>
                   <Input
                     placeholder="gcr.io"
                     value={newRegistryHost}
@@ -415,7 +428,7 @@ export function RegistrySettings() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-fg-mut">
-                    Project (optional)
+                    {t("settings", "projectOptional")}
                   </Label>
                   <Input
                     placeholder="my-gcp-project"
@@ -430,7 +443,9 @@ export function RegistrySettings() {
             {newRegistryProvider === "ecr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Account ID</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("settings", "accountId")}
+                  </Label>
                   <Input
                     placeholder="123456789012"
                     value={newRegistryAccountId}
@@ -440,7 +455,9 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Region</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("settings", "region")}
+                  </Label>
                   <Input
                     placeholder="us-east-1"
                     value={newRegistryRegion}
@@ -456,7 +473,7 @@ export function RegistrySettings() {
             )}
             <div className="flex items-center gap-2">
               <Button type="button" size="sm" onClick={handleRegistrySave}>
-                Save
+                {t("action", "save")}
               </Button>
               <Button
                 type="button"
@@ -464,7 +481,7 @@ export function RegistrySettings() {
                 size="sm"
                 onClick={handleRegistryCancel}
               >
-                Cancel
+                {t("action", "cancel")}
               </Button>
             </div>
           </div>
@@ -473,7 +490,9 @@ export function RegistrySettings() {
         {selectedRegistry.id !== "docker-hub" && (
           <div className="space-y-2 border-t border-hair pt-3">
             <div className="space-y-1">
-              <Label className="text-xs text-fg-mut">Display name</Label>
+              <Label className="text-xs text-fg-mut">
+                {t("settings", "displayName")}
+              </Label>
               <Input
                 value={selectedRegistry.label}
                 onChange={(event) =>
@@ -486,7 +505,9 @@ export function RegistrySettings() {
             {(selectedRegistry.provider === "registry-v2" ||
               selectedRegistry.provider === "harbor") && (
               <div className="space-y-1">
-                <Label className="text-xs text-fg-mut">Registry URL</Label>
+                <Label className="text-xs text-fg-mut">
+                  {t("settings", "registryUrl")}
+                </Label>
                 <Input
                   placeholder="registry.example.com"
                   value={selectedRegistry.baseUrl ?? ""}
@@ -501,7 +522,7 @@ export function RegistrySettings() {
             {selectedRegistry.provider === "harbor" && (
               <div className="space-y-1">
                 <Label className="text-xs text-fg-mut">
-                  Project (optional)
+                  {t("settings", "projectOptional")}
                 </Label>
                 <Input
                   placeholder="project-name"
@@ -517,7 +538,9 @@ export function RegistrySettings() {
             {selectedRegistry.provider === "gcr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Host</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("columns", "host")}
+                  </Label>
                   <Input
                     placeholder="gcr.io"
                     value={selectedRegistry.host ?? ""}
@@ -530,7 +553,7 @@ export function RegistrySettings() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-fg-mut">
-                    Project (optional)
+                    {t("settings", "projectOptional")}
                   </Label>
                   <Input
                     placeholder="my-gcp-project"
@@ -547,7 +570,9 @@ export function RegistrySettings() {
             {selectedRegistry.provider === "ecr" && (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Account ID</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("settings", "accountId")}
+                  </Label>
                   <Input
                     placeholder="123456789012"
                     value={selectedRegistry.accountId ?? ""}
@@ -559,7 +584,9 @@ export function RegistrySettings() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-fg-mut">Region</Label>
+                  <Label className="text-xs text-fg-mut">
+                    {t("settings", "region")}
+                  </Label>
                   <Input
                     placeholder="us-east-1"
                     value={selectedRegistry.region ?? ""}
@@ -577,7 +604,9 @@ export function RegistrySettings() {
 
         <div className="space-y-2 border-t border-hair pt-3">
           <div className="space-y-1">
-            <Label className="text-xs text-fg-mut">Auth</Label>
+            <Label className="text-xs text-fg-mut">
+              {t("settings", "auth")}
+            </Label>
             <Select
               value={selectedRegistry.authType}
               onValueChange={(nextValue) =>
@@ -587,10 +616,10 @@ export function RegistrySettings() {
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select auth" />
+                <SelectValue placeholder={t("settings", "selectAuth")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="none">{t("empty", "none")}</SelectItem>
                 <SelectItem value="basic">Basic</SelectItem>
                 <SelectItem value="bearer">Bearer token</SelectItem>
               </SelectContent>
@@ -599,7 +628,7 @@ export function RegistrySettings() {
           {selectedRegistry.authType === "basic" && (
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
-                placeholder="Username"
+                placeholder={t("settings", "username")}
                 value={selectedRegistry.username ?? ""}
                 onChange={(event) =>
                   updateRegistry(selectedRegistryId, {
@@ -609,7 +638,7 @@ export function RegistrySettings() {
               />
               <Input
                 type="password"
-                placeholder="Password"
+                placeholder={t("settings", "password")}
                 value={editPassword}
                 onChange={(event) => setEditPassword(event.target.value)}
               />
@@ -618,7 +647,7 @@ export function RegistrySettings() {
           {selectedRegistry.authType === "bearer" && (
             <Input
               type="password"
-              placeholder="Token"
+              placeholder={t("settings", "token")}
               value={editToken}
               onChange={(event) => setEditToken(event.target.value)}
             />
@@ -629,8 +658,10 @@ export function RegistrySettings() {
               <div className="text-xs text-fg-mut">
                 {selectedRegistry.authType === "basic" &&
                 selectedRegistry.username
-                  ? `Saved: ${selectedRegistry.username}`
-                  : "Credentials configured"}
+                  ? t("settings", "savedAs", {
+                      username: selectedRegistry.username,
+                    })
+                  : t("settings", "credentialsConfigured")}
               </div>
             )}
           <div className="flex flex-wrap gap-2">
@@ -640,7 +671,7 @@ export function RegistrySettings() {
               onClick={handleAuthSave}
               disabled={selectedRegistry.authType === "none"}
             >
-              Save credentials
+              {t("action", "saveCredentials")}
             </Button>
             <Button
               type="button"
@@ -648,7 +679,7 @@ export function RegistrySettings() {
               size="sm"
               onClick={handleAuthClear}
             >
-              Clear
+              {t("action", "clear")}
             </Button>
           </div>
           {authStatusMessage && (

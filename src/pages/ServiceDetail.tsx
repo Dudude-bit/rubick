@@ -31,8 +31,10 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { publishedFor } from "@/lib/published";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function ServiceDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -67,43 +69,51 @@ export function ServiceDetail() {
   const loadBalancerIps = service?.loadBalancerIps ?? [];
 
   const facts: KeyValue[] = [
-    { label: "Type", value: service?.type },
+    { label: t("columns", "type"), value: service?.type },
     // A headless service has no cluster IP at all; "None" is the API's own
     // word for it and means something different from "not assigned yet".
     {
-      label: "Cluster IP",
+      label: t("columns", "clusterIp"),
       value: (
         <CopyableAddress
           value={service?.clusterIp}
-          label="Cluster IP"
+          label={t("columns", "clusterIp")}
           fallback="None"
         />
       ),
     },
     {
-      label: "External IPs",
-      value: <CopyableAddresses values={externalIps} label="External IP" />,
+      label: t("columns", "externalIps"),
+      value: (
+        <CopyableAddresses
+          values={externalIps}
+          label={t("columns", "externalIp")}
+        />
+      ),
     },
     ...(service?.type === "LoadBalancer"
       ? [
           {
-            label: "Load balancer",
+            label: t("columns", "loadBalancer"),
             // The empty state keeps its own tone, so it stays plain text
             // rather than the component's faint fallback.
             value:
               loadBalancerIps.length > 0 ? (
                 <CopyableAddresses
                   values={loadBalancerIps}
-                  label="Load balancer address"
+                  label={t("columns", "loadBalancerAddress")}
                 />
               ) : (
-                "pending"
+                t("empty", "pendingInline")
               ),
             tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
           },
         ]
       : []),
-    { label: "Session affinity", value: service?.sessionAffinity || "None" },
+    {
+      label: t("columns", "sessionAffinity"),
+      value: service?.sessionAffinity || "None",
+    },
   ];
 
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
@@ -111,7 +121,7 @@ export function ServiceDetail() {
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -123,33 +133,35 @@ export function ServiceDetail() {
     },
     {
       id: "access",
-      label: "Access",
+      label: t("nav", "access"),
       glyph: viewGlyph(ExternalLink),
       content: service ? <ServiceAccessInfo service={service} /> : null,
     },
     connectionsTab(connections, deliveryQuery),
     {
       id: "ports",
-      label: "Ports",
+      label: t("columns", "ports"),
       glyph: viewGlyph(Plug),
       mark: countMark(ports.length),
       content: (
         <Section>
-          <SectionHeader title="Ports" count={ports.length} />
+          <SectionHeader
+            title={t("columns", "ports")}
+            count={ports.length || undefined}
+          />
           {ports.length === 0 ? (
             <p className="text-xs text-fg-fnt">
-              No ports declared, so this Service accepts no traffic — nothing
-              reaches the pods its selector matches.
+              {t("empty", "noPortsDeclared")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Port</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Node port</TableHead>
-                  <TableHead>Protocol</TableHead>
+                  <TableHead>{t("columns", "name")}</TableHead>
+                  <TableHead>{t("columns", "port")}</TableHead>
+                  <TableHead>{t("columns", "target")}</TableHead>
+                  <TableHead>{t("columns", "nodePort")}</TableHead>
+                  <TableHead>{t("columns", "protocol")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -180,14 +192,14 @@ export function ServiceDetail() {
     },
     {
       id: "selector",
-      label: "Selector",
+      label: t("nav", "selector"),
       glyph: viewGlyph(Filter),
       content: (
         <KeyValueSection
-          title="Pod selector"
+          title={t("nav", "podSelector")}
           count={Object.keys(service?.selector ?? {}).length}
           items={recordToKeyValues(service?.selector ?? {})}
-          emptyMessage="No selector — this service does not pick pods by label"
+          emptyMessage={t("empty", "noSelectorService")}
         />
       ),
     },
@@ -205,21 +217,21 @@ export function ServiceDetail() {
     },
     {
       id: "labels",
-      label: "Metadata",
+      label: t("nav", "metadata"),
       glyph: viewGlyph(Tag),
       content: (
         <>
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(service?.labels ?? {}).length}
             items={recordToKeyValues(service?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(service?.annotations ?? {}).length}
             items={recordToKeyValues(service?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),

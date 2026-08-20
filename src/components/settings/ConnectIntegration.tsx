@@ -39,6 +39,16 @@ import type {
   InClusterHint,
   ProbeResult,
 } from "@/integrations";
+import { useT } from "@/i18n/useT";
+import { commands } from "@/lib/commands";
+import type { ServiceInfo } from "@/generated/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function ConnectIntegration({
   vendorId,
@@ -89,6 +99,7 @@ function ConnectForm({
   gives: string;
   onDone: () => void;
 }) {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   const remember = useClusterForwardStore((state) => state.remember);
   const setAutoStart = useClusterForwardStore((state) => state.setAutoStart);
@@ -130,15 +141,14 @@ function ConnectForm({
       <DialogHeader>
         <DialogTitle>{vendorName}</DialogTitle>
         <DialogDescription>
-          One address per cluster, because a {vendorName} is per cluster —
-          staging&rsquo;s is not production&rsquo;s. Gives {gives}.
+          {t("settings", "oneAddressPerCluster", { vendor: vendorName, gives })}
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-col gap-3 py-1">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="integration-url" className="text-xs text-fg-mut">
-            Address
+            {t("columns", "address")}
           </Label>
           <Input
             id="integration-url"
@@ -154,11 +164,19 @@ function ConnectForm({
               that works from inside the cluster resolves to nothing here, and
               that is the commonest way to get this field wrong. */}
           <p className="text-[11px] text-fg-fnt">
-            Asked from this machine, not from inside the cluster — so a
-            cluster-internal name like{" "}
-            <span className="font-mono">prometheus.monitoring</span> will not
-            resolve. Give an address that reaches it from here, or let the app
-            forward a port to it.
+            {/* One sentence in the catalogue, split here rather than there:
+                a translator moves the example wherever their word order wants
+                it, and the monospace still lands on it. */}
+            {splitAround(t("settings", "addressIsFromHere"), "{example}").map(
+              (part, i) =>
+                i === 1 ? (
+                  <span key="example" className="font-mono">
+                    prometheus.monitoring
+                  </span>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+            )}
           </p>
         </div>
 
@@ -175,6 +193,10 @@ function ConnectForm({
                   service: picked.service,
                   remotePort: picked.remotePort,
                   localPort: picked.localPort,
+                  // Carried, so waking this forward tomorrow rebuilds the
+                  // same address — an API under /prometheus is not reachable
+                  // at the port alone.
+                  subpath: picked.subpath,
                   // Off until asked for: a forward is a socket on this
                   // machine and a connection into the cluster, and neither is
                   // started on somebody's behalf because they pressed a
@@ -196,16 +218,30 @@ function ConnectForm({
               className="mt-0.5"
             />
             <span>
-              Open the tunnel when I switch to this cluster
+              {t("settings", "openTunnelOnSwitch")}
               <span className="mt-0.5 block text-[11px] text-fg-fnt">
-                Forwarding{" "}
-                <span className="font-mono">
-                  {saved.namespace}/{saved.service}:{saved.remotePort}
-                </span>{" "}
-                to{" "}
-                <span className="font-mono">localhost:{saved.localPort}</span>.
-                Left off, the row stays in the sidebar and pressing it opens the
-                tunnel — kept per cluster, on this machine only.
+                {splitAround(
+                  t("settings", "forwardingTunnelNote"),
+                  "{target}"
+                ).map((part, i) =>
+                  i === 1 ? (
+                    <span key="target" className="font-mono">
+                      {saved.namespace}/{saved.service}:{saved.remotePort}
+                    </span>
+                  ) : (
+                    <React.Fragment key={i}>
+                      {splitAround(part, "{local}").map((sub, j) =>
+                        j === 1 ? (
+                          <span key="local" className="font-mono">
+                            localhost:{saved.localPort}
+                          </span>
+                        ) : (
+                          <span key={j}>{sub}</span>
+                        )
+                      )}
+                    </React.Fragment>
+                  )
+                )}
               </span>
             </span>
           </label>
@@ -216,13 +252,13 @@ function ConnectForm({
             checked={bearer}
             onCheckedChange={(value) => setBearer(value === true)}
           />
-          Send a bearer token
+          {t("settings", "sendBearerToken")}
         </label>
 
         {bearer && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="integration-token" className="text-xs text-fg-mut">
-              Token
+              {t("settings", "token")}
             </Label>
             <Input
               id="integration-token"
@@ -231,8 +267,8 @@ function ConnectForm({
               autoComplete="off"
               placeholder={
                 editor.saved?.hasToken
-                  ? "unchanged — type to replace it"
-                  : "pasted here, kept out of this window afterwards"
+                  ? t("settings", "tokenUnchangedPlaceholder")
+                  : t("settings", "tokenNewPlaceholder")
               }
               onChange={(event) => setToken(event.target.value)}
               className="font-mono text-xs"
@@ -240,9 +276,7 @@ function ConnectForm({
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
             <p className="text-[11px] leading-snug text-fg-fnt">
-              Stored in this app&rsquo;s config file in plain text, beside the
-              registry passwords it already keeps there, and sent only from the
-              backend — it is never handed back to this window.
+              {t("settings", "tokenStorageNote")}
             </p>
           </div>
         )}
@@ -252,7 +286,7 @@ function ConnectForm({
             checked={insecure}
             onCheckedChange={(value) => setInsecure(value === true)}
           />
-          Accept a certificate this machine does not trust
+          {t("settings", "acceptUntrustedCert")}
         </label>
 
         {tested && <TestResult result={tested} />}
@@ -270,7 +304,7 @@ function ConnectForm({
               }}
               className="text-err hover:text-err"
             >
-              Disconnect
+              {t("action", "disconnect")}
             </Button>
           )}
         </div>
@@ -281,14 +315,14 @@ function ConnectForm({
             onClick={test}
             disabled={testing || url.trim() === ""}
           >
-            {testing ? "Testing…" : "Test"}
+            {testing ? t("action", "testing") : t("action", "test")}
           </Button>
           <Button
             size="sm"
             onClick={save}
             disabled={editor.isSaving || url.trim() === ""}
           >
-            Save
+            {t("action", "save")}
           </Button>
         </div>
       </DialogFooter>
@@ -310,7 +344,8 @@ function ConnectForm({
  * for the reader would be this app guessing which of their monitoring stacks
  * they meant.
  */
-function InCluster({
+/** Exported for its own test: the dialog around it needs a live cluster. */
+export function InCluster({
   hint,
   vendorName,
   onPicked,
@@ -319,6 +354,7 @@ function InCluster({
   vendorName: string;
   onPicked: (forwarded: Forwarded) => void;
 }) {
+  const t = useT();
   const [looking, setLooking] = React.useState(false);
   const [found, setFound] = React.useState<Candidate[] | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -358,14 +394,14 @@ function InCluster({
         disabled={looking}
         className="self-start text-xs"
       >
-        {looking ? "Looking…" : `Find ${vendorName} in this cluster`}
+        {looking
+          ? t("settings", "lookingEllipsis")
+          : t("settings", "findVendorInCluster", { vendor: vendorName })}
       </Button>
 
       {found !== null && found.length === 0 && (
         <p className="text-[11px] text-fg-fnt">
-          No Service in this cluster is labelled or named for {vendorName}. If
-          it is here under another name, forward it yourself and give the
-          address above.
+          {t("settings", "noServiceForVendor", { vendor: vendorName })}
         </p>
       )}
 
@@ -384,29 +420,203 @@ function InCluster({
               <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
             </span>
             <span className="flex-none text-[11px] text-fg-fnt">
-              {busy === key ? "forwarding…" : candidate.because}
+              {busy === key
+                ? t("settings", "forwardingEllipsis")
+                : candidate.because}
             </span>
           </button>
         );
       })}
+
+      <ByHand hint={hint} onPicked={onPicked} onFailed={setFailed} />
 
       {failed && <p className="text-[11px] text-err">{failed}</p>}
     </div>
   );
 }
 
+/**
+ * Point at a Service this app did not recognise.
+ *
+ * The search above matches a Service by the vendor's own name and label,
+ * which is right for the thing it names and useless for everything that
+ * merely speaks its API — a VictoriaMetrics is called `vmsingle`, wears no
+ * Prometheus label, listens on 8428 and answers the same queries (#71).
+ *
+ * So: any Service in the cluster, any of its ports, and the subpath the API
+ * sits under. Namespace, Service and port are chosen from what the cluster
+ * actually has rather than typed, because three of the four fields are facts
+ * this app already holds and a typo in them is a connection that fails with
+ * nothing to point at. Only the subpath is typed, because only the subpath is
+ * something the cluster cannot tell us.
+ */
+function ByHand({
+  hint,
+  onPicked,
+  onFailed,
+}: {
+  hint: InClusterHint;
+  onPicked: (forwarded: Forwarded) => void;
+  onFailed: (message: string | null) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = React.useState(false);
+  const [services, setServices] = React.useState<ServiceInfo[] | null>(null);
+  const [chosen, setChosen] = React.useState("");
+  const [port, setPort] = React.useState("");
+  const [subpath, setSubpath] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const service = services?.find(
+    (candidate) => `${candidate.namespace}/${candidate.name}` === chosen
+  );
+
+  const reveal = async () => {
+    setOpen(true);
+    onFailed(null);
+    if (services !== null) return;
+    try {
+      setServices(await commands.listServices(null));
+    } catch (error) {
+      onFailed(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const go = async () => {
+    if (!service) return;
+    setBusy(true);
+    onFailed(null);
+    try {
+      onPicked(await forward(service, [Number(port)], undefined, subpath));
+    } catch (error) {
+      onFailed(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => void reveal()}
+        className="self-start text-[11px] text-fg-fnt underline underline-offset-2 hover:text-fg"
+      >
+        {t("settings", "pointAtServiceYourself")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded border border-hair p-2">
+      <p className="text-[11px] text-fg-fnt">
+        {t("settings", "pointAtServiceHint")}
+      </p>
+
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="integration-service" className="text-xs text-fg-mut">
+          {t("settings", "serviceLabel")}
+        </Label>
+        <Select
+          value={chosen}
+          onValueChange={(value) => {
+            setChosen(value);
+            setPort("");
+          }}
+        >
+          <SelectTrigger id="integration-service" className="h-7 text-xs">
+            <SelectValue placeholder={t("settings", "chooseService")} />
+          </SelectTrigger>
+          <SelectContent>
+            {(services ?? []).map((candidate) => (
+              <SelectItem
+                key={`${candidate.namespace}/${candidate.name}`}
+                value={`${candidate.namespace}/${candidate.name}`}
+              >
+                {candidate.namespace}/{candidate.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="integration-port" className="text-xs text-fg-mut">
+          {t("settings", "portLabel")}
+        </Label>
+        <Select value={port} onValueChange={setPort} disabled={!service}>
+          <SelectTrigger id="integration-port" className="h-7 text-xs">
+            <SelectValue placeholder={t("settings", "choosePort")} />
+          </SelectTrigger>
+          <SelectContent>
+            {(service?.ports ?? []).map((exposed) => (
+              <SelectItem key={exposed.port} value={String(exposed.port)}>
+                {exposed.port}
+                {exposed.name ? ` · ${exposed.name}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        {/* The hint sits outside the label: inside it, the accessible name of
+            the field becomes the whole paragraph. */}
+        <label htmlFor="integration-subpath" className="text-xs text-fg-mut">
+          {t("settings", "subpathLabel")}
+        </label>
+        <Input
+          id="integration-subpath"
+          value={subpath}
+          onChange={(event) => setSubpath(event.target.value)}
+          placeholder={hint.subpathExample ?? "/prometheus"}
+          className="h-7 font-mono text-xs"
+        />
+        <span className="text-[11px] text-fg-fnt">
+          {t("settings", "subpathHint")}
+        </span>
+      </div>
+
+      <Button
+        size="sm"
+        onClick={() => void go()}
+        disabled={!service || !port || busy}
+        className="self-start text-xs"
+      >
+        {busy
+          ? t("settings", "forwardingEllipsis")
+          : t("settings", "forwardIt")}
+      </Button>
+    </div>
+  );
+}
+
 function TestResult({ result }: { result: ProbeResult }) {
+  const t = useT();
   if (result.ok) {
     return (
       <p className="text-[11px] text-ok" role="status">
-        Answered in {result.latencyMs}ms
+        {t("settings", "probeAnswered", { ms: result.latencyMs })}
         {result.version ? ` · ${result.version}` : ""}
       </p>
     );
   }
   return (
     <p className="text-[11px] text-err" role="status">
-      Did not answer — {result.reason}
+      {t("settings", "probeDidNotAnswer", { reason: result.reason })}
     </p>
   );
+}
+
+/**
+ * A sentence kept whole in the catalogue, cut where it is rendered.
+ *
+ * The alternative is two half-sentences either side of a styled span, and a
+ * language that puts the example first has nowhere to put it. One string with
+ * a placeholder travels; the cut happens here.
+ */
+function splitAround(text: string, token: string): string[] {
+  const at = text.indexOf(token);
+  if (at < 0) return [text];
+  return [text.slice(0, at), token, text.slice(at + token.length)];
 }

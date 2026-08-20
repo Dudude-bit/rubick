@@ -24,6 +24,7 @@ import {
 import { formatQuantity } from "@/lib/metric-format";
 import { agoOf, clockOf } from "@/lib/usage-history";
 import type { TrafficWindow } from "@/integrations";
+import { useT } from "@/i18n/useT";
 
 const BAND_H = 56;
 const MARGIN = { top: 13, right: 3, bottom: 1, left: 0 };
@@ -64,10 +65,8 @@ export interface TrafficChartProps {
  * there is no core answer for traffic, so "the app has nothing to say here"
  * has to look like silence and not like zero bytes.
  */
-export function TrafficChart({
-  window: data,
-  label = "Network",
-}: TrafficChartProps) {
+export function TrafficChart({ window: data, label }: TrafficChartProps) {
+  const t = useT();
   const rows: Row[] = React.useMemo(
     () => data.points.map((point, i) => ({ i, ...point })),
     [data.points]
@@ -90,13 +89,15 @@ export function TrafficChart({
   return (
     <div>
       <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2">
-        <span className="text-[11px] text-fg-mut">{label}</span>
+        <span className="text-[11px] text-fg-mut">
+          {label ?? t("nav", "network")}
+        </span>
         <div
           ref={band}
           className="relative w-full"
           style={{ height: BAND_H }}
           role="img"
-          aria-label={describe(rows, peak)}
+          aria-label={describe(rows, peak, t)}
         >
           <div className="absolute inset-0">
             <AreaChart
@@ -156,8 +157,17 @@ export function TrafficChart({
       {/* Identity is never colour alone: the name and the number carry it,
        *  and the swatch only confirms which line is which. */}
       <div className="flex gap-4 pb-1 pl-[104px] pr-1.5 text-[11px] text-fg-fnt">
-        <Key colour={IN_ROLE} name="in" value={newest?.rx ?? null} />
-        <Key colour={OUT_ROLE} name="out" value={newest?.tx ?? null} dashed />
+        <Key
+          colour={IN_ROLE}
+          name={t("columns", "trafficIn")}
+          value={newest?.rx ?? null}
+        />
+        <Key
+          colour={OUT_ROLE}
+          name={t("columns", "trafficOut")}
+          value={newest?.tx ?? null}
+          dashed
+        />
       </div>
     </div>
   );
@@ -204,6 +214,7 @@ function TrafficTooltip({
   active?: boolean;
   payload?: TooltipPayload[];
 }) {
+  const t = useT();
   const point = payload?.[0]?.payload;
   if (!active || !point) return null;
   return (
@@ -215,8 +226,10 @@ function TrafficTooltip({
         {clockOf(point.t)} · {agoOf(point.t, now)}
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
-        in {point.rx === null ? "—" : formatQuantity(point.rx, "throughput")} ·
-        out {point.tx === null ? "—" : formatQuantity(point.tx, "throughput")}
+        {t("columns", "trafficIn")}{" "}
+        {point.rx === null ? "—" : formatQuantity(point.rx, "throughput")} ·{" "}
+        {t("columns", "trafficOut")}{" "}
+        {point.tx === null ? "—" : formatQuantity(point.tx, "throughput")}
       </div>
     </div>
   );
@@ -240,12 +253,16 @@ function useBandWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   return [ref, width];
 }
 
-function describe(rows: readonly Row[], peak: number): string {
+function describe(
+  rows: readonly Row[],
+  peak: number,
+  t: ReturnType<typeof useT>
+): string {
   const newest = rows[rows.length - 1];
-  return [
-    `Network: ${rows.length} readings`,
-    `now in ${formatQuantity(newest?.rx ?? 0, "throughput")}`,
-    `out ${formatQuantity(newest?.tx ?? 0, "throughput")}`,
-    `peak ${formatQuantity(peak, "throughput")}`,
-  ].join(", ");
+  return t("count", "trafficReadings", {
+    n: rows.length,
+    rx: formatQuantity(newest?.rx ?? 0, "throughput"),
+    tx: formatQuantity(newest?.tx ?? 0, "throughput"),
+    peak: formatQuantity(peak, "throughput"),
+  });
 }

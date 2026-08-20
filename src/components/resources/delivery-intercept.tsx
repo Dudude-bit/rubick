@@ -28,6 +28,7 @@ import type { DeliveryIntercept } from "@/lib/delivery";
 import { deliveryWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
 import { DetailAction, type DetailActionProps } from "./detail-blocks";
+import { useT } from "@/i18n/useT";
 
 /**
  * A {@link DetailAction} that asks first, and only when there is something to
@@ -73,6 +74,7 @@ export function DeliveryInterceptDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const t = useT();
   if (!intercept) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,7 +85,7 @@ export function DeliveryInterceptDialog({
         <DeliveryInterceptBody intercept={intercept} />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button
             variant="destructive"

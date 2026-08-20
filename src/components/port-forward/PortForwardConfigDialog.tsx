@@ -18,6 +18,7 @@ import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "@/stores/portForwardStore";
+import { useT } from "@/i18n/useT";
 
 /**
  * The editor for a saved port-forward.
@@ -41,6 +42,7 @@ export function PortForwardConfigDialog({
   config?: PortForwardConfig;
   onClose: () => void;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const addConfig = usePortForwardStore((state) => state.addConfig);
   const updateConfig = usePortForwardStore((state) => state.updateConfig);
@@ -72,16 +74,16 @@ export function PortForwardConfigDialog({
 
     if (!pod.trim() || !namespace.trim()) {
       toast({
-        title: "Missing target",
-        description: "Pod name and namespace are required.",
+        title: t("activity", "missingTarget"),
+        description: t("activity", "missingTargetDetail"),
         variant: "destructive",
       });
       return;
     }
     if (!local || !remote) {
       toast({
-        title: "Invalid port",
-        description: "Ports must be between 1 and 65535.",
+        title: t("activity", "invalidPort"),
+        description: t("activity", "invalidPortDetail"),
         variant: "destructive",
       });
       return;
@@ -108,8 +110,8 @@ export function PortForwardConfigDialog({
     } catch (error) {
       toast({
         title: config
-          ? "Failed to save port-forward"
-          : "Failed to create port-forward",
+          ? t("activity", "saveForwardFailed")
+          : t("activity", "createForwardFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });
@@ -123,17 +125,27 @@ export function PortForwardConfigDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {config ? "Edit port forward" : "New port forward"}
+            {config
+              ? t("activity", "editPortForward")
+              : t("activity", "newPortForward")}
           </DialogTitle>
           <DialogDescription>
-            Saved for <span className="font-mono">{context}</span> and offered
-            in the activity panel until you delete it.
+            {splitAround(t("activity", "forwardSavedFor"), "{context}").map(
+              (part, i) =>
+                i === 1 ? (
+                  <span key="context" className="font-mono">
+                    {context}
+                  </span>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pfc-name">Name</Label>
+            <Label htmlFor="pfc-name">{t("columns", "name")}</Label>
             <Input
               id="pfc-name"
               value={name}
@@ -165,7 +177,7 @@ export function PortForwardConfigDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="pfc-local">Local port</Label>
+              <Label htmlFor="pfc-local">{t("activity", "localPort")}</Label>
               <Input
                 id="pfc-local"
                 type="number"
@@ -178,7 +190,7 @@ export function PortForwardConfigDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pfc-remote">Remote port</Label>
+              <Label htmlFor="pfc-remote">{t("activity", "remotePort")}</Label>
               <Input
                 id="pfc-remote"
                 type="number"
@@ -195,9 +207,9 @@ export function PortForwardConfigDialog({
           <div className="flex flex-col gap-4 border-t border-hair pt-4">
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-reconnect" className="font-normal">
-                Auto reconnect
+                {t("activity", "autoReconnect")}
                 <span className="mt-0.5 block text-[11px] text-fg-mut">
-                  Retry when the pod or the connection drops.
+                  {t("activity", "autoReconnectHint")}
                 </span>
               </Label>
               <Switch
@@ -208,9 +220,9 @@ export function PortForwardConfigDialog({
             </div>
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-autostart" className="font-normal">
-                Auto start
+                {t("activity", "autoStartLabel")}
                 <span className="mt-0.5 block text-[11px] text-fg-mut">
-                  Start as soon as this cluster connects.
+                  {t("activity", "autoStartHint")}
                 </span>
               </Label>
               <Switch
@@ -224,13 +236,22 @@ export function PortForwardConfigDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={save} disabled={busy}>
-            {config ? "Save changes" : "Save port forward"}
+            {config
+              ? t("action", "saveChanges")
+              : t("action", "savePortForward")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** A sentence kept whole in the catalogue, cut where it is rendered. */
+function splitAround(text: string, token: string): string[] {
+  const at = text.indexOf(token);
+  if (at < 0) return [text];
+  return [text.slice(0, at), token, text.slice(at + token.length)];
 }

@@ -10,6 +10,7 @@
 import { cn } from "@/lib/utils";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 import { splitUnit, usageRole, type UsageRole } from "@/lib/metric-format";
+import { useT } from "@/i18n/useT";
 
 /**
  * Two decimals turn a column of memory into "320.00Ki, 336.00Ki" — noise
@@ -92,6 +93,7 @@ export function MetricValue({
   type,
   className,
 }: MetricValueProps) {
+  const t = useT();
   const usedNum = typeof used === "number" ? used : null;
   if (usedNum === null) return <span className="text-fg-fnt">-</span>;
 
@@ -103,10 +105,17 @@ export function MetricValue({
   const display = formatUsage(usedNum, type);
   const title =
     ratio !== null
-      ? `${display} / ${formatUsage(limitNum!, type)} limit (${Math.round(ratio * 100)}%)`
+      ? t("empty", "metricOfLimit", {
+          used: display,
+          limit: formatUsage(limitNum!, type),
+          percent: Math.round(ratio * 100),
+        })
       : requestNum !== null
-        ? `${display} · ${formatUsage(requestNum, type)} requested, no limit`
-        : `${display} · no limit`;
+        ? t("empty", "metricRequestedNoLimit", {
+            used: display,
+            requested: formatUsage(requestNum, type),
+          })
+        : t("empty", "metricNoLimit", { used: display });
 
   return (
     <span

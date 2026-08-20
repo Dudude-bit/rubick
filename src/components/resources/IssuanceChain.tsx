@@ -20,16 +20,22 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import type { IssuanceStep, IssuanceStory } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /** "in 31 days", "6 days ago" — a date nobody has to subtract. */
-function relative(iso: string, now = Date.now()): string {
+function relative(
+  t: ReturnType<typeof useT>,
+  iso: string,
+  now = Date.now()
+): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return iso;
   const days = Math.round((at - now) / 86_400_000);
-  if (days === 0) return "today";
+  if (days === 0) return t("action", "today");
   return days > 0
-    ? `in ${days} day${days === 1 ? "" : "s"}`
-    : `${-days} day${days === -1 ? "" : "s"} ago`;
+    ? t("count", "inDays", { n: days })
+    : t("count", "daysAgo", { n: -days });
 }
 
 function issuerLine(story: IssuanceStory): string {
@@ -82,6 +88,7 @@ export function IssuanceSection({
   issuance: Issuance;
   secretName: string;
 }) {
+  const t = useT();
   // Not installed: the core answer above this stands whole, and there is
   // nothing to offer. Unlike a service with an address, an extension is not
   // something a button here could connect.
@@ -90,10 +97,11 @@ export function IssuanceSection({
   if (issuance.error) {
     return (
       <Section>
-        <SectionHeader title="Renewal" />
+        <SectionHeader title={t("nav", "renewal")} />
         <p className="text-xs text-warn">
-          The certificate above was read from the Secret. Who renews it could
-          not be read: {issuance.error.message}
+          {t("empty", "renewalNotReadable", {
+            error: issuance.error.message,
+          })}
         </p>
       </Section>
     );
@@ -105,10 +113,9 @@ export function IssuanceSection({
   if (!story) {
     return (
       <Section>
-        <SectionHeader title="Renewal" />
+        <SectionHeader title={t("nav", "renewal")} />
         <p className="text-xs text-fg-fnt">
-          Nothing in this namespace manages this Secret, so it will not renew on
-          its own — whoever put this certificate here replaces it.
+          <T section="empty" k="nothingManagesSecret" />
         </p>
       </Section>
     );
@@ -117,13 +124,16 @@ export function IssuanceSection({
   if (!story.inFlight) {
     return (
       <Section>
-        <SectionHeader title="Renewal" />
+        <SectionHeader title={t("nav", "renewal")} />
         <p className="text-xs text-fg-mut">
-          Renewed automatically by{" "}
+          {t("empty", "renewedAutomaticallyBy")}{" "}
           <span className="font-mono">{story.certificate}</span>
           {story.renewalTime
-            ? `, next ${relative(story.renewalTime)}`
-            : ""} · {issuerLine(story)}
+            ? t("empty", "nextRenewalAt", {
+                when: relative(t, story.renewalTime),
+              })
+            : ""}{" "}
+          · {issuerLine(story)}
         </p>
       </Section>
     );
@@ -137,12 +147,24 @@ export function IssuanceSection({
   return (
     <Section>
       <SectionHeader
-        title="Renewal"
+        title={t("nav", "renewal")}
         count={
           <span className={tone}>
-            {failed ? "failed" : story.failure ? "not finished" : "in progress"}
-            {story.since ? ` · started ${relative(story.since)}` : ""}
-            {story.attempts ? ` · ${story.attempts} failed attempts` : ""}
+            {failed
+              ? t("empty", "issuanceFailed")
+              : story.failure
+                ? t("empty", "issuanceNotFinished")
+                : t("empty", "issuanceInProgress")}
+            {story.since
+              ? ` · ${t("empty", "startedWhen", {
+                  when: relative(t, story.since),
+                })}`
+              : ""}
+            {story.attempts
+              ? ` · ${t("count", "failedAttemptsSoFar", {
+                  n: story.attempts,
+                })}`
+              : ""}
           </span>
         }
       />
@@ -183,6 +205,7 @@ export function RenewalNote({
   issuance: Issuance;
   secretName: string;
 }) {
+  const t = useT();
   if (!issuance.available || issuance.error) return null;
   const story = issuance.stories.get(secretName);
   if (!story) return null;
@@ -192,7 +215,9 @@ export function RenewalNote({
       <p className="text-[11px] text-fg-fnt">
         {issuerLine(story)}
         {story.renewalTime
-          ? ` · renews automatically ${relative(story.renewalTime)}`
+          ? ` · ${t("empty", "renewsAutomatically", {
+              when: relative(t, story.renewalTime),
+            })}`
           : ""}
       </p>
     );
@@ -202,8 +227,10 @@ export function RenewalNote({
   // has not finished and the Renewal block below carries the words.
   return (
     <p className="text-[11px] text-warn">
-      Renewal has not finished
-      {story.since ? `, since ${relative(story.since)}` : ""}
+      {t("empty", "renewalNotFinished")}
+      {story.since
+        ? `, ${t("empty", "startedWhen", { when: relative(t, story.since) })}`
+        : ""}
       {story.stalled ? ` — ${story.stalled}` : ""}
     </p>
   );

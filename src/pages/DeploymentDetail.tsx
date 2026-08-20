@@ -80,8 +80,10 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function DeploymentDetail() {
+  const t = useT();
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
@@ -178,10 +180,18 @@ export function DeploymentDetail() {
     },
     {
       toast: {
-        successTitle: "Deployment scaled",
+        successTitle: t("action", "kindScaled", {
+          kind: ResourceType.Deployment,
+        }),
         successDescription: (_data, replicas) =>
-          `Deployment ${name} scaled to ${replicas} replicas.`,
-        errorPrefix: "Failed to scale deployment",
+          t("action", "kindScaledDetail", {
+            kind: ResourceType.Deployment,
+            name: name ?? "",
+            n: replicas,
+          }),
+        errorPrefix: t("action", "scaleKindFailed", {
+          kind: ResourceType.Deployment,
+        }),
       },
       invalidateQueryKeys:
         namespace && name ? [["deployment", namespace, name]] : [],
@@ -198,9 +208,16 @@ export function DeploymentDetail() {
     },
     {
       toast: {
-        successTitle: "Deployment restarted",
-        successDescription: `Deployment ${name} is being restarted.`,
-        errorPrefix: "Failed to restart deployment",
+        successTitle: t("action", "kindRestarted", {
+          kind: ResourceType.Deployment,
+        }),
+        successDescription: t("action", "kindRestartingDetail", {
+          kind: ResourceType.Deployment,
+          name: name ?? "",
+        }),
+        errorPrefix: t("action", "restartKindFailed", {
+          kind: ResourceType.Deployment,
+        }),
       },
       invalidateQueryKeys:
         name && namespace ? [["deployment", namespace, name]] : [],
@@ -219,9 +236,12 @@ export function DeploymentDetail() {
     },
     {
       toast: {
-        successTitle: "Image updated",
-        successDescription: `Container ${selectedContainer} image updated to ${newImage}.`,
-        errorPrefix: "Failed to update image",
+        successTitle: t("action", "imageUpdated"),
+        successDescription: t("action", "imageUpdatedDetail", {
+          container: selectedContainer,
+          image: newImage,
+        }),
+        errorPrefix: t("action", "updateImageFailed"),
       },
       invalidateQueryKeys:
         name && namespace ? [["deployment", namespace, name]] : [],
@@ -276,10 +296,10 @@ export function DeploymentDetail() {
       return (
         progressing?.message ||
         progressing?.reason ||
-        "Rolling out new replica set"
+        t("action", "rollingOutNewReplicaSet")
       );
     }
-    return available?.message || "Deployment is available";
+    return available?.message || t("action", "deploymentAvailable");
   })();
 
   const replicas = deployment?.replicas;
@@ -291,14 +311,17 @@ export function DeploymentDetail() {
   // as four rows the reader had to subtract them to find the gap the bar shows
   // outright. The two the bar does not partition qualify it underneath.
   const facts: KeyValue[] = [
-    { label: "Strategy", value: deployment?.strategy || "RollingUpdate" },
+    {
+      label: t("columns", "strategy"),
+      value: deployment?.strategy || "RollingUpdate",
+    },
     serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace),
   ];
 
   const tabs: DetailTab[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
         <>
@@ -308,20 +331,30 @@ export function DeploymentDetail() {
 
           <WorkloadOverview
             count={
-              <CountBlock title="Replicas" governance={connections}>
+              <CountBlock
+                title={t("columns", "replicas")}
+                governance={connections}
+              >
                 <Composition
                   total={desired}
-                  label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                  label={t("count", "replicasWanted", { n: desired })}
                   segments={[
-                    { label: "ready", count: ready, tone: "ok" },
                     {
-                      label: "not ready",
+                      label: t("count", "readyWord"),
+                      count: ready,
+                      tone: "ok",
+                    },
+                    {
+                      label: t("count", "notReadyWord"),
                       count: Math.max(0, desired - ready),
                       tone: "warn",
                     },
                   ]}
-                  emptyMessage="scaled to zero"
-                  note={`${replicas?.updated ?? 0} up to date · ${replicas?.available ?? 0} available`}
+                  emptyMessage={t("empty", "scaledToZero")}
+                  note={t("count", "upToDateAvailable", {
+                    updated: replicas?.updated ?? 0,
+                    available: replicas?.available ?? 0,
+                  })}
                 />
               </CountBlock>
             }
@@ -335,14 +368,20 @@ export function DeploymentDetail() {
                 pods={pods}
                 idle={
                   desired === 0
-                    ? "This Deployment is scaled to zero."
-                    : "None of this Deployment's pods is running."
+                    ? t("empty", "kindScaledToZero", {
+                        kind: ResourceType.Deployment,
+                      })
+                    : t("empty", "kindNoPodsRunning", {
+                        kind: ResourceType.Deployment,
+                      })
                 }
                 connections={connections.data}
               />
             }
             traffic={<TrafficChain query={connections} />}
-            declared={<FactBlock title="How it is declared" items={facts} />}
+            declared={
+              <FactBlock title={t("nav", "howDeclared")} items={facts} />
+            }
           >
             {deployment && (
               <RelatedResources
@@ -353,16 +392,16 @@ export function DeploymentDetail() {
           </WorkloadOverview>
 
           <KeyValueSection
-            title="Labels"
+            title={t("columns", "labels")}
             count={Object.keys(deployment?.labels ?? {}).length}
             items={recordToKeyValues(deployment?.labels ?? {})}
-            emptyMessage="No labels"
+            emptyMessage={t("empty", "noLabels")}
           />
           <KeyValueSection
-            title="Annotations"
+            title={t("columns", "annotations")}
             count={Object.keys(deployment?.annotations ?? {}).length}
             items={recordToKeyValues(deployment?.annotations ?? {})}
-            emptyMessage="No annotations"
+            emptyMessage={t("empty", "noAnnotations")}
           />
         </>
       ),
@@ -370,7 +409,7 @@ export function DeploymentDetail() {
     connectionsTab(connections, deliveryQuery),
     {
       id: "container-template",
-      label: "Template",
+      label: t("nav", "template"),
       glyph: viewGlyph(Layers2),
       content: (
         <ContainerRows
@@ -389,7 +428,7 @@ export function DeploymentDetail() {
     },
     {
       id: toPlural(ResourceType.ReplicaSet),
-      label: "Revisions",
+      label: t("nav", "revisions"),
       glyph: kindGlyph(ResourceType.ReplicaSet),
       // A count rather than a severity: an old revision at zero is what a
       // rollout leaves behind, not a fault.
@@ -398,14 +437,14 @@ export function DeploymentDetail() {
     },
     {
       id: "logs",
-      label: "Logs",
+      label: t("action", "logs"),
       glyph: viewGlyph(AlignLeft),
       kind: "surface",
       content: (
         <div className="flex h-full flex-col">
           <SectionHeader
             className="flex-none pb-2"
-            title="Logs"
+            title={t("action", "logs")}
             actions={
               <Select
                 value={selectedLogPod || ""}
@@ -415,7 +454,7 @@ export function DeploymentDetail() {
                   aria-label="Pod"
                   className="h-6 w-56 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                 >
-                  <SelectValue placeholder="Select pod" />
+                  <SelectValue placeholder={t("action", "selectPod")} />
                 </SelectTrigger>
                 <SelectContent>
                   {pods.map((pod) => {
@@ -452,8 +491,8 @@ export function DeploymentDetail() {
             ) : (
               <p className="py-8 text-center text-xs text-fg-fnt">
                 {pods.length === 0
-                  ? "This deployment has no pods to read logs from."
-                  : "Select a pod to view logs"}
+                  ? t("empty", "noPodsToReadLogs")
+                  : t("empty", "selectPodForLogs")}
               </p>
             )}
           </div>
@@ -462,14 +501,14 @@ export function DeploymentDetail() {
     },
     {
       id: "conditions",
-      label: "Conditions",
+      label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
       mark: conditionsMark(deployment?.conditions),
       content: (
         <Section>
           <SectionHeader
-            title="Conditions"
-            count={deployment?.conditions.length}
+            title={t("nav", "conditions")}
+            count={deployment?.conditions.length || undefined}
           />
           <ConditionRows
             conditions={deployment?.conditions ?? []}
@@ -503,33 +542,38 @@ export function DeploymentDetail() {
         statusBadge={
           replicas && (
             <StatusBadge status={shortReplicas ? "Degraded" : "Available"}>
-              {replicas.ready}/{replicas.desired} ready
+              {t("count", "slashReady", {
+                n: replicas.ready,
+                total: replicas.desired,
+              })}
             </StatusBadge>
           )
         }
         badges={
           isRolloutInProgress && (
-            <span className="text-[11px] text-info">rolling out</span>
+            <span className="text-[11px] text-info">
+              {t("action", "rollingOut")}
+            </span>
           )
         }
         onBack={goBack}
         actions={
           <>
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={openScaleDialog}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               busy={restartMutation.isPending}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}
@@ -547,7 +591,11 @@ export function DeploymentDetail() {
               />
               <span className="text-fg-fnt">
                 {" "}
-                · {rolloutReady}/{rolloutDesired} pods ready
+                ·{" "}
+                {t("count", "podsReadySlash", {
+                  n: rolloutReady,
+                  total: rolloutDesired,
+                })}
               </span>
             </p>
           )
@@ -573,32 +621,32 @@ export function DeploymentDetail() {
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Container Image</DialogTitle>
+            <DialogTitle>{t("action", "updateContainerImage")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Container</Label>
+              <Label>{t("columns", "container")}</Label>
               <Input value={selectedContainer} disabled />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="image">New Image</Label>
+              <Label htmlFor="image">{t("action", "newImage")}</Label>
               <Input
                 id="image"
                 value={newImage}
                 onChange={(e) => setNewImage(e.target.value)}
-                placeholder="e.g., nginx:1.21"
+                placeholder={t("action", "imagePlaceholder")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
-              Cancel
+              {t("action", "cancel")}
             </Button>
             <Button
               onClick={() => updateImageMutation.mutate()}
               disabled={updateImageMutation.isPending || !newImage}
             >
-              Update
+              {t("action", "update")}
             </Button>
           </DialogFooter>
         </DialogContent>

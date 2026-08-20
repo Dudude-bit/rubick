@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { T } from "@/i18n/T";
 
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -26,7 +27,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     // Five mono fields and their spaces: `0 */6 * * MON-FRI`.
     size: 150,
     accessorKey: "schedule",
-    header: "Schedule",
+    header: () => <T section="columns" k="schedule" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mid">{row.original.schedule}</span>
     ),
@@ -34,7 +35,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   {
     size: 100,
     id: "suspend",
-    header: "Suspend",
+    header: () => <T section="columns" k="suspend" />,
     // Suspended is the exception worth colouring; "No" is the resting
     // state of every cronjob and stays quiet text.
     cell: ({ row }) =>
@@ -47,14 +48,14 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   {
     size: 70,
     id: "active",
-    header: "Active",
+    header: () => <T section="columns" k="active" />,
     cell: ({ row }) => row.original.active,
   },
   {
     // "3d ago", under a header twice the width of its own values.
-    size: 130,
+    size: 160,
     id: "last_schedule",
-    header: "Last Schedule",
+    header: () => <T section="columns" k="lastSchedule" />,
     cell: ({ row }) => (
       <span className="text-fg-fnt">
         {row.original.lastSchedule ? (

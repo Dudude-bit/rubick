@@ -7,8 +7,10 @@ import {
 import { cn } from "@/lib/utils";
 import { ResourceNodeData } from "@/features/infrastructure/types";
 import { ResourceType } from "@/lib/resource-registry";
+import { useT } from "@/i18n/useT";
 
 export function ResourceNode({ data, selected }: NodeProps<ResourceNodeData>) {
+  const t = useT();
   const showSourceHandle =
     data.kind === ResourceType.Ingress || data.kind === ResourceType.Service;
   const showTargetHandle =
@@ -61,11 +63,12 @@ export function ResourceNode({ data, selected }: NodeProps<ResourceNodeData>) {
           {imported && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-fg-fnt">· imported</span>
+                <span className="text-fg-fnt">
+                  · {t("columns", "imported")}
+                </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="center" className="max-w-xs">
-                Imported resources are excluded from Apply and Validate unless
-                you enable “Include imported”.
+                {t("empty", "importedExcludedNote")}
               </TooltipContent>
             </Tooltip>
           )}

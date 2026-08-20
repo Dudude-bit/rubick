@@ -47,8 +47,10 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
+  const t = useT();
   const {
     name,
     namespace,
@@ -116,10 +118,18 @@ export function StatefulSetDetail() {
     },
     {
       toast: {
-        successTitle: "StatefulSet scaled",
+        successTitle: t("action", "kindScaled", {
+          kind: ResourceType.StatefulSet,
+        }),
         successDescription: (_data, replicas) =>
-          `StatefulSet ${name} scaled to ${replicas} replicas.`,
-        errorPrefix: "Failed to scale StatefulSet",
+          t("action", "kindScaledTo", {
+            kind: ResourceType.StatefulSet,
+            name: name ?? "",
+            n: replicas,
+          }),
+        errorPrefix: t("action", "failedToScaleKind", {
+          kind: ResourceType.StatefulSet,
+        }),
       },
       invalidateQueryKeys:
         namespace && name ? [["statefulset", namespace, name]] : [],
@@ -137,13 +147,16 @@ export function StatefulSetDetail() {
     () => [
       {
         id: "overview",
-        label: "Overview",
+        label: t("nav", "overview"),
         glyph: viewGlyph(Info),
         content: (
           <>
             <WorkloadOverview
               count={
-                <CountBlock title="Replicas" governance={connections}>
+                <CountBlock
+                  title={t("columns", "replicas")}
+                  governance={connections}
+                >
                   {/* Ordinals matter here: a StatefulSet brings replicas up one
                       at a time, so the gap between desired and current is a
                       queue, not a failure. The bar shows both without three
@@ -152,24 +165,32 @@ export function StatefulSetDetail() {
                       rather than as a row in a fact table three blocks away. */}
                   <Composition
                     total={desired}
-                    label={desired === 1 ? "replica wanted" : "replicas wanted"}
+                    label={t("count", "replicasWanted", { n: desired })}
                     segments={[
-                      { label: "ready", count: ready, tone: "ok" },
                       {
-                        label: "starting",
+                        label: t("count", "readySegment", { n: ready }),
+                        count: ready,
+                        tone: "ok",
+                      },
+                      {
+                        label: t("count", "startingSegment", {
+                          n: Math.max(0, current - ready),
+                        }),
                         count: Math.max(0, current - ready),
                         tone: "warn",
                       },
                       {
-                        label: "not created",
+                        label: t("count", "notCreatedSegment", {
+                          n: Math.max(0, desired - current),
+                        }),
                         count: Math.max(0, desired - current),
                         tone: "err",
                       },
                     ]}
                     note={
                       statefulSet?.podManagementPolicy === "Parallel"
-                        ? "Started in parallel"
-                        : "Started in order, one at a time"
+                        ? t("empty", "startedInParallel")
+                        : t("empty", "startedInOrder")
                     }
                   />
                 </CountBlock>
@@ -184,8 +205,12 @@ export function StatefulSetDetail() {
                   pods={pods}
                   idle={
                     desired === 0
-                      ? "This StatefulSet is scaled to zero."
-                      : "None of this StatefulSet's pods is running."
+                      ? t("empty", "kindScaledToZero", {
+                          kind: ResourceType.StatefulSet,
+                        })
+                      : t("empty", "kindNoPodsRunning", {
+                          kind: ResourceType.StatefulSet,
+                        })
                   }
                   connections={connections.data}
                 />
@@ -193,8 +218,8 @@ export function StatefulSetDetail() {
               traffic={<TrafficChain query={connections} />}
               declared={
                 <FactBlock
-                  title="How it is declared"
-                  items={declaration(statefulSet)}
+                  title={t("columns", "howDeclared")}
+                  items={declaration(statefulSet, t)}
                 />
               }
             >
@@ -207,16 +232,16 @@ export function StatefulSetDetail() {
             </WorkloadOverview>
 
             <KeyValueSection
-              title="Labels"
+              title={t("columns", "labels")}
               count={Object.keys(statefulSet?.labels ?? {}).length}
               items={recordToKeyValues(statefulSet?.labels ?? {})}
-              emptyMessage="No labels"
+              emptyMessage={t("empty", "noLabels")}
             />
             <KeyValueSection
-              title="Annotations"
+              title={t("columns", "annotations")}
               count={Object.keys(statefulSet?.annotations ?? {}).length}
               items={recordToKeyValues(statefulSet?.annotations ?? {})}
-              emptyMessage="No annotations"
+              emptyMessage={t("empty", "noAnnotations")}
             />
           </>
         ),
@@ -224,7 +249,7 @@ export function StatefulSetDetail() {
       connectionsTab(connections, deliveryQuery),
       {
         id: "container-template",
-        label: "Template",
+        label: t("columns", "template"),
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
@@ -237,13 +262,13 @@ export function StatefulSetDetail() {
       },
       {
         id: "conditions",
-        label: "Conditions",
+        label: t("columns", "conditions"),
         glyph: viewGlyph(BadgeCheck),
         mark: conditionsMark(statefulSet?.conditions),
         content: (
           <Section>
             <SectionHeader
-              title="Conditions"
+              title={t("columns", "conditions")}
               count={statefulSet?.conditions.length}
             />
             <ConditionRows
@@ -263,6 +288,7 @@ export function StatefulSetDetail() {
       }),
     ],
     [
+      t,
       statefulSet,
       pods,
       yaml,
@@ -296,7 +322,7 @@ export function StatefulSetDetail() {
         statusBadge={
           statefulSet && (
             <StatusBadge status={short ? "Degraded" : "Ready"}>
-              {ready}/{desired} ready
+              {t("count", "slashReady", { n: ready, total: desired })}
             </StatusBadge>
           )
         }
@@ -307,13 +333,13 @@ export function StatefulSetDetail() {
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
             <DetailAction
-              label="Scale"
+              label={t("action", "scale")}
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               busy={deleteMutation?.isPending}
@@ -348,11 +374,12 @@ export function StatefulSetDetail() {
  * object is fine.
  */
 function declaration(
-  statefulSet: StatefulSetDetailInfo | undefined
+  statefulSet: StatefulSetDetailInfo | undefined,
+  t: ReturnType<typeof useT>
 ): KeyValue[] {
   return [
     {
-      label: "Governing service",
+      label: t("columns", "governingService"),
       value: statefulSet?.serviceName ? (
         <ResourceRef
           kind={ResourceType.Service}
@@ -363,12 +390,12 @@ function declaration(
       ) : (
         // Without a headless service the stable network identity a
         // StatefulSet exists for does not resolve.
-        "none — pods have no stable DNS"
+        t("empty", "noGoverningService")
       ),
       tone: statefulSet?.serviceName ? undefined : "warn",
     },
     {
-      label: "Update strategy",
+      label: t("columns", "updateStrategy"),
       value: statefulSet?.updateStrategy || "RollingUpdate",
     },
     serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),

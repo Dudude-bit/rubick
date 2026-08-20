@@ -1,4 +1,5 @@
 import { commands } from "@/lib/commands";
+import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ColumnDef } from "@tanstack/react-table";
 import {
@@ -36,6 +37,7 @@ import { useToast } from "@/components/ui/use-toast";
 import type { IngressInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * What a cloud controller says about these rows' TLS, handed to the cells
@@ -59,6 +61,30 @@ function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
       hasCatchAllTls={ingress.hasCatchAllTls}
       vendor={of?.(ingress) ?? null}
     />
+  );
+}
+
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
+  const t = useT();
+  const ips = ingress.loadBalancerIps;
+  // No address is the state worth naming: the ingress exists but is not
+  // reachable yet.
+  if (ips.length === 0)
+    return <span className="text-fg-fnt">{t("empty", "pendingInline")}</span>;
+  return (
+    <span className="flex items-baseline gap-2">
+      <CopyableAddress
+        value={ips[0]}
+        label={t("columns", "ingressAddress")}
+        className="text-fg-mid"
+      />
+      {ips.length > 1 && (
+        <span className="text-[11px] text-fg-fnt">
+          {t("count", "plusMore", { n: ips.length - 1 })}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -96,7 +122,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An ingress class name: "nginx", "traefik", "alb".
     size: 110,
     accessorKey: "className",
-    header: "Class",
+    header: () => <T section="columns" k="class" />,
     cell: ({ row }) => (
       <span className="text-fg-mut">{row.original.className || "default"}</span>
     ),
@@ -105,7 +131,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // The column people came to this page to read, and a hostname is long.
     size: 280,
     accessorKey: "rules",
-    header: "Hosts",
+    header: () => <T section="columns" k="hosts" />,
     cell: ({ row }) => {
       const hosts = row.original.rules
         .map((rule) => rule.host)
@@ -125,7 +151,13 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
               <span key={host}>{host}</span>
             ))}
             {hosts.length > 2 && (
-              <span className="text-fg-fnt">+{hosts.length - 2} more</span>
+              <span className="text-fg-fnt">
+                <T
+                  section="count"
+                  k="plusMore"
+                  values={{ n: hosts.length - 2 }}
+                />
+              </span>
             )}
           </TooltipTrigger>
           <TooltipContent>
@@ -143,14 +175,14 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // "12 paths", with the routes themselves in the tooltip.
     size: 90,
     id: "paths",
-    header: "Paths",
+    header: () => <T section="columns" k="paths" />,
     cell: ({ row }) => {
       const allPaths = row.original.rules.flatMap((rule) => rule.paths);
       if (allPaths.length === 0) return <span className="text-fg-fnt">—</span>;
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">
-            {allPaths.length} {allPaths.length === 1 ? "path" : "paths"}
+            <T section="count" k="paths" values={{ n: allPaths.length }} />
           </TooltipTrigger>
           <TooltipContent>
             {allPaths.map((path, i) => (
@@ -167,27 +199,8 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An IPv4 address and a "+2 more" beside it.
     size: 150,
     accessorKey: "loadBalancerIps",
-    header: "Address",
-    cell: ({ row }) => {
-      const ips = row.original.loadBalancerIps;
-      // No address is the state worth naming: the ingress exists but is not
-      // reachable yet.
-      if (ips.length === 0) return <span className="text-fg-fnt">pending</span>;
-      return (
-        <span className="flex items-baseline gap-2">
-          <CopyableAddress
-            value={ips[0]}
-            label="Ingress address"
-            className="text-fg-mid"
-          />
-          {ips.length > 1 && (
-            <span className="text-[11px] text-fg-fnt">
-              +{ips.length - 1} more
-            </span>
-          )}
-        </span>
-      );
-    },
+    header: () => <T section="columns" k="address" />,
+    cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
   {
     size: 80,
@@ -199,6 +212,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
 ];
 
 export function IngressList() {
+  const t = useT();
   const { currentNamespace } = useClusterStore();
   const navigate = useNavigate();
 
@@ -218,11 +232,14 @@ export function IngressList() {
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `Ingresses: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: toPlural(ResourceType.Ingress),
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed]
+    [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<IngressInfo>({
     enabled: true,
@@ -261,10 +278,11 @@ export function IngressList() {
       );
       if (hosts.length === 0) return null;
       const by =
-        vendorTls.of(ingress, hosts[0])?.by ?? "the load balancer in front";
+        vendorTls.of(ingress, hosts[0])?.by ??
+        t("empty", "theLoadBalancerInFront");
       return { hosts, by };
     },
-    [vendorTls]
+    [t, vendorTls]
   );
 
   const quickActions = useMemo<
@@ -273,7 +291,7 @@ export function IngressList() {
     () => (setDeleteTarget) => [
       {
         icon: Eye,
-        label: "View Details",
+        label: t("action", "viewDetails"),
         onClick: (item) =>
           navigate(
             getResourceDetailUrl(
@@ -285,7 +303,7 @@ export function IngressList() {
       },
       {
         icon: ExternalLink,
-        label: "Open in Browser",
+        label: t("action", "openInBrowser"),
         onClick: (item) => {
           const url = getIngressOpenUrl(item, vendorFor(item)?.hosts ?? []);
           if (url) window.open(url, "_blank", "noreferrer");
@@ -294,12 +312,12 @@ export function IngressList() {
       },
       {
         icon: Trash2,
-        label: "Delete",
+        label: t("action", "delete"),
         onClick: (item) => setDeleteTarget(item),
         variant: "destructive",
       },
     ],
-    [navigate, vendorFor]
+    [t, navigate, vendorFor]
   );
 
   return (

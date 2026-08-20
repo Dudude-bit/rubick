@@ -842,6 +842,12 @@ export interface Extension {
  *
  * `staleTime` is the vendor's, because a routing table and a delivery
  * pipeline do not go out of date at the same speed. Nothing here polls.
+ *
+ * The shell prefixes {@link queryKey} with the cluster context before it
+ * runs the query — cluster B must never read cluster A's numbers, the same
+ * rule the detection scan states. A page that wants to share the cache
+ * entry (the whole point of declaring the query) prefixes its own reads
+ * the same way: `[context, ...KEY]`.
  */
 export interface PageCount {
   queryKey: readonly unknown[];
@@ -857,6 +863,15 @@ export interface PageCount {
    * draws nothing rather than a zero.
    */
   select: (data: never) => number | null;
+  /**
+   * The dot beside the number: the worst thing on the page, or nothing.
+   *
+   * Same discipline the facts follow — inventory is quiet, a problem is
+   * coloured — spent on one pixel next to the count instead of on the
+   * count itself. Read from the same payload `select` reads, so the dot
+   * never costs a query the row was not already paying for.
+   */
+  tone?: (data: never) => "warn" | "err" | null;
   staleTime: number;
 }
 
@@ -870,6 +885,7 @@ export function pageCount<T>(count: {
   queryKey: readonly unknown[];
   queryFn: () => Promise<T>;
   select: (data: T) => number | null;
+  tone?: (data: T) => "warn" | "err" | null;
   staleTime: number;
 }): PageCount {
   return count as PageCount;

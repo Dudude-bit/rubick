@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { T } from "@/i18n/T";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Crosshair } from "lucide-react";
 
@@ -15,6 +16,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import type { NamespaceInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -28,7 +30,7 @@ export const columns = (
     // do not need rather than a name column's usual share.
     size: 420,
     accessorKey: "name",
-    header: "Name",
+    header: () => <T section="columns" k="name" />,
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">
         <ResourceRef
@@ -37,7 +39,9 @@ export const columns = (
           showKind={false}
         />
         {row.original.name === currentNamespace && (
-          <span className="text-[11px] text-fg-fnt">current scope</span>
+          <span className="text-[11px] text-fg-fnt">
+            <T section="cluster" k="currentScope" />
+          </span>
         )}
       </span>
     ),
@@ -45,7 +49,7 @@ export const columns = (
   {
     size: 120,
     accessorKey: "status",
-    header: "Status",
+    header: () => <T section="columns" k="status" />,
     cell: ({ row }) => <StatusBadge status={row.original.status} showDot />,
   },
   {
@@ -61,7 +65,7 @@ export const columns = (
   {
     size: 80,
     accessorKey: "createdAt",
-    header: "Age",
+    header: () => <T section="columns" k="age" />,
     cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
   },
 ];
@@ -72,6 +76,7 @@ export const columns = (
  * The row's useful verb is "point this window at it", so that is the action.
  */
 export function NamespaceList() {
+  const t = useT();
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const { namespaces } = useClusterSummary();
@@ -92,11 +97,11 @@ export function NamespaceList() {
     () => [
       {
         icon: Crosshair,
-        label: "Scope this window to it",
+        label: t("action", "scopeWindowToIt"),
         onClick: (item) => switchNamespace(item.name),
       },
     ],
-    [switchNamespace]
+    [switchNamespace, t]
   );
 
   return (

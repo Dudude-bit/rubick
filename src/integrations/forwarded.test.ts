@@ -29,6 +29,7 @@ import {
   podFor,
   portOf,
   reestablish,
+  normalisedSubpath,
 } from "./forwarded";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -182,6 +183,7 @@ describe("keeping the forward alive across a rollout", () => {
           remotePort: 9090,
           localPort: 20000,
           pod: "prom-old",
+          subpath: "",
           url: "http://localhost:20000",
         },
         service("prom", "mon", [9090])
@@ -348,5 +350,91 @@ describe("keeping the address a connection was saved under", () => {
     );
     const found = await forward(svc(), [9090], 20000);
     expect(found.localPort).not.toBe(20000);
+  });
+});
+
+describe("an API that does not sit at the root", () => {
+  /**
+   * Why this exists at all (#71). Prometheus answers `/api/v1/query` straight
+   * off the host, so a forward's address could stop at the port. A
+   * VictoriaMetrics does not: VMSingle serves the same API under
+   * `/prometheus`, and a VMCluster's vmselect under `/select/<tenant>/…`.
+   * The app cannot read which from the Service, so it is carried.
+   */
+  it("puts the subpath after the port, where the query path is appended", () => {
+    expect(normalisedSubpath("/prometheus")).toBe("/prometheus");
+  });
+
+  it("takes one without the leading slash, because people type it that way", () => {
+    expect(normalisedSubpath("prometheus")).toBe("/prometheus");
+    expect(normalisedSubpath("  select/0/prometheus  ")).toBe(
+      "/select/0/prometheus"
+    );
+  });
+
+  /**
+   * A trailing slash would make the address `…/prometheus//api/v1/query`.
+   * Some servers forgive that and some answer 404; none of them should have to.
+   */
+  it("drops a trailing slash rather than doubling it against the query path", () => {
+    expect(normalisedSubpath("/prometheus/")).toBe("/prometheus");
+    expect(normalisedSubpath("/prometheus///")).toBe("/prometheus");
+  });
+
+  it("is empty for an API at the root, and for nothing at all", () => {
+    expect(normalisedSubpath("")).toBe("");
+    expect(normalisedSubpath("   ")).toBe("");
+    expect(normalisedSubpath(undefined)).toBe("");
+    expect(normalisedSubpath("/")).toBe("");
+  });
+});
+
+describe("forwarding to something that only speaks the API", () => {
+  beforeEach(() => {
+    vi.mocked(commands.listPods).mockResolvedValue([pod("vmsingle-0", true)]);
+    vi.mocked(commands.listPortForwards).mockResolvedValue([]);
+  });
+
+  /**
+   * The whole of #71 in one assertion. A VictoriaMetrics is not called
+   * prometheus, wears no prometheus label and does not listen on 9090 — the
+   * search cannot find it — and its query API is not at the root, so the
+   * address the forward hands back has to carry the subpath or every query
+   * 404s against a connection that tested green.
+   */
+  it("builds the address with the subpath, not just the port", async () => {
+    const found = await forward(
+      service("vmsingle-victoria-metrics-k8s-stack", "monitoring", [8428]),
+      [8428],
+      undefined,
+      "/prometheus"
+    );
+    expect(found.url).toBe(`http://localhost:${found.localPort}/prometheus`);
+    expect(found.subpath).toBe("/prometheus");
+  });
+
+  /** A plain Prometheus is unchanged: no subpath, no trailing anything. */
+  it("leaves an API at the root exactly where it was", async () => {
+    const found = await forward(service("prom", "mon", [9090]), [9090]);
+    expect(found.url).toBe(`http://localhost:${found.localPort}`);
+    expect(found.subpath).toBe("");
+  });
+
+  /**
+   * The port comes from the form, not from the vendor's guess: 8428 is not in
+   * Prometheus's list, and picking a Service by hand is exactly the case
+   * where the app has no opinion about which port is the right one.
+   */
+  it("forwards the port it was given rather than one it recognises", async () => {
+    const found = await forward(
+      service("vmselect", "monitoring", [8481, 8482]),
+      [8481],
+      undefined,
+      "select/0/prometheus"
+    );
+    expect(found.remotePort).toBe(8481);
+    expect(found.url).toBe(
+      `http://localhost:${found.localPort}/select/0/prometheus`
+    );
   });
 });

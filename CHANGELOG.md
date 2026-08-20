@@ -5,6 +5,98 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-08-20
+
+The interface speaks Russian, a seven-day certificate stops wearing a
+warning it earned at birth, and a Prometheus-compatible server can be
+pointed at rather than searched for.
+
+### Added — the interface speaks Russian
+
+Chosen in **Settings → Appearance → Language**, and matching the system
+by default. German, French, Spanish and Chinese are offered too, marked
+_not translated yet_: the scaffolding is done and each is one file away.
+
+What gets translated is the app's own words — buttons, section captions,
+column headers, empty states, settings, counts. What does not is the
+cluster's:
+
+- **Kubernetes kind names** stay as the API spells them. `Pods`, not
+  «Поды». The interface has to agree with what you type into `kubectl
+get` and with what you will search for.
+- **Statuses** stay too, and for a sharper reason: a badge's colour is
+  chosen by matching the status text, so a translated `CrashLoopBackOff`
+  would turn every badge grey. A lint rule now rejects the mistake at the
+  call site.
+- **Product names** — Helm, Prometheus, Traefik — are names.
+
+Counts decline properly: «1 под / 2 пода / 5 подов», with the form picked
+by `Intl.PluralRules` rather than by the one-or-many ternary that only
+English can live with.
+
+Adding a language is one file and no code. The Russian catalogue's type is
+derived from the English one, so a key left untranslated is a build error
+rather than a blank label on somebody's screen. `CONTRIBUTING.md` has the
+rest.
+
+### Fixed — a seven-day certificate no longer reads as almost expired
+
+Let's Encrypt's short-lived profile issues certificates for seven days.
+The marks that say _act soon_ and _this is an interrupt_ were fourteen
+days and three, absolute — so a seven-day certificate was born inside the
+warning and wore it for its whole life. A mark that is always on is a mark
+nobody reads.
+
+The thresholds are caps now, not the rule: on a short certificate they
+shrink to a third and a tenth of its lifetime, which puts the warning
+exactly where cert-manager plans to renew. A ninety-day certificate never
+notices the difference.
+
+Three things came with it. cert-manager's own `renewalTime` is read where
+it exists, so a renewal that has come and gone is reported as overdue
+rather than left to be inferred from a date. Certificates expiring inside
+one day used to tie on whole days and fall back to alphabetical order,
+which is the hour the order matters most; they rank by the exact time
+left. And a sub-hour reading said `expires in 0 hours` — it counts in
+minutes.
+
+### Fixed — every integration read is keyed to its cluster
+
+`["integration-facts", vendor.id]` was not keyed by context, with a 60s
+cache and no invalidation on switch: the second cluster was never asked,
+and its integrations row showed the first one's answer. A stale count is
+wrong; "1 renewal overdue" pointed at the wrong cluster is an accusation.
+
+### Added — point at a Service the search cannot recognise
+
+"Find Prometheus in this cluster" matches a Service by the vendor's name
+and label, which is useless for anything that merely speaks the API. A
+VictoriaMetrics is called `vmsingle`, wears no Prometheus label, listens
+on 8428, and answers the same queries.
+
+Teaching the search about it would not have been enough, and the reporter
+said why: VictoriaMetrics does not serve the query API at the root, and
+where it does serve it depends on which VictoriaMetrics it is — VMSingle
+under `/prometheus`, a VMCluster's vmselect under
+`/select/<tenant>/prometheus`. Nothing on the Service says which.
+
+So there is a second way in: any Service in the cluster, any of its ports,
+and the subpath the API sits under. The first three are chosen from what
+the cluster has rather than typed; only the subpath is typed, because only
+the subpath is something the cluster cannot tell us. It is saved with the
+forward, so waking the connection tomorrow rebuilds the same address.
+
+A direct address already worked and is unchanged —
+`http://host:8428/prometheus` has always reached a VMSingle.
+
+### Fixed — the AUR package's contract fails in CI, not in pacman
+
+`rubick-kubernetes-bin` fetches `Rubick_<version>_amd64.deb` and five
+icons by raw URL. Renaming the product or tidying the icon folder would
+have broken the package one release later, on its maintainer, with nothing
+in this repository looking wrong. A test reads the config and the folder
+and says so in the pull request instead.
+
 ## [4.3.0] - 2026-08-17
 
 Four changes, three of them from one person's first hour with the app and

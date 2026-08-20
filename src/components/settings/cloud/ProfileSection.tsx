@@ -2,6 +2,7 @@ import * as React from "react";
 import { Loader2, Plus, TestTube, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n/useT";
 
 /**
  * The GCP and Azure profile lists are the same screen with different
@@ -26,6 +27,7 @@ export function ProfileSection({
   emptyMessage: string;
   children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="border-b border-hair py-2 last:border-b-0">
       <div className="flex items-center justify-between gap-4">
@@ -36,7 +38,9 @@ export function ProfileSection({
         </Button>
       </div>
       {isLoading ? (
-        <p className="py-2 text-[11px] text-fg-mut">Loading…</p>
+        <p className="py-2 text-[11px] text-fg-mut">
+          {t("settings", "loading")}
+        </p>
       ) : isEmpty ? (
         <p className="py-2 text-[11px] text-fg-mut">{emptyMessage}</p>
       ) : (
@@ -64,6 +68,7 @@ export function ProfileRow({
   onDelete: () => void;
   busy?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between gap-4 rounded px-1 py-1 transition-colors hover:bg-hover">
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -82,7 +87,7 @@ export function ProfileRow({
           <Button
             size="icon"
             variant="ghost"
-            aria-label={`Test ${name}`}
+            aria-label={t("settings", "testNamed", { name })}
             onClick={onTest}
             disabled={busy}
           >
@@ -94,12 +99,12 @@ export function ProfileRow({
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={onEdit}>
-          Edit
+          {t("settings", "edit")}
         </Button>
         <Button
           size="icon"
           variant="ghost"
-          aria-label={`Delete ${name}`}
+          aria-label={t("settings", "deleteNamed", { name })}
           onClick={onDelete}
         >
           <Trash2 className="h-3.5 w-3.5" />

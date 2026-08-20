@@ -3,6 +3,7 @@ import { PHASE_LABEL } from "@/lib/container-sequence";
 
 import type { ContainerFailure } from "./hooks/useLogStream";
 import { formatCount } from "./types";
+import { useT } from "@/i18n/useT";
 
 /** Its name, when it ran, and whether it ever did. */
 export type LegendContainer = Pick<ContainerInfo, "name" | "phase" | "state">;
@@ -50,6 +51,7 @@ export function LogLegend({
   onSolo,
   onShowAll,
 }: LogLegendProps) {
+  const t = useT();
   if (containers.length === 0) return null;
 
   const shown = containers.filter((c) => !hidden.has(c.name));
@@ -83,9 +85,13 @@ export function LogLegend({
               aria-pressed={!off}
               aria-keyshortcuts={index < 9 ? `${index + 1}` : undefined}
               title={`${
-                off ? `Show ${name} in the view` : `Hide ${name} from the view`
-              } — its stream keeps running either way. Double-click or alt-click to read ${name} alone${
-                index < 9 ? `, or press ${index + 1}` : ""
+                off
+                  ? t("action", "legendShow", { name })
+                  : t("action", "legendHide", { name })
+              } ${t("action", "legendSoloHint", { name })}${
+                index < 9
+                  ? t("action", "legendOrPress", { key: index + 1 })
+                  : ""
               }.`}
               onClick={(event) =>
                 event.altKey ? onSolo(name) : onToggle(name)
@@ -147,7 +153,7 @@ export function LogLegend({
           onClick={onShowAll}
           className="ml-1 rounded px-1.5 py-0.5 text-warn hover:bg-hover"
         >
-          {hidden.size} hidden · show all
+          {t("count", "hiddenShowAll", { n: hidden.size })}
         </button>
       )}
     </div>

@@ -23,6 +23,8 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
 
@@ -36,6 +38,7 @@ const getCrdRowId = (row: CrdListItem) => row.name;
 const crdHref = (name: string) => `${CRD_PATH}/${encodeURIComponent(name)}`;
 
 export function Crds() {
+  const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -70,14 +73,17 @@ export function Crds() {
     },
     onSuccess: (_, item) => {
       toast({
-        title: "CRD deleted",
-        description: `${item.name} has been deleted.`,
+        title: t("action", "kindDeleted", { kind: "CRD" }),
+        description: t("action", "kindDeletedDetail", {
+          kind: "CRD",
+          name: item.name,
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ["crds"] });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to delete CRD",
+        title: t("action", "deleteKindFailed", { kind: "CRD" }),
         description: error.message,
         variant: "destructive",
       });
@@ -96,7 +102,7 @@ export function Crds() {
     () => [
       {
         accessorKey: "kind",
-        header: "Kind",
+        header: () => <T section="columns" k="kind" />,
         size: 220,
         cell: ({ row }) => (
           <RouteLink
@@ -109,7 +115,7 @@ export function Crds() {
       },
       {
         accessorKey: "plural",
-        header: "Plural",
+        header: () => <T section="columns" k="plural" />,
         size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.plural}</span>
@@ -117,7 +123,7 @@ export function Crds() {
       },
       {
         accessorKey: "scope",
-        header: "Scope",
+        header: () => <T section="columns" k="scope" />,
         size: 110,
         cell: ({ row }) => (
           <span className="text-fg-mut">{row.original.scope}</span>
@@ -125,7 +131,7 @@ export function Crds() {
       },
       {
         accessorKey: "version",
-        header: "Version",
+        header: () => <T section="columns" k="version" />,
         size: 110,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.version}</span>
@@ -133,7 +139,7 @@ export function Crds() {
       },
       {
         accessorKey: "shortNames",
-        header: "Short names",
+        header: () => <T section="columns" k="shortNames" />,
         size: 160,
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;
@@ -159,13 +165,13 @@ export function Crds() {
             <DropdownMenuItem asChild>
               <Link to={crdHref(row.original.name)}>
                 <Eye className="mr-2 h-3.5 w-3.5" />
-                View details
+                <T section="action" k="viewDetails" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to={`${crdHref(row.original.name)}/instances`}>
                 <List className="mr-2 h-3.5 w-3.5" />
-                View instances
+                <T section="action" k="viewInstances" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -174,7 +180,7 @@ export function Crds() {
               onClick={() => setDeleteTarget(row.original)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
+              <T section="action" k="delete" />
             </DropdownMenuItem>
           </ActionMenu>
         ),
@@ -193,8 +199,8 @@ export function Crds() {
         title="Custom Resource Definitions"
         count={
           crds.length === 0
-            ? "none"
-            : `${crds.length} · ${crdGroups.length} API ${crdGroups.length === 1 ? "group" : "groups"}`
+            ? t("empty", "noneInline")
+            : `${crds.length} · ${t("count", "apiGroups", { n: crdGroups.length })}`
         }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}
@@ -209,20 +215,24 @@ export function Crds() {
         fill
         isLoading={isLoading}
         searchKey="kind"
-        searchPlaceholder="Search CRDs..."
+        searchPlaceholder={t("action", "searchKindPlaceholder", {
+          kind: "CRDs",
+        })}
         getRowId={getCrdRowId}
         getRowHref={(row) => crdHref(row.name)}
         grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
-        emptyMessage="This cluster has no custom resource definitions."
+        emptyMessage={t("empty", "noCrdsInCluster")}
       />
 
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={() => setDeleteTarget(null)}
-        title="Delete CRD?"
-        description={`Deleting "${deleteTarget?.name}" also deletes every instance of this custom resource.`}
-        confirmLabel="Delete"
+        title={t("action", "deleteKindQuestion", { kind: "CRD" })}
+        description={t("action", "deleteCrdDetail", {
+          name: deleteTarget?.name ?? "",
+        })}
+        confirmLabel={t("action", "delete")}
         confirmVariant="destructive"
         confirmDisabled={deleteMutation.isPending}
         onConfirm={() => {

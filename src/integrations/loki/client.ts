@@ -49,23 +49,21 @@ export async function logHistory(input: LogHistory): Promise<LogHistoryPage> {
   );
 
   return {
-    lines: page.lines.map(
-      ({ ts, line }): HistoryLine => ({
-        cursor: ts,
-        // Loki's clock, already resolved in Rust from its nanosecond
-        // timestamp. Never arrival order — these lines arrive in one batch
-        // and were written across hours.
-        epoch: line.timestamp ? Date.parse(line.timestamp) : 0,
-        message: line.message,
-        raw: line.raw,
-        pod: line.pod,
-        container: line.container,
-        namespace: line.namespace,
-        level: line.level,
-        format: line.format,
-        fields: line.fields,
-      })
-    ),
+    lines: page.lines.map(({ ts, line }): HistoryLine => ({
+      cursor: ts,
+      // Loki's clock, already resolved in Rust from its nanosecond
+      // timestamp. Never arrival order — these lines arrive in one batch
+      // and were written across hours.
+      epoch: line.timestamp ? Date.parse(line.timestamp) : 0,
+      message: line.message,
+      raw: line.raw,
+      pod: line.pod,
+      container: line.container,
+      namespace: line.namespace,
+      level: line.level,
+      format: line.format,
+      fields: line.fields,
+    })),
     truncated: page.truncated,
     limit: page.limit,
     streams: page.streams,

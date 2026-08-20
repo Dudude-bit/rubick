@@ -34,6 +34,7 @@ import {
 } from "../page-kit";
 import { useAlbSources } from "./data";
 import { albGroups, type AlbFinding, type AlbGroup } from "./groups";
+import { useT } from "@/i18n/useT";
 import {
   INGRESS_CLASS_PARAMS_CRD,
   TARGET_GROUP_BINDING_CRD,
@@ -41,11 +42,13 @@ import {
   bindingSummary,
   boundService,
 } from "./model";
+import type { en } from "@/i18n/catalogue";
 
 /** Past this many groups with a finding, nothing opens itself. */
 const AUTO_OPEN = 6;
 
 export default function AwsLoadBalancerPage() {
+  const t = useT();
   const sources = useAlbSources();
   const [filter, setFilter] = useState("");
 
@@ -83,7 +86,7 @@ export default function AwsLoadBalancerPage() {
     return (
       <Section className="max-w-[64ch] py-8">
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          Could not read this cluster&rsquo;s Ingresses
+          {t("empty", "couldNotReadIngresses")}
         </h2>
         <p className="text-[11px] text-fg-fnt">{sources.error.message}</p>
       </Section>
@@ -97,24 +100,19 @@ export default function AwsLoadBalancerPage() {
         count={
           sources.isPending
             ? undefined
-            : `${groups.length} ${groups.length === 1 ? "load balancer" : "load balancers"}`
+            : t("count", "loadBalancers", { n: groups.length })
         }
-        description="One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer."
+        description={t("empty", "albPageDescription")}
       />
 
       {sources.data?.unread.map((kind) => (
         <Finding
           key={kind.crd}
           tone="warn"
-          title={
-            <>
-              <span className="font-mono">{kind.crd}</span> could not be listed
-            </>
-          }
+          title={t("empty", "crdCouldNotBeListed", { crd: kind.crd })}
           verbatim={kind.reason}
         >
-          Groups are still drawn from the Ingresses themselves; what is missing
-          is what the class configured for them.
+          {t("empty", "albUnreadNote")}
         </Finding>
       ))}
 
@@ -123,23 +121,22 @@ export default function AwsLoadBalancerPage() {
           <FilterBox
             value={filter}
             onChange={setFilter}
-            placeholder="Filter by group, Ingress or host…"
-            label="Filter load balancers"
+            placeholder={t("action", "filterAlbPlaceholder")}
+            label={t("action", "filterLoadBalancers")}
           />
         </div>
 
         {sources.isPending ? (
-          <p className="text-xs text-fg-fnt">Reading the Ingresses…</p>
+          <p className="text-xs text-fg-fnt">
+            {t("empty", "readingIngresses")}
+          </p>
         ) : groups.length === 0 ? (
           <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
-            No Ingress in this cluster asks for the{" "}
-            <span className="font-mono">alb</span> class, so this controller is
-            running no load balancer here. Its CRDs may still be installed —
-            that is what put this page in the sidebar.
+            {t("empty", "albNoIngressAsksForClass")}
           </p>
         ) : shown.length === 0 ? (
           <p className="text-[11.5px] text-fg-fnt">
-            Nothing matches <span className="font-mono">{filter}</span>.
+            {t("empty", "nothingMatchesQuery", { query: filter })}
           </p>
         ) : (
           <div className="flex flex-col">
@@ -159,20 +156,23 @@ export default function AwsLoadBalancerPage() {
   );
 }
 
-function groupState(group: AlbGroup): { text: string; tone: Tone } {
+function groupState(group: AlbGroup): {
+  key: keyof typeof en.empty;
+  tone: Tone;
+} {
   if (group.findings.some((finding) => finding.kind === "no-params")) {
-    return { text: "names something absent", tone: "err" };
+    return { key: "namesSomethingAbsent", tone: "err" };
   }
   if (group.findings.some((finding) => finding.kind === "order-clash")) {
-    return { text: "rules of equal order", tone: "warn" };
+    return { key: "rulesOfEqualOrder", tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "disagree")) {
-    return { text: "members disagree", tone: "warn" };
+    return { key: "membersDisagree", tone: "warn" };
   }
   if (group.findings.some((finding) => finding.kind === "shared")) {
-    return { text: "shared across namespaces", tone: "warn" };
+    return { key: "sharedAcrossNamespaces", tone: "warn" };
   }
-  return { text: "serving", tone: "ok" };
+  return { key: "serving", tone: "ok" };
 }
 
 function GroupRow({
@@ -186,6 +186,8 @@ function GroupRow({
   openByDefault: boolean;
   last: boolean;
 }) {
+  const t = useT();
+  const state = groupState(group);
   const namespaces = [
     ...new Set(group.members.map((member) => member.ingress.namespace)),
   ];
@@ -206,13 +208,13 @@ function GroupRow({
         <>
           {group.members.length}{" "}
           {group.members.length === 1 ? "Ingress" : "Ingresses"}
-          {namespaces.length > 1 && ` across ${namespaces.length} namespaces`}
-          {hosts.length > 0 &&
-            ` · ${hosts.length} ${hosts.length === 1 ? "host" : "hosts"}`}
-          {group.name === null && " · its own ALB"}
+          {namespaces.length > 1 &&
+            ` ${t("count", "acrossNamespaces", { n: namespaces.length })}`}
+          {hosts.length > 0 && ` · ${t("count", "hosts", { n: hosts.length })}`}
+          {group.name === null && ` · ${t("action", "itsOwnAlb")}`}
         </>
       }
-      state={groupState(group)}
+      state={{ text: t("empty", state.key), tone: state.tone }}
       openByDefault={openByDefault}
       last={last}
     >
@@ -229,11 +231,12 @@ function GroupRow({
 
 /** What the class configured for this load balancer, which nothing resolved. */
 function ParamsBlock({ group }: { group: AlbGroup }) {
+  const t = useT();
   const params = group.params;
   if (!params) return null;
   return (
     <Chain>
-      <Column label="Class params">
+      <Column label={t("columns", "classParams")}>
         <Cell under={params.loadBalancerName ?? undefined}>
           <ResourceRef
             kind="IngressClassParams"
@@ -243,22 +246,22 @@ function ParamsBlock({ group }: { group: AlbGroup }) {
           />
         </Cell>
       </Column>
-      <Column label="Facing">
+      <Column label={t("columns", "facing")}>
         <Cell under={params.ipAddressType ?? undefined}>
-          {params.scheme ?? "not set"}
+          {params.scheme ?? t("action", "notSet")}
         </Cell>
       </Column>
-      <Column label="Certificate">
+      <Column label={t("columns", "certificate")}>
         <Cell
           title={params.certificateArn ?? undefined}
           under={params.sslPolicy ?? undefined}
         >
           {params.certificateArn
             ? (params.certificateArn.split("/").pop() ?? params.certificateArn)
-            : "not set here"}
+            : t("action", "notSetHere")}
         </Cell>
       </Column>
-      <Column label="Reachable from">
+      <Column label={t("columns", "reachableFrom")}>
         <Cell
           title={params.inboundCidrs.join(", ") || undefined}
           under={
@@ -267,7 +270,7 @@ function ParamsBlock({ group }: { group: AlbGroup }) {
         >
           {params.inboundCidrs.length > 0
             ? params.inboundCidrs.join(", ")
-            : "anywhere the subnets allow"}
+            : t("action", "anywhereSubnetsAllow")}
         </Cell>
       </Column>
     </Chain>
@@ -281,6 +284,7 @@ function MembersBlock({
   group: AlbGroup;
   bindings: Parameters<typeof bindingSummary>[0][];
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-1.5">
       {group.members.map((member) => {
@@ -305,14 +309,18 @@ function MembersBlock({
                 />
               </Cell>
             </Column>
-            <Column label="Order">
+            <Column label={t("columns", "order")}>
               <Cell warn={member.order === null && group.members.length > 1}>
-                {member.order === null ? "unset" : String(member.order)}
+                {member.order === null
+                  ? t("action", "unset")
+                  : String(member.order)}
               </Cell>
             </Column>
-            <Column label="Hosts">
+            <Column label={t("columns", "hosts")}>
               <Cell title={member.hosts.join(", ") || undefined}>
-                {member.hosts.length > 0 ? member.hosts.join(", ") : "any host"}
+                {member.hosts.length > 0
+                  ? member.hosts.join(", ")
+                  : t("action", "anyHost")}
               </Cell>
             </Column>
             {/* The Service used to be the `under` line of the target group,
@@ -321,7 +329,7 @@ function MembersBlock({
             <Column label="Service">
               {backends.length === 0 ? (
                 <Cell>
-                  <span className="text-fg-fnt">no backend</span>
+                  <span className="text-fg-fnt">{t("empty", "noBackend")}</span>
                 </Cell>
               ) : (
                 backends.map((backend) => (
@@ -336,7 +344,7 @@ function MembersBlock({
                 ))
               )}
             </Column>
-            <Column label="Target groups">
+            <Column label={t("columns", "targetGroups")}>
               {backends.length === 0 ? (
                 <Cell>
                   <span className="text-fg-fnt">—</span>
@@ -367,7 +375,7 @@ function MembersBlock({
                         </ObjectLink>
                       ) : (
                         <span className="text-fg-fnt">
-                          no TargetGroupBinding
+                          {t("empty", "noTargetGroupBinding")}
                         </span>
                       )}
                     </Cell>
@@ -383,72 +391,48 @@ function MembersBlock({
 }
 
 function FindingLine({ finding }: { finding: AlbFinding }) {
+  const t = useT();
   switch (finding.kind) {
     case "shared":
       return (
-        <Finding tone="warn" title="One load balancer, several namespaces">
-          <span className="font-mono">{finding.namespaces.join(", ")}</span> all
-          put Ingresses on this ALB. Their rules are concatenated into one
-          listener, so a path added in one namespace can shadow a path in
-          another, and the certificate, scheme and WAF are shared — none of
-          which is visible from any of the Ingresses&rsquo; own pages.
+        <Finding tone="warn" title={t("action", "albSharedTitle")}>
+          {t("empty", "albSharedBody", {
+            namespaces: finding.namespaces.join(", "),
+          })}
         </Finding>
       );
     case "order-clash":
       return (
         <Finding
           tone="warn"
-          title={
-            <>
-              Two Ingresses claim order{" "}
-              <span className="font-mono">{finding.order}</span>
-            </>
-          }
+          title={t("action", "albOrderClashTitle", { order: finding.order })}
         >
-          <span className="font-mono">{finding.members.join(", ")}</span> ask
-          for the same position in the listener&rsquo;s rule list. The
-          controller will pick one; nothing in these objects says which, and the
-          one that loses has its rules evaluated after the other&rsquo;s.
+          {t("empty", "albOrderClashBody", {
+            members: finding.members.join(", "),
+          })}
         </Finding>
       );
     case "disagree":
       return (
         <Finding
           tone="warn"
-          title={
-            <>
-              Members disagree about{" "}
-              <span className="font-mono">{finding.field}</span>
-            </>
-          }
+          title={t("action", "albDisagreeTitle", { field: finding.field })}
         >
           {finding.values.map((entry) => (
             <span key={entry.value} className="block">
-              <span className="font-mono">{entry.by}</span> asks for{" "}
-              <span className="font-mono">{entry.value}</span>
+              {t("empty", "albAsksFor", { by: entry.by, value: entry.value })}
             </span>
           ))}
-          <span className="mt-1 block">
-            A load balancer has one of these. One of the two is being discarded,
-            and the controller decides which.
-          </span>
+          <span className="mt-1 block">{t("empty", "albDisagreeNote")}</span>
         </Finding>
       );
     case "no-params":
       return (
         <Finding
           tone="err"
-          title={
-            <>
-              No <span className="font-mono">IngressClassParams</span> named{" "}
-              <span className="font-mono">{finding.named}</span>
-            </>
-          }
+          title={t("action", "albNoParamsTitle", { name: finding.named })}
         >
-          The <span className="font-mono">{finding.className}</span> class
-          points its <span className="font-mono">spec.parameters</span> at it
-          and there is none in the cluster, so every default it was meant to set
-          — scheme, certificate, subnets, WAF — is unset instead.
+          {t("empty", "albNoParamsBody", { className: finding.className })}
         </Finding>
       );
     default:

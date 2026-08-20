@@ -9,6 +9,7 @@ import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * A container port that opens a port-forward.
@@ -40,6 +41,7 @@ export function ClickablePort({
   className,
   showProtocol = true,
 }: ClickablePortProps) {
+  const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const label = portName
@@ -69,7 +71,7 @@ export function ClickablePort({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          Forward this port
+          {t("action", "forwardThisPort")}
         </TooltipContent>
       </Tooltip>
 

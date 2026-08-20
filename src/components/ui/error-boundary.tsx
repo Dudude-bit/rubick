@@ -1,6 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { logError } from "@/lib/logger";
+import { T } from "@/i18n/T";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -59,9 +60,11 @@ export class ErrorBoundary extends React.Component<
 
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="text-lg font-semibold">Something went wrong</div>
+        <div className="text-lg font-semibold">
+          <T section="action" k="somethingWentWrong" />
+        </div>
         <div className="text-xs text-fg-mut">
-          The page failed to render. You can reload or return home.
+          <T section="empty" k="pageFailedToRender" />
         </div>
         {this.state.error?.message && (
           <pre className="max-w-2xl whitespace-pre-wrap rounded-md bg-hover px-4 py-3 text-left text-xs text-fg-mut">
@@ -70,9 +73,11 @@ export class ErrorBoundary extends React.Component<
         )}
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={this.handleGoHome}>
-            Go Home
+            <T section="action" k="goHome" />
           </Button>
-          <Button onClick={this.handleReload}>Reload</Button>
+          <Button onClick={this.handleReload}>
+            <T section="action" k="reload" />
+          </Button>
         </div>
       </div>
     );

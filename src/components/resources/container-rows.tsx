@@ -34,6 +34,8 @@ import type {
   ContainerPhase,
   DeploymentContainerInfo,
 } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
 
 /**
  * A pod's containers, and a deployment's container template, as metadata
@@ -167,8 +169,7 @@ export function ContainerRows(props: ContainerRowsProps) {
     // workload — and the reader has to be able to tell the two apart.
     return (
       <p className="text-xs text-fg-fnt">
-        No containers in this spec — nothing to inspect, and nothing an image or
-        a probe could be read from.
+        <T section="empty" k="noContainersInSpec" />
       </p>
     );
   }
@@ -253,16 +254,20 @@ function ContainerBlock({
   onUpdateImage?: (containerName: string, currentImage: string) => void;
   onOpenLogs?: (containerName: string) => void;
 }) {
+  const t = useT();
   const runtime = isRuntime(container);
   const status = step?.status ?? (runtime ? containerStatus(container) : null);
 
   const items: KeyValue[] = [
-    { label: "Image", value: <ImageRef image={container.image} /> },
+    {
+      label: t("columns", "image"),
+      value: <ImageRef image={container.image} />,
+    },
   ];
 
   if (runtime) {
     items.push({
-      label: "Restarts",
+      label: t("columns", "restarts"),
       value: container.restartCount,
       tone: container.restartCount > 0 ? "warn" : undefined,
     });
@@ -278,14 +283,14 @@ function ContainerBlock({
     if (death) {
       const when = terminationWhen(death);
       items.push({
-        label: "Last exit",
+        label: t("columns", "lastExit"),
         value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
         tone: death.exitCode === 0 ? undefined : "err",
       });
     }
     if (container.ports.length > 0) {
       items.push({
-        label: "Ports",
+        label: t("columns", "ports"),
         value:
           podName && namespace ? (
             <ClickablePorts
@@ -306,7 +311,7 @@ function ContainerBlock({
   if (!runtime) {
     if (container.ports.length > 0) {
       items.push({
-        label: "Ports",
+        label: t("columns", "ports"),
         value: container.ports.join(" · "),
         mono: true,
       });
@@ -314,12 +319,16 @@ function ContainerBlock({
     const requests = quantities(container.resources.requests);
     const limits = quantities(container.resources.limits);
     if (requests)
-      items.push({ label: "Requests", value: requests, mono: true });
+      items.push({
+        label: t("columns", "requests"),
+        value: requests,
+        mono: true,
+      });
     items.push({
-      label: "Limits",
+      label: t("columns", "limits"),
       // A container with no limit can consume the node; saying so beats
       // omitting the row and letting it read as "not applicable".
-      value: limits ?? "none set",
+      value: limits ?? t("empty", "noneSet"),
       mono: limits != null,
       tone: limits ? undefined : "warn",
     });
@@ -359,7 +368,7 @@ function ContainerBlock({
           <>
             {runtime && onOpenLogs && hasLogs && (
               <DetailAction
-                label="Logs"
+                label={t("action", "logs")}
                 icon={ScrollText}
                 onClick={() => onOpenLogs(container.name)}
               />
@@ -368,14 +377,14 @@ function ContainerBlock({
                 container that has never started, it can only fail. */}
             {runtime && onOpenShell && container.state.type === "running" && (
               <DetailAction
-                label="Shell"
+                label={t("action", "shell")}
                 icon={TerminalIcon}
                 onClick={() => onOpenShell(container.name)}
               />
             )}
             {!runtime && onUpdateImage && (
               <DetailAction
-                label="Update image"
+                label={t("action", "updateImage")}
                 icon={ImageIcon}
                 onClick={() => onUpdateImage(container.name, container.image)}
               />

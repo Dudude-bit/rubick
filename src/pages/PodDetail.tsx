@@ -87,6 +87,7 @@ import {
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -107,17 +108,17 @@ const CANNOT_PULL =
 
 function describeWaiting(
   container: ContainerInfo,
-  reason: string
+  reason: string,
+  t: ReturnType<typeof useT>
 ): Omit<PodProblem, "tab"> {
   if (CANNOT_PULL.test(reason)) {
     return {
       reason,
-      headline: `${container.name} cannot pull its image`,
+      headline: t("empty", "cannotPullImage", { container: container.name }),
       detail: (
         <>
-          <ImageRef image={container.image} inline /> — the kubelet is retrying,
-          waiting longer after each attempt. The name, the tag or the pull
-          credentials are what to check.
+          <ImageRef image={container.image} inline />{" "}
+          {t("empty", "imagePullRetrying")}
         </>
       ),
       tone: "err",
@@ -127,27 +128,29 @@ function describeWaiting(
     const last = container.lastTerminated;
     return {
       reason,
-      headline: `${container.name} starts and then exits, over and over`,
+      headline: t("empty", "startsAndExits", { container: container.name }),
       detail: last
-        ? `${container.restartCount} restarts so far; the last run ended ${describeTermination(last)}${
-            terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
-          }. What it printed before it died is in Logs.`
-        : `${container.restartCount} restarts so far. What it printed before it last died is in Logs.`,
+        ? t("empty", "crashRestartsWithLastRun", {
+            n: container.restartCount,
+            how: `${describeTermination(last)}${
+              terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
+            }`,
+          })
+        : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
       tone: "err",
     };
   }
   if (/^CreateContainer(Config)?Error$/i.test(reason)) {
     return {
       reason,
-      headline: `${container.name} cannot be built from this spec`,
-      detail:
-        "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
+      headline: t("empty", "cannotBeBuilt", { container: container.name }),
+      detail: t("empty", "missingConfigMapSecretOrVolume"),
       tone: "err",
     };
   }
   return {
     reason,
-    headline: `${container.name} is waiting to start`,
+    headline: t("empty", "waitingToStart", { container: container.name }),
     detail: reason,
     tone: statusRole(reason) === "err" ? "err" : "warn",
   };
@@ -161,7 +164,10 @@ function describeWaiting(
  * [app]` is the same fact with the answer taken out. The Ready family is
  * skipped for that reason: it can only ever restate the loop above it.
  */
-function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
+function podProblem(
+  pod: PodInfo | null | undefined,
+  t: ReturnType<typeof useT>
+): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
 
   // Init containers included, and first: a pod in `Init:CrashLoopBackOff`
@@ -177,7 +183,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       !STARTING.has(state.reason.toLowerCase())
     ) {
       return {
-        ...describeWaiting(container, state.reason),
+        ...describeWaiting(container, state.reason, t),
         tab: "containers",
       };
     }
@@ -185,8 +191,13 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       const { termination } = state;
       return {
         reason: termination.reason ?? "Error",
-        headline: `${container.name} exited with ${termination.exitCode}`,
-        detail: `${describeTermination(termination)} — the last run of this container did not finish cleanly.`,
+        headline: t("empty", "containerExitedWith", {
+          container: container.name,
+          code: termination.exitCode,
+        }),
+        detail: t("empty", "lastRunNotClean", {
+          how: describeTermination(termination),
+        }),
         tone: "err",
         tab: "containers",
       };
@@ -202,8 +213,11 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
       reason: condition.reason ?? condition.type,
       headline:
         condition.type === "PodScheduled"
-          ? "No node will take this pod"
-          : `${condition.type} is ${condition.status}`,
+          ? t("empty", "noNodeWillTakePod")
+          : t("empty", "conditionIsStatus", {
+              type: condition.type,
+              status: condition.status,
+            }),
       detail: (
         <ResourceMessage
           message={condition.message ?? condition.reason ?? ""}
@@ -220,7 +234,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
   if (pod.status.reason || pod.status.message) {
     return {
       reason: pod.status.reason ?? "Failed",
-      headline: pod.status.reason ?? "This pod failed",
+      headline: pod.status.reason ?? t("empty", "thisPodFailed"),
       detail: (
         <ResourceMessage
           message={pod.status.message ?? ""}
@@ -236,6 +250,7 @@ function podProblem(pod: PodInfo | null | undefined): PodProblem | null {
 }
 
 export function PodDetail() {
+  const t = useT();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentContext } = useClusterStore();
@@ -345,16 +360,16 @@ export function PodDetail() {
     },
     onSuccess: () => {
       toast({
-        title: "Pod restarted",
-        description: `Pod ${name} is being restarted.`,
+        title: t("action", "podRestarted"),
+        description: t("action", "podRestartingDetail", { name: name ?? "" }),
       });
       queryClient.invalidateQueries({ queryKey: ["pod", namespace, name] });
       refetch();
     },
     onError: (err) => {
       toast({
-        title: "Error",
-        description: `Failed to restart pod: ${err}`,
+        title: t("action", "error"),
+        description: t("action", "failedToRestartPod", { error: String(err) }),
         variant: "destructive",
       });
     },
@@ -411,8 +426,8 @@ export function PodDetail() {
 
     if (isDebugPod && pod) {
       toast({
-        title: "Debug pod still running",
-        description: "Delete when done to free cluster resources",
+        title: t("action", "debugPodStillRunning"),
+        description: t("action", "debugPodDeleteHint"),
         action: (
           <Button
             size="sm"
@@ -420,32 +435,46 @@ export function PodDetail() {
             onClick={async () => {
               try {
                 await commands.deleteDebugPod(pod.name, pod.namespace);
-                toast({ title: "Debug pod deleted", description: pod.name });
+                toast({
+                  title: t("action", "debugPodDeleted"),
+                  description: pod.name,
+                });
                 navigate(-1);
               } catch (err) {
                 toast({
-                  title: "Failed to delete",
+                  title: t("action", "failedToDelete"),
                   description: normalizeTauriError(err),
                   variant: "destructive",
                 });
               }
             }}
           >
-            Delete Now
+            {t("action", "deleteNow")}
           </Button>
         ),
         duration: 10000,
       });
     }
-  }, [isDebugPod, pod, podKey, toast, navigate, searchParams, setSearchParams]);
+  }, [
+    isDebugPod,
+    pod,
+    podKey,
+    t,
+    toast,
+    navigate,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const handleFindReplacement = savedLabels
     ? () =>
         findReplacement().then((replacement) => {
           if (replacement) {
             toast({
-              title: "Found replacement pod",
-              description: `Switching to ${replacement.name}`,
+              title: t("action", "foundReplacementPod"),
+              description: t("action", "switchingTo", {
+                name: replacement.name,
+              }),
             });
             navigate(
               `/${toPlural(ResourceType.Pod)}/${replacement.namespace}/${replacement.name}`,
@@ -453,8 +482,8 @@ export function PodDetail() {
             );
           } else {
             toast({
-              title: "No replacement found",
-              description: "No other running pods with matching labels",
+              title: t("action", "noReplacementFound"),
+              description: t("empty", "noMatchingRunningPods"),
               variant: "destructive",
             });
           }
@@ -463,7 +492,7 @@ export function PodDetail() {
 
   const placement: KeyValue[] = [
     {
-      label: "Node",
+      label: t("columns", "node"),
       value: pod?.nodeName ? (
         <span className="inline-flex items-baseline gap-2">
           <ResourceRef
@@ -474,7 +503,7 @@ export function PodDetail() {
           {nodeIsSpot && <SpotMark says="spot" />}
         </span>
       ) : (
-        "unscheduled"
+        t("empty", "unscheduled")
       ),
       tone: pod?.nodeName ? undefined : "warn",
     },
@@ -485,22 +514,25 @@ export function PodDetail() {
     ...(nodeIsSpot
       ? [
           {
-            label: "Spot node",
-            value:
-              "The cloud can reclaim this node at any time. An eviction here is the arrangement, not a fault.",
+            label: t("columns", "spotNode"),
+            value: t("empty", "spotNodeNote"),
           },
         ]
       : []),
     {
-      label: "Pod IP",
-      value: <CopyableAddress value={pod?.podIp} label="Pod IP" />,
+      label: t("columns", "podIp"),
+      value: (
+        <CopyableAddress value={pod?.podIp} label={t("columns", "podIp")} />
+      ),
     },
     {
-      label: "Host IP",
-      value: <CopyableAddress value={pod?.hostIp} label="Host IP" />,
+      label: t("columns", "hostIp"),
+      value: (
+        <CopyableAddress value={pod?.hostIp} label={t("columns", "hostIp")} />
+      ),
     },
     {
-      label: "Restarts",
+      label: t("columns", "restarts"),
       value: pod ? describeRestarts(pod) : 0,
       tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
     },
@@ -509,12 +541,15 @@ export function PodDetail() {
     // to check. Only when it disagrees with the header, which is the only
     // time the two are not the same word twice.
     ...(pod && pod.status.phase !== pod.status.display
-      ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+      ? [{ label: t("columns", "phase"), value: pod.status.phase, mono: true }]
       : []),
     {
-      label: "Containers",
+      label: t("columns", "containers"),
       value: pod
-        ? `${podReadiness(pod).ready} of ${podReadiness(pod).total} ready`
+        ? t("count", "ofTotalReady", {
+            n: podReadiness(pod).ready,
+            total: podReadiness(pod).total,
+          })
         : "—",
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
@@ -524,7 +559,7 @@ export function PodDetail() {
       // so it renders as the glyph and the tinted name and no link — but it
       // is the same object under the same mark wherever it is named, and the
       // day the kind gets a page it lights up without a change here.
-      label: "Service account",
+      label: t("columns", "serviceAccount"),
       value: pod?.serviceAccountName ? (
         <ResourceRef
           kind="ServiceAccount"
@@ -540,7 +575,7 @@ export function PodDetail() {
     },
   ];
 
-  const problem = useMemo(() => podProblem(pod), [pod]);
+  const problem = useMemo(() => podProblem(pod, t), [pod, t]);
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -574,7 +609,9 @@ export function PodDetail() {
               status={pod.status.display}
               roleOverride={silence ? "neutral" : undefined}
               title={
-                silence ? silenceNote(silence) : `Phase ${pod.status.phase}`
+                silence
+                  ? silenceNote(silence)
+                  : `${t("columns", "phase")} ${pod.status.phase}`
               }
             />
           ) : null
@@ -607,7 +644,12 @@ export function PodDetail() {
               tone={problem.tone}
               action={
                 <DetailAction
-                  label={`See ${problem.tab}`}
+                  label={t(
+                    "action",
+                    problem.tab === "containers"
+                      ? "seeContainers"
+                      : "seeConditions"
+                  )}
                   icon={ArrowRight}
                   onClick={() => setActiveTab(problem.tab)}
                 />
@@ -618,20 +660,20 @@ export function PodDetail() {
         actions={
           <>
             <DetailAction
-              label="Debug"
+              label={t("action", "debug")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
               disabled={!currentContext || !pod}
             />
             <DetailAction
-              label="Port forward"
+              label={t("action", "portForward")}
               icon={Network}
               onClick={openPortForwardDialog}
               disabled={!currentContext || !pod}
             />
             <InterceptedAction
               intercept={intercept("Restart")}
-              label="Restart"
+              label={t("action", "restart")}
               icon={RefreshCw}
               onClick={() => restartMutation.mutate()}
               disabled={!pod}
@@ -639,7 +681,7 @@ export function PodDetail() {
             />
             <InterceptedAction
               intercept={intercept("Delete")}
-              label="Delete"
+              label={t("action", "delete")}
               icon={Trash2}
               onClick={() => deleteMutation?.mutate()}
               disabled={!pod}
@@ -651,7 +693,7 @@ export function PodDetail() {
         tabs={[
           {
             id: "overview",
-            label: "Overview",
+            label: t("nav", "overview"),
             glyph: viewGlyph(Info),
             content: (
               <>
@@ -667,7 +709,12 @@ export function PodDetail() {
                   takes the first slot is the question a Pod does have in the
                   same place: where the one is. */}
                 <WorkloadOverview
-                  count={<FactBlock title="Placement" items={placement} />}
+                  count={
+                    <FactBlock
+                      title={t("columns", "placement")}
+                      items={placement}
+                    />
+                  }
                   usage={
                     <UsageBlock
                       kind={ResourceType.Pod}
@@ -713,16 +760,16 @@ export function PodDetail() {
                   />
                 )}
                 <KeyValueSection
-                  title="Labels"
+                  title={t("columns", "labels")}
                   count={Object.keys(pod?.labels ?? {}).length}
                   items={recordToKeyValues(pod?.labels ?? {})}
-                  emptyMessage="No labels"
+                  emptyMessage={t("empty", "noLabels")}
                 />
                 <KeyValueSection
-                  title="Annotations"
+                  title={t("columns", "annotations")}
                   count={Object.keys(pod?.annotations ?? {}).length}
                   items={recordToKeyValues(pod?.annotations ?? {})}
-                  emptyMessage="No annotations"
+                  emptyMessage={t("empty", "noAnnotations")}
                 />
               </>
             ),
@@ -730,7 +777,7 @@ export function PodDetail() {
           connectionsTab(connections, deliveryQuery),
           {
             id: "containers",
-            label: "Containers",
+            label: t("columns", "containers"),
             // A container has no kind of its own; it is what a Pod is made of,
             // so it arrives under the Pod's cube and the Pod's hue — the same
             // mark the reader clicked to get here.
@@ -753,7 +800,7 @@ export function PodDetail() {
           },
           {
             id: "logs",
-            label: "Logs",
+            label: t("action", "logs"),
             glyph: viewGlyph(AlignLeft),
             kind: "surface",
             content: pod ? (
@@ -768,11 +815,15 @@ export function PodDetail() {
           },
           {
             id: "shell",
-            label: "Shell",
+            label: t("columns", "shell"),
             glyph: viewGlyph(SquareTerminal),
             kind: "surface",
             mark: shellSession
-              ? liveMark(`session attached to ${shellSession.containerName}`)
+              ? liveMark(
+                  t("empty", "sessionAttachedTo", {
+                    container: shellSession.containerName,
+                  })
+                )
               : undefined,
             content: pod ? (
               <PodShell
@@ -788,13 +839,13 @@ export function PodDetail() {
           },
           {
             id: "conditions",
-            label: "Conditions",
+            label: t("columns", "conditions"),
             glyph: viewGlyph(BadgeCheck),
             mark: conditionsMark(pod?.status.conditions),
             content: (
               <Section>
                 <SectionHeader
-                  title="Conditions"
+                  title={t("columns", "conditions")}
                   count={pod?.status.conditions.length}
                 />
                 <ConditionRows

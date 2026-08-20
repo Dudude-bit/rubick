@@ -38,6 +38,8 @@ export interface Forwarded {
   localPort: number;
   /** The pod it resolved to this time. Never durable — see the module note. */
   pod: string;
+  /** Empty for an API at the root — see {@link normalisedSubpath}. */
+  subpath: string;
   url: string;
 }
 
@@ -134,6 +136,21 @@ export async function podFor(service: ServiceInfo): Promise<string | null> {
  * explicitly *not* the answer to a pod that has gone for good, which is what
  * {@link reestablish} is for.
  */
+/**
+ * The part of the address after the port, when the API does not sit at the root.
+ *
+ * Prometheus answers `/api/v1/query` straight off the host; VictoriaMetrics
+ * does not — VMSingle serves the same API under `/prometheus`, and a
+ * VMCluster's vmselect under `/select/<tenant>/prometheus`. The app cannot
+ * work out which from the Service, so it is asked for and carried with the
+ * forward, and everything downstream concatenates as it always did.
+ */
+export function normalisedSubpath(subpath: string | undefined): string {
+  const trimmed = (subpath ?? "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
 export async function forward(
   service: ServiceInfo,
   preferredPorts: number[],
@@ -142,7 +159,8 @@ export async function forward(
    * address is already made of. Taken, a free one is chosen instead and the
    * caller is expected to move the address with it.
    */
-  keepLocal?: number
+  keepLocal?: number,
+  subpath?: string
 ): Promise<Forwarded> {
   const remotePort = portOf(service, preferredPorts);
   if (remotePort === null) {
@@ -185,7 +203,8 @@ export async function forward(
     remotePort,
     localPort,
     pod,
-    url: `http://localhost:${localPort}`,
+    subpath: normalisedSubpath(subpath),
+    url: `http://localhost:${localPort}${normalisedSubpath(subpath)}`,
   };
 }
 
@@ -249,6 +268,12 @@ export interface InClusterHint {
    * feature exists to stop somebody hitting.
    */
   avoid?: string[];
+  /**
+   * What a subpath looks like for this vendor, shown as the field's
+   * placeholder. Prometheus itself needs none; the things that speak its API
+   * do, and the example is the fastest way to say which shape is wanted.
+   */
+  subpathExample?: string;
 }
 
 export interface Candidate {

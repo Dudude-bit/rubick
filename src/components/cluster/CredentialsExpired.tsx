@@ -37,12 +37,14 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { verbatim } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ExpiredCredentials } from "@/lib/credentials";
+import { useT } from "@/i18n/useT";
 
 export function CredentialsExpired({
   expired,
 }: {
   expired: ExpiredCredentials;
 }) {
+  const t = useT();
   const context = useClusterStore((state) => state.currentContext);
   const connect = useClusterStore((state) => state.connect);
   const isAuthenticating = useClusterStore((state) => state.isAuthenticating);
@@ -61,18 +63,16 @@ export function CredentialsExpired({
         <KeyRound className="size-4 flex-none translate-y-0.5 text-warn" />
         <h2 className="text-[13px] font-semibold tracking-tight text-fg">
           {context
-            ? `${context} is no longer accepting this session`
-            : "This session is no longer accepted"}
+            ? t("cluster", "sessionRefusedNamed", { context })
+            : t("cluster", "sessionRefused")}
         </h2>
       </div>
 
       <p className="text-xs text-fg-mut">
         {deadline
-          ? `The credentials this window connected with expired ${since} ago. `
-          : `The cluster refused this window's credentials ${since} ago. `}
-        Nothing here renews them on its own, so every list, count and chart in
-        this window stopped being answerable at that moment — which is why the
-        page is this rather than a screen of empty ones.
+          ? t("cluster", "credentialsExpiredAgo", { since })
+          : t("cluster", "credentialsRefusedAgo", { since })}
+        {t("cluster", "credentialsExpiredBody")}
       </p>
 
       {/* The server's own words, never paraphrased. Somebody is going to paste
@@ -90,14 +90,15 @@ export function CredentialsExpired({
             if (context) void connect(context);
           }}
         >
-          {isAuthenticating ? "Signing in…" : "Sign in again"}
+          {isAuthenticating
+            ? t("cluster", "signingIn")
+            : t("cluster", "signInAgain")}
         </Button>
         {/* Said only after a press: before one, it would be an instruction to
             do something the reader has not tried yet. */}
         {tried && !isAuthenticating && (
           <span className="text-[11px] text-fg-fnt">
-            Still refused? The credential plugin this context uses may need a
-            sign-in of its own first — for GKE that is{" "}
+            {t("cluster", "stillRefusedHint")}{" "}
             <span className="select-text font-mono">gcloud auth login</span>.
           </span>
         )}

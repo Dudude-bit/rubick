@@ -23,6 +23,7 @@ import { isScalable, toKind, isResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "./ResourceRef";
 import { KeyValueRow } from "./detail-kv";
 import type { OwnerReference } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 interface RelatedResourcesProps {
   ownerReferences: OwnerReference[];
@@ -103,6 +104,7 @@ export function RelatedResources({
   ownerReferences,
   namespace,
 }: RelatedResourcesProps) {
+  const t = useT();
   const controller = controllerOf(ownerReferences?.filter((r) => r.controller));
   const others = (ownerReferences ?? []).filter((ref) => !ref.controller);
 
@@ -124,10 +126,10 @@ export function RelatedResources({
 
   return (
     <Section>
-      <SectionHeader title="Related resources" />
+      <SectionHeader title={t("nav", "relatedResources")} />
       <dl className="flex flex-col">
         {hops.length > 0 && (
-          <KeyValueRow label="Controlled by">
+          <KeyValueRow label={t("columns", "controlledBy")}>
             <span className="flex flex-wrap items-baseline gap-x-2">
               {hops.map((hop, index) => (
                 <span
@@ -158,7 +160,7 @@ export function RelatedResources({
           </KeyValueRow>
         )}
         {others.map((owner) => (
-          <KeyValueRow key={owner.uid} label="Owner">
+          <KeyValueRow key={owner.uid} label={t("columns", "ownedBy")}>
             <span className="flex flex-wrap items-baseline gap-x-2">
               <OwnerName hop={owner} namespace={namespace} />
             </span>

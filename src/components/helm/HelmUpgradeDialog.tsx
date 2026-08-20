@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { KeyValueRow } from "@/components/resources/detail-kv";
 import type { HelmRelease } from "@/generated/types";
+import { useT } from "@/i18n/useT";
 
 export interface HelmUpgradeDialogProps {
   /** Release to upgrade */
@@ -46,40 +47,49 @@ export function HelmUpgradeDialog({
   onUpgrade,
   isUpgrading,
 }: HelmUpgradeDialogProps) {
+  const t = useT();
+
   return (
     <Dialog open={release !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Upgrade Release</DialogTitle>
+          <DialogTitle>{t("action", "upgradeRelease")}</DialogTitle>
           <DialogDescription>
-            Upgrade {release?.name} in namespace {release?.namespace}
+            {t("action", "upgradeReleaseIn", {
+              name: release?.name ?? "",
+              namespace: release?.namespace ?? "",
+            })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <dl className="max-w-sm">
-            <KeyValueRow label="Current chart" mono>
+            <KeyValueRow label={t("action", "currentChart")} mono>
               {release?.chart}
             </KeyValueRow>
-            <KeyValueRow label="Revision" mono>
+            <KeyValueRow label={t("action", "revision")} mono>
               {release?.revision}
             </KeyValueRow>
           </dl>
           <div className="space-y-2">
-            <Label htmlFor="upgrade-version">New Version (optional)</Label>
+            <Label htmlFor="upgrade-version">
+              {t("action", "newVersionOptional")}
+            </Label>
             <Input
               id="upgrade-version"
               value={version}
               onChange={(e) => onVersionChange(e.target.value)}
-              placeholder="Leave empty for latest"
+              placeholder={t("action", "leaveEmptyForLatest")}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="upgrade-values">Values (YAML, optional)</Label>
+            <Label htmlFor="upgrade-values">
+              {t("action", "valuesYamlOptional")}
+            </Label>
             <Textarea
               id="upgrade-values"
               value={values}
               onChange={(e) => onValuesChange(e.target.value)}
-              placeholder="# Custom values to merge&#10;replicaCount: 3"
+              placeholder={t("action", "valuesPlaceholder")}
               className="font-mono text-sm h-32"
             />
           </div>
@@ -90,16 +100,16 @@ export function HelmUpgradeDialog({
               onCheckedChange={(checked) => onWaitChange(checked === true)}
             />
             <Label htmlFor="upgrade-wait" className="text-sm">
-              Wait for ready
+              {t("action", "waitForReady")}
             </Label>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("action", "cancel")}
           </Button>
           <Button onClick={onUpgrade} disabled={isUpgrading}>
-            {isUpgrading ? "Upgrading..." : "Upgrade"}
+            {isUpgrading ? t("action", "upgrading") : t("action", "upgrade")}
           </Button>
         </DialogFooter>
       </DialogContent>
