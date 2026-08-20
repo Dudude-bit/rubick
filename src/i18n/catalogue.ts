@@ -287,6 +287,8 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    openOnSiteShort: "Open on {site}",
+    valueNoun: "value",
     readingGroup: "reading {group}",
     listAnd: " and ",
     listComma: ", ",

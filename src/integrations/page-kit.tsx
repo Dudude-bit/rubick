@@ -304,7 +304,7 @@ export function OutLink({
       href={href}
       onClick={go}
       onAuxClick={(event) => event.button === 1 && go(event)}
-      title={t("action", "openOnSite", { site })}
+      title={t("action", "openOnSiteShort", { site })}
       className={cn(
         "inline-flex items-baseline gap-0.5 text-info hover:underline",
         className

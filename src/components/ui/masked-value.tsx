@@ -14,6 +14,8 @@ interface MaskedValueProps {
   placeholder?: string;
   className?: string;
   copyLabel?: string;
+  /** What the value is, for the copy toast: "Value of DB_PASSWORD copied." */
+  label?: string;
   /** Compact mode for table cells */
   compact?: boolean;
 }
@@ -27,6 +29,7 @@ export function MaskedValue({
   placeholder = "••••••••",
   className,
   copyLabel,
+  label,
   compact = false,
 }: MaskedValueProps) {
   const t = useT();
@@ -34,7 +37,11 @@ export function MaskedValue({
   const displayValue = isRevealed ? value : placeholder;
 
   const handleCopy = () => {
-    copyToClipboard(value, copyLabel ?? t("action", "valueCopied"));
+    copyToClipboard(
+      value,
+      copyLabel ??
+        t("action", "valueCopied", { label: label ?? t("action", "valueNoun") })
+    );
   };
 
   if (compact) {

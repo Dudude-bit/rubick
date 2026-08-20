@@ -254,6 +254,8 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    openOnSiteShort: "Открыть на {site}",
+    valueNoun: "значение",
     readingGroup: "идёт чтение: {group}",
     listAnd: " и ",
     listComma: ", ",
@@ -1458,7 +1460,7 @@ export const ru: Catalogue = {
       other: "{names} не запустились.",
     },
     initContainersAlreadyExited: {
-      one: "{names} — init-контейнер, который отработал, — уже завершился.",
+      one: "{names} — {n} init-контейнер, который отработал, — уже завершился.",
       few: "{names} — {n} init-контейнера, которые отработали, — уже завершились.",
       many: "{names} — {n} init-контейнеров, которые отработали, — уже завершились.",
       other:
@@ -3056,7 +3058,7 @@ export const ru: Catalogue = {
     shownOfTotal: "{n} из {total}",
     brokenAndFirst: "сломано {n} из {total}, и они первыми",
     servedOnNames: {
-      one: "Отдаётся на имени, которого нет в сертификате",
+      one: "Отдаётся на {n} имени, которого нет в сертификате",
       few: "Отдаётся на {n} именах, которых нет в сертификате",
       many: "Отдаётся на {n} именах, которых нет в сертификате",
       other: "Отдаётся на {n} именах, которых нет в сертификате",
@@ -3248,10 +3250,10 @@ export const ru: Catalogue = {
       other: "Отброшено {count} старые строки.",
     },
     rowsStandFor: {
-      one: "Эта строка представляет",
-      few: "Эти {n} строки представляют",
-      many: "Эти {n} строк представляют",
-      other: "Эти {n} строки представляют",
+      one: "{n} строка представляет",
+      few: "{n} строки представляют",
+      many: "{n} строк представляют",
+      other: "{n} строки представляют",
     },
     forLines: {
       one: "{count} строку.",
