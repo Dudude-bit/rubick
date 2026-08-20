@@ -16,7 +16,12 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { connectOf, forward, type Forwarded } from "@/integrations";
+import {
+  connectOf,
+  forward,
+  normalisedSubpath,
+  type Forwarded,
+} from "@/integrations";
 import type { ServiceInfo } from "@/generated/types";
 import {
   forwardsFor,
@@ -92,10 +97,12 @@ export async function wake(
     for (const id of await orphansOf(preference, preference.localPort)) {
       await commands.stopPortForward(id).catch(() => undefined);
     }
+    const subpath = normalisedSubpath(preference.subpath);
     return {
       ...preference,
       pod: "",
-      url: `http://localhost:${preference.localPort}`,
+      subpath,
+      url: `http://localhost:${preference.localPort}${subpath}`,
     };
   }
 
@@ -114,7 +121,8 @@ export async function wake(
   const found = await forward(
     service,
     [preference.remotePort],
-    preference.localPort
+    preference.localPort,
+    preference.subpath
   );
   if (found.localPort !== preference.localPort) {
     await moveAddress(vendorId, preference, found.localPort);
@@ -145,7 +153,7 @@ async function moveAddress(
   const saved = await connect.read().catch(() => null);
   await connect
     .save({
-      url: `http://localhost:${localPort}`,
+      url: `http://localhost:${localPort}${normalisedSubpath(preference.subpath)}`,
       authType: saved?.authType ?? "none",
       // Empty, never null: the backend keeps the stored one when nothing is
       // sent, and the token has never been in this window to send back.
