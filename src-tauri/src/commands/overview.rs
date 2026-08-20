@@ -1066,6 +1066,9 @@ pub async fn get_cluster_overview(
 }
 
 #[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::metrics::{MetricsStatus, NodeMetrics};

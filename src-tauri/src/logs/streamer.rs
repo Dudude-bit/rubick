@@ -1,6 +1,6 @@
 //! `LogStreamer` — owns a kube `Client` and an event broadcaster,
 //! exposes `get_logs` (one-shot) and `stream_logs` (with batching
-//! + periodic flush so verbose pods don't generate one Tauri
+//! and a periodic flush, so verbose pods don't generate one Tauri
 //! round-trip per line).
 
 use crate::commands::helpers::ResourceContext;

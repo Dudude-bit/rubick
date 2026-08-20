@@ -24,7 +24,7 @@ pub trait CliTool: Send + Sync {
     /// Custom path from user configuration, if set
     fn custom_path(&self) -> Option<String>;
 
-    /// Arguments to pass for version check (e.g., ["version", "--client"])
+    /// Arguments to pass for version check (e.g. `["version", "--client"]`)
     fn version_args(&self) -> Vec<&'static str>;
 
     /// Parse version string from command output

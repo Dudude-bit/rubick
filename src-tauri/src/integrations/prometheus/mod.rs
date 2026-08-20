@@ -386,6 +386,9 @@ fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
 }
 
 #[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
     use serde_json::json;

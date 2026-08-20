@@ -5,7 +5,7 @@
 //!
 //! - `events`:   `AppEvent` enum + `LogLineEvent` + `WatchOp`
 //! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl` /
-//!               `LogStream` bookkeeping types
+//!   `LogStream` bookkeeping types
 
 mod events;
 mod sessions;

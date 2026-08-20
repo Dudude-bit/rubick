@@ -5,7 +5,7 @@
 //! - `cloud`:   GCP + Azure + bindings + CLI paths
 //! - `registry`: image-registry configurations
 //! - `prefs`:   theme + YAML history + infra builder + recent +
-//!              updater + cluster preferences + `AppInfo`
+//!   updater + cluster preferences + `AppInfo`
 
 mod cloud;
 pub mod helpers;

@@ -1,7 +1,7 @@
 //! Shell command execution with user PATH resolution.
 //!
 //! - `path`:    `USER_PATH` `OnceCell` + login-shell PATH probe + fallback
-//!              merge for common locations (homebrew, asdf, cargo).
+//!   merge for common locations (homebrew, asdf, cargo).
 //! - `command`: `ShellCommand` builder + execution with timeout.
 
 mod command;

@@ -5,7 +5,7 @@
 //!
 //! - `types`: frontend Metrics types + internal serde shapes
 //! - `parse`: kube `DynamicObject` → frontend types, status mapping,
-//!           shared `fetch_metrics` generic helper
+//!   shared `fetch_metrics` generic helper
 
 mod parse;
 mod types;

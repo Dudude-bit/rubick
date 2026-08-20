@@ -1,6 +1,16 @@
 //! Kubernetes Quantity Parsing and Formatting
 //!
 //! Unified module for parsing and formatting Kubernetes resource quantities.
+
+// Converting between numeric types is what this module does: "1.5Gi" becomes
+// bytes through f64 and back again. A quantity a cluster reports is never
+// negative and stays far below the magnitude where f64's 52-bit mantissa or
+// u64's range would round anything a reader could notice.
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 //! Supports both CPU (cores/millicores) and Memory (bytes/Ki/Mi/Gi) formats.
 
 /// Binary unit multipliers (Ki, Mi, Gi, Ti, Pi, Ei)
@@ -133,6 +143,9 @@ pub fn calculate_utilization(used: f64, total: f64) -> Option<f64> {
 }
 
 #[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
