@@ -413,17 +413,37 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             const broken = listener.conditions.find(
               (c) => c.status === "False"
             );
+            const address = gateway.addresses[0];
             return {
               label: listener.name,
               value: (
                 <span className="inline-flex flex-wrap items-baseline gap-x-1 font-mono">
-                  :{listener.port} {listener.protocol}
+                  {address ? (
+                    // The dialable pair rides the click; the label stays
+                    // the listener's own :port.
+                    <CopyableValue
+                      value={`${address}:${listener.port}`}
+                      label={`Copy ${address}:${listener.port}`}
+                      quietMark
+                    >
+                      :{listener.port}
+                    </CopyableValue>
+                  ) : (
+                    <>:{listener.port}</>
+                  )}{" "}
+                  {listener.protocol}
                   {listener.hostname && (
                     <CopyableValue
                       value={listener.hostname}
                       label={`Listener hostname ${listener.hostname}`}
                       quietMark
                     />
+                  )}
+                  {listener.attachedRoutes != null && (
+                    <span className="font-sans text-fg-fnt">
+                      · {listener.attachedRoutes} route
+                      {listener.attachedRoutes === 1 ? "" : "s"}
+                    </span>
                   )}
                   {broken && (
                     <span className="text-err">
