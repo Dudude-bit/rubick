@@ -10,7 +10,7 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ServiceInfo } from "@/generated/types";
 
@@ -31,6 +31,15 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { InCluster } = await import("./ConnectIntegration");
+
+// Radix's Select asks the DOM two things jsdom does not implement. Without
+// them the listbox never opens and the test fails on the widget rather than
+// on the behaviour it is about.
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 const vmsingle = {
   name: "vmsingle-victoria-metrics-k8s-stack",
@@ -82,11 +91,15 @@ describe("pointing at a Service the search cannot find", () => {
     );
     await waitFor(() => expect(listServices).toHaveBeenCalled());
 
-    await user.selectOptions(
-      screen.getByLabelText("Service"),
-      "monitoring/vmsingle-victoria-metrics-k8s-stack"
+    await user.click(screen.getByRole("combobox", { name: "Service" }));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "monitoring/vmsingle-victoria-metrics-k8s-stack",
+      })
     );
-    await user.selectOptions(screen.getByLabelText("Port"), "8428");
+
+    await user.click(screen.getByRole("combobox", { name: "Port" }));
+    await user.click(await screen.findByRole("option", { name: /8428/ }));
     await user.type(screen.getByLabelText("Subpath"), "/prometheus");
     await user.click(screen.getByRole("button", { name: "Forward it" }));
 
@@ -97,5 +110,7 @@ describe("pointing at a Service the search cannot find", () => {
     expect(forwarded.url).toBe(
       `http://localhost:${forwarded.localPort}/prometheus`
     );
-  });
+    // Two popovers opened and picked from, in jsdom: the default five seconds
+    // is not a statement about this code, it is the widget being slow here.
+  }, 20_000);
 });

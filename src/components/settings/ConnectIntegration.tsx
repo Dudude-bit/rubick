@@ -42,6 +42,13 @@ import type {
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function ConnectIntegration({
   vendorId,
@@ -506,45 +513,51 @@ function ByHand({
         {t("settings", "pointAtServiceHint")}
       </p>
 
-      <label className="flex flex-col gap-1 text-xs text-fg-mut">
-        {t("settings", "serviceLabel")}
-        <select
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="integration-service" className="text-xs text-fg-mut">
+          {t("settings", "serviceLabel")}
+        </Label>
+        <Select
           value={chosen}
-          onChange={(event) => {
-            setChosen(event.target.value);
+          onValueChange={(value) => {
+            setChosen(value);
             setPort("");
           }}
-          className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg"
         >
-          <option value="">{t("settings", "chooseService")}</option>
-          {(services ?? []).map((candidate) => (
-            <option
-              key={`${candidate.namespace}/${candidate.name}`}
-              value={`${candidate.namespace}/${candidate.name}`}
-            >
-              {candidate.namespace}/{candidate.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger id="integration-service" className="h-7 text-xs">
+            <SelectValue placeholder={t("settings", "chooseService")} />
+          </SelectTrigger>
+          <SelectContent>
+            {(services ?? []).map((candidate) => (
+              <SelectItem
+                key={`${candidate.namespace}/${candidate.name}`}
+                value={`${candidate.namespace}/${candidate.name}`}
+              >
+                {candidate.namespace}/{candidate.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      <label className="flex flex-col gap-1 text-xs text-fg-mut">
-        {t("settings", "portLabel")}
-        <select
-          value={port}
-          onChange={(event) => setPort(event.target.value)}
-          disabled={!service}
-          className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg disabled:opacity-60"
-        >
-          <option value="">{t("settings", "choosePort")}</option>
-          {(service?.ports ?? []).map((exposed) => (
-            <option key={exposed.port} value={String(exposed.port)}>
-              {exposed.port}
-              {exposed.name ? ` · ${exposed.name}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="integration-port" className="text-xs text-fg-mut">
+          {t("settings", "portLabel")}
+        </Label>
+        <Select value={port} onValueChange={setPort} disabled={!service}>
+          <SelectTrigger id="integration-port" className="h-7 text-xs">
+            <SelectValue placeholder={t("settings", "choosePort")} />
+          </SelectTrigger>
+          <SelectContent>
+            {(service?.ports ?? []).map((exposed) => (
+              <SelectItem key={exposed.port} value={String(exposed.port)}>
+                {exposed.port}
+                {exposed.name ? ` · ${exposed.name}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="flex flex-col gap-1">
         {/* The hint sits outside the label: inside it, the accessible name of
