@@ -32,6 +32,7 @@ import {
   useGatewayRoutes,
 } from "@/hooks/useGatewayRoutes";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -320,15 +321,50 @@ export function GatewayRoutesList() {
     [filtered, gateways.data, classes.data, backing.data, served, t]
   );
 
+  // The map's outer columns: pods and deployments, read only while the
+  // map is open — the list alone never pays for them.
+  const pods = useLiveQuery({
+    queryKey: ["map-pods"],
+    queryFn: () =>
+      commands.listPods({
+        namespace: null,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      }),
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled: showMap,
+  });
+  const deployments = useLiveQuery({
+    queryKey: ["map-deployments"],
+    queryFn: () =>
+      commands.listDeployments({
+        namespace: null,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+      }),
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled: showMap,
+  });
+
   const topology = useMemo(
     () =>
       gatewayTopology(
         gateways.data ?? [],
         filtered,
         backing.data ? { ...backing.data, backingKnown: true } : undefined,
-        t
+        t,
+        pods.data && deployments.data
+          ? { pods: pods.data, deployments: deployments.data }
+          : undefined
       ),
-    [gateways.data, filtered, backing.data, t]
+    [gateways.data, filtered, backing.data, t, pods.data, deployments.data]
   );
 
   if (!isConnected) {

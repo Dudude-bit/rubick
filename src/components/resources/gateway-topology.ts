@@ -1,6 +1,6 @@
 /**
- * The routing layer's shape: Gateways → routes → backends, as a
- * three-column map.
+ * The routing layer's shape, first mile to last:
+ * IP → Gateways → Kinds → Routes → Backends → Workloads.
  *
  * Nothing here is inferred. A Gateway column node is a Gateway that exists
  * — or one a parentRef names and the API server does not have, drawn as
@@ -9,6 +9,12 @@
  * own slices publish. A mesh parentRef (`kind: Service`) draws no Gateway
  * node: the route simply has no entry point on this map, which is the
  * truth of it.
+ *
+ * The outer layers exist only where they say something: the IP column when
+ * a gateway published an address, the kind funnel when the routes span
+ * more than one kind, the workloads when the pod lists have answered. A
+ * kind node is per (gateway, kind), never shared — one funnel for two
+ * gateways would merge their flows and lose which route enters where.
  */
 
 import {
@@ -22,7 +28,35 @@ import {
 import { describeStop } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
-import type { GatewayInfo, RouteInfo } from "@/generated/types";
+import type { GatewayInfo, PodInfo, RouteInfo } from "@/generated/types";
+
+/** What the last column is built from — handed over only once both lists
+ *  have answered, because a workload column guessed from half the pods
+ *  would draw missing workloads that are merely unread. */
+export interface WorkloadSources {
+  pods: PodInfo[];
+  deployments: Array<{ name: string; namespace: string }>;
+}
+
+/** The controller that owns a pod, with the ReplicaSet hop collapsed into
+ *  its Deployment — but only when that Deployment actually exists, never
+ *  by trusting the name's shape alone. */
+function ownerOf(
+  pod: PodInfo,
+  deployments: Map<string, Set<string>>
+): { kind: string; name: string } | null {
+  const owner =
+    pod.ownerReferences.find((ref) => ref.controller) ?? pod.ownerReferences[0];
+  if (!owner) return null;
+  if (owner.kind === "ReplicaSet") {
+    const cut = owner.name.lastIndexOf("-");
+    const candidate = cut > 0 ? owner.name.slice(0, cut) : null;
+    if (candidate && deployments.get(pod.namespace)?.has(candidate)) {
+      return { kind: "Deployment", name: candidate };
+    }
+  }
+  return { kind: owner.kind, name: owner.name };
+}
 
 function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
   const programmed =
@@ -68,13 +102,20 @@ export function gatewayTopology(
   gateways: GatewayInfo[],
   routes: RouteInfo[],
   backing: BackingSources | undefined,
-  t: T
+  t: T,
+  workloads?: WorkloadSources
 ): RoutingMapData {
   const gatewayNodes = new Map<string, MapNode>();
+  const kindNodes = new Map<string, MapNode>();
+  // The worst verdict flowing into each funnel node, for its gateway edge.
+  const kindEdgeTone = new Map<string, { gatewayId: string; tone: MapTone }>();
+  const kindRouteCount = new Map<string, number>();
   const routeNodes: MapNode[] = [];
   const backendNodes = new Map<string, MapNode>();
   const edges: MapEdge[] = [];
   const linked = new Set<string>();
+  // One funnel node per kind is only honest while it cannot merge flows.
+  const drawKinds = new Set(routes.map((route) => route.kind)).size >= 2;
 
   const link = (from: string, to: string, tone: MapTone) => {
     const key = `${from}->${to}`;
@@ -132,11 +173,27 @@ export function gatewayTopology(
           tag: { text: t("columns", "missingTag"), tone: "err" },
         });
       }
-      link(
-        gatewayId,
-        routeId,
-        refusedBy(route, parent.name, ns) ? "err" : "mute"
-      );
+      const verdict: MapTone = refusedBy(route, parent.name, ns)
+        ? "err"
+        : "mute";
+      if (!drawKinds) {
+        link(gatewayId, routeId, verdict);
+      } else {
+        const kindId = `kind/${gatewayId}/${route.kind}`;
+        if (!kindNodes.has(kindId)) {
+          kindNodes.set(kindId, {
+            id: kindId,
+            label: route.kind,
+            labelClassName: KIND_TEXT[route.kind],
+            tone: "mute",
+          });
+          kindEdgeTone.set(kindId, { gatewayId, tone: verdict });
+        } else if (verdict === "err") {
+          kindEdgeTone.get(kindId)!.tone = "err";
+        }
+        kindRouteCount.set(kindId, (kindRouteCount.get(kindId) ?? 0) + 1);
+        link(kindId, routeId, verdict);
+      }
     }
 
     for (const rule of route.rules) {
@@ -192,12 +249,147 @@ export function gatewayTopology(
     }
   }
 
-  return {
-    columns: [
-      { label: "Gateways", nodes: [...gatewayNodes.values()] },
-      { label: t("nav", "routes"), nodes: routeNodes, width: 240 },
-      { label: t("columns", "backends"), nodes: [...backendNodes.values()] },
-    ],
-    edges,
-  };
+  for (const [kindId, edge] of kindEdgeTone) {
+    const node = kindNodes.get(kindId)!;
+    node.sub = t("count", "nRoutes", { n: kindRouteCount.get(kindId) ?? 0 });
+    link(edge.gatewayId, kindId, edge.tone);
+  }
+
+  // The first mile: every address a drawn gateway publishes, deduplicated —
+  // two gateways behind one LB are two edges out of one node.
+  const ipNodes = new Map<string, MapNode>();
+  for (const gateway of gateways) {
+    const gatewayId = `gw/${gateway.namespace}/${gateway.name}`;
+    if (!gatewayNodes.has(gatewayId)) continue;
+    for (const address of gateway.addresses) {
+      const ipId = `ip/${address}`;
+      if (!ipNodes.has(ipId)) {
+        ipNodes.set(ipId, { id: ipId, label: address, tone: "mute" });
+      }
+      link(ipId, gatewayId, "mute");
+    }
+  }
+
+  // The last: what actually runs behind each backend Service — its
+  // published endpoints resolved to pods, the pods to their controllers.
+  const workloadNodes = new Map<string, MapNode>();
+  if (workloads && backing) {
+    const podByKey = new Map(
+      workloads.pods.map((pod) => [`${pod.namespace}/${pod.name}`, pod])
+    );
+    const deploymentNames = new Map<string, Set<string>>();
+    for (const deployment of workloads.deployments) {
+      const at = deploymentNames.get(deployment.namespace) ?? new Set();
+      at.add(deployment.name);
+      deploymentNames.set(deployment.namespace, at);
+    }
+
+    for (const node of backendNodes.values()) {
+      if (node.object?.kind !== "Service" || node.object.namespace == null) {
+        continue;
+      }
+      const service = node.object;
+      const published = backing.published.find(
+        (entry) =>
+          entry.service.name === service.name &&
+          entry.service.namespace === service.namespace
+      );
+      if (!published) continue;
+
+      const behind = new Map<
+        string,
+        {
+          kind: string | null;
+          name: string | null;
+          ready: number;
+          total: number;
+        }
+      >();
+      for (const endpoint of published.endpoints) {
+        const target = endpoint.target;
+        const pod =
+          target?.kind === "Pod"
+            ? podByKey.get(
+                `${target.namespace ?? service.namespace}/${target.name}`
+              )
+            : undefined;
+        const owner = pod ? ownerOf(pod, deploymentNames) : null;
+        // Pods with no controller — and addresses whose pod the list does
+        // not hold — group into one quiet node instead of vanishing.
+        const key = owner
+          ? `${owner.kind}/${owner.name}`
+          : `bare/${service.name}`;
+        const entry = behind.get(key) ?? {
+          kind: owner?.kind ?? null,
+          name: owner?.name ?? null,
+          ready: 0,
+          total: 0,
+        };
+        entry.total += 1;
+        if (endpoint.ready) entry.ready += 1;
+        behind.set(key, entry);
+      }
+
+      for (const [key, entry] of behind) {
+        const wlId =
+          entry.kind != null
+            ? `wl/${entry.kind}/${service.namespace}/${entry.name}`
+            : `wl/bare/${service.namespace}/${key}`;
+        if (!workloadNodes.has(wlId)) {
+          workloadNodes.set(wlId, {
+            id: wlId,
+            label: entry.name ?? t("count", "nBarePods", { n: entry.total }),
+            sub: t("count", "ofTotalReady", {
+              n: entry.ready,
+              total: entry.total,
+            }),
+            tone: entry.ready > 0 ? "ok" : entry.total > 0 ? "err" : "mute",
+            ...(entry.kind != null && entry.name != null
+              ? {
+                  object: {
+                    kind: entry.kind,
+                    name: entry.name,
+                    namespace: service.namespace,
+                  },
+                  tag: { text: entry.kind, tone: "mute" as MapTone },
+                }
+              : {}),
+          });
+        }
+        link(
+          node.id,
+          wlId,
+          workloadNodes.get(wlId)?.tone === "err" ? "err" : "mute"
+        );
+      }
+    }
+  }
+
+  const columns = [];
+  if (ipNodes.size > 0) {
+    columns.push({ label: "IP", nodes: [...ipNodes.values()], width: 150 });
+  }
+  columns.push({ label: "Gateways", nodes: [...gatewayNodes.values()] });
+  if (drawKinds) {
+    columns.push({
+      label: t("columns", "kinds"),
+      nodes: [...kindNodes.values()],
+      width: 130,
+    });
+  }
+  const spine = columns.length;
+  columns.push({ label: t("nav", "routes"), nodes: routeNodes, width: 240 });
+  columns.push({
+    label: t("columns", "backends"),
+    nodes: [...backendNodes.values()],
+  });
+  if (workloadNodes.size > 0) {
+    columns.push({
+      label: t("nav", "workloads"),
+      nodes: [...workloadNodes.values()],
+      width: 200,
+    });
+  }
+
+  return { columns, edges, spine };
 }

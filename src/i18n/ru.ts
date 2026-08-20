@@ -97,6 +97,7 @@ export const ru: Catalogue = {
     controller: "Контроллер",
     weight: "Вес",
     behindIt: "За ним",
+    kinds: "Типы",
     claim: "Заявка",
     hostname: "Хост",
     gatewayAddress: "Адрес шлюза",
@@ -2952,6 +2953,18 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    nRoutes: {
+      one: "{n} маршрут",
+      few: "{n} маршрута",
+      many: "{n} маршрутов",
+      other: "{n} маршрута",
+    },
+    nBarePods: {
+      one: "{n} под без владельца",
+      few: "{n} пода без владельца",
+      many: "{n} подов без владельца",
+      other: "{n} пода без владельца",
+    },
     gwNotServingCount: {
       one: "{n} не обслуживается",
       few: "{n} не обслуживаются",

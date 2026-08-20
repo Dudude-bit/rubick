@@ -132,6 +132,7 @@ export const en = {
     controller: "Controller",
     weight: "Weight",
     behindIt: "Behind it",
+    kinds: "Kinds",
     claim: "Claim",
     hostname: "Hostname",
     gatewayAddress: "Gateway address",
@@ -2866,6 +2867,8 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    nRoutes: { one: "{n} route", other: "{n} routes" },
+    nBarePods: { one: "{n} bare pod", other: "{n} bare pods" },
     gwNotServingCount: {
       one: "{n} not serving",
       other: "{n} not serving",
