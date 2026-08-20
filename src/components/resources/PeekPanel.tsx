@@ -715,7 +715,6 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
               <Rail
                 tone="on"
                 into={last ? null : "on"}
-                entering={index > 0}
                 here={level.key === "self"}
               />
               <div

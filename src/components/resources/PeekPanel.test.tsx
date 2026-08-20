@@ -1079,8 +1079,6 @@ describe("PeekPanel traffic chain", () => {
     expectAbove(self, endpoints);
     // One dot in the chain is haloed: the one the reader is standing on.
     expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
-    // Every segment ends in an arrowhead — three hops, two arrows, all down.
-    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
     // The rule's host rides on the hop, so it says which door this is.
     expect(screen.getByText("storefront.example.com")).toBeInTheDocument();
     // The words the chain replaced stay gone.
@@ -1262,7 +1260,6 @@ describe("PeekPanel traffic chain", () => {
     ).toBeInTheDocument();
     // Three levels — the doors, the Service, this Pod — so two arrows,
     // however many doors there are.
-    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {
