@@ -431,11 +431,15 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                 <>
                   {" "}
                   to{" "}
+                  {/* The clipboard gets the dialable pair — the same rule
+                      every hostless door follows. */}
                   <CopyableValue
-                    value={connectTarget}
-                    label={`Probe target ${connectTarget}`}
+                    value={`${connectTarget}:${port ?? 80}`}
+                    label={`Copy ${connectTarget}:${port ?? 80}`}
                     quietMark
-                  />
+                  >
+                    {connectTarget}
+                  </CopyableValue>
                 </>
               )}{" "}
               {tcp.status === "idle" && "— not checked yet"}
