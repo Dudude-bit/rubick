@@ -65,6 +65,7 @@ vi.mock("@/lib/commands", () => ({
     getService: vi.fn(),
     getResourceConnections: vi.fn(),
     getNamespace: vi.fn(),
+    getGatewayRoute: vi.fn(),
   },
 }));
 
@@ -1123,6 +1124,87 @@ describe("PeekPanel traffic chain", () => {
     // The route's hostnames ride on the hop, and the class rides the Gateway.
     expect(screen.getByText("shop.example.com")).toBeInTheDocument();
     expect(screen.getByText(/class envoy/)).toBeInTheDocument();
+  });
+
+  it("reads a route peek in the route's own words, not dotted paths", async () => {
+    vi.mocked(commands.getGatewayRoute).mockResolvedValue({
+      kind: "HTTPRoute",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      name: "promo",
+      namespace: "storefront",
+      hostnames: ["promo.example.com"],
+      parentRefs: [
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "Gateway",
+          name: "edge",
+          namespace: null,
+          sectionName: "http",
+          port: null,
+        },
+      ],
+      rules: [
+        {
+          matches: [],
+          backendRefs: [
+            {
+              group: "",
+              kind: "Service",
+              name: "frontend",
+              namespace: null,
+              port: 3000,
+              weight: null,
+            },
+          ],
+          hasRedirect: false,
+          extensionRefs: [],
+        },
+      ],
+      parents: [
+        {
+          parent: {
+            group: "gateway.networking.k8s.io",
+            kind: "Gateway",
+            name: "edge",
+            namespace: null,
+            sectionName: null,
+            port: null,
+          },
+          controllerName: "example.net/gw",
+          conditions: [
+            {
+              type: "Accepted",
+              status: "True",
+              reason: "Accepted",
+              message: null,
+              lastTransitionTime: null,
+            },
+          ],
+        },
+      ],
+      generation: 1,
+      labels: {},
+      annotations: {},
+      createdAt: "2026-08-19T20:00:00Z",
+    });
+    wrap("/events?peek=httproutes/storefront/promo");
+
+    expect(
+      await screen.findByRole("link", { name: "Gateway edge" })
+    ).toBeInTheDocument();
+    expect(commands.getGatewayRoute).toHaveBeenCalledWith(
+      "HTTPRoute",
+      "promo",
+      "storefront"
+    );
+    expect(screen.getByText("promo.example.com")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Service frontend" })
+    ).toBeInTheDocument();
+    // The port is a forward, and the flatten's dotted paths are gone.
+    expect(screen.getByRole("button", { name: ":3000" })).toBeInTheDocument();
+    expect(screen.queryByText(/backendRefs\.0/)).toBeNull();
+    expect(commands.getManifest).not.toHaveBeenCalled();
   });
 
   it("puts the Service in front above a Pod, and nothing below it", async () => {
