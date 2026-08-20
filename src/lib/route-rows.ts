@@ -41,6 +41,10 @@ export interface RouteRow {
    *  object is not there. Null while they are still loading: absence is
    *  only a fact once the list that would hold it has answered. */
   viaGhost: { kind: string; name: string; namespace: string } | null;
+  /** Another route on the same gateway claims the same hostname — per the
+   *  spec the older route wins, so this names the winner. Exact matches
+   *  only; wildcard overlap is the controller's verdict to give. */
+  contested: { by: string } | null;
   createdAt: string | null;
   serving: boolean;
 }
@@ -182,6 +186,37 @@ export function routesBoard(
   const serving: RouteRow[] = [];
   const mesh: RouteRow[] = [];
 
+  // Who claims which host on which gateway. The spec resolves the tie —
+  // oldest creationTimestamp wins, then alphabetical — so the loser's row
+  // can name the exact route that is actually serving its hostname.
+  const claims = new Map<string, RouteInfo[]>();
+  for (const route of routes) {
+    const first = route.parentRefs.find((parent) => parent.kind === "Gateway");
+    if (!first) continue;
+    for (const host of route.hostnames) {
+      const at = `${first.namespace ?? route.namespace}/${first.name}/${host}`;
+      claims.set(at, [...(claims.get(at) ?? []), route]);
+    }
+  }
+  const contestedBy = (route: RouteInfo): { by: string } | null => {
+    const first = route.parentRefs.find((parent) => parent.kind === "Gateway");
+    if (!first) return null;
+    for (const host of route.hostnames) {
+      const rivals =
+        claims.get(
+          `${first.namespace ?? route.namespace}/${first.name}/${host}`
+        ) ?? [];
+      if (rivals.length < 2) continue;
+      const winner = [...rivals].sort(
+        (a, b) =>
+          (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+          a.name.localeCompare(b.name)
+      )[0];
+      if (winner.name !== route.name) return { by: winner.name };
+    }
+    return null;
+  };
+
   for (const route of routes) {
     const gatewayParents = route.parentRefs.filter(
       (parent) => parent.kind === "Gateway"
@@ -209,6 +244,7 @@ export function routesBoard(
           via: "—",
           viaRef: null,
           viaGhost: null,
+          contested: null,
           serving: false,
         },
       });
@@ -234,6 +270,7 @@ export function routesBoard(
         via: parent.name,
         viaRef: exists ? ref : null,
         viaGhost: settled && !exists ? ref : null,
+        contested: null,
         serving: true,
       });
       continue;
@@ -267,6 +304,7 @@ export function routesBoard(
           viaGhost: sources.topologyKnown && !exists ? ref : null,
         };
       })(),
+      contested: contestedBy(route),
       serving: broken == null,
     };
     if (broken) {

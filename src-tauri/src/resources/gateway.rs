@@ -515,6 +515,52 @@ mod schema {
 
     #[derive(Debug, Default, Deserialize)]
     #[serde(rename_all = "camelCase", default)]
+    pub struct BackendTlsPolicySpec {
+        pub target_refs: Vec<PolicyTargetRef>,
+        pub validation: BackendTlsValidation,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    pub struct PolicyTargetRef {
+        pub group: Option<String>,
+        pub kind: Option<String>,
+        pub name: String,
+        pub section_name: Option<String>,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    pub struct BackendTlsValidation {
+        pub hostname: String,
+        // serde's camelCase writes "Ca"; the API spells the acronym out.
+        #[serde(rename = "wellKnownCACertificates")]
+        pub well_known_ca_certificates: Option<String>,
+        pub ca_certificate_refs: Vec<NamedRef>,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    pub struct NamedRef {
+        pub name: String,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    pub struct PolicyStatus {
+        pub ancestors: Vec<PolicyAncestor>,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    pub struct PolicyAncestor {
+        pub ancestor_ref: ParentRef,
+        pub controller_name: String,
+        pub conditions: Vec<ConditionInfo>,
+    }
+
+    #[derive(Debug, Default, Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
     pub struct RouteSpec {
         pub hostnames: Vec<String>,
         pub parent_refs: Vec<ParentRef>,
@@ -824,12 +870,172 @@ impl RouteInfo {
     }
 }
 
+/// One `targetRefs` entry of a policy — what the policy attaches to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyTargetRef {
+    pub group: String,
+    pub kind: String,
+    pub name: String,
+    /// A Service port name, where the policy narrows to one.
+    pub section_name: Option<String>,
+}
+
+/// One `status.ancestors[]` entry — a verdict is always scoped to the
+/// (ancestor, controller) pair, never a single boolean.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyAncestorInfo {
+    pub ancestor: ParentRefInfo,
+    pub controller_name: String,
+    pub conditions: Vec<ConditionInfo>,
+}
+
+/// BackendTLSPolicy, read at whatever version the cluster serves.
+///
+/// GEP-713 direct policy attachment: the policy names its targets, the
+/// targets never name it back — so every surface that wants "what affects
+/// this backend" does a reverse lookup over this list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendTlsPolicyInfo {
+    pub name: String,
+    pub namespace: String,
+    pub target_refs: Vec<PolicyTargetRef>,
+    /// The SNI the gateway sends and the SAN it requires of the backend.
+    pub hostname: String,
+    /// `System` where the well-known bundle is trusted instead of refs.
+    pub well_known_ca: Option<String>,
+    /// Names of the ConfigMaps/Secrets holding the CA, where given.
+    pub ca_cert_refs: Vec<String>,
+    pub ancestors: Vec<PolicyAncestorInfo>,
+    /// The ancestors list is capped at 16 by the API — a full one may be
+    /// the truth cut short, and must be said so.
+    pub ancestors_maybe_truncated: bool,
+    pub generation: Option<i64>,
+    pub labels: std::collections::BTreeMap<String, String>,
+    pub annotations: std::collections::BTreeMap<String, String>,
+    pub created_at: Option<String>,
+}
+
+impl BackendTlsPolicyInfo {
+    /// Tolerant like every reader here: absent fields become empties,
+    /// unknown fields are ignored, nothing fails.
+    pub fn read(obj: &DynamicObject) -> Self {
+        use kube::ResourceExt;
+
+        let spec: schema::BackendTlsPolicySpec = section(obj, "spec");
+        let status: schema::PolicyStatus = section(obj, "status");
+        let ancestors: Vec<PolicyAncestorInfo> = status
+            .ancestors
+            .into_iter()
+            .map(|entry| PolicyAncestorInfo {
+                ancestor: parent_ref_info(entry.ancestor_ref),
+                controller_name: entry.controller_name,
+                conditions: entry.conditions,
+            })
+            .collect();
+
+        Self {
+            name: obj.name_any(),
+            namespace: obj.namespace().unwrap_or_default(),
+            target_refs: spec
+                .target_refs
+                .into_iter()
+                .map(|target| PolicyTargetRef {
+                    group: target.group.unwrap_or_default(),
+                    kind: target.kind.unwrap_or_else(|| "Service".to_string()),
+                    name: target.name,
+                    section_name: target.section_name,
+                })
+                .collect(),
+            hostname: spec.validation.hostname,
+            well_known_ca: spec.validation.well_known_ca_certificates,
+            ca_cert_refs: spec
+                .validation
+                .ca_certificate_refs
+                .into_iter()
+                .map(|r| r.name)
+                .collect(),
+            ancestors_maybe_truncated: ancestors.len() >= 16,
+            ancestors,
+            generation: obj.metadata.generation,
+            labels: obj.metadata.labels.clone().unwrap_or_default(),
+            annotations: obj.metadata.annotations.clone().unwrap_or_default(),
+            created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse(yaml: &str) -> DynamicObject {
         serde_yaml::from_str(yaml).expect("fixture parses")
+    }
+
+    const BACKEND_TLS_POLICY_V1: &str = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: app-tls
+  namespace: gwtest
+  generation: 2
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: gwtest-app
+      sectionName: https
+  validation:
+    hostname: healthy.gwtest.example.com
+    wellKnownCACertificates: System
+status:
+  ancestors:
+    - ancestorRef:
+        group: gateway.networking.k8s.io
+        kind: Gateway
+        name: gwtest-edge
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+      conditions:
+        - type: Accepted
+          status: "True"
+          reason: Accepted
+          lastTransitionTime: "2026-08-20T00:00:00Z"
+          observedGeneration: 2
+"#;
+
+    #[test]
+    fn backend_tls_policy_reads_targets_validation_and_ancestors() {
+        let policy = BackendTlsPolicyInfo::read(&parse(BACKEND_TLS_POLICY_V1));
+        assert_eq!(policy.name, "app-tls");
+        assert_eq!(policy.namespace, "gwtest");
+        assert_eq!(policy.target_refs.len(), 1);
+        assert_eq!(policy.target_refs[0].kind, "Service");
+        assert_eq!(policy.target_refs[0].name, "gwtest-app");
+        assert_eq!(policy.target_refs[0].section_name.as_deref(), Some("https"));
+        assert_eq!(policy.hostname, "healthy.gwtest.example.com");
+        assert_eq!(policy.well_known_ca.as_deref(), Some("System"));
+        assert!(policy.ca_cert_refs.is_empty());
+        assert_eq!(policy.ancestors.len(), 1);
+        assert_eq!(policy.ancestors[0].ancestor.name, "gwtest-edge");
+        assert_eq!(
+            policy.ancestors[0].conditions[0].observed_generation,
+            Some(2)
+        );
+        assert!(!policy.ancestors_maybe_truncated);
+        assert_eq!(policy.generation, Some(2));
+    }
+
+    #[test]
+    fn backend_tls_policy_tolerates_an_empty_object() {
+        let policy = BackendTlsPolicyInfo::read(&parse(
+            "apiVersion: gateway.networking.k8s.io/v1\nkind: BackendTLSPolicy\nmetadata:\n  name: bare\n  namespace: gwtest",
+        ));
+        assert_eq!(policy.hostname, "");
+        assert!(policy.target_refs.is_empty());
+        assert!(policy.ancestors.is_empty());
     }
 
     const HTTP_ROUTE_V1: &str = r#"

@@ -27,6 +27,9 @@ import {
 } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { trafficDoors } from "@/lib/traffic-doors";
+import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import type { KeyValue } from "./key-values";
@@ -399,10 +402,87 @@ function PeekOverview({
         ))
       )}
       {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
+      {target.kind === "Service" && target.namespace && (
+        <BackendPolicies
+          service={{ name: target.name, namespace: target.namespace }}
+        />
+      )}
       {target.kind === "Namespace" && (
         <NamespaceContents namespace={target.name} />
       )}
       <PeekEvents target={target} />
+    </div>
+  );
+}
+
+/**
+ * The GEP-713 reverse lookup, at the Service: which BackendTLSPolicies
+ * name this backend, what they demand, and whether any controller accepted
+ * them. Rendered only where the cluster serves the kind.
+ */
+function BackendPolicies({
+  service,
+}: {
+  service: { name: string; namespace: string };
+}) {
+  const detection = useGatewayApi().data;
+  const served =
+    detection?.kinds.some((kind) => kind.kind === "BackendTLSPolicy") ?? false;
+  const { crdFor } = useCrdIndex();
+  const policiesQuery = useLiveQuery({
+    queryKey: ["backend-tls-policies", service.namespace],
+    queryFn: () => commands.listBackendTlsPolicies(service.namespace),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    enabled: served,
+    retry: false,
+  });
+  const attached = policiesOnService(policiesQuery.data ?? [], service);
+  if (attached.length === 0) return null;
+  const crd =
+    crdFor("gateway.networking.k8s.io", "BackendTLSPolicy") ?? undefined;
+
+  return (
+    <div>
+      <PeekHeading title="Policies" count={attached.length} />
+      <div className="flex flex-col gap-1">
+        {attached.map((policy) => {
+          const verdict = policyVerdict(policy);
+          return (
+            <p
+              key={policy.name}
+              className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+            >
+              <ResourceRef
+                kind="BackendTLSPolicy"
+                name={policy.name}
+                namespace={policy.namespace}
+                crd={crd}
+                showKind={false}
+              />
+              <span>
+                — the gateway speaks TLS to this backend, SNI{" "}
+                <CopyableValue
+                  value={policy.hostname}
+                  label={`SNI ${policy.hostname}`}
+                  quietMark
+                />
+              </span>
+              <span
+                className={
+                  verdict.tone === "ok"
+                    ? "text-ok"
+                    : verdict.tone === "err"
+                      ? "text-err"
+                      : "text-warn"
+                }
+              >
+                · {verdict.word}
+              </span>
+            </p>
+          );
+        })}
+      </div>
     </div>
   );
 }

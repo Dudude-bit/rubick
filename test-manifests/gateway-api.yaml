@@ -631,3 +631,57 @@ spec:
         - name: gwtest-billing
           namespace: gwtest-partner
           port: 8080
+---
+# ============================================================================
+# v2: policy attachment + a contested host.
+#
+# | Object                        | State it proves                                |
+# | ----------------------------- | ---------------------------------------------- |
+# | BackendTLSPolicy app-tls      | accepted — TLS to gwtest-app, System bundle    |
+# | BackendTLSPolicy app-tls-late | Conflicted — the older policy won the target   |
+# | HTTPRoute gwtest-dup          | claims healthy.gwtest.example.com — the OLDER  |
+# |                               | gwtest-healthy wins; this row says so          |
+# ============================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: app-tls
+  namespace: gwtest
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: gwtest-app
+  validation:
+    hostname: healthy.gwtest.example.com
+    wellKnownCACertificates: System
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: app-tls-late
+  namespace: gwtest
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: gwtest-app
+  validation:
+    hostname: other.gwtest.example.com
+    wellKnownCACertificates: System
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gwtest-dup
+  namespace: gwtest
+spec:
+  hostnames:
+    - healthy.gwtest.example.com
+  parentRefs:
+    - name: gwtest-edge
+      sectionName: http
+  rules:
+    - backendRefs:
+        - name: gwtest-app-v2
+          port: 8080

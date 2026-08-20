@@ -825,6 +825,34 @@ export interface CertificateRefInfo {
   namespace: string | null;
 }
 
+export interface BackendTlsPolicyInfo {
+  name: string;
+  namespace: string;
+  targetRefs: PolicyTargetRef[];
+  hostname: string;
+  wellKnownCa: string | null;
+  caCertRefs: string[];
+  ancestors: PolicyAncestorInfo[];
+  ancestorsMaybeTruncated: boolean;
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyAncestorInfo {
+  ancestor: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface PolicyTargetRef {
+  group: string | null;
+  kind: string | null;
+  name: string;
+  sectionName: string | null;
+}
+
 export interface GatewayClassInfo {
   name: string;
   controllerName: string;

@@ -6,6 +6,7 @@ import type {
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
+  BackendTlsPolicyInfo,
   BatchLogResult,
   BinaryLocation,
   CliAvailability,
@@ -754,6 +755,14 @@ export async function detectGatewayApi(): Promise<GatewayApiDetection> {
 
 export async function listGatewayClasses(): Promise<GatewayClassInfo[]> {
   return invoke<GatewayClassInfo[]>("list_gateway_classes");
+}
+
+export async function listBackendTlsPolicies(
+  namespace: string | null
+): Promise<BackendTlsPolicyInfo[]> {
+  return invoke<BackendTlsPolicyInfo[]>("list_backend_tls_policies", {
+    namespace,
+  });
 }
 
 export async function getGatewayClass(name: string): Promise<GatewayClassInfo> {

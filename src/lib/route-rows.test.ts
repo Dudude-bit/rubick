@@ -408,6 +408,42 @@ describe("routesBoard", () => {
     expect(board.serving[0].viaGhost).toBeNull();
   });
 
+  it("marks the younger claimant of a contested host — the older route wins", () => {
+    const older = route("older", {
+      hostnames: ["contested.example.com"],
+      createdAt: "2026-08-01T00:00:00Z",
+    });
+    const younger = route("younger", {
+      hostnames: ["contested.example.com"],
+      createdAt: "2026-08-15T00:00:00Z",
+    });
+    const board = routesBoard([younger, older], sources());
+
+    const by = (name: string) => board.serving.find((row) => row.name === name);
+    expect(by("older")?.contested).toBeNull();
+    expect(by("younger")?.contested).toEqual({ by: "older" });
+  });
+
+  it("does not call hosts on different gateways a conflict", () => {
+    const onEdge = route("on-edge", { hostnames: ["same.example.com"] });
+    const elsewhere = route("elsewhere", {
+      hostnames: ["same.example.com"],
+      parentRefs: [parentRef("second", { sectionName: null })],
+      parents: [
+        parentStatus("second", [
+          condition("Accepted", "True", "Accepted"),
+          condition("ResolvedRefs", "True", "ResolvedRefs"),
+        ]),
+      ],
+    });
+    const board = routesBoard(
+      [onEdge, elsewhere],
+      sources({ gateways: [gateway("edge"), gateway("second")] })
+    );
+
+    expect(board.serving.every((row) => row.contested === null)).toBe(true);
+  });
+
   it("marks the worst parent's verdict on a route attached to two gateways", () => {
     const twin = route("twin", {
       parentRefs: [

@@ -339,6 +339,7 @@ fn main() {
             commands::gateway::list_gateway_routes,
             commands::gateway::get_gateway_route,
             commands::gateway::delete_gateway_route,
+            commands::gateway::list_backend_tls_policies,
             commands::gateway::probe_resolve_host,
             commands::gateway::probe_tcp_connect,
             // Stats commands

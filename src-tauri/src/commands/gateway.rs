@@ -15,8 +15,8 @@ use tauri::State;
 use crate::commands::helpers::{build_list_params, ResourceContext};
 use crate::error::{Error, Result};
 use crate::resources::{
-    GatewayApiDetection, GatewayClassInfo, GatewayInfo, ListenerSetInfo, RouteInfo,
-    GATEWAY_API_GROUP,
+    BackendTlsPolicyInfo, GatewayApiDetection, GatewayClassInfo, GatewayInfo, ListenerSetInfo,
+    RouteInfo, GATEWAY_API_GROUP,
 };
 use crate::state::AppState;
 
@@ -33,6 +33,7 @@ fn plural_of(kind: &str) -> Result<&'static str> {
         "TCPRoute" => "tcproutes",
         "UDPRoute" => "udproutes",
         "ListenerSet" => "listenersets",
+        "BackendTLSPolicy" => "backendtlspolicies",
         other => {
             return Err(Error::InvalidInput(format!(
                 "not a Gateway API kind this app reads: {other}"
@@ -121,6 +122,23 @@ pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<Gate
         .items
         .into_iter()
         .map(|obj| GatewayClassInfo::read(&with_types(obj, &api_resource)))
+        .collect())
+}
+
+/// Every BackendTLSPolicy in scope. Policies name their targets and the
+/// targets never name them back, so surfaces do the reverse lookup over
+/// this list — the same shape gwctl's effective-policy view reads.
+#[tauri::command]
+pub async fn list_backend_tls_policies(
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<BackendTlsPolicyInfo>> {
+    let (api, api_resource) = gateway_api("BackendTLSPolicy", namespace, true, &state).await?;
+    let list = api.list(&build_list_params(None, None, None)).await?;
+    Ok(list
+        .items
+        .into_iter()
+        .map(|obj| BackendTlsPolicyInfo::read(&with_types(obj, &api_resource)))
         .collect())
 }
 

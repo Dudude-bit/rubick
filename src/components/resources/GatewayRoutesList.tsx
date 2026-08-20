@@ -154,6 +154,12 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
             {row.stale.current}
           </span>
         )}
+        {row.contested && (
+          <span className="text-warn">
+            {" "}
+            · host also claimed by {row.contested.by} — the older route wins
+          </span>
+        )}
       </span>
       <span
         className={cn(

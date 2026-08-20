@@ -26,7 +26,14 @@ import {
   type TraceStep,
 } from "@/lib/route-trace";
 import { Spinner } from "@/components/ui/spinner";
-import type { ResolveProbe, RouteInfo, TcpProbe } from "@/generated/types";
+import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import type {
+  BackendTlsPolicyInfo,
+  ResolveProbe,
+  RouteInfo,
+  TcpProbe,
+} from "@/generated/types";
 
 /** Gateways change with a deploy, not by the second — same as the lists. */
 const ROUTING_STALE = 60_000;
@@ -153,7 +160,16 @@ function Say({ step }: { step: TraceStep }) {
   );
 }
 
-function StepRow({ step, index }: { step: TraceStep; index: number }) {
+function StepRow({
+  step,
+  index,
+  note,
+}: {
+  step: TraceStep;
+  index: number;
+  /** A quiet line under the row — what a policy adds to this hop. */
+  note?: React.ReactNode;
+}) {
   const off = step.state === "off";
   return (
     <li className="relative">
@@ -209,12 +225,78 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
           {off ? "not reached" : WHO[step.who]}
         </span>
       </div>
+      {!off && note && <div className="pb-2 pl-8 text-xs">{note}</div>}
       {step.detail && (
         <div className="pl-8">
           <StepDetail step={step} />
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * What a BackendTLSPolicy adds to the backend hop: the gateway speaks TLS
+ * to this Service, with this SNI, trusted this way — GEP-713's reverse
+ * lookup, drawn at the hop it affects instead of on a list nobody reads.
+ */
+function BackendPolicyNote({
+  policies,
+  service,
+}: {
+  policies: BackendTlsPolicyInfo[];
+  service: { name: string; namespace: string };
+}) {
+  const { crdFor } = useCrdIndex();
+  const attached = policiesOnService(policies, service);
+  if (attached.length === 0) return null;
+  const crd =
+    crdFor("gateway.networking.k8s.io", "BackendTLSPolicy") ?? undefined;
+  return (
+    <div className="flex flex-col gap-0.5">
+      {attached.map((policy) => {
+        const verdict = policyVerdict(policy);
+        return (
+          <p
+            key={policy.name}
+            className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+          >
+            <span>TLS to this backend:</span>
+            <ResourceRef
+              kind="BackendTLSPolicy"
+              name={policy.name}
+              namespace={policy.namespace}
+              crd={crd}
+              showKind={false}
+            />
+            <span>
+              — SNI{" "}
+              <CopyableValue
+                value={policy.hostname}
+                label={`SNI ${policy.hostname}`}
+                quietMark
+              />
+              {policy.wellKnownCa
+                ? `, trusts the ${policy.wellKnownCa} bundle`
+                : policy.caCertRefs.length > 0
+                  ? `, CA from ${policy.caCertRefs.join(", ")}`
+                  : ""}
+            </span>
+            <span
+              className={
+                verdict.tone === "ok"
+                  ? "text-ok"
+                  : verdict.tone === "err"
+                    ? "text-err"
+                    : "text-warn"
+              }
+            >
+              · {verdict.word}
+            </span>
+          </p>
+        );
+      })}
+    </div>
   );
 }
 
@@ -487,10 +569,12 @@ function TraceCard({
   trace,
   route,
   named,
+  policies,
 }: {
   trace: RouteTrace;
   route: RouteInfo;
   named: boolean;
+  policies: BackendTlsPolicyInfo[];
 }) {
   return (
     <div>
@@ -529,7 +613,24 @@ function TraceCard({
       </div>
       <ol className="list-none">
         {trace.steps.map((step, index) => (
-          <StepRow key={step.id} step={step} index={index} />
+          <StepRow
+            key={step.id}
+            step={step}
+            index={index}
+            note={
+              step.id === "backend" &&
+              step.subject?.kind === "Service" &&
+              step.subject.namespace != null ? (
+                <BackendPolicyNote
+                  policies={policies}
+                  service={{
+                    name: step.subject.name,
+                    namespace: step.subject.namespace,
+                  }}
+                />
+              ) : undefined
+            }
+          />
         ))}
       </ol>
       {trace.steps.at(-1)?.state === "blind" && (
@@ -563,6 +664,16 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   });
   const backing = useBackingLists();
 
+  // GEP-713 reverse lookup: the policy names the Service, never the other
+  // way round, so the trace scans the namespace's policies once.
+  const policiesQuery = useQuery({
+    queryKey: ["backend-tls-policies", route.namespace],
+    queryFn: () => commands.listBackendTlsPolicies(route.namespace),
+    staleTime: ROUTING_STALE,
+    enabled: served.has("BackendTLSPolicy"),
+  });
+  const policies = policiesQuery.data ?? [];
+
   const traces = useMemo(
     () =>
       routeTraces(route, {
@@ -594,6 +705,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
             trace={trace}
             route={route}
             named={traces.length > 1}
+            policies={policies}
           />
         ))}
       </div>
