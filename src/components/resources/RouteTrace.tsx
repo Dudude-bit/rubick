@@ -148,17 +148,18 @@ function Say({ step }: { step: TraceStep }) {
 function StepRow({ step, index }: { step: TraceStep; index: number }) {
   const off = step.state === "off";
   return (
-    <li className="relative pl-8">
+    <li className="relative">
       {index < 7 && (
         <span className="absolute bottom-0 left-[9px] top-[24px] w-px bg-hair" />
       )}
-      {/* Centred on the row's 26px first line, as is everything in it. */}
-      <span
-        className={`absolute left-0 top-[3px] flex h-5 w-5 items-center justify-center rounded-full border bg-raise text-[11px] ${MARK_TONE[step.state]}`}
-      >
-        {MARKS[step.state] ?? index + 1}
-      </span>
+      {/* The mark is a flex sibling of the words and the chip, so the row's
+          own centring lines all three up — no hand-tuned offsets to drift. */}
       <div className="flex min-h-[26px] flex-wrap items-center gap-2 pb-2">
+        <span
+          className={`z-[1] flex h-5 w-5 flex-none items-center justify-center rounded-full border bg-raise text-[11px] ${MARK_TONE[step.state]}`}
+        >
+          {MARKS[step.state] ?? index + 1}
+        </span>
         <span className={off ? "text-xs text-fg-fnt" : "text-xs text-fg-mid"}>
           <Say step={step} />
           {!off &&
@@ -193,7 +194,11 @@ function StepRow({ step, index }: { step: TraceStep; index: number }) {
           {off ? "not reached" : WHO[step.who]}
         </span>
       </div>
-      <StepDetail step={step} />
+      {step.detail && (
+        <div className="pl-8">
+          <StepDetail step={step} />
+        </div>
+      )}
     </li>
   );
 }
