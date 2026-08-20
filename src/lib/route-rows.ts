@@ -22,6 +22,9 @@ export interface RouteRow {
   namespace: string;
   /** What the route serves: its first hostname, or `:port PROTO`. */
   serves: string;
+  /** What a click puts on the clipboard: the hostname, or the dialable
+   *  `address:port` for a hostless route. Null where nothing honest exists. */
+  servesCopy: string | null;
   /** How many further hostnames hide behind {@link serves}. */
   more: number;
   /** The break, compressed: which link and why — null on a serving row. */
@@ -77,13 +80,26 @@ const HOSTLESS_PROTO: Record<string, string> = {
   TLSRoute: "TLS",
 };
 
-function servesOf(route: RouteInfo, trace: RouteTrace | undefined): string {
-  if (route.hostnames.length > 0) return route.hostnames[0];
+function servesOf(
+  route: RouteInfo,
+  trace: RouteTrace | undefined
+): { serves: string; servesCopy: string | null } {
+  if (route.hostnames.length > 0) {
+    return { serves: route.hostnames[0], servesCopy: route.hostnames[0] };
+  }
   if (trace?.probe.port != null) {
     const proto = HOSTLESS_PROTO[route.kind];
-    return `:${trace.probe.port}${proto ? ` ${proto}` : ""}`;
+    return {
+      serves: `:${trace.probe.port}${proto ? ` ${proto}` : ""}`,
+      // The dialable pair, where the gateway published an address — the
+      // label alone dials nothing.
+      servesCopy:
+        trace.probe.address != null
+          ? `${trace.probe.address}:${trace.probe.port}`
+          : null,
+    };
   }
-  return route.name;
+  return { serves: route.name, servesCopy: null };
 }
 
 function viaOf(parents: ParentRefInfo[]): string {
@@ -185,7 +201,7 @@ export function routesBoard(
         depth: 0,
         row: {
           ...base,
-          serves: servesOf(route, undefined),
+          ...servesOf(route, undefined),
           stop: {
             at: "route",
             short: "no parentRefs — attaches to nothing and serves no traffic",
@@ -212,7 +228,7 @@ export function routesBoard(
       const ref = { kind: parent.kind, name: parent.name, namespace: at };
       mesh.push({
         ...base,
-        serves: servesOf(route, undefined),
+        ...servesOf(route, undefined),
         stop: null,
         tail: `attaches to ${parent.kind} ${parent.name} — GAMMA, not judged here`,
         via: parent.name,
@@ -232,7 +248,7 @@ export function routesBoard(
     const broken = firstBroken(worst);
     const row: RouteRow = {
       ...base,
-      serves: servesOf(route, worst),
+      ...servesOf(route, worst),
       stop: broken
         ? { at: STEP_LABEL[broken.id], short: broken.short ?? broken.say }
         : null,

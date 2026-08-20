@@ -298,6 +298,8 @@ describe("routesBoard", () => {
 
     expect(board.serving[0].serves).toBe(":9000 TCP");
     expect(board.serving[0].via).toBe("edge :tcp");
+    // The dialable pair — the label alone dials nothing.
+    expect(board.serving[0].servesCopy).toBe("203.0.113.10:9000");
   });
 
   it("counts extra hostnames instead of listing them", () => {
@@ -308,6 +310,7 @@ describe("routesBoard", () => {
 
     expect(board.serving[0].serves).toBe("a.example.com");
     expect(board.serving[0].more).toBe(2);
+    expect(board.serving[0].servesCopy).toBe("a.example.com");
   });
 
   it("keeps mesh routes out of the verdict groups, said as GAMMA", () => {

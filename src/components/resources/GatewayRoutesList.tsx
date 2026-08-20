@@ -115,16 +115,19 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
         ●
       </span>
       <span className="flex min-w-0 items-baseline gap-1 font-mono text-xs text-fg">
-        {/* A listener port is not worth a clipboard; a hostname is what
-            gets pasted into curl, DNS lookups and browser bars all day. */}
-        {row.serves.startsWith(":") ? (
-          <span className="truncate">{row.serves}</span>
-        ) : (
+        {/* What lands on the clipboard may be more than the label: a
+            hostless route copies the dialable address:port while showing
+            the listener's :port. No honest value — plain text. */}
+        {row.servesCopy ? (
           <CopyableValue
-            value={row.serves}
-            label={`Host ${row.serves}`}
+            value={row.servesCopy}
+            label={`Copy ${row.servesCopy}`}
             className="min-w-0 text-xs"
-          />
+          >
+            {row.serves}
+          </CopyableValue>
+        ) : (
+          <span className="truncate">{row.serves}</span>
         )}
         {row.more > 0 && (
           <span className="flex-none font-sans text-fg-fnt">+{row.more}</span>

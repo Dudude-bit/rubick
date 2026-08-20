@@ -104,7 +104,7 @@ describe("trafficDoors", () => {
     expect(entry.doors).toEqual([
       {
         host: "healthy.example.com",
-        copyable: true,
+        copy: "healthy.example.com",
         broken: null,
         route: {
           kind: "HTTPRoute",
@@ -235,7 +235,9 @@ describe("trafficDoors", () => {
 
     const door = model.entries[0].doors[0];
     expect(door.host).toBe(":9000 TCP");
-    expect(door.copyable).toBe(false);
+    // What the reader pastes into nc: the gateway's address with the
+    // listener's port — the label alone dials nothing.
+    expect(door.copy).toBe("203.0.113.10:9000");
   });
 
   it("claims no port at all where the listener cannot be known", () => {
@@ -269,6 +271,7 @@ describe("trafficDoors", () => {
     const door = model.entries[0].doors[0];
     expect(door.host).toBe("TCP");
     expect(door.host).not.toContain("8080");
+    expect(door.copy).toBeNull();
   });
 
   it("keeps mesh parents out of the entries, named in their own place", () => {
@@ -313,7 +316,7 @@ describe("trafficDoors", () => {
     expect(entry.meta).toBe("Ingress");
     expect(entry.doors[0]).toEqual({
       host: "shop.example.com",
-      copyable: true,
+      copy: "shop.example.com",
       broken: null,
       route: null,
       note: "/ · TLS",

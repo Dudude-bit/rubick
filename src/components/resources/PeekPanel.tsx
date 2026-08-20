@@ -571,12 +571,17 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
                     door.broken && "text-fg-mut line-through decoration-err/50"
                   )}
                 >
-                  {door.copyable ? (
+                  {door.copy ? (
+                    // What lands on the clipboard may be more than the
+                    // label: a hostless door copies the dialable
+                    // address:port while showing the listener's :port.
                     <CopyableValue
-                      value={door.host}
-                      label={`Host ${door.host}`}
+                      value={door.copy}
+                      label={`Copy ${door.copy}`}
                       quietMark
-                    />
+                    >
+                      {door.host}
+                    </CopyableValue>
                   ) : (
                     door.host
                   )}

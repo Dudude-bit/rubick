@@ -25,8 +25,9 @@ export interface DoorRef {
 export interface TrafficDoor {
   /** The door itself: a hostname, or `:port` for the hostless kinds. */
   host: string;
-  /** Hostnames paste into curl; a bare port label does not. */
-  copyable: boolean;
+  /** What a click puts on the clipboard: the hostname, or the dialable
+   *  `address:port` for a hostless door. Null where nothing honest exists. */
+  copy: string | null;
   /** One-word verdict where the door is broken — null is healthy. */
   broken: string | null;
   /** The route to peek at, quiet on the right. */
@@ -161,7 +162,7 @@ export function trafficDoors(
         for (const host of edge.relation.hostnames) {
           entry.doors.push({
             host,
-            copyable: true,
+            copy: host,
             broken,
             route: doorRef(edge.from),
             note: null,
@@ -183,11 +184,14 @@ export function trafficDoors(
           : listeners.length === 1
             ? listeners[0]
             : undefined;
+        const address = entry.address;
         entry.doors.push({
           host: listener
             ? `:${listener.port}${proto ? ` ${proto}` : ""}`
             : (proto ?? edge.from.kind),
-          copyable: false,
+          // The dialable pair, where both halves are known — the label
+          // alone dials nothing.
+          copy: listener && address ? `${address}:${listener.port}` : null,
           broken,
           route: doorRef(edge.from),
           note: null,
@@ -199,7 +203,7 @@ export function trafficDoors(
       const entry = entryFor(edge.from, "Ingress");
       entry.doors.push({
         host: edge.relation.host ?? "all hosts",
-        copyable: edge.relation.host != null,
+        copy: edge.relation.host,
         broken: null,
         route: null,
         note:
