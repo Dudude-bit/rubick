@@ -25,8 +25,8 @@ import {
   getCustomResourceUrl,
   getResourceDetailUrl,
 } from "@/lib/navigation-utils";
-import type { ObjectRef } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
+import { trafficDoors } from "@/lib/traffic-doors";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
@@ -432,39 +432,27 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];
-  // An Ingress hop keeps the hosts its rules name, so the hop says which
-  // door it is rather than only that a door exists.
-  const ingresses = new Map<string, { object: ObjectRef; hosts: string[] }>();
-  for (const edge of edges) {
-    if (edge.relation.verb !== "routes" || edge.from.kind !== "Ingress")
-      continue;
-    const key = `${edge.from.namespace}/${edge.from.name}`;
-    const entry = ingresses.get(key) ?? { object: edge.from, hosts: [] };
-    if (edge.relation.host && !entry.hosts.includes(edge.relation.host)) {
-      entry.hosts.push(edge.relation.host);
-    }
-    ingresses.set(key, entry);
-  }
-  // Gateway API doors, same shape: the route with its hostnames, and above
-  // it the Gateway the route attaches to — the path's true beginning.
-  const gatewayRoutes = new Map<
-    string,
-    { object: ObjectRef; hosts: string[] }
-  >();
-  const gateways = new Map<string, ObjectRef>();
-  for (const edge of edges) {
-    if (edge.relation.verb === "ruleRoutes") {
-      const key = `${edge.from.kind}/${edge.from.namespace}/${edge.from.name}`;
-      const entry = gatewayRoutes.get(key) ?? { object: edge.from, hosts: [] };
-      for (const host of edge.relation.hostnames) {
-        if (!entry.hosts.includes(host)) entry.hosts.push(host);
-      }
-      gatewayRoutes.set(key, entry);
-    }
-    if (edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway") {
-      gateways.set(`${edge.to.namespace}/${edge.to.name}`, edge.to);
-    }
-  }
+  // The Gateways behind the doors carry their addresses on their own list —
+  // the same cache the routes list and the trace already share.
+  const hasGatewayDoors = edges.some(
+    (edge) => edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway"
+  );
+  const gatewaysQuery = useLiveQuery({
+    queryKey: ["gateway-map-gateways"],
+    queryFn: () => commands.listGateways(null),
+    staleTime: STALE_TIMES.resourceDetail,
+    enabled: hasGatewayDoors,
+    refresh: false,
+  });
+  // The doors under their entries: Gateway API and Ingress ways in, each
+  // door wearing its verdict — see `lib/traffic-doors`.
+  const doors = useMemo(
+    () =>
+      conns.data
+        ? trafficDoors(conns.data, gatewaysQuery.data ?? [])
+        : { entries: [], mesh: [] },
+    [conns.data, gatewaysQuery.data]
+  );
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.
   const services = isServiceish
@@ -508,54 +496,6 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   // stack; the arrows run between levels only.
   const shownRoutes = vendorRoutes.slice(0, 6);
   const waysIn: ReactNode[] = [
-    ...[...ingresses.values()].map(({ object, hosts }) => (
-      <p
-        key={`ingress/${object.namespace}/${object.name}`}
-        className="text-[11px] text-fg-fnt"
-      >
-        <ResourceRef
-          kind="Ingress"
-          name={object.name}
-          namespace={object.namespace}
-          showKind={false}
-        />{" "}
-        {hosts.length > 0 && (
-          <span className="text-xs text-fg-mid">
-            {hosts.map((host, index) => (
-              <span key={host}>
-                {index > 0 && ", "}
-                <CopyableValue value={host} label={`Host ${host}`} quietMark />
-              </span>
-            ))}{" "}
-          </span>
-        )}
-        — Ingress
-      </p>
-    )),
-    ...[...gatewayRoutes.values()].map(({ object, hosts }) => (
-      <p
-        key={`gwroute/${object.kind}/${object.namespace}/${object.name}`}
-        className="text-[11px] text-fg-fnt"
-      >
-        <ResourceRef
-          kind={object.kind}
-          name={object.name}
-          namespace={object.namespace}
-          showKind={false}
-        />{" "}
-        {hosts.length > 0 && (
-          <span className="text-xs text-fg-mid">
-            {hosts.map((host, index) => (
-              <span key={host}>
-                {index > 0 && ", "}
-                <CopyableValue value={host} label={`Host ${host}`} quietMark />
-              </span>
-            ))}{" "}
-          </span>
-        )}
-        — {object.kind}
-      </p>
-    )),
     // Object first and the address under it, the order every other entry
     // reads in — this line is the router, not its hostname.
     ...shownRoutes.map((route) => (
@@ -579,27 +519,95 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   ];
 
   const levels: { key: string; entries: ReactNode[] }[] = [];
-  // The Gateways the routes attach to sit a level above the doors — the
-  // path's true beginning, address and all.
-  if (gateways.size > 0) {
+  // Each entry — a Gateway with its address, an Ingress — is a level of its
+  // own, its doors stacked under it, each door wearing its verdict.
+  for (const entry of doors.entries) {
     levels.push({
-      key: "gateways",
-      entries: [...gateways.values()].map((object) => (
-        <p
-          key={`gateway/${object.namespace}/${object.name}`}
-          className="text-[11px] text-fg-fnt"
-        >
-          <ResourceRef
-            kind="Gateway"
-            name={object.name}
-            namespace={object.namespace}
-            showKind={false}
-          />{" "}
-          — Gateway
-          {object.facts?.kind === "gateway" &&
-            `, class ${object.facts.className}`}
-        </p>
-      )),
+      key: `entry/${entry.object.kind}/${entry.object.namespace ?? ""}/${entry.object.name}`,
+      entries: [
+        <div key="entry">
+          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt">
+            <ResourceRef
+              kind={entry.object.kind}
+              name={entry.object.name}
+              namespace={entry.object.namespace}
+              showKind={false}
+            />
+            {entry.ghost && (
+              <span
+                aria-label={`${entry.object.kind} ${entry.object.name} does not exist`}
+                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
+              >
+                ?
+              </span>
+            )}
+            {entry.address && (
+              <CopyableAddress
+                value={entry.address}
+                label={`${entry.object.kind} address`}
+              />
+            )}
+            <span className={entry.ghost ? "text-err" : undefined}>
+              — {entry.ghost ? `${entry.meta} that does not exist` : entry.meta}
+            </span>
+          </p>
+          <div className="mt-1 flex flex-col gap-0.5">
+            {entry.doors.map((door) => (
+              <div
+                key={`${door.host}/${door.route?.kind ?? ""}/${door.route?.name ?? ""}`}
+                className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-baseline gap-x-1.5 text-xs"
+              >
+                <span
+                  className={cn(
+                    "text-[8px] leading-relaxed",
+                    door.broken ? "text-err" : "text-ok"
+                  )}
+                >
+                  ●
+                </span>
+                <span
+                  className={cn(
+                    "truncate font-mono",
+                    door.broken && "text-fg-mut line-through decoration-err/50"
+                  )}
+                >
+                  {door.copyable ? (
+                    <CopyableValue
+                      value={door.host}
+                      label={`Host ${door.host}`}
+                      quietMark
+                    />
+                  ) : (
+                    door.host
+                  )}
+                </span>
+                <span className="whitespace-nowrap text-[11px] text-fg-fnt">
+                  {door.broken ? (
+                    <span className="text-err">{door.broken}</span>
+                  ) : (
+                    <>
+                      {door.route && (
+                        <ResourceRef
+                          kind={door.route.kind}
+                          name={door.route.name}
+                          namespace={door.route.namespace}
+                          showKind={false}
+                        />
+                      )}
+                      {door.note && <span> {door.note}</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            ))}
+            {entry.moreDoors > 0 && (
+              <p className="pl-[16px] text-[11px] text-fg-fnt">
+                and {entry.moreDoors} more…
+              </p>
+            )}
+          </div>
+        </div>,
+      ],
     });
   }
   if (waysIn.length > 0) levels.push({ key: "ways-in", entries: waysIn });
@@ -714,6 +722,23 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           );
         })}
       </div>
+      {doors.mesh.length > 0 && (
+        <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
+          {doors.mesh.map((route, index) => (
+            <span key={`${route.kind}/${route.name}`}>
+              {index > 0 && ", "}
+              <ResourceRef
+                kind={route.kind}
+                name={route.name}
+                namespace={route.namespace}
+                showKind={false}
+              />
+            </span>
+          ))}{" "}
+          also name{doors.mesh.length === 1 ? "s" : ""} this Service as a mesh
+          parent — GAMMA, not through any gateway.
+        </p>
+      )}
     </div>
   );
 }
