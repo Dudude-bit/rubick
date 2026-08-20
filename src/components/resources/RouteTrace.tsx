@@ -412,8 +412,26 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
           <li className="flex items-baseline gap-2">
             <span className="relative top-px h-2 w-2 flex-none rounded-full bg-fg-fnt" />
             <span className="text-fg-fnt">
-              UDP{port != null && ` :${port}`} — a TCP connect proves nothing
-              about a UDP listener, so this machine does not pretend to check it
+              UDP
+              {port != null &&
+                (address ? (
+                  <>
+                    {" "}
+                    {/* Not probed is not not-copyable: the dialable pair is
+                        still what nc -u takes. */}
+                    <CopyableValue
+                      value={`${address}:${port}`}
+                      label={`Copy ${address}:${port}`}
+                      quietMark
+                    >
+                      :{port}
+                    </CopyableValue>
+                  </>
+                ) : (
+                  ` :${port}`
+                ))}{" "}
+              — a TCP connect proves nothing about a UDP listener, so this
+              machine does not pretend to check it
             </span>
           </li>
         ) : (
