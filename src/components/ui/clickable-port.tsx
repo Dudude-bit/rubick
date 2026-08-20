@@ -121,7 +121,15 @@ export function ClickableServicePort({
     event.stopPropagation();
     setBusy(true);
     try {
-      const endpoints = await commands.getEndpoints(serviceName, namespace);
+      // The Service is what ties the clicked port number to the endpoint
+      // entry's NAME — on a multi-port Service, ports[0] would forward the
+      // wrong container port while the tooltip promised this one.
+      const [endpoints, service] = await Promise.all([
+        commands.getEndpoints(serviceName, namespace),
+        commands.getService(serviceName, namespace).catch(() => null),
+      ]);
+      const portName =
+        service?.ports.find((entry) => entry.port === port)?.name ?? null;
       for (const subset of endpoints.subsets) {
         const address = subset.addresses.find(
           (entry) => entry.targetRef?.kind === "Pod"
@@ -129,9 +137,17 @@ export function ClickableServicePort({
         if (!address?.targetRef) continue;
         // The endpoints port is the pod-side number — the one a forward to
         // the pod actually needs, where targetPort differs from port.
+        // Ports pair by name; a single unnamed port pairs by being alone.
+        const match =
+          portName != null
+            ? subset.ports.find((entry) => entry.name === portName)
+            : subset.ports.length === 1
+              ? subset.ports[0]
+              : (subset.ports.find((entry) => entry.port === port) ?? null);
+        if (!match && subset.ports.length > 0 && portName != null) continue;
         setResolved({
           podName: address.targetRef.name,
-          port: subset.ports[0]?.port ?? port,
+          port: match?.port ?? port,
         });
         setDialogOpen(true);
         return;

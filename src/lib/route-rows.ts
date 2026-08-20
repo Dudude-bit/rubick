@@ -207,12 +207,13 @@ export function routesBoard(
           `${first.namespace ?? route.namespace}/${first.name}/${host}`
         ) ?? [];
       if (rivals.length < 2) continue;
+      const identity = (r: RouteInfo) => `${r.kind}/${r.namespace}/${r.name}`;
       const winner = [...rivals].sort(
         (a, b) =>
           (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
-          a.name.localeCompare(b.name)
+          identity(a).localeCompare(identity(b))
       )[0];
-      if (winner.name !== route.name) return { by: winner.name };
+      if (identity(winner) !== identity(route)) return { by: winner.name };
     }
     return null;
   };
@@ -290,7 +291,9 @@ export function routesBoard(
         ? { at: STEP_LABEL[broken.id], short: broken.short ?? broken.say }
         : null,
       tail: redirectOnly(route) ? "redirects — no backends, none needed" : null,
-      stale: staleOf(traces),
+      // The worst trace is the one whose break the row shows — its
+      // staleness first, so the badge never belongs to the other gateway.
+      stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),
       via: viaOf(gatewayParents),
       ...(() => {
         const first = gatewayParents[0];

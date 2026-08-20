@@ -91,25 +91,35 @@ export function trafficDoors(
   conns: ResourceConnections,
   gateways: GatewayInfo[]
 ): TrafficDoors {
-  // What broke, per route — the stops already carry the route's identity.
-  const brokenByRoute = new Map<string, string>();
+  // What broke, and under which gateway. A refusal is a verdict about ONE
+  // (route, gateway) pair — a route refused by one gateway may be serving
+  // through another, and the healthy door must not wear the refusal.
+  // Refs failures carry no gateway and apply to every door of the route.
+  const brokenPerGateway = new Map<string, string>();
+  const brokenPerRoute = new Map<string, string>();
   for (const stop of conns.stops) {
     const word = brokenWord(stop);
-    if (word && "route" in stop) brokenByRoute.set(key(stop.route), word);
+    if (!word || !("route" in stop)) continue;
+    if ("gateway" in stop) {
+      brokenPerGateway.set(`${key(stop.route)}@${key(stop.gateway)}`, word);
+    } else {
+      brokenPerRoute.set(key(stop.route), word);
+    }
   }
 
-  // Which gateway each route attaches to — and through which listener,
-  // because the listener's port is the actual door for the hostless kinds.
-  const gatewayOf = new Map<
+  // EVERY gateway each route attaches to — a route with two parents is a
+  // door under each of them, not under whichever edge came last.
+  const gatewaysOf = new Map<
     string,
-    { gateway: ObjectRef; sectionName: string | null }
+    Array<{ gateway: ObjectRef; sectionName: string | null }>
   >();
   for (const edge of conns.edges) {
     if (edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway") {
-      gatewayOf.set(key(edge.from), {
-        gateway: edge.to,
-        sectionName: edge.relation.sectionName,
-      });
+      const at = key(edge.from);
+      gatewaysOf.set(at, [
+        ...(gatewaysOf.get(at) ?? []),
+        { gateway: edge.to, sectionName: edge.relation.sectionName },
+      ]);
     }
   }
 
@@ -142,60 +152,62 @@ export function trafficDoors(
 
   for (const edge of conns.edges) {
     if (edge.relation.verb === "ruleRoutes") {
-      const attached = gatewayOf.get(key(edge.from));
-      if (!attached) {
+      const attachments = gatewaysOf.get(key(edge.from)) ?? [];
+      if (attachments.length === 0) {
         // No gateway parent in the graph: a mesh attachment (GAMMA).
         mesh.push(doorRef(edge.from));
         continue;
       }
-      const { gateway, sectionName } = attached;
-      const className =
-        gateway.facts?.kind === "gateway" ? gateway.facts.className : null;
-      const entry = entryFor(
-        gateway,
-        className ? `Gateway · class ${className}` : "Gateway"
-      );
-      const broken =
-        brokenByRoute.get(key(edge.from)) ??
-        (gateway.existence === "missing" ? "gateway missing" : null);
-      if (edge.relation.hostnames.length > 0) {
-        for (const host of edge.relation.hostnames) {
+      for (const { gateway, sectionName } of attachments) {
+        const className =
+          gateway.facts?.kind === "gateway" ? gateway.facts.className : null;
+        const entry = entryFor(
+          gateway,
+          className ? `Gateway · class ${className}` : "Gateway"
+        );
+        const broken =
+          brokenPerGateway.get(`${key(edge.from)}@${key(gateway)}`) ??
+          brokenPerRoute.get(key(edge.from)) ??
+          (gateway.existence === "missing" ? "gateway missing" : null);
+        if (edge.relation.hostnames.length > 0) {
+          for (const host of edge.relation.hostnames) {
+            entry.doors.push({
+              host,
+              copy: host,
+              broken,
+              route: doorRef(edge.from),
+              note: null,
+            });
+          }
+        } else {
+          // The door is the LISTENER's port — the relation's port is the
+          // backendRef's, the service side, and must never pose as the door.
+          // No sectionName and several listeners means guessing, so no claim.
+          const proto = HOSTLESS_PROTO[edge.from.kind];
+          const listeners =
+            gateways.find(
+              (candidate) =>
+                candidate.name === gateway.name &&
+                candidate.namespace === gateway.namespace
+            )?.listeners ?? [];
+          const listener = sectionName
+            ? listeners.find((entry) => entry.name === sectionName)
+            : listeners.length === 1
+              ? listeners[0]
+              : undefined;
+          const address = entry.address;
           entry.doors.push({
-            host,
-            copy: host,
+            host: listener
+              ? `:${listener.port}${proto ? ` ${proto}` : ""}`
+              : (proto ?? edge.from.kind),
+            // The dialable pair, where both halves are known — the label
+            // alone dials nothing.
+            copy: listener && address ? `${address}:${listener.port}` : null,
             broken,
             route: doorRef(edge.from),
             note: null,
           });
         }
-      } else {
-        // The door is the LISTENER's port — the relation's port is the
-        // backendRef's, the service side, and must never pose as the door.
-        // No sectionName and several listeners means guessing, so no claim.
-        const proto = HOSTLESS_PROTO[edge.from.kind];
-        const listeners =
-          gateways.find(
-            (candidate) =>
-              candidate.name === gateway.name &&
-              candidate.namespace === gateway.namespace
-          )?.listeners ?? [];
-        const listener = sectionName
-          ? listeners.find((entry) => entry.name === sectionName)
-          : listeners.length === 1
-            ? listeners[0]
-            : undefined;
-        const address = entry.address;
-        entry.doors.push({
-          host: listener
-            ? `:${listener.port}${proto ? ` ${proto}` : ""}`
-            : (proto ?? edge.from.kind),
-          // The dialable pair, where both halves are known — the label
-          // alone dials nothing.
-          copy: listener && address ? `${address}:${listener.port}` : null,
-          broken,
-          route: doorRef(edge.from),
-          note: null,
-        });
       }
     }
 
@@ -219,7 +231,7 @@ export function trafficDoors(
     // first, so the hidden tail is never where the problem hides.
     const seen = new Set<string>();
     const doors = entry.doors.filter((door) => {
-      const at = `${door.host}/${door.route ? `${door.route.kind}/${door.route.name}` : ""}`;
+      const at = `${door.host}/${door.route ? `${door.route.kind}/${door.route.namespace ?? ""}/${door.route.name}` : ""}`;
       if (seen.has(at)) return false;
       seen.add(at);
       return true;

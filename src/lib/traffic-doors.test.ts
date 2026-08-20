@@ -274,6 +274,105 @@ describe("trafficDoors", () => {
     expect(door.copy).toBeNull();
   });
 
+  it("gives a two-gateway route a door under EACH gateway", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "twin"),
+            ref("Service", "app"),
+            ruleRoutes(["twin.example.com"])
+          ),
+          edge(ref("HTTPRoute", "twin"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+          edge(ref("HTTPRoute", "twin"), gatewayRef("internal"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+        ],
+      }),
+      []
+    );
+
+    expect(model.entries.map((entry) => entry.object.name).sort()).toEqual([
+      "edge",
+      "internal",
+    ]);
+    for (const entry of model.entries) {
+      expect(entry.doors).toHaveLength(1);
+      expect(entry.doors[0].host).toBe("twin.example.com");
+    }
+  });
+
+  it("keeps a per-gateway refusal on ITS door only — the healthy door stays green", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "split"),
+            ref("Service", "app"),
+            ruleRoutes(["split.example.com"])
+          ),
+          edge(ref("HTTPRoute", "split"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+          edge(ref("HTTPRoute", "split"), gatewayRef("internal"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+        ],
+        stops: [
+          {
+            reason: "routeNotAccepted",
+            route: ref("HTTPRoute", "split"),
+            gateway: gatewayRef("internal"),
+            conditionReason: "NoMatchingListenerHostname",
+            message: null,
+          },
+        ],
+      }),
+      []
+    );
+
+    const doorOn = (name: string) =>
+      model.entries.find((entry) => entry.object.name === name)!.doors[0];
+    expect(doorOn("edge").broken).toBeNull();
+    expect(doorOn("internal").broken).toBe("refused");
+  });
+
+  it("keeps same-named routes from different namespaces as separate doors", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "api", "team-a"),
+            ref("Service", "app"),
+            ruleRoutes(["api.example.com"])
+          ),
+          edge(ref("HTTPRoute", "api", "team-a"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+          edge(
+            ref("HTTPRoute", "api", "team-b"),
+            ref("Service", "app"),
+            ruleRoutes(["api.example.com"])
+          ),
+          edge(ref("HTTPRoute", "api", "team-b"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: null,
+          }),
+        ],
+      }),
+      []
+    );
+
+    expect(model.entries[0].doors).toHaveLength(2);
+  });
+
   it("keeps mesh parents out of the entries, named in their own place", () => {
     const model = trafficDoors(
       conns({

@@ -608,6 +608,9 @@ function TraceCard({
               showKind={false}
               showNamespace
             />
+            {trace.gateway.sectionName && (
+              <span className="font-mono">:{trace.gateway.sectionName}</span>
+            )}
           </span>
         )}
       </div>
@@ -701,7 +704,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
       <div className="space-y-6">
         {traces.map((trace) => (
           <TraceCard
-            key={`${trace.gateway.namespace}/${trace.gateway.name}`}
+            key={`${trace.gateway.namespace}/${trace.gateway.name}/${trace.gateway.sectionName ?? ""}`}
             trace={trace}
             route={route}
             named={traces.length > 1}

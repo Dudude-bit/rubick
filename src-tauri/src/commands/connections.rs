@@ -354,14 +354,24 @@ fn gateway_traffic_into(
                 },
             );
 
-            let Some(status) = route.parents.iter().find(|p| {
+            // A status parentRef echoes the spec's, sectionName included —
+            // a route attached to one gateway through two listeners has two
+            // verdicts, and each attachment must read its own. Loose match
+            // stays as the fallback for controllers that drop the section.
+            let named = |p: &&crate::resources::RouteParentStatusInfo| {
                 p.parent.name == parent.name
                     && p.parent
                         .namespace
                         .clone()
                         .unwrap_or_else(|| route.namespace.clone())
                         == gw_ns
-            }) else {
+            };
+            let status = route
+                .parents
+                .iter()
+                .find(|p| named(p) && p.parent.section_name == parent.section_name)
+                .or_else(|| route.parents.iter().find(named));
+            let Some(status) = status else {
                 continue;
             };
             for condition in &status.conditions {

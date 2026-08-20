@@ -82,8 +82,9 @@ export interface TraceStep {
 }
 
 export interface RouteTrace {
-  /** The parent this trace runs through — named even when missing. */
-  gateway: { name: string; namespace: string };
+  /** The parent this trace runs through — named even when missing. The
+   *  sectionName keeps two attachments to one gateway distinct. */
+  gateway: { name: string; namespace: string; sectionName: string | null };
   serving: boolean;
   /** 1-based index of the first broken step, where one is. */
   stopStep: number | null;
@@ -123,12 +124,21 @@ function statusesFor(
   route: RouteInfo,
   parent: ParentRefInfo
 ): RouteParentStatusInfo[] {
-  return route.parents.filter(
+  const named = route.parents.filter(
     (entry) =>
       entry.parent.name === parent.name &&
       (entry.parent.namespace ?? route.namespace) ===
         (parent.namespace ?? route.namespace)
   );
+  // A status parentRef echoes the spec's, sectionName included — a route
+  // attached to one gateway through two listeners has two verdicts, and
+  // each trace must read its own. Entries that name no section (or a
+  // controller that did not echo it) fall back for every attachment.
+  const exact = named.filter(
+    (entry) =>
+      (entry.parent.sectionName ?? null) === (parent.sectionName ?? null)
+  );
+  return exact.length > 0 ? exact : named;
 }
 
 /** The listeners this parentRef points at — one by section, or all. */
@@ -811,7 +821,11 @@ function traceFor(
   }
 
   return {
-    gateway: { name: parent.name, namespace },
+    gateway: {
+      name: parent.name,
+      namespace,
+      sectionName: parent.sectionName,
+    },
     serving: firstBroken < 0,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,
     steps,

@@ -99,6 +99,15 @@ const parentStatus = (
   conditions,
 });
 
+const parentRef2 = (name: string, sectionName: string | null) => ({
+  group: "gateway.networking.k8s.io",
+  kind: "Gateway",
+  name,
+  namespace: null,
+  sectionName,
+  port: null,
+});
+
 const route = (
   name: string,
   overrides: Partial<RouteInfo> = {}
@@ -209,7 +218,11 @@ describe("routeTraces", () => {
   it("walks a healthy route green, leaving only the last mile unchecked", () => {
     const [trace] = routeTraces(route("healthy"), sources());
 
-    expect(trace.gateway).toEqual({ name: "edge", namespace: "gwtest" });
+    expect(trace.gateway).toEqual({
+      name: "edge",
+      namespace: "gwtest",
+      sectionName: "http",
+    });
     expect(trace.serving).toBe(true);
     expect(trace.stopStep).toBeNull();
     expect(ids(trace)).toEqual([
@@ -526,6 +539,52 @@ describe("routeTraces", () => {
     expect(trace.serving).toBe(true);
   });
 
+  it("keeps each listener's verdict on its own trace when one gateway is named twice", () => {
+    const both = route("both", {
+      parentRefs: [parentRef2("edge", "http"), parentRef2("edge", "https")],
+      parents: [
+        {
+          parent: parentRef2("edge", "http"),
+          controllerName: "example.net/gw",
+          conditions: [
+            condition("Accepted", "True", "Accepted"),
+            condition("ResolvedRefs", "True", "ResolvedRefs"),
+          ],
+        },
+        {
+          parent: parentRef2("edge", "https"),
+          controllerName: "example.net/gw",
+          conditions: [
+            condition(
+              "Accepted",
+              "False",
+              "NoMatchingListenerHostname",
+              "no match on https"
+            ),
+          ],
+        },
+      ],
+    });
+    const traces = routeTraces(
+      both,
+      sources({
+        backing: {
+          services: [service("both")],
+          published: [published("both", 1)],
+          backingKnown: true,
+        },
+      })
+    );
+
+    expect(traces).toHaveLength(2);
+    // Distinct identities, so React keys and section labels never collide.
+    expect(traces[0].gateway.sectionName).toBe("http");
+    expect(traces[1].gateway.sectionName).toBe("https");
+    expect(traces[0].serving).toBe(true);
+    expect(traces[1].serving).toBe(false);
+    expect(traces[1].stopStep).toBe(3);
+  });
+
   it("returns one trace per gateway parent and none for mesh parents", () => {
     const twin = route("twin", {
       parentRefs: [
@@ -558,7 +617,11 @@ describe("routeTraces", () => {
     const traces = routeTraces(twin, sources());
 
     expect(traces).toHaveLength(2);
-    expect(traces[1].gateway).toEqual({ name: "second", namespace: "infra" });
+    expect(traces[1].gateway).toEqual({
+      name: "second",
+      namespace: "infra",
+      sectionName: null,
+    });
   });
 
   it("probes by gateway address and listener port when the route has no hostname", () => {
