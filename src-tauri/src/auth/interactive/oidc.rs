@@ -34,6 +34,10 @@ const REDIRECT_PORTS: [u16; 2] = [8000, 18000];
 /// works for a provider that honours RFC 8252 — any loopback port for a
 /// native app, which is what Google does — and for one that does not, the
 /// browser at least says which URI was refused.
+fn redirect_uri_for(port: u16) -> String {
+    format!("http://localhost:{port}")
+}
+
 async fn bind_redirect() -> Result<TcpListener> {
     for port in REDIRECT_PORTS {
         if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)).await {
@@ -63,7 +67,19 @@ pub(super) async fn run_oidc_auth(
     let auth = OidcAuth::new(issuer_url, client_id, client_secret, scopes);
     let listener = bind_redirect().await?;
     let redirect_port = listener.local_addr()?.port();
-    let redirect_uri = format!("http://127.0.0.1:{redirect_port}/callback");
+    // `http://localhost:<port>`, exactly — host and path included.
+    //
+    // A provider compares redirect URIs by string (RFC 6749 §3.1.2.3), so
+    // matching the port is not enough: `http://127.0.0.1:8000/callback` is a
+    // different string from what was registered. What was registered is what
+    // `kubectl oidc-login` sends, and asking it directly answers
+    // `redirect_uri=http://localhost:8000` — host `localhost`, no path. Dex is
+    // lenient about both for a public client; Keycloak, Okta and Entra are not.
+    //
+    // The listener stays on 127.0.0.1 — also what kubelogin does — and the
+    // callback parser reads the query off whatever path arrives, so serving at
+    // the root costs nothing here.
+    let redirect_uri = redirect_uri_for(redirect_port);
 
     let auth_url = auth.generate_auth_url(&redirect_uri).await?;
     let (session_id, mut cancel_rx) = state.create_auth_session(context, "oidc");
@@ -258,5 +274,16 @@ mod tests {
     #[test]
     fn uses_kubelogins_defaults_in_its_order() {
         assert_eq!(REDIRECT_PORTS, [8000, 18000]);
+    }
+
+    /// The port alone was not enough, and this is the shape that was missed:
+    /// asking `kubectl oidc-login` what it sends answers
+    /// `redirect_uri=http://localhost:8000` — host `localhost`, no path. A
+    /// provider compares the whole string, so `http://127.0.0.1:8000/callback`
+    /// matches nothing anybody registered.
+    #[test]
+    fn builds_the_uri_a_kubelogin_setup_registered() {
+        assert_eq!(redirect_uri_for(8000), "http://localhost:8000");
+        assert_eq!(redirect_uri_for(18000), "http://localhost:18000");
     }
 }
