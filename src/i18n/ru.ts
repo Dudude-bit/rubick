@@ -1075,6 +1075,7 @@ export const ru: Catalogue = {
     failedFor: "Не удалось войти в {context}.",
     complete: "Вход выполнен",
     completeFor: "Выполнен вход в {context}.",
+    cancelAlt: "Отменить вход",
     cancelled: "Вход отменён",
     cancelledFor: "Отменено: {context}.",
   },

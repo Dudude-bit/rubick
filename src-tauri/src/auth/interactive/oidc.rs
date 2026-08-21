@@ -3,7 +3,7 @@
 //! a token via `OidcAuth`.
 
 use crate::auth::kubeconfig_tokens::{
-    can_replace, file_defining_user, kubeconfig_files, write_tokens,
+    can_replace, can_write_tokens, file_defining_user, kubeconfig_files, write_tokens,
 };
 use crate::auth::{AuthProvider as _, AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
@@ -79,7 +79,7 @@ async fn refreshed(
     let path = file_defining_user(files, user)?;
     // Asked before the token is spent, not after: a refresh token is
     // single-use, so nowhere to put the replacement has to mean no refresh.
-    if !can_replace(&path) {
+    if !can_replace(&path) || !can_write_tokens(&path, user) {
         tracing::info!(
             path = %path.display(),
             "kubeconfig cannot be rewritten; asking for a browser rather than              spending a refresh token whose replacement could not be stored"

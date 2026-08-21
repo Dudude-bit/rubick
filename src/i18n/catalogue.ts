@@ -1074,6 +1074,7 @@ export const en = {
     failedFor: "Could not sign in to {context}.",
     complete: "Signed in",
     completeFor: "Signed in to {context}.",
+    cancelAlt: "Cancel signing in",
     cancelled: "Sign-in cancelled",
     cancelledFor: "Cancelled {context}.",
   },

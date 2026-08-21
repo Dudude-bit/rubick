@@ -208,7 +208,7 @@ export function useAuthFlowEvents() {
                 action: React.createElement(
                   ToastAction,
                   {
-                    altText: "Cancel authentication",
+                    altText: tRef.current("auth", "cancelAlt"),
                     onClick: () => {
                       console.log("Cancelling auth session:", sessionId);
                       commands.cancelAuthSession(sessionId).catch((e) => {
@@ -216,7 +216,7 @@ export function useAuthFlowEvents() {
                       });
                     },
                   },
-                  "Cancel"
+                  tRef.current("action", "cancel")
                 ),
               });
               toastIdsRef.current[sessionId] = toastId;

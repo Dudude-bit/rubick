@@ -431,7 +431,7 @@ fn auth_for_user(kubeconfig: &Kubeconfig, user: &str) -> ContextAuth {
 /// before any `Kubeconfig::read_from(...)` so a stray `..` segment
 /// or a stale symlink can't quietly load a different file than
 /// the user thinks they're loading.
-fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
+pub(crate) fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
     let expanded: PathBuf = if let Some(stripped) = path
         .to_str()
         .and_then(|s| s.strip_prefix("~/"))

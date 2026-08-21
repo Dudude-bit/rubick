@@ -18,20 +18,38 @@ use std::path::{Path, PathBuf};
 /// exists: the parsed document does not say which file any one user came from.
 #[must_use]
 pub fn kubeconfig_files(override_path: Option<PathBuf>) -> Vec<PathBuf> {
-    if let Some(path) = override_path {
-        return vec![path];
+    let named: Vec<PathBuf> = if let Some(path) = override_path {
+        vec![path]
+    } else {
+        let separator = if cfg!(windows) { ';' } else { ':' };
+        match std::env::var("KUBECONFIG") {
+            Ok(value) if !value.is_empty() => value
+                .split(separator)
+                .filter(|entry| !entry.is_empty())
+                .map(PathBuf::from)
+                .collect(),
+            _ => dirs::home_dir()
+                .map(|home| vec![home.join(".kube").join("config")])
+                .unwrap_or_default(),
+        }
+    };
+
+    // Through the loader's own resolution, for three separate reasons. A `~`
+    // in a stored override is a path no `read_to_string` accepts. A symlinked
+    // `~/.kube/config` has to become the file it points at, or the rename that
+    // installs the replacement would put a regular file where the link was and
+    // leave the real one holding the token just spent. And one file named
+    // twice in `$KUBECONFIG` would otherwise read as two files claiming the
+    // same user, which is the one shape that cancels the refresh.
+    let mut resolved: Vec<PathBuf> = Vec::with_capacity(named.len());
+    for path in named {
+        if let Ok(real) = crate::client::canonicalize_kubeconfig_path(&path) {
+            if !resolved.contains(&real) {
+                resolved.push(real);
+            }
+        }
     }
-    let separator = if cfg!(windows) { ';' } else { ':' };
-    match std::env::var("KUBECONFIG") {
-        Ok(value) if !value.is_empty() => value
-            .split(separator)
-            .filter(|entry| !entry.is_empty())
-            .map(PathBuf::from)
-            .collect(),
-        _ => dirs::home_dir()
-            .map(|home| vec![home.join(".kube").join("config")])
-            .unwrap_or_default(),
-    }
+    resolved
 }
 
 /// The single file that defines `user`, or `None` when that is not a single
@@ -41,8 +59,17 @@ pub fn kubeconfig_files(override_path: Option<PathBuf>) -> Vec<PathBuf> {
 /// and Rubick has no business guessing which one somebody meant to edit.
 #[must_use]
 pub fn file_defining_user(files: &[PathBuf], user: &str) -> Option<PathBuf> {
-    let mut found = None;
+    let mut found: Option<PathBuf> = None;
+    let mut seen: Vec<PathBuf> = Vec::new();
     for path in files {
+        // One file named twice is one file. Counting it twice would read as
+        // two claimants, which is the single shape that cancels the refresh.
+        let real =
+            crate::client::canonicalize_kubeconfig_path(path).unwrap_or_else(|_| path.clone());
+        if seen.contains(&real) {
+            continue;
+        }
+        seen.push(real);
         let Ok(text) = std::fs::read_to_string(path) else {
             continue;
         };
@@ -86,62 +113,195 @@ pub fn can_replace(path: &Path) -> bool {
         .is_some_and(|directory| tempfile::NamedTempFile::new_in(directory).is_ok())
 }
 
-/// Replace this user's `id-token` and `refresh-token`, leaving the rest of the
-/// document as it was.
+/// Where a user's two token lines live in a kubeconfig's text.
 ///
-/// The edit goes through `serde_yaml::Value` rather than kube's own structs so
-/// that keys the app does not model — and other users entirely — survive the
-/// round trip untouched.
+/// Line numbers rather than a parsed tree, because the file has to come back
+/// out byte-identical apart from those two lines. A round trip through any
+/// YAML library cannot promise that: it drops the owner's comments, and it
+/// re-emits a quoted `"no"` bare — which `kubectl`, reading YAML 1.1 where
+/// `no` is a boolean, then refuses to parse at all, taking every unrelated
+/// context in the file down with it.
+struct TokenLines {
+    id_token: Option<usize>,
+    refresh_token: Option<usize>,
+    /// Column the keys of the `config` mapping start at, for a line that has
+    /// to be added rather than replaced.
+    indent: usize,
+    /// Where such a line goes.
+    insert_at: usize,
+}
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// The value of `key` on this line, if the line is exactly `key: value`.
+fn value_of<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let rest = line.trim_start().strip_prefix(key)?.strip_prefix(':')?;
+    Some(rest.trim().trim_matches(['"', '\'']))
+}
+
+/// The half-open line range of the entry for `user` in the `users` sequence.
+fn user_block(lines: &[&str], user: &str) -> Option<(usize, usize)> {
+    let users = lines
+        .iter()
+        .position(|line| line.trim_end() == "users:" && indent_of(line) == 0)?;
+
+    let dash = lines[users + 1..]
+        .iter()
+        .position(|line| line.trim_start().starts_with("- "))
+        .map(|offset| users + 1 + offset)?;
+    let dash_indent = indent_of(lines[dash]);
+
+    // Every entry of the sequence, by the lines that open one.
+    let mut starts = Vec::new();
+    for (index, line) in lines.iter().enumerate().skip(dash) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let indent = indent_of(line);
+        if indent == dash_indent && line.trim_start().starts_with("- ") {
+            starts.push(index);
+        } else if indent <= dash_indent {
+            break; // a sibling of `users:` — the sequence is over
+        }
+    }
+
+    for (position, &start) in starts.iter().enumerate() {
+        let end = starts
+            .get(position + 1)
+            .copied()
+            .unwrap_or_else(|| block_end(lines, start, dash_indent));
+        let named = lines[start..end].iter().any(|line| {
+            value_of(line, "- name") == Some(user) || value_of(line, "name") == Some(user)
+        });
+        if named {
+            return Some((start, end));
+        }
+    }
+    None
+}
+
+/// Where the block opened at `start` stops: the first later line indented no
+/// deeper than the block itself.
+fn block_end(lines: &[&str], start: usize, indent: usize) -> usize {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find(|(_, line)| !line.trim().is_empty() && indent_of(line) <= indent)
+        .map_or(lines.len(), |(index, _)| index)
+}
+
+/// The two token lines inside this user's `auth-provider` config.
+fn token_lines(lines: &[&str], user: &str) -> Option<TokenLines> {
+    let (start, end) = user_block(lines, user)?;
+    let entry = &lines[start..end];
+
+    let provider = entry
+        .iter()
+        .position(|line| line.trim_end().ends_with("auth-provider:"))?;
+    let config = entry
+        .iter()
+        .enumerate()
+        .skip(provider + 1)
+        .find(|(_, line)| line.trim_end().ends_with("config:"))
+        .map(|(index, _)| index)?;
+    let config_indent = indent_of(entry[config]);
+
+    let body_end = block_end(entry, config, config_indent);
+    let indent = entry
+        .get(config + 1)
+        .filter(|line| !line.trim().is_empty())
+        .map_or(config_indent + 2, |line| indent_of(line));
+
+    let find = |key: &str| {
+        entry[config + 1..body_end]
+            .iter()
+            .position(|line| value_of(line, key).is_some() && indent_of(line) == indent)
+            .map(|offset| start + config + 1 + offset)
+    };
+    Some(TokenLines {
+        id_token: find("id-token"),
+        refresh_token: find("refresh-token"),
+        indent,
+        insert_at: start + body_end,
+    })
+}
+
+/// Whether this file's text can be edited in place for `user`.
+///
+/// Asked before the refresh, next to `can_replace`, for the same reason: a
+/// refresh token is single-use, so every way the write could fail has to be
+/// ruled out before it is spent.
+#[must_use]
+pub fn can_write_tokens(path: &Path, user: &str) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    token_lines(&lines, user).is_some_and(|site| site.id_token.is_some())
+}
+
+/// Replace this user's `id-token` and `refresh-token` and change nothing else.
 ///
 /// # Errors
 ///
-/// If the file cannot be read or written, is not YAML, or does not carry an
-/// `auth-provider` config for that user.
+/// If the file cannot be read or written, or those lines cannot be found.
 pub fn write_tokens(
     path: &Path,
     user: &str,
     id_token: &str,
     refresh_token: Option<&str>,
 ) -> Result<()> {
+    // Resolved here too, not only by the caller: renaming over a symlink
+    // would leave a regular file where the link was and leave the file it
+    // pointed at holding the token that has just been spent.
+    let resolved =
+        crate::client::canonicalize_kubeconfig_path(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = resolved.as_path();
+
     let text = std::fs::read_to_string(path).map_err(|e| {
         Error::Auth(AuthError::Kubeconfig(format!(
             "Cannot read {}: {e}",
             path.display()
         )))
     })?;
-    let mut doc: serde_yaml::Value = serde_yaml::from_str(&text).map_err(|e| {
+    let mut lines: Vec<String> = text.lines().map(ToString::to_string).collect();
+    let borrowed: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let site = token_lines(&borrowed, user).ok_or_else(|| {
         Error::Auth(AuthError::Kubeconfig(format!(
-            "Cannot parse {}: {e}",
+            "No auth-provider config for user {user} in {}",
             path.display()
         )))
     })?;
+    drop(borrowed);
 
-    let config = doc
-        .get_mut("users")
-        .and_then(serde_yaml::Value::as_sequence_mut)
-        .and_then(|users| {
-            users
-                .iter_mut()
-                .find(|entry| entry.get("name").and_then(serde_yaml::Value::as_str) == Some(user))
-        })
-        .and_then(|entry| entry.get_mut("user"))
-        .and_then(|user| user.get_mut("auth-provider"))
-        .and_then(|provider| provider.get_mut("config"))
-        .and_then(serde_yaml::Value::as_mapping_mut)
-        .ok_or_else(|| {
-            Error::Auth(AuthError::Kubeconfig(format!(
-                "No auth-provider config for user {user} in {}",
-                path.display()
-            )))
-        })?;
-
-    config.insert("id-token".into(), id_token.into());
+    // Later line first, so replacing one cannot move the other.
+    let mut edits: Vec<(usize, String)> = Vec::new();
+    let pad = " ".repeat(site.indent);
+    if let Some(line) = site.id_token {
+        edits.push((line, format!("{pad}id-token: {id_token}")));
+    } else {
+        return Err(Error::Auth(AuthError::Kubeconfig(format!(
+            "No id-token for user {user} in {}",
+            path.display()
+        ))));
+    }
     if let Some(token) = refresh_token {
-        config.insert("refresh-token".into(), token.into());
+        match site.refresh_token {
+            Some(line) => edits.push((line, format!("{pad}refresh-token: {token}"))),
+            None => lines.insert(site.insert_at, format!("{pad}refresh-token: {token}")),
+        }
+    }
+    for (line, replacement) in edits {
+        lines[line] = replacement;
     }
 
-    let rendered = serde_yaml::to_string(&doc)
-        .map_err(|e| Error::Auth(AuthError::Kubeconfig(format!("Cannot serialise: {e}"))))?;
+    let mut rendered = lines.join("\n");
+    if text.ends_with('\n') {
+        rendered.push('\n');
+    }
     replace_file(path, &rendered)
 }
 
@@ -268,6 +428,106 @@ users:
         assert!(after.contains("new-id"), "{after}");
     }
 
+    /// The file belongs to its owner and exactly two lines in it are ours.
+    /// Anything else that moves is a change nobody asked for — and one of them
+    /// is fatal: `kubectl` reads YAML 1.1, where an unquoted `no` is a boolean,
+    /// so re-emitting somebody else's `value: "no"` without its quotes makes
+    /// the whole kubeconfig unparseable for every context in it.
+    #[test]
+    fn changes_only_the_two_lines_it_owns() {
+        const OWNED: &str = r#"# A kubeconfig somebody wrote by hand.
+apiVersion: v1
+kind: Config
+users:
+- name: alice
+  user:
+    auth-provider:
+      name: oidc
+      config:
+        client-id: kubernetes   # registered with Dex
+        id-token: old-id
+        refresh-token: old-refresh
+- name: bob
+  user:
+    exec:
+      command: kubelogin
+      env:
+      - name: KUBELOGIN_FORCE
+        value: "no"
+"#;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", OWNED);
+
+        write_tokens(&path, "alice", "new-id", Some("new-refresh")).expect("write");
+
+        let after = std::fs::read_to_string(&path).expect("read");
+        let moved: Vec<(&str, &str)> = OWNED
+            .lines()
+            .zip(after.lines())
+            .filter(|(before, now)| before != now)
+            .collect();
+        assert_eq!(
+            moved,
+            vec![
+                ("        id-token: old-id", "        id-token: new-id"),
+                (
+                    "        refresh-token: old-refresh",
+                    "        refresh-token: new-refresh"
+                ),
+            ],
+            "\n--- after ---\n{after}"
+        );
+        assert_eq!(
+            OWNED.lines().count(),
+            after.lines().count(),
+            "the file gained or lost lines"
+        );
+    }
+
+    /// A config that has never been refreshed carries no `refresh-token` line
+    /// at all; the first refresh has to add one rather than drop the token.
+    #[test]
+    fn adds_the_refresh_token_line_when_there_is_none() {
+        const NEVER_REFRESHED: &str = r"apiVersion: v1
+users:
+- name: alice
+  user:
+    auth-provider:
+      name: oidc
+      config:
+        client-id: kubernetes
+        id-token: old-id
+";
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", NEVER_REFRESHED);
+
+        write_tokens(&path, "alice", "new-id", Some("new-refresh")).expect("write");
+
+        let after = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            after.contains("        refresh-token: new-refresh"),
+            "{after}"
+        );
+        assert!(after.contains("        id-token: new-id"), "{after}");
+        assert!(after.contains("        client-id: kubernetes"), "{after}");
+    }
+
+    /// The gate the caller leans on: it has to answer before a single-use
+    /// token is spent, so a file it could not edit must answer no.
+    #[test]
+    fn says_up_front_whether_it_could_write() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+
+        assert!(can_write_tokens(&path, "alice"));
+        assert!(!can_write_tokens(&path, "bob"), "bob has no auth-provider");
+        assert!(
+            !can_write_tokens(&path, "carol"),
+            "carol is not in the file"
+        );
+        assert!(!can_write_tokens(&dir.path().join("absent"), "alice"));
+    }
+
     #[test]
     fn refuses_a_user_with_no_auth_provider() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -375,11 +635,69 @@ users:
 
     #[test]
     fn an_override_is_the_only_file_considered() {
-        let path = PathBuf::from("/somewhere/explicit");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+
         assert_eq!(
             kubeconfig_files(Some(path.clone())),
-            vec![path],
+            vec![path.canonicalize().expect("canonicalize")],
             "an explicit choice is not merged with anything"
+        );
+    }
+
+    /// A `~/.kube/config` that is a symlink into a dotfiles repo is an
+    /// ordinary setup. The replacement arrives by rename, which would put a
+    /// regular file where the link was and leave the real file holding the
+    /// refresh token just spent — so the link has to be resolved first.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_kubeconfig_resolves_to_what_it_points_at() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = write(dir.path(), "real-config", CONFIG);
+        let link = dir.path().join("config");
+        std::os::unix::fs::symlink(&real, &link).expect("symlink");
+
+        assert_eq!(
+            kubeconfig_files(Some(link)),
+            vec![real.canonicalize().expect("canonicalize")]
+        );
+    }
+
+    /// And the write must survive being handed the link directly.
+    #[cfg(unix)]
+    #[test]
+    fn writing_through_a_link_keeps_the_link() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = write(dir.path(), "real-config", CONFIG);
+        let link = dir.path().join("config");
+        std::os::unix::fs::symlink(&real, &link).expect("symlink");
+
+        write_tokens(&link, "alice", "new-id", Some("new-refresh")).expect("write");
+
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .expect("stat")
+                .file_type()
+                .is_symlink(),
+            "the link was replaced by a regular file"
+        );
+        assert!(
+            std::fs::read_to_string(&real)
+                .expect("read")
+                .contains("new-id"),
+            "the file the link points at did not get the new token"
+        );
+    }
+
+    /// `$KUBECONFIG` naming one file twice is one file, not two claimants.
+    #[test]
+    fn one_file_named_twice_is_still_one_claimant() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+
+        assert_eq!(
+            file_defining_user(&[path.clone(), path.clone()], "alice"),
+            Some(path)
         );
     }
 }
