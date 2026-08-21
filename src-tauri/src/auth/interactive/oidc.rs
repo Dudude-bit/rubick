@@ -2,9 +2,10 @@
 //! emit the auth URL to the frontend, exchange the callback code for
 //! a token via `OidcAuth`.
 
-use crate::auth::OidcAuth;
+use crate::auth::{AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
 use crate::state::{AppEvent, AppState};
+use base64::Engine as _;
 use kube::config::AuthProviderConfig;
 use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -34,6 +35,28 @@ const REDIRECT_PORTS: [u16; 2] = [8000, 18000];
 /// works for a provider that honours RFC 8252 — any loopback port for a
 /// native app, which is what Google does — and for one that does not, the
 /// browser at least says which URI was refused.
+/// Headroom before an `exp` is treated as spent, so a token that dies in
+/// flight is not sent in the first place.
+const TOKEN_SKEW_SECS: i64 = 60;
+
+/// The `exp` claim of a JWT, read without verifying anything.
+///
+/// The signature is the API server's business. All this decides is whether a
+/// token is worth sending, so anything unreadable simply reads as spent.
+fn expiry_of(token: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    chrono::DateTime::from_timestamp(claims.get("exp")?.as_i64()?, 0)
+}
+
+fn still_usable(token: &str) -> bool {
+    expiry_of(token)
+        .is_some_and(|exp| exp > chrono::Utc::now() + chrono::Duration::seconds(TOKEN_SKEW_SECS))
+}
+
 fn redirect_uri_for(port: u16) -> String {
     format!("http://localhost:{port}")
 }
@@ -53,6 +76,22 @@ pub(super) async fn run_oidc_auth(
     provider: &AuthProviderConfig,
 ) -> Result<crate::auth::AuthResult> {
     let config = &provider.config;
+
+    // `kubectl` never opens a browser for this kind of user: it sends the
+    // `id-token` sitting in the file until that expires, and only then reaches
+    // for the refresh token. Opening a browser first asks the provider to have
+    // registered a redirect URI that this config never needed — which is how a
+    // cluster somebody uses daily through kubectl answered
+    // "Unregistered redirect_uri" here.
+    if let Some(token) = config.get("id-token").filter(|token| still_usable(token)) {
+        return Ok(AuthResult {
+            token: token.clone(),
+            expires_at: expiry_of(token),
+            refresh_token: config.get("refresh-token").cloned(),
+            token_type: "Bearer".to_string(),
+        });
+    }
+
     let issuer_url = config
         .get("idp-issuer-url")
         .ok_or_else(|| Error::Auth(AuthError::Oidc("Missing issuer URL".to_string())))?
@@ -232,6 +271,84 @@ async fn wait_for_oidc_callback(listener: TcpListener) -> Result<OidcCallback> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A JWT shaped the way a provider issues one, expiring `secs` from now.
+    /// Only the payload matters here — nothing verifies the other two parts.
+    fn token_expiring_in(secs: i64) -> String {
+        let exp = (chrono::Utc::now() + chrono::Duration::seconds(secs)).timestamp();
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(format!(r#"{{"sub":"a@b.c","exp":{exp}}}"#));
+        format!("header.{payload}.signature")
+    }
+
+    #[test]
+    fn reads_the_expiry_a_provider_stamped() {
+        let token = token_expiring_in(3600);
+        let exp = expiry_of(&token).expect("exp");
+        let left = (exp - chrono::Utc::now()).num_seconds();
+        assert!((3500..=3600).contains(&left), "{left}s left");
+    }
+
+    /// The whole point: a config carrying a live token must not send anybody
+    /// to a browser, because the redirect URI it would need was never
+    /// registered — `kubectl` works on exactly this config without one.
+    #[test]
+    fn a_live_token_is_used_as_it_stands() {
+        assert!(still_usable(&token_expiring_in(3600)));
+    }
+
+    /// The behavioural half: the issuer here is an address nothing listens on,
+    /// so anything that reached for the network would fail. Returning the token
+    /// is the proof that no browser and no round trip happen at all.
+    #[tokio::test]
+    async fn a_live_token_skips_the_browser_entirely() {
+        let token = token_expiring_in(3600);
+        let provider = AuthProviderConfig {
+            name: "oidc".to_string(),
+            config: HashMap::from([
+                (
+                    "idp-issuer-url".to_string(),
+                    "http://127.0.0.1:1/dex".to_string(),
+                ),
+                ("client-id".to_string(), "kubernetes".to_string()),
+                ("id-token".to_string(), token.clone()),
+                ("refresh-token".to_string(), "refresh".to_string()),
+            ]),
+        };
+        let state = AppState::new().expect("state");
+        let result = run_oidc_auth(&state, "ctx", &provider)
+            .await
+            .expect("a live token needs no provider");
+        assert_eq!(result.token, token);
+        assert_eq!(result.refresh_token.as_deref(), Some("refresh"));
+    }
+
+    #[test]
+    fn a_spent_token_is_not() {
+        assert!(!still_usable(&token_expiring_in(-1)));
+    }
+
+    /// A token dying inside the skew window would expire mid-request.
+    #[test]
+    fn nor_is_one_that_dies_while_it_travels() {
+        assert!(!still_usable(&token_expiring_in(30)));
+    }
+
+    #[test]
+    fn anything_unreadable_counts_as_spent() {
+        for token in ["", "not-a-jwt", "header..signature", "a.!!!.c"] {
+            assert!(!still_usable(token), "{token:?}");
+            assert!(expiry_of(token).is_none(), "{token:?}");
+        }
+    }
+
+    /// A JWT without `exp` says nothing about when it dies, and guessing
+    /// "still good" there is how a request fails at the API server instead.
+    #[test]
+    fn so_does_one_that_never_says_when_it_ends() {
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(r#"{"sub":"a@b.c"}"#);
+        assert!(!still_usable(&format!("header.{payload}.signature")));
+    }
 
     /// The whole of #67, and both halves of the rule in one test on purpose.
     ///
