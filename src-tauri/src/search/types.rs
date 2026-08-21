@@ -112,11 +112,10 @@ pub fn describe_failure(error: &crate::error::Error) -> (SearchFailureKind, Stri
     // text classifier looks for.
     let kind = match error {
         Error::Timeout(_) => SearchFailureKind::Timeout,
-        Error::PermissionDenied(_) => SearchFailureKind::Forbidden,
         // A 401 no longer arrives as `KubeApi` — it has its own variant now.
         // The fan-out has no state for "this cluster's session is over", and
         // refused is the nearest true thing it can say about one row.
-        Error::CredentialsExpired(_) => SearchFailureKind::Forbidden,
+        Error::PermissionDenied(_) | Error::CredentialsExpired(_) => SearchFailureKind::Forbidden,
         _ => SearchFailureKind::classify_text(&chain.join(" | ")),
     };
     (kind, message)

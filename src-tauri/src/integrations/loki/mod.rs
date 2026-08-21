@@ -268,7 +268,7 @@ pub async fn probe_loki(
 
     let started = Instant::now();
     let answer = get_json(&entry, "/loki/api/v1/labels", &[]).await;
-    let latency_ms = started.elapsed().as_millis() as u64;
+    let latency_ms = crate::utils::elapsed_ms(started);
 
     match answer {
         Ok(value) => {

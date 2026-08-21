@@ -81,10 +81,10 @@ impl ResourceKind {
 
             ResourceKind::Ingress | ResourceKind::NetworkPolicy => "networking.k8s.io/v1",
 
-            ResourceKind::Role | ResourceKind::RoleBinding => "rbac.authorization.k8s.io/v1",
-            ResourceKind::ClusterRole | ResourceKind::ClusterRoleBinding => {
-                "rbac.authorization.k8s.io/v1"
-            }
+            ResourceKind::Role
+            | ResourceKind::RoleBinding
+            | ResourceKind::ClusterRole
+            | ResourceKind::ClusterRoleBinding => "rbac.authorization.k8s.io/v1",
 
             ResourceKind::CustomResourceDefinition => "apiextensions.k8s.io/v1",
             ResourceKind::Custom => "",

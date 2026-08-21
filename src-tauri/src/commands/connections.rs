@@ -63,7 +63,7 @@ pub async fn get_resource_connections(
     } else {
         ResourceContext::for_command(&state, namespace)?
     };
-    connections_of(&ctx, &kind, &name).await
+    Box::pin(connections_of(&ctx, &kind, &name)).await
 }
 
 /// The kinds whose neighbourhood spans every namespace there is: the pods a
@@ -91,7 +91,7 @@ pub async fn connections_of(
     match canonical {
         "Pod" => pod_connections(ctx, &ns, name, &mut out).await?,
         "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" | "Job" | "CronJob" => {
-            workload_connections(ctx, &ns, canonical, name, &mut out).await?;
+            Box::pin(workload_connections(ctx, &ns, canonical, name, &mut out)).await?;
         }
         "Service" => service_connections(ctx, &ns, name, &mut out).await?,
         "Ingress" => ingress_connections(ctx, &ns, name, &mut out).await?,

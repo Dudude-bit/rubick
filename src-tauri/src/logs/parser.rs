@@ -114,9 +114,11 @@ pub fn parse_structured_message(
     )
 }
 
-fn parse_json_message(
-    message: &str,
-) -> Option<(BTreeMap<String, String>, Option<LogLevel>, Option<String>)> {
+/// Fields lifted out of a structured line, the level they imply, and
+/// what is left to show the reader as the message.
+type ParsedMessage = (BTreeMap<String, String>, Option<LogLevel>, Option<String>);
+
+fn parse_json_message(message: &str) -> Option<ParsedMessage> {
     let trimmed = message.trim_start();
     if !trimmed.starts_with('{') {
         return None;
@@ -170,9 +172,7 @@ fn extract_json_value(object: &serde_json::Map<String, Value>, keys: &[&str]) ->
     None
 }
 
-fn parse_logfmt_message(
-    message: &str,
-) -> Option<(BTreeMap<String, String>, Option<LogLevel>, Option<String>)> {
+fn parse_logfmt_message(message: &str) -> Option<ParsedMessage> {
     let fields = parse_logfmt_fields(message)?;
 
     // Require at least 2 valid key=value pairs

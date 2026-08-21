@@ -31,7 +31,7 @@ pub enum ResourceType {
 impl ResourceType {
     /// Parse resource type from string (Strict Kind matching)
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_kind(s: &str) -> Option<Self> {
         match s {
             "Pod" => Some(Self::Pod),
             "Deployment" => Some(Self::Deployment),
@@ -156,15 +156,15 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(ResourceType::from_str("Pod"), Some(ResourceType::Pod));
+        assert_eq!(ResourceType::from_kind("Pod"), Some(ResourceType::Pod));
         // Strict case - these should now fail (return None)
-        assert_eq!(ResourceType::from_str("pods"), None);
-        assert_eq!(ResourceType::from_str("pod"), None);
+        assert_eq!(ResourceType::from_kind("pods"), None);
+        assert_eq!(ResourceType::from_kind("pod"), None);
         assert_eq!(
-            ResourceType::from_str("PersistentVolumeClaim"),
+            ResourceType::from_kind("PersistentVolumeClaim"),
             Some(ResourceType::PersistentVolumeClaim)
         );
-        assert_eq!(ResourceType::from_str("unknown"), None);
+        assert_eq!(ResourceType::from_kind("unknown"), None);
     }
 
     #[test]

@@ -239,7 +239,7 @@ pub async fn probe_prometheus(
 
     let started = Instant::now();
     let answer = get_json(&entry, "/api/v1/query", &[("query", "1".to_string())]).await;
-    let latency_ms = started.elapsed().as_millis() as u64;
+    let latency_ms = crate::utils::elapsed_ms(started);
 
     match answer {
         Ok(_) => {

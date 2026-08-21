@@ -143,7 +143,7 @@ impl TerminalAdapter for AuthExecAdapter {
             let mut buf = vec![0u8; crate::terminal::session::TERMINAL_BUFFER_SIZE];
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break,
+                    Ok(0) | Err(_) => break,
                     Ok(n) => {
                         let data = buf[..n].to_vec();
                         {
@@ -159,7 +159,6 @@ impl TerminalAdapter for AuthExecAdapter {
                             break;
                         }
                     }
-                    Err(_) => break,
                 }
             }
         });
@@ -197,6 +196,9 @@ impl TerminalAdapter for AuthExecAdapter {
 
         // Short timeout matches the manager's 50ms read tick — it lets
         // the I/O loop interleave with input and cancel checks.
+        // Two different endings that call for the same answer; keeping them
+        // apart is what lets each say which one it is.
+        #[allow(clippy::match_same_arms)]
         match tokio::time::timeout(std::time::Duration::from_millis(10), rx.recv()).await {
             Ok(Some(data)) => Ok(Some(data)),
             Ok(None) => Ok(None), // sender dropped: child exited

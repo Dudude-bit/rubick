@@ -122,20 +122,20 @@ pub async fn update_helm_repos() -> Result<String> {
     exec_helm_cli(&["repo", "update"], 120).await
 }
 
+/// One row of `helm search repo -o json`.
+#[derive(Deserialize)]
+struct SearchResult {
+    name: String,
+    version: String,
+    app_version: String,
+    description: String,
+}
+
 /// Search for Helm charts in repositories
 #[tauri::command]
 pub async fn helm_search_charts(keyword: String) -> Result<Vec<HelmChartSearchResult>> {
     // Search in all repos
     let output = exec_helm_cli(&["search", "repo", &keyword, "-o", "json"], 30).await?;
-
-    // Parse JSON output
-    #[derive(Deserialize)]
-    struct SearchResult {
-        name: String,
-        version: String,
-        app_version: String,
-        description: String,
-    }
 
     let results: Vec<SearchResult> = serde_json::from_str(&output).map_err(|e| {
         Error::Plugin(PluginError::ExecutionFailed(format!(

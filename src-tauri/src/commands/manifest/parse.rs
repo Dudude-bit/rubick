@@ -18,10 +18,10 @@ pub(super) struct ParsedManifest {
 
 impl ParsedManifest {
     /// Get the effective namespace (from manifest, fallback, or "default")
-    pub fn effective_namespace(&self, fallback: &Option<String>) -> String {
+    pub fn effective_namespace(&self, fallback: Option<&str>) -> String {
         self.namespace
             .clone()
-            .or_else(|| fallback.clone())
+            .or_else(|| fallback.map(str::to_string))
             .unwrap_or_else(|| "default".to_string())
     }
 

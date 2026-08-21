@@ -113,7 +113,7 @@ pub async fn list_events(
     let mut events: Vec<EventInfo> = items.iter().map(EventInfo::from).collect();
 
     // Sort by last timestamp (most recent first)
-    events.sort_by_key(|event| std::cmp::Reverse(event.last_timestamp.clone()));
+    events.sort_by_key(|event| std::cmp::Reverse(event.last_timestamp));
 
     if let Some(limit) = filters.limit {
         if limit > 0 {

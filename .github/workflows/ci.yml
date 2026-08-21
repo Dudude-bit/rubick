@@ -45,11 +45,10 @@ jobs:
         run: bun run build
 
       - name: Rust clippy
-        # Informational for now — a single new warning breaking CI for all
-        # contributors is too strict until we've settled into clippy's
-        # current preferences. Promote to `-D warnings` once the tree is
-        # quiet again.
-        run: cargo clippy --workspace --all-targets --no-deps -- -W clippy::all
+        # The tree is quiet: every finding is either fixed or allowed where it
+        # applies, with the reason next to it. A new one should stop the PR
+        # rather than join a backlog nobody reads.
+        run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
 
       - name: Rust tests
         # --workspace, not just src-tauri: k8s-gui-common carries unit

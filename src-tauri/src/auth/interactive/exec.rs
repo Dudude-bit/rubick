@@ -701,6 +701,9 @@ mod preview_tests {
     use super::{preview_bytes, AUTH_FLOW_TIMEOUT_SECS};
 
     #[test]
+    // Constant on purpose: the point is to fail the moment somebody lowers
+    // the timeout, and the message needs both values in it.
+    #[allow(clippy::assertions_on_constants)]
     fn auth_flow_timeout_is_large_enough_to_outlast_any_reasonable_plugin() {
         // We deliberately do NOT pin our timeout against a specific
         // plugin's current default — that's how we got into trouble

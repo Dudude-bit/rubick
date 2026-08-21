@@ -35,6 +35,15 @@ pub fn normalize_optional_namespace(namespace: Option<String>) -> Option<String>
     })
 }
 
+/// Milliseconds elapsed since `started`, saturating instead of wrapping.
+///
+/// Every caller is timing one round trip to put a number in a log line, so
+/// the saturation point is not a case anybody has to reason about.
+#[must_use]
+pub fn elapsed_ms(started: std::time::Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
 /// Generate a unique ID with a given prefix
 #[must_use]
 pub fn generate_id(prefix: &str) -> String {
