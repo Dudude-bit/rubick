@@ -117,15 +117,6 @@ pub fn format_memory(bytes: u64) -> String {
     format!("{bytes}")
 }
 
-/// Calculate utilization percentage
-#[must_use]
-pub fn calculate_utilization(used: f64, total: f64) -> Option<f64> {
-    if total <= 0.0 {
-        return None;
-    }
-    Some((used / total * 100.0).clamp(0.0, 100.0))
-}
-
 #[cfg(test)]
 // Every float here is compared against a value the arithmetic under test
 // produces exactly, so an exact comparison is the assertion we want.
@@ -171,13 +162,5 @@ mod tests {
         assert_eq!(format_memory(1024), "1.00Ki");
         assert_eq!(format_memory(1024 * 1024), "1.00Mi");
         assert_eq!(format_memory(1024 * 1024 * 1024), "1.00Gi");
-    }
-
-    #[test]
-    fn test_calculate_utilization() {
-        assert_eq!(calculate_utilization(50.0, 100.0), Some(50.0));
-        assert_eq!(calculate_utilization(150.0, 100.0), Some(100.0));
-        assert_eq!(calculate_utilization(-10.0, 100.0), Some(0.0));
-        assert_eq!(calculate_utilization(10.0, 0.0), None);
     }
 }
