@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.1] - 2026-08-21
+
+Four things that reached a screen and should not have: a sign-in that
+never got past the provider, a coverage panel calling a live cluster
+somebody else's, two pickers painted white in a dark window, and a
+handful of labels showing their own placeholders.
+
+### Fixed — OIDC sign-in reaches the provider
+
+The redirect URI Rubick sent was `http://127.0.0.1:8000/callback`. What
+`kubectl oidc-login` sends, and what a provider therefore has on file, is
+`http://localhost:8000` — a different host, and no path. A provider
+compares the whole string, so the flow stopped with an invalid-redirect
+error before anyone could approve anything. Dex is lenient about both;
+Keycloak, Okta and Entra are not.
+
+### Fixed — a cluster that answers is not a foreign one
+
+The Prometheus coverage panel asks a server which nodes it knows. A server
+scraping only cAdvisor answers `kube_node_info` with nothing — and nothing
+was read as "those are somebody else's nodes", so the panel called the
+cluster unwatched while the graphs beside it were drawing its data. An
+empty answer now means the question does not apply, and the count comes
+from the metrics that are actually there.
+
+### Fixed — the Service and port pickers match the window
+
+Both were native `<select>` elements, which the system paints white
+whatever the app's theme. They use the same picker as the rest of
+Settings now.
+
+### Fixed — labels that showed their own placeholders
+
+Four strings reached the screen with `{label}` or `{site}` still in them,
+and three Russian counters dropped the number in the form that also covers
+21, 31 and 41 — so twenty-one rows announced themselves as one row. A test
+now holds both halves of that contract in every language.
+
 ## [4.4.0] - 2026-08-20
 
 The interface speaks Russian, a seven-day certificate stops wearing a
