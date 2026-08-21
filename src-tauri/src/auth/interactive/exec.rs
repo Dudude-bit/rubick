@@ -229,6 +229,9 @@ pub(super) async fn run_exec_auth(
                                 url,
                                 flow: "exec".to_string(),
                                 session_id: Some(session_id.clone()),
+                                // The plugin runs its own flow; where it sends the browser back is
+                                // its business and not visible from here.
+                                redirect_uri: None,
                             });
                         }
                     }

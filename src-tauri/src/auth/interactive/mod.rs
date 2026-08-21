@@ -77,7 +77,8 @@ pub async fn prepare_kubeconfig_for_context(
 
     if let Some(provider) = auth_info.auth_provider.clone() {
         if provider.name == "oidc" {
-            let oidc_result = oidc::run_oidc_auth(state, context_name, &provider).await?;
+            let oidc_result =
+                oidc::run_oidc_auth(state, context_name, &user_name, &provider).await?;
             auth_info.token = Some(SecretString::from(oidc_result.token));
             auth_info.auth_provider = None;
         }

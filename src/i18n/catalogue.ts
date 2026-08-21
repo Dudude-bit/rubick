@@ -1057,6 +1057,26 @@ export const en = {
     jobCount: { one: "{n} job", other: "{n} jobs" },
     active: "{n} active",
   },
+  auth: {
+    started: "Signing in",
+    startedIn:
+      "Finish signing in to {context} in your browser. Cancel if you closed the tab.",
+    // A provider only accepts a redirect address its client has registered,
+    // and nobody but the reader can add one — so it goes on screen while they
+    // wait, next to the browser that may already be refusing it.
+    waitingOn:
+      "Waiting on {uri} — your provider must allow that address for this client.",
+    windowTitle: "Sign in to {context}",
+    windowFailed: "Could not open the sign-in window",
+    windowFailedBody: "Try again.",
+    failed: "Sign-in failed",
+    couldNotOpen: "Could not open sign-in. Try again.",
+    failedFor: "Could not sign in to {context}.",
+    complete: "Signed in",
+    completeFor: "Signed in to {context}.",
+    cancelled: "Sign-in cancelled",
+    cancelledFor: "Cancelled {context}.",
+  },
   cluster: {
     markBroken: "broken",
     markWorthALook: "worth a look",

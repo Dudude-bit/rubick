@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-shell";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 import { ToastAction } from "@/components/ui/toast";
 import { commands } from "@/lib/commands";
 
@@ -11,6 +12,10 @@ interface AuthUrlRequestedPayload {
   url: string;
   flow: string;
   session_id?: string | null;
+  /// Where the provider is expected to send the browser back, when the flow
+  /// has one. Shown while waiting: a provider that has not been told to allow
+  /// it refuses immediately, and only the reader can go and add it.
+  redirect_uri?: string | null;
 }
 
 interface AuthFlowCompletedPayload {
@@ -44,12 +49,16 @@ const AUTH_WINDOW_PREFIX = "auth-";
 
 export function useAuthFlowEvents() {
   const { toast, dismiss } = useToast();
+  const t = useT();
   const windowsRef = useRef<Record<string, WebviewWindow>>({});
   const activeSessionsRef = useRef<Set<string>>(new Set());
   const toastIdsRef = useRef<Record<string, string>>({});
   // Use refs for toast functions to avoid re-running effect when they change
   const toastRef = useRef(toast);
   const dismissRef = useRef(dismiss);
+  // Same reason, and one more: listing `t` as a dependency would tear down
+  // every listener on a language change, dropping any sign-in in flight.
+  const tRef = useRef(t);
 
   // State for auth terminal modal
   const [authTerminalSession, setAuthTerminalSession] =
@@ -58,8 +67,9 @@ export function useAuthFlowEvents() {
   // Keep refs up to date
   useEffect(() => {
     toastRef.current = toast;
+    tRef.current = t;
     dismissRef.current = dismiss;
-  }, [toast, dismiss]);
+  }, [toast, dismiss, t]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,8 +184,19 @@ export function useAuthFlowEvents() {
               }
 
               const { id: toastId } = toastRef.current({
-                title: "Authentication started",
-                description: `Complete authentication in your browser for ${payload.context}. Click Cancel if you closed the browser tab.`,
+                title: tRef.current("auth", "started"),
+                description: [
+                  tRef.current("auth", "startedIn", {
+                    context: payload.context,
+                  }),
+                  payload.redirect_uri
+                    ? tRef.current("auth", "waitingOn", {
+                        uri: payload.redirect_uri,
+                      })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
                 // Auto-dismiss after 10 minutes — long enough for a
                 // realistic browser-auth flow (password manager,
                 // SSO redirect, MFA) but short enough that an
@@ -204,7 +225,9 @@ export function useAuthFlowEvents() {
               const label = `${AUTH_WINDOW_PREFIX}${sessionId}`;
               const window = new WebviewWindow(label, {
                 url: payload.url,
-                title: `Authenticate ${payload.context}`,
+                title: tRef.current("auth", "windowTitle", {
+                  context: payload.context,
+                }),
                 width: 960,
                 height: 720,
                 resizable: true,
@@ -215,9 +238,8 @@ export function useAuthFlowEvents() {
               window.once("tauri://error", (e) => {
                 console.error("Auth window error:", e);
                 toastRef.current({
-                  title: "Authentication window error",
-                  description:
-                    "Failed to open authentication window. Please try again.",
+                  title: tRef.current("auth", "windowFailed"),
+                  description: tRef.current("auth", "windowFailedBody"),
                   variant: "destructive",
                 });
                 commands.cancelAuthSession(sessionId).catch(() => {});
@@ -236,8 +258,8 @@ export function useAuthFlowEvents() {
           } catch (error) {
             console.error("Failed to open auth URL:", error);
             toastRef.current({
-              title: "Authentication failed",
-              description: "Could not open authentication. Please try again.",
+              title: tRef.current("auth", "failed"),
+              description: tRef.current("auth", "couldNotOpen"),
               variant: "destructive",
             });
             await commands.cancelAuthSession(sessionId).catch(() => {});
@@ -262,14 +284,17 @@ export function useAuthFlowEvents() {
 
           if (payload.success) {
             toastRef.current({
-              title: "Authentication complete",
-              description: `Authentication completed for ${payload.context}.`,
+              title: tRef.current("auth", "complete"),
+              description: tRef.current("auth", "completeFor", {
+                context: payload.context,
+              }),
             });
           } else {
             toastRef.current({
-              title: "Authentication failed",
+              title: tRef.current("auth", "failed"),
               description:
-                payload.message || `Failed to authenticate ${payload.context}.`,
+                payload.message ||
+                tRef.current("auth", "failedFor", { context: payload.context }),
               variant: "destructive",
             });
           }
@@ -292,8 +317,12 @@ export function useAuthFlowEvents() {
           );
 
           toastRef.current({
-            title: "Authentication cancelled",
-            description: payload.message || `Cancelled ${payload.context}.`,
+            title: tRef.current("auth", "cancelled"),
+            description:
+              payload.message ||
+              tRef.current("auth", "cancelledFor", {
+                context: payload.context,
+              }),
           });
         }
       );

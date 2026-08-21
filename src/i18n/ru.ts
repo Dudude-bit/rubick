@@ -1061,6 +1061,23 @@ export const ru: Catalogue = {
     },
     active: "активных: {n}",
   },
+  auth: {
+    started: "Вход",
+    startedIn:
+      "Завершите вход в {context} в браузере. Отмените, если закрыли вкладку.",
+    waitingOn:
+      "Ждём ответ на {uri} — этот адрес должен быть разрешён у провайдера для этого клиента.",
+    windowTitle: "Вход в {context}",
+    windowFailed: "Не удалось открыть окно входа",
+    windowFailedBody: "Попробуйте ещё раз.",
+    failed: "Войти не удалось",
+    couldNotOpen: "Не удалось открыть вход. Попробуйте ещё раз.",
+    failedFor: "Не удалось войти в {context}.",
+    complete: "Вход выполнен",
+    completeFor: "Выполнен вход в {context}.",
+    cancelled: "Вход отменён",
+    cancelledFor: "Отменено: {context}.",
+  },
   cluster: {
     markBroken: "сломано",
     markWorthALook: "стоит взглянуть",

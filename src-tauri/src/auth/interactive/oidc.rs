@@ -2,7 +2,8 @@
 //! emit the auth URL to the frontend, exchange the callback code for
 //! a token via `OidcAuth`.
 
-use crate::auth::{AuthResult, OidcAuth};
+use crate::auth::kubeconfig_tokens::{file_defining_user, kubeconfig_files, write_tokens};
+use crate::auth::{AuthProvider as _, AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
 use crate::state::{AppEvent, AppState};
 use base64::Engine as _;
@@ -57,6 +58,52 @@ fn still_usable(token: &str) -> bool {
         .is_some_and(|exp| exp > chrono::Utc::now() + chrono::Duration::seconds(TOKEN_SKEW_SECS))
 }
 
+/// Trade the refresh token for a live one and write both back, or `None` when
+/// that cannot be done safely — no refresh token, nowhere certain to write, or
+/// the provider refused.
+///
+/// Every `None` here falls through to the browser, which is the honest
+/// outcome: it asks for something rather than silently spending a credential
+/// somebody else still needs.
+async fn refreshed(
+    config: &HashMap<String, String>,
+    user: &str,
+    files: &[std::path::PathBuf],
+) -> Option<AuthResult> {
+    let refresh_token = config.get("refresh-token").filter(|t| !t.is_empty())?;
+    let issuer_url = config.get("idp-issuer-url")?.clone();
+    let client_id = config.get("client-id")?.clone();
+
+    let path = file_defining_user(files, user)?;
+
+    let auth = OidcAuth::new(
+        issuer_url,
+        client_id,
+        config.get("client-secret").cloned(),
+        parse_scopes(config),
+    );
+    let spent = AuthResult {
+        token: String::new(),
+        expires_at: None,
+        refresh_token: Some(refresh_token.clone()),
+        token_type: "Bearer".to_string(),
+    };
+    let fresh = match auth.refresh(&spent).await {
+        Ok(fresh) => fresh,
+        Err(err) => {
+            tracing::info!(%err, "OIDC refresh declined; falling back to the browser");
+            return None;
+        }
+    };
+
+    if let Err(err) = write_tokens(&path, user, &fresh.token, fresh.refresh_token.as_deref()) {
+        // The token just spent is gone either way; saying so is the only thing
+        // that explains why `kubectl` may now ask for a fresh login too.
+        tracing::warn!(%err, path = %path.display(), "refreshed the OIDC token but could not write it back");
+    }
+    Some(fresh)
+}
+
 fn redirect_uri_for(port: u16) -> String {
     format!("http://localhost:{port}")
 }
@@ -73,8 +120,9 @@ async fn bind_redirect() -> Result<TcpListener> {
 pub(super) async fn run_oidc_auth(
     state: &AppState,
     context: &str,
+    user: &str,
     provider: &AuthProviderConfig,
-) -> Result<crate::auth::AuthResult> {
+) -> Result<AuthResult> {
     let config = &provider.config;
 
     // `kubectl` never opens a browser for this kind of user: it sends the
@@ -90,6 +138,20 @@ pub(super) async fn run_oidc_auth(
             refresh_token: config.get("refresh-token").cloned(),
             token_type: "Bearer".to_string(),
         });
+    }
+
+    // The token is spent, and `kubectl` would now trade the refresh token for
+    // a new one without a browser in sight. Do the same — but settle where the
+    // result will be written *first*. Dex invalidates a refresh token the
+    // moment it is spent, so refreshing without being able to write the
+    // replacement back would leave the file holding a dead token and break the
+    // `kubectl` beside us. No single file to write means no refresh.
+    let override_path =
+        crate::commands::settings::helpers::read_config(|c| c.kubernetes.kubeconfig_path.clone())
+            .ok()
+            .flatten();
+    if let Some(result) = refreshed(config, user, &kubeconfig_files(override_path)).await {
+        return Ok(result);
     }
 
     let issuer_url = config
@@ -128,6 +190,7 @@ pub(super) async fn run_oidc_auth(
         url: auth_url.url.clone(),
         flow: "oidc".to_string(),
         session_id: Some(session_id.clone()),
+        redirect_uri: Some(redirect_uri.clone()),
     });
 
     let callback_fut = wait_for_oidc_callback(listener);
@@ -316,11 +379,79 @@ mod tests {
             ]),
         };
         let state = AppState::new().expect("state");
-        let result = run_oidc_auth(&state, "ctx", &provider)
+        let result = run_oidc_auth(&state, "ctx", "alice", &provider)
             .await
             .expect("a live token needs no provider");
         assert_eq!(result.token, token);
         assert_eq!(result.refresh_token.as_deref(), Some("refresh"));
+    }
+
+    /// The whole loop against a real provider, because the part that matters
+    /// is somebody else's behaviour: Dex invalidates a refresh token the
+    /// moment it is spent, so the replacement has to reach the file or the
+    /// next `kubectl` is locked out.
+    ///
+    /// Needs a Dex on 127.0.0.1:5556 and a refresh token in
+    /// `RUBICK_TEST_REFRESH_TOKEN`, so it is not part of the normal run:
+    /// `cargo test -- --ignored refreshes_against_a_real_provider`
+    #[tokio::test]
+    #[ignore = "needs a live Dex; see the doc comment"]
+    async fn refreshes_against_a_real_provider_and_writes_the_result_back() {
+        let spent_refresh =
+            std::env::var("RUBICK_TEST_REFRESH_TOKEN").expect("RUBICK_TEST_REFRESH_TOKEN");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config");
+        std::fs::write(
+            &path,
+            format!(
+                "apiVersion: v1\nkind: Config\nusers:\n- name: alice\n  user:\n    \
+                 auth-provider:\n      name: oidc\n      config:\n        \
+                 client-id: kubernetes\n        id-token: expired\n        \
+                 idp-issuer-url: http://127.0.0.1:5556/dex\n        \
+                 refresh-token: {spent_refresh}\n"
+            ),
+        )
+        .expect("write");
+
+        let config = HashMap::from([
+            (
+                "idp-issuer-url".to_string(),
+                "http://127.0.0.1:5556/dex".to_string(),
+            ),
+            ("client-id".to_string(), "kubernetes".to_string()),
+            ("refresh-token".to_string(), spent_refresh.clone()),
+        ]);
+
+        let fresh = refreshed(&config, "alice", std::slice::from_ref(&path))
+            .await
+            .expect("a live refresh token buys a new one");
+
+        assert!(still_usable(&fresh.token), "the new id-token must be live");
+
+        // The file has to carry the replacement, not the token just spent.
+        let after = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            after.contains(&fresh.token),
+            "new id-token not written back"
+        );
+        assert!(
+            !after.contains(&spent_refresh),
+            "the file still holds the refresh token Dex just invalidated"
+        );
+
+        // And the chain has to continue: whatever landed in the file must buy
+        // the next token too, or the `kubectl` reading this file is locked out
+        // one refresh from now.
+        let stored: serde_yaml::Value = serde_yaml::from_str(&after).expect("yaml");
+        let stored = stored["users"][0]["user"]["auth-provider"]["config"]["refresh-token"]
+            .as_str()
+            .expect("refresh-token")
+            .to_string();
+        let mut next = config.clone();
+        next.insert("refresh-token".to_string(), stored);
+        refreshed(&next, "alice", std::slice::from_ref(&path))
+            .await
+            .expect("the refresh token written back must work in its turn");
     }
 
     #[test]

@@ -265,6 +265,11 @@ pub enum AppEvent {
         url: String,
         flow: String,
         session_id: Option<String>,
+        /// Where the provider is expected to send the browser back, when the
+        /// flow has one. A provider only accepts an address its client has
+        /// registered, and the reader is the only person who can add it —
+        /// naming it while they wait beats naming it once the wait times out.
+        redirect_uri: Option<String>,
     },
     /// Auth flow completed
     AuthFlowCompleted {
@@ -407,11 +412,13 @@ impl AppEvent {
                 url,
                 flow,
                 session_id,
+                redirect_uri,
             } => serde_json::json!({
                 "context": context,
                 "url": url,
                 "flow": flow,
                 "session_id": session_id,
+                "redirect_uri": redirect_uri,
             }),
             AppEvent::AuthFlowCompleted {
                 session_id,
@@ -479,6 +486,7 @@ mod tests {
                 url: "https://example".into(),
                 flow: "exec".into(),
                 session_id: Some("auth-1".into()),
+                redirect_uri: None,
             },
             AppEvent::AuthFlowCompleted {
                 session_id: "auth-1".into(),
@@ -587,6 +595,7 @@ mod tests {
                     url: String::new(),
                     flow: String::new(),
                     session_id: None,
+                    redirect_uri: None,
                 },
                 "auth-url-requested",
             ),

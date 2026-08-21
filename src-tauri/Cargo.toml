@@ -95,8 +95,10 @@ flate2 = "1.0"
 # `term.ReadPassword` / `getpass` which require isatty(stdin).
 portable-pty = "0.9"
 
-[dev-dependencies]
+# Replacing a kubeconfig means writing beside it and renaming over the
+# original, so a crash mid-write cannot leave somebody without one.
 tempfile = "3"
+
 
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
