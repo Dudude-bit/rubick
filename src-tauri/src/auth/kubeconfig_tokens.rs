@@ -66,6 +66,26 @@ fn user_entry<'a>(doc: &'a serde_yaml::Value, user: &str) -> Option<&'a serde_ya
         .find(|entry| entry.get("name").and_then(serde_yaml::Value::as_str) == Some(user))
 }
 
+/// Whether this file could be replaced right now.
+///
+/// Asked *before* a refresh, never after: the token about to be spent is
+/// single-use, so discovering at the end that there was nowhere to put the
+/// replacement is discovering it one step too late. A file that cannot be
+/// rewritten means no refresh at all, and the browser gets asked instead.
+#[must_use]
+pub fn can_replace(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if metadata.permissions().readonly() {
+        return false;
+    }
+    // The rename lands in the directory, so that is what has to accept a new
+    // file — a writable file inside a read-only directory is still a dead end.
+    path.parent()
+        .is_some_and(|directory| tempfile::NamedTempFile::new_in(directory).is_ok())
+}
+
 /// Replace this user's `id-token` and `refresh-token`, leaving the rest of the
 /// document as it was.
 ///
@@ -303,6 +323,54 @@ users:
         let found = file_defining_user(&[broken, missing, mine.clone()], "alice");
 
         assert_eq!(found, Some(mine));
+    }
+
+    #[test]
+    fn a_writable_file_can_be_replaced() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+
+        assert!(can_replace(&path));
+    }
+
+    #[test]
+    fn a_file_that_is_not_there_cannot() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        assert!(!can_replace(&dir.path().join("absent")));
+    }
+
+    /// The caller asks this before spending a single-use token, so a read-only
+    /// file has to answer no — otherwise the refresh happens and the
+    /// replacement has nowhere to go.
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_file_cannot() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).expect("chmod");
+
+        assert!(!can_replace(&path));
+    }
+
+    /// A writable file inside a directory that will not accept a new entry is
+    /// still a dead end, because the replacement arrives by rename.
+    #[cfg(unix)]
+    #[test]
+    fn nor_can_one_in_a_directory_that_takes_no_new_files() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", CONFIG);
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o500))
+            .expect("chmod");
+
+        let answer = can_replace(&path);
+
+        // Put it back before the assert, or the tempdir cannot clean itself up.
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("chmod");
+        assert!(!answer);
     }
 
     #[test]

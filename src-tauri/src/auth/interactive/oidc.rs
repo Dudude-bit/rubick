@@ -2,7 +2,9 @@
 //! emit the auth URL to the frontend, exchange the callback code for
 //! a token via `OidcAuth`.
 
-use crate::auth::kubeconfig_tokens::{file_defining_user, kubeconfig_files, write_tokens};
+use crate::auth::kubeconfig_tokens::{
+    can_replace, file_defining_user, kubeconfig_files, write_tokens,
+};
 use crate::auth::{AuthProvider as _, AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
 use crate::state::{AppEvent, AppState};
@@ -75,6 +77,15 @@ async fn refreshed(
     let client_id = config.get("client-id")?.clone();
 
     let path = file_defining_user(files, user)?;
+    // Asked before the token is spent, not after: a refresh token is
+    // single-use, so nowhere to put the replacement has to mean no refresh.
+    if !can_replace(&path) {
+        tracing::info!(
+            path = %path.display(),
+            "kubeconfig cannot be rewritten; asking for a browser rather than              spending a refresh token whose replacement could not be stored"
+        );
+        return None;
+    }
 
     let auth = OidcAuth::new(
         issuer_url,
