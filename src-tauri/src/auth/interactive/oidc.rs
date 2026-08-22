@@ -92,7 +92,8 @@ async fn refreshed(
         client_id,
         config.get("client-secret").cloned(),
         parse_scopes(config),
-    );
+    )
+    .with_idp_ca(idp_ca(config));
     let spent = AuthResult {
         token: String::new(),
         expires_at: None,
@@ -113,6 +114,18 @@ async fn refreshed(
         tracing::warn!(%err, path = %path.display(), "refreshed the OIDC token but could not write it back");
     }
     Some(fresh)
+}
+
+/// The provider's CA, as the kubeconfig gives it: inline base64 first, then a
+/// path on disk. Both are keys `kubectl` reads, and a self-hosted provider
+/// behind a private CA is unreachable without one.
+fn idp_ca(config: &HashMap<String, String>) -> Option<Vec<u8>> {
+    if let Some(encoded) = config.get("idp-certificate-authority-data") {
+        return base64::engine::general_purpose::STANDARD
+            .decode(encoded.trim())
+            .ok();
+    }
+    std::fs::read(config.get("idp-certificate-authority")?).ok()
 }
 
 fn redirect_uri_for(port: u16) -> String {
@@ -176,7 +189,8 @@ pub(super) async fn run_oidc_auth(
     let client_secret = config.get("client-secret").cloned();
     let scopes = parse_scopes(config);
 
-    let auth = OidcAuth::new(issuer_url, client_id, client_secret, scopes);
+    let auth =
+        OidcAuth::new(issuer_url, client_id, client_secret, scopes).with_idp_ca(idp_ca(config));
     let listener = bind_redirect().await?;
     let redirect_port = listener.local_addr()?.port();
     // `http://localhost:<port>`, exactly — host and path included.
@@ -463,6 +477,44 @@ mod tests {
         refreshed(&next, "alice", std::slice::from_ref(&path))
             .await
             .expect("the refresh token written back must work in its turn");
+    }
+
+    /// A self-hosted provider behind a private CA is the ordinary case, and
+    /// both spellings below are what `kubectl` reads to reach one. Missing
+    /// this is not a degraded flow — every call fails at the handshake.
+    #[test]
+    fn reads_the_provider_ca_the_way_kubectl_does() {
+        let pem = b"-----BEGIN CERTIFICATE-----\nnot really\n-----END CERTIFICATE-----\n";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(pem);
+
+        let inline = HashMap::from([(
+            "idp-certificate-authority-data".to_string(),
+            encoded.clone(),
+        )]);
+        assert_eq!(idp_ca(&inline).as_deref(), Some(pem.as_slice()));
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("ca.pem");
+        std::fs::write(&path, pem).expect("write");
+        let on_disk = HashMap::from([(
+            "idp-certificate-authority".to_string(),
+            path.to_string_lossy().into_owned(),
+        )]);
+        assert_eq!(idp_ca(&on_disk).as_deref(), Some(pem.as_slice()));
+
+        // Inline wins, so a stale path cannot override what the file states.
+        let mut both = on_disk.clone();
+        both.insert("idp-certificate-authority-data".to_string(), encoded);
+        assert_eq!(idp_ca(&both).as_deref(), Some(pem.as_slice()));
+
+        assert_eq!(idp_ca(&HashMap::new()), None);
+        assert_eq!(
+            idp_ca(&HashMap::from([(
+                "idp-certificate-authority".to_string(),
+                "/nowhere/at/all".to_string()
+            )])),
+            None
+        );
     }
 
     #[test]

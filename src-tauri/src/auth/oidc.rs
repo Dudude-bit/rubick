@@ -11,6 +11,12 @@ pub struct OidcAuth {
     client_id: String,
     client_secret: Option<String>,
     scopes: Vec<String>,
+    /// The PEM a kubeconfig named for the provider itself, when the provider
+    /// is not signed by anything the machine already trusts. A self-hosted Dex
+    /// behind a company CA is the ordinary case, and without this every call
+    /// here fails at the TLS handshake while `kubectl` — which reads the same
+    /// two keys — carries on.
+    idp_ca: Option<Vec<u8>>,
 }
 
 /// OIDC token response
@@ -44,7 +50,36 @@ impl OidcAuth {
             client_id,
             client_secret,
             scopes,
+            idp_ca: None,
         }
+    }
+
+    /// Trust this PEM when talking to the provider, on top of the machine's
+    /// own roots.
+    #[must_use]
+    pub fn with_idp_ca(mut self, pem: Option<Vec<u8>>) -> Self {
+        self.idp_ca = pem;
+        self
+    }
+
+    /// A client that trusts the provider's CA when the kubeconfig named one.
+    ///
+    /// # Errors
+    ///
+    /// If the PEM cannot be read as a certificate.
+    fn http(&self) -> Result<reqwest::Client> {
+        let Some(pem) = &self.idp_ca else {
+            return Ok(reqwest::Client::new());
+        };
+        let certificate = reqwest::Certificate::from_pem(pem).map_err(|e| {
+            Error::Auth(AuthError::Oidc(format!(
+                "idp-certificate-authority is not a usable certificate: {e}"
+            )))
+        })?;
+        reqwest::Client::builder()
+            .add_root_certificate(certificate)
+            .build()
+            .map_err(|e| Error::Auth(AuthError::Oidc(format!("Cannot build HTTP client: {e}"))))
     }
 
     /// Discover OIDC endpoints
@@ -54,7 +89,7 @@ impl OidcAuth {
             self.issuer_url.trim_end_matches('/')
         );
 
-        let client = reqwest::Client::new();
+        let client = self.http()?;
         let response = client
             .get(&discovery_url)
             .send()
@@ -71,7 +106,7 @@ impl OidcAuth {
     /// Exchange refresh token for new access token
     async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse> {
         let discovery = self.discover().await?;
-        let client = reqwest::Client::new();
+        let client = self.http()?;
 
         let mut params = vec![
             ("grant_type", "refresh_token"),
@@ -221,7 +256,7 @@ impl OidcAuth {
         code_verifier: &str,
     ) -> Result<AuthResult> {
         let discovery = self.discover().await?;
-        let client = reqwest::Client::new();
+        let client = self.http()?;
 
         let mut params = vec![
             ("grant_type", "authorization_code"),
