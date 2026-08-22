@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.2] - 2026-08-22
+
+Signing in to a cluster that uses an OIDC auth-provider no longer opens a
+browser at all — which is what `kubectl` has always done with the same
+kubeconfig — and the two pickers still drawn by the operating system now
+match the rest of the window.
+
+### Fixed — an OIDC cluster signs in the way kubectl does
+
+A kubeconfig whose user has an `auth-provider: oidc` block already carries
+the tokens that prove who you are, and `kubectl` spends them: the
+`id-token` until it expires, then the `refresh-token` for a fresh one.
+Neither step involves a browser, and neither needs a redirect URI
+registered with anybody.
+
+Rubick read none of that and opened a browser every time, which asks your
+provider to have allowed an address this kind of config never needed. On a
+cluster somebody used daily through `kubectl`, that came back as
+"Unregistered redirect_uri" with no way past it.
+
+It now uses the token in the file, refreshes it once that is spent, and
+writes the replacement back where `kubectl` will find it. The browser is
+left for the case where there is nothing to refresh — and while it waits,
+it names the address it is waiting on, instead of mentioning it only when
+the wait runs out three minutes later.
+
+### Fixed — the kubeconfig is edited rather than rewritten
+
+Writing the refreshed token back used to re-emit the whole document. A
+quoted `"no"` belonging to an entirely different user came back bare, and
+`kubectl` reads YAML 1.1, where that is a boolean — so refreshing one user
+made the file unparseable for every context in it. Comments disappeared
+the same way.
+
+Two lines change now and nothing else does. A `~/.kube/config` that is a
+symlink stays one: the replacement used to land on the link itself and
+leave the real file holding a token that no longer worked.
+
+### Fixed — a provider behind a private CA is reachable
+
+`idp-certificate-authority-data` and `idp-certificate-authority` are read
+from the kubeconfig, the same two keys `kubectl` reads. Without them a
+self-hosted provider signed by a company CA failed at the TLS handshake,
+and the sign-in fell back to a browser that could not help either.
+
+### Fixed — the language and namespace pickers match the window
+
+Both were native `<select>` elements, which the operating system paints in
+its own colours rather than the app's — the same thing reported for the
+Service and port pickers after 4.4.0. They use the app's own list now, and
+a lint rule keeps the next one from reaching a release.
+
 ## [4.4.1] - 2026-08-21
 
 Four things that reached a screen and should not have: a sign-in that
