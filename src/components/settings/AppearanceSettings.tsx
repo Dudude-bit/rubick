@@ -1,3 +1,10 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
@@ -41,34 +48,35 @@ export function AppearanceSettings() {
         htmlFor="setting-language"
         keywords="language locale translation русский"
         control={
-          // A plain select, not the radio row the theme uses: six options and
-          // growing, and a language list is looked up by name rather than
-          // scanned. Each language is written in itself — somebody who needs
-          // this setting cannot necessarily read the current one.
-          <select
-            id="setting-language"
+          // A list, not the radio row the theme uses: six options and growing,
+          // and a language is looked up by name rather than scanned. Each one
+          // is written in itself — somebody who needs this setting cannot
+          // necessarily read the current one.
+          <Select
             value={choice ?? "system"}
-            onChange={(event) =>
-              setChoice(
-                event.target.value === "system"
-                  ? null
-                  : (event.target.value as Locale)
-              )
+            onValueChange={(value) =>
+              setChoice(value === "system" ? null : (value as Locale))
             }
-            className="rounded-md border border-hair bg-canvas px-2 py-1 text-xs text-fg"
           >
-            <option value="system">{t("settings", "systemLanguage")}</option>
-            {LOCALES.map((locale) => (
-              <option key={locale} value={locale}>
-                {LOCALE_NAMES[locale]}
-                {/* Offered but empty: the scaffolding is done, the words are
-                    not, and hiding it would hide where to contribute. */}
-                {isTranslated(locale)
-                  ? ""
-                  : ` — ${t("settings", "notTranslatedYet")}`}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="setting-language" className="h-7 w-56 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system">
+                {t("settings", "systemLanguage")}
+              </SelectItem>
+              {LOCALES.map((locale) => (
+                <SelectItem key={locale} value={locale}>
+                  {LOCALE_NAMES[locale]}
+                  {/* Offered but empty: the scaffolding is done, the words are
+                      not, and hiding it would hide where to contribute. */}
+                  {isTranslated(locale)
+                    ? ""
+                    : ` — ${t("settings", "notTranslatedYet")}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
       />
       <SettingRow

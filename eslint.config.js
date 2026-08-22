@@ -154,6 +154,17 @@ export default [
           message:
             "StatusBadge's `status` decides the colour by table lookup, so it must stay the untranslated code. Put the translated text in children: <StatusBadge status={code}>{label}</StatusBadge>.",
         },
+        {
+          // A native `<select>` is drawn by the operating system, not by the
+          // app: on macOS it opens a system menu in the system's colours,
+          // which in a dark window reads as somebody else's control — and in
+          // the wrong appearance renders white. A user reported exactly that
+          // an hour after a release, and the same mistake was still sitting
+          // in the language setting and the routing map afterwards.
+          selector: "JSXOpeningElement[name.name='select']",
+          message:
+            "Use the shared Select from components/ui/select. A native <select> is painted by the OS and does not follow the app's theme.",
+        },
       ],
     },
   },
