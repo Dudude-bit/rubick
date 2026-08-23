@@ -1,4 +1,10 @@
-import { ResourceType, toPlural, type ResourceKind } from "./resource-registry";
+import {
+  getResourceDefinition,
+  ResourceType,
+  toKind,
+  toPlural,
+  type ResourceKind,
+} from "./resource-registry";
 
 /**
  * Get the URL for a resource detail page
@@ -18,10 +24,25 @@ export function getResourceDetailUrl(
   namespace?: string | null
 ): string {
   const plural = toPlural(resourceKind as ResourceKind);
-  if (namespace) {
+  // A cluster-scoped kind has no namespace to put in a path, whatever it was
+  // handed. `isRoutableKind` already refuses the mirror case — a namespaced
+  // kind with no namespace — for the reason it names: a half-built URL is a
+  // dead link the reader only discovers by clicking. This side went
+  // unchecked, so an owner reference that arrived carrying its child's
+  // namespace turned a PersistentVolume into `/persistentvolumes/default/pv`
+  // and no route matched.
+  if (namespace && !isClusterScoped(resourceKind)) {
     return `/${plural}/${namespace}/${name}`;
   }
   return `/${plural}/${name}`;
+}
+
+/** Whether the registry calls this kind cluster-scoped. Unknown kinds are not. */
+function isClusterScoped(kind: ResourceKind | string): boolean {
+  const resolved = toKind(kind);
+  return (
+    resolved !== null && getResourceDefinition(resolved).scope === "cluster"
+  );
 }
 
 const CRD_INSTANCES = toPlural(ResourceType.CustomResourceDefinition);

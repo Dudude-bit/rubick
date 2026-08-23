@@ -315,8 +315,18 @@ export function isResourceType(value: string): value is ResourceKind {
   );
 }
 
+/**
+ * The registry entry for a kind, by either spelling.
+ *
+ * Plurals resolve too, because `isResourceType` accepts them and narrows to
+ * `ResourceKind` — so the type system endorses handing one straight to this
+ * function, and it used to answer `undefined` while its signature promised a
+ * definition. The next caller to write the obvious `isResourceType(k) &&
+ * getResourceDefinition(k).scope` read a property of nothing.
+ */
 export function getResourceDefinition(kind: ResourceKind): ResourceDefinition {
-  return RESOURCE_BY_KIND.get(kind)!;
+  return (RESOURCE_BY_KIND.get(kind) ??
+    RESOURCE_BY_PLURAL.get(String(kind).toLowerCase()))!;
 }
 
 export function getApiVersion(resourceKind: string): string {

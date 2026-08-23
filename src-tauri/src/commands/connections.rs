@@ -908,8 +908,17 @@ fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
 
 // --- ownership ---------------------------------------------------------
 
+/// The owner an object names, addressed the way its own kind is addressed.
+///
+/// The child's namespace is the right answer for a namespaced owner and only
+/// for one: Kubernetes requires a namespaced owner to sit in the dependent's
+/// namespace, but it explicitly allows a namespaced dependent to name a
+/// cluster-scoped owner. Stamping the namespace on regardless broke the
+/// invariant `ObjectRef::namespace` documents — `None` for the cluster-scoped
+/// kinds — and produced a reference to something that is not there.
 fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
-    ObjectRef::unchecked(&owner.kind, &owner.name, Some(ns.to_string()))
+    let namespace = (!cluster_scoped(&owner.kind)).then(|| ns.to_string());
+    ObjectRef::unchecked(&owner.kind, &owner.name, namespace)
 }
 
 /// Walk `metadata.ownerReferences` to the top.
@@ -1905,6 +1914,47 @@ mod ingress_backend_tests {
                 assert!(*tls);
             }
             other => panic!("expected Routes, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    fn owner(kind: &str) -> OwnerReference {
+        OwnerReference {
+            kind: kind.to_string(),
+            name: "the-owner".to_string(),
+            ..OwnerReference::default()
+        }
+    }
+
+    /// Kubernetes requires a namespaced owner to sit in the dependent's
+    /// namespace, so the child's namespace is the right answer there.
+    #[test]
+    fn a_namespaced_owner_is_addressed_in_the_child_s_namespace() {
+        assert_eq!(
+            owner_ref(&owner("ReplicaSet"), "production")
+                .namespace
+                .as_deref(),
+            Some("production")
+        );
+    }
+
+    /// And a cluster-scoped one is not, however the dependent is scoped —
+    /// naming one is explicitly allowed. `ObjectRef::namespace` documents
+    /// `None` for these and the UI builds the object's URL out of it, so a
+    /// `PersistentVolume` carrying a namespace addressed
+    /// `/persistentvolumes/<ns>/<name>`, which is nothing.
+    #[test]
+    fn a_cluster_scoped_owner_carries_no_namespace() {
+        for kind in ["Node", "PersistentVolume"] {
+            assert_eq!(
+                owner_ref(&owner(kind), "production").namespace,
+                None,
+                "{kind} is not in a namespace"
+            );
         }
     }
 }

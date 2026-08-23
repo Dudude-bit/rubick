@@ -31,6 +31,38 @@ describe("getResourceDetailUrl", () => {
     expect(getResourceDetailUrl("Node", "node-1", "")).toBe("/nodes/node-1");
   });
 
+  /**
+   * The mirror of the case `isRoutableKind` already refuses. An owner
+   * reference used to arrive carrying its dependent's namespace whatever the
+   * owner's own scope was — Kubernetes lets a namespaced object name a
+   * cluster-scoped owner — and the path built from it addressed nothing.
+   */
+  it("ignores a namespace handed to a cluster-scoped kind", () => {
+    expect(getResourceDetailUrl("Node", "node-1", "default")).toBe(
+      "/nodes/node-1"
+    );
+    expect(getResourceDetailUrl("PersistentVolume", "pv-1", "production")).toBe(
+      "/persistentvolumes/pv-1"
+    );
+    expect(getResourceDetailUrl("Namespace", "kube-system", "default")).toBe(
+      "/namespaces/kube-system"
+    );
+  });
+
+  /**
+   * `isResourceType` accepts a plural and narrows it to `ResourceKind`, so a
+   * plural reaches the scope lookup with the type system's blessing. It used
+   * to find nothing there and read a property of undefined.
+   */
+  it("resolves a plural spelling as well as a kind", () => {
+    expect(getResourceDetailUrl("pods", "nginx", "default")).toBe(
+      "/pods/default/nginx"
+    );
+    expect(getResourceDetailUrl("nodes", "node-1", "default")).toBe(
+      "/nodes/node-1"
+    );
+  });
+
   it("does not URL-encode the name (callers must pre-encode if needed)", () => {
     // Documents the contract: pod names follow DNS rules, no encoding needed.
     // If a caller ever passes a name with special chars, they own encoding.
