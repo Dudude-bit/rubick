@@ -25,7 +25,7 @@ pub async fn validate_manifest(
 
     let results: Vec<String> = parsed_docs
         .iter()
-        .map(|p| p.format_id(&p.effective_namespace(&namespace), "validated"))
+        .map(|p| p.format_id(&p.effective_namespace(namespace.as_deref()), "validated"))
         .collect();
 
     // Verify we have a connection for server-side validation
@@ -58,7 +58,7 @@ pub async fn apply_manifest(
     let patch_params = PatchParams::apply("k8s-gui").force();
 
     for parsed in parsed_docs {
-        let ns = parsed.effective_namespace(&namespace);
+        let ns = parsed.effective_namespace(namespace.as_deref());
         let name = parsed.name();
         let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
         let api = ctx.dynamic_api_for_resource(

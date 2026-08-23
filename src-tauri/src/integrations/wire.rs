@@ -30,11 +30,11 @@ pub fn client(insecure_tls: bool) -> Result<reqwest::Client> {
 }
 
 /// Epoch ms, so a row can say "answered 2s ago".
+#[must_use]
 pub fn now_ms() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as f64)
-        .unwrap_or(0.0)
+        .map_or(0.0, |d| d.as_millis() as f64)
 }
 
 /// The shortest sentence that names what went wrong.
@@ -43,6 +43,7 @@ pub fn now_ms() -> f64 {
 /// (...): error trying to connect: tcp connect error: ..." — four layers of
 /// which only the last one is the answer. The innermost source is that
 /// answer, and it is the one the row prints.
+#[must_use]
 pub fn why(error: &reqwest::Error) -> String {
     let mut source: &dyn std::error::Error = error;
     while let Some(inner) = source.source() {

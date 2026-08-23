@@ -43,8 +43,7 @@ export const gkeIngress = defineVendor({
   id: "gke-ingress",
   name: "GKE Ingress",
   extension: {
-    gives:
-      "what a GKE load balancer was told, and which domains a Google-managed certificate is stuck on",
+    gives: "googleCloudGives",
     icon: ShieldCheck,
     facts,
   },

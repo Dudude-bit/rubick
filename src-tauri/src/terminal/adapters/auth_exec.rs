@@ -50,7 +50,7 @@ pub struct AuthExecAdapter {
     /// "plugin produced no JSON because it exited 0 with empty output."
     last_exit_status: Arc<Mutex<Option<i32>>>,
 
-    /// Collected output for ExecCredential JSON parsing. The PTY stream
+    /// Collected output for `ExecCredential` JSON parsing. The PTY stream
     /// contains both prompts and the final JSON; downstream `serde_json`
     /// extracts the credential payload from the buffer's tail.
     collected_stdout: Arc<Mutex<Vec<u8>>>,
@@ -58,6 +58,7 @@ pub struct AuthExecAdapter {
 
 impl AuthExecAdapter {
     /// Create new auth exec adapter
+    #[must_use]
     pub fn new(command: String, args: Vec<String>, env: HashMap<String, String>) -> Self {
         Self {
             command,
@@ -76,6 +77,7 @@ impl AuthExecAdapter {
     /// Get collected stdout (for JSON parsing after process completes).
     /// Synchronous lock — the auth flow grabs this once after the
     /// process exits, so contention is nil.
+    #[must_use]
     pub fn collected_stdout(&self) -> Arc<Mutex<Vec<u8>>> {
         self.collected_stdout.clone()
     }
@@ -84,6 +86,7 @@ impl AuthExecAdapter {
     /// child has terminated. Used by the auth flow to enrich error
     /// messages when JSON extraction fails ("plugin exited 1 with 6
     /// bytes: \"foo\\n\\r\"" is debuggable; "no JSON" alone is not).
+    #[must_use]
     pub fn last_exit_status(&self) -> Arc<Mutex<Option<i32>>> {
         self.last_exit_status.clone()
     }
@@ -140,7 +143,7 @@ impl TerminalAdapter for AuthExecAdapter {
             let mut buf = vec![0u8; crate::terminal::session::TERMINAL_BUFFER_SIZE];
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break,
+                    Ok(0) | Err(_) => break,
                     Ok(n) => {
                         let data = buf[..n].to_vec();
                         {
@@ -156,7 +159,6 @@ impl TerminalAdapter for AuthExecAdapter {
                             break;
                         }
                     }
-                    Err(_) => break,
                 }
             }
         });
@@ -188,13 +190,15 @@ impl TerminalAdapter for AuthExecAdapter {
     }
 
     async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
-        let rx = match self.output_rx.as_mut() {
-            Some(rx) => rx,
-            None => return Ok(None),
+        let Some(rx) = self.output_rx.as_mut() else {
+            return Ok(None);
         };
 
         // Short timeout matches the manager's 50ms read tick — it lets
         // the I/O loop interleave with input and cancel checks.
+        // Two different endings that call for the same answer; keeping them
+        // apart is what lets each say which one it is.
+        #[allow(clippy::match_same_arms)]
         match tokio::time::timeout(std::time::Duration::from_millis(10), rx.recv()).await {
             Ok(Some(data)) => Ok(Some(data)),
             Ok(None) => Ok(None), // sender dropped: child exited

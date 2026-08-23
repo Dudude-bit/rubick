@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 import type { MetricsStatus } from "@/generated/types";
 import { AlertTriangle, ShieldAlert, Wrench } from "lucide-react";
 
@@ -12,6 +13,7 @@ export function MetricsStatusBanner({
   status,
   className,
 }: MetricsStatusBannerProps) {
+  const t = useT();
   if (!status || status.status === "available") {
     return null;
   }
@@ -22,24 +24,23 @@ export function MetricsStatusBanner({
     switch (status.status) {
       case "notInstalled":
         return {
-          title: "Metrics server not installed",
-          description: "Install metrics-server to see CPU and memory usage.",
+          title: t("cluster", "metricsNotInstalled"),
+          description: t("cluster", "metricsNotInstalledBody"),
           icon: Wrench,
           variant: "default" as const,
         };
       case "forbidden":
         return {
-          title: "Metrics API access denied",
-          description:
-            "Your account cannot read metrics. Check RBAC for metrics.k8s.io.",
+          title: t("cluster", "metricsForbidden"),
+          description: t("cluster", "metricsForbiddenBody"),
           icon: ShieldAlert,
           variant: "destructive" as const,
         };
       case "error":
       default:
         return {
-          title: "Metrics API error",
-          description: "Failed to load metrics from the cluster.",
+          title: t("cluster", "metricsError"),
+          description: t("cluster", "metricsErrorBody"),
           icon: AlertTriangle,
           variant: "destructive" as const,
         };
@@ -47,7 +48,7 @@ export function MetricsStatusBanner({
   })();
 
   const description = details
-    ? `${config.description} Details: ${details}`
+    ? `${config.description} ${t("cluster", "metricsDetails", { details })}`
     : config.description;
 
   const Icon = config.icon;

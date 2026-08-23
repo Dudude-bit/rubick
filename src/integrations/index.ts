@@ -486,7 +486,8 @@ export interface IntegrationStatus {
    * over a Prometheus that is refusing every query would be the silent
    * fallback this whole seam exists to prevent.
    */
-  installed: boolean;
+  /** `null` where the cluster would not say — which is not "no". */
+  installed: boolean | null;
   version: string | null;
   facts: FactsState;
   /** `null` for a vendor nobody gives an address to. */
@@ -560,7 +561,12 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
       connection,
       installed: connection
         ? connection.state === "connected"
-        : (entry?.installed ?? false),
+        : // A vendor the scan never mentioned is not installed. A vendor it
+          // mentioned without an answer is a different thing, and `?? false`
+          // used to flatten the two into the same claim.
+          entry
+          ? entry.installed
+          : false,
       version: connection
         ? connection.state === "connected"
           ? connection.probe.ok

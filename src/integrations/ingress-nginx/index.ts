@@ -27,7 +27,7 @@ export default defineVendor({
   id: "ingress-nginx",
   name: "ingress-nginx",
   extension: {
-    gives: "annotations read as behaviour instead of as a wall of strings",
+    gives: "ingressNginxGives",
     icon: Network,
     facts,
   },

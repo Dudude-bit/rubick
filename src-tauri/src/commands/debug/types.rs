@@ -83,7 +83,7 @@ pub(super) fn generate_debugger_name() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    format!("debugger-{}", timestamp)
+    format!("debugger-{timestamp}")
 }
 
 /// Generate a unique debug pod name
@@ -99,5 +99,5 @@ pub(super) fn generate_debug_pod_name(base_name: &str) -> String {
     } else {
         base_name
     };
-    format!("{}-debug-{}", truncated, timestamp)
+    format!("{truncated}-debug-{timestamp}")
 }

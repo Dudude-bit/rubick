@@ -8,8 +8,8 @@
 //! unknown fields covers all of them; a version-specific reader appears
 //! only when upstream actually breaks a shape.
 //!
-//! Five route kinds share one `RouteInfo`. HTTPRoute has path matches,
-//! GRPCRoute has service/method matches, TLSRoute has SNI hostnames and
+//! Five route kinds share one `RouteInfo`. `HTTPRoute` has path matches,
+//! `GRPCRoute` has service/method matches, `TLSRoute` has SNI hostnames and
 //! TCP/UDPRoute have neither — but the chain they anchor is the same
 //! `parentRefs` up and `backendRefs` down, and five near-identical structs
 //! would be five places for the next field to be forgotten in.
@@ -47,7 +47,7 @@ pub struct BackendRefInfo {
     pub kind: String,
     pub name: String,
     /// `None` means "same namespace as the route". A `Some` pointing
-    /// elsewhere needs a ReferenceGrant, and the controller says whether it
+    /// elsewhere needs a `ReferenceGrant`, and the controller says whether it
     /// got one in `ResolvedRefs`.
     pub namespace: Option<String>,
     pub port: Option<i32>,
@@ -151,13 +151,13 @@ pub struct CertificateRefInfo {
     pub kind: String,
     pub name: String,
     /// `None` means the Gateway's own namespace. Elsewhere needs a
-    /// ReferenceGrant, and the listener's `ResolvedRefs` says whether it
+    /// `ReferenceGrant`, and the listener's `ResolvedRefs` says whether it
     /// got one.
     pub namespace: Option<String>,
 }
 
 /// One listener a Gateway serves — its own, or one contributed by a
-/// ListenerSet, told apart by [`ListenerInfo::from_listener_set`].
+/// `ListenerSet`, told apart by [`ListenerInfo::from_listener_set`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListenerInfo {
@@ -177,7 +177,7 @@ pub struct ListenerInfo {
     /// controller wrote it.
     pub attached_routes: Option<i64>,
     pub conditions: Vec<ConditionInfo>,
-    /// The ListenerSet this listener came from — `None` for the Gateway's
+    /// The `ListenerSet` this listener came from — `None` for the Gateway's
     /// own.
     pub from_listener_set: Option<String>,
 }
@@ -190,7 +190,7 @@ pub struct GatewayInfo {
     pub namespace: String,
     pub api_version: String,
     /// `spec.gatewayClassName` — the claim that decides whose Gateway this
-    /// is, resolved the same way IngressClass claiming is.
+    /// is, resolved the same way `IngressClass` claiming is.
     pub class_name: String,
     pub listeners: Vec<ListenerInfo>,
     /// `status.addresses`, values only.
@@ -203,7 +203,7 @@ pub struct GatewayInfo {
     pub created_at: Option<String>,
 }
 
-/// A ListenerSet: listeners defined apart from the Gateway they attach to.
+/// A `ListenerSet`: listeners defined apart from the Gateway they attach to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListenerSetInfo {
@@ -218,7 +218,7 @@ pub struct ListenerSetInfo {
     pub created_at: Option<String>,
 }
 
-/// A GatewayClass and the honest answer to "did anything claim it".
+/// A `GatewayClass` and the honest answer to "did anything claim it".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayClassInfo {
@@ -322,6 +322,7 @@ fn listener_info(
 
 impl GatewayInfo {
     /// See [`RouteInfo::read`] for the tolerance contract.
+    #[must_use]
     pub fn read(obj: &DynamicObject) -> Self {
         use kube::ResourceExt;
 
@@ -348,7 +349,7 @@ impl GatewayInfo {
         }
     }
 
-    /// Fold ListenerSet listeners into this Gateway's, marked by origin.
+    /// Fold `ListenerSet` listeners into this Gateway's, marked by origin.
     ///
     /// Only sets whose resolved parentRef names this Gateway are taken;
     /// the rest are some other Gateway's business.
@@ -362,6 +363,7 @@ impl GatewayInfo {
 }
 
 impl ListenerSetInfo {
+    #[must_use]
     pub fn read(obj: &DynamicObject) -> Self {
         use kube::ResourceExt;
 
@@ -391,6 +393,7 @@ impl ListenerSetInfo {
 }
 
 impl GatewayClassInfo {
+    #[must_use]
     pub fn read(obj: &DynamicObject) -> Self {
         use kube::ResourceExt;
 
@@ -447,6 +450,7 @@ fn agreed<'a>(values: impl Iterator<Item = Option<&'a str>>) -> (Option<String>,
 impl GatewayApiDetection {
     /// Read the answer off a CRD list the app already fetches — no extra
     /// request, one scan per cluster.
+    #[must_use]
     pub fn from_crds(
         crds: &[k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition],
     ) -> Self {
@@ -592,7 +596,7 @@ mod schema {
     #[serde(rename_all = "camelCase", default)]
     pub struct RouteMatch {
         pub path: Option<PathMatch>,
-        /// A string on HTTPRoute (`GET`), an object on GRPCRoute
+        /// A string on `HTTPRoute` (`GET`), an object on `GRPCRoute`
         /// (`{service, method}`) — same field name, two shapes, so it is
         /// read as a value and told apart at conversion.
         pub method: Option<serde_json::Value>,
@@ -902,7 +906,7 @@ pub struct PolicyAncestorInfo {
     pub conditions: Vec<ConditionInfo>,
 }
 
-/// BackendTLSPolicy, read at whatever version the cluster serves.
+/// `BackendTLSPolicy`, read at whatever version the cluster serves.
 ///
 /// GEP-713 direct policy attachment: the policy names its targets, the
 /// targets never name it back — so every surface that wants "what affects
@@ -932,6 +936,7 @@ pub struct BackendTlsPolicyInfo {
 impl BackendTlsPolicyInfo {
     /// Tolerant like every reader here: absent fields become empties,
     /// unknown fields are ignored, nothing fails.
+    #[must_use]
     pub fn read(obj: &DynamicObject) -> Self {
         use kube::ResourceExt;
 
@@ -1143,7 +1148,7 @@ status:
     #[test]
     fn redirect_rule_reads_as_configuration_not_breakage() {
         let route = RouteInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: { name: to-https, namespace: shop }
@@ -1152,7 +1157,7 @@ spec:
   - filters:
     - type: RequestRedirect
       requestRedirect: { scheme: https, statusCode: 301 }
-"#,
+",
         ));
         let rule = &route.rules[0];
         assert!(rule.has_redirect);
@@ -1162,7 +1167,7 @@ spec:
     #[test]
     fn extension_ref_filter_is_named_not_hidden() {
         let route = RouteInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: { name: with-middleware, namespace: shop }
@@ -1173,7 +1178,7 @@ spec:
       extensionRef: { group: traefik.io, kind: Middleware, name: strip-prefix }
     backendRefs:
     - { name: promo, port: 8080 }
-"#,
+",
         ));
         let ext = &route.rules[0].extension_refs[0];
         assert_eq!(ext.group, "traefik.io");
@@ -1185,7 +1190,7 @@ spec:
     #[test]
     fn grpc_route_method_match_is_read() {
         let route = RouteInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata: { name: billing, namespace: shop }
@@ -1196,7 +1201,7 @@ spec:
     - method: { service: billing.v1.Invoices, method: Create }
     backendRefs:
     - { name: billing, port: 9000 }
-"#,
+",
         ));
         assert_eq!(route.kind, "GRPCRoute");
         let m = &route.rules[0].matches[0];
@@ -1227,7 +1232,7 @@ spec:
     #[test]
     fn v1alpha2_tls_route_reads_through_the_same_baseline() {
         let route = RouteInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TLSRoute
 metadata: { name: passthrough, namespace: shop }
@@ -1238,7 +1243,7 @@ spec:
   rules:
   - backendRefs:
     - { name: vault, port: 8200 }
-"#,
+",
         ));
         assert_eq!(route.api_version, "gateway.networking.k8s.io/v1alpha2");
         assert_eq!(route.hostnames, vec!["secure.example.com"]);
@@ -1356,13 +1361,13 @@ status:
     #[test]
     fn gateway_class_unwritten_status_reads_as_unclaimed() {
         let class = GatewayClassInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata: { name: envoy }
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
-"#,
+",
         ));
         assert_eq!(
             class.controller_name,
@@ -1373,7 +1378,7 @@ spec:
         // The CRD's own default status — Accepted: Unknown, Waiting — is
         // the same honest answer: nothing claimed it.
         let waiting = GatewayClassInfo::read(&parse(
-            r#"
+            r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata: { name: idle }
@@ -1381,7 +1386,7 @@ spec: { controllerName: example.net/none }
 status:
   conditions:
   - { type: Accepted, status: Unknown, reason: Waiting, message: waiting for controller }
-"#,
+",
         ));
         assert_eq!(waiting.accepted, None);
 

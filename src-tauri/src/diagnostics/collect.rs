@@ -1,7 +1,6 @@
 use kube::config::Kubeconfig;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use crate::commands::binaries::{kubectl_plugin_binary, locate_on_user_path, search_directories};
 
@@ -16,7 +15,8 @@ pub struct SearchPathEntry {
 }
 
 impl SearchPathEntry {
-    pub fn probe(path: PathBuf) -> Self {
+    #[must_use]
+    pub fn probe(path: &std::path::Path) -> Self {
         Self {
             exists: path.is_dir(),
             path: path.to_string_lossy().into_owned(),
@@ -71,6 +71,7 @@ pub struct InstallationInfo {
 }
 
 impl InstallationInfo {
+    #[must_use]
     pub fn collect() -> Self {
         Self {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -117,6 +118,7 @@ fn user_for(raw: &Kubeconfig, context: &str) -> Option<String> {
 }
 
 /// How each context authenticates.
+#[must_use]
 pub fn contexts_from(raw: &Kubeconfig) -> Vec<DiagnosticContext> {
     raw.contexts
         .iter()
@@ -160,6 +162,7 @@ pub fn contexts_from(raw: &Kubeconfig) -> Vec<DiagnosticContext> {
 /// Keyed in name order: two reads of an unchanged machine must produce the
 /// same list in the same order, or the panel appears to change when nothing
 /// did.
+#[must_use]
 pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<PluginStatus> {
     let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -196,7 +199,7 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     let search_path = search_directories()
         .into_iter()
-        .map(SearchPathEntry::probe)
+        .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
 
@@ -214,11 +217,10 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
     };
 
-    let path = client
-        .kubeconfig_path()
-        .await
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "unknown — loaded before the path was recorded".to_string());
+    let path = client.kubeconfig_path().await.map_or_else(
+        || "unknown — loaded before the path was recorded".to_string(),
+        |p| p.to_string_lossy().into_owned(),
+    );
 
     let contexts = contexts_from(&raw);
     let plugins = plugins_from(&contexts, &raw);
@@ -289,10 +291,10 @@ users:
     #[test]
     fn a_search_path_entry_says_whether_the_directory_is_really_there() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let present = SearchPathEntry::probe(dir.path().to_path_buf());
+        let present = SearchPathEntry::probe(dir.path());
         assert!(present.exists, "a directory that exists should say so");
 
-        let absent = SearchPathEntry::probe(dir.path().join("nowhere"));
+        let absent = SearchPathEntry::probe(&dir.path().join("nowhere"));
         assert!(
             !absent.exists,
             "a directory in the path that does not exist is worth showing as such"

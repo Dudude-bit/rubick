@@ -29,7 +29,7 @@ pub struct ReplicaSetReplicaInfo {
 
 /// One `ReplicaSet`, as its detail page asks about it.
 ///
-/// There is deliberately no separate list shape. Nothing lists ReplicaSets
+/// There is deliberately no separate list shape. Nothing lists `ReplicaSets`
 /// for their own sake — they are reached from an event, a pod's owner chain
 /// or a Deployment's revisions, and all three want the same answer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,7 @@ pub struct ReplicaSetInfo {
     /// This `ReplicaSet`'s `deployment.kubernetes.io/revision`.
     pub revision: Option<String>,
     /// The same annotation read off the owning Deployment. Equal to
-    /// `revision` on exactly one of that Deployment's ReplicaSets; `None`
+    /// `revision` on exactly one of that Deployment's `ReplicaSets`; `None`
     /// when no Deployment owns this one, which is the only case where
     /// "current" is a question with no answer rather than a no.
     pub current_revision: Option<String>,
@@ -82,7 +82,7 @@ impl ReplicaSetInfo {
             uid: rs.uid().unwrap_or_default(),
             replicas: ReplicaSetReplicaInfo {
                 desired: spec.and_then(|s| s.replicas).unwrap_or(0),
-                current: status.map(|s| s.replicas).unwrap_or(0),
+                current: status.map_or(0, |s| s.replicas),
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 available: status.and_then(|s| s.available_replicas).unwrap_or(0),
             },

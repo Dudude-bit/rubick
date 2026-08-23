@@ -3,14 +3,14 @@
 use crate::cli::kubectl::KubectlTool;
 use crate::cli::{CliAvailability, CliToolManager};
 use crate::error::Result;
-use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 
 /// Global kubectl manager singleton with async Mutex for reload support
-static KUBECTL: Lazy<Mutex<CliToolManager<KubectlTool>>> = Lazy::new(|| {
-    let tool = KubectlTool::with_default_config();
-    Mutex::new(CliToolManager::new(tool))
-});
+static KUBECTL: std::sync::LazyLock<Mutex<CliToolManager<KubectlTool>>> =
+    std::sync::LazyLock::new(|| {
+        let tool = KubectlTool::with_default_config();
+        Mutex::new(CliToolManager::new(tool))
+    });
 
 /// Check if kubectl CLI is available
 ///

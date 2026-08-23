@@ -5,6 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.2] - 2026-08-22
+
+Signing in to a cluster that uses an OIDC auth-provider no longer opens a
+browser at all — which is what `kubectl` has always done with the same
+kubeconfig — and the two pickers still drawn by the operating system now
+match the rest of the window.
+
+### Fixed — an OIDC cluster signs in the way kubectl does
+
+A kubeconfig whose user has an `auth-provider: oidc` block already carries
+the tokens that prove who you are, and `kubectl` spends them: the
+`id-token` until it expires, then the `refresh-token` for a fresh one.
+Neither step involves a browser, and neither needs a redirect URI
+registered with anybody.
+
+Rubick read none of that and opened a browser every time, which asks your
+provider to have allowed an address this kind of config never needed. On a
+cluster somebody used daily through `kubectl`, that came back as
+"Unregistered redirect_uri" with no way past it.
+
+It now uses the token in the file, refreshes it once that is spent, and
+writes the replacement back where `kubectl` will find it. The browser is
+left for the case where there is nothing to refresh — and while it waits,
+it names the address it is waiting on, instead of mentioning it only when
+the wait runs out three minutes later.
+
+### Fixed — the kubeconfig is edited rather than rewritten
+
+Writing the refreshed token back used to re-emit the whole document. A
+quoted `"no"` belonging to an entirely different user came back bare, and
+`kubectl` reads YAML 1.1, where that is a boolean — so refreshing one user
+made the file unparseable for every context in it. Comments disappeared
+the same way.
+
+Two lines change now and nothing else does. A `~/.kube/config` that is a
+symlink stays one: the replacement used to land on the link itself and
+leave the real file holding a token that no longer worked.
+
+### Fixed — a provider behind a private CA is reachable
+
+`idp-certificate-authority-data` and `idp-certificate-authority` are read
+from the kubeconfig, the same two keys `kubectl` reads. Without them a
+self-hosted provider signed by a company CA failed at the TLS handshake,
+and the sign-in fell back to a browser that could not help either.
+
+### Fixed — the language and namespace pickers match the window
+
+Both were native `<select>` elements, which the operating system paints in
+its own colours rather than the app's — the same thing reported for the
+Service and port pickers after 4.4.0. They use the app's own list now, and
+a lint rule keeps the next one from reaching a release.
+
+## [4.4.1] - 2026-08-21
+
+Four things that reached a screen and should not have: a sign-in that
+never got past the provider, a coverage panel calling a live cluster
+somebody else's, two pickers painted white in a dark window, and a
+handful of labels showing their own placeholders.
+
+### Fixed — OIDC sign-in reaches the provider
+
+The redirect URI Rubick sent was `http://127.0.0.1:8000/callback`. What
+`kubectl oidc-login` sends, and what a provider therefore has on file, is
+`http://localhost:8000` — a different host, and no path. A provider
+compares the whole string, so the flow stopped with an invalid-redirect
+error before anyone could approve anything. Dex is lenient about both;
+Keycloak, Okta and Entra are not.
+
+### Fixed — a cluster that answers is not a foreign one
+
+The Prometheus coverage panel asks a server which nodes it knows. A server
+scraping only cAdvisor answers `kube_node_info` with nothing — and nothing
+was read as "those are somebody else's nodes", so the panel called the
+cluster unwatched while the graphs beside it were drawing its data. An
+empty answer now means the question does not apply, and the count comes
+from the metrics that are actually there.
+
+### Fixed — the Service and port pickers match the window
+
+Both were native `<select>` elements, which the system paints white
+whatever the app's theme. They use the same picker as the rest of
+Settings now.
+
+### Fixed — labels that showed their own placeholders
+
+Four strings reached the screen with `{label}` or `{site}` still in them,
+and three Russian counters dropped the number in the form that also covers
+21, 31 and 41 — so twenty-one rows announced themselves as one row. A test
+now holds both halves of that contract in every language.
+
 ## [4.4.0] - 2026-08-20
 
 The interface speaks Russian, a seven-day certificate stops wearing a

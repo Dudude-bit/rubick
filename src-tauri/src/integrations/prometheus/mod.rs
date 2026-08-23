@@ -7,15 +7,20 @@
 //! would need that Prometheus to have been configured with CORS headers for
 //! an app it has never heard of, which no cluster operator has done.
 //!
-//! So the webview sends PromQL and gets numbers back. It never sends, sees,
-//! or stores the credential — {@link PrometheusConnection} is deliberately
+//! So the webview sends `PromQL` and gets numbers back. It never sends, sees,
+//! or stores the credential — {@link `PrometheusConnection`} is deliberately
 //! missing the token field, and `get_prometheus_connection` answers with
 //! `has_token` rather than with the token.
 //!
-//! What is *not* here is any knowledge of what the queries mean. The PromQL
+//! What is *not* here is any knowledge of what the queries mean. The `PromQL`
 //! is built in `src/integrations/prometheus/queries.ts`, where it is pure and
 //! unit-tested against the label shapes cAdvisor actually emits. This module
 //! is a credentialed HTTP client with a Prometheus-shaped response parser.
+
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -234,7 +239,7 @@ pub async fn probe_prometheus(
 
     let started = Instant::now();
     let answer = get_json(&entry, "/api/v1/query", &[("query", "1".to_string())]).await;
-    let latency_ms = started.elapsed().as_millis() as u64;
+    let latency_ms = crate::utils::elapsed_ms(started);
 
     match answer {
         Ok(_) => {
@@ -275,7 +280,7 @@ fn unreachable(reason: String) -> Error {
     Error::Connection(reason)
 }
 
-async fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
+fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
     let context = context_of(state)?;
     entry_for(&context)?
         .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))
@@ -287,7 +292,7 @@ pub async fn prometheus_query(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<PromSeries>> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let value = get_json(&entry, "/api/v1/query", &[("query", query)])
         .await
         .map_err(unreachable)?;
@@ -307,7 +312,7 @@ pub async fn prometheus_query_range(
     step: u32,
     state: State<'_, AppState>,
 ) -> Result<Vec<PromSeries>> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let value = get_json(
         &entry,
         "/api/v1/query_range",
@@ -386,6 +391,9 @@ fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
 }
 
 #[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -423,7 +431,7 @@ mod tests {
                 "resultType": "matrix",
                 "result": [{
                     "metric": { "pod": "busy-demo-abc-def" },
-                    "values": [[1700000000.0, "12.5"], [1700000015.0, "NaN"]]
+                    "values": [[1_700_000_000.0, "12.5"], [1_700_000_015.0, "NaN"]]
                 }]
             }
         });
@@ -448,7 +456,7 @@ mod tests {
                 "resultType": "vector",
                 "result": [{
                     "metric": { "persistentvolumeclaim": "data-stateful-demo-0" },
-                    "value": [1700000000.0, "0.84"]
+                    "value": [1_700_000_000.0, "0.84"]
                 }]
             }
         });

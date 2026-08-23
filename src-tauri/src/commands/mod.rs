@@ -2,9 +2,20 @@
 //!
 //! This module exposes Rust functionality to the frontend via Tauri commands.
 
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
+// A command declared `async` is spawned onto the async runtime; a synchronous
+// one runs on the main thread and blocks the window while it works. Several
+// commands here take the keyword for that reason alone and never await —
+// `subscribe_namespaced!` says so in as many words.
+#![allow(clippy::unused_async)]
+
 pub mod filters;
 pub mod helpers;
 
+pub mod access;
 pub mod auth;
 pub mod binaries;
 pub mod certificates;

@@ -78,15 +78,15 @@ fn decode_basic_auth(encoded: &str) -> Option<(String, String)> {
 pub(super) fn load_saved_auth(registry_id: &str) -> Result<Option<RegistryAuth>> {
     let config = AppConfig::load()?;
     if let Some(entry) = config.registries.registries.get(registry_id) {
-        if entry.auth_type != "none" {
+        if entry.auth_type == "none" {
+            Ok(None)
+        } else {
             Ok(Some(RegistryAuth {
                 auth_type: entry.auth_type.clone(),
                 username: entry.username.clone(),
                 password: entry.password.clone(),
                 token: entry.token.clone(),
             }))
-        } else {
-            Ok(None)
         }
     } else {
         Ok(None)

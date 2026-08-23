@@ -8,7 +8,7 @@ use crate::client::{ClusterInfo, ContextInfo};
 use crate::error::Result;
 use crate::state::AppState;
 
-/// Read the persisted kubeconfig override path from AppConfig. Returns
+/// Read the persisted kubeconfig override path from `AppConfig`. Returns
 /// None on read failure (treated as "no override") so a corrupted
 /// config file doesn't lock the user out of the default `~/.kube/config`
 /// path entirely.
@@ -126,7 +126,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
 
     // Test connection and get cluster info (timeout to avoid hanging auth flows)
     let info = match timeout(
-        Duration::from_secs(120),
+        Duration::from_mins(2),
         state.client_manager.test_connection(&context),
     )
     .await
@@ -238,7 +238,7 @@ pub struct KubeconfigSource {
     pub error: Option<String>,
 }
 
-fn candidate(path: std::path::PathBuf, origin: &str) -> KubeconfigCandidate {
+fn candidate(path: &std::path::Path, origin: &str) -> KubeconfigCandidate {
     KubeconfigCandidate {
         exists: path.exists(),
         path: path.to_string_lossy().into_owned(),
@@ -255,20 +255,21 @@ fn kubeconfig_candidates(
     env: Option<&str>,
 ) -> Vec<KubeconfigCandidate> {
     if let Some(path) = override_path {
-        return vec![candidate(path, "override")];
+        return vec![candidate(&path, "override")];
     }
     if let Some(value) = env.filter(|v| !v.is_empty()) {
         let separator = if cfg!(windows) { ';' } else { ':' };
         return value
             .split(separator)
             .filter(|entry| !entry.is_empty())
-            .map(|entry| candidate(std::path::PathBuf::from(entry), "env"))
+            .map(|entry| candidate(std::path::Path::new(entry), "env"))
             .collect();
     }
-    let default = dirs::home_dir()
-        .map(|home| home.join(".kube").join("config"))
-        .unwrap_or_else(|| std::path::PathBuf::from("~/.kube/config"));
-    vec![candidate(default, "default")]
+    let default = dirs::home_dir().map_or_else(
+        || std::path::PathBuf::from("~/.kube/config"),
+        |home| home.join(".kube").join("config"),
+    );
+    vec![candidate(&default, "default")]
 }
 
 /// Report the kubeconfig lookup and what it found.

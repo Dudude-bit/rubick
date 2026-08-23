@@ -29,8 +29,7 @@ export default defineVendor({
   id: "istio",
   name: "Istio",
   extension: {
-    gives:
-      "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
+    gives: "istioGives",
     icon: Waypoints,
     facts,
   },

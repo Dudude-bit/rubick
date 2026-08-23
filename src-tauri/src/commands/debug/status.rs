@@ -38,7 +38,7 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
                         .unwrap_or_else(|| "Waiting".to_string());
                     if reason.contains("ImagePull") && reason.contains("Back") {
                         return DebugStatus::Failed {
-                            error: format!("Image pull failed: {}", reason),
+                            error: format!("Image pull failed: {reason}"),
                         };
                     }
                     if reason.contains("Err") {
@@ -54,7 +54,7 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
                         .clone()
                         .unwrap_or_else(|| "Terminated".to_string());
                     return DebugStatus::Failed {
-                        error: format!("Container terminated: {}", reason),
+                        error: format!("Container terminated: {reason}"),
                     };
                 }
             }
@@ -72,8 +72,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
         .status
         .as_ref()
         .and_then(|s| s.phase.as_ref())
-        .map(|s| s.as_str())
-        .unwrap_or("Unknown");
+        .map_or("Unknown", std::string::String::as_str);
 
     match phase {
         "Failed" => {
@@ -129,7 +128,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                         .unwrap_or_else(|| "Waiting".to_string());
                     if reason.contains("ImagePull") && reason.contains("Back") {
                         return DebugStatus::Failed {
-                            error: format!("Image pull failed: {}", reason),
+                            error: format!("Image pull failed: {reason}"),
                         };
                     }
                     if reason.contains("Err") || reason.contains("CrashLoop") {
@@ -145,7 +144,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                         .clone()
                         .unwrap_or_else(|| "Terminated".to_string());
                     return DebugStatus::Failed {
-                        error: format!("Container terminated: {}", reason),
+                        error: format!("Container terminated: {reason}"),
                     };
                 }
             }

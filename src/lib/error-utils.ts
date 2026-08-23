@@ -135,6 +135,17 @@ function extractErrorCode(error: unknown): ErrorCode {
  * @param context - Optional context string for where the error occurred
  * @returns Normalized error structure
  */
+/**
+ * Whether the cluster refused this, rather than failing at it.
+ *
+ * The difference is the whole message. "Could not read Pods" tells somebody
+ * that something is broken and invites them to retry; a refusal is neither,
+ * and reads as a fault only because it was never told apart from one.
+ */
+export function isRefusal(error: unknown): boolean {
+  return extractErrorCode(error) === ERROR_CODES.PERMISSION;
+}
+
 export function normalizeError(
   error: unknown,
   context?: string

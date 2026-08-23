@@ -318,9 +318,8 @@ async fn search_context(
     let search_id = search_id.as_str();
     let context = context.as_str();
 
-    let client = match resolve_client(event_tx, &client_manager, search_id, context).await {
-        Some(client) => client,
-        None => return,
+    let Some(client) = resolve_client(event_tx, &client_manager, search_id, context).await else {
+        return;
     };
 
     let mut matched: u32 = 0;

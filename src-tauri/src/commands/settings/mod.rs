@@ -1,11 +1,11 @@
 //! Settings and configuration commands.
 //!
 //! Split into:
-//! - `helpers`: thin save_config / with_config / read_config wrappers
+//! - `helpers`: thin `save_config` / `with_config` / `read_config` wrappers
 //! - `cloud`:   GCP + Azure + bindings + CLI paths
 //! - `registry`: image-registry configurations
 //! - `prefs`:   theme + YAML history + infra builder + recent +
-//!              updater + cluster preferences + AppInfo
+//!   updater + cluster preferences + `AppInfo`
 
 mod cloud;
 pub mod helpers;

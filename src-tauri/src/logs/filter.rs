@@ -120,7 +120,7 @@ pub fn intake_since_time(terms: &[QueryTerm]) -> Option<DateTime<Utc>> {
 /// point — they must cost as little as possible. So: text needles are
 /// folded once at construction instead of once per line, and they sort
 /// to the back, because a level or field test is a comparison where a
-/// text test is a scan of the line. Terms are ANDed, so the first
+/// text test is a scan of the line. Terms are `ANDed`, so the first
 /// failure ends the line.
 #[derive(Debug, Clone, Default)]
 pub struct IntakeFilter {

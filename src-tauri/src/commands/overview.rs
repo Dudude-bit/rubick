@@ -52,7 +52,7 @@ const MAX_EVENT_PAGES: usize = 4;
 const COUNT_PAGE_SIZE: u32 = 500;
 
 /// Longest a pod may sit Pending before it counts as a problem. Scheduling
-/// and image pulls take seconds; without this grace every CronJob tick
+/// and image pulls take seconds; without this grace every `CronJob` tick
 /// paints the panel red and the signal is gone.
 const PENDING_GRACE_SECONDS: i64 = 60;
 
@@ -574,18 +574,18 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
         // Keep the newest occurrence as the representative sample.
         if entry.last_seen.is_none() || last_rfc > entry.last_seen {
             entry.last_seen = last_rfc;
-            entry.sample = event.message.clone();
-            entry.object_kind = event.involved_object.kind.clone();
-            entry.object_name = event.involved_object.name.clone();
+            entry.sample.clone_from(&event.message);
+            entry.object_kind.clone_from(&event.involved_object.kind);
+            entry.object_name.clone_from(&event.involved_object.name);
             // Deliberately not `event.metadata.namespace`, which is `default`
             // for an event about a Node — inheriting it would file a
             // cluster-scoped object inside a namespace it does not live in.
-            entry.namespace = event.involved_object.namespace.clone();
+            entry.namespace.clone_from(&event.involved_object.namespace);
         }
     }
 
     let mut groups: Vec<_> = grouped.into_values().collect();
-    groups.sort_by(|a, b| b.count.cmp(&a.count));
+    groups.sort_by_key(|group| std::cmp::Reverse(group.count));
     groups
 }
 
@@ -650,12 +650,10 @@ fn summarize_nodes(
         let allocatable = node.status.as_ref().and_then(|s| s.allocatable.as_ref());
         let cpu_allocatable = allocatable
             .and_then(|a| a.get("cpu"))
-            .map(|q| parse_cpu(&q.0))
-            .unwrap_or(0.0);
+            .map_or(0.0, |q| parse_cpu(&q.0));
         let memory_allocatable = allocatable
             .and_then(|a| a.get("memory"))
-            .map(|q| parse_memory(&q.0) as f64)
-            .unwrap_or(0.0);
+            .map_or(0.0, |q| parse_memory(&q.0) as f64);
         let pod_capacity = allocatable
             .and_then(|a| a.get("pods"))
             .and_then(|q| q.0.parse::<i64>().ok());
@@ -844,7 +842,7 @@ fn namespace_loads(pods: &[Pod]) -> Vec<NamespaceLoad> {
             pod_count,
         })
         .collect();
-    loads.sort_by(|a, b| b.pod_count.cmp(&a.pod_count));
+    loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
     loads
 }
 
@@ -1068,6 +1066,9 @@ pub async fn get_cluster_overview(
 }
 
 #[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::metrics::{MetricsStatus, NodeMetrics};
@@ -1159,7 +1160,6 @@ mod tests {
                 phase: Some("Running".to_string()),
                 ..Default::default()
             }),
-            ..Default::default()
         }
     }
 
@@ -1365,7 +1365,7 @@ mod tests {
 
     /// Every pod is Pending for its first seconds. Reporting that made the
     /// "N problems need attention" panel permanently red on any cluster with
-    /// CronJobs, which is the same as having no panel at all.
+    /// `CronJobs`, which is the same as having no panel at all.
     #[test]
     fn pending_pod_is_reported_only_after_the_grace_period() {
         let now = Utc::now();

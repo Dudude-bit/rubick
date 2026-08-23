@@ -119,7 +119,8 @@ impl K8sClientManager {
 
         let kubeconfig = Kubeconfig::read_from(&path).map_err(|e| {
             Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig from {path:?}: {e}"
+                "Failed to read kubeconfig from {}: {e}",
+                path.display()
             )))
         })?;
 
@@ -430,7 +431,7 @@ fn auth_for_user(kubeconfig: &Kubeconfig, user: &str) -> ContextAuth {
 /// before any `Kubeconfig::read_from(...)` so a stray `..` segment
 /// or a stale symlink can't quietly load a different file than
 /// the user thinks they're loading.
-fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
+pub(crate) fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
     let expanded: PathBuf = if let Some(stripped) = path
         .to_str()
         .and_then(|s| s.strip_prefix("~/"))
@@ -447,7 +448,8 @@ fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
 
     expanded.canonicalize().map_err(|e| {
         Error::Auth(AuthError::Kubeconfig(format!(
-            "Cannot resolve kubeconfig path {expanded:?}: {e}"
+            "Cannot resolve kubeconfig path {}: {e}",
+            expanded.display()
         )))
     })
 }
@@ -470,7 +472,7 @@ mod tests {
     #[test]
     fn every_user_shape_is_classified_or_admitted() {
         let kubeconfig: Kubeconfig = serde_yaml::from_str(
-            r#"
+            r"
 apiVersion: v1
 kind: Config
 users:
@@ -512,7 +514,7 @@ users:
   - name: key-only
     user:
       client-key: /home/u/only.key
-"#,
+",
         )
         .expect("parse");
 

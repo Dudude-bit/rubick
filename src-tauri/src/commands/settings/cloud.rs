@@ -73,16 +73,15 @@ pub async fn test_gcp_profile(name: String) -> Result<String> {
 
     match auth.authenticate().await {
         Ok(result) => {
-            let expires = result
-                .expires_at
-                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+            let expires = result.expires_at.map_or_else(
+                || "unknown".to_string(),
+                |t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            );
             Ok(format!(
-                "Authentication successful! Token expires: {}",
-                expires
+                "Authentication successful! Token expires: {expires}"
             ))
         }
-        Err(e) => Ok(format!("Authentication failed: {}", e)),
+        Err(e) => Ok(format!("Authentication failed: {e}")),
     }
 }
 
@@ -142,24 +141,22 @@ pub async fn test_azure_profile(name: String) -> Result<String> {
     let config = AppConfig::load()?;
     let profile = config.cloud.azure_profiles.get(&name);
 
-    let (use_cli_fallback, tenant_id) = profile
-        .map(|p| (p.use_cli_fallback, p.tenant_id.clone()))
-        .unwrap_or((false, None));
+    let (use_cli_fallback, tenant_id) =
+        profile.map_or((false, None), |p| (p.use_cli_fallback, p.tenant_id.clone()));
 
     let auth = AzureAksAuth::new(use_cli_fallback, tenant_id);
 
     match auth.authenticate().await {
         Ok(result) => {
-            let expires = result
-                .expires_at
-                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+            let expires = result.expires_at.map_or_else(
+                || "unknown".to_string(),
+                |t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            );
             Ok(format!(
-                "Authentication successful! Token expires: {}",
-                expires
+                "Authentication successful! Token expires: {expires}"
             ))
         }
-        Err(e) => Ok(format!("Authentication failed: {}", e)),
+        Err(e) => Ok(format!("Authentication failed: {e}")),
     }
 }
 

@@ -18,10 +18,10 @@ pub(super) struct ParsedManifest {
 
 impl ParsedManifest {
     /// Get the effective namespace (from manifest, fallback, or "default")
-    pub fn effective_namespace(&self, fallback: &Option<String>) -> String {
+    pub fn effective_namespace(&self, fallback: Option<&str>) -> String {
         self.namespace
             .clone()
-            .or_else(|| fallback.clone())
+            .or_else(|| fallback.map(str::to_string))
             .unwrap_or_else(|| "default".to_string())
     }
 
@@ -182,7 +182,7 @@ pub(super) fn pluralize(kind: &str) -> String {
 fn split_yaml_documents(manifest: &str) -> Vec<String> {
     manifest
         .split("\n---")
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty() && !s.starts_with('#'))
         .map(String::from)
         .collect()

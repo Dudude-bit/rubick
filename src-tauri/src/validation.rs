@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::utils::{is_valid_dns_label, is_valid_dns_subdomain};
 
 /// Validate a Kubernetes resource name as DNS-1123 label (no dots, max 63 chars)
-/// Used for: Pod, Deployment, Service, StatefulSet, DaemonSet, Job, CronJob, Endpoints
+/// Used for: Pod, Deployment, Service, `StatefulSet`, `DaemonSet`, Job, `CronJob`, Endpoints
 pub fn validate_dns_label(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::InvalidInput(
@@ -28,7 +28,7 @@ pub fn validate_dns_label(name: &str) -> Result<()> {
 }
 
 /// Validate a Kubernetes resource name as DNS-1123 subdomain (dots allowed, max 253 chars)
-/// Used for: CRD names, Node names, ConfigMap, Secret, PV, PVC, StorageClass, Ingress, Helm releases
+/// Used for: CRD names, Node names, `ConfigMap`, Secret, PV, PVC, `StorageClass`, Ingress, Helm releases
 pub fn validate_dns_subdomain(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::InvalidInput(

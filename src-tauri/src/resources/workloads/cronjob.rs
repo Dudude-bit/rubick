@@ -11,7 +11,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
 
-/// Basic CronJob info for list views
+/// Basic `CronJob` info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CronJobInfo {
@@ -33,7 +33,7 @@ impl From<&CronJob> for CronJobInfo {
         Self {
             name: meta.name.clone().unwrap_or_default(),
             namespace: meta.namespace.clone().unwrap_or_default(),
-            schedule: spec.map(|s| s.schedule.clone()).unwrap_or_else(String::new),
+            schedule: spec.map(|s| s.schedule.clone()).unwrap_or_default(),
             suspend: spec.and_then(|s| s.suspend).unwrap_or(false),
             active: status
                 .and_then(|s| s.active.as_ref())
@@ -46,7 +46,7 @@ impl From<&CronJob> for CronJobInfo {
     }
 }
 
-/// Detailed CronJob info for detail view
+/// Detailed `CronJob` info for detail view
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CronJobDetailInfo {
@@ -89,7 +89,7 @@ impl From<&CronJob> for CronJobDetailInfo {
             name: cj.name_any(),
             namespace: cj.namespace().unwrap_or_default(),
             uid: cj.uid().unwrap_or_default(),
-            schedule: spec.map(|s| s.schedule.clone()).unwrap_or_else(String::new),
+            schedule: spec.map(|s| s.schedule.clone()).unwrap_or_default(),
             timezone: spec.and_then(|s| s.time_zone.clone()),
             suspend: spec.and_then(|s| s.suspend).unwrap_or(false),
             concurrency_policy: spec.and_then(|s| s.concurrency_policy.clone()),

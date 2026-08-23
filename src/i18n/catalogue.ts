@@ -46,6 +46,10 @@ export const en = {
     fromThisMachine: "From this machine",
     policies: "Policies",
     contents: "Contents",
+    // Said on a nav row the authorizer refused, and on the page behind it.
+    // The reader is not being told the app is broken: they are being told
+    // whose decision it was, which is the one fact that makes it actionable.
+    noListAccess: "You do not have permission to list these",
     relatedResources: "Related resources",
     trafficPath: "Traffic path",
     releases: "Releases",
@@ -352,6 +356,8 @@ export const en = {
     copyPair: "Copy {pair}",
     toInline: "to",
     viaGateway: "via Gateway",
+    openOnSiteShort: "Open on {site}",
+    valueNoun: "value",
     readingGroup: "reading {group}",
     listAnd: " and ",
     listComma: ", ",
@@ -1120,7 +1126,64 @@ export const en = {
     jobCount: { one: "{n} job", other: "{n} jobs" },
     active: "{n} active",
   },
+  auth: {
+    started: "Signing in",
+    startedIn:
+      "Finish signing in to {context} in your browser. Cancel if you closed the tab.",
+    // A provider only accepts a redirect address its client has registered,
+    // and nobody but the reader can add one — so it goes on screen while they
+    // wait, next to the browser that may already be refusing it.
+    waitingOn:
+      "Waiting on {uri} — your provider must allow that address for this client.",
+    windowTitle: "Sign in to {context}",
+    windowFailed: "Could not open the sign-in window",
+    windowFailedBody: "Try again.",
+    failed: "Sign-in failed",
+    couldNotOpen: "Could not open sign-in. Try again.",
+    failedFor: "Could not sign in to {context}.",
+    complete: "Signed in",
+    completeFor: "Signed in to {context}.",
+    cancelAlt: "Cancel signing in",
+    cancelled: "Sign-in cancelled",
+    cancelledFor: "Cancelled {context}.",
+  },
+  // What each extension gets the reader, in the words of the thing they get.
+  // Here rather than in the vendor module because a vendor module is a plain
+  // table with no hook to call: it names the key, and the row translates it.
+  vendor: {
+    argocdGives:
+      "every Application with what it is failing to apply, and which objects differ from git",
+    awsGives:
+      "the real ALB target group behind a Service, and what the controller could not apply",
+    azureGives:
+      "which pod identity binds which pods, and what an App Gateway ingress is told to leave alone",
+    certManagerGives:
+      "why a certificate has not renewed, from the object that failed",
+    fluxGives:
+      "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
+    googleCloudGives:
+      "what a GKE load balancer was told, and which domains a Google-managed certificate is stuck on",
+    ingressNginxGives:
+      "annotations read as behaviour instead of as a wall of strings",
+    istioGives:
+      "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
+    lokiGives: "logs from before the current pod existed",
+    prometheusGives:
+      "usage history, volume fullness and traffic on pods and workloads",
+    traefikGives: "every host this cluster serves, and where each one stops",
+  },
   cluster: {
+    metricsNotInstalled: "Metrics server not installed",
+    metricsNotInstalledBody:
+      "Install metrics-server to see CPU and memory usage.",
+    metricsForbidden: "No permission to read metrics",
+    metricsForbiddenBody:
+      "This account may not read the metrics API. Whoever grants rights needs to allow metrics.k8s.io.",
+    metricsError: "Metrics API error",
+    metricsErrorBody: "Failed to load metrics from the cluster.",
+    // The cluster's own words, kept whole: they are what somebody takes to
+    // whoever can act on them.
+    metricsDetails: "Details: {details}",
     markBroken: "broken",
     markWorthALook: "worth a look",
     connectToImport: "Connect to a cluster to import live resources.",
@@ -2649,6 +2712,9 @@ export const en = {
     couldNotReadCrds: "Could not read this cluster’s CRDs",
     crdDetectionFailed:
       "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed — so this list would be a guess rather than an answer.",
+    couldNotLookForExtensions: "The cluster would not say what is installed",
+    couldNotLookWhy:
+      "Detection asks the API server for each extension's CustomResourceDefinitions, and this account may not list those. Something may well be installed — this screen cannot tell.",
     nothingInstalledKnown: "Nothing installed that this app knows how to use",
     everyExtensionOptional:
       "The cluster works exactly as it does now — every extension here is optional, and none of them is needed to read a pod.",

@@ -317,6 +317,30 @@ const RESOURCE_BY_PLURAL = new Map<string, ResourceDefinition>(
   RESOURCE_REGISTRY.map((entry) => [entry.plural, entry])
 );
 
+/**
+ * The question that asks whether somebody may list this kind.
+ *
+ * Built here because this table already holds every part of it — the plural
+ * the API server matches, the group in front of it, and whether the kind
+ * lives in a namespace at all. A second copy anywhere else would be free to
+ * disagree with the URLs built from these same three fields.
+ */
+export function listQueryFor(resourceKind: ResourceKind): {
+  group: string;
+  resource: string;
+  namespaced: boolean;
+} {
+  const entry = RESOURCE_BY_KIND.get(resourceKind);
+  const apiVersion = entry?.apiVersion ?? "v1";
+  return {
+    // `v1` is a version with no group in front of it, and the API server
+    // matches the core group as the empty string.
+    group: apiVersion.includes("/") ? apiVersion.split("/")[0] : "",
+    resource: toPlural(resourceKind),
+    namespaced: entry?.scope !== "cluster",
+  };
+}
+
 export function toPlural(resourceKind: ResourceKind): string {
   return (
     RESOURCE_BY_KIND.get(resourceKind)?.plural ?? resourceKind.toLowerCase()

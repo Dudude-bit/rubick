@@ -55,6 +55,8 @@ import type {
   JobDetailInfo,
   JobInfo,
   KubeconfigSource,
+  ListAccess,
+  ListQuery,
   LogLine,
   LokiConnection,
   LokiPage,
@@ -230,6 +232,13 @@ export async function getTlsCertificates(
     namespace,
     secretNames,
   });
+}
+
+export async function checkListAccess(
+  queries: ListQuery[],
+  namespaces: string[]
+): Promise<ListAccess[]> {
+  return invoke<ListAccess[]>("check_list_access", { queries, namespaces });
 }
 
 export async function listRegistryConfigs(): Promise<RegistryConfigInfo[]> {

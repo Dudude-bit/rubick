@@ -54,7 +54,7 @@ pub struct PodInfo {
     pub owner_references: Vec<OwnerReference>,
     /// `.spec.volumes`, joined to the mounts that consume them.
     ///
-    /// The pod already names every ConfigMap, Secret and claim it depends on
+    /// The pod already names every `ConfigMap`, Secret and claim it depends on
     /// here, and until now none of it reached the frontend — the only way to
     /// find out what a pod mounts was to read its YAML.
     pub volumes: Vec<PodVolumeInfo>,
@@ -108,7 +108,8 @@ pub struct VolumeMountInfo {
 /// source, so the first match is the only match. `projected` is the one that
 /// names several objects, and it is also the one on every pod in the cluster
 /// — the `kube-api-access-*` volume the API server injects projects the
-/// `kube-root-ca.crt` ConfigMap, which is a real object worth reaching.
+/// `kube-root-ca.crt` `ConfigMap`, which is a real object worth reaching.
+#[must_use]
 pub fn volume_source(volume: &Volume) -> (String, Vec<VolumeObjectRef>) {
     let object = |kind: &str, name: &str| VolumeObjectRef {
         kind: kind.to_string(),
@@ -167,8 +168,9 @@ pub fn volume_source(volume: &Volume) -> (String, Vec<VolumeObjectRef>) {
 
 /// Every mount of `volume_name`, across app and init containers alike.
 ///
-/// Both lists are walked: a ConfigMap read only by an init container is
+/// Both lists are walked: a `ConfigMap` read only by an init container is
 /// exactly the mount whose absence explains a pod stuck in `Init:Error`.
+#[must_use]
 pub fn mounts_of(spec: &PodSpec, volume_name: &str) -> Vec<VolumeMountInfo> {
     let init = spec.init_containers.as_deref().unwrap_or_default();
     let each = |container: &Container| {
@@ -329,18 +331,15 @@ pub struct PodStatusInfo {
 impl PodStatusInfo {
     fn from_pod(pod: &Pod) -> Self {
         let display = display_status(pod);
-        let status = match pod.status.as_ref() {
-            Some(s) => s,
-            None => {
-                return Self {
-                    phase: "Unknown".to_string(),
-                    display,
-                    ready: false,
-                    conditions: vec![],
-                    message: None,
-                    reason: None,
-                }
-            }
+        let Some(status) = pod.status.as_ref() else {
+            return Self {
+                phase: "Unknown".to_string(),
+                display,
+                ready: false,
+                conditions: vec![],
+                message: None,
+                reason: None,
+            };
         };
 
         let ready = status.conditions.as_ref().is_some_and(|conds| {

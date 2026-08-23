@@ -81,8 +81,8 @@ fn metrics_api(ctx: &ResourceContext, kind: &str) -> Api<DynamicObject> {
     ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped)
 }
 
-pub(super) fn parse_pod_metric(item: DynamicObject) -> Option<PodMetrics> {
-    let value = serde_json::to_value(&item).ok()?;
+pub(super) fn parse_pod_metric(item: &DynamicObject) -> Option<PodMetrics> {
+    let value = serde_json::to_value(item).ok()?;
     let parsed: PodMetricsItem = serde_json::from_value(value).ok()?;
 
     let mut total_cpu = 0.0f64;
@@ -109,8 +109,8 @@ pub(super) fn parse_pod_metric(item: DynamicObject) -> Option<PodMetrics> {
     })
 }
 
-pub(super) fn parse_node_metric(item: DynamicObject) -> Option<NodeMetrics> {
-    let value = serde_json::to_value(&item).ok()?;
+pub(super) fn parse_node_metric(item: &DynamicObject) -> Option<NodeMetrics> {
+    let value = serde_json::to_value(item).ok()?;
     let parsed: NodeMetricsItem = serde_json::from_value(value).ok()?;
 
     let cpu_millicores = parse_usage_cpu(&parsed.usage);
@@ -133,7 +133,7 @@ fn parse_usage_memory(usage: &ContainerUsage) -> Option<u64> {
 
 /// Generic fetch+parse for the Metrics API. Used by both
 /// `get_pod_metrics` and `get_node_metrics` — they differ only in
-/// the kind string (PodMetrics vs NodeMetrics) and the parser
+/// the kind string (`PodMetrics` vs `NodeMetrics`) and the parser
 /// function. On API error returns `(metrics_status_from_error, vec![])`
 /// so the frontend can render a "Metrics API not installed / forbidden"
 /// banner without seeing the call as a hard failure.
@@ -141,7 +141,7 @@ pub(super) async fn fetch_metrics<T>(
     state: &AppState,
     namespace: Option<&str>,
     kind: &str,
-    parse: impl Fn(DynamicObject) -> Option<T>,
+    parse: impl Fn(&DynamicObject) -> Option<T>,
 ) -> Result<(MetricsStatus, Vec<T>)> {
     let ctx = ResourceContext::for_list_from_app_state(state, namespace.map(str::to_string))?;
     let api = metrics_api(&ctx, kind);
@@ -151,6 +151,6 @@ pub(super) async fn fetch_metrics<T>(
         Err(err) => return Ok((metrics_status_from_error(&err), vec![])),
     };
 
-    let metrics = list.items.into_iter().filter_map(parse).collect();
+    let metrics = list.items.iter().filter_map(parse).collect();
     Ok((metrics_status_available(), metrics))
 }

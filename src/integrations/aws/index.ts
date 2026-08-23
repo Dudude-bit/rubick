@@ -34,8 +34,7 @@ export const awsLoadBalancerController = defineVendor({
   id: "aws-load-balancer-controller",
   name: "AWS Load Balancer Controller",
   extension: {
-    gives:
-      "the real ALB target group behind a Service, and what the controller could not apply",
+    gives: "awsGives",
     icon: Waypoints,
     facts,
   },

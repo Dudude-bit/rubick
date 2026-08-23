@@ -37,7 +37,7 @@ pub async fn list_endpoints(
     list_resource_infos::<Endpoints, EndpointsInfo>(filters, state).await
 }
 
-/// What every Service in scope publishes, read off its own EndpointSlices.
+/// What every Service in scope publishes, read off its own `EndpointSlices`.
 ///
 /// One list of slices per scope, grouped by the `kubernetes.io/service-name`
 /// label the controllers write — the answer for two hundred Services is two
@@ -137,7 +137,7 @@ pub struct IngressClassBinding {
     /// `spec.ingressClassName`, or `None` where the Ingress named none and
     /// is relying on the cluster's default.
     pub requested: Option<String>,
-    /// The IngressClass that answers for it.
+    /// The `IngressClass` that answers for it.
     pub resolved: Option<String>,
     /// `spec.controller` on that class — the implementation, in its own
     /// words, which is the part that says whether it is Traefik or nginx.
@@ -153,7 +153,7 @@ pub struct IngressClassBinding {
     pub available: Vec<IngressClassSummary>,
 }
 
-/// One IngressClass, and the controller that answers for it.
+/// One `IngressClass`, and the controller that answers for it.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngressClassSummary {

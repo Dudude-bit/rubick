@@ -1,6 +1,6 @@
 //! `LogStreamer` — owns a kube `Client` and an event broadcaster,
 //! exposes `get_logs` (one-shot) and `stream_logs` (with batching
-//! + periodic flush so verbose pods don't generate one Tauri
+//! and a periodic flush, so verbose pods don't generate one Tauri
 //! round-trip per line).
 
 use crate::commands::helpers::ResourceContext;
@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{broadcast, oneshot};
 use tokio::time::{interval, MissedTickBehavior};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 use super::config::LogConfig;
 use super::filter::IntakeFilter;
@@ -131,7 +132,6 @@ impl LogStreamer {
             }
         };
 
-        use tokio_util::compat::FuturesAsyncReadCompatExt;
         let reader = BufReader::new(stream.compat());
         let mut lines = reader.lines();
 

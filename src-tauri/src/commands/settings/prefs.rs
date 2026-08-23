@@ -1,6 +1,6 @@
 //! Application preferences — theme, YAML editor history, infrastructure
 //! builder canvas state, recent items, updater settings, cluster
-//! preferences, and the trivial AppInfo command.
+//! preferences, and the trivial `AppInfo` command.
 
 use crate::config::{
     ClusterPreferences, InfrastructureBuilderState as ConfigBuilderState, RecentItem,
@@ -40,11 +40,12 @@ pub struct AppInfo {
 
 /// Get application version and build info
 #[tauri::command]
+#[must_use]
 pub fn get_app_info(app: tauri::AppHandle) -> AppInfo {
     let package_info = app.package_info();
     AppInfo {
         version: package_info.version.to_string(),
-        name: package_info.name.to_string(),
+        name: package_info.name.clone(),
         tauri_version: tauri::VERSION.to_string(),
         os: std::env::consts::OS.to_string(),
     }

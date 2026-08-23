@@ -64,11 +64,11 @@ pub async fn get_resource_connections(
     } else {
         ResourceContext::for_command(&state, namespace)?
     };
-    connections_of(&ctx, &kind, &name, gateway.as_ref()).await
+    Box::pin(connections_of(&ctx, &kind, &name, gateway.as_ref())).await
 }
 
 /// The kinds whose neighbourhood spans every namespace there is: the pods a
-/// Node carries, and the claim a PersistentVolume is bound to.
+/// Node carries, and the claim a `PersistentVolume` is bound to.
 fn cluster_scoped(kind: &str) -> bool {
     matches!(kind, "Node" | "PersistentVolume")
 }
@@ -93,7 +93,10 @@ pub async fn connections_of(
     match canonical {
         "Pod" => pod_connections(ctx, &ns, name, gateway, &mut out).await?,
         "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" | "Job" | "CronJob" => {
-            workload_connections(ctx, &ns, canonical, name, gateway, &mut out).await?;
+            Box::pin(workload_connections(
+                ctx, &ns, canonical, name, gateway, &mut out,
+            ))
+            .await?;
         }
         "Service" => service_connections(ctx, &ns, name, gateway, &mut out).await?,
         "Ingress" => ingress_connections(ctx, &ns, name, &mut out).await?,
@@ -417,7 +420,7 @@ fn routes_into(ns: &str, svc_ref: &ObjectRef, snapshot: &Snapshot, out: &mut Nei
 /// objects, the cluster's own answer, and the two disagree in exactly the
 /// cases nobody can see.
 ///
-/// A Service with no selector is not a stop: an ExternalName resolves
+/// A Service with no selector is not a stop: an `ExternalName` resolves
 /// elsewhere and a hand-managed one has endpoints this app never wrote — but
 /// what it publishes is still read and still drawn, because a slice is a
 /// slice however it got written.
@@ -644,7 +647,7 @@ fn tls_covers(ing: &Ingress, host: Option<&str>) -> bool {
 
 // --- what it needs to run ----------------------------------------------
 
-/// The ConfigMaps, Secrets, claims and identity a pod spec names, with how
+/// The `ConfigMaps`, Secrets, claims and identity a pod spec names, with how
 /// each one is used.
 fn uses_from_spec(
     ns: &str,
@@ -712,7 +715,7 @@ fn uses_from_spec(
 /// A name a pod spec states, resolved as far as this call actually looked.
 ///
 /// Claims were listed, so they carry their phase and size and can be called
-/// present or missing. ConfigMaps, Secrets and ServiceAccounts were not, and
+/// present or missing. `ConfigMaps`, Secrets and `ServiceAccounts` were not, and
 /// saying `notChecked` is the difference between "the app did not ask" and
 /// "the cluster does not have it".
 fn named_object(ns: &str, kind: &str, name: &str, claims: &[PersistentVolumeClaim]) -> ObjectRef {
@@ -1008,7 +1011,7 @@ fn governed_by(
     budgets_over(ns, target, labels, &snapshot.budgets, out);
 }
 
-/// The PodDisruptionBudgets whose selector matches these pod labels.
+/// The `PodDisruptionBudgets` whose selector matches these pod labels.
 fn budgets_over(
     ns: &str,
     target: &ObjectRef,
@@ -1043,8 +1046,16 @@ fn budgets_over(
 /// What the reads that failed leave the answer unable to say.
 fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
     UnexploredKind::governance(
-        snapshot.autoscalers.as_ref().err().map(|why| why.as_str()),
-        snapshot.budgets.as_ref().err().map(|why| why.as_str()),
+        snapshot
+            .autoscalers
+            .as_ref()
+            .err()
+            .map(std::string::String::as_str),
+        snapshot
+            .budgets
+            .as_ref()
+            .err()
+            .map(std::string::String::as_str),
     )
 }
 
@@ -1062,7 +1073,7 @@ fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
 /// two GETs whatever the chain looks like.
 ///
 /// `seen` is shared across the pods of one Service so that each pod states
-/// the ReplicaSet that made it while the hop above it is walked once.
+/// the `ReplicaSet` that made it while the hop above it is walked once.
 async fn owner_chain(
     ctx: &ResourceContext,
     ns: &str,
@@ -1109,7 +1120,7 @@ async fn owner_chain(
 
 /// The owner references of the only two kinds that have any.
 ///
-/// A Deployment, a StatefulSet, a DaemonSet and a CronJob are tops; fetching
+/// A Deployment, a `StatefulSet`, a `DaemonSet` and a `CronJob` are tops; fetching
 /// them would buy nothing, so the walk ends there rather than spending a
 /// request to learn that.
 async fn fetch_owners(
@@ -1598,7 +1609,7 @@ async fn workload_connections(
     Ok(())
 }
 
-/// The ReplicaSets a Deployment made, newest first.
+/// The `ReplicaSets` a Deployment made, newest first.
 ///
 /// Filtered by controller owner rather than by the selector alone: matching
 /// the selector is what makes a `ReplicaSet` adoptable, and the ownership is
@@ -1762,30 +1773,27 @@ async fn ingress_connections(
     for (backend, relation) in ingress_backends(ing) {
         match backend {
             Backend::Service(service) => {
-                match snapshot.services.iter().find(|s| s.name_any() == service) {
-                    Some(svc) => {
-                        let svc_ref = service_ref(svc, ns);
-                        out.edge(subject.clone(), svc_ref.clone(), relation);
-                        if !reached.insert(service.clone()) {
-                            continue;
-                        }
-                        note_reach(svc, &svc_ref, &snapshot, out, false);
-                        workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+                if let Some(svc) = snapshot.services.iter().find(|s| s.name_any() == service) {
+                    let svc_ref = service_ref(svc, ns);
+                    out.edge(subject.clone(), svc_ref.clone(), relation);
+                    if !reached.insert(service.clone()) {
+                        continue;
                     }
-                    None => {
-                        let missing = ObjectRef::new(
-                            "Service",
-                            &service,
-                            Some(ns.to_string()),
-                            Existence::Missing,
-                        );
-                        out.edge(subject.clone(), missing.clone(), relation);
-                        if reached.insert(service.clone()) {
-                            out.stops.push(ChainStop::BackendMissing {
-                                ingress: subject.clone(),
-                                service: missing,
-                            });
-                        }
+                    note_reach(svc, &svc_ref, &snapshot, out, false);
+                    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+                } else {
+                    let missing = ObjectRef::new(
+                        "Service",
+                        &service,
+                        Some(ns.to_string()),
+                        Existence::Missing,
+                    );
+                    out.edge(subject.clone(), missing.clone(), relation);
+                    if reached.insert(service.clone()) {
+                        out.stops.push(ChainStop::BackendMissing {
+                            ingress: subject.clone(),
+                            service: missing,
+                        });
                     }
                 }
             }
@@ -1835,7 +1843,7 @@ async fn claim_connections(
     Ok(())
 }
 
-/// A ConfigMap or a Secret: the objects that draw on it, and nothing else.
+/// A `ConfigMap` or a Secret: the objects that draw on it, and nothing else.
 /// Neither kind states an edge of its own — every edge it has was written
 /// somewhere that names it.
 async fn config_connections(
@@ -1893,7 +1901,8 @@ async fn node_connections(
         budgets_over(&ns, &this, pod.labels(), &budgets, out);
     }
 
-    out.not_looked_at = UnexploredKind::on_a_node(budgets.as_ref().err().map(|why| why.as_str()));
+    out.not_looked_at =
+        UnexploredKind::on_a_node(budgets.as_ref().err().map(std::string::String::as_str));
     Ok(())
 }
 
@@ -1919,7 +1928,7 @@ fn node_ref(node: &Node) -> ObjectRef {
     )
 }
 
-/// A PersistentVolume: the claim it is bound to, and the class that made it.
+/// A `PersistentVolume`: the claim it is bound to, and the class that made it.
 ///
 /// The claim is the cluster-scoped case in miniature. `spec.claimRef` names
 /// its namespace outright, and that namespace is neither the page the reader
@@ -1969,7 +1978,7 @@ async fn volume_connections(
 
 /// Everything in the namespace whose pod spec names this object.
 ///
-/// Deployments, StatefulSets, DaemonSets, Jobs and CronJobs, plus the pods
+/// Deployments, `StatefulSets`, `DaemonSets`, Jobs and `CronJobs`, plus the pods
 /// themselves, and — for a Secret — the Ingresses that serve it as a
 /// certificate. Seven concurrent lists, one per kind, whatever the answer
 /// turns out to be.
@@ -2148,12 +2157,12 @@ mod gateway_traffic_tests {
         ObjectRef::new("Service", name, Some(ns.to_string()), Existence::Present)
     }
 
-    const EDGE_GATEWAY: &str = r#"
+    const EDGE_GATEWAY: &str = r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata: { name: edge, namespace: shop }
 spec: { gatewayClassName: envoy }
-"#;
+";
 
     const HEALTHY_ROUTE: &str = r#"
 apiVersion: gateway.networking.k8s.io/v1
@@ -2243,7 +2252,7 @@ status:
     fn cross_namespace_backend_ref_does_not_match_by_name_alone() {
         // The route names `promo` in the `audit` namespace; the subject is
         // `promo` in `shop`. Same name, different Service.
-        let cross = r#"
+        let cross = r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: { name: promo, namespace: shop }
@@ -2251,7 +2260,7 @@ spec:
   rules:
   - backendRefs:
     - { name: promo, namespace: audit, port: 8080 }
-"#;
+";
         let mut out = Neighbourhood::new();
         gateway_traffic_into(
             "shop",
@@ -2349,7 +2358,7 @@ status:
 
     #[test]
     fn a_parent_gateway_the_server_does_not_have_is_named_missing() {
-        let orphan = r#"
+        let orphan = r"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: { name: promo, namespace: shop }
@@ -2359,7 +2368,7 @@ spec:
   rules:
   - backendRefs:
     - { name: promo, port: 8080 }
-"#;
+";
         let mut out = Neighbourhood::new();
         gateway_traffic_into(
             "shop",

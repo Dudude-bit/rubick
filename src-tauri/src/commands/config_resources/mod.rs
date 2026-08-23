@@ -1,7 +1,7 @@
 //! `ConfigMap` and Secret commands.
 //!
 //! - `data`:        the shared decode/withhold door both kinds read through
-//! - `configmap`:   ConfigMap CRUD
+//! - `configmap`:   `ConfigMap` CRUD
 //! - `secret`:      Secret CRUD
 
 mod configmap;

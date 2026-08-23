@@ -11,6 +11,7 @@ use crate::error::{AuthError, Error, Result};
 use crate::state::{AppEvent, AppState};
 use kube::config::{ExecAuthCluster, ExecConfig, ExecInteractiveMode};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use tokio::time::{Duration, Instant};
 
@@ -54,7 +55,8 @@ fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
         .unwrap_or(command);
 
     let is_kubelogin_family = matches!(basename, "kubelogin" | "kubectl-oidc_login")
-        || (basename == "kubectl" && args.first().map(|a| a.as_str()) == Some("oidc-login"));
+        || (basename == "kubectl"
+            && args.first().map(std::string::String::as_str) == Some("oidc-login"));
 
     if !is_kubelogin_family {
         return false;
@@ -83,7 +85,7 @@ fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
 ///   * kubelogin 180 s default and any future bump (3-5x headroom)
 ///   * cloud-CLI plugins (gke-gcloud-auth-plugin / aws-iam-authenticator)
 ///     that occasionally take minutes on first-time MFA prompts
-///   * a real human walking away to fetch a YubiKey
+///   * a real human walking away to fetch a `YubiKey`
 ///
 /// The user is never trapped: the auth modal has a Cancel button
 /// (`cancel_auth_session` Tauri command → `cancel_rx` branch of the
@@ -227,6 +229,9 @@ pub(super) async fn run_exec_auth(
                                 url,
                                 flow: "exec".to_string(),
                                 session_id: Some(session_id.clone()),
+                                // The plugin runs its own flow; where it sends the browser back is
+                                // its business and not visible from here.
+                                redirect_uri: None,
                             });
                         }
                     }
@@ -353,8 +358,7 @@ async fn build_exec_terminal_params(
     // Try to resolve the command path for cloud CLIs
     let resolved_command = resolve_cloud_cli_path(command)
         .await
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| command.clone());
+        .map_or_else(|| command.clone(), |p| p.to_string_lossy().to_string());
 
     // Collect args
     let mut args = exec.args.clone().unwrap_or_default();
@@ -468,12 +472,14 @@ fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
             b'\r' => out.push_str("\\r"),
             b'\t' => out.push_str("\\t"),
             0x20..=0x7e => out.push(b as char),
-            other => out.push_str(&format!("\\x{:02x}", other)),
+            other => {
+                let _ = write!(out, "\\x{other:02x}");
+            }
         }
     }
     out.push('"');
     if truncated {
-        out.push_str(&format!(" (+{} more bytes)", data.len() - max_bytes));
+        let _ = write!(out, " (+{} more bytes)", data.len() - max_bytes);
     }
     out
 }
@@ -593,7 +599,7 @@ mod inject_tests {
     use super::should_inject_kubelogin_timeout;
 
     fn args(strs: &[&str]) -> Vec<String> {
-        strs.iter().map(|s| s.to_string()).collect()
+        strs.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]
@@ -698,6 +704,9 @@ mod preview_tests {
     use super::{preview_bytes, AUTH_FLOW_TIMEOUT_SECS};
 
     #[test]
+    // Constant on purpose: the point is to fail the moment somebody lowers
+    // the timeout, and the message needs both values in it.
+    #[allow(clippy::assertions_on_constants)]
     fn auth_flow_timeout_is_large_enough_to_outlast_any_reasonable_plugin() {
         // We deliberately do NOT pin our timeout against a specific
         // plugin's current default — that's how we got into trouble

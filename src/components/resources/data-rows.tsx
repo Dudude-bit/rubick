@@ -227,7 +227,7 @@ export function DataSection({
                             )
                           : copyToClipboard(
                               value as string,
-                              t("action", "valueCopied", { key })
+                              t("action", "valueCopied", { label: key })
                             )
                       }
                     />

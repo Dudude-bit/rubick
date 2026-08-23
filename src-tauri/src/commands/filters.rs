@@ -23,14 +23,15 @@ pub struct PodFilters {
     pub base: ResourceFilters,
     /// Filter by pod phase (Running, Pending, etc.)
     pub status_filter: Option<String>,
-    /// Label selector as key-value pairs (alternative to label_selector string)
+    /// Label selector as key-value pairs (alternative to `label_selector` string)
     pub selector: Option<BTreeMap<String, String>>,
     /// Filter by node name
     pub node_name: Option<String>,
 }
 
 impl PodFilters {
-    /// Build the effective label selector string, combining label_selector and selector map
+    /// Build the effective label selector string, combining `label_selector` and selector map
+    #[must_use]
     pub fn build_label_selector(&self) -> Option<String> {
         let mut parts = Vec::new();
 
@@ -56,6 +57,7 @@ impl PodFilters {
     }
 
     /// Build the effective field selector string
+    #[must_use]
     pub fn build_field_selector(&self) -> Option<String> {
         let mut parts = Vec::new();
 
@@ -68,7 +70,7 @@ impl PodFilters {
 
         // Add node_name filter
         if let Some(node) = &self.node_name {
-            parts.push(format!("spec.nodeName={}", node));
+            parts.push(format!("spec.nodeName={node}"));
         }
 
         if parts.is_empty() {

@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn a_fan_out_wider_than_the_cap_is_refused() {
-        let wide: Vec<String> = (0..MAX_CONTEXTS + 1).map(|i| format!("c{i}")).collect();
+        let wide: Vec<String> = (0..=MAX_CONTEXTS).map(|i| format!("c{i}")).collect();
         let mut req = request(&[]);
         req.contexts = wide;
         let err = resolve_context_names(&req, &set(&["c0"]), None).unwrap_err();

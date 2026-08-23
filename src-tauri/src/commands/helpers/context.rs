@@ -73,6 +73,10 @@ impl ResourceContext {
         Self::from_app_state(state, namespace, false)
     }
 
+    /// # Panics
+    ///
+    /// If the context has no namespace. Callers reach this only from a
+    /// namespaced command, where `for_command` has already required one.
     #[must_use]
     pub fn namespaced_api<K>(&self) -> Api<K>
     where

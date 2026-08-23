@@ -43,7 +43,7 @@ export default defineVendor({
   id: "loki",
   name: "Loki",
   extension: {
-    gives: "logs from before the current pod existed",
+    gives: "lokiGives",
     icon: ScrollText,
   },
   connect: {

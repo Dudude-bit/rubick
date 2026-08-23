@@ -661,6 +661,7 @@ export function EnvironmentVariables({
                         ) : isSecret ? (
                           <MaskedValue
                             value={displayValue}
+                            label={ev.name}
                             isRevealed={isRevealed}
                             onToggleReveal={() => toggleReveal(ev.name)}
                             isLoading={loadingSecrets}

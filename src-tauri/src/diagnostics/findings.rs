@@ -37,6 +37,7 @@ pub struct Finding {
 /// `None` when the command names no plugin, or names one that is present —
 /// there is nothing to report in either case, and reporting anyway would
 /// refuse commands that work today.
+#[must_use]
 pub fn missing_plugin_finding(context: &str, command: &str, args: &[String]) -> Option<Finding> {
     let plugin = kubectl_plugin_binary(command, args)?;
     if locate_on_user_path(&plugin).is_some() {
@@ -72,7 +73,7 @@ mod tests {
     use super::*;
 
     fn args(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
+        list.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

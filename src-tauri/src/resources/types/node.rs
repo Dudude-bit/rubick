@@ -103,8 +103,8 @@ impl From<&Node> for NodeInfo {
 
         let roles: Vec<String> = node
             .labels()
-            .iter()
-            .filter_map(|(k, _)| {
+            .keys()
+            .filter_map(|k| {
                 if k.starts_with("node-role.kubernetes.io/") {
                     Some(k.trim_start_matches("node-role.kubernetes.io/").to_string())
                 } else {

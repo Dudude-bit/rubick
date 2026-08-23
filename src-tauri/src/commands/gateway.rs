@@ -125,7 +125,7 @@ pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<Gate
         .collect())
 }
 
-/// Every BackendTLSPolicy in scope. Policies name their targets and the
+/// Every `BackendTLSPolicy` in scope. Policies name their targets and the
 /// targets never name them back, so surfaces do the reverse lookup over
 /// this list — the same shape gwctl's effective-policy view reads.
 #[tauri::command]
@@ -161,7 +161,7 @@ pub async fn delete_gateway_class(name: String, state: State<'_, AppState>) -> R
     Ok(())
 }
 
-/// Every ListenerSet in the cluster, or nothing where the kind is not
+/// Every `ListenerSet` in the cluster, or nothing where the kind is not
 /// installed. Absence is ordinary — the kind graduated in Gateway API 1.5
 /// and most bundles in the wild predate it — so "cannot list" reads as
 /// "none", not as an error a Gateway page fails on.

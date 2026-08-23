@@ -33,8 +33,7 @@ export default defineVendor({
     "object.related": relatedTo,
   },
   extension: {
-    gives:
-      "every Application with what it is failing to apply, and which objects differ from git",
+    gives: "argocdGives",
     icon: GitBranch,
     facts,
   },

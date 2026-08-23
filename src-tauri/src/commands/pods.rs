@@ -14,11 +14,11 @@ use crate::state::AppState;
 ///
 /// Supports filtering by:
 /// - namespace: Kubernetes namespace
-/// - label_selector: Label selector string (e.g., "app=nginx,env=prod")
-/// - selector: Label selector as key-value map (alternative to label_selector)
-/// - field_selector: Field selector string
-/// - node_name: Filter pods running on a specific node
-/// - status_filter: Filter by pod phase (Running, Pending, Failed, etc.)
+/// - `label_selector`: Label selector string (e.g., "app=nginx,env=prod")
+/// - selector: Label selector as key-value map (alternative to `label_selector`)
+/// - `field_selector`: Field selector string
+/// - `node_name`: Filter pods running on a specific node
+/// - `status_filter`: Filter by pod phase (Running, Pending, Failed, etc.)
 /// - limit: Maximum number of pods to return
 #[tauri::command]
 pub async fn list_pods(
@@ -43,7 +43,7 @@ pub async fn list_pods(
 
     let started = std::time::Instant::now();
     let pod_list = api.list(&lp).await?;
-    let fetched_ms = started.elapsed().as_millis() as u64;
+    let fetched_ms = crate::utils::elapsed_ms(started);
     let mut pods: Vec<PodInfo> = pod_list.items.iter().map(PodInfo::from).collect();
     // The reported cost of this page is seconds on a hundred pods, and the
     // split between the API round-trip and everything after it is the whole
@@ -51,7 +51,7 @@ pub async fn list_pods(
     tracing::info!(
         count = pods.len(),
         fetch_ms = fetched_ms,
-        total_ms = started.elapsed().as_millis() as u64,
+        total_ms = crate::utils::elapsed_ms(started),
         "list_pods"
     );
 

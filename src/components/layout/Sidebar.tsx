@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
+  Lock,
   Package,
   Plug,
   Route,
@@ -15,6 +16,7 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { useListAccess } from "@/hooks/useListAccess";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
@@ -58,6 +60,8 @@ type NavItem = NavName & {
   icon: LucideIcon;
   /** Which of the backend's counts belongs at the end of this row. */
   count?: keyof ResourceCounts;
+  /** The kind this row lists, for the rows that list one. */
+  kind?: ResourceKind;
   /**
    * The route prefix this row owns, where that is wider than where it goes.
    * Settings has five panes and one row; whichever pane the row happens to
@@ -74,6 +78,7 @@ const UPDATES_PATH = "/settings/about";
 /** A row whose label, route and icon all come from the resource registry. */
 function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
   return {
+    kind,
     label: getDisplayPlural(kind),
     path: getResourceListUrl(kind),
     icon: getResourceIcon(kind),
@@ -145,6 +150,11 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   },
 ];
 
+/** Every kind the nav offers, which is exactly what to ask the authorizer about. */
+const NAV_KINDS: ResourceKind[] = GROUPS.flatMap((group) =>
+  group.items.map((item) => item.kind).filter((kind) => kind !== undefined)
+);
+
 /**
  * The app's own rows, pinned under the scroll rather than at the end of it.
  *
@@ -166,6 +176,7 @@ const APP_ROWS: NavItem[] = [
 export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
   const { data } = useScopedOverview();
+  const access = useListAccess(NAV_KINDS);
 
   // The overview query keeps its last answer as placeholder data across the
   // key change a disconnect causes, which is right while switching clusters
@@ -182,7 +193,12 @@ export function Sidebar() {
           <div key={group.caption ?? `ungrouped-${index}`}>
             {group.caption && <GroupCaption k={group.caption} />}
             {group.items.map((item) => (
-              <NavRow key={item.path} item={item} overview={overview} />
+              <NavRow
+                key={item.path}
+                item={item}
+                overview={overview}
+                denied={item.kind ? access[item.kind] === false : false}
+              />
             ))}
             {group.caption === "network" && <GatewayRows overview={overview} />}
           </div>
@@ -574,6 +590,7 @@ function NavRow({
   value,
   mark,
   note,
+  denied,
   onPress,
   active,
 }: {
@@ -587,6 +604,14 @@ function NavRow({
    * colour — so this one pixel is the row's whole opinion.
    */
   mark?: "warn" | "err";
+  /**
+   * The authorizer says this reader may not list what the row leads to.
+   *
+   * Drawn, never enforced: the row stays a link and the list call stays the
+   * authority. A review that is wrong then costs a mark the next answer
+   * clears, rather than a screen somebody cannot open.
+   */
+  denied?: boolean;
   /**
    * A word at the end of the row instead of a count — for a state that is
    * neither a number nor a fault. A port-forward that is down is the case
@@ -652,7 +677,19 @@ function NavRow({
               <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
             )}
           </div>
-          {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}
+          <span className={cn(denied && "text-fg-fnt")}>
+            {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}
+          </span>
+          {denied && (
+            // A word would not fit beside "Persistent Volumes" in a rail this
+            // narrow, and would need translating into a space it does not have.
+            <Lock
+              className="ml-auto h-3 w-3 flex-none text-fg-fnt"
+              aria-label={t("nav", "noListAccess")}
+            >
+              <title>{t("nav", "noListAccess")}</title>
+            </Lock>
+          )}
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (

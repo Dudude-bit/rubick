@@ -20,6 +20,7 @@ export const ru: Catalogue = {
     fromThisMachine: "С этой машины",
     policies: "Политики",
     contents: "Содержимое",
+    noListAccess: "У вас нет прав смотреть этот список",
     relatedResources: "Связанные ресурсы",
     trafficPath: "Путь трафика",
     releases: "Релизы",
@@ -317,6 +318,8 @@ export const ru: Catalogue = {
     copyPair: "Скопировать {pair}",
     toInline: "к",
     viaGateway: "через Gateway",
+    openOnSiteShort: "Открыть на {site}",
+    valueNoun: "значение",
     readingGroup: "идёт чтение: {group}",
     listAnd: " и ",
     listComma: ", ",
@@ -1122,7 +1125,57 @@ export const ru: Catalogue = {
     },
     active: "активных: {n}",
   },
+  auth: {
+    started: "Вход",
+    startedIn:
+      "Завершите вход в {context} в браузере. Отмените, если закрыли вкладку.",
+    waitingOn:
+      "Ждём ответ на {uri} — этот адрес должен быть разрешён у провайдера для этого клиента.",
+    windowTitle: "Вход в {context}",
+    windowFailed: "Не удалось открыть окно входа",
+    windowFailedBody: "Попробуйте ещё раз.",
+    failed: "Войти не удалось",
+    couldNotOpen: "Не удалось открыть вход. Попробуйте ещё раз.",
+    failedFor: "Не удалось войти в {context}.",
+    complete: "Вход выполнен",
+    completeFor: "Выполнен вход в {context}.",
+    cancelAlt: "Отменить вход",
+    cancelled: "Вход отменён",
+    cancelledFor: "Отменено: {context}.",
+  },
+  vendor: {
+    argocdGives:
+      "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
+    awsGives:
+      "настоящую target group ALB за Service и то, что контроллер не смог применить",
+    azureGives:
+      "какая pod identity к каким подам привязана и что ingress App Gateway велено не трогать",
+    certManagerGives:
+      "почему сертификат не обновился — от того объекта, на котором сорвалось",
+    fluxGives:
+      "что Flux применяет, откуда применяет и где остановившаяся выгрузка тихо заморозила кластер",
+    googleCloudGives:
+      "что сказали балансировщику GKE и на каких доменах застрял сертификат, управляемый Google",
+    ingressNginxGives:
+      "аннотации, прочитанные как поведение, а не как стена строк",
+    istioGives:
+      "VirtualService и DestinationRule, прочитанные как маршрутизация, а не как сырые ресурсы",
+    lokiGives: "логи за время до того, как появился текущий под",
+    prometheusGives:
+      "историю нагрузки, заполненность томов и трафик подов и рабочих нагрузок",
+    traefikGives:
+      "каждый хост, который отдаёт этот кластер, и где каждый обрывается",
+  },
   cluster: {
+    metricsNotInstalled: "metrics-server не установлен",
+    metricsNotInstalledBody:
+      "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
+    metricsForbidden: "Нет прав читать метрики",
+    metricsForbiddenBody:
+      "У этой учётной записи нет доступа к API метрик. Тому, кто выдаёт права, нужно разрешить metrics.k8s.io.",
+    metricsError: "Ошибка API метрик",
+    metricsErrorBody: "Не удалось получить метрики из кластера.",
+    metricsDetails: "Подробности: {details}",
     markBroken: "сломано",
     markWorthALook: "стоит взглянуть",
     connectToImport:
@@ -1733,7 +1786,7 @@ export const ru: Catalogue = {
       other: "{names} не запустились.",
     },
     initContainersAlreadyExited: {
-      one: "{names} — init-контейнер, который отработал, — уже завершился.",
+      one: "{names} — {n} init-контейнер, который отработал, — уже завершился.",
       few: "{names} — {n} init-контейнера, которые отработали, — уже завершились.",
       many: "{names} — {n} init-контейнеров, которые отработали, — уже завершились.",
       other:
@@ -2725,6 +2778,9 @@ export const ru: Catalogue = {
     couldNotReadCrds: "Не удалось прочитать CRD этого кластера",
     crdDetectionFailed:
       "Каждое расширение здесь определяется запросом к API-серверу о CustomResourceDefinition, которые оно ставит, и этот запрос не удался — так что список был бы догадкой, а не ответом.",
+    couldNotLookForExtensions: "Кластер не сказал, что установлено",
+    couldNotLookWhy:
+      "Расширения определяются по их CustomResourceDefinition, а у этой учётной записи нет прав их смотреть. Что-то вполне может быть установлено — этот экран не может сказать.",
     nothingInstalledKnown:
       "Не установлено ничего, чем это приложение умеет пользоваться",
     everyExtensionOptional:
@@ -3374,7 +3430,7 @@ export const ru: Catalogue = {
     shownOfTotal: "{n} из {total}",
     brokenAndFirst: "сломано {n} из {total}, и они первыми",
     servedOnNames: {
-      one: "Отдаётся на имени, которого нет в сертификате",
+      one: "Отдаётся на {n} имени, которого нет в сертификате",
       few: "Отдаётся на {n} именах, которых нет в сертификате",
       many: "Отдаётся на {n} именах, которых нет в сертификате",
       other: "Отдаётся на {n} именах, которых нет в сертификате",
@@ -3566,10 +3622,10 @@ export const ru: Catalogue = {
       other: "Отброшено {count} старые строки.",
     },
     rowsStandFor: {
-      one: "Эта строка представляет",
-      few: "Эти {n} строки представляют",
-      many: "Эти {n} строк представляют",
-      other: "Эти {n} строки представляют",
+      one: "{n} строка представляет",
+      few: "{n} строки представляют",
+      many: "{n} строк представляют",
+      other: "{n} строки представляют",
     },
     forLines: {
       one: "{count} строку.",

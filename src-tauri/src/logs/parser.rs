@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use super::types::{LogFormat, LogLevel, LogLine};
 
 /// Parse a multi-line blob into one `LogLine` per line.
+#[must_use]
 pub fn parse_logs(logs: &str, pod: &str, container: &str, namespace: &str) -> Vec<LogLine> {
     logs.lines()
         .map(|line| parse_log_line(line, pod, container, namespace))
@@ -20,6 +21,7 @@ pub fn parse_logs(logs: &str, pod: &str, container: &str, namespace: &str) -> Ve
 /// Parse a single log line into a typed `LogLine`. Detects RFC3339
 /// timestamp prefix (the kube API prepends one when `timestamps:
 /// true`), then delegates to the structured-message parsers.
+#[must_use]
 pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -> LogLine {
     let raw = line.to_string();
     // Try to parse timestamp from the beginning of the line —
@@ -59,6 +61,7 @@ pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -
 
 /// Try every structured-format parser in turn. Falls back to
 /// `LogFormat::Plain` with `LogLevel::Unknown` if nothing matches.
+#[must_use]
 pub fn parse_structured_message(
     message: &str,
 ) -> (
@@ -111,9 +114,11 @@ pub fn parse_structured_message(
     )
 }
 
-fn parse_json_message(
-    message: &str,
-) -> Option<(BTreeMap<String, String>, Option<LogLevel>, Option<String>)> {
+/// Fields lifted out of a structured line, the level they imply, and
+/// what is left to show the reader as the message.
+type ParsedMessage = (BTreeMap<String, String>, Option<LogLevel>, Option<String>);
+
+fn parse_json_message(message: &str) -> Option<ParsedMessage> {
     let trimmed = message.trim_start();
     if !trimmed.starts_with('{') {
         return None;
@@ -167,9 +172,7 @@ fn extract_json_value(object: &serde_json::Map<String, Value>, keys: &[&str]) ->
     None
 }
 
-fn parse_logfmt_message(
-    message: &str,
-) -> Option<(BTreeMap<String, String>, Option<LogLevel>, Option<String>)> {
+fn parse_logfmt_message(message: &str) -> Option<ParsedMessage> {
     let fields = parse_logfmt_fields(message)?;
 
     // Require at least 2 valid key=value pairs
@@ -207,13 +210,13 @@ fn parse_klog_message(message: &str) -> Option<(Option<String>, LogLevel)> {
     if bytes.len() < 8 {
         return None;
     }
-    if !bytes[0..4].iter().all(|b| b.is_ascii_digit()) {
+    if !bytes[0..4].iter().all(u8::is_ascii_digit) {
         return None;
     }
     if !bytes[4].is_ascii_whitespace() {
         return None;
     }
-    if !bytes[5..].iter().any(|b| *b == b':') {
+    if !bytes[5..].contains(&b':') {
         return None;
     }
 
@@ -246,11 +249,11 @@ fn is_date_token(token: &str) -> bool {
     if bytes.len() != 10 {
         return false;
     }
-    bytes[0..4].iter().all(|b| b.is_ascii_digit())
+    bytes[0..4].iter().all(u8::is_ascii_digit)
         && bytes[4] == b'-'
-        && bytes[5..7].iter().all(|b| b.is_ascii_digit())
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
         && bytes[7] == b'-'
-        && bytes[8..10].iter().all(|b| b.is_ascii_digit())
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
 }
 
 fn is_time_token(token: &str) -> bool {
@@ -258,11 +261,11 @@ fn is_time_token(token: &str) -> bool {
     if bytes.len() < 8 {
         return false;
     }
-    bytes[0..2].iter().all(|b| b.is_ascii_digit())
+    bytes[0..2].iter().all(u8::is_ascii_digit)
         && bytes[2] == b':'
-        && bytes[3..5].iter().all(|b| b.is_ascii_digit())
+        && bytes[3..5].iter().all(u8::is_ascii_digit)
         && bytes[5] == b':'
-        && bytes[6..8].iter().all(|b| b.is_ascii_digit())
+        && bytes[6..8].iter().all(u8::is_ascii_digit)
 }
 
 fn extract_logfmt_value(fields: &BTreeMap<String, String>, keys: &[&str]) -> Option<String> {

@@ -3,10 +3,10 @@
 //! - `params`:     `build_list_params` / `build_label_selector`
 //! - `context`:    `ResourceContext` (Client + namespace + Api factories)
 //! - `namespaced`: generic get / delete / list / list-into-Info /
-//!                 get-into-Info for `NamespaceResourceScope` kinds
+//!   get-into-Info for `NamespaceResourceScope` kinds
 //! - `cluster`:    same five generics for `ClusterResourceScope` kinds
 //! - `yaml`:       fetch + clean-for-editor (strips server-managed
-//!                 metadata fields)
+//!   metadata fields)
 
 mod cluster;
 mod context;

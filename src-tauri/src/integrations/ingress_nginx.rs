@@ -2,7 +2,7 @@
 //!
 //! Every other extension in this module is found by asking whether one
 //! object exists: `certificates.cert-manager.io` is in the API server or it
-//! is not. ingress-nginx installs **no CustomResourceDefinition at all** —
+//! is not. ingress-nginx installs **no `CustomResourceDefinition` at all** —
 //! its whole configuration lives in core `Ingress` objects and in
 //! annotations on them — so there is no marker CRD to look for, and the
 //! marker table cannot hold it.
@@ -57,6 +57,7 @@ const VERSION_LABEL: &str = "app.kubernetes.io/version";
 /// Pure, so the two shapes that matter — a cluster whose only class is
 /// somebody else's, and a class with no `controller` at all — are testable
 /// without a cluster.
+#[must_use]
 pub fn from_classes(classes: &[IngressClass]) -> Option<Option<String>> {
     let claimed = classes.iter().find(|class| {
         class
@@ -69,6 +70,7 @@ pub fn from_classes(classes: &[IngressClass]) -> Option<Option<String>> {
 }
 
 /// The version off the controller's own workload, for the class-less install.
+#[must_use]
 pub fn from_workloads(deployments: &[Deployment]) -> Option<Option<String>> {
     let first = deployments.first()?;
     Some(first.labels().get(VERSION_LABEL).cloned())
@@ -83,7 +85,7 @@ pub async fn detect(state: State<'_, AppState>) -> Result<DetectedExtension> {
 
     Ok(DetectedExtension {
         id: ID.to_string(),
-        installed: found.is_some(),
+        installed: Some(found.is_some()),
         version: found.flatten(),
     })
 }

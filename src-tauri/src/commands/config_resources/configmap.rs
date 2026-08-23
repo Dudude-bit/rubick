@@ -31,14 +31,14 @@ pub async fn get_configmap(
 
 /// Get `ConfigMap` data.
 ///
-/// Through the same door as a Secret's values. A ConfigMap is not a Secret,
+/// Through the same door as a Secret's values. A `ConfigMap` is not a Secret,
 /// but nothing stops someone pasting a private key into one — it happens —
 /// and this path used to hand back `data` verbatim while the Secret path and
-/// every YAML tab redacted the same bytes. A ConfigMap carries no `type`, so
+/// every YAML tab redacted the same bytes. A `ConfigMap` carries no `type`, so
 /// the PEM-label and key-name nets are the ones that catch it.
 ///
 /// `binaryData` is read too. It was dropped entirely before, which made a
-/// ConfigMap holding only binary keys look empty.
+/// `ConfigMap` holding only binary keys look empty.
 #[tauri::command]
 pub async fn get_configmap_data(
     name: String,

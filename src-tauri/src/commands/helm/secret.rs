@@ -149,7 +149,7 @@ pub async fn list_helm_releases_native(
                         // Keep only the latest revision for each release
                         let should_insert = releases_map
                             .get(&key)
-                            .map_or(true, |existing| release.version > existing.revision);
+                            .is_none_or(|existing| release.version > existing.revision);
 
                         if should_insert {
                             let helm_release = HelmRelease {
@@ -186,6 +186,9 @@ pub async fn list_helm_releases_native(
 
 #[cfg(test)]
 mod tests {
+    /// Vendor, release name, and the labels that vendor stamped on it.
+    type LabelledRelease<'a> = (&'a str, &'a str, Option<&'a BTreeMap<String, String>>);
+
     use super::*;
     use std::collections::BTreeMap;
 
@@ -206,7 +209,7 @@ mod tests {
             .map(|v| labels("traefik", &v.to_string()))
             .collect();
         let argo = [labels("argocd", "1"), labels("argocd", "2")];
-        let entries: Vec<(&str, &str, Option<&BTreeMap<String, String>>)> = traefik
+        let entries: Vec<LabelledRelease> = traefik
             .iter()
             .enumerate()
             .map(|(i, l)| ("traefik", TRAEFIK_NAMES[i], Some(l)))
@@ -252,7 +255,7 @@ mod tests {
     fn keeps_namespaces_apart_and_skips_the_unlabelled() {
         let one = labels("api", "3");
         let two = labels("api", "5");
-        let entries: Vec<(&str, &str, Option<&BTreeMap<String, String>>)> = vec![
+        let entries: Vec<LabelledRelease> = vec![
             ("backend", "sh.helm.release.v1.api.v3", Some(&one)),
             ("frontend", "sh.helm.release.v1.api.v5", Some(&two)),
             ("backend", "some-other-secret", None),
@@ -375,7 +378,7 @@ pub async fn get_helm_history(
     }
 
     // Sort by revision descending (newest first)
-    history.sort_by(|a, b| b.revision.cmp(&a.revision));
+    history.sort_by_key(|entry| std::cmp::Reverse(entry.revision));
 
     Ok(history)
 }

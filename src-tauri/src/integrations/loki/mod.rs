@@ -1,9 +1,14 @@
 //! Loki — the second integration that is configured rather than detected,
 //! and the one that closes the bigger hole.
+
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
 //!
 //! A crashed pod takes its logs with it. `kubectl logs --previous` reaches
 //! exactly one run back and only while the pod object still exists; once the
-//! ReplicaSet has replaced it there is nothing left to ask, and no amount of
+//! `ReplicaSet` has replaced it there is nothing left to ask, and no amount of
 //! client-side buffering brings it back. Loki is where those lines went, if
 //! anybody was shipping them.
 //!
@@ -15,7 +20,7 @@
 //!
 //! What is **not** here is the app's own log query. The viewer's chips, its
 //! intake filter and its level thresholds stay what they are — evaluated in
-//! `logs::filter` over lines this app holds. LogQL is only the selector this
+//! `logs::filter` over lines this app holds. `LogQL` is only the selector this
 //! module sends to fetch a range, and rebuilding the reader's query on top
 //! of it would mean two filter languages that must agree and one that
 //! silently would not.
@@ -263,7 +268,7 @@ pub async fn probe_loki(
 
     let started = Instant::now();
     let answer = get_json(&entry, "/loki/api/v1/labels", &[]).await;
-    let latency_ms = started.elapsed().as_millis() as u64;
+    let latency_ms = crate::utils::elapsed_ms(started);
 
     match answer {
         Ok(value) => {
@@ -331,7 +336,7 @@ fn retention_from_config(body: &str) -> Option<String> {
     Some(value.to_string())
 }
 
-async fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
+fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
     let context = context_of(state)?;
     entry_for(&context)?
         .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))
@@ -340,7 +345,7 @@ async fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
 /// One page of a range, newest-first on the wire and oldest-first on the way
 /// out.
 ///
-/// `selector` is the LogQL stream selector built in
+/// `selector` is the `LogQL` stream selector built in
 /// `src/integrations/loki/queries.ts`, where it is pure and unit-tested.
 /// This module does not know what a pod is.
 ///
@@ -357,7 +362,7 @@ pub async fn loki_query_range(
     before: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<LokiPage> {
-    let entry = configured(&state).await?;
+    let entry = configured(&state)?;
     let limit = limit.clamp(1, MAX_LINES);
     let end = match before.as_deref().map(str::trim) {
         Some(cursor) if !cursor.is_empty() => cursor.to_string(),
@@ -504,7 +509,7 @@ mod tests {
         })
     }
 
-    fn body(streams: Vec<serde_json::Value>) -> serde_json::Value {
+    fn body(streams: &[serde_json::Value]) -> serde_json::Value {
         json!({ "status": "success", "data": { "resultType": "streams", "result": streams } })
     }
 
@@ -514,7 +519,7 @@ mod tests {
     #[test]
     fn streams_are_merged_onto_one_clock_oldest_first() {
         let page = parse_streams(
-            &body(vec![
+            &body(&[
                 stream("p-1", "app", vec![("30", "third"), ("10", "first")]),
                 stream("p-1", "side", vec![("20", "second")]),
             ]),
@@ -539,7 +544,7 @@ mod tests {
             .map(|i| (format!("{}", 100 + i), format!("line {i}")))
             .collect();
         let page = parse_streams(
-            &body(vec![stream(
+            &body(&[stream(
                 "p-1",
                 "app",
                 values
@@ -556,8 +561,7 @@ mod tests {
         );
         assert_eq!(page.limit, 3);
         // And one line short of the limit is a whole answer, not a partial.
-        let page =
-            parse_streams(&body(vec![stream("p-1", "app", vec![("100", "only")])]), 3).unwrap();
+        let page = parse_streams(&body(&[stream("p-1", "app", vec![("100", "only")])]), 3).unwrap();
         assert!(!page.truncated);
     }
 
@@ -566,12 +570,12 @@ mod tests {
     /// facts and only one of them is the reader's to fix.
     #[test]
     fn no_stream_at_all_is_reported_as_no_stream_and_not_as_no_lines() {
-        let page = parse_streams(&body(vec![]), 100).unwrap();
+        let page = parse_streams(&body(&[]), 100).unwrap();
         assert_eq!(page.streams, 0);
         assert!(page.lines.is_empty());
 
         // A stream that answered with nothing in it is *not* the same thing.
-        let page = parse_streams(&body(vec![stream("p-1", "app", vec![])]), 100).unwrap();
+        let page = parse_streams(&body(&[stream("p-1", "app", vec![])]), 100).unwrap();
         assert_eq!(page.streams, 1);
     }
 
@@ -580,11 +584,7 @@ mod tests {
     #[test]
     fn the_timestamp_on_a_line_is_lokis_and_not_the_lines_own() {
         let page = parse_streams(
-            &body(vec![stream(
-                "p-1",
-                "app",
-                vec![("1700000000123456789", "hello")],
-            )]),
+            &body(&[stream("p-1", "app", vec![("1700000000123456789", "hello")])]),
             100,
         )
         .unwrap();

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 // Shared default fns (used by serde defaults across this module)
 // ============================================================================
 
+#[must_use]
 pub fn default_true() -> bool {
     true
 }

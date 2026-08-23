@@ -111,6 +111,7 @@ fn main() {
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
             commands::cluster::get_kubeconfig_source,
+            commands::access::check_list_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
             // Namespace management

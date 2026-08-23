@@ -34,6 +34,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useT } from "@/i18n/useT";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +98,10 @@ export interface RoutingMapData {
 
 /** Column widths, in the order the columns are handed over. */
 const WIDTHS = [156, 216, 208];
+/// Radix refuses an empty string as an item value, so the "no filter"
+/// choice needs a name of its own rather than the empty namespace it means.
+const ALL_NAMESPACES = "__all__";
+
 const GAP = 60;
 const NODE_H = 46;
 const NODE_GAP = 10;
@@ -264,6 +276,7 @@ export function RoutingMap({
   /** What to say instead when there is nothing to draw. */
   empty?: ReactNode;
 }) {
+  const t = useT();
   // The namespaces the drawn objects live in — one select, every vendor's
   // map, because "my namespace's slice" is how a twenty-tenant cluster is
   // actually read.
@@ -324,24 +337,35 @@ export function RoutingMap({
     // to clip every name on the screen.
     <div className="overflow-x-auto pb-1">
       {namespaces.length > 1 && (
-        <label className="mb-2 flex items-center justify-end gap-1.5 text-[11px] text-fg-fnt">
-          namespace
-          <select
-            value={namespace}
-            onChange={(event) => {
-              setNamespace(event.target.value);
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-[11px] text-fg-fnt">
+          <label htmlFor="routing-map-namespace">
+            {t("columns", "namespace")}
+          </label>
+          <Select
+            value={namespace || ALL_NAMESPACES}
+            onValueChange={(value) => {
+              setNamespace(value === ALL_NAMESPACES ? "" : value);
               setActive(null);
             }}
-            className="h-6 rounded border border-hair bg-canvas px-1.5 font-mono text-[11px] text-fg-mid focus-visible:border-info focus-visible:outline-hidden"
           >
-            <option value="">all namespaces</option>
-            {namespaces.map((entry) => (
-              <option key={entry} value={entry}>
-                {entry}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              id="routing-map-namespace"
+              className="h-6 w-56 font-mono text-[11px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_NAMESPACES}>
+                {t("columns", "allNamespaces")}
+              </SelectItem>
+              {namespaces.map((entry) => (
+                <SelectItem key={entry} value={entry}>
+                  {entry}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       <div style={{ width }}>
         <div className="flex" style={{ gap: GAP }}>

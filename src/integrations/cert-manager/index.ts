@@ -42,7 +42,7 @@ export default defineVendor({
   id: "cert-manager",
   name: "cert-manager",
   extension: {
-    gives: "why a certificate has not renewed, from the object that failed",
+    gives: "certManagerGives",
     icon: ShieldCheck,
     facts,
   },

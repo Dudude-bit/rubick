@@ -87,12 +87,14 @@ fn read_backend(backend: &IngressBackend) -> (String, String, Option<String>) {
         .service
         .as_ref()
         .and_then(|s| s.port.as_ref())
-        .map(|p| {
-            p.name
-                .clone()
-                .unwrap_or_else(|| p.number.map_or_else(|| "?".to_string(), |n| n.to_string()))
-        })
-        .unwrap_or_else(|| "?".to_string());
+        .map_or_else(
+            || "?".to_string(),
+            |p| {
+                p.name
+                    .clone()
+                    .unwrap_or_else(|| p.number.map_or_else(|| "?".to_string(), |n| n.to_string()))
+            },
+        );
 
     (backend_service, backend_port, resource_backend)
 }
@@ -271,55 +273,6 @@ pub struct EndpointsInfo {
     pub over_capacity: bool,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use k8s_openapi::api::networking::v1::{
-        IngressBackend, IngressServiceBackend, IngressSpec, ServiceBackendPort,
-    };
-    use kube::core::ObjectMeta;
-
-    fn ingress_with_default_backend() -> Ingress {
-        Ingress {
-            metadata: ObjectMeta {
-                name: Some("traefik-ingress".into()),
-                namespace: Some("traefik".into()),
-                ..Default::default()
-            },
-            spec: Some(IngressSpec {
-                default_backend: Some(IngressBackend {
-                    service: Some(IngressServiceBackend {
-                        name: "traefik".into(),
-                        port: Some(ServiceBackendPort {
-                            number: Some(80),
-                            ..Default::default()
-                        }),
-                    }),
-                    resource: None,
-                }),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn default_backend_is_read() {
-        let info = IngressInfo::from(&ingress_with_default_backend());
-        let backend = info.default_backend.expect("spec.defaultBackend was set");
-        assert_eq!(backend.backend_service, "traefik");
-        assert_eq!(backend.backend_port, "80");
-        assert_eq!(backend.resource_backend, None);
-    }
-
-    #[test]
-    fn missing_default_backend_is_none() {
-        assert!(IngressInfo::from(&Ingress::default())
-            .default_backend
-            .is_none());
-    }
-}
-
 impl From<&Endpoints> for EndpointsInfo {
     fn from(ep: &Endpoints) -> Self {
         let name = ep.name_any();
@@ -328,8 +281,7 @@ impl From<&Endpoints> for EndpointsInfo {
 
         let subsets = ep
             .subsets
-            .as_ref()
-            .map(|s| s.clone()) // Endpoints subsets are already structured, but we need to map to our structs
+            .clone() // Endpoints subsets are already structured, but we need to map to our structs
             .unwrap_or_default()
             .into_iter()
             .map(|subset| {
@@ -391,5 +343,54 @@ impl From<&Endpoints> for EndpointsInfo {
             created_at,
             over_capacity: super::published::legacy_over_capacity(ep),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::networking::v1::{
+        IngressBackend, IngressServiceBackend, IngressSpec, ServiceBackendPort,
+    };
+    use kube::core::ObjectMeta;
+
+    fn ingress_with_default_backend() -> Ingress {
+        Ingress {
+            metadata: ObjectMeta {
+                name: Some("traefik-ingress".into()),
+                namespace: Some("traefik".into()),
+                ..Default::default()
+            },
+            spec: Some(IngressSpec {
+                default_backend: Some(IngressBackend {
+                    service: Some(IngressServiceBackend {
+                        name: "traefik".into(),
+                        port: Some(ServiceBackendPort {
+                            number: Some(80),
+                            ..Default::default()
+                        }),
+                    }),
+                    resource: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn default_backend_is_read() {
+        let info = IngressInfo::from(&ingress_with_default_backend());
+        let backend = info.default_backend.expect("spec.defaultBackend was set");
+        assert_eq!(backend.backend_service, "traefik");
+        assert_eq!(backend.backend_port, "80");
+        assert_eq!(backend.resource_backend, None);
+    }
+
+    #[test]
+    fn missing_default_backend_is_none() {
+        assert!(IngressInfo::from(&Ingress::default())
+            .default_backend
+            .is_none());
     }
 }

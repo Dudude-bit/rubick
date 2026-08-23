@@ -42,7 +42,7 @@ pub async fn list_storage_classes(
     list_cluster_resource_infos::<StorageClass, StorageClassInfo>(filters, state).await
 }
 
-/// Get a single PersistentVolume by name
+/// Get a single `PersistentVolume` by name
 #[tauri::command]
 pub async fn get_persistent_volume(
     name: String,
@@ -52,14 +52,14 @@ pub async fn get_persistent_volume(
     get_cluster_resource_info::<PersistentVolume, PersistentVolumeInfo>(name, state).await
 }
 
-/// Delete a PersistentVolume
+/// Delete a `PersistentVolume`
 #[tauri::command]
 pub async fn delete_persistent_volume(name: String, state: State<'_, AppState>) -> Result<()> {
     crate::validation::validate_dns_subdomain(&name)?;
     crate::commands::helpers::delete_cluster_resource::<PersistentVolume>(name, state, None).await
 }
 
-/// Get a single PersistentVolumeClaim by name
+/// Get a single `PersistentVolumeClaim` by name
 #[tauri::command]
 pub async fn get_persistent_volume_claim(
     name: String,
@@ -71,7 +71,7 @@ pub async fn get_persistent_volume_claim(
         .await
 }
 
-/// Delete a PersistentVolumeClaim
+/// Delete a `PersistentVolumeClaim`
 #[tauri::command]
 pub async fn delete_persistent_volume_claim(
     name: String,
@@ -83,7 +83,7 @@ pub async fn delete_persistent_volume_claim(
         .await
 }
 
-/// Get a single StorageClass by name
+/// Get a single `StorageClass` by name
 #[tauri::command]
 pub async fn get_storage_class(
     name: String,
@@ -93,7 +93,7 @@ pub async fn get_storage_class(
     get_cluster_resource_info::<StorageClass, StorageClassInfo>(name, state).await
 }
 
-/// Delete a StorageClass
+/// Delete a `StorageClass`
 #[tauri::command]
 pub async fn delete_storage_class(name: String, state: State<'_, AppState>) -> Result<()> {
     crate::validation::validate_dns_subdomain(&name)?;

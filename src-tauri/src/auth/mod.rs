@@ -11,6 +11,7 @@
 mod azure_aks;
 mod gcp_gke;
 mod interactive;
+mod kubeconfig_tokens;
 mod oidc;
 
 pub use azure_aks::{is_aks_exec_command, parse_aks_exec_args, AksClusterInfo, AzureAksAuth};

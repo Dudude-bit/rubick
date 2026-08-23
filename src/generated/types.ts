@@ -1513,6 +1513,17 @@ export interface RegistryConfigInfo {
   token?: string;
 }
 
+export interface ListAccess {
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface ListQuery {
+  group: string;
+  resource: string;
+  namespaced: boolean;
+}
+
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
@@ -1557,7 +1568,7 @@ export interface PrometheusConnection {
 
 export interface DetectedExtension {
   id: string;
-  installed: boolean;
+  installed: boolean | null;
   version: string | null;
 }
 

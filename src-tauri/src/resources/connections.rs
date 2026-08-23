@@ -42,7 +42,7 @@ pub struct ObjectRef {
     pub kind: String,
     pub name: String,
     /// `None` for the cluster-scoped kinds — a Node has no namespace, and a
-    /// claim's PersistentVolume is not in the claim's.
+    /// claim's `PersistentVolume` is not in the claim's.
     pub namespace: Option<String>,
     pub existence: Existence,
     /// What the object itself says, where the far end is only reachable
@@ -93,7 +93,7 @@ pub enum ObjectFacts {
         #[serde(rename = "externalName")]
         external_name: Option<String>,
         /// `spec.selector` as text. `None` where the Service has none at all
-        /// — an ExternalName, or one whose endpoints are kept by hand.
+        /// — an `ExternalName`, or one whose endpoints are kept by hand.
         selector: Option<String>,
         ports: Vec<ServicePortInfo>,
     },
@@ -150,7 +150,7 @@ pub enum ObjectFacts {
         /// read, the same as every other quantity in this app.
         memory: Option<String>,
     },
-    /// A HorizontalPodAutoscaler, in the terms the workload it scales needs.
+    /// A `HorizontalPodAutoscaler`, in the terms the workload it scales needs.
     ///
     /// The whole status travels, conditions included, because the finding
     /// worth the read is a condition rather than a number:
@@ -172,7 +172,7 @@ pub enum ObjectFacts {
         #[serde(rename = "lastScaleTime")]
         last_scale_time: Option<DateTime<Utc>>,
     },
-    /// A PodDisruptionBudget, and how much room it is leaving right now.
+    /// A `PodDisruptionBudget`, and how much room it is leaving right now.
     Budget {
         /// As written, `Some("1")` or `Some("50%")`. Exactly one of the two
         /// is set on any budget the API server accepted.
@@ -216,9 +216,9 @@ pub struct AutoscalerMetric {
     pub current: Option<String>,
 }
 
-/// How a pod spec draws on a ConfigMap, a Secret, a claim or an identity.
+/// How a pod spec draws on a `ConfigMap`, a Secret, a claim or an identity.
 ///
-/// The phrasing the reader sees — "mounted at /etc/app, and APP_MESSAGE
+/// The phrasing the reader sees — "mounted at /etc/app, and `APP_MESSAGE`
 /// reads app.conf" — comes straight off these; nothing downstream has to
 /// re-derive it from a volume list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -304,17 +304,17 @@ pub enum Relation {
     /// A claim's `spec.volumeName` or `spec.storageClassName`.
     Binds,
     /// `from` acts on `to` of its own accord — an autoscaler whose
-    /// `scaleTargetRef` names it, a PodDisruptionBudget whose selector
+    /// `scaleTargetRef` names it, a `PodDisruptionBudget` whose selector
     /// matches its pods.
     ///
     /// A verb of its own rather than `Selects` or `Uses`, and the direction
     /// of consent is why. Every other verb here is stated by the object that
-    /// wants something: a pod spec names the ConfigMap it needs, a claim
+    /// wants something: a pod spec names the `ConfigMap` it needs, a claim
     /// names its class. These two are stated *about* an object, by a third
     /// one, and nothing on the governed side records that it happened — a
     /// Deployment's YAML says nothing about the HPA that overwrites its
     /// `spec.replicas` fifteen seconds after you set it. Filing that under
-    /// `Selects` would put a PodDisruptionBudget in the same group as the
+    /// `Selects` would put a `PodDisruptionBudget` in the same group as the
     /// Service that routes traffic, which answers a different question.
     Governs {
         /// The selector that matched, where the edge came from one. `None`
@@ -420,7 +420,7 @@ pub struct ResourceConnections {
     /// Where a path into the subject stops. Empty means every path this call
     /// followed reaches something the Service publishes.
     pub stops: Vec<ChainStop>,
-    /// What each Service in this answer publishes, as its own EndpointSlices
+    /// What each Service in this answer publishes, as its own `EndpointSlices`
     /// state it. One entry per Service the call touched; the endpoint rows
     /// and the second list are filled only for a Service the reader opened,
     /// because a chain hop elsewhere needs a count and one name.
@@ -468,7 +468,7 @@ impl UnexploredKind {
     ///
     /// Empty for both `None`, and that is the point of the function: the app
     /// reads both kinds now, and a row still saying "the app does not read
-    /// HorizontalPodAutoscalers" would be a worse lie than the gap it
+    /// `HorizontalPodAutoscalers`" would be a worse lie than the gap it
     /// replaced.
     #[must_use]
     pub fn governance(autoscalers: Option<&str>, budgets: Option<&str>) -> Vec<Self> {
@@ -485,7 +485,7 @@ impl UnexploredKind {
     /// What a Node's neighbourhood still cannot say, once its pods and every
     /// namespace's budgets have been read.
     ///
-    /// The claims are the gap a drain feels. A ReadWriteOnce volume has to
+    /// The claims are the gap a drain feels. A `ReadWriteOnce` volume has to
     /// detach from this node before the replacement pod starts anywhere else,
     /// and that detach is where a drain spends its time — but the claims of
     /// the pods here are one list per namespace with a pod on this node, and
@@ -501,7 +501,7 @@ impl UnexploredKind {
         unread
     }
 
-    /// The same, for a PersistentVolume: its claim is read, and what mounts
+    /// The same, for a `PersistentVolume`: its claim is read, and what mounts
     /// that claim is not.
     ///
     /// "Is anything still writing to this volume" is the question asked
@@ -745,7 +745,7 @@ mod tests {
 
     /// The gap this feature closed. Both kinds are read, so neither may be
     /// named as unread — a page that says "the app does not read
-    /// HorizontalPodAutoscalers" beside a block drawn from one is worse than
+    /// `HorizontalPodAutoscalers`" beside a block drawn from one is worse than
     /// the honest gap it replaced.
     #[test]
     fn a_kind_the_app_now_reads_is_not_listed_as_unread() {

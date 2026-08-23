@@ -82,7 +82,7 @@ mod tests {
 
     #[test]
     fn intake_narrows_a_stream_before_anything_is_kept() {
-        let logs = vec![
+        let logs = [
             parser::parse_log_line(
                 r#"{"level":"error","msg":"dropping batch","component":"ingest"}"#,
                 "flood",

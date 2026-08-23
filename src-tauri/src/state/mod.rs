@@ -3,9 +3,9 @@
 //! Holds active connections, cached data, and the event broadcast
 //! channel.
 //!
-//! - `events`:   AppEvent enum + LogLineEvent + WatchOp
-//! - `sessions`: Session / PortForwardSession / AuthSessionControl /
-//!               LogStream bookkeeping types
+//! - `events`:   `AppEvent` enum + `LogLineEvent` + `WatchOp`
+//! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl` /
+//!   `LogStream` bookkeeping types
 
 mod events;
 mod sessions;
