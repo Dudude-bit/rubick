@@ -232,9 +232,15 @@ function SourceLine({
 }
 
 /**
- * Two states in one, because they are the same question answered
- * differently by the same facts: whether any of the files the app would
- * read is actually there.
+ * Three states, from the same facts: is a file there, and did it parse.
+ *
+ * It used to be two, split on the file existing. A kubeconfig that exists
+ * and will not parse landed in the "it was read" branch, so the heading said
+ * the file lists no context to connect with — directly above the parse error
+ * it then printed, naming the line and column where reading stopped. The
+ * reader is told the file is empty and shown proof that it is broken, and
+ * those call for opposite next moves: one says point the app somewhere else,
+ * the other says go fix line 6.
  */
 function NoClusters({
   kubeconfig,
@@ -245,13 +251,21 @@ function NoClusters({
   const source = kubeconfig.source;
   const found = source?.candidates.some((c) => c.exists) ?? false;
   const counts = source?.counts;
+  // A file that did not parse was never read, whatever is on disk.
+  const unreadable = Boolean(source?.error);
 
   if (found) {
     return (
       <>
         <Heading
-          title={t("empty", "configHasNoClusters")}
-          sub={t("empty", "configHasNoClustersSub")}
+          title={t(
+            "empty",
+            unreadable ? "configWillNotParse" : "configHasNoClusters"
+          )}
+          sub={t(
+            "empty",
+            unreadable ? "configWillNotParseSub" : "configHasNoClustersSub"
+          )}
         />
         <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
           <Act onClick={() => void kubeconfig.choose()}>

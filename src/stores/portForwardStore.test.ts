@@ -1,15 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const portForwardPod = vi.fn(async (pod: string, namespace: string) => ({
-  id: "pf-1",
-  context: "kind-nsname",
-  pod,
-  namespace,
-  localPort: 18080,
-  remotePort: 80,
-  autoReconnect: true,
-  createdAt: "now",
-}));
+interface Request {
+  localPort: number;
+  remotePort: number;
+  autoReconnect: boolean;
+}
+
+const portForwardPod = vi.fn(
+  async (pod: string, namespace: string, _request: Request) => ({
+    id: "pf-1",
+    context: "kind-nsname",
+    pod,
+    namespace,
+    localPort: 18080,
+    remotePort: 80,
+    autoReconnect: true,
+    createdAt: "now",
+  })
+);
 const createPortForwardConfig = vi.fn(async () => ({
   id: "cfg-1",
   context: "kind-nsname",
@@ -27,11 +35,10 @@ const listPortForwards = vi.fn(async () => []);
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    portForwardPod: (...args: [string, string, unknown]) =>
-      portForwardPod(...(args as [string, string])),
-    createPortForwardConfig: (...args: [unknown]) =>
-      createPortForwardConfig(...(args as [])),
-    stopPortForward: (...args: [string]) => stopPortForward(...args),
+    portForwardPod: (pod: string, namespace: string, request: Request) =>
+      portForwardPod(pod, namespace, request),
+    createPortForwardConfig: () => createPortForwardConfig(),
+    stopPortForward: (id: string) => stopPortForward(id),
     listPortForwards: () => listPortForwards(),
     listPortForwardConfigs: vi.fn(async () => []),
     deletePortForwardConfig: vi.fn(),

@@ -2650,6 +2650,9 @@ export const en = {
     fileNamesNoContexts: "This file names no contexts",
     fileNamesNoContextsBody:
       "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written — point the app at another file to check.",
+    configWillNotParse: "The config file could not be read",
+    configWillNotParseSub:
+      "It is on disk, but it is not valid YAML — the error below names where reading stopped. Nothing can connect until it parses.",
     configHasNoClusters: "The config file has no clusters in it",
     configHasNoClustersSub:
       "It was read, but it lists no context to connect with.",
