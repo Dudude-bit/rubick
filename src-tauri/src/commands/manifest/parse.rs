@@ -8,6 +8,7 @@
 use crate::error::{Error, Result};
 use kube::core::DynamicObject;
 use kube::discovery::ApiResource;
+use serde::Deserialize as _;
 
 /// Parsed manifest with API resource info
 pub(super) struct ParsedManifest {
@@ -48,7 +49,7 @@ impl ParsedManifest {
 
 /// Parse all documents from a manifest string
 pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>> {
-    let documents = split_yaml_documents(manifest);
+    let documents = yaml_documents(manifest)?;
 
     if documents.is_empty() {
         return Err(Error::InvalidInput(
@@ -67,11 +68,7 @@ pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>>
 }
 
 /// Parse a single YAML document into a `DynamicObject` with API resource info
-fn parse_manifest_document(yaml_doc: &str) -> Result<ParsedManifest> {
-    // Parse YAML to get apiVersion and kind
-    let value: serde_yaml::Value =
-        serde_yaml::from_str(yaml_doc).map_err(|e| Error::Serialization(e.to_string()))?;
-
+fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> {
     let api_version = value
         .get("apiVersion")
         .and_then(|v| v.as_str())
@@ -107,7 +104,7 @@ fn parse_manifest_document(yaml_doc: &str) -> Result<ParsedManifest> {
 
     // Parse as DynamicObject
     let mut object: DynamicObject =
-        serde_yaml::from_str(yaml_doc).map_err(|e| Error::Serialization(e.to_string()))?;
+        serde_yaml::from_value(value.clone()).map_err(|e| Error::Serialization(e.to_string()))?;
 
     // Ensure metadata is set
     if object.metadata.name.is_none() {
@@ -171,14 +168,26 @@ pub(super) fn pluralize(kind: &str) -> String {
     }
 }
 
-/// Split YAML into multiple documents
-fn split_yaml_documents(manifest: &str) -> Vec<String> {
-    manifest
-        .split("\n---")
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && !s.starts_with('#'))
-        .map(String::from)
-        .collect()
+/// The documents a manifest holds, in order.
+///
+/// Parsed, not split on a separator. Splitting on `\n---` and dropping any
+/// piece that began with `#` threw away every document `helm template`
+/// writes — each one opens with a `# Source: …` line — so applying its output
+/// sent the cluster the first object, silently discarded the rest, and
+/// reported success. A lone comment at the top of a single-document manifest
+/// emptied it entirely and answered "No valid YAML documents found".
+fn yaml_documents(manifest: &str) -> Result<Vec<serde_yaml::Value>> {
+    let mut documents = Vec::new();
+    for document in serde_yaml::Deserializer::from_str(manifest) {
+        let value = serde_yaml::Value::deserialize(document)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        // A document of nothing but comments — or the empty tail a trailing
+        // `---` leaves — reads as null, and null is not an object to apply.
+        if !value.is_null() {
+            documents.push(value);
+        }
+    }
+    Ok(documents)
 }
 
 /// Check if a kind is cluster-scoped (not namespaced)
@@ -230,8 +239,56 @@ kind: ConfigMap
 metadata:
     name: test2
 ";
-        let docs = split_yaml_documents(yaml);
-        assert_eq!(docs.len(), 2);
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 2);
+    }
+
+    /// Every document `helm template` writes opens with `# Source: …`, and
+    /// splitting on the separator dropped all but the first — so applying a
+    /// chart sent one object to the cluster and called it a success.
+    #[test]
+    fn keeps_the_documents_helm_writes() {
+        let yaml = r"---
+# Source: demo/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo
+---
+# Source: demo/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+---
+# Source: demo/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+";
+        let documents = yaml_documents(yaml).expect("parses");
+        assert_eq!(documents.len(), 3, "helm output lost documents");
+        let kinds: Vec<_> = documents
+            .iter()
+            .filter_map(|doc| doc.get("kind").and_then(serde_yaml::Value::as_str))
+            .collect();
+        assert_eq!(kinds, ["ServiceAccount", "Service", "Deployment"]);
+    }
+
+    /// One document that merely starts with a comment used to leave nothing
+    /// at all, and the reader was told their manifest held no YAML.
+    #[test]
+    fn a_comment_on_the_first_line_is_not_an_empty_manifest() {
+        let yaml =
+            "# my nginx deployment\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: n\n";
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 1);
+    }
+
+    /// A trailing separator leaves an empty tail, which is not an object.
+    #[test]
+    fn a_trailing_separator_adds_nothing() {
+        let yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n---\n";
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 1);
     }
 
     #[test]
@@ -245,7 +302,7 @@ metadata:
 data:
     key: value
 ";
-        let parsed = parse_manifest_document(yaml).unwrap();
+        let parsed = parse_manifest_document(&serde_yaml::from_str(yaml).unwrap()).unwrap();
         assert_eq!(parsed.api_resource.kind, "ConfigMap");
         assert_eq!(parsed.api_resource.version, "v1");
         assert_eq!(parsed.namespace, Some("default".to_string()));
@@ -259,7 +316,7 @@ kind: Deployment
 metadata:
     name: test-deploy
 ";
-        let parsed = parse_manifest_document(yaml).unwrap();
+        let parsed = parse_manifest_document(&serde_yaml::from_str(yaml).unwrap()).unwrap();
         assert_eq!(parsed.api_resource.kind, "Deployment");
         assert_eq!(parsed.api_resource.group, "apps");
         assert_eq!(parsed.api_resource.version, "v1");
