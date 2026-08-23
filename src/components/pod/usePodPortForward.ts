@@ -11,6 +11,7 @@ import { useCallback, useState } from "react";
 
 import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { PodInfo } from "@/generated/types";
@@ -36,6 +37,7 @@ function parsePortValue(value: string): number | null {
 
 export function usePodPortForward(pod: PodInfo | undefined) {
   const { toast } = useToast();
+  const t = useT();
   const currentContext = useClusterStore((state) => state.currentContext);
 
   const addPortForwardConfig = usePortForwardStore((state) => state.addConfig);
@@ -67,7 +69,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     if (!pod) return;
     if (!currentContext) {
       toast({
-        title: "No cluster selected",
+        title: t("action", "noClusterSelected"),
         description: "Connect to a cluster to start port-forwarding.",
         variant: "destructive",
       });
@@ -80,7 +82,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     if (!localPort || !remotePort) {
       toast({
         title: "Invalid port",
-        description: "Ports must be between 1 and 65535.",
+        description: t("action", "portsOutOfRange"),
         variant: "destructive",
       });
       return;
@@ -112,7 +114,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
       setOpen(false);
     } catch (err) {
       toast({
-        title: "Failed to start port-forward",
+        title: t("action", "portForwardStartFailed"),
         description: String(err),
         variant: "destructive",
       });
@@ -127,6 +129,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     startPortForwardConfig,
     refreshPortForwards,
     toast,
+    t,
   ]);
 
   const handleStopSession = useCallback(
@@ -135,13 +138,13 @@ export function usePodPortForward(pod: PodInfo | undefined) {
         await stopPortForwardSession(sessionId);
       } catch (err) {
         toast({
-          title: "Failed to stop port-forward",
+          title: t("action", "portForwardStopFailed"),
           description: String(err),
           variant: "destructive",
         });
       }
     },
-    [stopPortForwardSession, toast]
+    [stopPortForwardSession, toast, t]
   );
 
   const activePortForwards =

@@ -291,6 +291,13 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    noClusterSelected: "No cluster selected",
+    portsOutOfRange: "Ports must be between 1 and 65535.",
+    portForwardStartFailed: "Failed to start port-forward",
+    portForwardStopFailed: "Failed to stop port-forward",
+    terminalListenersFailed: "Failed to set up terminal listeners",
+    copiedToClipboard: "Copied to clipboard",
+    unknownBackendError: "Unknown backend error",
     undo: "Undo",
     openOnSiteShort: "Open on {site}",
     valueNoun: "value",

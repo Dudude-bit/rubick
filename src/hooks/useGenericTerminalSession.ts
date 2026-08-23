@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { commands } from "@/lib/commands";
+import { useT } from "@/i18n/useT";
 import { listen } from "@tauri-apps/api/event";
 
 export type SessionStatus =
@@ -38,10 +39,16 @@ export function useGenericTerminalSession({
   const onCloseRef = useRef(onClose);
 
   // Keep refs up to date
+  const t = useT();
+  // Held in a ref like its neighbours: the listener effect must not tear down
+  // and re-register every time the reader changes language.
+  const tRef = useRef(t);
+
   useEffect(() => {
+    tRef.current = t;
     onOutputRef.current = onOutput;
     onCloseRef.current = onClose;
-  }, [onOutput, onClose]);
+  }, [onOutput, onClose, t]);
 
   // `send` and `resize` are called from xterm's own handlers rather than from
   // a render, so they read the status from a ref — which was declared and then
@@ -200,7 +207,7 @@ export function useGenericTerminalSession({
         console.error("Failed to setup terminal listeners:", err);
         if (isMountedRef.current) {
           setStatus("error");
-          setError("Failed to setup terminal listeners");
+          setError(tRef.current("action", "terminalListenersFailed"));
         }
       }
     };

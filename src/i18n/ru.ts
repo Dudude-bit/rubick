@@ -255,6 +255,13 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    noClusterSelected: "Кластер не выбран",
+    portsOutOfRange: "Порты должны быть от 1 до 65535.",
+    portForwardStartFailed: "Не удалось запустить проброс порта",
+    portForwardStopFailed: "Не удалось остановить проброс порта",
+    terminalListenersFailed: "Не удалось подключить слушатели терминала",
+    copiedToClipboard: "Скопировано в буфер обмена",
+    unknownBackendError: "Неизвестная ошибка бэкенда",
     undo: "Отменить",
     openOnSiteShort: "Открыть на {site}",
     valueNoun: "значение",
