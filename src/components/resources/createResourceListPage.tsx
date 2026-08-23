@@ -46,7 +46,7 @@ import { deliveryScopeOf } from "@/lib/delivery";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translator } from "@/i18n/useT";
 
 /** A resource that can show up in a list page. */
 type ListableResource = { name: string; namespace?: string | null };
@@ -79,8 +79,14 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    * namespace selection — which is a set, not a name: "in prod, staging" and
    * "in 4 namespaces" are both scopes a reader can be in, and a line built
    * from one namespace calls all of them "all namespaces".
+   *
+   * The translator comes with it: this config is a module-level table, so a
+   * hook cannot be called where the line is written. Taking `t` as a
+   * parameter is how every other such table says something in the reader's
+   * language.
    */
-  description?: string | ((deps: { scope: NamespaceScope }) => string);
+  description?:
+    string | ((deps: { scope: NamespaceScope; t: Translator }) => string);
   /** Search key (column accessor) for the in-page search box. */
   searchKey?: string;
   /**
@@ -187,7 +193,7 @@ export function createResourceListPage<T extends ListableResource>(
         title={config.title}
         description={
           typeof config.description === "function"
-            ? config.description({ scope })
+            ? config.description({ scope, t })
             : config.description
         }
         searchKey={config.searchKey}

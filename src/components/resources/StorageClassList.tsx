@@ -108,7 +108,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
 export const StorageClassList = createResourceListPage<StorageClassInfo>({
   resourceType: ResourceType.StorageClass,
   title: "Storage Classes",
-  description: "Describes the classes of storage available in the cluster",
+  description: ({ t }) => t("empty", "storageClassesAre"),
   scope: "cluster",
   searchKey: "name",
   fetcher: () => commands.listStorageClasses(null),

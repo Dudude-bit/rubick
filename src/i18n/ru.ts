@@ -1513,6 +1513,14 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    endpointsFor: "Сетевые адреса служб в {scope}",
+    persistentVolumesAre:
+      "Хранилище уровня кластера, выделенное администратором",
+    storageClassesAre: "Описывает классы хранилищ, доступные в кластере",
+    emptySpec: "Пустая спецификация",
+    hideLineDetail: "Скрыть подробности строки",
+    showLineDetail: "Показать подробности строки",
+    collapseRepeats: "Свернуть повторы",
     watchingFromNow:
       "Наблюдаем с этого момента — metrics-server истории не хранит, поэтому линия начинается здесь и растёт вправо.",
     noLimitSet:

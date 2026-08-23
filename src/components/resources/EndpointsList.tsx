@@ -163,8 +163,8 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
 export const EndpointsList = createResourceListPage<EndpointsInfo>({
   resourceType: ResourceType.Endpoints,
   title: "Endpoints",
-  description: ({ scope }) =>
-    `Network endpoints for services in ${scope.inWords}`,
+  description: ({ scope, t }) =>
+    t("empty", "endpointsFor", { scope: scope.inWords }),
   searchKey: "name",
   fetcher: ({ namespace }) =>
     commands.listEndpoints({

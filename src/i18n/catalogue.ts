@@ -1501,6 +1501,15 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    endpointsFor: "Network endpoints for services in {scope}",
+    persistentVolumesAre:
+      "Cluster-wide storage resources provisioned by an administrator",
+    storageClassesAre:
+      "Describes the classes of storage available in the cluster",
+    emptySpec: "An empty spec",
+    hideLineDetail: "Hide line detail",
+    showLineDetail: "Show line detail",
+    collapseRepeats: "Collapse these repeats",
     watchingFromNow:
       "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.",
     noLimitSet:

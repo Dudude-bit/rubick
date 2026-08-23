@@ -56,8 +56,7 @@ export const PersistentVolumeList =
   createResourceListPage<PersistentVolumeInfo>({
     resourceType: ResourceType.PersistentVolume,
     title: "Persistent Volumes",
-    description:
-      "Cluster-wide storage resources provisioned by an administrator",
+    description: ({ t }) => t("empty", "persistentVolumesAre"),
     scope: "cluster",
     searchKey: "name",
     fetcher: () => commands.listPersistentVolumes(null),
