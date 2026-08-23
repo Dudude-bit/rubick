@@ -247,6 +247,16 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       (GATEWAY_ROUTE_KINDS as readonly string[]).includes(kind)
     );
 
+  // The authorizer's word on our rows, same as every row above them.
+  const access = useListAccess([
+    ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
+    ...(routeKinds as ResourceKind[]),
+  ]);
+  const gatewaysDenied = access[ResourceType.Gateway] === false;
+  const routesDenied =
+    routeKinds.length > 0 &&
+    routeKinds.every((kind) => access[kind as ResourceKind] === false);
+
   // Same keys as the routes list and the trace — the rail's numbers and
   // the pages they open can never disagree.
   const gateways = useLiveQuery({
@@ -254,7 +264,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     refresh: "overview",
-    enabled: installed && served.has("Gateway"),
+    enabled: installed && served.has("Gateway") && !gatewaysDenied,
   });
   const classes = useLiveQuery({
     queryKey: ["gateway-classes"],
@@ -273,9 +283,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     },
     staleTime: ROUTING_STALE,
     refresh: "overview",
-    enabled: installed && routeKinds.length > 0,
+    enabled: installed && routeKinds.length > 0 && !routesDenied,
   });
-  const backing = useBackingLists(installed && routeKinds.length > 0);
+  const backing = useBackingLists(
+    installed && routeKinds.length > 0 && !routesDenied
+  );
 
   const classesSettled =
     classes.data !== undefined || !served.has("GatewayClass");
@@ -316,6 +328,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
             board.pulse,
             gateways.data !== undefined && classesSettled
           )}
+          denied={gatewaysDenied}
         />
       )}
       {routeKinds.length > 0 && (
@@ -324,6 +337,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
           overview={overview}
           value={routes.data?.length ?? null}
           mark={boardMark(board)}
+          denied={routesDenied}
         />
       )}
     </>

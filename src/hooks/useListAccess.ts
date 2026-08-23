@@ -40,8 +40,13 @@ export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
   // ask it again and hold two copies of one answer.
   const namespaces = [...scope].sort();
 
+  // The asked kinds are part of the question: the nav asks about its own
+  // rows, the Gateway rows ask about theirs, and one key for both would
+  // hand the second asker the first one's answers.
+  const asked = kinds.map((kind) => listQueryFor(kind).resource).sort();
+
   const { data } = useQuery({
-    queryKey: ["list-access", currentContext, namespaces],
+    queryKey: ["list-access", currentContext, namespaces, asked],
     queryFn: () =>
       commands.checkListAccess(kinds.map(listQueryFor), namespaces),
     enabled: isConnected && Boolean(currentContext),

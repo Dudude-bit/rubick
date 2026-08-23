@@ -26,6 +26,13 @@ import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { gatewayTopology } from "./gateway-topology";
 import {
   GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
@@ -47,6 +54,10 @@ import type { RouteInfo } from "@/generated/types";
 
 /** Gateways change with a deploy, not by the second — same as the map. */
 const ROUTING_STALE = 60_000;
+
+// Radix refuses an empty string as an item value, so the "no filter"
+// choice needs a name of its own rather than the empty kind it means.
+const ALL_KINDS = "__all__";
 
 /** The step a break lands on, in the reader's language. */
 function stepWord(at: string, t: T): string {
@@ -425,19 +436,29 @@ export function GatewayRoutesList() {
               aria-label={t("action", "filterRoutes")}
               className="h-7 w-52 rounded-md border border-hair bg-transparent px-2.5 text-xs text-fg placeholder:text-fg-fnt focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             />
-            <select
-              value={kind}
-              onChange={(event) => setKind(event.target.value)}
-              aria-label={t("action", "filterByKind")}
-              className="h-7 rounded-md border border-hair bg-canvas px-2 text-xs text-fg-mid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            <Select
+              value={kind === "" ? ALL_KINDS : kind}
+              onValueChange={(value) =>
+                setKind(value === ALL_KINDS ? "" : value)
+              }
             >
-              <option value="">{t("action", "allKinds")}</option>
-              {ROUTE_KINDS.filter((k) => served.has(k)).map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                aria-label={t("action", "filterByKind")}
+                className="h-7 text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_KINDS}>
+                  {t("action", "allKinds")}
+                </SelectItem>
+                {ROUTE_KINDS.filter((k) => served.has(k)).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               size="sm"
