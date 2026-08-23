@@ -2793,6 +2793,7 @@ export const ru: Catalogue = {
     asking: "запрашиваем…",
     looking: "ищем…",
     detected: "найден",
+    couldNotTell: "не удалось определить",
     notInstalled: "не установлен",
     notConfigured: "не настроен",
     connected: "подключён",
@@ -2991,6 +2992,7 @@ export const ru: Catalogue = {
     noIntegrationByName: "Интеграции с таким именем нет",
     noIntegrationByNameBody:
       "В приложении нет страницы для «{slug}». Название могло измениться, либо ссылка из более новой версии.",
+    integrationCannotTell: "Не удалось определить, установлен ли {name}",
     integrationNotInstalled: "{name} не установлен в этом кластере",
     integrationNotInstalledBody:
       "Его CustomResourceDefinition нет на этом API-сервере, поэтому странице нечего читать. Любое расширение необязательно — кластер работает ровно так же, как сейчас.",

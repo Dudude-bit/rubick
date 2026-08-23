@@ -146,15 +146,22 @@ pub async fn detect_in_cluster_extensions(
     // Each source answers for itself. One refusal used to take the whole
     // screen with it: a reader without rights over IngressClasses lost
     // cert-manager, Traefik and everything else that had answered fine.
-    let crds = crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
+    let crds = match crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
         state.clone(),
         None,
         None,
         None,
     )
     .await
-    .ok()
-    .map(|list| list.items);
+    {
+        Ok(list) => Some(list.items),
+        // Only a refusal degrades. It is an answer about this account's
+        // rights and leaves every other source worth asking. A timeout or a
+        // dead connection is a fault, and dressing it as "no rights to look"
+        // would send somebody to their cluster admin about a network blip.
+        Err(err) if err.is_refusal() => None,
+        Err(err) => return Err(err),
+    };
 
     let mut detected = vec![match &crds {
         Some(items) => cert_manager::detect(items),
@@ -164,11 +171,11 @@ pub async fn detect_in_cluster_extensions(
         Some(items) => detect_by_marker(items, id, markers),
         None => unknown(id),
     }));
-    detected.push(
-        ingress_nginx::detect(state)
-            .await
-            .unwrap_or_else(|_| unknown(ingress_nginx::ID)),
-    );
+    detected.push(match ingress_nginx::detect(state).await {
+        Ok(found) => found,
+        Err(err) if err.is_refusal() => unknown(ingress_nginx::ID),
+        Err(err) => return Err(err),
+    });
     Ok(detected)
 }
 

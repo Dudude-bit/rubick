@@ -2726,6 +2726,10 @@ export const en = {
     asking: "asking…",
     looking: "looking…",
     detected: "detected",
+    // Said of an extension the cluster would not answer about. Neither
+    // "detected" nor "not installed" — both of those are claims, and a
+    // refusal to look establishes neither of them.
+    couldNotTell: "could not tell",
     notInstalled: "not installed",
     notConfigured: "not configured",
     connected: "connected",
@@ -2917,6 +2921,7 @@ export const en = {
     noIntegrationByName: "No integration by that name",
     noIntegrationByNameBody:
       "This app has no page for “{slug}”. The name may have changed, or the link may be from a newer version.",
+    integrationCannotTell: "Cannot tell whether {name} is installed",
     integrationNotInstalled: "{name} is not installed in this cluster",
     integrationNotInstalledBody:
       "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional — the cluster works exactly as it does now.",

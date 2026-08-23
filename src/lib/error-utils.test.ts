@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { errorToShow, normalizeError, verbatim } from "./error-utils";
+import {
+  errorToShow,
+  isRefusal,
+  normalizeError,
+  verbatim,
+} from "./error-utils";
 
 /**
  * The failure a reader is shown is the server's, not ours.
@@ -59,5 +64,43 @@ describe("whether an error is worth retrying", () => {
     expect(normalizeError(new Error("connection refused")).isRetryable).toBe(
       true
     );
+  });
+});
+
+/**
+ * The words in these messages are the API server's, and Kubernetes objects
+ * carry them inside their own names. `isRetryableError` learned that once —
+ * every error about `networking.k8s.io` contains "network" — and this end of
+ * the file had not.
+ */
+describe("telling a refusal from a fault", () => {
+  it("reads a refusal whatever else the sentence happens to say", () => {
+    for (const message of [
+      'nodes is forbidden: User "dev" cannot list resource "nodes"',
+      // Istio's own kinds carry "auth" in the resource name.
+      'authorizationpolicies.security.istio.io is forbidden: User "dev" cannot list',
+      // ...and so does an ordinary namespace, or a service account's path.
+      'pods is forbidden: User "dev" cannot list resource "pods" in the namespace "auth"',
+      'pods is forbidden: User "system:serviceaccount:auth:dex" cannot list',
+      "permission denied",
+    ]) {
+      expect(isRefusal(new Error(message))).toBe(true);
+    }
+  });
+
+  it("still calls an authentication failure what it is", () => {
+    for (const message of [
+      "Unauthorized",
+      "not authenticated",
+      "authentication failed: token expired",
+    ]) {
+      expect(isRefusal(new Error(message))).toBe(false);
+    }
+  });
+
+  /** Nothing about permissions in it at all. */
+  it("leaves an ordinary fault alone", () => {
+    expect(isRefusal(new Error("connection reset by peer"))).toBe(false);
+    expect(isRefusal(new Error("context deadline exceeded"))).toBe(false);
   });
 });

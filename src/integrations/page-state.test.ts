@@ -80,3 +80,45 @@ describe("what /integrations/<slug> answers", () => {
     ).toBe("absent");
   });
 });
+
+/**
+ * A refusal to look is not an answer about the cluster. Reporting "X is not
+ * installed" off the back of one puts a fact about this account's rights
+ * behind a fact about what the cluster runs — which is the claim the whole
+ * `boolean | null` change exists to stop the app making.
+ */
+describe("an extension the cluster would not answer about", () => {
+  it("is neither installed nor absent", () => {
+    expect(
+      pageDecision(
+        { id: "cert-manager", configured: false },
+        [{ id: "cert-manager", installed: null }],
+        undefined
+      )
+    ).toBe("cannotTell");
+  });
+
+  it("still reads as absent when the cluster did answer", () => {
+    expect(
+      pageDecision(
+        { id: "cert-manager", configured: false },
+        [{ id: "cert-manager", installed: false }],
+        undefined
+      )
+    ).toBe("absent");
+  });
+
+  /** An answer of yes is still an answer, whatever its neighbours said. */
+  it("is ready when it answered yes", () => {
+    expect(
+      pageDecision(
+        { id: "cert-manager", configured: false },
+        [
+          { id: "traefik", installed: null },
+          { id: "cert-manager", installed: true },
+        ],
+        undefined
+      )
+    ).toBe("ready");
+  });
+});

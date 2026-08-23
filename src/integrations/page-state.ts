@@ -12,7 +12,13 @@
  */
 
 export type PageDecision =
-  "unknown" | "detecting" | "absent" | "notConfigured" | "ready";
+  | "unknown"
+  | "detecting"
+  | "absent"
+  /** The scan was refused, so neither "here" nor "not here" was established. */
+  | "cannotTell"
+  | "notConfigured"
+  | "ready";
 
 export function pageDecision(
   vendor: { id: string; configured: boolean } | undefined,
@@ -38,5 +44,9 @@ export function pageDecision(
   }
 
   if (!detected) return "detecting";
+  // An entry with no answer in it is the cluster declining to look, and
+  // "absent" is a claim about the cluster that nothing established.
+  const entry = detected.find((candidate) => candidate.id === vendor.id);
+  if (entry && entry.installed === null) return "cannotTell";
   return "absent";
 }

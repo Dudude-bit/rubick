@@ -260,6 +260,24 @@ impl From<Error> for String {
     }
 }
 
+impl Error {
+    /// Whether the cluster refused this request, rather than failing at it.
+    ///
+    /// A 403 arrives as `KubeApi` and stays there on purpose — folding it into
+    /// its own variant would say the session is over when only one request was
+    /// answered. So the question has to be asked of the response code, and a
+    /// caller that matched `PermissionDenied` instead would match nothing at
+    /// all: that variant exists for refusals the app itself raises.
+    #[must_use]
+    pub fn is_refusal(&self) -> bool {
+        match self {
+            Error::PermissionDenied(_) => true,
+            Error::KubeApi(kube::Error::Api(response)) => response.code == 403,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,6 +321,19 @@ mod tests {
             Error::from(api_error(403, "Forbidden")),
             Error::KubeApi(_)
         ));
+    }
+
+    /// The other half of the rule above. A 403 stays a `KubeApi`, so anything
+    /// that wants to know "was this refused" has to ask the code — matching
+    /// `PermissionDenied` would match nothing a cluster ever sends, which is
+    /// how a screen came to report a refusal as a hard failure.
+    #[test]
+    fn a_403_is_a_refusal_however_it_is_filed() {
+        assert!(Error::from(api_error(403, "Forbidden")).is_refusal());
+        assert!(Error::PermissionDenied("ours".into()).is_refusal());
+        assert!(!Error::from(api_error(401, "Unauthorized")).is_refusal());
+        assert!(!Error::from(api_error(500, "InternalError")).is_refusal());
+        assert!(!Error::Config("nothing to do with rights".into()).is_refusal());
     }
 
     #[test]
