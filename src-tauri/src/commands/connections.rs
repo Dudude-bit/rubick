@@ -68,8 +68,21 @@ pub async fn get_resource_connections(
 
 /// The kinds whose neighbourhood spans every namespace there is: the pods a
 /// Node carries, and the claim a `PersistentVolume` is bound to.
+/// The kinds that are not in a namespace.
+///
+/// The authority is the frontend registry — `src/lib/resource-registry.ts`,
+/// where each kind carries its `scope` and every URL is built from it. This
+/// mirrors the five it marks `cluster`, and only those: an unknown kind, a
+/// custom resource above all, is treated as namespaced, which is what the
+/// overwhelming majority of them are.
+///
+/// It listed two until `owner_ref` began asking it about arbitrary owner
+/// kinds rather than the handful this file dispatches on.
 fn cluster_scoped(kind: &str) -> bool {
-    matches!(kind, "Node" | "PersistentVolume")
+    matches!(
+        kind,
+        "Node" | "PersistentVolume" | "Namespace" | "StorageClass" | "CustomResourceDefinition"
+    )
 }
 
 /// The same answer, for callers that already hold a client — the live
@@ -1921,6 +1934,47 @@ mod ingress_backend_tests {
 #[cfg(test)]
 mod ownership_tests {
     use super::*;
+
+    /// `cluster_scoped` says the frontend registry is the authority, and a
+    /// comment saying so is not a thing that stays true. This reads the
+    /// registry and holds the two to the same answer, kind by kind — the
+    /// drift it guards against had already happened once, leaving three
+    /// kinds addressed as though they were in a namespace.
+    #[test]
+    fn the_scope_list_matches_the_registry_it_names() {
+        let registry = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/lib/resource-registry.ts"
+        ))
+        .expect("the registry this list mirrors");
+
+        // Each entry reads `kind: "Foo",` and, further down, `scope: "…",`.
+        let mut kind: Option<String> = None;
+        let mut checked = 0usize;
+        for line in registry.lines() {
+            let line = line.trim();
+            if let Some(rest) = line.strip_prefix("kind: \"") {
+                kind = rest.split('"').next().map(ToString::to_string);
+            } else if let Some(rest) = line.strip_prefix("scope: \"") {
+                let Some(name) = kind.take() else { continue };
+                let registry_says_cluster = rest.starts_with("cluster");
+                checked += 1;
+                assert_eq!(
+                    cluster_scoped(&name),
+                    registry_says_cluster,
+                    "the registry and `cluster_scoped` disagree about {name}; \
+                     a kind addressed two ways by one app is a dead link at \
+                     one of them"
+                );
+            }
+        }
+
+        assert!(
+            checked > 15,
+            "read only {checked} registry entries — the format moved and this \
+             test is no longer checking anything"
+        );
+    }
 
     fn owner(kind: &str) -> OwnerReference {
         OwnerReference {
