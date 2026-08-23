@@ -69,7 +69,13 @@ export function daysUntil(dateValue: unknown): number | null {
 
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
-    return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    // Rounded down, like `expiryOf` in `lib/certificates.ts` — which is the
+    // rule every other certificate surface in the app already follows.
+    // Rounding up here meant the cert-manager column said "4 days" about a
+    // certificate the Ingress and Secret screens called "expires in 3 days",
+    // at the same instant, about the same object. Down is also the honest
+    // reading: 3.2 days left is three whole days.
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   } catch {
     return null;
   }

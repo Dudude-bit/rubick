@@ -1,3 +1,4 @@
+import { workloadStatus } from "@/lib/workload-status";
 import type { ReactNode } from "react";
 import { load as parseYaml } from "js-yaml";
 
@@ -206,9 +207,6 @@ function placement(node: NodeInfo): PeekGroup[] {
     },
   ];
 }
-
-const workloadStatus = (ready: number, desired: number) =>
-  desired > 0 && ready >= desired ? "Ready" : "Progressing";
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   Pod: source(commands.getPod, (pod) => {
