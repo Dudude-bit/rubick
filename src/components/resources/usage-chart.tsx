@@ -35,6 +35,10 @@ import {
   type UsageSample,
 } from "@/lib/usage-history";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+
+/** A line this chart is allowed to say, by the name the catalogue gives it. */
+export type EmptyKey = keyof typeof en.empty;
 
 /**
  * Tall enough to read a shape off. The 42px band this replaces turned every
@@ -77,13 +81,15 @@ function peakOf(points: readonly UsagePoint[]): number | null {
   return peak;
 }
 
-/** What a band says before it has two readings to join. */
-export const WATCHING_NOTE =
-  "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.";
-
-/** What a band says when nothing declares a ceiling for it. */
-export const NO_LIMIT_NOTE =
-  "No limit set — the scale is what it has used, and nothing stops it taking the node's.";
+/**
+ * What a band says before it has two readings to join, and what it says when
+ * nothing declares a ceiling.
+ *
+ * Keys rather than sentences: both are read by somebody looking at a chart,
+ * and a chart is not the place the app is allowed to change language.
+ */
+export const WATCHING_NOTE = "watchingFromNow" as const;
+export const NO_LIMIT_NOTE = "noLimitSet" as const;
 
 export interface UsageChartProps {
   label: string;
@@ -98,7 +104,7 @@ export interface UsageChartProps {
    * call site: a band that silently omitted it would be the very bug this
    * replaces — a scale with no stated denominator.
    */
-  noLimitNote?: string | null;
+  noLimitNote?: EmptyKey | null;
   /** Live value, used before the buffer has anything to draw. */
   current: number | null;
   /** Set when the block is saying the same thing once for both bands. */
@@ -204,9 +210,9 @@ export function UsageChart({
         {suppressNote || (drawn === 0 && value === null)
           ? null
           : drawn <= 1 && live
-            ? WATCHING_NOTE
-            : limit === null || limit <= 0
-              ? noLimitNote
+            ? t("empty", WATCHING_NOTE)
+            : (limit === null || limit <= 0) && noLimitNote !== null
+              ? t("empty", noLimitNote)
               : null}
       </Note>
     </div>

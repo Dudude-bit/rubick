@@ -71,7 +71,7 @@ export function DetailError({
           ? `The ${kind} may have been deleted or recreated under a new name.`
           : typeof error === "string"
             ? error
-            : (error?.message ?? "The cluster did not answer.")}
+            : (error?.message ?? t("empty", "clusterDidNotAnswer"))}
       </p>
       {additionalMessage && (
         <p className="text-xs text-fg-mut">{additionalMessage}</p>

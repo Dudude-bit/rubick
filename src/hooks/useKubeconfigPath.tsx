@@ -15,11 +15,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 
 export function useKubeconfigPath() {
   const { toast } = useToast();
+  const t = useT();
   const queryClient = useQueryClient();
 
   const override = useQuery({
@@ -62,20 +64,20 @@ export function useKubeconfigPath() {
       else await commands.clearKubeconfigPath();
       await reload();
       toast({
-        title: "Kubeconfig restored",
-        description: previous ?? "Back to the default lookup.",
+        title: t("settings", "kubeconfigRestored"),
+        description: previous ?? t("settings", "backToDefaultLookup"),
       });
     } catch (error) {
-      failed("Failed to restore the previous kubeconfig")(error);
+      failed(t("settings", "restorePreviousFailed"))(error);
     }
   };
 
   const undo = (previous: string | null) => (
     <ToastAction
-      altText="Undo the kubeconfig change"
+      altText={t("settings", "undoKubeconfigChange")}
       onClick={() => void restore(previous)}
     >
-      Undo
+      {t("action", "undo")}
     </ToastAction>
   );
 
@@ -87,14 +89,14 @@ export function useKubeconfigPath() {
     onSuccess: async (_result, _path, context) => {
       await reload();
       toast({
-        title: "Kubeconfig updated",
+        title: t("settings", "kubeconfigUpdated"),
         description: context.previous
-          ? `Was ${context.previous}.`
-          : "Was the default lookup.",
+          ? t("settings", "wasPath", { path: context.previous })
+          : t("settings", "wasDefaultLookup"),
         action: undo(context.previous),
       });
     },
-    onError: failed("Failed to set kubeconfig path"),
+    onError: failed(t("settings", "setKubeconfigFailed")),
   });
 
   const clearPath = useMutation({
@@ -103,12 +105,12 @@ export function useKubeconfigPath() {
     onSuccess: async (_result, _vars, context) => {
       await reload();
       toast({
-        title: "Kubeconfig updated",
-        description: "Reverted to the default lookup.",
+        title: t("settings", "kubeconfigUpdated"),
+        description: t("settings", "revertedToDefault"),
         action: context.previous ? undo(context.previous) : undefined,
       });
     },
-    onError: failed("Failed to clear kubeconfig override"),
+    onError: failed(t("settings", "clearKubeconfigFailed")),
   });
 
   /** Pick a file and pin the app to it. A cancelled dialog changes nothing. */
@@ -116,7 +118,7 @@ export function useKubeconfigPath() {
     const selected = await open({
       multiple: false,
       directory: false,
-      title: "Select kubeconfig file",
+      title: t("settings", "selectKubeconfigFile"),
     }).catch(() => null);
     if (typeof selected === "string") setPath.mutate(selected);
     return typeof selected === "string" ? selected : null;

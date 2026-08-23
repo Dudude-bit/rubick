@@ -291,6 +291,7 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    undo: "Undo",
     openOnSiteShort: "Open on {site}",
     valueNoun: "value",
     readingGroup: "reading {group}",
@@ -1232,6 +1233,18 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    lookingForBinary: "Looking for the binary…",
+    kubeconfigRestored: "Kubeconfig restored",
+    kubeconfigUpdated: "Kubeconfig updated",
+    backToDefaultLookup: "Back to the default lookup.",
+    wasDefaultLookup: "Was the default lookup.",
+    wasPath: "Was {path}.",
+    revertedToDefault: "Reverted to the default lookup.",
+    undoKubeconfigChange: "Undo the kubeconfig change",
+    selectKubeconfigFile: "Select kubeconfig file",
+    restorePreviousFailed: "Failed to restore the previous kubeconfig",
+    setKubeconfigFailed: "Failed to set kubeconfig path",
+    clearKubeconfigFailed: "Failed to clear kubeconfig override",
     pointAtServiceYourself: "Point at a Service yourself",
     pointAtServiceHint:
       "For anything that speaks this API without carrying the vendor's name — a VictoriaMetrics is called vmsingle and answers the same queries.",
@@ -1481,6 +1494,10 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    watchingFromNow:
+      "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.",
+    noLimitSet:
+      "No limit set — the scale is what it has used, and nothing stops it taking the node's.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
     noContainerToAttach: "No container is running to attach to",
     whichFailedTimes: "which has failed {n} times",
@@ -2062,7 +2079,7 @@ export const en = {
     noSeriesAtAll: "no series at all",
     promNothingCarries: "Nothing in this Prometheus carries",
     promMissingFamiliesTail:
-      ". The surfaces built on them draw the window this app watched itself and dim the longer ranges — they do not report an error, because an empty answer is a valid one.",
+      ". Charts that would have used it fall back to the window this app watched itself, and dim the ranges that reach further back. They report no error, because an empty answer is a valid one.",
     lokiCouldNotAsk: "Could not ask this Loki anything",
     lokiPageDescription:
       "Whether the Loki this cluster is pointed at holds this cluster's logs — which a connection test cannot tell you, because an address that answers LogQL says nothing about whose lines are behind it.",

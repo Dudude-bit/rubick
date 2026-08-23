@@ -11,6 +11,7 @@
  * Node and a Deployment must not disagree about what a chart of CPU looks
  * like. What is here is only the summing and the honesty about zero.
  */
+import type { EmptyKey } from "@/components/resources/usage-chart";
 import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -91,7 +92,7 @@ export interface WorkloadUsageProps {
    */
   idle: string;
   connections?: ResourceConnections | null;
-  noLimitNote?: string;
+  noLimitNote?: EmptyKey;
 }
 
 export function WorkloadUsage({
@@ -106,7 +107,8 @@ export function WorkloadUsage({
   noLimitNote,
 }: WorkloadUsageProps) {
   const t = useT();
-  const limitNote = noLimitNote ?? t("empty", "noLimitsDeclared");
+  // The key travels; the chart is what turns it into words.
+  const limitNote: EmptyKey = noLimitNote ?? "noLimitsDeclared";
   const running = useMemo(() => runningPods(pods), [pods]);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({

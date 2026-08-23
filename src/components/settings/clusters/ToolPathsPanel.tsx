@@ -11,15 +11,16 @@ import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { SettingRow } from "../settings-row";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
   tool: CliAvailability | null,
   isChecking: boolean,
-  label: string
+  label: string,
+  t: T
 ) {
-  if (isChecking || tool === null) return "Looking for the binary…";
+  if (isChecking || tool === null) return t("settings", "lookingForBinary");
   if (tool.available) {
     return (
       <>
@@ -154,7 +155,7 @@ export function ToolPathsPanel() {
             key={tool.id}
             label={tool.label}
             htmlFor={`${tool.id}-path`}
-            hint={availabilityHint(tool.state, isChecking, tool.label)}
+            hint={availabilityHint(tool.state, isChecking, tool.label, t)}
             control={
               <>
                 <StatusBadge

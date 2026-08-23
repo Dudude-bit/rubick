@@ -255,6 +255,7 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    undo: "Отменить",
     openOnSiteShort: "Открыть на {site}",
     valueNoun: "значение",
     readingGroup: "идёт чтение: {group}",
@@ -1236,6 +1237,18 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    lookingForBinary: "Ищем исполняемый файл…",
+    kubeconfigRestored: "Kubeconfig восстановлен",
+    kubeconfigUpdated: "Kubeconfig изменён",
+    backToDefaultLookup: "Обратно к поиску по умолчанию.",
+    wasDefaultLookup: "Был поиск по умолчанию.",
+    wasPath: "Было: {path}.",
+    revertedToDefault: "Возвращён поиск по умолчанию.",
+    undoKubeconfigChange: "Отменить смену kubeconfig",
+    selectKubeconfigFile: "Выберите файл kubeconfig",
+    restorePreviousFailed: "Не удалось восстановить прежний kubeconfig",
+    setKubeconfigFailed: "Не удалось задать путь к kubeconfig",
+    clearKubeconfigFailed: "Не удалось снять переопределение kubeconfig",
     pointAtServiceYourself: "Указать Service вручную",
     pointAtServiceHint:
       "Для всего, что говорит на этом API, но не носит имя вендора: VictoriaMetrics называется vmsingle и отвечает на те же запросы.",
@@ -1493,6 +1506,10 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    watchingFromNow:
+      "Наблюдаем с этого момента — metrics-server истории не хранит, поэтому линия начинается здесь и растёт вправо.",
+    noLimitSet:
+      "Предел не задан — шкала показывает израсходованное, и ничто не мешает занять всё, что есть у узла.",
     noRulesRoutesNothing:
       "Правил нет, поэтому этот Ingress ничего не маршрутизирует.",
     noContainerToAttach:
@@ -2125,7 +2142,7 @@ export const ru: Catalogue = {
     noSeriesAtAll: "рядов нет вовсе",
     promNothingCarries: "В этом Prometheus нет ничего с именами",
     promMissingFamiliesTail:
-      ". Экраны, построенные на них, показывают только то окно, которое приложение наблюдало само, и гасят длинные интервалы — об ошибке они не сообщают, потому что пустой ответ тоже ответ.",
+      ". Графики, которым его не хватило, показывают только то окно, которое приложение наблюдало само, и гасят интервалы подлиннее. Об ошибке они не сообщают: пустой ответ — тоже ответ.",
     lokiCouldNotAsk: "Не удалось ничего спросить у этого Loki",
     lokiPageDescription:
       "Хранит ли этот Loki логи именно этого кластера — проверка подключения об этом не скажет, потому что адрес, отвечающий на LogQL, ничего не говорит о том, чьи строки за ним стоят.",
