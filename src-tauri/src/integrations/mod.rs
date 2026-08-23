@@ -159,7 +159,7 @@ pub async fn detect_in_cluster_extensions(
         // rights and leaves every other source worth asking. A timeout or a
         // dead connection is a fault, and dressing it as "no rights to look"
         // would send somebody to their cluster admin about a network blip.
-        Err(crate::error::Error::PermissionDenied(_)) => None,
+        Err(err) if err.is_refusal() => None,
         Err(err) => return Err(err),
     };
 
@@ -173,7 +173,7 @@ pub async fn detect_in_cluster_extensions(
     }));
     detected.push(match ingress_nginx::detect(state).await {
         Ok(found) => found,
-        Err(crate::error::Error::PermissionDenied(_)) => unknown(ingress_nginx::ID),
+        Err(err) if err.is_refusal() => unknown(ingress_nginx::ID),
         Err(err) => return Err(err),
     });
     Ok(detected)
