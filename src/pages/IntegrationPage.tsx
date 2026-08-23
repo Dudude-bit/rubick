@@ -46,6 +46,17 @@ export function IntegrationPage() {
     );
   }
 
+  // Refused rather than answered. Saying "not installed" here would put a
+  // fact about the cluster behind a fact about this account's rights.
+  if (page.state === "cannotTell") {
+    return (
+      <Missing
+        title={t("empty", "integrationCannotTell", { name: page.name })}
+        body={t("empty", "couldNotLookWhy")}
+      />
+    );
+  }
+
   // A configured-only vendor installs nothing, so "not installed" and its
   // talk of CRDs would both be false — the address is the whole setup.
   if (page.state === "notConfigured") {

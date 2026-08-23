@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -125,6 +125,37 @@ describe("the vendors that get a row", () => {
     ).toBeVisible();
     // And nothing it does not know: no fact line, rather than zeroes.
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  /**
+   * The mixed case, and the one the honest wording used to miss entirely: one
+   * extension answers, the rest were refused. The all-empty state carries the
+   * "would not say" copy, so it never renders here — and every refused row
+   * used to print the flat words "not installed" about a cluster nobody was
+   * allowed to look at.
+   */
+  it("does not call an extension absent when it was refused a look", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "ingress-nginx", installed: true, version: null },
+      { id: "cert-manager", installed: null, version: null },
+      { id: "traefik", installed: null, version: null },
+    ]);
+
+    wrap(<IntegrationsSettings />);
+
+    expect(await screen.findByText("detected")).toBeVisible();
+
+    // Asked of the rows themselves: a vendor the scan never mentioned is
+    // genuinely not detected, and those rows are right to say so.
+    const wordIn = (name: string) => {
+      const row = screen.getByText(name).closest("li, div[class*=grid]");
+      return within(row as HTMLElement).getByText(
+        /detected|not installed|could not tell/
+      ).textContent;
+    };
+    expect(wordIn("cert-manager")).toBe("could not tell");
+    expect(wordIn("Traefik")).toBe("could not tell");
+    expect(wordIn("ingress-nginx")).toBe("detected");
   });
 
   /**

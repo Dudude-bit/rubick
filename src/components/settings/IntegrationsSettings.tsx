@@ -164,6 +164,12 @@ function ExtensionRow({
   const t = useT();
   const { vendor, extension, installed, version, facts, connection } = status;
   const Icon = extension.icon;
+  // `null` is the cluster declining to answer, and it is neither of the two
+  // words this row otherwise has. Saying "not installed" on the strength of a
+  // refusal is the claim the tri-state exists to stop, and it is still made
+  // here whenever some other extension did answer — which is when the
+  // all-empty state that carries the honest wording never renders.
+  const cannotTell = connection === null && installed === null;
   // Searched on the words the reader sees, not on the key behind them.
   const visible = useSettingSearchMatch(
     vendor.name,
@@ -247,7 +253,9 @@ function ExtensionRow({
               ? t("empty", CONNECTION_WORD[connection.state])
               : installed
                 ? t("empty", "detected")
-                : t("empty", "notInstalled")}
+                : cannotTell
+                  ? t("empty", "couldNotTell")
+                  : t("empty", "notInstalled")}
         </span>
         {connection && !pending && (
           <>

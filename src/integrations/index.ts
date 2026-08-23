@@ -940,6 +940,8 @@ export type IntegrationPageState =
   | { state: "detecting" }
   | { state: "unknown" }
   | { state: "absent"; name: string; icon: LucideIcon }
+  /** The scan was refused; neither presence nor absence was established. */
+  | { state: "cannotTell"; name: string; icon: LucideIcon }
   | { state: "notConfigured"; name: string; icon: LucideIcon }
   | {
       state: "ready";
@@ -967,6 +969,7 @@ export function useIntegrationPage(
     case "detecting":
       return { state: "detecting" };
     case "absent":
+    case "cannotTell":
     case "notConfigured":
       return {
         state: decision,

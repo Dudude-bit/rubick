@@ -97,17 +97,22 @@ function extractErrorCode(error: unknown): ErrorCode {
 
   const lowerMessage = message.toLowerCase();
 
-  if (
-    lowerMessage.includes("not authenticated") ||
-    lowerMessage.includes("auth")
-  ) {
-    return ERROR_CODES.AUTH;
+  // A refusal is read first and on whole words, both for the same reason
+  // `isRetryableError` above learned it: the sentence names Kubernetes
+  // objects, and they carry these words inside them. `auth` used to be
+  // matched bare and tested first, so every refusal about Istio's
+  // `authorizationpolicies` — or any refusal at all in a namespace called
+  // `auth`, or for a `system:serviceaccount:auth:…` — was filed as an
+  // authentication problem and drawn as a fault the reader could retry.
+  if (/\b(forbidden|permission denied)\b/.test(lowerMessage)) {
+    return ERROR_CODES.PERMISSION;
   }
   if (
-    lowerMessage.includes("permission denied") ||
-    lowerMessage.includes("forbidden")
+    /\b(unauthorized|not authenticated|authentication failed)\b/.test(
+      lowerMessage
+    )
   ) {
-    return ERROR_CODES.PERMISSION;
+    return ERROR_CODES.AUTH;
   }
   if (lowerMessage.includes("not found")) {
     return ERROR_CODES.NOT_FOUND;
