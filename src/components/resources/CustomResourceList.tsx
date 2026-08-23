@@ -13,6 +13,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -178,7 +179,7 @@ export function CustomResourceList({
   const queryKey = useMemo(
     // Not `as const`: one of the two readers wants a mutable array, and a
     // copy made for it is what defeated this memo in the first place.
-    () => ["custom-resources", crdName, namespace ?? "all"],
+    () => queryKeys.customResourceList(crdName, namespace),
     [crdName, namespace]
   );
   const subscribeCustomResource = useCallback(

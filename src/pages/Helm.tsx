@@ -25,6 +25,7 @@ import type {
   HelmChartSearchResult,
   HelmInstallOptions,
 } from "@/generated/types";
+import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
@@ -45,7 +46,11 @@ export function Helm() {
     null
   );
   const [historyDialog, setHistoryDialog] = useState<HelmRelease | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("all");
+  // `*`, not the word "all": a namespace can be named `all` — the API server
+  // takes it — and then picking it selected every namespace instead. Names
+  // are RFC-1123 labels, so `*` is one no namespace can answer to.
+  const [selectedNamespace, setSelectedNamespace] =
+    useState<string>(EVERY_NAMESPACE);
   const [activeTab, setActiveTab] = useState<string>("releases");
 
   const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
@@ -98,7 +103,8 @@ export function Helm() {
     queryKey: ["helm-releases-native", selectedNamespace],
     queryFn: async () => {
       try {
-        const ns = selectedNamespace === "all" ? null : selectedNamespace;
+        const ns =
+          selectedNamespace === EVERY_NAMESPACE ? null : selectedNamespace;
         return await commands.listHelmReleasesNative(ns);
       } catch (err) {
         throw normalizeTauriError(err);
