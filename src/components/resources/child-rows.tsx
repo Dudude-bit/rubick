@@ -10,6 +10,7 @@ import { ResourceRef } from "./ResourceRef";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { isRefusal, verbatim } from "@/lib/error-utils";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -52,10 +53,42 @@ export function ChildRows({
   // rather than shrug: "Nothing here" told the reader neither what was
   // looked for nor whether the lookup worked.
   emptyMessage,
+  /**
+   * The read failed, and there is nothing to show from before it.
+   *
+   * Without this the card had one story for two states: a workload with no
+   * pods and a pod list nobody was allowed to read both rendered "no pods
+   * for this workload". The second is a claim about the cluster made from a
+   * question that was never answered — and it is the reading somebody takes
+   * to mean their deployment is down. Same rule `ResourceList` follows: the
+   * failure only replaces the rows when there are no rows left.
+   */
+  error,
+  /** What was being listed, for the failure line. */
+  label,
 }: {
   rows: ChildRow[];
   emptyMessage?: string;
+  error?: Error | null;
+  label?: string;
 }) {
+  const t = useT();
+  if (rows.length === 0 && error) {
+    return (
+      <div className="px-1.5 py-1">
+        <p className="text-xs text-err">
+          {/* A refusal is not a failure: saying "could not read" about one
+              invites a retry that will be refused the same way. */}
+          {isRefusal(error)
+            ? t("nav", "noListAccess")
+            : t("empty", "couldNotReadInScope", { label: label ?? "" })}
+        </p>
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {verbatim(error.message)}
+        </p>
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
       <p className="px-1.5 py-1 text-xs text-fg-fnt">

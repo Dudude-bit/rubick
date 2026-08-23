@@ -7,14 +7,18 @@ import { useT } from "@/i18n/useT";
 interface PodListCardProps {
   pods: PodInfo[];
   emptyMessage?: string;
+  /** The pod list failed to read. Not the same as owning no pods. */
+  error?: Error | null;
 }
 
 /** The pods a workload owns. */
-export function PodListCard({ pods, emptyMessage }: PodListCardProps) {
+export function PodListCard({ pods, emptyMessage, error }: PodListCardProps) {
   const t = useT();
   return (
     <ChildRows
       emptyMessage={emptyMessage ?? t("empty", "noPodsForWorkload")}
+      error={error}
+      label={t("count", "podNoun", { n: 2 })}
       rows={pods.map((pod) => {
         const { ready, total } = podReadiness(pod);
         const restarts = pod.restartCount ?? 0;

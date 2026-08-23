@@ -40,6 +40,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DaemonSetDetailInfo } from "@/generated/types";
@@ -74,7 +75,11 @@ export function DaemonSetDetail() {
   // it from match labels dropped it and listed nothing.
   const labelSelector = daemonSet?.selector || null;
 
-  const { data: pods = [] } = useLiveQuery({
+  // The failure travels. It used to be caught and turned into an empty
+  // array, which the card then reported as "no pods for this workload" — a
+  // claim about the cluster made from a question nobody answered, and the
+  // reading somebody takes to mean their DaemonSet is down.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["daemonset-pods", namespace, name, labelSelector],
     queryFn: async () => {
       if (!namespace) return [];
@@ -88,8 +93,8 @@ export function DaemonSetDetail() {
           selector: null,
           nodeName: null,
         });
-      } catch {
-        return [];
+      } catch (err) {
+        throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
     enabled: !!namespace && !!labelSelector,
@@ -247,7 +252,7 @@ export function DaemonSetDetail() {
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
-        content: <PodListCard pods={pods} />,
+        content: <PodListCard pods={pods} error={podsError} />,
       },
       {
         id: "conditions",
@@ -279,6 +284,7 @@ export function DaemonSetDetail() {
     [
       daemonSet,
       pods,
+      podsError,
       yaml,
       copyYaml,
       namespace,

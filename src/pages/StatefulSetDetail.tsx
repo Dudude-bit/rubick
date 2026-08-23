@@ -44,6 +44,7 @@ import {
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
 import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
@@ -73,7 +74,9 @@ export function StatefulSetDetail() {
 
   const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
-  const { data: pods = [] } = useLiveQuery({
+  // The failure travels rather than becoming an empty list; see the same
+  // change on the DaemonSet page.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["statefulset-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -96,8 +99,8 @@ export function StatefulSetDetail() {
             pod.name.startsWith(`${name}-`) &&
             /^\d+$/.test(pod.name.slice(name.length + 1))
         );
-      } catch {
-        return [];
+      } catch (err) {
+        throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
     enabled: !!namespace && !!name,
@@ -258,7 +261,7 @@ export function StatefulSetDetail() {
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
-        content: <PodListCard pods={pods} />,
+        content: <PodListCard pods={pods} error={podsError} />,
       },
       {
         id: "conditions",
@@ -291,6 +294,7 @@ export function StatefulSetDetail() {
       t,
       statefulSet,
       pods,
+      podsError,
       yaml,
       copyYaml,
       namespace,

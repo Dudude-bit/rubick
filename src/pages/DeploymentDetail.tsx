@@ -77,6 +77,7 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { podToShow } from "@/lib/pod-selection";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
@@ -109,7 +110,7 @@ export function DeploymentDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useLiveQuery({
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["deployment-pods", namespace, name],
     queryFn: async () => {
       try {
@@ -145,16 +146,24 @@ export function DeploymentDetail() {
     enabled: !!deployment,
   });
 
-  // Auto-select first pod for logs when pods load. Genuine
-  // sync-async-data-into-local-state — could be derived as
-  // `selectedLogPod ?? pods[0]?.name` at use sites, but the user
-  // can also explicitly pick a different pod via the dropdown,
-  // and that user choice has to win over auto-selection.
+  // The chosen pod has to be one of this workload's pods. Genuine
+  // sync-async-data-into-local-state — it could be derived as
+  // `selectedLogPod ?? pods[0]?.name` at use sites, but the reader can pick
+  // a different pod from the dropdown and that choice has to win over the
+  // automatic one.
+  //
+  // The condition used to be `!selectedLogPod`, which only ever ran once.
+  // Walk to another Deployment, or watch the chosen pod get rolled away, and
+  // the name stayed pointing at a pod this list no longer has: `logPod` came
+  // back undefined, the Logs tab rendered nothing, and the effect that would
+  // have fixed it was gated on the very value that was wrong. Nothing short
+  // of a reload recovered. Membership rather than emptiness, so a selection
+  // that has gone stale is replaced instead of kept.
   useEffect(() => {
-    if (pods.length > 0 && !selectedLogPod) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedLogPod(pods[0].name);
-    }
+    const shown = podToShow(pods, selectedLogPod);
+    if (shown === selectedLogPod) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedLogPod(shown);
   }, [pods, selectedLogPod]);
 
   const logPod = pods.find((p) => p.name === selectedLogPod);
@@ -424,7 +433,7 @@ export function DeploymentDetail() {
       label: "Pods",
       glyph: kindGlyph(ResourceType.Pod),
       mark: podsMark(pods),
-      content: <PodListCard pods={pods} />,
+      content: <PodListCard pods={pods} error={podsError} />,
     },
     {
       id: toPlural(ResourceType.ReplicaSet),
