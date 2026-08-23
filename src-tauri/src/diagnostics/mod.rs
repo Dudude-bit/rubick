@@ -14,5 +14,5 @@ pub use collect::{
     collect, DiagnosticContext, Diagnostics, InstallationInfo, KubeconfigInfo, PluginStatus,
     SearchPathEntry,
 };
-pub use findings::{missing_plugin_finding, Finding, Severity};
+pub use findings::{missing_plugin_finding, unreadable_kubeconfig_finding, Finding, Severity};
 pub use redact::redacted;

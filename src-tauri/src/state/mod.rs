@@ -58,7 +58,12 @@ pub struct AppState {
     pub port_forward_sessions: Arc<DashMap<String, PortForwardSession>>,
 
     /// Port-forward cancel controls
-    pub port_forward_controls: Arc<DashMap<String, tokio::sync::oneshot::Sender<()>>>,
+    /// One cancellation per live forward, held for the session's whole life
+    /// rather than just its accept loop. A oneshot could only be fired once
+    /// and only be awaited in one place, so the established connections —
+    /// each its own detached task — had nothing to listen to and outlived
+    /// the session that owned them.
+    pub port_forward_controls: Arc<DashMap<String, tokio_util::sync::CancellationToken>>,
 
     /// Active log streams
     pub log_streams: Arc<DashMap<String, LogStream>>,

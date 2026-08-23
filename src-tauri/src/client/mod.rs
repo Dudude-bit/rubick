@@ -30,6 +30,16 @@ pub struct K8sClientManager {
     /// Default kubeconfig path
     kubeconfig_path: RwLock<Option<PathBuf>>,
 
+    /// Why the last load failed, when one did.
+    ///
+    /// The error used to travel out to the caller and stop there, so a
+    /// kubeconfig that would not parse left this manager holding `None` —
+    /// the same thing it holds when there is no kubeconfig at all. The
+    /// Diagnostics panel, whose whole job is telling those two apart, could
+    /// only say "no kubeconfig loaded" to somebody staring at a file that
+    /// plainly exists. Kept here so the panel can name the reason.
+    kubeconfig_error: RwLock<Option<String>>,
+
     /// The file the loaded kubeconfig actually came from.
     ///
     /// Distinct from `kubeconfig_path`, which records an *override* and
@@ -54,17 +64,21 @@ impl K8sClientManager {
             kubeconfig: RwLock::new(None),
             kubeconfig_path: RwLock::new(None),
             kubeconfig_source: RwLock::new(None),
+            kubeconfig_error: RwLock::new(None),
             credential_deadlines: DashMap::new(),
         }
     }
 
     /// Load kubeconfig from default locations
     pub async fn load_kubeconfig(&self) -> Result<()> {
-        let kubeconfig = Kubeconfig::read().map_err(|e| {
-            Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig: {e}"
-            )))
-        })?;
+        let kubeconfig = match Kubeconfig::read() {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                let why = format!("Failed to read kubeconfig: {e}");
+                *self.kubeconfig_error.write().await = Some(why.clone());
+                return Err(Error::Auth(AuthError::Kubeconfig(why)));
+            }
+        };
 
         // Record which file that was. `Kubeconfig::read` does not say, and a
         // screen asking "where did this come from" cannot answer from the
@@ -77,6 +91,7 @@ impl K8sClientManager {
             .or_else(|| dirs::home_dir().map(|h| h.join(".kube").join("config")));
 
         *self.kubeconfig.write().await = Some(kubeconfig);
+        *self.kubeconfig_error.write().await = None;
         Ok(())
     }
 
@@ -87,6 +102,15 @@ impl K8sClientManager {
     /// possibly a different file.
     pub async fn kubeconfig(&self) -> Option<Kubeconfig> {
         self.kubeconfig.read().await.clone()
+    }
+
+    /// Why the last load failed, if it did.
+    ///
+    /// `None` alongside a `None` kubeconfig means nothing has been loaded
+    /// yet — which is a different thing from a file that would not parse,
+    /// and the two must not be drawn the same way.
+    pub async fn kubeconfig_error(&self) -> Option<String> {
+        self.kubeconfig_error.read().await.clone()
     }
 
     /// Load kubeconfig from an explicit path if `override_path` is
@@ -117,16 +141,23 @@ impl K8sClientManager {
         // trusted input. Returns a clear error if the file is missing.
         let path = canonicalize_kubeconfig_path(&path)?;
 
-        let kubeconfig = Kubeconfig::read_from(&path).map_err(|e| {
-            Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig from {}: {e}",
-                path.display()
-            )))
-        })?;
+        let kubeconfig = match Kubeconfig::read_from(&path) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                let why = format!("Failed to read kubeconfig from {}: {e}", path.display());
+                *self.kubeconfig_error.write().await = Some(why.clone());
+                // The path is recorded even though the read failed: naming
+                // the file somebody has to go fix is most of the answer, and
+                // a panel that cannot name it sends them looking.
+                *self.kubeconfig_source.write().await = Some(path);
+                return Err(Error::Auth(AuthError::Kubeconfig(why)));
+            }
+        };
 
         *self.kubeconfig_path.write().await = Some(path.clone());
         *self.kubeconfig_source.write().await = Some(path);
         *self.kubeconfig.write().await = Some(kubeconfig);
+        *self.kubeconfig_error.write().await = None;
         Ok(())
     }
 

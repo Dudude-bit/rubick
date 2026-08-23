@@ -32,6 +32,27 @@ pub struct Finding {
     pub subject: Option<String>,
 }
 
+/// The finding for a kubeconfig the app could not read.
+///
+/// Blocking, because nothing works without it: no context can be selected,
+/// so every screen behind this one is empty for a reason none of them can
+/// explain. This is the one failure the Diagnostics panel exists for and
+/// the one it used to stay silent about.
+#[must_use]
+pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
+    Finding {
+        severity: Severity::Blocking,
+        title: "Kubeconfig could not be read".to_string(),
+        detail: format!(
+            "{why}. No context can be selected until this file parses, which \
+             is why the cluster screens are empty. Check it with \
+             `kubectl config view`, which reports the same error against the \
+             same file."
+        ),
+        subject: Some(path.to_string()),
+    }
+}
+
 /// The finding for a context whose kubectl plugin is not installed.
 ///
 /// `None` when the command names no plugin, or names one that is present —

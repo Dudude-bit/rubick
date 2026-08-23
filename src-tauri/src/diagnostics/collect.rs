@@ -207,13 +207,37 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     // the file. A second read would answer about a different moment, and
     // this panel exists because two answers about one machine is the bug.
     let Some(raw) = client.kubeconfig().await else {
+        // Nothing parsed. Two different reasons land here and they must not
+        // read the same: a file that would not parse is a problem with an
+        // address and a fix, while no file at all is just an app nobody has
+        // pointed at a cluster yet. This block promised the first case a
+        // finding and never produced one, so the panel built for exactly
+        // this moment answered "no kubeconfig loaded" to somebody looking
+        // at a kubeconfig.
+        let (kubeconfig, findings) = match client.kubeconfig_error().await {
+            Some(why) => {
+                let path = client.kubeconfig_path().await.map_or_else(
+                    || "unknown".to_string(),
+                    |p| p.to_string_lossy().into_owned(),
+                );
+                (
+                    Some(KubeconfigInfo {
+                        path: path.clone(),
+                        parse_error: Some(why.clone()),
+                        context_count: 0,
+                    }),
+                    vec![super::unreadable_kubeconfig_finding(&path, &why)],
+                )
+            }
+            None => (None, Vec::new()),
+        };
         return Diagnostics {
             search_path,
             plugins: Vec::new(),
             contexts: Vec::new(),
-            kubeconfig: None,
+            kubeconfig,
             app,
-            findings: Vec::new(),
+            findings,
         };
     };
 
@@ -339,5 +363,61 @@ users:
         );
         assert!(!d.app.version.is_empty());
         assert!(d.findings.is_empty());
+    }
+
+    /// The case this panel was built for, and the one it used to be silent
+    /// about: a kubeconfig that exists and will not parse. Silence here is
+    /// worse than nothing, because the reader is looking at the file while
+    /// the app tells them there is no file.
+    #[tokio::test]
+    async fn a_kubeconfig_that_will_not_parse_says_so() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config");
+        std::fs::write(&path, "clusters: [ this is not\n  a kubeconfig\n").expect("write");
+
+        let client = crate::client::K8sClientManager::new();
+        let failed = client.load_kubeconfig_from_path(path.clone()).await;
+        assert!(failed.is_err(), "the fixture has to actually fail to parse");
+
+        let d = collect(&client).await;
+
+        let kc = d
+            .kubeconfig
+            .expect("a file that exists is named even when it will not parse");
+        assert!(
+            kc.parse_error.is_some(),
+            "the reason is the whole point; without it the panel says nothing \
+             the reader did not already know"
+        );
+        assert_eq!(kc.context_count, 0);
+
+        let finding = d
+            .findings
+            .iter()
+            .find(|f| f.title == "Kubeconfig could not be read")
+            .expect("the doc comment on `collect` promises this finding");
+        assert_eq!(finding.severity, super::super::Severity::Blocking);
+        assert!(
+            finding.subject.as_deref().is_some_and(|s| !s.is_empty()),
+            "a finding nobody can locate is not actionable"
+        );
+    }
+
+    /// The third state has to stay a third state: never having loaded is not
+    /// a broken file, and drawing them the same way puts a blocking finding
+    /// on an app that is merely new.
+    #[tokio::test]
+    async fn never_having_loaded_is_not_a_broken_file() {
+        let client = crate::client::K8sClientManager::new();
+        assert!(client.kubeconfig_error().await.is_none());
+
+        let d = collect(&client).await;
+        assert!(d.kubeconfig.is_none());
+        assert!(
+            !d.findings
+                .iter()
+                .any(|f| f.title == "Kubeconfig could not be read"),
+            "nothing was ever read, so nothing failed to read"
+        );
     }
 }
