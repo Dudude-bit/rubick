@@ -268,7 +268,7 @@ export function useResourceWatch<
 function identify<T extends { name: string; namespace?: string | null }>(
   item: T
 ): string {
-  return `${item.namespace ?? ""} ${item.name}`;
+  return `${item.namespace ?? ""}\0${item.name}`;
 }
 
 function stage<T extends { name: string; namespace?: string | null }>(

@@ -213,23 +213,11 @@ class LogQueueImpl {
       timestamp: entry.timestamp,
     }));
 
-    try {
-      // Use batch command for efficiency - single IPC call
-      await commands.logFrontendEventsBatch(batchEntries);
-    } catch (error) {
-      // If batch fails, mark all entries for retry
-      for (const entry of entries) {
-        if (entry.retries < MAX_RETRIES) {
-          this.failedLogs.push({ ...entry, retries: entry.retries + 1 });
-        }
-      }
-
-      if (this.failedLogs.length > 0) {
-        this.scheduleRetry();
-      }
-
-      throw error;
-    }
+    // One IPC call for the batch, and a failure is left to travel. `flush`
+    // owns the retry policy and calls `handleFailedBatch` on its way out; a
+    // catch here used to be a verbatim copy of that method, so every failed
+    // entry was queued twice and each retry doubled the buffer again.
+    await commands.logFrontendEventsBatch(batchEntries);
   }
 
   private handleFailedBatch(entries: LogEntry[]): void {
