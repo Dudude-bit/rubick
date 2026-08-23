@@ -120,54 +120,14 @@ export function parseCPU(cpuStr: string | null | undefined): number {
  */
 export function parseMemory(memStr: string | null | undefined): number {
   if (!memStr) return 0;
-
-  const trimmed = memStr.trim();
-
-  // Binary units (Ki, Mi, Gi, Ti)
-  if (trimmed.endsWith("Ki")) {
-    const num = parseFloat(trimmed.slice(0, -2));
-    return isNaN(num) ? 0 : num * BINARY_UNITS.Ki;
-  }
-
-  if (trimmed.endsWith("Mi")) {
-    const num = parseFloat(trimmed.slice(0, -2));
-    return isNaN(num) ? 0 : num * BINARY_UNITS.Mi;
-  }
-
-  if (trimmed.endsWith("Gi")) {
-    const num = parseFloat(trimmed.slice(0, -2));
-    return isNaN(num) ? 0 : num * BINARY_UNITS.Gi;
-  }
-
-  if (trimmed.endsWith("Ti")) {
-    const num = parseFloat(trimmed.slice(0, -2));
-    return isNaN(num) ? 0 : num * BINARY_UNITS.Ti;
-  }
-
-  // Decimal units (K, M, G, T) - single character
-  if (trimmed.endsWith("K") && !trimmed.endsWith("Ki")) {
-    const num = parseFloat(trimmed.slice(0, -1));
-    return isNaN(num) ? 0 : num * DECIMAL_UNITS.K;
-  }
-
-  if (trimmed.endsWith("M") && !trimmed.endsWith("Mi")) {
-    const num = parseFloat(trimmed.slice(0, -1));
-    return isNaN(num) ? 0 : num * DECIMAL_UNITS.M;
-  }
-
-  if (trimmed.endsWith("G") && !trimmed.endsWith("Gi")) {
-    const num = parseFloat(trimmed.slice(0, -1));
-    return isNaN(num) ? 0 : num * DECIMAL_UNITS.G;
-  }
-
-  if (trimmed.endsWith("T") && !trimmed.endsWith("Ti")) {
-    const num = parseFloat(trimmed.slice(0, -1));
-    return isNaN(num) ? 0 : num * DECIMAL_UNITS.T;
-  }
-
-  // Assume bytes if no unit
-  const bytes = parseFloat(trimmed);
-  return isNaN(bytes) ? 0 : bytes;
+  // Read from the same table `parseQuantity` reads, which is what this file's
+  // header has always claimed. The hand-rolled chain that used to live here
+  // knew eight suffixes where the table knows thirteen, so `1Pi` matched
+  // nothing, fell through to `parseFloat("1Pi")`, and a petabyte of declared
+  // storage was reported as one byte. Its `endsWith("K") && !endsWith("Ki")`
+  // guards could never fire either: a string ending in `Ki` does not end in
+  // `K`.
+  return parseQuantity(memStr) ?? 0;
 }
 
 /**

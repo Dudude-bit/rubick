@@ -176,7 +176,9 @@ export function CustomResourceList({
   // user lacks the `watch` verb on the CRD), the toast fires and
   // the list falls back to its default poll rate.
   const queryKey = useMemo(
-    () => ["custom-resources", crdName, namespace ?? "all"] as const,
+    // Not `as const`: one of the two readers wants a mutable array, and a
+    // copy made for it is what defeated this memo in the first place.
+    () => ["custom-resources", crdName, namespace ?? "all"],
     [crdName, namespace]
   );
   const subscribeCustomResource = useCallback(
@@ -209,7 +211,10 @@ export function CustomResourceList({
   const { resyncing } = useResourceWatch<CustomResourceListItem>({
     enabled: true,
     subscribe: subscribeCustomResource,
-    queryKey: [...queryKey],
+    // The memoised array itself, not a copy of it: the watch effect has this
+    // in its dependencies, and a fresh array on every render tore the subscription
+    // down and opened another one on every single render.
+    queryKey,
     onError: handleWatchError,
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
@@ -219,7 +224,7 @@ export function CustomResourceList({
       title={(count) =>
         t("count", "kindInstances", { kind: crdKind, n: count })
       }
-      queryKey={[...queryKey]}
+      queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={async () => {
         const result = await commands.listCustomResources(
