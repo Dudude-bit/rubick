@@ -1080,7 +1080,39 @@ export const ru: Catalogue = {
     cancelled: "Вход отменён",
     cancelledFor: "Отменено: {context}.",
   },
+  vendor: {
+    argocdGives:
+      "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
+    awsGives:
+      "настоящую target group ALB за Service и то, что контроллер не смог применить",
+    azureGives:
+      "какая pod identity к каким подам привязана и что ingress App Gateway велено не трогать",
+    certManagerGives:
+      "почему сертификат не обновился — от того объекта, на котором сорвалось",
+    fluxGives:
+      "что Flux применяет, откуда применяет и где остановившаяся выгрузка тихо заморозила кластер",
+    googleCloudGives:
+      "что сказали балансировщику GKE и на каких доменах застрял сертификат, управляемый Google",
+    ingressNginxGives:
+      "аннотации, прочитанные как поведение, а не как стена строк",
+    istioGives:
+      "VirtualService и DestinationRule, прочитанные как маршрутизация, а не как сырые ресурсы",
+    lokiGives: "логи за время до того, как появился текущий под",
+    prometheusGives:
+      "историю нагрузки, заполненность томов и трафик подов и рабочих нагрузок",
+    traefikGives:
+      "каждый хост, который отдаёт этот кластер, и где каждый обрывается",
+  },
   cluster: {
+    metricsNotInstalled: "metrics-server не установлен",
+    metricsNotInstalledBody:
+      "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
+    metricsForbidden: "Нет прав читать метрики",
+    metricsForbiddenBody:
+      "У этой учётной записи нет доступа к API метрик. Тому, кто выдаёт права, нужно разрешить metrics.k8s.io.",
+    metricsError: "Ошибка API метрик",
+    metricsErrorBody: "Не удалось получить метрики из кластера.",
+    metricsDetails: "Подробности: {details}",
     markBroken: "сломано",
     markWorthALook: "стоит взглянуть",
     connectToImport:

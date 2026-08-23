@@ -103,6 +103,8 @@
  */
 
 import type { LucideIcon } from "lucide-react";
+
+import type { en } from "@/i18n/catalogue";
 import type { ComponentType, ReactNode } from "react";
 
 import type { IssuanceStory, LogFormat, LogLevel } from "@/generated/types";
@@ -798,7 +800,7 @@ export interface Extension {
    * and it must name a power the app actually has: a row promising a
    * feature nothing implements is an advert, and this screen has none.
    */
-  gives: string;
+  gives: keyof typeof en.vendor;
   icon: LucideIcon;
   /**
    * What it is doing for this cluster right now — the second half of the

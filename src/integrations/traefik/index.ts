@@ -29,7 +29,7 @@ export default defineVendor({
   id: "traefik",
   name: "Traefik",
   extension: {
-    gives: "every host this cluster serves, and where each one stops",
+    gives: "traefikGives",
     icon: Router,
     facts,
   },

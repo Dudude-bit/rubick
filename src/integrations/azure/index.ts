@@ -37,8 +37,7 @@ export const aksAddons = defineVendor({
   id: "aks-addons",
   name: "AKS add-ons",
   extension: {
-    gives:
-      "which pod identity binds which pods, and what an App Gateway ingress is told to leave alone",
+    gives: "azureGives",
     icon: KeyRound,
     facts,
   },

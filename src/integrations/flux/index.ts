@@ -41,8 +41,7 @@ export default defineVendor({
     "object.related": relatedTo,
   },
   extension: {
-    gives:
-      "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
+    gives: "fluxGives",
     icon: Layers,
     facts,
   },

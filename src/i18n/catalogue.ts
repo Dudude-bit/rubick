@@ -1082,7 +1082,43 @@ export const en = {
     cancelled: "Sign-in cancelled",
     cancelledFor: "Cancelled {context}.",
   },
+  // What each extension gets the reader, in the words of the thing they get.
+  // Here rather than in the vendor module because a vendor module is a plain
+  // table with no hook to call: it names the key, and the row translates it.
+  vendor: {
+    argocdGives:
+      "every Application with what it is failing to apply, and which objects differ from git",
+    awsGives:
+      "the real ALB target group behind a Service, and what the controller could not apply",
+    azureGives:
+      "which pod identity binds which pods, and what an App Gateway ingress is told to leave alone",
+    certManagerGives:
+      "why a certificate has not renewed, from the object that failed",
+    fluxGives:
+      "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
+    googleCloudGives:
+      "what a GKE load balancer was told, and which domains a Google-managed certificate is stuck on",
+    ingressNginxGives:
+      "annotations read as behaviour instead of as a wall of strings",
+    istioGives:
+      "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
+    lokiGives: "logs from before the current pod existed",
+    prometheusGives:
+      "usage history, volume fullness and traffic on pods and workloads",
+    traefikGives: "every host this cluster serves, and where each one stops",
+  },
   cluster: {
+    metricsNotInstalled: "Metrics server not installed",
+    metricsNotInstalledBody:
+      "Install metrics-server to see CPU and memory usage.",
+    metricsForbidden: "No permission to read metrics",
+    metricsForbiddenBody:
+      "This account may not read the metrics API. Whoever grants rights needs to allow metrics.k8s.io.",
+    metricsError: "Metrics API error",
+    metricsErrorBody: "Failed to load metrics from the cluster.",
+    // The cluster's own words, kept whole: they are what somebody takes to
+    // whoever can act on them.
+    metricsDetails: "Details: {details}",
     markBroken: "broken",
     markWorthALook: "worth a look",
     connectToImport: "Connect to a cluster to import live resources.",

@@ -44,7 +44,7 @@ export default defineVendor({
   id: "prometheus",
   name: "Prometheus",
   extension: {
-    gives: "usage history, volume fullness and traffic on pods and workloads",
+    gives: "prometheusGives",
     icon: Flame,
   },
   connect: {

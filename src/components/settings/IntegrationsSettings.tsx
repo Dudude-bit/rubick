@@ -164,7 +164,11 @@ function ExtensionRow({
   const t = useT();
   const { vendor, extension, installed, version, facts, connection } = status;
   const Icon = extension.icon;
-  const visible = useSettingSearchMatch(vendor.name, extension.gives);
+  // Searched on the words the reader sees, not on the key behind them.
+  const visible = useSettingSearchMatch(
+    vendor.name,
+    t("vendor", extension.gives)
+  );
   const [editing, setEditing] = React.useState(false);
   const row = React.useRef<HTMLDivElement>(null);
 
@@ -214,7 +218,7 @@ function ExtensionRow({
           {installed || configured
             ? t("empty", "gives")
             : t("empty", "wouldGive")}{" "}
-          <span className="text-fg-mut">{extension.gives}</span>
+          <span className="text-fg-mut">{t("vendor", extension.gives)}</span>
         </div>
         {showFacts && <Facts facts={facts} />}
       </div>
@@ -258,7 +262,7 @@ function ExtensionRow({
             <ConnectIntegration
               vendorId={vendor.id}
               vendorName={vendor.name}
-              gives={extension.gives}
+              gives={t("vendor", extension.gives)}
               open={editing}
               onOpenChange={setEditing}
             />
