@@ -52,7 +52,11 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 pub struct DetectedExtension {
     pub id: String,
-    pub installed: bool,
+    /// `None` where the cluster would not say. A reader without rights over
+    /// `CustomResourceDefinition`s cannot be told "not installed" about every
+    /// extension that announces itself with one — that is a different fact,
+    /// and it is not one this app is entitled to assert.
+    pub installed: Option<bool>,
     /// What the extension labels its own CRDs with, where it labels them.
     pub version: Option<String>,
 }
@@ -124,7 +128,7 @@ fn detect_by_marker(
         .find(|marker| crds.iter().any(|crd| crd.name_any() == **marker));
     DetectedExtension {
         id: id.to_string(),
-        installed: found.is_some(),
+        installed: Some(found.is_some()),
         version: found.and_then(|marker| version_from(crds, marker)),
     }
 }
@@ -139,21 +143,42 @@ fn detect_by_marker(
 pub async fn detect_in_cluster_extensions(
     state: State<'_, AppState>,
 ) -> Result<Vec<DetectedExtension>> {
+    // Each source answers for itself. One refusal used to take the whole
+    // screen with it: a reader without rights over IngressClasses lost
+    // cert-manager, Traefik and everything else that had answered fine.
     let crds = crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
         state.clone(),
         None,
         None,
         None,
     )
-    .await?;
-    let mut detected = vec![cert_manager::detect(&crds.items)];
-    detected.extend(
-        MARKERS
-            .iter()
-            .map(|(id, markers)| detect_by_marker(&crds.items, id, markers)),
+    .await
+    .ok()
+    .map(|list| list.items);
+
+    let mut detected = vec![match &crds {
+        Some(items) => cert_manager::detect(items),
+        None => unknown(cert_manager::ID),
+    }];
+    detected.extend(MARKERS.iter().map(|(id, markers)| match &crds {
+        Some(items) => detect_by_marker(items, id, markers),
+        None => unknown(id),
+    }));
+    detected.push(
+        ingress_nginx::detect(state)
+            .await
+            .unwrap_or_else(|_| unknown(ingress_nginx::ID)),
     );
-    detected.push(ingress_nginx::detect(state).await?);
     Ok(detected)
+}
+
+/// An extension the cluster would not answer about.
+fn unknown(id: &str) -> DetectedExtension {
+    DetectedExtension {
+        id: id.to_string(),
+        installed: None,
+        version: None,
+    }
 }
 
 /// The `app.kubernetes.io/version` an extension stamps on its own CRDs.
@@ -193,10 +218,16 @@ mod tests {
     #[test]
     fn a_renamed_api_group_is_still_the_same_vendor() {
         let v2 = vec![crd("ingressroutes.traefik.containo.us")];
-        assert!(detect_by_marker(&v2, "traefik", MARKERS[0].1).installed);
+        assert_eq!(
+            detect_by_marker(&v2, "traefik", MARKERS[0].1).installed,
+            Some(true)
+        );
 
         let v3 = vec![crd("ingressroutes.traefik.io")];
-        assert!(detect_by_marker(&v3, "traefik", MARKERS[0].1).installed);
+        assert_eq!(
+            detect_by_marker(&v3, "traefik", MARKERS[0].1).installed,
+            Some(true)
+        );
     }
 
     /// Would break if a cloud's row started depending on the whole set of
@@ -210,8 +241,9 @@ mod tests {
         for id in ["gke-ingress", "aws-load-balancer-controller", "aks-addons"] {
             for marker in by_id(id) {
                 let alone = vec![crd(marker)];
-                assert!(
+                assert_eq!(
                     detect_by_marker(&alone, id, by_id(id)).installed,
+                    Some(true),
                     "{id} was not detected by {marker} on its own"
                 );
             }
@@ -228,8 +260,9 @@ mod tests {
             let installed: Vec<_> = markers.iter().map(|marker| crd(marker)).collect();
             for other in clouds.iter().filter(|other| *other != id) {
                 let other_markers = MARKERS.iter().find(|(n, _)| n == other).unwrap().1;
-                assert!(
-                    !detect_by_marker(&installed, other, other_markers).installed,
+                assert_eq!(
+                    detect_by_marker(&installed, other, other_markers).installed,
+                    Some(false),
                     "{id}'s CRDs were read as {other}"
                 );
             }
@@ -243,7 +276,7 @@ mod tests {
         let other = vec![crd("widgets.demo.k8s-gui.io")];
         for (id, markers) in MARKERS {
             assert!(!markers.is_empty(), "{id} has no marker to detect it by");
-            assert!(!detect_by_marker(&other, id, markers).installed);
+            assert_eq!(detect_by_marker(&other, id, markers).installed, Some(false));
         }
     }
 }

@@ -15,6 +15,7 @@
 pub mod filters;
 pub mod helpers;
 
+pub mod access;
 pub mod auth;
 pub mod binaries;
 pub mod certificates;

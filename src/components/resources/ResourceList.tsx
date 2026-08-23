@@ -19,7 +19,7 @@ import {
   type DeliveryFilter,
 } from "@/lib/delivery";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
-import { verbatim } from "@/lib/error-utils";
+import { isRefusal, verbatim } from "@/lib/error-utils";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -353,7 +353,11 @@ export function ResourceList<
       {failed && resources.length === 0 ? (
         <div className="max-w-[68ch] py-8">
           <p className="text-xs text-err">
-            {t("empty", "couldNotReadInScope", { label: emptyStateLabel })}
+            {/* A refusal is not a failure, and saying "could not read" about
+                one invites a retry that will be refused the same way. */}
+            {isRefusal(failed)
+              ? t("nav", "noListAccess")
+              : t("empty", "couldNotReadInScope", { label: emptyStateLabel })}
           </p>
           <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {verbatim(failed.message)}

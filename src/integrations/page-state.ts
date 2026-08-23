@@ -16,7 +16,7 @@ export type PageDecision =
 
 export function pageDecision(
   vendor: { id: string; configured: boolean } | undefined,
-  detected: Array<{ id: string; installed: boolean }> | undefined,
+  detected: Array<{ id: string; installed: boolean | null }> | undefined,
   connection: { state: string } | undefined
 ): PageDecision {
   if (!vendor) return "unknown";

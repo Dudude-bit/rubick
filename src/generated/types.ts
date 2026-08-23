@@ -395,12 +395,6 @@ export interface EndpointTargetRef {
   namespace: string;
 }
 
-export interface IngressDefaultBackend {
-  backendService: string;
-  backendPort: string;
-  resourceBackend: string | null;
-}
-
 export interface IngressInfo {
   name: string;
   namespace: string;
@@ -420,6 +414,12 @@ export interface IngressTlsConfig {
   hosts: string[];
   secretName: string | null;
   isCatchAll: boolean;
+}
+
+export interface IngressDefaultBackend {
+  backendService: string;
+  backendPort: string;
+  resourceBackend: string | null;
 }
 
 export interface IngressRule {
@@ -1351,6 +1351,17 @@ export interface RegistryConfigInfo {
   token?: string;
 }
 
+export interface ListAccess {
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface ListQuery {
+  group: string;
+  resource: string;
+  namespaced: boolean;
+}
+
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
@@ -1395,7 +1406,7 @@ export interface PrometheusConnection {
 
 export interface DetectedExtension {
   id: string;
-  installed: boolean;
+  installed: boolean | null;
   version: string | null;
 }
 

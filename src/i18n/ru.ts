@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    noListAccess: "У вас нет прав смотреть этот список",
     relatedResources: "Связанные ресурсы",
     trafficPath: "Путь трафика",
     releases: "Релизы",
@@ -2470,6 +2471,9 @@ export const ru: Catalogue = {
     couldNotReadCrds: "Не удалось прочитать CRD этого кластера",
     crdDetectionFailed:
       "Каждое расширение здесь определяется запросом к API-серверу о CustomResourceDefinition, которые оно ставит, и этот запрос не удался — так что список был бы догадкой, а не ответом.",
+    couldNotLookForExtensions: "Кластер не сказал, что установлено",
+    couldNotLookWhy:
+      "Расширения определяются по их CustomResourceDefinition, а у этой учётной записи нет прав их смотреть. Что-то вполне может быть установлено — этот экран не может сказать.",
     nothingInstalledKnown:
       "Не установлено ничего, чем это приложение умеет пользоваться",
     everyExtensionOptional:

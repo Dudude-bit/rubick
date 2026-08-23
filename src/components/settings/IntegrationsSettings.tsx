@@ -70,6 +70,9 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
   const configured = statuses.filter((status) => status.connection !== null);
   const detected = statuses.filter((status) => status.connection === null);
   const anyDetected = detected.some((status) => status.installed);
+  // `null` is the cluster declining to say. Reporting "none of them is here"
+  // on the back of a refusal states a fact nobody established.
+  const couldNotLook = detected.some((status) => status.installed === null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -86,7 +89,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
         </SettingsGroup>
       )}
       {!isPending && !anyDetected ? (
-        <NothingInstalled />
+        <NothingInstalled couldNotLook={couldNotLook} />
       ) : (
         <SettingsGroup title={t("settings", "detectedGroup")}>
           {detected.map((status) => (
@@ -111,7 +114,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
  * answer all three, and they double as the list of what supporting one
  * would buy.
  */
-function NothingInstalled() {
+function NothingInstalled({ couldNotLook }: { couldNotLook: boolean }) {
   const t = useT();
   const visible = useSettingSearchMatch(
     "integrations extensions",
@@ -120,16 +123,24 @@ function NothingInstalled() {
   return (
     <div className={cn("max-w-[64ch] py-8", !visible && "hidden")}>
       <h3 className="text-xs font-medium text-fg">
-        {t("empty", "nothingInstalledKnown")}
+        {t(
+          "empty",
+          couldNotLook ? "couldNotLookForExtensions" : "nothingInstalledKnown"
+        )}
       </h3>
       <p className="mt-1.5 text-xs text-fg-mut">
-        {t("empty", "everyExtensionOptional")}
+        {t(
+          "empty",
+          couldNotLook ? "couldNotLookWhy" : "everyExtensionOptional"
+        )}
       </p>
-      <p className="mt-2 text-[11px] text-fg-fnt">
-        {t("empty", "lookedForExtensions", {
-          list: sentenceList(EXTENSION_NAMES, t("empty", "listAnd")),
-        })}
-      </p>
+      {!couldNotLook && (
+        <p className="mt-2 text-[11px] text-fg-fnt">
+          {t("empty", "lookedForExtensions", {
+            list: sentenceList(EXTENSION_NAMES, t("empty", "listAnd")),
+          })}
+        </p>
+      )}
     </div>
   );
 }

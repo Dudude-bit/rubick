@@ -40,7 +40,7 @@ pub fn detect(crds: &[CustomResourceDefinition]) -> DetectedExtension {
     let installed = crds.iter().any(|crd| crd.name_any() == MARKER_CRD);
     DetectedExtension {
         id: ID.to_string(),
-        installed,
+        installed: Some(installed),
         version: installed.then(|| version_from(crds, MARKER_CRD)).flatten(),
     }
 }
@@ -383,12 +383,12 @@ mod tests {
     #[test]
     fn detection_is_the_crd_and_nothing_else() {
         let with = vec![crd("certificates.cert-manager.io", Some("v1.16.3"))];
-        assert!(detect(&with).installed);
+        assert_eq!(detect(&with).installed, Some(true));
         assert_eq!(detect(&with).version.as_deref(), Some("v1.16.3"));
 
         // A cluster with other operators on it, and no cert-manager.
         let without = vec![crd("ingressroutes.traefik.io", Some("v3.1.2"))];
-        assert!(!detect(&without).installed);
+        assert_eq!(detect(&without).installed, Some(false));
         assert_eq!(detect(&without).version, None);
     }
 
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn an_unlabelled_install_is_still_an_install() {
         let crds = vec![crd("certificates.cert-manager.io", None)];
-        assert!(detect(&crds).installed);
+        assert_eq!(detect(&crds).installed, Some(true));
         assert_eq!(detect(&crds).version, None);
     }
 }

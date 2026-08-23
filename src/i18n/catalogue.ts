@@ -41,6 +41,10 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    // Said on a nav row the authorizer refused, and on the page behind it.
+    // The reader is not being told the app is broken: they are being told
+    // whose decision it was, which is the one fact that makes it actionable.
+    noListAccess: "You do not have permission to list these",
     relatedResources: "Related resources",
     trafficPath: "Traffic path",
     releases: "Releases",
@@ -2393,6 +2397,9 @@ export const en = {
     couldNotReadCrds: "Could not read this cluster’s CRDs",
     crdDetectionFailed:
       "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed — so this list would be a guess rather than an answer.",
+    couldNotLookForExtensions: "The cluster would not say what is installed",
+    couldNotLookWhy:
+      "Detection asks the API server for each extension's CustomResourceDefinitions, and this account may not list those. Something may well be installed — this screen cannot tell.",
     nothingInstalledKnown: "Nothing installed that this app knows how to use",
     everyExtensionOptional:
       "The cluster works exactly as it does now — every extension here is optional, and none of them is needed to read a pod.",

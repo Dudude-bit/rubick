@@ -85,7 +85,7 @@ pub async fn detect(state: State<'_, AppState>) -> Result<DetectedExtension> {
 
     Ok(DetectedExtension {
         id: ID.to_string(),
-        installed: found.is_some(),
+        installed: Some(found.is_some()),
         version: found.flatten(),
     })
 }

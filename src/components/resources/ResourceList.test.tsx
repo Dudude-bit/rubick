@@ -65,9 +65,26 @@ describe("a list whose rows come from outside", () => {
    * reader their cluster had no pods.
    */
   it("says the read failed rather than that the scope is empty", () => {
-    list({ data: [], error: new Error("pods is forbidden: RBAC") });
+    list({ data: [], error: new Error("connection reset by peer") });
 
     expect(screen.getByText(/Could not read Pods in this scope/)).toBeVisible();
+    expect(screen.getByText(/connection reset/)).toBeVisible();
+  });
+
+  /**
+   * A refusal is not a failure. "Could not read" describes something broken
+   * and invites a retry that will be refused in exactly the same way, which
+   * is how an ordinary RBAC boundary came to read as a fault in the app.
+   */
+  it("says a refusal is a refusal", () => {
+    list({ data: [], error: new Error("pods is forbidden: RBAC") });
+
+    expect(
+      screen.getByText(/do not have permission to list these/)
+    ).toBeVisible();
+    expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
+    // The cluster's own words stay: they name the resource and the user,
+    // which is what somebody takes to whoever grants the rights.
     expect(screen.getByText(/forbidden/)).toBeVisible();
   });
 
