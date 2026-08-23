@@ -9,7 +9,6 @@
 
 import { useCallback, useState } from "react";
 
-import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
 import { useT } from "@/i18n/useT";
 import { usePortForwardStore } from "@/stores/portForwardStore";
@@ -44,9 +43,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
   const startPortForwardConfig = usePortForwardStore(
     (state) => state.startConfig
   );
-  const refreshPortForwards = usePortForwardStore(
-    (state) => state.refreshSessions
-  );
+  const startPortForwardPod = usePortForwardStore((state) => state.startPod);
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
   const stopPortForwardSession = usePortForwardStore(
     (state) => state.stopSession
@@ -103,14 +100,13 @@ export function usePodPortForward(pod: PodInfo | undefined) {
         });
         await startPortForwardConfig(config.id);
       } else {
-        await commands.portForwardPod(pod.name, pod.namespace, {
+        await startPortForwardPod(pod.name, pod.namespace, {
           localPort,
           remotePort,
           autoReconnect: form.autoReconnect,
         });
       }
 
-      await refreshPortForwards();
       setOpen(false);
     } catch (err) {
       toast({
@@ -127,7 +123,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     form,
     addPortForwardConfig,
     startPortForwardConfig,
-    refreshPortForwards,
+    startPortForwardPod,
     toast,
     t,
   ]);
