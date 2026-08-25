@@ -104,104 +104,10 @@ impl Default for KubernetesConfig {
 // Cache
 // ============================================================================
 
-/// Cache configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheConfig {
-    /// Enable caching
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// Cache TTL in seconds
-    #[serde(default = "default_cache_ttl")]
-    pub ttl_seconds: u64,
-    /// Maximum cache entries
-    #[serde(default = "default_max_entries")]
-    pub max_entries: usize,
-}
-
-fn default_cache_ttl() -> u64 {
-    60
-}
-fn default_max_entries() -> usize {
-    1000
-}
-
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            ttl_seconds: default_cache_ttl(),
-            max_entries: default_max_entries(),
-        }
-    }
-}
-
 // ============================================================================
 // Plugins
 // ============================================================================
 
-/// Plugin configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginsConfig {
-    /// Enable kubectl plugins
-    #[serde(default = "default_true")]
-    pub kubectl_plugins: bool,
-    /// Additional plugin directories
-    #[serde(default)]
-    pub plugin_dirs: Vec<PathBuf>,
-    /// Plugin execution timeout in seconds
-    #[serde(default = "default_plugin_timeout")]
-    pub timeout_seconds: u64,
-    /// Disabled plugins
-    #[serde(default)]
-    pub disabled: Vec<String>,
-}
-
-fn default_plugin_timeout() -> u64 {
-    60
-}
-
-impl Default for PluginsConfig {
-    fn default() -> Self {
-        Self {
-            kubectl_plugins: true,
-            plugin_dirs: vec![],
-            timeout_seconds: default_plugin_timeout(),
-            disabled: vec![],
-        }
-    }
-}
-
 // ============================================================================
 // Logging
 // ============================================================================
-
-/// Logging configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoggingConfig {
-    /// Log level
-    #[serde(default = "default_log_level")]
-    pub level: String,
-    /// Log to file
-    #[serde(default)]
-    pub file: Option<PathBuf>,
-    /// Max log file size in MB
-    #[serde(default = "default_log_size")]
-    pub max_size_mb: u64,
-}
-
-fn default_log_level() -> String {
-    "info".to_string()
-}
-fn default_log_size() -> u64 {
-    10
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            level: default_log_level(),
-            file: None,
-            max_size_mb: default_log_size(),
-        }
-    }
-}

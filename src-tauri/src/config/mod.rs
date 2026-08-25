@@ -25,9 +25,7 @@ use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub use app::{
-    default_true, CacheConfig, KubernetesConfig, LoggingConfig, PluginsConfig, ThemeConfig,
-};
+pub use app::{default_true, KubernetesConfig, ThemeConfig};
 pub use cloud::{AzureProfile, CliPathsConfig, CloudConfig, ContextBinding, GcpProfile};
 pub use connection::{
     PortForwardConfig, PortForwardConfigStore, RegistriesConfig, RegistryConfigEntry,
@@ -40,20 +38,19 @@ pub use integrations::{ConnectionEntry, IntegrationsConfig, LokiEntry, Prometheu
 
 /// Application configuration
 ///
-/// Contains all application settings including theme, Kubernetes connection,
-/// cache, plugins, and logging configuration.
+/// Every setting the app keeps in `config.toml`.
+///
+/// It used to name cache, plugins and logging too. Those three sections were
+/// written to every user's file and parsed back out of it, and nothing read
+/// them — `logging.level = "debug"` was a line somebody could set and watch
+/// do nothing. A setting that is only stored is worse than a missing one:
+/// the missing one does not promise anything.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// UI theme
     pub theme: ThemeConfig,
     /// Kubernetes configuration
     pub kubernetes: KubernetesConfig,
-    /// Cache configuration
-    pub cache: CacheConfig,
-    /// Plugin configuration
-    pub plugins: PluginsConfig,
-    /// Logging configuration
-    pub logging: LoggingConfig,
     /// Cloud provider configuration
     #[serde(default)]
     pub cloud: CloudConfig,
@@ -184,6 +181,41 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.theme.theme, "dark");
         assert_eq!(config.kubernetes.default_namespace, "default");
+    }
+
+    /// Every config file written before those three sections were removed
+    /// still has them, and a reader whose settings failed to load because of
+    /// a section the app stopped caring about would lose their theme, their
+    /// cluster bindings and their saved port-forwards over it.
+    #[test]
+    fn a_file_still_carrying_the_removed_sections_loads() {
+        let old_file = r#"
+[theme]
+theme = "light"
+
+[kubernetes]
+default_namespace = "production"
+
+[cache]
+enabled = false
+ttl_seconds = 120
+max_entries = 4000
+
+[plugins]
+kubectl_plugins = false
+plugin_dirs = ["/opt/kubectl-plugins"]
+timeout_seconds = 30
+disabled = ["kubectl-foo"]
+
+[logging]
+level = "debug"
+max_size_mb = 50
+"#;
+
+        let parsed: AppConfig =
+            toml::from_str(old_file).expect("an unknown section is not a broken config");
+        assert_eq!(parsed.theme.theme, "light");
+        assert_eq!(parsed.kubernetes.default_namespace, "production");
     }
 
     #[test]
