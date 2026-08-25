@@ -1251,6 +1251,7 @@ export interface CustomResourceInfo {
 export interface ClusterPreferences {
   lastContext?: string;
   namespaces: Record<string, string>;
+  scopes: Record<string, string[]>;
 }
 
 export interface UpdaterConfig {

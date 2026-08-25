@@ -37,6 +37,19 @@ interface ClusterState {
    * from.
    */
   namespaceScope: string[];
+  /**
+   * The selection each context was last left on.
+   *
+   * Switching clusters used to clear the scope, so somebody with rights to
+   * two namespaces in each of six clusters reselected them every time they
+   * moved. The window remembers instead, per context, and restores on the
+   * way back.
+   *
+   * Held here as well as on disk because a switch has to happen in one
+   * render — reading it back over IPC would let a beat of the new cluster
+   * render under the old cluster's scope.
+   */
+  savedScopes: Record<string, string[]>;
   isConnected: boolean;
   isLoading: boolean;
   isAuthenticating: boolean;
@@ -61,11 +74,30 @@ interface ClusterState {
   disconnect: () => Promise<void>;
 }
 
+/**
+ * What the window looks at after moving to `context`.
+ *
+ * Staying put keeps whatever is on screen. Moving restores what that cluster
+ * was last left on — clearing it was the behaviour somebody with rights to
+ * two namespaces in each of six clusters had to undo on every switch.
+ */
+function scopeFor(
+  state: { savedScopes: Record<string, string[]>; namespaceScope: string[] },
+  context: string,
+  changed: boolean
+): { namespaceScope: string[]; currentNamespace: string } {
+  const scope = changed
+    ? clampScope(state.savedScopes[context] ?? [])
+    : state.namespaceScope;
+  return { namespaceScope: scope, currentNamespace: wireNamespace(scope) };
+}
+
 export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
   currentContext: null,
   currentNamespace: "", // Empty string means all namespaces
   namespaceScope: [],
+  savedScopes: {},
   isConnected: false,
   isLoading: false,
   isAuthenticating: false,
@@ -93,9 +125,21 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
           // one namespace or none — see `lib/namespace-scope.ts` — so this is
           // the same window every build has always reopened; `decodeScope`
           // covers the joined values earlier builds of this feature wrote.
-          const scope = clampScope(
-            decodeScope(prefs.namespaces[prefs.lastContext])
-          );
+          // Every context's selection, not only the one being reopened:
+          // the first switch to another cluster has to restore without a
+          // round-trip.
+          const savedScopes: Record<string, string[]> = {};
+          for (const [context, stored] of Object.entries(prefs.namespaces)) {
+            savedScopes[context] = clampScope(decodeScope(stored));
+          }
+          // The list wins where there is one — `namespaces` only ever holds
+          // a single namespace, so a selection of three reads as one there.
+          for (const [context, stored] of Object.entries(prefs.scopes ?? {})) {
+            savedScopes[context] = clampScope(stored);
+          }
+          set({ savedScopes });
+
+          const scope = savedScopes[prefs.lastContext] ?? [];
           if (scope.length > 0) {
             set({
               namespaceScope: scope,
@@ -121,8 +165,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const changed = previousContext !== null && previousContext !== context;
     set({
       currentContext: context,
-      namespaceScope: changed ? [] : get().namespaceScope,
-      currentNamespace: changed ? "" : get().currentNamespace,
+      ...scopeFor(get(), context, changed),
       error: null,
       errorContext: null,
     });
@@ -152,8 +195,11 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       // The wire value, not the selection: this field is one opaque string
       // per context that a build without this feature reads straight into
       // `currentNamespace`. The selection itself is kept by the scope tab.
+      set((state) => ({
+        savedScopes: { ...state.savedScopes, [context]: scope },
+      }));
       commands
-        .saveClusterPreferences(null, context, wireNamespace(scope))
+        .saveClusterPreferences(null, context, wireNamespace(scope), scope)
         .catch(() => {
           // Ignore errors saving preferences - not critical
         });
@@ -190,8 +236,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       errorContext: null,
       pendingContext: targetContext,
       currentContext: targetContext,
-      namespaceScope: changed ? [] : get().namespaceScope,
-      currentNamespace: changed ? "" : get().currentNamespace,
+      ...scopeFor(get(), targetContext, changed),
       isConnected: false,
       connectionAttemptId: attemptId,
       connectStartedAt: Date.now(),
@@ -222,7 +267,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       useClusterRecencyStore.getState().recordUse(connectedContext);
       // Save selected cluster on successful connection
       commands
-        .saveClusterPreferences(connectedContext, null, null)
+        .saveClusterPreferences(connectedContext, null, null, null)
         .catch(() => {
           // Ignore errors saving preferences - not critical
         });

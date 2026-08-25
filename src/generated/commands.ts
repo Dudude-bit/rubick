@@ -397,12 +397,14 @@ export async function getClusterPreferences(): Promise<ClusterPreferences> {
 export async function saveClusterPreferences(
   lastContext: string | null,
   context: string | null,
-  namespace: string | null
+  namespace: string | null,
+  scope: string[] | null
 ): Promise<void> {
   return invoke<void>("save_cluster_preferences", {
     lastContext,
     context,
     namespace,
+    scope,
   });
 }
 

@@ -167,9 +167,22 @@ pub struct ClusterPreferences {
         alias = "last_context"
     )]
     pub last_context: Option<String>,
-    /// Namespace per context
+    /// Namespace per context.
+    ///
+    /// One namespace or none — the wire value. Kept because a build without
+    /// multi-namespace scopes reads this field straight into its current
+    /// namespace, and a joined list here would have such a build asking the
+    /// API server for a namespace called `a,b`.
     #[serde(default)]
     pub namespaces: std::collections::HashMap<String, String>,
+    /// The whole selection per context, where there is more than one.
+    ///
+    /// Its own field rather than a joined `namespaces` value, for the reason
+    /// above: an older build ignores a field it does not know and keeps
+    /// reading `namespaces`, so downgrading loses the extra namespaces
+    /// instead of asking for a namespace that cannot exist.
+    #[serde(default)]
+    pub scopes: std::collections::HashMap<String, Vec<String>>,
 }
 
 #[cfg(test)]
