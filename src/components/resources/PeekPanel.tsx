@@ -124,8 +124,8 @@ function PeekContent({
   const activeTab = resolvePeekTab(requestedTab, tabs);
 
   const summary = useMemo(
-    () => (data === undefined ? null : source.summarise(data, target)),
-    [data, source, target]
+    () => (data === undefined ? null : source.summarise(data, target, t)),
+    [data, source, target, t]
   );
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
