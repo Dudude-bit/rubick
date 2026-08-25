@@ -249,12 +249,15 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             },
             {
               label: t("columns", "restarts"),
-              value: describeRestarts(pod),
+              value: describeRestarts(pod, t),
               tone: pod.restartCount > 0 ? "warn" : undefined,
             },
             {
               label: t("columns", "containers"),
-              value: `${readiness.ready} of ${readiness.total} ready`,
+              value: t("count", "readyOfTotal", {
+                ready: readiness.ready,
+                total: readiness.total,
+              }),
               tone: readiness.allReady ? undefined : "warn",
             },
             // Only when it disagrees with the badge above. `Phase Running`
@@ -290,12 +293,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             {
               label: "CPU",
-              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? "unlimited"}`,
+              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? t("empty", "unlimited")}`,
               mono: true,
             },
             {
               label: t("columns", "memory"),
-              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? "unlimited"}`,
+              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? t("empty", "unlimited")}`,
               mono: true,
             },
           ],
@@ -316,7 +319,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "replicas"),
-            value: `${deployment.replicas.ready} of ${deployment.replicas.desired} ready`,
+            value: t("count", "readyOfTotal", {
+              ready: deployment.replicas.ready,
+              total: deployment.replicas.desired,
+            }),
             tone:
               deployment.replicas.ready < deployment.replicas.desired
                 ? "warn"

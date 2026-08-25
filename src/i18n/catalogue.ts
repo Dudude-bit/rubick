@@ -2840,6 +2840,12 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    readyOfTotal: "{ready} of {total} ready",
+    restartsWithLast: {
+      one: "{n} restart, last {ago} ago",
+      other: "{n} restarts, last {ago} ago",
+    },
+    restartsPlain: { one: "{n} restart", other: "{n} restarts" },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",
       other: "{n} pods match its selector and all of them are Ready",

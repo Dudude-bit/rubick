@@ -533,7 +533,7 @@ export function PodDetail() {
     },
     {
       label: t("columns", "restarts"),
-      value: pod ? describeRestarts(pod) : 0,
+      value: pod ? describeRestarts(pod, t) : 0,
       tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
     },
     // Where the raw phase stays reachable — "the pod really is in phase
