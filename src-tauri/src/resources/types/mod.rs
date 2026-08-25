@@ -26,5 +26,5 @@ pub use pod::{
     mounts_of, volume_source, PodInfo, PodStatusInfo, PodVolumeInfo, VolumeMountInfo,
     VolumeObjectRef,
 };
-pub use pod_display::condition_is_true;
+pub use pod_display::{condition_is_true, restarts};
 pub use service::{ServiceInfo, ServicePortInfo};

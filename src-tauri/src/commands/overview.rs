@@ -65,6 +65,21 @@ const MAX_PROBLEMS: usize = 50;
 /// this is worth a look before it starts flapping.
 const RESTART_ATTENTION_THRESHOLD: i32 = 5;
 
+/// How recently the last restart has to have been for the pod to still count
+/// as restarting.
+///
+/// The comment above says a pod that restarted hours ago is noise, and the
+/// rule did not implement it: a restart count is a running total that never
+/// falls, so once a pod crossed the threshold it was reported for the rest
+/// of its life. Somebody rebooted a bare-metal cluster, every pod on it
+/// restarted, and two days later the Overview badge still said one problem
+/// about a pod that was `Running`, `7/7 ready` and had not restarted since.
+///
+/// An hour is far longer than a crash loop takes to come round again —
+/// `CrashLoopBackOff` caps its wait at five minutes — so nothing that is
+/// actually flapping escapes, and an incident that is over stops being news.
+const RESTART_RECENT_SECONDS: i64 = 3600;
+
 /// Waiting-state reasons that mean the pod is stuck, not starting up.
 const STUCK_WAITING_REASONS: &[&str] = &[
     "CrashLoopBackOff",
@@ -357,10 +372,11 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     let status = pod.status.as_ref()?;
     let phase = status.phase.as_deref().unwrap_or("");
 
-    let restarts: i32 = status
-        .container_statuses
-        .as_ref()
-        .map_or(0, |cs| cs.iter().map(|c| c.restart_count).sum());
+    // The same count the pod list shows, and the time of the last one. This
+    // used to sum `container_statuses` here and nowhere else, which left
+    // init containers and sidecars out — so a pod whose sidecar was flapping
+    // had one restart count on the Pods page and a different one here.
+    let (restarts, last_restart_at) = crate::resources::restarts(pod);
 
     if let Some((reason, message)) = stuck_reason(pod) {
         return Some(ClusterProblem {
@@ -426,7 +442,12 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
-    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" {
+    // Undated restarts still report, the way an undated Pending pod does:
+    // not knowing when it happened is not evidence that it is over.
+    let restarted_recently = last_restart_at
+        .is_none_or(|at| now - at < chrono::Duration::seconds(RESTART_RECENT_SECONDS));
+
+    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarted_recently {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Warning,
             kind: "Pod".to_string(),
@@ -434,7 +455,9 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             namespace,
             reason: "Restarting".to_string(),
             detail: Some(format!("{restarts} restarts since creation")),
-            since: created,
+            // Dated by the restart, not by the pod. `since: created` put a
+            // twelve-day-old date on something that happened minutes ago.
+            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
         });
     }
@@ -1074,8 +1097,9 @@ mod tests {
     use crate::metrics::{MetricsStatus, NodeMetrics};
     use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
     use k8s_openapi::api::core::v1::{
-        Container, ContainerState, ContainerStateWaiting, ContainerStatus, NodeStatus,
-        PodCondition, PodSpec, PodStatus, ResourceRequirements,
+        Container, ContainerState, ContainerStateRunning, ContainerStateTerminated,
+        ContainerStateWaiting, ContainerStatus, NodeStatus, PodCondition, PodSpec, PodStatus,
+        ResourceRequirements,
     };
     use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
@@ -1449,6 +1473,100 @@ mod tests {
             )],
             now,
         );
+        assert!(problems.is_empty());
+    }
+
+    /// A pod that restarted `count` times, the last of them `ago` seconds
+    /// back, and has been `Running` ever since.
+    fn restarted_pod(name: &str, now: DateTime<Utc>, count: i32, ago: Option<i64>) -> Pod {
+        pod(
+            name,
+            PodStatus {
+                phase: Some("Running".to_string()),
+                container_statuses: Some(vec![ContainerStatus {
+                    name: "app".to_string(),
+                    restart_count: count,
+                    ready: true,
+                    started: Some(true),
+                    state: Some(ContainerState {
+                        running: Some(ContainerStateRunning::default()),
+                        ..Default::default()
+                    }),
+                    last_state: ago.map(|seconds| ContainerState {
+                        terminated: Some(ContainerStateTerminated {
+                            exit_code: 1,
+                            finished_at: Some(at(now, seconds)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Reported from the field: somebody rebooted a bare-metal cluster, every
+    /// pod on it restarted, and two days later the Overview badge still said
+    /// one problem — about a pod that was `Running`, ready, and had not
+    /// restarted since. A restart count never falls, so "has restarted" was
+    /// true for the rest of that pod's life.
+    #[test]
+    fn a_pod_that_stopped_restarting_two_days_ago_is_not_a_problem() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("csi", now, 7, Some(2 * 24 * 3600))], now);
+        assert!(
+            problems.is_empty(),
+            "a pod that has been up for two days is not restarting: {problems:?}"
+        );
+    }
+
+    /// And one that is genuinely flapping still is. `CrashLoopBackOff` waits
+    /// at most five minutes, so anything alive comes round well inside the
+    /// window.
+    #[test]
+    fn a_pod_still_flapping_is_reported() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Restarting");
+        assert_eq!(problems[0].restarts, Some(7));
+    }
+
+    /// The row shows the age of `since`. Dating it by the pod put "12d" on
+    /// something that happened two minutes ago.
+    #[test]
+    fn the_problem_is_dated_by_the_restart_not_by_the_pod() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("flapper", now, 9, Some(120))], now);
+        let since: DateTime<Utc> = problems[0]
+            .since
+            .as_deref()
+            .expect("a restart problem carries the time of the restart")
+            .parse()
+            .expect("rfc3339");
+        assert!(
+            (now - since).num_seconds() < 300,
+            "expected the last restart, got {since}"
+        );
+    }
+
+    /// Not knowing when it happened is not evidence that it is over — the
+    /// same rule the Pending branch follows for an undated pod.
+    #[test]
+    fn restarts_with_no_recorded_time_still_report() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("undated", now, 7, None)], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Restarting");
+    }
+
+    /// Below the threshold nothing is said, however recent.
+    #[test]
+    fn a_couple_of_restarts_are_not_worth_a_row() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("fine", now, 2, Some(30))], now);
         assert!(problems.is_empty());
     }
 
