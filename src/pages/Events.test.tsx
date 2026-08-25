@@ -139,7 +139,12 @@ describe("what the limit is counted against", () => {
     expect(
       await screen.findByText(/500 normal · latest 500/)
     ).toBeInTheDocument();
-  });
+    // Five hundred rows in jsdom is the most expensive render in the suite.
+    // Alone it takes about a second; sharing eight cores with the rest of
+    // the files it has been seen at twelve, which the 5s default turns into
+    // a failure that says "timed out" about code that is working. The number
+    // is headroom for a loaded machine, not an expectation.
+  }, 30_000);
 });
 
 describe("what the join costs", () => {

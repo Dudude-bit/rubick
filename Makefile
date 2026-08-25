@@ -20,6 +20,12 @@ help:
 # output, and still exits 0 — the app then compiles and breaks at runtime.
 # Guard on the tool, and on the command count as a backstop for any other
 # cause of a lossy regeneration.
+#
+# REMOVED=n when you meant to delete commands. The count guard cannot tell a
+# deliberate removal from a lossy run — both are "fewer than last time" — so
+# it refused every intentional shrink of the API, which is a thing that has
+# to be possible. Say how many and it checks that exact number: state four
+# and lose five and it still fails, which is the case worth catching.
 gen-entities-tauri:
 	@$(MISE_EXEC) cargo expand --version >/dev/null 2>&1 || { \
 		echo "error: cargo-expand not found — run 'mise install', or 'cargo install cargo-expand' (needs a nightly toolchain)"; \
@@ -28,12 +34,19 @@ gen-entities-tauri:
 	@before=$$(grep -c '^export async function' src/generated/commands.ts 2>/dev/null || echo 0); \
 	$(MISE_EXEC) tauri-ts-generator generate --verbose || exit 1; \
 	after=$$(grep -c '^export async function' src/generated/commands.ts); \
-	if [ "$$after" -lt "$$before" ]; then \
-		echo "error: generated command count dropped $$before -> $$after."; \
+	removed=$${REMOVED:-0}; \
+	expected=$$((before - removed)); \
+	if [ "$$after" -lt "$$expected" ]; then \
+		echo "error: generated command count is $$after, expected at least $$expected ($$before minus REMOVED=$$removed)."; \
 		echo "       The output is missing commands — discard it with 'git checkout -- src/generated/'."; \
+		echo "       Deleting commands on purpose? Say how many: make gen-entities-tauri REMOVED=n"; \
 		exit 1; \
 	fi; \
 	echo "generated $$after commands"
+	@# The generator writes one long line per import list and per signature;
+	@# the committed files are formatted. Without this every regeneration
+	@# reads as ~900 changed lines and the one real change hides in them.
+	@bunx prettier --write src/generated/commands.ts src/generated/types.ts >/dev/null
 
 # Regenerate every platform's icon from src-tauri/icons/base.png.
 #

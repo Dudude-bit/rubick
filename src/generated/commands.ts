@@ -353,12 +353,6 @@ export async function addYamlHistoryEntry(
   return invoke<void>("add_yaml_history_entry", { resourceKey, entry });
 }
 
-export async function getAllYamlHistory(): Promise<
-  Record<string, YamlHistoryEntryDto[]>
-> {
-  return invoke<Record<string, YamlHistoryEntryDto[]>>("get_all_yaml_history");
-}
-
 export async function getInfrastructureState(
   context: string
 ): Promise<InfrastructureBuilderStateDto> {

@@ -125,29 +125,6 @@ pub fn add_yaml_history_entry(resource_key: String, entry: YamlHistoryEntryDto) 
     })
 }
 
-#[tauri::command]
-pub fn get_all_yaml_history() -> Result<std::collections::HashMap<String, Vec<YamlHistoryEntryDto>>>
-{
-    read_config(|config| {
-        config
-            .yaml_editor
-            .history
-            .iter()
-            .map(|(k, v)| {
-                let entries = v
-                    .iter()
-                    .map(|e| YamlHistoryEntryDto {
-                        timestamp: e.timestamp,
-                        content: e.content.clone(),
-                        label: e.label.clone(),
-                    })
-                    .collect();
-                (k.clone(), entries)
-            })
-            .collect()
-    })
-}
-
 // ============================================================================
 // Infrastructure builder canvas state
 // ============================================================================
