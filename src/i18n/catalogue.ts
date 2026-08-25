@@ -811,6 +811,7 @@ export const en = {
     configureInSettings: "Configure in Settings",
     installHelm: "Install Helm",
     search: "Search",
+    filterEventsPlaceholder: "Filter events…",
     hintOpen: "open",
     hintMove: "move",
     hintSearch: "search",
@@ -1939,6 +1940,8 @@ export const en = {
     renewsAutomatically: "renews automatically {when}",
     renewalNotFinished: "Renewal has not finished",
     noEventsInScope: "No events in {scope} yet.",
+    noEventsMatch:
+      "No event in {scope} matches “{query}”. The filter reads the reason, the object, its namespace and the message.",
     drainExplained:
       "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
     readingWhatRefusesToMove: "Reading what would refuse to move…",

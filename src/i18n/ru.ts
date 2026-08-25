@@ -791,6 +791,7 @@ export const ru: Catalogue = {
     configureInSettings: "Настроить в настройках",
     installHelm: "Установить Helm",
     search: "Поиск",
+    filterEventsPlaceholder: "Фильтр событий…",
     hintOpen: "открыть",
     hintMove: "выбрать",
     hintSearch: "поиск",
@@ -1988,6 +1989,8 @@ export const ru: Catalogue = {
     renewsAutomatically: "продлевается автоматически {when}",
     renewalNotFinished: "Продление не завершено",
     noEventsInScope: "Событий в {scope} пока нет.",
+    noEventsMatch:
+      "В {scope} нет событий по запросу «{query}». Фильтр смотрит на причину, объект, его неймспейс и сообщение.",
     drainExplained:
       "Узел закрывается для планирования, и каждый под на нём, который контроллер может пересоздать, вытесняется. Поды DaemonSet остаются.",
     readingWhatRefusesToMove: "Читаем, что откажется переезжать…",
