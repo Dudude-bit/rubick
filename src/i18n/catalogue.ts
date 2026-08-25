@@ -938,6 +938,49 @@ export const en = {
     restart: "Restart",
     debug: "Debug",
     portForward: "Port forward",
+    restartDeletesIt: "Restart (deletes it)",
+    podFinishedNoShell:
+      "This pod has finished — {phase}. There is no process left to attach a shell to.",
+    podStoppedNoShell:
+      "This pod has stopped. Its containers are gone, so there is nothing to attach to.",
+    noContainerRunningYet:
+      "No container is running yet — this pod is {phase}{note}.",
+    waitingNote: " · {container} {reason}",
+    podDeclaresNoPort:
+      "No container in this pod declares a port, so there is nothing to forward to.",
+    nothingListeningYet:
+      "Nothing is listening yet — no container is running, this pod is {phase}{note}.",
+    serviceDeclaresNoPorts:
+      "This Service declares no ports, so there is nothing to forward.",
+    endpointsUnreadable: "Could not read this Service's endpoints: {error}",
+    noReadyEndpoints:
+      "No ready endpoints — nothing is behind this Service to forward to.",
+    deleteSubjectTitle: "Delete {subject}?",
+    deleteSubjectBody: "Deleting {subject} {effect}",
+    restartSubjectTitle: "Restart {subject}?",
+    restartBareBody:
+      "Restarting a pod means deleting it. Nothing owns {subject}, so nothing will recreate it — this removes the pod for good.",
+    effectPodOwned:
+      "removes it now. Its {kind} {name} will start a replacement.",
+    effectPodBare:
+      "removes it now. Nothing owns this pod, so nothing will bring it back.",
+    effectWorkloadPods: "removes it and every pod it runs.",
+    effectStatefulSet:
+      "removes it and its pods. The PersistentVolumeClaims it created stay behind and keep costing.",
+    effectDaemonSet: "removes it and its pod on every node it runs on.",
+    effectJob: "removes it and the pods it created, including their logs.",
+    effectCronJob:
+      "stops the schedule and removes it. Jobs it has already created stay behind.",
+    effectService:
+      "removes its address. Anything resolving this name stops reaching these pods.",
+    effectConfigLike:
+      "leaves running pods alone, but any pod that mounts it will fail to start until it is recreated.",
+    effectClaim:
+      "releases the volume. Depending on the storage class's reclaim policy the data may be erased.",
+    effectVolume:
+      "removes the volume object. Whether the data survives is up to its reclaim policy.",
+    effectPermanent: "is permanent and cannot be undone.",
+    podSubject: "pod {name}",
     validate: "Validate",
     apply: "Apply",
     applyAnyway: "Apply anyway",
@@ -2701,6 +2744,10 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    effectDeploymentPods: {
+      one: "removes it and the {n} pod it runs.",
+      other: "removes it and the {n} pods it runs.",
+    },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",
       other: "{n} reconcilers from {sources}",

@@ -216,7 +216,7 @@ export function useObjectActions({
     onError: failed("scale"),
   });
 
-  const plan = planPeekActions(kind, detail, {
+  const plan = planPeekActions(kind, detail, t, {
     backend: backendQuery.data,
     backendPending:
       backendQuery.isPending && backendQuery.fetchStatus !== "idle",
@@ -278,8 +278,8 @@ export function useObjectActions({
       : null
     : podForward(pod);
 
-  const deletion = describeDeletion(kind, name, namespace, detail);
-  const bareRestart = describeBareRestart(name, namespace);
+  const deletion = describeDeletion(kind, name, namespace, detail, t);
+  const bareRestart = describeBareRestart(name, namespace, t);
 
   const dialogs = (
     <>
