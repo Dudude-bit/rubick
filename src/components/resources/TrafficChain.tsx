@@ -534,7 +534,7 @@ export function TrafficChain({
   // condition. `trafficChains` is pure and answers an empty list for no data,
   // which is exactly what the hook should be asked about in that case.
   const paths = data
-    ? trafficChains(data, {
+    ? trafficChains(data, t, {
         certificates: certificates ?? routed.certificates,
         controller,
         routing: routed.routing,
@@ -567,7 +567,7 @@ export function TrafficChain({
   }
 
   if (paths.length === 0) {
-    const silence = chainSilence(data);
+    const silence = chainSilence(data, t);
     // A quiet single line, and no heading over it: a heading plus one
     // sentence is two lines spent saying that nothing is there.
     return silence ? <p className="text-xs text-fg-fnt">{silence}</p> : null;

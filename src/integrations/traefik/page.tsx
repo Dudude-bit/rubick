@@ -1117,7 +1117,7 @@ function describeFinding(
       // The same three sentences the traffic chain uses, so "no pod carries
       // app=promo" reads identically whether it was reached from a
       // Deployment or from a hostname.
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest502", {
           reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,

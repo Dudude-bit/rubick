@@ -92,8 +92,9 @@ function Outside({ end }: { end: OutsideEnd }) {
 }
 
 function Row({ row }: { row: ConnRow }) {
+  const t = useT();
   const existence = row.object
-    ? describeExistence(row.object, row.verifiable ?? false)
+    ? describeExistence(row.object, t, row.verifiable ?? false)
     : null;
   // One way stays on the name's line, as a name and what it is for. Several
   // become their own lines, because five clauses joined by commas is a
@@ -197,7 +198,7 @@ export function ConnectionsPanel({
     );
   }
 
-  const groups = connectionGroups(data, deliveries);
+  const groups = connectionGroups(data, t, deliveries);
   if (groups.length === 0) return <Nothing subject={data.subject} />;
 
   return (

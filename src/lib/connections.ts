@@ -13,6 +13,7 @@
  * into a sentence.
  */
 
+import type { T } from "@/i18n/useT";
 import { covers } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
@@ -65,11 +66,20 @@ function unique(refs: ObjectRef[]): ObjectRef[] {
   });
 }
 
-/** "a, and b" for two; "a, b, and c" past that — the mock's rhythm. */
-function sentence(parts: string[]): string {
+/**
+ * "a, and b" for two; "a, b, and c" past that — the mock's rhythm.
+ *
+ * The last join is a catalogue string because it is a word: English puts
+ * "and" there and Russian puts "и", with no comma before it. Hard-coding
+ * either one leaves the other language reading a sentence in two.
+ */
+function sentence(parts: string[], t: T): string {
   const kept = [...new Set(parts.filter(Boolean))];
   if (kept.length <= 1) return kept[0] ?? "";
-  return `${kept.slice(0, -1).join(", ")}, and ${kept[kept.length - 1]}`;
+  return t("nav", "listAndLast", {
+    list: kept.slice(0, -1).join(", "),
+    last: kept[kept.length - 1],
+  });
 }
 
 const join = (...parts: (string | null | undefined | false)[]) =>
@@ -83,7 +93,11 @@ const join = (...parts: (string | null | undefined | false)[]) =>
  * `containers` is the containers this one line covers — several, where a
  * mount was grouped — and null where naming them would be noise.
  */
-function describeUsage(usage: Usage, containers: string[] | null): string {
+function describeUsage(
+  usage: Usage,
+  containers: string[] | null,
+  t: T
+): string {
   // Leading rather than trailing: on their own lines these read as a column
   // of containers, and "mounted at /etc/app in app" invites the path to be
   // read as part of the sentence.
@@ -104,15 +118,15 @@ function describeUsage(usage: Usage, containers: string[] | null): string {
     case "env":
       return inside(`${usage.name} reads ${usage.key}`);
     case "envFrom":
-      return inside("every key becomes an environment variable");
+      return inside(t("nav", "everyKeyBecomesEnv"));
     case "imagePullSecret":
-      return "used to pull the images";
+      return t("nav", "usedToPullImages");
     case "identity":
-      return "the identity it runs as";
+      return t("nav", "identityItRunsAs");
     case "ingressTls":
       return usage.hosts.length > 0
         ? `serves TLS for ${usage.hosts.join(", ")}`
-        : "serves TLS for every host on this Ingress";
+        : t("nav", "servesTlsForHosts");
   }
 }
 
@@ -137,7 +151,7 @@ function describeUsage(usage: Usage, containers: string[] | null): string {
  * edge does not carry, and which a ConfigMap page listing four pods that use
  * it could not know for any of them.
  */
-export function describeUsages(usages: Usage[]): string[] {
+export function describeUsages(usages: Usage[], t: T): string[] {
   const groups = groupMounts(usages.filter((use) => use.how === "mount"));
   const rest = usages.filter((use) => use.how !== "mount");
   const drawnBy = new Set(
@@ -147,12 +161,13 @@ export function describeUsages(usages: Usage[]): string[] {
   const say = (containers: boolean) => [
     ...new Set([
       ...groups.map((group) =>
-        describeUsage(group.mount, containers ? group.containers : null)
+        describeUsage(group.mount, containers ? group.containers : null, t)
       ),
       ...rest.map((use) =>
         describeUsage(
           use,
-          containers && "container" in use ? [use.container] : null
+          containers && "container" in use ? [use.container] : null,
+          t
         )
       ),
     ]),
@@ -161,11 +176,11 @@ export function describeUsages(usages: Usage[]): string[] {
   const ways = say(false);
   if (ways.length > 2 || (ways.length > 1 && drawnBy.size > 1))
     return say(true);
-  return [sentence(ways)].filter(Boolean);
+  return [sentence(ways, t)].filter(Boolean);
 }
 
 /** What the far end knows about itself, where it is worth a line. */
-function describeFacts(facts: ObjectFacts | null): string | null {
+function describeFacts(facts: ObjectFacts | null, t: T): string | null {
   if (!facts) return null;
   switch (facts.kind) {
     case "claim":
@@ -180,7 +195,7 @@ function describeFacts(facts: ObjectFacts | null): string | null {
             `${facts.replicas} ${facts.replicas === 1 ? "pod" : "pods"}`
           );
     case "service":
-      return serviceVia(facts);
+      return serviceVia(facts, t);
     case "ingress":
       return facts.className;
     case "autoscaler":
@@ -208,14 +223,17 @@ function nodeCapacity(facts: Extract<ObjectFacts, { kind: "node" }>): string {
   );
 }
 
-function serviceVia(facts: Extract<ObjectFacts, { kind: "service" }>): string {
+function serviceVia(
+  facts: Extract<ObjectFacts, { kind: "service" }>,
+  t: T
+): string {
   const address =
     facts.externalName !== null
       ? `ExternalName → ${facts.externalName}`
       : join(facts.type, facts.clusterIp);
   return join(
     address,
-    facts.selector ? `selects ${facts.selector}` : "no selector"
+    facts.selector ? `selects ${facts.selector}` : t("nav", "noSelector")
   );
 }
 
@@ -241,10 +259,12 @@ function servicePorts(ref: ObjectRef): string | null {
  */
 export function describeExistence(
   ref: ObjectRef,
+  t: T,
   verifiable = true
 ): string | null {
-  if (ref.existence === "missing") return "does not exist in this namespace";
-  if (ref.existence === "notChecked" && verifiable) return "not checked";
+  if (ref.existence === "missing") return t("nav", "notInThisNamespace");
+  if (ref.existence === "notChecked" && verifiable)
+    return t("nav", "notChecked");
   return null;
 }
 
@@ -259,46 +279,50 @@ export function describeExistence(
  * the one this chain used to make — since the pods really are Ready and it is
  * the endpoint controller that skipped them.
  */
-export function describeStop(stop: ChainStop): { title: string; note: string } {
+export function describeStop(
+  stop: ChainStop,
+  t: T
+): { title: string; note: string } {
   switch (stop.reason) {
     case "publishesNothing": {
       const matched =
-        stop.pods === 1
-          ? "1 pod matches its selector and it is Ready"
-          : stop.readyPods === stop.pods
-            ? `${stop.pods} pods match its selector and all of them are Ready`
-            : `${stop.pods} pods match its selector and ${stop.readyPods} of them are Ready`;
+        stop.readyPods === stop.pods
+          ? t("count", "podsMatchAllReady", { n: stop.pods })
+          : t("count", "podsMatchSomeReady", {
+              n: stop.pods,
+              ready: stop.readyPods,
+            });
       if (stop.unnamedPorts.length === 0) {
         return {
-          title: "This Service publishes no endpoint",
-          note: `${matched}, and not one of them is in anything this Service publishes. Why is not something these objects state — a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.`,
+          title: t("nav", "servicePublishesNoEndpoint"),
+          note: t("nav", "stopNoSliceNote", { matched }),
         };
       }
       const asked = stop.unnamedPorts
-        .map((name) => `targetPort: ${name}`)
+        .map((name) => t("nav", "targetPortNamed", { name }))
         .join(", ");
       return {
-        title: "This Service publishes no endpoint",
-        note: `${matched}, but it asks for ${asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.`,
+        title: t("nav", "servicePublishesNoEndpoint"),
+        note: t("nav", "stopUnnamedPortNote", { matched, asked }),
       };
     }
     case "backendMissing":
       return {
-        title: `No Service named ${stop.service.name} in this namespace`,
-        note: "The Ingress routes this path to a backend that was never created, so the controller has nothing to send the request to. The rule above is fine; the name in it is the fault.",
+        title: t("nav", "stopNoServiceNamed", { name: stop.service.name }),
+        note: t("nav", "ingressBackendNeverCreated"),
       };
     case "selectsNothing":
       return {
-        title: `No pod carries ${stop.selector}`,
-        note: "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+        title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
+        note: t("nav", "connectionRefusedNothingBehind"),
       };
     case "noneReady":
       return {
-        title:
-          stop.pods === 1
-            ? `1 pod carries ${stop.selector}, and it is not ready`
-            : `${stop.pods} pods carry ${stop.selector}, and none of them is ready`,
-        note: "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+        title: t("count", "podsCarryNotReady", {
+          n: stop.pods,
+          selector: stop.selector,
+        }),
+        note: t("nav", "stopNoneReadyNote"),
       };
   }
 }
@@ -412,7 +436,7 @@ export interface ChainPath {
  */
 export interface RoutedIngress {
   tls: Array<{ secretName: string; hosts: string[] }>;
-  /** Who picks it up, including "nobody does". */
+  /** Who picks it up, including t("nav", "nobodyDoes"). */
   binding: IngressClassBinding | null;
   /**
    * Where the controller published it: `status.loadBalancer.ingress`, as an
@@ -435,6 +459,7 @@ const verb = <V extends Relation["verb"]>(
 function routeHop(
   edges: ConnectionEdge[],
   object: ObjectRef,
+  t: T,
   known?: RoutedIngress
 ): ChainHopObject {
   const relations = edges.map(
@@ -451,8 +476,10 @@ function routeHop(
     self: false,
     detail,
     via: join(
-      relations.some((rule) => rule.tls) ? "over HTTPS" : "over plain HTTP",
-      describeFacts(object.facts)
+      relations.some((rule) => rule.tls)
+        ? t("nav", "overHttps")
+        : t("nav", "overHttpPlain"),
+      describeFacts(object.facts, t)
     ),
     urls: [
       ...new Set(
@@ -467,13 +494,13 @@ function routeHop(
   };
 }
 
-function serviceHop(object: ObjectRef, self: boolean): ChainHopObject {
+function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
   return {
     at: "object",
     object,
     self,
     detail: servicePorts(object),
-    via: describeFacts(object.facts),
+    via: describeFacts(object.facts, t),
     urls: [],
     publishedAt: null,
   };
@@ -555,6 +582,7 @@ function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
  */
 export function trafficChains(
   conns: ResourceConnections,
+  t: T,
   /**
    * What the page has read beyond the edges. Every field is optional and
    * the chain is whole without any of them — the hops they add extend the
@@ -622,18 +650,18 @@ export function trafficChains(
           hops.push({ at: "controller", binding: extra.controller });
         }
         hops.push({
-          ...routeHop(mine, subject, extra.routing?.get(refKey(subject))),
+          ...routeHop(mine, subject, t, extra.routing?.get(refKey(subject))),
           self: true,
         });
         hops.push(
           service.kind === "Service"
-            ? serviceHop(service, false)
+            ? serviceHop(service, false, t)
             : {
                 at: "object",
                 object: service,
                 self: false,
                 detail: null,
-                via: "a resource backend — the app does not follow these",
+                via: t("nav", "resourceBackend"),
                 urls: [],
                 publishedAt: null,
               }
@@ -666,9 +694,9 @@ export function trafficChains(
           if (known?.binding) {
             hops.push({ at: "controller", binding: known.binding });
           }
-          hops.push(routeHop([edge], edge.from, known));
+          hops.push(routeHop([edge], edge.from, t, known));
         }
-        hops.push(serviceHop(service, subject.kind === "Service"));
+        hops.push(serviceHop(service, subject.kind === "Service", t));
       }
 
       if (
@@ -692,13 +720,13 @@ export function trafficChains(
           object: subject,
           self: true,
           detail: null,
-          via: describeFacts(subject.facts),
+          via: describeFacts(subject.facts, t),
           urls: [],
           publishedAt: null,
         });
       }
 
-      if (stop) hops.push({ at: "stop", ...describeStop(stop) });
+      if (stop) hops.push({ at: "stop", ...describeStop(stop, t) });
       else if (
         subject.kind !== "Pod" &&
         published &&
@@ -718,7 +746,7 @@ export function trafficChains(
  * claim rather than an absence of data — which is the only reason it is
  * allowed to be this short.
  */
-export function chainSilence(conns: ResourceConnections): string | null {
+export function chainSilence(conns: ResourceConnections, t: T): string | null {
   const subject = conns.subject;
   const facts = subject.facts;
   if (subject.kind === "Service") {
@@ -726,15 +754,15 @@ export function chainSilence(conns: ResourceConnections): string | null {
       return `This Service has no selector: it resolves to ${facts.externalName} rather than to anything in this cluster.`;
     }
     if (facts?.kind === "service" && facts.selector === null) {
-      return "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.";
+      return t("nav", "endpointsByHandNoneWritten");
     }
     return null;
   }
   if (subject.kind === "Ingress") {
-    return "This Ingress states no backend, so it routes nothing.";
+    return t("nav", "ingressStatesNoBackend");
   }
   if (subject.kind === "Pod") {
-    return "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.";
+    return t("nav", "noServiceSelectsPod");
   }
   return `No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this ${subject.kind}.`;
 }
@@ -761,6 +789,8 @@ export interface OutsideEnd {
 }
 
 export interface ConnRow {
+  /** Sort order, where the group has one. Not a label — see NEED_LABEL. */
+  rank?: number;
   key: string;
   /** Left column. Empty continues the row above, as a table of facts does. */
   label: string;
@@ -772,7 +802,7 @@ export interface ConnRow {
   /** Every way the subject draws on it — one line each past two. */
   ways: string[];
   /**
-   * Whether this row is worth saying "not checked" on.
+   * Whether this row is worth saying t("nav", "notChecked") on.
    *
    * Only where existence bears on the claim the group makes. "If one of these
    * is missing the pod does not start" is exactly such a claim, so a name the
@@ -794,14 +824,66 @@ export interface ConnGroup {
 }
 
 /** Which question a thing a pod spec names is an answer to. */
-const NEED_LABEL: Record<string, string> = {
-  ConfigMap: "Configuration",
-  Secret: "Configuration",
-  PersistentVolumeClaim: "Storage",
-  ServiceAccount: "Identity",
+/**
+ * What a needed object is called, as a catalogue key rather than the words.
+ *
+ * The words used to be the key: this table held "Configuration" and the sort
+ * below looked that same string up in an order list. Translating the label
+ * would have left every row ranked last, in whatever order the API happened
+ * to return them — a label doing double duty as a sort key breaks the moment
+ * the label stops being English.
+ */
+const NEED_LABEL: Record<string, NeedKey> = {
+  ConfigMap: "configuration",
+  Secret: "configuration",
+  PersistentVolumeClaim: "storage",
+  ServiceAccount: "identity",
 };
 
-const NEED_ORDER = ["Configuration", "TLS certificate", "Storage", "Identity"];
+type NeedKey = "configuration" | "tlsCertificate" | "storage" | "identity";
+
+/** Worst-to-least surprising, and independent of the language. */
+const NEED_ORDER: NeedKey[] = [
+  "configuration",
+  "tlsCertificate",
+  "storage",
+  "identity",
+];
+
+/** Which of the four a needed object is, or none of them. */
+function needKey(edge: { relation: { usages: Usage[] }; to: ObjectRef }) {
+  return edge.relation.usages.every((use) => use.how === "ingressTls")
+    ? ("tlsCertificate" as NeedKey)
+    : NEED_LABEL[edge.to.kind];
+}
+
+/** Its place in the order, or last for a kind the table does not name. */
+function needRank(edge: { relation: { usages: Usage[] }; to: ObjectRef }) {
+  const key = needKey(edge);
+  const at = key ? NEED_ORDER.indexOf(key) : -1;
+  return at === -1 ? NEED_ORDER.length : at;
+}
+
+/** And what to call it — the kind's own name where the table has none. */
+function needLabel(
+  edge: { relation: { usages: Usage[] }; to: ObjectRef },
+  t: T
+): string {
+  // The four live in two sections of the catalogue, so the section is part
+  // of the answer rather than something a caller can guess.
+  switch (needKey(edge)) {
+    case "configuration":
+      return t("nav", "configuration");
+    case "tlsCertificate":
+      return t("nav", "tlsCertificate");
+    case "storage":
+      return t("nav", "storage");
+    case "identity":
+      return t("columns", "identity");
+    default:
+      return edge.to.kind;
+  }
+}
 
 /**
  * What the top of an ownership chain is worth opening for. Shared with the
@@ -819,10 +901,16 @@ const OWNABLE = new Set([
   "CronJob",
 ]);
 
-const UNASKED_LABEL: Record<string, string> = {
-  HorizontalPodAutoscaler: "Autoscaling",
-  PodDisruptionBudget: "Disruption budget",
+const UNASKED_LABEL: Record<string, "autoscaling" | "disruptionBudget"> = {
+  HorizontalPodAutoscaler: "autoscaling",
+  PodDisruptionBudget: "disruptionBudget",
 };
+
+/** The same, for the group that names what was never read. */
+function unaskedLabel(kind: string, t: T): string {
+  const key = UNASKED_LABEL[kind];
+  return key ? t("nav", key) : kind;
+}
 
 /** A label is written once and left blank on the rows that repeat it. */
 function labelled(rows: ConnRow[]): ConnRow[] {
@@ -836,50 +924,47 @@ function labelled(rows: ConnRow[]): ConnRow[] {
 
 /**
  * A row for an object with nothing but its own facts to add. Existence is
- * left off deliberately: "not checked" is a different claim from a fact the
+ * left off deliberately: t("nav", "notChecked") is a different claim from a fact the
  * cluster stated, and the row draws it in its own tone rather than smuggling
  * it into the same string.
  */
-function rowFor(label: string, object: ObjectRef, extra?: string): ConnRow {
+function rowFor(
+  label: string,
+  object: ObjectRef,
+  t: T,
+  extra?: string
+): ConnRow {
   return {
     key: refKey(object),
     label,
     object,
-    detail: join(extra, describeFacts(object.facts)),
+    detail: join(extra, describeFacts(object.facts, t)),
     ways: [],
   };
 }
 
-function needsToRun(conns: ResourceConnections): ConnRow[] {
+function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
   const rows = verb(conns.edges, "uses")
     .filter((edge) => sameObject(edge.from, conns.subject))
     .map((edge) => ({
-      ...rowFor(
-        edge.relation.usages.every((use) => use.how === "ingressTls")
-          ? "TLS certificate"
-          : (NEED_LABEL[edge.to.kind] ?? edge.to.kind),
-        edge.to
-      ),
-      ways: describeUsages(edge.relation.usages),
+      ...rowFor(needLabel(edge, t), edge.to, t),
+      ways: describeUsages(edge.relation.usages, t),
       verifiable: true,
+      rank: needRank(edge),
     }));
-  rows.sort((a, b) => {
-    const rank = (label: string) => {
-      const at = NEED_ORDER.indexOf(label);
-      return at === -1 ? NEED_ORDER.length : at;
-    };
-    return rank(a.label) - rank(b.label);
-  });
+  rows.sort(
+    (a, b) => (a.rank ?? NEED_ORDER.length) - (b.rank ?? NEED_ORDER.length)
+  );
   return labelled(rows);
 }
 
-function usedBy(conns: ResourceConnections): ConnRow[] {
+function usedBy(conns: ResourceConnections, t: T): ConnRow[] {
   return labelled(
     verb(conns.edges, "uses")
       .filter((edge) => sameObject(edge.to, conns.subject))
       .map((edge) => ({
-        ...rowFor(edge.from.kind, edge.from),
-        ways: describeUsages(edge.relation.usages),
+        ...rowFor(edge.from.kind, edge.from, t),
+        ways: describeUsages(edge.relation.usages, t),
       }))
   );
 }
@@ -892,7 +977,7 @@ function usedBy(conns: ResourceConnections): ConnRow[] {
  * ownership edges are the answer, and the ReplicaSet in between is noise
  * here.
  */
-function answersHere(conns: ResourceConnections): ConnRow[] {
+function answersHere(conns: ResourceConnections, t: T): ConnRow[] {
   const owns = verb(conns.edges, "owns");
   const owned = new Set(owns.map((edge) => refKey(edge.to)));
   return labelled(
@@ -902,7 +987,7 @@ function answersHere(conns: ResourceConnections): ConnRow[] {
         .filter(
           (from) => !owned.has(refKey(from)) && !sameObject(from, conns.subject)
         )
-    ).map((object) => rowFor(object.kind, object))
+    ).map((object) => rowFor(object.kind, object, t))
   );
 }
 
@@ -924,7 +1009,7 @@ function answersHere(conns: ResourceConnections): ConnRow[] {
  * clause is what makes it worth following, and it is only ever put on a kind
  * this app can actually scale, so it never points somewhere with no control.
  */
-function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
+function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   const owns = verb(conns.edges, "owns");
   const children = owns.filter((edge) => sameObject(edge.from, conns.subject));
 
@@ -937,9 +1022,10 @@ function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
     for (const edge of up) {
       rows.push({
         ...rowFor(
-          "Controlled by",
+          t("columns", "controlledBy"),
           edge.from,
-          edge.relation.controller ? undefined : "an owner, not the controller"
+          t,
+          edge.relation.controller ? undefined : t("nav", "ownerNotController")
         ),
         key: `owner:${refKey(edge.from)}`,
       });
@@ -961,7 +1047,7 @@ function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
   if (rows.length === 0) {
     rows.push({
       key: "owner:none",
-      label: "Controlled by",
+      label: t("columns", "controlledBy"),
       object: null,
       detail: `nothing — a ${conns.subject.kind} is the top`,
       ways: [],
@@ -975,7 +1061,11 @@ function madeByAndMakes(conns: ResourceConnections): ConnRow[] {
 
   for (const edge of [...revisions, ...rest]) {
     rows.push({
-      ...rowFor(edge.to.kind === "ReplicaSet" ? "Revisions" : "Runs", edge.to),
+      ...rowFor(
+        edge.to.kind === "ReplicaSet" ? "Revisions" : "Runs",
+        edge.to,
+        t
+      ),
       key: `child:${refKey(edge.to)}`,
     });
   }
@@ -997,17 +1087,17 @@ function revisionOf(object: ObjectRef): number {
  * to live there and would have drawn that as the whole answer; the subject's
  * own scope decides now, and a Node's pods are read across every namespace.
  */
-function placement(conns: ResourceConnections): ConnGroup | null {
+function placement(conns: ResourceConnections, t: T): ConnGroup | null {
   const edges = verb(conns.edges, "runsOn");
   if (edges.length === 0) return null;
-  if (conns.subject.kind === "Node") return runsHere(conns, edges);
+  if (conns.subject.kind === "Node") return runsHere(conns, edges, t);
   return {
     key: "placement",
-    title: "Runs on",
+    title: t("nav", "runsOn"),
     caption: null,
     rows: labelled(
       unique(edges.map((edge) => edge.to)).map((object) =>
-        rowFor("Nodes", object)
+        rowFor("Nodes", object, t)
       )
     ),
   };
@@ -1027,7 +1117,8 @@ function placement(conns: ResourceConnections): ConnGroup | null {
  */
 function runsHere(
   conns: ResourceConnections,
-  edges: ConnectionEdge[]
+  edges: ConnectionEdge[],
+  t: T
 ): ConnGroup {
   const pods = unique(edges.map((edge) => edge.from)).sort(
     (a, b) =>
@@ -1045,10 +1136,12 @@ function runsHere(
   }${capacity}`;
   return {
     key: "placed",
-    title: "What runs here",
+    title: t("nav", "whatRunsHere"),
     caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts) : null)}`,
     rows: labelled(
-      pods.map((pod) => rowFor(pod.namespace ?? "no namespace", pod))
+      pods.map((pod) =>
+        rowFor(pod.namespace ?? t("nav", "noNamespaceValue"), pod, t)
+      )
     ),
   };
 }
@@ -1068,9 +1161,9 @@ function runsHere(
  * opposite kind of thing. The workload runs perfectly well without it, and
  * has no say in it either way.
  */
-function governedBy(conns: ResourceConnections): ConnRow[] {
+function governedBy(conns: ResourceConnections, t: T): ConnRow[] {
   const rows = verb(conns.edges, "governs").map((edge) => ({
-    ...rowFor(GOVERNOR_LABEL[edge.from.kind] ?? edge.from.kind, edge.from),
+    ...rowFor(governorLabel(edge.from.kind, t), edge.from, t),
     key: `governs:${refKey(edge.from)}:${refKey(edge.to)}`,
     ways: [
       // Named where the far end is not the page's own subject — on a pod, an
@@ -1091,22 +1184,31 @@ function governedBy(conns: ResourceConnections): ConnRow[] {
   return labelled(rows);
 }
 
-const GOVERNOR_LABEL: Record<string, string> = {
-  HorizontalPodAutoscaler: "Autoscaling",
-  PodDisruptionBudget: "Disruption budget",
+const GOVERNOR_LABEL: Record<string, "autoscaling" | "disruptionBudget"> = {
+  HorizontalPodAutoscaler: "autoscaling",
+  PodDisruptionBudget: "disruptionBudget",
 };
+
+/** What governs this, in words — the kind's own name where there are none. */
+function governorLabel(kind: string, t: T): string {
+  const key = GOVERNOR_LABEL[kind];
+  return key ? t("nav", key) : kind;
+}
 
 const GOVERNS_VERB: Record<string, string> = {
   HorizontalPodAutoscaler: "scales",
   PodDisruptionBudget: "protects",
 };
 
-function bindings(conns: ResourceConnections): ConnRow[] {
+function bindings(conns: ResourceConnections, t: T): ConnRow[] {
   return labelled(
     verb(conns.edges, "binds").map((edge) =>
       rowFor(
-        edge.to.kind === "StorageClass" ? "Storage class" : "Volume",
-        edge.to
+        edge.to.kind === "StorageClass"
+          ? t("columns", "storageClass")
+          : t("columns", "volume"),
+        edge.to,
+        t
       )
     )
   );
@@ -1121,6 +1223,7 @@ function bindings(conns: ResourceConnections): ConnRow[] {
  */
 export function connectionGroups(
   conns: ResourceConnections,
+  t: T,
   /**
    * What delivered the subject, where anything did.
    *
@@ -1131,36 +1234,40 @@ export function connectionGroups(
    */
   delivery: Delivery[] = []
 ): ConnGroup[] {
-  const deliveredBy = deliveredRows(delivery);
+  const deliveredBy = deliveredRows(delivery, t);
   const groups: (ConnGroup | null)[] = [
     {
       key: "needs",
-      title: "Needs to run",
-      caption: "— if one of these is missing the pod does not start",
-      rows: needsToRun(conns),
+      title: t("nav", "needsToRun"),
+      caption: t("nav", "needsToRunNote"),
+      rows: needsToRun(conns, t),
     },
     {
       key: "used-by",
-      title: "Used by",
-      caption: "— what names this in its pod spec",
-      rows: usedBy(conns),
+      title: t("nav", "usedBy"),
+      caption: t("nav", "usedByNote"),
+      rows: usedBy(conns, t),
     },
     conns.subject.kind === "Service" || conns.subject.kind === "Ingress"
       ? {
           key: "answers",
-          title: "What answers here",
-          caption: "— what made the pods behind this address",
-          rows: answersHere(conns),
+          title: t("nav", "whatAnswersHere"),
+          caption: t("nav", "whatAnswersHereNote"),
+          rows: answersHere(conns, t),
         }
       : null,
-    placement(conns),
-    { key: "binds", title: "Bound to", caption: null, rows: bindings(conns) },
+    placement(conns, t),
+    {
+      key: "binds",
+      title: t("nav", "boundTo"),
+      caption: null,
+      rows: bindings(conns, t),
+    },
     {
       key: "governs",
-      title: "Governed by",
-      caption:
-        "— acts on this on its own schedule, and nothing here asked for it",
-      rows: governedBy(conns),
+      title: t("nav", "governedBy"),
+      caption: t("nav", "governedByNote"),
+      rows: governedBy(conns, t),
     },
     // Only for the kinds that take part in ownership at all. "Controlled by:
     // nothing" is a real answer on a Deployment and a non-sequitur on a
@@ -1172,11 +1279,13 @@ export function connectionGroups(
     OWNABLE.has(conns.subject.kind) || deliveredBy.length > 0
       ? {
           key: "owners",
-          title: "Made by, and makes",
+          title: t("nav", "madeByAndMakes"),
           caption: null,
           rows: [
             ...deliveredBy,
-            ...(OWNABLE.has(conns.subject.kind) ? madeByAndMakes(conns) : []),
+            ...(OWNABLE.has(conns.subject.kind)
+              ? madeByAndMakes(conns, t)
+              : []),
           ],
         }
       : null,
@@ -1189,12 +1298,11 @@ export function connectionGroups(
   if (conns.notLookedAt.length > 0) {
     drawn.push({
       key: "unasked",
-      title: "Not looked at",
-      caption:
-        "— named, so a group that is absent is never read as a group that is empty",
+      title: t("nav", "notLookedAt"),
+      caption: t("nav", "notLookedAtNote"),
       rows: conns.notLookedAt.map((entry) => ({
         key: entry.kind,
-        label: UNASKED_LABEL[entry.kind] ?? entry.kind,
+        label: unaskedLabel(entry.kind, t),
         object: null,
         detail: entry.why,
         ways: [],
@@ -1214,11 +1322,11 @@ export function connectionGroups(
  * drawing it here would put a line in the connection graph for a relationship
  * that does not exist.
  */
-function deliveredRows(delivery: Delivery[]): ConnRow[] {
+function deliveredRows(delivery: Delivery[], t: T): ConnRow[] {
   return labelled(
     delivered(delivery).map((source) => ({
       key: `delivered:${source.vendorId}:${source.owner.namespace}/${source.owner.name}`,
-      label: "Delivered by",
+      label: t("nav", "deliveredBy"),
       object: null,
       outside: {
         name: source.owner.name,
@@ -1254,9 +1362,19 @@ export function podsOnNode(
 }
 
 /** How many distinct objects the tab draws — what its count mark stands for. */
+/**
+ * A translator for the one caller that provably throws every word away.
+ *
+ * {@link connectionCount} reads `row.object` and nothing else, so the number
+ * cannot depend on the language — and threading a translator through the ten
+ * pages that ask for the count, so that a count could ignore it, would be a
+ * parameter that exists to be discarded.
+ */
+const NO_WORDS: T = () => "";
+
 export function connectionCount(conns: ResourceConnections): number {
   return unique(
-    connectionGroups(conns)
+    connectionGroups(conns, NO_WORDS)
       .flatMap((group) => group.rows)
       .map((row) => row.object)
       .filter((object): object is ObjectRef => object !== null)

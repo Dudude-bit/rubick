@@ -750,7 +750,7 @@ function describeFinding(
       };
     }
     case "stop": {
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "istioRouteResolves503", {
           detail: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,

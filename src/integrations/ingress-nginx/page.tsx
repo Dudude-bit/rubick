@@ -951,7 +951,7 @@ function describeFinding(
 ): { title: string; note: string } {
   switch (finding.kind) {
     case "stop": {
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest503", {
           reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,

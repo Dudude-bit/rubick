@@ -17,6 +17,62 @@ export const ru: Catalogue = {
   nav: {
     noListAccess: "У вас нет прав смотреть этот список",
     relatedResources: "Связанные ресурсы",
+    runsOn: "Работает на",
+    whatRunsHere: "Что здесь работает",
+    needsToRun: "Нужно для запуска",
+    needsToRunNote: "— если чего-то из этого нет, под не стартует",
+    usedBy: "Используется",
+    usedByNote: "— кто называет это в своей спецификации пода",
+    whatAnswersHere: "Кто здесь отвечает",
+    whatAnswersHereNote: "— кто создал поды за этим адресом",
+    boundTo: "Привязано к",
+    governedBy: "Под управлением",
+    governedByNote:
+      "— действует по своему расписанию, и никто отсюда об этом не просил",
+    madeByAndMakes: "Кем создано и что создаёт",
+    notLookedAt: "Не проверялось",
+    notLookedAtNote:
+      "— названо, чтобы отсутствующая группа не читалась как пустая",
+    deliveredBy: "Доставлено",
+    disruptionBudget: "Бюджет простоя",
+    autoscaling: "Автомасштабирование",
+    tlsCertificate: "Сертификат TLS",
+    configuration: "Конфигурация",
+    everyKeyBecomesEnv: "каждый ключ становится переменной окружения",
+    usedToPullImages: "используется для скачивания образов",
+    identityItRunsAs: "удостоверение, под которым он работает",
+    servesTlsForHosts: "обслуживает TLS для всех хостов этого Ingress",
+    noSelector: "без селектора",
+    notInThisNamespace: "в этом неймспейсе не существует",
+    notChecked: "не проверялось",
+    nobodyDoes: "никто",
+    overHttps: "по HTTPS",
+    overHttpPlain: "по обычному HTTP",
+    resourceBackend: "ресурсный бэкенд — приложение по таким не ходит",
+    ownerNotController: "владелец, но не контроллер",
+    replicasSetHere: "число реплик задаётся здесь",
+    noNamespaceValue: "без неймспейса",
+    servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
+    stopNoSliceNote:
+      "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Почему — эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
+    stopUnnamedPortNote:
+      "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер — контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите Service номер.",
+    stopNoServiceNamed: "В этом неймспейсе нет Service по имени {name}",
+    stopNoPodCarries: "Ни один под не несёт {selector}",
+    stopNoneReadyNote:
+      "Service не публикует эндпоинт для пода, который не проходит проверку готовности, поэтому трафик отклоняется, пока поды спокойно работают — из-за этого все списки в приложении рисуют их здоровыми. Срезы говорят то же самое: все адреса за этим Service в них есть, и ни один не обслуживает.",
+    targetPortNamed: "targetPort: {name}",
+    listAndLast: "{list} и {last}",
+    ingressBackendNeverCreated:
+      "Ingress направляет этот путь на бэкенд, которого никогда не создавали, — контроллеру просто некуда отправить запрос.",
+    connectionRefusedNothingBehind:
+      "Всё, что доходит до этого адреса, получает отказ в соединении. Service есть и подключён — за ним просто никого нет.",
+    endpointsByHandNoneWritten:
+      "У этого Service нет селектора и он ничего не публикует: его эндпоинты пишут вручную, и никто их не написал.",
+    ingressStatesNoBackend:
+      "Этот Ingress не называет бэкенда, поэтому ничего не маршрутизирует.",
+    noServiceSelectsPod:
+      "Ни один Service в этом неймспейсе не выбирает этот под, поэтому трафик до него не доходит ни от чего в кластере.",
     trafficPath: "Путь трафика",
     releases: "Релизы",
     charts: "Чарты",
@@ -2854,6 +2910,21 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    podsMatchAllReady: {
+      one: "{n} под подходит под его селектор, и он Ready",
+      few: "{n} пода подходят под его селектор, и все они Ready",
+      other: "{n} подов подходят под его селектор, и все они Ready",
+    },
+    podsMatchSomeReady: {
+      one: "{n} под подходит под его селектор, из них Ready: {ready}",
+      few: "{n} пода подходят под его селектор, из них Ready: {ready}",
+      other: "{n} подов подходят под его селектор, из них Ready: {ready}",
+    },
+    podsCarryNotReady: {
+      one: "{n} под несёт {selector}, и он не готов",
+      few: "{n} пода несут {selector}, и ни один не готов",
+      other: "{n} подов несут {selector}, и ни один не готов",
+    },
     effectDeploymentPods: {
       one: "удалит его и {n} под, который он держит.",
       few: "удалит его и {n} пода, которые он держит.",

@@ -1,4 +1,8 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
   applyWarnings,
@@ -123,7 +127,7 @@ describe("reading the two governing kinds", () => {
    * does not read autoscalers is worse than the honest gap it replaced.
    */
   it("does not carry a not-looked-at row for a kind it now reads", () => {
-    const groups = connectionGroups(conns([governs(hpa("hpa-busy"))]));
+    const groups = connectionGroups(conns([governs(hpa("hpa-busy"))]), t);
     const unasked = groups.find((group) => group.key === "unasked");
     expect(unasked).toBeUndefined();
 
@@ -138,7 +142,8 @@ describe("reading the two governing kinds", () => {
           kind: "HorizontalPodAutoscaler",
           why: "the app asked for autoscaling/v2 and the cluster did not answer",
         },
-      ])
+      ]),
+      t
     );
     const unasked = groups.find((group) => group.key === "unasked");
     expect(unasked?.rows[0].label).toBe("Autoscaling");

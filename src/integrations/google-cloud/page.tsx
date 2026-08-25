@@ -627,7 +627,7 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
       // `selectsNothing`, and printing that told the reader nothing they
       // could act on.
       const stop = finding.backing.stop
-        ? describeStop(finding.backing.stop)
+        ? describeStop(finding.backing.stop, t)
         : null;
       if (!stop) return null;
       return (

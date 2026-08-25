@@ -46,6 +46,62 @@ export const en = {
     // whose decision it was, which is the one fact that makes it actionable.
     noListAccess: "You do not have permission to list these",
     relatedResources: "Related resources",
+    runsOn: "Runs on",
+    whatRunsHere: "What runs here",
+    needsToRun: "Needs to run",
+    needsToRunNote: "— if one of these is missing the pod does not start",
+    usedBy: "Used by",
+    usedByNote: "— what names this in its pod spec",
+    whatAnswersHere: "What answers here",
+    whatAnswersHereNote: "— what made the pods behind this address",
+    boundTo: "Bound to",
+    governedBy: "Governed by",
+    governedByNote:
+      "— acts on this on its own schedule, and nothing here asked for it",
+    madeByAndMakes: "Made by, and makes",
+    notLookedAt: "Not looked at",
+    notLookedAtNote:
+      "— named, so a group that is absent is never read as a group that is empty",
+    deliveredBy: "Delivered by",
+    disruptionBudget: "Disruption budget",
+    autoscaling: "Autoscaling",
+    tlsCertificate: "TLS certificate",
+    configuration: "Configuration",
+    everyKeyBecomesEnv: "every key becomes an environment variable",
+    usedToPullImages: "used to pull the images",
+    identityItRunsAs: "the identity it runs as",
+    servesTlsForHosts: "serves TLS for every host on this Ingress",
+    noSelector: "no selector",
+    notInThisNamespace: "does not exist in this namespace",
+    notChecked: "not checked",
+    nobodyDoes: "nobody does",
+    overHttps: "over HTTPS",
+    overHttpPlain: "over plain HTTP",
+    resourceBackend: "a resource backend — the app does not follow these",
+    ownerNotController: "an owner, not the controller",
+    replicasSetHere: "the replica count is set here",
+    noNamespaceValue: "no namespace",
+    servicePublishesNoEndpoint: "This Service publishes no endpoint",
+    stopNoSliceNote:
+      "{matched}, and not one of them is in anything this Service publishes. Why is not something these objects state — a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
+    stopUnnamedPortNote:
+      "{matched}, but it asks for {asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.",
+    stopNoServiceNamed: "No Service named {name} in this namespace",
+    stopNoPodCarries: "No pod carries {selector}",
+    stopNoneReadyNote:
+      "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+    targetPortNamed: "targetPort: {name}",
+    listAndLast: "{list}, and {last}",
+    ingressBackendNeverCreated:
+      "The Ingress routes this path to a backend that was never created, so the controller has nothing to send the request to.",
+    connectionRefusedNothingBehind:
+      "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+    endpointsByHandNoneWritten:
+      "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.",
+    ingressStatesNoBackend:
+      "This Ingress states no backend, so it routes nothing.",
+    noServiceSelectsPod:
+      "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.",
     trafficPath: "Traffic path",
     releases: "Releases",
     charts: "Charts",
@@ -2784,6 +2840,18 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    podsMatchAllReady: {
+      one: "{n} pod matches its selector and it is Ready",
+      other: "{n} pods match its selector and all of them are Ready",
+    },
+    podsMatchSomeReady: {
+      one: "{n} pod matches its selector and {ready} of them are Ready",
+      other: "{n} pods match its selector and {ready} of them are Ready",
+    },
+    podsCarryNotReady: {
+      one: "{n} pod carries {selector}, and it is not ready",
+      other: "{n} pods carry {selector}, and none of them is ready",
+    },
     effectDeploymentPods: {
       one: "removes it and the {n} pod it runs.",
       other: "removes it and the {n} pods it runs.",
