@@ -31,11 +31,14 @@ import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
  * React. It answers here, in one place, testable without a DOM — the panel
  * only has to render the answer and own the dialogs.
  *
- * Nothing here pre-flights access. The app has no SelfSubjectAccessReview
- * anywhere, so an RBAC refusal surfaces the same way it does on every detail
- * page: the call is made, it fails, and the error says so. A second, weaker
- * convention that greys buttons out on a guess would disagree with the first
- * one in exactly the cases that matter.
+ * Nothing here pre-flights access, and that is still true now that the nav
+ * does. A `SelfSubjectAccessReview` decides how a nav row is *drawn* — the
+ * reader has not committed to anything yet, and a wrong mark costs them a
+ * mark the real call then corrects. A button is the commitment: greying it
+ * out on a guess shuts somebody out of an action they could have taken, and
+ * a review that disagrees with the call does so in exactly the cases that
+ * matter. So an RBAC refusal surfaces here the way it does on every detail
+ * page: the call is made, it fails, and the error says so.
  */
 
 export type PeekActionId =

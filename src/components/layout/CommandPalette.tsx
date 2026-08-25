@@ -123,7 +123,6 @@ const PANELS: Array<{
 }> = [
   { tab: "ports", label: "panelPortForwards", icon: Network },
   { tab: "terminals", label: "terminals", icon: Terminal },
-  { tab: "jobs", label: "panelBackgroundJobs", icon: Activity },
 ];
 
 /**
@@ -214,7 +213,7 @@ type Entry =
   | { id: string; kind: "link"; path: string; label: string; icon: IconType }
   /**
    * A row that does something instead of going somewhere. Added because the
-   * Activity panel — port forwards, terminals, background jobs — was a sheet
+   * Activity panel — port forwards and terminals — was a sheet
    * behind a status-bar line and therefore invisible to the one mechanism this
    * app offers for "I cannot find it".
    */

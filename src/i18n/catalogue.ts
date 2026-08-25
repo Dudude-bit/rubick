@@ -1058,7 +1058,6 @@ export const en = {
     sessions: "Sessions",
     running: "Running",
     panelPortForwards: "Port forwards",
-    panelBackgroundJobs: "Background jobs",
     title: "Activity",
     idle: "activity",
     ports: "Ports",
@@ -1066,7 +1065,6 @@ export const en = {
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
     terminalCount: { one: "{n} terminal", other: "{n} terminals" },
-    jobCount: { one: "{n} job", other: "{n} jobs" },
     active: "{n} active",
   },
   auth: {
@@ -2062,8 +2060,6 @@ export const en = {
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:
       "Declared size, not how full, for the {n} of these the kubelet does not report on.",
-    noBackgroundJobs: "No background jobs",
-    backgroundJobsHint: "Delete, scale and restart operations show up here",
     terminalSessionEnded: "Session ended: {status}",
     importedExcludedNote:
       "Imported resources are excluded from Apply and Validate unless you enable “Include imported”.",

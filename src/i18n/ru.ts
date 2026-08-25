@@ -1042,7 +1042,6 @@ export const ru: Catalogue = {
     sessions: "Сессии",
     running: "Выполняются",
     panelPortForwards: "Пробросы портов",
-    panelBackgroundJobs: "Фоновые задачи",
     title: "Активность",
     idle: "активность",
     ports: "Порты",
@@ -1061,12 +1060,6 @@ export const ru: Catalogue = {
       few: "{n} терминала",
       many: "{n} терминалов",
       other: "{n} терминала",
-    },
-    jobCount: {
-      one: "{n} задача",
-      few: "{n} задачи",
-      many: "{n} задач",
-      other: "{n} задачи",
     },
     active: "активных: {n}",
   },
@@ -2121,9 +2114,6 @@ export const ru: Catalogue = {
       "Заявленный размер, а не заполненность. metrics-server отдаёт только CPU и память — сколько тома занято, сообщает kubelet, а его может прочитать Prometheus, но не это приложение.",
     declaredSizeForUnreported:
       "Заявленный размер, а не заполненность, — для {n} из них kubelet ничего не сообщает.",
-    noBackgroundJobs: "Фоновых задач нет",
-    backgroundJobsHint:
-      "Здесь появляются удаление, масштабирование и перезапуск",
     terminalSessionEnded: "Сессия завершена: {status}",
     importedExcludedNote:
       "Импортированные ресурсы не участвуют в «Применить» и «Проверить», пока не включено «Включая импортированные».",
