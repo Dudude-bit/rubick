@@ -62,8 +62,19 @@ impl Default for ThemeConfig {
 /// Kubernetes configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KubernetesConfig {
-    /// Default kubeconfig path
+    /// The first pinned kubeconfig, or none.
+    ///
+    /// Kept beside [`Self::kubeconfig_paths`] rather than replaced by it: a
+    /// build without multiple files reads this one and would otherwise find
+    /// nothing pinned at all. It holds the first of the list, so downgrading
+    /// loses the extra files instead of the lot.
     pub kubeconfig_path: Option<PathBuf>,
+    /// Every pinned kubeconfig, in the order they are merged.
+    ///
+    /// Empty means nothing is pinned and the default lookup applies —
+    /// `$KUBECONFIG` if it is set, `~/.kube/config` otherwise.
+    #[serde(default)]
+    pub kubeconfig_paths: Vec<PathBuf>,
     /// Default namespace
     #[serde(default = "default_namespace")]
     pub default_namespace: String,
@@ -92,6 +103,7 @@ impl Default for KubernetesConfig {
     fn default() -> Self {
         Self {
             kubeconfig_path: None,
+            kubeconfig_paths: Vec::new(),
             default_namespace: default_namespace(),
             timeout_seconds: default_timeout(),
             enable_watch: true,

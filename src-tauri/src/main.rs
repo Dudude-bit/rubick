@@ -277,6 +277,8 @@ fn main() {
             // Kubeconfig override
             commands::settings::get_kubeconfig_path,
             commands::settings::set_kubeconfig_path,
+            commands::settings::set_kubeconfig_paths,
+            commands::settings::get_kubeconfig_paths,
             commands::settings::clear_kubeconfig_path,
             // Registry configurations
             commands::settings::list_registry_configs,

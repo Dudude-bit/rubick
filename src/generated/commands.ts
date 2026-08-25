@@ -320,8 +320,16 @@ export async function getKubeconfigPath(): Promise<string | null> {
   return invoke<string | null>("get_kubeconfig_path");
 }
 
+export async function getKubeconfigPaths(): Promise<string[]> {
+  return invoke<string[]>("get_kubeconfig_paths");
+}
+
 export async function setKubeconfigPath(path: string): Promise<void> {
   return invoke<void>("set_kubeconfig_path", { path });
+}
+
+export async function setKubeconfigPaths(paths: string[]): Promise<void> {
+  return invoke<void>("set_kubeconfig_paths", { paths });
 }
 
 export async function clearKubeconfigPath(): Promise<void> {

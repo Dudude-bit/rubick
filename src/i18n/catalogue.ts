@@ -1426,6 +1426,13 @@ export const en = {
     fileNotThere: "this file is not there",
     useDefaultLookup: "Use the default lookup",
     useAnotherFile: "Use another file",
+    kubeconfigFilesTitle: "Kubeconfig files",
+    addKubeconfigFile: "Add a file",
+    removeKubeconfigFile: "Stop reading this file",
+    mergedFirstWins:
+      "merged in this order — the first file to name a context keeps it",
+    everyContextClaimedElsewhere:
+      "every context here is also in a file above, which keeps them",
     manageToolPaths: "manage tool paths",
     helmOnlyForHelmPage:
       "Helm is only needed for the Helm page; nothing here uses it.",
@@ -3021,6 +3028,7 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
     queriesRefused: {

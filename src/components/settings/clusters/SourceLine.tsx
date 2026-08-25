@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FileText, FolderOpen } from "lucide-react";
+import { FileText, FolderOpen, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import type { KubeconfigSource } from "@/generated/types";
@@ -32,6 +32,13 @@ export function SourceLine() {
   const primary = source?.candidates[0];
   const contexts = source?.counts?.contexts;
   const busy = kubeconfig.isPending;
+  const pinned = kubeconfig.paths;
+  // Every file being read, however it got there. `$KUBECONFIG` can name
+  // several and the app merges them exactly the same way — the reader
+  // wanting to know which cluster came from which file does not care which
+  // of the two knobs put it there. Only a pinned file can be un-pinned
+  // here; the app cannot unset somebody's environment variable.
+  const files = source?.candidates ?? [];
 
   const provenance = describeProvenance(source);
   const visible = useSettingSearchMatch(
@@ -132,6 +139,14 @@ export function SourceLine() {
             )}
             <button
               type="button"
+              onClick={() => void kubeconfig.add()}
+              disabled={busy}
+              className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            >
+              {t("settings", "addKubeconfigFile")}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setTyped(kubeconfig.overridePath ?? "");
                 setEditing(true);
@@ -142,6 +157,50 @@ export function SourceLine() {
             </button>
           </span>
         </>
+      )}
+      {files.length > 1 && (
+        <ul className="mt-1 w-full space-y-0.5">
+          {files.map((file) => {
+            const path = file.path;
+            const removable = pinned.includes(path);
+            return (
+              <li
+                key={path}
+                className="group flex items-baseline gap-2 rounded px-1 py-0.5 hover:bg-hover"
+              >
+                <span className="font-mono text-[11px] text-fg-mid">
+                  {path}
+                </span>
+                <span className="text-[11px] text-fg-fnt">
+                  {file && file.contexts.length > 0
+                    ? t("count", "contextsFromFile", {
+                        n: file.contexts.length,
+                      })
+                    : t("settings", "everyContextClaimedElsewhere")}
+                </span>
+                {!file.exists && (
+                  <span className="text-[11px] text-err">
+                    {t("settings", "fileNotThere")}
+                  </span>
+                )}
+                {removable && (
+                  <button
+                    type="button"
+                    aria-label={t("settings", "removeKubeconfigFile")}
+                    onClick={() => kubeconfig.remove(path)}
+                    disabled={busy}
+                    className="ml-auto rounded p-0.5 text-fg-fnt opacity-0 transition-opacity hover:text-err focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info group-hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+          <li className="px-1 pt-0.5 text-[11px] text-fg-fnt">
+            {t("settings", "mergedFirstWins")}
+          </li>
+        </ul>
       )}
     </div>
   );

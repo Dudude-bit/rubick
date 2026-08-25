@@ -265,6 +265,29 @@ pub fn get_kubeconfig_path() -> Result<Option<String>> {
     })
 }
 
+/// Every pinned kubeconfig path, in merge order.
+///
+/// Empty means nothing is pinned and the default lookup applies.
+#[tauri::command]
+pub fn get_kubeconfig_paths() -> Result<Vec<String>> {
+    read_config(|config| {
+        let paths = if config.kubernetes.kubeconfig_paths.is_empty() {
+            config
+                .kubernetes
+                .kubeconfig_path
+                .clone()
+                .into_iter()
+                .collect()
+        } else {
+            config.kubernetes.kubeconfig_paths.clone()
+        };
+        paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
+    })
+}
+
 /// Persist a kubeconfig override path. Validates the path resolves and
 /// parses as a kubeconfig file (so the user can't save garbage that
 /// would brick the next startup). Empty string clears the override.
@@ -277,19 +300,48 @@ pub async fn set_kubeconfig_path(
     if trimmed.is_empty() {
         return clear_kubeconfig_path(state).await;
     }
-    let path_buf = std::path::PathBuf::from(trimmed);
+    set_kubeconfig_paths(vec![trimmed.to_string()], state).await
+}
 
-    // Validate via the same canonicalize-and-parse pipeline the real
-    // loader uses. If this rejects, we don't touch persisted state —
-    // the user keeps whatever they had before.
+/// Pin these files, in this order, as the kubeconfig the app reads.
+///
+/// The whole list at once rather than one add and one remove: the files
+/// merge, and merging depends on the order, so "the list is now this" is
+/// the only statement that says what the app will read. It also makes the
+/// check honest — the new list is loaded before anything is written, so a
+/// file that will not parse leaves the reader on the set they had rather
+/// than half-applying.
+///
+/// An empty list clears the pinning and goes back to the default lookup.
+#[tauri::command]
+pub async fn set_kubeconfig_paths(
+    paths: Vec<String>,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<()> {
+    let wanted: Vec<std::path::PathBuf> = paths
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .map(std::path::PathBuf::from)
+        .collect();
+
+    if wanted.is_empty() {
+        return clear_kubeconfig_path(state).await;
+    }
+
+    // Validated through the loader the rest of the app reads clusters with,
+    // so a rejection here is the rejection the cluster list would have hit.
     state
         .client_manager
-        .load_kubeconfig_from_path(path_buf.clone())
+        .load_kubeconfig_resolved(wanted.clone())
         .await
         .map_err(|e| crate::error::Error::Config(format!("Invalid kubeconfig path: {e}")))?;
 
     with_config(|config| {
-        config.kubernetes.kubeconfig_path = Some(path_buf);
+        // The single field carries the first of them, for a build that has
+        // never heard of the list.
+        config.kubernetes.kubeconfig_path = wanted.first().cloned();
+        config.kubernetes.kubeconfig_paths.clone_from(&wanted);
     })?;
 
     // Drop any cached clients / current context — they were bound to
@@ -305,13 +357,14 @@ pub async fn set_kubeconfig_path(
 pub async fn clear_kubeconfig_path(state: tauri::State<'_, crate::state::AppState>) -> Result<()> {
     with_config(|config| {
         config.kubernetes.kubeconfig_path = None;
+        config.kubernetes.kubeconfig_paths = Vec::new();
     })?;
 
     // Re-load using the now-cleared override (i.e. default lookup) so
     // subsequent list_contexts sees the right cluster set immediately.
     state
         .client_manager
-        .load_kubeconfig_resolved(None)
+        .load_kubeconfig_resolved(Vec::new())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
     state.client_manager.disconnect_all();

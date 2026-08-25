@@ -68,6 +68,7 @@ export interface KubeconfigCandidate {
   path: string;
   exists: boolean;
   origin: string;
+  contexts: string[];
 }
 
 export interface ClusterInfo {

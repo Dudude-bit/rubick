@@ -24,12 +24,21 @@ export function ContextRow({
   binaries,
   connected,
   onBind,
+  fromFile,
 }: {
   context: ContextInfo;
   binding: ContextBindingInfo | undefined;
   binaries: Map<string, string | null>;
   connected: boolean;
   onBind: (context: string) => void;
+  /**
+   * Which file named this context, where more than one is being read.
+   *
+   * Absent with a single file — every context came from it, and repeating
+   * the path on every row is noise. With a work file and a home file it is
+   * the one thing the row cannot be worked out from.
+   */
+  fromFile?: string;
 }) {
   const reading = readContext(context, { binaries, binding, connected });
   const t = useT();
@@ -76,6 +85,11 @@ export function ContextRow({
           {prefix && <span className="text-fg-fnt">{prefix}</span>}
           <span style={{ color: colour }}>{label}</span>
         </div>
+        {fromFile && (
+          <div className="truncate font-mono text-[11px] text-fg-fnt">
+            {fromFile}
+          </div>
+        )}
         {context.server && (
           <div className="truncate font-mono text-[11px] text-fg-fnt">
             {context.server}

@@ -1433,6 +1433,13 @@ export const ru: Catalogue = {
     fileNotThere: "этого файла нет",
     useDefaultLookup: "Искать по умолчанию",
     useAnotherFile: "Указать другой файл",
+    kubeconfigFilesTitle: "Файлы kubeconfig",
+    addKubeconfigFile: "Добавить файл",
+    removeKubeconfigFile: "Перестать читать этот файл",
+    mergedFirstWins:
+      "объединяются в этом порядке — контекст остаётся за первым файлом, который его назвал",
+    everyContextClaimedElsewhere:
+      "все контексты отсюда есть и в файле выше, они остаются за ним",
     manageToolPaths: "настроить пути к утилитам",
     helmOnlyForHelmPage:
       "Helm нужен только для страницы Helm; здесь он ни на что не влияет.",
@@ -3422,6 +3429,11 @@ export const ru: Catalogue = {
       few: "{n} контекста",
       many: "{n} контекстов",
       other: "{n} контекста",
+    },
+    contextsFromFile: {
+      one: "{n} контекст",
+      few: "{n} контекста",
+      other: "{n} контекстов",
     },
     apiGroups: {
       one: "{n} API-группа",
