@@ -1267,6 +1267,39 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    forwardNoFreePort:
+      "Every local port between {from} and {to} is already forwarding something.",
+    forwardNoPod:
+      "No running pod is behind {where}, so there is nothing to forward to.",
+    forwardNoPodAnyMore: "No running pod is behind {where} any more.",
+    forwardServiceGone:
+      "{where} is not in this cluster any more, so there is nothing to forward to.",
+    forwardNoKnownPort: {
+      one: "{name} exposes {n} port and it is not one this app recognises — forward it by hand and give the address instead.",
+      other:
+        "{name} exposes {n} ports and none of them is one this app recognises — forward it by hand and give the address instead.",
+    },
+    forwardByComponent: 'its "{part}" component',
+    forwardByLabel: "labelled {label}",
+    forwardByName: "named for it",
+    weekdaySunday: "Sunday",
+    weekdayMonday: "Monday",
+    weekdayTuesday: "Tuesday",
+    weekdayWednesday: "Wednesday",
+    weekdayThursday: "Thursday",
+    weekdayFriday: "Friday",
+    weekdaySaturday: "Saturday",
+    cronEveryMinute: "every minute",
+    cronHourlyAt: "hourly at :{minute}",
+    cronDailyAt: "daily at {clock}",
+    cronWeeklyAt: "every {day} at {clock}",
+    cronWeekdaysAt: "weekdays at {clock}",
+    cronMonthlyAt: "monthly on day {day} at {clock}",
+    cronEveryMinutes: { one: "every {n} minute", other: "every {n} minutes" },
+    cronEveryHours: {
+      one: "every {n} hour, at :{minute}",
+      other: "every {n} hours, at :{minute}",
+    },
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {

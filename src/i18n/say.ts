@@ -66,3 +66,27 @@ export function sayWords(saying: Saying, t: T): string {
   if ("spanMs" in values) values.span = spanWords(Number(values.spanMs), t);
   return t("readings", saying.key, values);
 }
+
+/**
+ * A failure the app itself worded, carried so it can be worded again.
+ *
+ * A thrown `Error` is a string, and by the time it reaches the toast that
+ * shows it there is nothing left to translate. This keeps the key beside the
+ * message: `error.message` stays English for the console and the stack
+ * trace, and {@link errorWords} says the same thing to the reader.
+ */
+export class SaidError extends Error {
+  constructor(
+    readonly saying: Saying,
+    message: string
+  ) {
+    super(message);
+    this.name = "SaidError";
+  }
+}
+
+/** What to show a reader about a caught error. */
+export function errorWords(error: unknown, t: T): string {
+  if (error instanceof SaidError) return sayWords(error.saying, t);
+  return error instanceof Error ? error.message : String(error);
+}

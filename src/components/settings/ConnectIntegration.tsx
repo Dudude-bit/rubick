@@ -39,6 +39,7 @@ import type {
   InClusterHint,
   ProbeResult,
 } from "@/integrations";
+import { errorWords, sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
@@ -366,7 +367,7 @@ export function InCluster({
     try {
       setFound(await candidates(hint));
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : String(error));
+      setFailed(errorWords(error, t));
     } finally {
       setLooking(false);
     }
@@ -379,7 +380,7 @@ export function InCluster({
     try {
       onPicked(await forward(candidate.service, hint.ports));
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : String(error));
+      setFailed(errorWords(error, t));
     } finally {
       setBusy(null);
     }
@@ -422,7 +423,7 @@ export function InCluster({
             <span className="flex-none text-[11px] text-fg-fnt">
               {busy === key
                 ? t("settings", "forwardingEllipsis")
-                : candidate.because}
+                : sayWords(candidate.because, t)}
             </span>
           </button>
         );
@@ -478,7 +479,7 @@ function ByHand({
     try {
       setServices(await commands.listServices(null));
     } catch (error) {
-      onFailed(error instanceof Error ? error.message : String(error));
+      onFailed(errorWords(error, t));
     }
   };
 
@@ -489,7 +490,7 @@ function ByHand({
     try {
       onPicked(await forward(service, [Number(port)], undefined, subpath));
     } catch (error) {
-      onFailed(error instanceof Error ? error.message : String(error));
+      onFailed(errorWords(error, t));
     } finally {
       setBusy(false);
     }

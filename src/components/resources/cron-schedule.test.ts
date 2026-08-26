@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { describeCron, nextCronRun, parseCron } from "./cron-schedule";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 /** Fixed point of reference: a Wednesday, 14:37 UTC. */
 const NOW = new Date("2026-03-11T14:37:00Z");
 
@@ -105,11 +111,11 @@ describe("describeCron", () => {
     ["0 0 1 * *", "monthly on day 1 at 00:00"],
     ["@daily", "daily at 00:00"],
   ])("reads %s as %s", (schedule, expected) => {
-    expect(describeCron(schedule)).toBe(expected);
+    expect(describeCron(schedule, t)).toBe(expected);
   });
 
   it("says nothing rather than guessing at an unusual shape", () => {
-    expect(describeCron("0 0 1,15 */2 3")).toBeNull();
-    expect(describeCron("nonsense")).toBeNull();
+    expect(describeCron("0 0 1,15 */2 3", t)).toBeNull();
+    expect(describeCron("nonsense", t)).toBeNull();
   });
 });

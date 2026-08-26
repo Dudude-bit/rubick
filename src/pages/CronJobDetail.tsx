@@ -63,7 +63,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
     [cronJob.schedule, cronJob.timezone, cronJob.suspend]
   );
   const countdown = useRealtimeCountdown(next);
-  const description = describeCron(cronJob.schedule);
+  const description = describeCron(cronJob.schedule, t);
 
   return (
     <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">

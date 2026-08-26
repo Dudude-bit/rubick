@@ -26,6 +26,7 @@
  * durable thing is the Service; the pod is a detail that is looked up again.
  */
 
+import { SaidError, type Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 
@@ -58,7 +59,11 @@ export function freePort(taken: ReadonlySet<number>): number {
   for (let port = PORT_FLOOR; port <= PORT_CEILING; port += 1) {
     if (!taken.has(port)) return port;
   }
-  throw new Error(
+  throw new SaidError(
+    {
+      key: "forwardNoFreePort",
+      values: { from: PORT_FLOOR, to: PORT_CEILING },
+    },
     `Every local port between ${PORT_FLOOR} and ${PORT_CEILING} is already forwarding something.`
   );
 }
@@ -164,14 +169,22 @@ export async function forward(
 ): Promise<Forwarded> {
   const remotePort = portOf(service, preferredPorts);
   if (remotePort === null) {
-    throw new Error(
+    throw new SaidError(
+      {
+        key: "forwardNoKnownPort",
+        values: { name: service.name, n: service.ports.length },
+      },
       `${service.name} exposes ${service.ports.length} ports and none of them is one this app recognises — forward it by hand and give the address instead.`
     );
   }
 
   const pod = await podFor(service);
   if (pod === null) {
-    throw new Error(
+    throw new SaidError(
+      {
+        key: "forwardNoPod",
+        values: { where: `${service.namespace}/${service.name}` },
+      },
       `No running pod is behind ${service.namespace}/${service.name}, so there is nothing to forward to.`
     );
   }
@@ -229,7 +242,11 @@ export async function reestablish(
 
   const pod = await podFor(service);
   if (pod === null) {
-    throw new Error(
+    throw new SaidError(
+      {
+        key: "forwardNoPodAnyMore",
+        values: { where: `${found.namespace}/${found.service}` },
+      },
       `No running pod is behind ${found.namespace}/${found.service} any more.`
     );
   }
@@ -279,8 +296,11 @@ export interface InClusterHint {
 export interface Candidate {
   service: ServiceInfo;
   port: number;
-  /** Why it is in the list, for a reader deciding between two of them. */
-  because: string;
+  /**
+   * Why it is in the list, for a reader deciding between two of them. Named
+   * rather than written: the list is built in a query.
+   */
+  because: Saying;
 }
 
 /**
@@ -331,10 +351,20 @@ export async function candidates(hint: InClusterHint): Promise<Candidate[]> {
           rank: prefers >= 0 ? prefers : (hint.prefer?.length ?? 0),
           because:
             prefers >= 0
-              ? `its "${hint.prefer![prefers]}" component`
+              ? {
+                  key: "forwardByComponent" as const,
+                  values: { part: hint.prefer![prefers] },
+                }
               : labelled
-                ? `labelled ${service.labels["app.kubernetes.io/name"] ?? service.labels["app"]}`
-                : "named for it",
+                ? {
+                    key: "forwardByLabel" as const,
+                    values: {
+                      label:
+                        service.labels["app.kubernetes.io/name"] ??
+                        service.labels["app"],
+                    },
+                  }
+                : { key: "forwardByName" as const },
         },
       ];
     })

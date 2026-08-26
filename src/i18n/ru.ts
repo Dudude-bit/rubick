@@ -1259,6 +1259,48 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    forwardNoFreePort:
+      "Все локальные порты с {from} по {to} уже заняты пробросом.",
+    forwardNoPod:
+      "За {where} нет ни одного работающего пода, поэтому пробрасывать не к чему.",
+    forwardNoPodAnyMore: "За {where} больше нет ни одного работающего пода.",
+    forwardServiceGone:
+      "{where} больше нет в этом кластере, поэтому пробрасывать не к чему.",
+    forwardNoKnownPort: {
+      one: "{name} отдаёт {n} порт, и приложение его не узнаёт — пробросьте вручную и укажите адрес.",
+      few: "{name} отдаёт {n} порта, и ни один из них приложение не узнаёт — пробросьте вручную и укажите адрес.",
+      many: "{name} отдаёт {n} портов, и ни один из них приложение не узнаёт — пробросьте вручную и укажите адрес.",
+      other:
+        "{name} отдаёт {n} порта, и ни один из них приложение не узнаёт — пробросьте вручную и укажите адрес.",
+    },
+    forwardByComponent: "его компонент «{part}»",
+    forwardByLabel: "с меткой {label}",
+    forwardByName: "назван в его честь",
+    weekdaySunday: "воскресенье",
+    weekdayMonday: "понедельник",
+    weekdayTuesday: "вторник",
+    weekdayWednesday: "среда",
+    weekdayThursday: "четверг",
+    weekdayFriday: "пятница",
+    weekdaySaturday: "суббота",
+    cronEveryMinute: "каждую минуту",
+    cronHourlyAt: "каждый час в :{minute}",
+    cronDailyAt: "ежедневно в {clock}",
+    cronWeeklyAt: "каждое {day} в {clock}",
+    cronWeekdaysAt: "по будням в {clock}",
+    cronMonthlyAt: "ежемесячно {day}-го в {clock}",
+    cronEveryMinutes: {
+      one: "каждую {n} минуту",
+      few: "каждые {n} минуты",
+      many: "каждые {n} минут",
+      other: "каждые {n} минуты",
+    },
+    cronEveryHours: {
+      one: "каждый {n} час, в :{minute}",
+      few: "каждые {n} часа, в :{minute}",
+      many: "каждые {n} часов, в :{minute}",
+      other: "каждые {n} часа, в :{minute}",
+    },
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {
