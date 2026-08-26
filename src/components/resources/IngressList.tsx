@@ -206,7 +206,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   {
     size: 80,
     accessorKey: "tlsHosts",
-    header: "TLS",
+    header: () => <T section="columns" k="tls" />,
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
   },
   createAgeColumn<IngressInfo>(),

@@ -107,7 +107,7 @@ export function createCpuColumn<
   return {
     size: 90,
     id: "cpu",
-    header: "CPU",
+    header: () => <T section="columns" k="cpu" />,
     cell: ({ row }) => {
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests

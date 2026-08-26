@@ -45,7 +45,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
     size: 300,
     accessorKey: "volume",
-    header: "Volume",
+    header: () => <T section="columns" k="volume" />,
     cell: ({ row }) =>
       row.original.volume ? (
         <ResourceRef
@@ -62,7 +62,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 160,
     accessorKey: "storageClass",
-    header: "Storage Class",
+    header: () => <T section="columns" k="storageClass" />,
     cell: ({ row }) => (
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),

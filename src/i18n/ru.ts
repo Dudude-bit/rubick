@@ -148,6 +148,9 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    cpu: "CPU",
+    pods: "Поды",
+    ip: "IP",
     routing: "Маршрутизация",
     priority: "Приоритет",
     entryPoints: "Точки входа",
@@ -1314,6 +1317,14 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    nginxNoController:
+      "Ничто в этом кластере не несёт {selector}, поэтому собственную конфигурацию контроллера прочитать не удалось.",
+    nginxManifestUnreadable:
+      "Его манифест прочитать не удалось, поэтому неизвестно, какой глобальный ConfigMap он использует — {why}",
+    nginxNoConfigMapFlag:
+      "Этот контроллер запущен без флага --configmap, поэтому глобального ConfigMap у него нет, и все настройки берутся из его собственных значений по умолчанию или из Ingress.",
+    nginxConfigMapUnreadable:
+      "Контроллер читает {where}, а здесь прочитать это не удалось — {why}",
     tlsFromVendor: "от {by}",
     tlsHostFrom: "{host} — от {by}",
     awsAcmNamed: "ACM {name}",
@@ -2480,6 +2491,7 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    expandRepeats: "Развернуть повторы: {count}",
     anEmptySpec: "Пустой spec",
     nothingConfigured: "Ничего не настроено",
     emptyParens: "(пусто)",

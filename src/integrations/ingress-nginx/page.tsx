@@ -16,6 +16,7 @@
  * own voice rather than going quiet.
  */
 
+import { sayWords } from "@/i18n/say";
 import { useCallback, useMemo, useState } from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
@@ -1088,7 +1089,9 @@ function SettingsTab({
           {t("empty", "noGlobalNginxSettings")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ?? t("empty", "controllerNamesNoConfigMap")}
+          {controller.problem
+            ? sayWords(controller.problem, t)
+            : t("empty", "controllerNamesNoConfigMap")}
         </p>
       </div>
     );
@@ -1115,7 +1118,7 @@ function SettingsTab({
         {t("empty", "namedInConfigmapFlagPost")}
       </p>
       {config.problem ? (
-        <p className="text-[11px] text-warn">{config.problem}</p>
+        <p className="text-[11px] text-warn">{sayWords(config.problem, t)}</p>
       ) : settings.length === 0 ? (
         <p className="text-[11px] text-fg-fnt">
           {t("empty", "configMapEmptyDefaults")}
@@ -1206,12 +1209,14 @@ function ControllerTab({
               </span>
             )}
             {controller.problem && (
-              <p className="text-[11px] text-warn">{controller.problem}</p>
+              <p className="text-[11px] text-warn">
+                {sayWords(controller.problem, t)}
+              </p>
             )}
           </div>
         ) : (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         )}
       </Section>

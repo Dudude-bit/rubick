@@ -183,6 +183,9 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    cpu: "CPU",
+    pods: "Pods",
+    ip: "IP",
     routing: "Routing",
     priority: "Priority",
     entryPoints: "Entry Points",
@@ -1322,6 +1325,14 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    nginxNoController:
+      "Nothing in this cluster carries {selector}, so the controller's own configuration could not be read.",
+    nginxManifestUnreadable:
+      "Its manifest could not be read, so the global ConfigMap it uses is unknown — {why}",
+    nginxNoConfigMapFlag:
+      "This controller was started with no --configmap flag, so it has no global ConfigMap and every setting comes from its own defaults or from an Ingress.",
+    nginxConfigMapUnreadable:
+      "The controller reads {where}, and it could not be read here — {why}",
     tlsFromVendor: "from {by}",
     tlsHostFrom: "{host} — from {by}",
     awsAcmNamed: "ACM {name}",
@@ -2340,6 +2351,7 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    expandRepeats: "Expand {count} repeats",
     anEmptySpec: "An empty spec",
     nothingConfigured: "Nothing configured",
     emptyParens: "(empty)",

@@ -117,6 +117,7 @@ export const LogLineComponent = memo(function LogLineComponent({
   onFieldClick,
   onLevelClick,
 }: LogLineProps) {
+  const t = useT();
   const level = log.level ?? "unknown";
   const messageColor = LEVEL_MESSAGE_COLORS[level];
 
@@ -161,7 +162,11 @@ export const LogLineComponent = memo(function LogLineComponent({
           )}
           <button
             type="button"
-            title={expanded ? "Hide line detail" : "Show line detail"}
+            title={
+              expanded
+                ? t("empty", "hideLineDetail")
+                : t("empty", "showLineDetail")
+            }
             aria-expanded={expanded}
             className={`text-left hover:underline hover:decoration-dotted ${messageColor}`}
             onClick={() => onToggleDetail(lineId)}
@@ -281,6 +286,7 @@ export const LogRunRow = memo(function LogRunRow({
   containerColor: string | undefined;
   onToggle: (id: number) => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -289,8 +295,8 @@ export const LogRunRow = memo(function LogRunRow({
       aria-expanded={expanded}
       title={
         expanded
-          ? "Collapse these repeats"
-          : `Expand ${formatCount(run.count)} repeats`
+          ? t("empty", "collapseRepeats")
+          : t("empty", "expandRepeats", { count: formatCount(run.count) })
       }
       data-testid="log-run"
     >

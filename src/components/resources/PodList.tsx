@@ -33,6 +33,19 @@ import { useT } from "@/i18n/useT";
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
 
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function PodIpCell({ pod }: { pod: PodRow }) {
+  const t = useT();
+  return (
+    <CopyableAddress
+      value={pod.podIp}
+      label={t("columns", "podIp")}
+      fallback="-"
+      className="text-fg-mut"
+    />
+  );
+}
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -136,15 +149,8 @@ export const columns: ColumnDef<PodRow>[] = [
   {
     size: 130,
     id: "ip",
-    header: "IP",
-    cell: ({ row }) => (
-      <CopyableAddress
-        value={row.original.podIp}
-        label="Pod IP"
-        fallback="-"
-        className="text-fg-mut"
-      />
-    ),
+    header: () => <T section="columns" k="ip" />,
+    cell: ({ row }) => <PodIpCell pod={row.original} />,
   },
   createAgeColumn<PodRow>(),
 ];

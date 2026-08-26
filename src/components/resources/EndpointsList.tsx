@@ -25,7 +25,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
   {
     size: 200,
     id: "endpoints",
-    header: "Endpoints",
+    header: () => <T section="columns" k="endpoints" />,
     cell: ({ row }) => {
       const readyCount = row.original.subsets.reduce(
         (acc, s) => acc + s.addresses.length,

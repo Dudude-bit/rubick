@@ -36,7 +36,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // A CSI driver name in full: `pd.csi.storage.gke.io`, `rancher.io/local-path`.
     size: 240,
     accessorKey: "provisioner",
-    header: "Provisioner",
+    header: () => <T section="columns" k="provisioner" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.provisioner}</span>
     ),

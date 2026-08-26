@@ -55,7 +55,7 @@ export const columns = (
   {
     size: 80,
     id: "pods",
-    header: "Pods",
+    header: () => <T section="columns" k="pods" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">
         {podCounts.get(row.original.name) ?? 0}

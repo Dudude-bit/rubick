@@ -399,7 +399,7 @@ function ClusterRow() {
       />
       <span className="flex min-w-0 flex-col text-left">
         <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
-          {alias ?? currentContext ?? "no cluster"}
+          {alias ?? currentContext ?? t("cluster", "noCluster")}
         </span>
         {alias && currentContext && (
           // Clipped from the front, not the back. This rail is 200px wide
