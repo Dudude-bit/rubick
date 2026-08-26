@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все неймспейсы",
     dataTable: "Таблица данных",
     protectsVerb: "защищает",
@@ -149,6 +150,7 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    connections: "Связи",
     providerId: "ID провайдера",
     resourceVersion: "Версия ресурса",
     uid: "UID",
@@ -245,7 +247,6 @@ export const ru: Catalogue = {
     health: "Состояние",
     whatThisRevisionRuns: "что запускает эта ревизия",
     selector: "Селектор",
-    connections: "Связи",
     object: "Объект",
     ownedBy: "Владелец",
     finalizers: "Финализаторы",

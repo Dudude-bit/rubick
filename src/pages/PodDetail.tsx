@@ -774,7 +774,7 @@ export function PodDetail() {
               </>
             ),
           },
-          connectionsTab(connections, deliveryQuery),
+          connectionsTab(connections, t, deliveryQuery),
           {
             id: "containers",
             label: t("columns", "containers"),

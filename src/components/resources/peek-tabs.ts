@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import { AlignLeft, Braces, Info, Link2, Table2 } from "lucide-react";
 
 import { podContainers } from "@/lib/container-sequence";
@@ -76,6 +77,7 @@ const CHILDREN_LABEL = {
 
 export function peekTabsFor(
   kind: string,
+  t: T,
   /** What the Overview fetch returned, when it has returned. */
   detail?: unknown,
   /**
@@ -96,7 +98,11 @@ export function peekTabsFor(
   if (crd) {
     return [
       OVERVIEW,
-      { id: "connections", label: "Connections", glyph: viewGlyph(Link2) },
+      {
+        id: "connections",
+        label: t("columns", "connections"),
+        glyph: viewGlyph(Link2),
+      },
       YAML,
     ];
   }

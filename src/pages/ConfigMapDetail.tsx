@@ -78,7 +78,7 @@ export function ConfigMapDetail() {
         />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "metadata",
       label: t("nav", "metadata"),

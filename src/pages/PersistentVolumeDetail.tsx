@@ -101,7 +101,7 @@ export function PersistentVolumeDetail() {
         <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     yamlTab({
       title: t("action", "kindYaml", { kind: "PersistentVolume" }),
       yaml: pvYaml,

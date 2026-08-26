@@ -139,7 +139,7 @@ export function PersistentVolumeClaimDetail() {
         <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "events",
       label: "Events",

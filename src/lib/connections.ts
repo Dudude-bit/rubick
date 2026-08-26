@@ -237,7 +237,9 @@ function serviceVia(
       : join(facts.type, facts.clusterIp);
   return join(
     address,
-    facts.selector ? `selects ${facts.selector}` : t("nav", "noSelector")
+    facts.selector
+      ? t("nav", "selectsLabels", { selector: facts.selector })
+      : t("nav", "noSelector")
   );
 }
 

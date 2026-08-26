@@ -240,7 +240,7 @@ export function DaemonSetDetail() {
           </>
         ),
       },
-      connectionsTab(connections, deliveryQuery),
+      connectionsTab(connections, t, deliveryQuery),
       {
         id: "container-template",
         label: t("columns", "template"),

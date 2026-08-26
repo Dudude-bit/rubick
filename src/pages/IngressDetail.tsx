@@ -435,7 +435,7 @@ export function IngressDetail() {
         </Section>
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "rules",
       label: t("columns", "rules"),

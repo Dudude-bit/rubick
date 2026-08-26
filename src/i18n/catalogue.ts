@@ -41,6 +41,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    selectsLabels: "selects {selector}",
     allNamespacesLower: "all namespaces",
     dataTable: "Data table",
     protectsVerb: "protects",
@@ -184,6 +185,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    connections: "Connections",
     providerId: "Provider ID",
     resourceVersion: "Resource version",
     uid: "UID",
@@ -280,7 +282,6 @@ export const en = {
     health: "Health",
     whatThisRevisionRuns: "what this revision runs",
     selector: "Selector",
-    connections: "Connections",
     object: "Object",
     ownedBy: "Owned by",
     finalizers: "Finalizers",

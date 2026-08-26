@@ -304,7 +304,7 @@ export function NodeDetail() {
         />
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, t),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Node" }),
       yaml: nodeYaml,

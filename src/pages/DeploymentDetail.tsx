@@ -415,7 +415,7 @@ export function DeploymentDetail() {
         </>
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "container-template",
       label: t("nav", "template"),

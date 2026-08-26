@@ -137,7 +137,7 @@ export function ServiceDetail() {
       glyph: viewGlyph(ExternalLink),
       content: service ? <ServiceAccessInfo service={service} /> : null,
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "ports",
       label: t("columns", "ports"),
