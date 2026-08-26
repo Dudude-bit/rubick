@@ -15,6 +15,22 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    protectsVerb: "защищает",
+    scalesVerb: "масштабирует",
+    actsOn: "действует на",
+    nothingIsTheTop: "ничего — {kind} и есть вершина",
+    replicaCountSetHere: "число реплик задаётся здесь",
+    noServiceSelectsThese:
+      "Ни один сервис в этом неймспейсе не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
+    serviceResolvesExternal:
+      "У этого сервиса нет селектора: он разрешается в {name}, а не во что-либо внутри кластера.",
+    servesTlsFor: "обслуживает TLS для {hosts}",
+    inVolumeUnmounted:
+      "в томе {volume}, который не монтирует ни один контейнер",
+    readOnlySuffix: ", только для чтения",
+    fromSubPath: " из {subPath}",
+    mountedAt: "смонтирован в {path}",
+    projectedInto: "проецируется в {path}",
     noListAccess: "У вас нет прав смотреть этот список",
     relatedResources: "Связанные ресурсы",
     runsOn: "Работает на",
@@ -1243,6 +1259,42 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    istioOrJoin: " или ",
+    istioAndMoreBelow: "{said}, и ещё ниже",
+    istioAndJoin: ", и ",
+    istioEveryRequest: "любой запрос",
+    istioShownBelow: "показано ниже как есть",
+    istioHeaderTerm: "заголовок {header} {how} {what}",
+    istioPortTerm: "запрос пришёл на порт {port}",
+    istioSchemeTerm: "схема {how} {what}",
+    istioMethodTerm: "метод {how} {what}",
+    istioHostTerm: "заголовок Host {how} {what}",
+    istioPathTerm: "путь {how} {what}",
+    istioIgnoreUriCase:
+      "в нём задан ignoreUriCase, а он меняет смысл каждого условия по пути",
+    istioUnreadableMatch:
+      "это блок match, который приложение прочитать не умеет",
+    istioStartsWith: "начинается с",
+    istioIsExactly: "в точности равен",
+    notReadyEndpoints: {
+      one: "{n} не готов",
+      few: "{n} не готовы",
+      many: "{n} не готовы",
+      other: "{n} не готовы",
+    },
+    drainingCount: {
+      one: "{n} завершает",
+      few: "{n} завершают",
+      many: "{n} завершают",
+      other: "{n} завершают",
+    },
+    publishedCount: {
+      one: "{n} опубликован",
+      few: "{n} опубликовано",
+      many: "{n} опубликовано",
+      other: "{n} опубликовано",
+    },
+    stillTakingTraffic: ", всё ещё принимает трафик",
     delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
     delEditWhatApplies:
       "Чтобы изменить насовсем, поменяйте то, что применяет {name}.",

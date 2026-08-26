@@ -12,6 +12,12 @@ import {
   type IstioSources,
 } from "./model";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 function custom(
   kind: string,
   name: string,
@@ -114,7 +120,7 @@ const healthy = custom("VirtualService", "shop-vs", {
 describe("the chain", () => {
   /** Would break if the healthy case stopped reading as healthy. */
   it("says nothing about a host whose chain resolves end to end", () => {
-    const groups = hostGroups(sources({ virtualServices: [healthy] }));
+    const groups = hostGroups(sources({ virtualServices: [healthy] }), t);
     expect(groups).toHaveLength(1);
     expect(groups[0].host).toBe("shop.mesh.test");
     expect(groups[0].findings).toHaveLength(0);
@@ -134,7 +140,7 @@ describe("the chain", () => {
       gateways: ["edge"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    expect(hostGroups(sources({ virtualServices: [many] }))).toHaveLength(2);
+    expect(hostGroups(sources({ virtualServices: [many] }), t)).toHaveLength(2);
   });
 });
 
@@ -178,7 +184,7 @@ describe("a host no Gateway serves", () => {
       gateways: ["no-such-gateway"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [orphan] }));
+    const groups = hostGroups(sources({ virtualServices: [orphan] }), t);
     const finding = groups[0].findings.find(
       (entry) => entry.kind === "noGateway"
     );
@@ -195,7 +201,7 @@ describe("a host no Gateway serves", () => {
       gateways: ["edge"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [elsewhere] }));
+    const groups = hostGroups(sources({ virtualServices: [elsewhere] }), t);
     expect(groups[0].findings.map((entry) => entry.kind)).toContain(
       "noGateway"
     );
@@ -211,7 +217,7 @@ describe("a host no Gateway serves", () => {
       hosts: ["shop"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [inMesh] }));
+    const groups = hostGroups(sources({ virtualServices: [inMesh] }), t);
     expect(groups[0].meshOnly).toBe(true);
     expect(groups[0].findings).toHaveLength(0);
   });
@@ -235,7 +241,7 @@ describe("a subset nothing defines", () => {
       gateways: ["edge"],
       http: [{ route: [{ destination: { host: "shop", subset: "v3" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [typo] }));
+    const groups = hostGroups(sources({ virtualServices: [typo] }), t);
     const finding = groups[0].findings.find(
       (entry) => entry.kind === "noSubset"
     );
@@ -254,7 +260,8 @@ describe("a subset nothing defines", () => {
       http: [{ route: [{ destination: { host: "shop", subset: "v3" } }] }],
     });
     const groups = hostGroups(
-      sources({ virtualServices: [typo], destinationRules: [] })
+      sources({ virtualServices: [typo], destinationRules: [] }),
+      t
     );
     const finding = groups[0].findings.find(
       (entry) => entry.kind === "noSubset"
@@ -284,7 +291,7 @@ describe("a subset nothing defines", () => {
         },
       ],
     });
-    const groups = hostGroups(sources({ virtualServices: [fqdn] }));
+    const groups = hostGroups(sources({ virtualServices: [fqdn] }), t);
     expect(
       groups[0].findings.filter((entry) => entry.kind === "noSubset")
     ).toHaveLength(0);
@@ -306,7 +313,7 @@ describe("weights", () => {
         },
       ],
     });
-    const groups = hostGroups(sources({ virtualServices: [skewed] }));
+    const groups = hostGroups(sources({ virtualServices: [skewed] }), t);
     const finding = groups[0].findings.find(
       (entry) => entry.kind === "weights"
     );
@@ -321,7 +328,7 @@ describe("weights", () => {
       gateways: ["edge"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [plain] }));
+    const groups = hostGroups(sources({ virtualServices: [plain] }), t);
     expect(
       groups[0].findings.filter((entry) => entry.kind === "weights")
     ).toHaveLength(0);
@@ -329,7 +336,7 @@ describe("weights", () => {
 
   /** Would break if the healthy 80/20 split started reading as a finding. */
   it("says nothing about weights that add up", () => {
-    const groups = hostGroups(sources({ virtualServices: [healthy] }));
+    const groups = hostGroups(sources({ virtualServices: [healthy] }), t);
     expect(
       groups[0].findings.filter((entry) => entry.kind === "weights")
     ).toHaveLength(0);
@@ -344,7 +351,10 @@ describe("ordering", () => {
       gateways: ["no-such-gateway"],
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
-    const groups = hostGroups(sources({ virtualServices: [healthy, broken] }));
+    const groups = hostGroups(
+      sources({ virtualServices: [healthy, broken] }),
+      t
+    );
     expect(groups[0].host).toBe("zzz.mesh.test");
   });
 });

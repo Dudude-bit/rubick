@@ -6,6 +6,7 @@
  * Integrations pane asks for the row's facts.
  */
 
+import type { T } from "@/i18n/useT";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -50,7 +51,10 @@ export async function fetchMesh(): Promise<MeshSources> {
  * would be the rail contradicting the screen it opens.
  */
 export function countHosts(mesh: MeshSources): number {
-  return hostGroups({ ...mesh, services: [], published: [] }).length;
+  // Only the count is wanted, and every sentence `hostGroups` composes is
+  // discarded — so it is handed a translator with nothing to say.
+  const noWords: T = () => "";
+  return hostGroups({ ...mesh, services: [], published: [] }, noWords).length;
 }
 
 export const MESH_KEY = ["istio", "mesh"] as const;

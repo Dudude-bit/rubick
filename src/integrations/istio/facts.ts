@@ -7,6 +7,7 @@
  * how many kinds Istio defined.
  */
 
+import type { T } from "@/i18n/useT";
 import { integrationPagePath } from "../paths";
 import { plural } from "../kit";
 import type { VendorFact } from "../registry";
@@ -15,7 +16,10 @@ import { hostGroups } from "./model";
 
 export async function facts(): Promise<VendorFact[]> {
   const mesh = await fetchMesh();
-  const groups = hostGroups({ ...mesh, services: [], published: [] });
+  // The pane prints counts; every sentence `hostGroups` composes on the way
+  // is discarded here.
+  const noWords: T = () => "";
+  const groups = hostGroups({ ...mesh, services: [], published: [] }, noWords);
 
   const lines: VendorFact[] = [
     {

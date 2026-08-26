@@ -41,6 +41,21 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    protectsVerb: "protects",
+    scalesVerb: "scales",
+    actsOn: "acts on",
+    nothingIsTheTop: "nothing — a {kind} is the top",
+    replicaCountSetHere: "the replica count is set here",
+    noServiceSelectsThese:
+      "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
+    serviceResolvesExternal:
+      "This Service has no selector: it resolves to {name} rather than to anything in this cluster.",
+    servesTlsFor: "serves TLS for {hosts}",
+    inVolumeUnmounted: "in volume {volume}, which no container mounts",
+    readOnlySuffix: ", read-only",
+    fromSubPath: " from {subPath}",
+    mountedAt: "mounted at {path}",
+    projectedInto: "projected into {path}",
     // Said on a nav row the authorizer refused, and on the page behind it.
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
@@ -1252,6 +1267,41 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    istioOrJoin: " or ",
+    istioAndMoreBelow: "{said}, and more below",
+    istioAndJoin: ", and ",
+    istioEveryRequest: "every request",
+    istioShownBelow: "shown as written below",
+    istioHeaderTerm: "the {header} header {how} {what}",
+    istioPortTerm: "it arrived on port {port}",
+    istioSchemeTerm: "the scheme {how} {what}",
+    istioMethodTerm: "the method {how} {what}",
+    istioHostTerm: "the Host header {how} {what}",
+    istioPathTerm: "path {how} {what}",
+    istioIgnoreUriCase:
+      "it sets ignoreUriCase, which changes what every path term in it means",
+    istioUnreadableMatch: "it is not a match block this app can read",
+    istioStartsWith: "starts with",
+    istioIsExactly: "is exactly",
+    notReadyEndpoints: {
+      one: "{n} not ready",
+      few: "{n} not ready",
+      many: "{n} not ready",
+      other: "{n} not ready",
+    },
+    drainingCount: {
+      one: "{n} draining",
+      few: "{n} draining",
+      many: "{n} draining",
+      other: "{n} draining",
+    },
+    publishedCount: {
+      one: "{n} published",
+      few: "{n} published",
+      many: "{n} published",
+      other: "{n} published",
+    },
+    stillTakingTraffic: ", still taking traffic",
     delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
     delEditWhatApplies: "To change it for good, change what {name} applies.",
     delEditManifests: "To change it for good, edit the manifests under {path}.",

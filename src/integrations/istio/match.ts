@@ -34,6 +34,8 @@
  * alternatives and each is an independent set of requirements.
  */
 
+import type { T } from "@/i18n/useT";
+
 /** One `match` entry, read as far as it can be read exactly. */
 export interface MatchReading {
   /** What a request must satisfy, in sentences. Empty means "every request". */
@@ -54,22 +56,29 @@ type StringMatch = { exact?: string; prefix?: string; regex?: string };
 
 function readStringMatch(
   value: unknown,
+  t: T,
   say: (how: string, what: string) => string
 ): { term: string | null; unread: boolean } {
   if (typeof value === "string") {
     // Istio accepts a bare string for `method` and friends in some
     // spellings, and reads it as an exact match.
-    return { term: say("is exactly", value), unread: false };
+    return { term: say(t("readings", "istioIsExactly"), value), unread: false };
   }
   if (typeof value !== "object" || value === null) {
     return { term: null, unread: true };
   }
   const match = value as StringMatch;
   if (typeof match.exact === "string") {
-    return { term: say("is exactly", match.exact), unread: false };
+    return {
+      term: say(t("readings", "istioIsExactly"), match.exact),
+      unread: false,
+    };
   }
   if (typeof match.prefix === "string") {
-    return { term: say("starts with", match.prefix), unread: false };
+    return {
+      term: say(t("readings", "istioStartsWith"), match.prefix),
+      unread: false,
+    };
   }
   // A regex is neither, and no sentence about it is shorter than itself.
   return { term: null, unread: true };
@@ -85,14 +94,14 @@ const verbatim = (key: string, value: unknown): string =>
  * takes every request, which is a real and common configuration and the
  * thing a catch-all route is.
  */
-export function readMatch(entry: unknown): MatchReading {
+export function readMatch(entry: unknown, t: T): MatchReading {
   const raw = JSON.stringify(entry, null, 2);
 
   if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
     return {
       terms: [],
       unread: [],
-      refused: "it is not a match block this app can read",
+      refused: t("readings", "istioUnreadableMatch"),
       raw,
     };
   }
@@ -107,8 +116,7 @@ export function readMatch(entry: unknown): MatchReading {
     return {
       terms: [],
       unread: [],
-      refused:
-        "it sets ignoreUriCase, which changes what every path term in it means",
+      refused: t("readings", "istioIgnoreUriCase"),
       raw,
     };
   }
@@ -119,36 +127,32 @@ export function readMatch(entry: unknown): MatchReading {
         // A label on the entry, not a condition on the request.
         break;
       case "uri": {
-        const read = readStringMatch(
-          value,
-          (how, what) => `path ${how} ${what}`
+        const read = readStringMatch(value, t, (how, what) =>
+          t("readings", "istioPathTerm", { how, what })
         );
         if (read.term) terms.push(read.term);
         else unread.push(verbatim(key, value));
         break;
       }
       case "authority": {
-        const read = readStringMatch(
-          value,
-          (how, what) => `the Host header ${how} ${what}`
+        const read = readStringMatch(value, t, (how, what) =>
+          t("readings", "istioHostTerm", { how, what })
         );
         if (read.term) terms.push(read.term);
         else unread.push(verbatim(key, value));
         break;
       }
       case "method": {
-        const read = readStringMatch(
-          value,
-          (how, what) => `the method ${how} ${what}`
+        const read = readStringMatch(value, t, (how, what) =>
+          t("readings", "istioMethodTerm", { how, what })
         );
         if (read.term) terms.push(read.term);
         else unread.push(verbatim(key, value));
         break;
       }
       case "scheme": {
-        const read = readStringMatch(
-          value,
-          (how, what) => `the scheme ${how} ${what}`
+        const read = readStringMatch(value, t, (how, what) =>
+          t("readings", "istioSchemeTerm", { how, what })
         );
         if (read.term) terms.push(read.term);
         else unread.push(verbatim(key, value));
@@ -156,7 +160,7 @@ export function readMatch(entry: unknown): MatchReading {
       }
       case "port": {
         if (typeof value === "number") {
-          terms.push(`it arrived on port ${value}`);
+          terms.push(t("readings", "istioPortTerm", { port: value }));
         } else {
           unread.push(verbatim(key, value));
         }
@@ -170,9 +174,8 @@ export function readMatch(entry: unknown): MatchReading {
         for (const [header, condition] of Object.entries(
           value as Record<string, unknown>
         )) {
-          const read = readStringMatch(
-            condition,
-            (how, what) => `the ${header} header ${how} ${what}`
+          const read = readStringMatch(condition, t, (how, what) =>
+            t("readings", "istioHeaderTerm", { header, how, what })
           );
           if (read.term) terms.push(read.term);
           else unread.push(verbatim(`headers.${header}`, condition));
@@ -200,19 +203,21 @@ export function fullyRead(reading: MatchReading): boolean {
  * An empty or absent list is a rule that takes every request the host has
  * left, which is what a default route is and is stated as such.
  */
-export function readMatches(matches: unknown): MatchReading[] {
+export function readMatches(matches: unknown, t: T): MatchReading[] {
   if (!Array.isArray(matches) || matches.length === 0) return [];
-  return matches.map(readMatch);
+  return matches.map((entry) => readMatch(entry, t));
 }
 
 /** "path starts with /api, and the x-env header is exactly staging". */
-export function describeMatch(reading: MatchReading): string {
-  if (reading.refused) return "shown as written below";
+export function describeMatch(reading: MatchReading, t: T): string {
+  if (reading.refused) return t("readings", "istioShownBelow");
   if (reading.terms.length === 0) {
     return reading.unread.length > 0
-      ? "shown as written below"
-      : "every request";
+      ? t("readings", "istioShownBelow")
+      : t("readings", "istioEveryRequest");
   }
-  const said = reading.terms.join(", and ");
-  return reading.unread.length > 0 ? `${said}, and more below` : said;
+  const said = reading.terms.join(t("readings", "istioAndJoin"));
+  return reading.unread.length > 0
+    ? t("readings", "istioAndMoreBelow", { said })
+    : said;
 }

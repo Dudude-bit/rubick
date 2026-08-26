@@ -108,13 +108,17 @@ function describeUsage(
   switch (usage.how) {
     case "mount": {
       const where = usage.projected
-        ? `projected into ${usage.path}`
-        : `mounted at ${usage.path}`;
-      const from = usage.subPath ? ` from ${usage.subPath}` : "";
-      return inside(`${where}${from}${usage.readOnly ? ", read-only" : ""}`);
+        ? t("nav", "projectedInto", { path: usage.path })
+        : t("nav", "mountedAt", { path: usage.path });
+      const from = usage.subPath
+        ? t("nav", "fromSubPath", { subPath: usage.subPath })
+        : "";
+      return inside(
+        `${where}${from}${usage.readOnly ? t("nav", "readOnlySuffix") : ""}`
+      );
     }
     case "unmounted":
-      return `in volume ${usage.volume}, which no container mounts`;
+      return t("nav", "inVolumeUnmounted", { volume: usage.volume });
     case "env":
       return inside(`${usage.name} reads ${usage.key}`);
     case "envFrom":
@@ -125,7 +129,7 @@ function describeUsage(
       return t("nav", "identityItRunsAs");
     case "ingressTls":
       return usage.hosts.length > 0
-        ? `serves TLS for ${usage.hosts.join(", ")}`
+        ? t("nav", "servesTlsFor", { hosts: usage.hosts.join(", ") })
         : t("nav", "servesTlsForHosts");
   }
 }
@@ -467,7 +471,9 @@ function routeHop(
   );
   const detail = [
     ...new Set(
-      relations.map((rule) => `${rule.host ?? "any host "}${rule.path}`)
+      relations.map(
+        (rule) => `${rule.host ?? `${t("action", "anyHost")} `}${rule.path}`
+      )
     ),
   ].join(", ");
   return {
@@ -518,11 +524,15 @@ function publishedHop(published: ServicePublished, t: T): ChainHopPublished {
   const first = published.endpoints[0];
   const rest = endpointCount(published) - 1;
   const summary = join(
-    rest > 0 && `and ${rest} more`,
-    published.ready > 0 && `${published.ready} published`,
+    rest > 0 && t("empty", "andMore", { n: rest }),
+    published.ready > 0 &&
+      t("readings", "publishedCount", { n: published.ready }),
     published.draining > 0 &&
-      `${published.draining} draining${published.ready === 0 ? ", still taking traffic" : ""}`,
-    published.notReady > 0 && `${published.notReady} not ready`,
+      `${t("readings", "drainingCount", { n: published.draining })}${
+        published.ready === 0 ? t("readings", "stillTakingTraffic") : ""
+      }`,
+    published.notReady > 0 &&
+      t("readings", "notReadyEndpoints", { n: published.notReady }),
     sourceMark(published, t)
   );
   return {
@@ -751,7 +761,9 @@ export function chainSilence(conns: ResourceConnections, t: T): string | null {
   const facts = subject.facts;
   if (subject.kind === "Service") {
     if (facts?.kind === "service" && facts.externalName !== null) {
-      return `This Service has no selector: it resolves to ${facts.externalName} rather than to anything in this cluster.`;
+      return t("nav", "serviceResolvesExternal", {
+        name: facts.externalName,
+      });
     }
     if (facts?.kind === "service" && facts.selector === null) {
       return t("nav", "endpointsByHandNoneWritten");
@@ -764,7 +776,7 @@ export function chainSilence(conns: ResourceConnections, t: T): string | null {
   if (subject.kind === "Pod") {
     return t("nav", "noServiceSelectsPod");
   }
-  return `No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this ${subject.kind}.`;
+  return t("nav", "noServiceSelectsThese", { kind: subject.kind });
 }
 
 // --- the tab -----------------------------------------------------------
@@ -889,7 +901,8 @@ function needLabel(
  * What the top of an ownership chain is worth opening for. Shared with the
  * overview's own chain so the two never say it differently.
  */
-export const REPLICAS_SET_HERE = "the replica count is set here";
+/** The catalogue key for it, so the two callers cannot word it differently. */
+export const REPLICAS_SET_HERE = "replicaCountSetHere" as const;
 
 const OWNABLE = new Set([
   "Pod",
@@ -1040,7 +1053,7 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   if (top !== -1 && isScalable(child.kind)) {
     rows[top] = {
       ...rows[top],
-      detail: join(REPLICAS_SET_HERE, rows[top].detail),
+      detail: join(t("nav", REPLICAS_SET_HERE), rows[top].detail),
     };
   }
 
@@ -1049,7 +1062,7 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
       key: "owner:none",
       label: t("columns", "controlledBy"),
       object: null,
-      detail: `nothing — a ${conns.subject.kind} is the top`,
+      detail: t("nav", "nothingIsTheTop", { kind: conns.subject.kind }),
       ways: [],
     });
   }
@@ -1172,7 +1185,7 @@ function governedBy(conns: ResourceConnections, t: T): ConnRow[] {
       ...(sameObject(edge.to, conns.subject)
         ? []
         : [
-            `${GOVERNS_VERB[edge.from.kind] ?? "acts on"} ${edge.to.kind} ${edge.to.name}`,
+            `${t("nav", GOVERNS_VERB[edge.from.kind] ?? "actsOn")} ${edge.to.kind} ${edge.to.name}`,
           ]),
       // And which query reached it. A budget names no workload — it matched
       // labels — so "why does this apply to me" is otherwise unanswerable
@@ -1195,9 +1208,9 @@ function governorLabel(kind: string, t: T): string {
   return key ? t("nav", key) : kind;
 }
 
-const GOVERNS_VERB: Record<string, string> = {
-  HorizontalPodAutoscaler: "scales",
-  PodDisruptionBudget: "protects",
+const GOVERNS_VERB: Record<string, "scalesVerb" | "protectsVerb"> = {
+  HorizontalPodAutoscaler: "scalesVerb",
+  PodDisruptionBudget: "protectsVerb",
 };
 
 function bindings(conns: ResourceConnections, t: T): ConnRow[] {
