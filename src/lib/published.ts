@@ -8,6 +8,7 @@
  * there.
  */
 
+import type { T } from "@/i18n/useT";
 import type {
   ObjectRef,
   PublishedEndpoint,
@@ -15,9 +16,6 @@ import type {
   ServicePublished,
   UnpublishedPod,
 } from "@/generated/types";
-
-const plural = (n: number, one: string, many = `${one}s`) =>
-  `${n} ${n === 1 ? one : many}`;
 
 /** Everything in the answer, published or merely present in it. */
 export const endpointCount = (published: ServicePublished): number =>
@@ -43,39 +41,47 @@ export function publishedFor(
  * back to when nothing else is ready, and the legacy object could not say it
  * at all.
  */
-export function endpointState(endpoint: PublishedEndpoint): {
+export function endpointState(
+  endpoint: PublishedEndpoint,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
   if (endpoint.ready) {
     return endpoint.terminating
-      ? { text: "ready, terminating", tone: "warn" }
-      : { text: "ready", tone: "ok" };
+      ? { text: t("readings", "epReadyTerminating"), tone: "warn" }
+      : { text: t("readings", "epReady"), tone: "ok" };
   }
   if (endpoint.serving) {
     return {
       text: endpoint.terminating
-        ? "serving, terminating"
-        : "serving, not ready",
+        ? t("readings", "epServingTerminating")
+        : t("readings", "epServingNotReady"),
       tone: "warn",
     };
   }
   return {
-    text: endpoint.terminating ? "terminating" : "not ready",
+    text: endpoint.terminating
+      ? t("readings", "epTerminating")
+      : t("readings", "epNotReady"),
     tone: "err",
   };
 }
 
 /** "3 endpoints across 1 slice" — the count line over the first list. */
-export function publishedSummary(published: ServicePublished): string {
+export function publishedSummary(published: ServicePublished, t: T): string {
   const total = endpointCount(published);
   switch (published.source) {
     case "slices":
-      return `${plural(total, "endpoint")} across ${plural(published.slices, "slice")}`;
+      return t("count", "endpointsAcrossSlices", {
+        endpoints: t("count", "endpointsCount", { n: total }),
+        slices: t("count", "slicesCount", { n: published.slices }),
+      });
     case "legacyEndpoints":
-      return `${plural(total, "address", "addresses")} in the Endpoints object`;
+      return t("count", "addressesInEndpoints", { n: total });
     case "podReadiness":
-      return `${plural(total, "pod")} the selector matches`;
+      return t("count", "podsSelectorMatches", { n: total });
   }
 }
 
@@ -86,7 +92,7 @@ export function publishedSummary(published: ServicePublished): string {
  * and either way a confident empty would be the app inventing an outage out
  * of its own API version. Naming the source is the whole repair.
  */
-export function sourceNote(published: ServicePublished): string | null {
+export function sourceNote(published: ServicePublished, t: T): string | null {
   switch (published.source) {
     case "slices":
       // Addresses the controller wrote down and gave no port to. They are not
@@ -94,7 +100,7 @@ export function sourceNote(published: ServicePublished): string | null {
       // the count above — and saying nothing about them would leave the first
       // list reading as an empty Service rather than a broken one.
       return published.unrouted > 0
-        ? `${plural(published.unrouted, "address", "addresses")} the selector matched ${published.unrouted === 1 ? "is" : "are"} in a slice that carries no port, so ${published.unrouted === 1 ? "it is" : "they are"} not published at all.`
+        ? t("count", "unroutedMatched", { n: published.unrouted })
         : null;
     case "legacyEndpoints":
       return "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from a dead one, and it stops at 1000.";
@@ -104,14 +110,14 @@ export function sourceNote(published: ServicePublished): string | null {
 }
 
 /** The short form of the same, for a line inside a chain hop. */
-export function sourceMark(published: ServicePublished): string | null {
+export function sourceMark(published: ServicePublished, t: T): string | null {
   switch (published.source) {
     case "slices":
       return null;
     case "legacyEndpoints":
-      return "from the legacy Endpoints object";
+      return t("readings", "epFromLegacy");
     case "podReadiness":
-      return "deduced from pod readiness";
+      return t("readings", "epDeducedFromPods");
   }
 }
 
@@ -121,7 +127,7 @@ export function sourceMark(published: ServicePublished): string | null {
  * Null on the overwhelming majority of Services, which is the point: hints
  * are off by default and a caption over a gap is worse than no caption.
  */
-export function topologyNote(published: ServicePublished): string | null {
+export function topologyNote(published: ServicePublished, t: T): string | null {
   const hinted = published.endpoints.filter(
     (endpoint) => endpoint.hintZones.length > 0
   );
@@ -133,9 +139,13 @@ export function topologyNote(published: ServicePublished): string | null {
     const count = hinted.filter((endpoint) =>
       endpoint.hintZones.includes(zone)
     ).length;
-    return `a client in ${zone} reaches ${count} of ${published.endpoints.length}`;
+    return t("readings", "epZoneReach", {
+      zone,
+      n: count,
+      total: published.endpoints.length,
+    });
   });
-  return `Hints are on, so traffic stays in the client's zone: ${reach.join("; ")}.`;
+  return t("readings", "epHintsOn", { reach: reach.join("; ") });
 }
 
 /**
@@ -146,22 +156,28 @@ export function topologyNote(published: ServicePublished): string | null {
  * — and it is the only inference offered. Anything else says "Ready, and not
  * published" and stops there, because nothing else is written down.
  */
-export function unpublishedNote(entry: UnpublishedPod): string {
+export function unpublishedNote(entry: UnpublishedPod, t: T): string {
   const facts = entry.pod.facts;
   const ready = facts?.kind === "pod" && facts.ready;
   const where = entry.inSlice
-    ? "in a slice that carries no port"
-    : "in no slice at all";
+    ? t("readings", "epInSliceNoPort")
+    : t("readings", "epInNoSlice");
   const head = ready
-    ? `Ready, and ${where}`
-    : `${facts?.kind === "pod" ? facts.display : "Not ready"} — a pod that is not Ready is never published`;
+    ? t("readings", "epReadyAnd", { where })
+    : t("readings", "epNotReadyNeverPublished", {
+        state:
+          facts?.kind === "pod"
+            ? facts.display
+            : t("readings", "epNotReadyWord"),
+      });
   if (entry.unnamedPorts.length === 0) return head;
   const asked = entry.unnamedPorts
-    .map((name) => `targetPort: ${name}`)
+    .map((name) => t("readings", "epTargetPort", { name }))
     .join(", ");
-  return `${head} — ${asked} ${
-    entry.unnamedPorts.length === 1 ? "matches" : "match"
-  } no port this pod's containers declare`;
+  return `${head} — ${t("count", "portsMatchNothing", {
+    n: entry.unnamedPorts.length,
+    ports: asked,
+  })}`;
 }
 
 /**
@@ -177,24 +193,31 @@ export function unpublishedNote(entry: UnpublishedPod): string {
 export function legacyNote(
   listed: number,
   overCapacity: boolean,
-  published: ServicePublished | undefined
+  published: ServicePublished | undefined,
+  t: T
 ): string {
   if (!published || published.source !== "slices") {
     return "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.";
   }
   const real = endpointCount(published) + published.unrouted;
-  const from = `The count comes from ${plural(published.slices, "EndpointSlice")}, which is what kube-proxy reads.`;
+  const from = t("count", "slicesRead", { n: published.slices });
   if (listed === real) {
-    return `${plural(listed, "address", "addresses")}, and the slices agree. ${from} This object is kept for compatibility and cannot express serving or terminating.`;
+    return t("readings", "epKeptForCompat", {
+      addresses: t("count", "addressesAgree", { n: listed }),
+      from,
+    });
   }
   if (listed < real) {
-    return `This object lists ${listed} of ${real} addresses. ${from} ${
-      overCapacity
-        ? "The control plane truncates this object at 1000 and has annotated it endpoints.kubernetes.io/over-capacity."
-        : "It cannot express serving or terminating, so an address that is draining is simply absent from it."
-    }`;
+    return t("readings", "epListsOf", {
+      listed,
+      real,
+      from,
+      why: overCapacity
+        ? t("readings", "epOverCapacity")
+        : t("readings", "epCannotExpress"),
+    });
   }
-  return `This object lists ${listed} addresses and the slices publish ${real}. ${from} The two disagree, which they do briefly while the controllers catch up with each other.`;
+  return t("readings", "epDisagree", { listed, real, from });
 }
 
 /** `10.42.1.51:8080`, or the bare address where the slice publishes no port. */

@@ -514,7 +514,7 @@ function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
  * ready one is left, so a Service down to one draining pod is a restart in
  * progress and the app used to call it an outage.
  */
-function publishedHop(published: ServicePublished): ChainHopPublished {
+function publishedHop(published: ServicePublished, t: T): ChainHopPublished {
   const first = published.endpoints[0];
   const rest = endpointCount(published) - 1;
   const summary = join(
@@ -523,7 +523,7 @@ function publishedHop(published: ServicePublished): ChainHopPublished {
     published.draining > 0 &&
       `${published.draining} draining${published.ready === 0 ? ", still taking traffic" : ""}`,
     published.notReady > 0 && `${published.notReady} not ready`,
-    sourceMark(published)
+    sourceMark(published, t)
   );
   return {
     at: "published",
@@ -732,7 +732,7 @@ export function trafficChains(
         published &&
         endpointCount(published) > 0
       )
-        hops.push(publishedHop(published));
+        hops.push(publishedHop(published, t));
 
       return { key: refKey(service), hops, broken: !!stop };
     })

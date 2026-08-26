@@ -1251,6 +1251,38 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    epKeptForCompat:
+      "{addresses} {from} This object is kept for compatibility.",
+    epListsOf: "This object lists {listed} of {real} addresses. {from} {why}",
+    epDisagree:
+      "This object lists {listed} addresses and the slices publish {real}. {from} The two disagree, which they do briefly while the controllers catch up with each other.",
+    epReady: "ready",
+    epReadyTerminating: "ready, terminating",
+    epServingTerminating: "serving, terminating",
+    epServingNotReady: "serving, not ready",
+    epTerminating: "terminating",
+    epNotReady: "not ready",
+    epFromLegacy: "from the legacy Endpoints object",
+    epDeducedFromPods: "deduced from pod readiness",
+    epLegacyAnswered:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from an absent one.",
+    epDeduction:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own answer.",
+    epZoneReach: "a client in {zone} reaches {n} of {total}",
+    epHintsOn: "Hints are on, so traffic stays in the client's zone: {reach}.",
+    epInSliceNoPort: "in a slice that carries no port",
+    epInNoSlice: "in no slice at all",
+    epReadyAnd: "Ready, and {where}",
+    epNotReadyNeverPublished:
+      "{state} — a pod that is not Ready is never published",
+    epNotReadyWord: "Not ready",
+    epTargetPort: "targetPort: {name}",
+    epLegacyCompat:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, so a draining address is simply absent from it.",
+    epOverCapacity:
+      "The control plane truncates this object at 1000 and has annotated it endpoints.kubernetes.io/over-capacity.",
+    epCannotExpress:
+      "It cannot express serving or terminating, so an address that is draining is simply absent from it.",
     delLabelledNotListed:
       "Labelled as delivered by {claim}, which does not list it",
     delLabelledNoOwner:
@@ -3111,6 +3143,35 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    endpointsAcrossSlices: "{endpoints} across {slices}",
+    endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
+    slicesCount: { one: "{n} slice", other: "{n} slices" },
+    addressesCount: { one: "{n} address", other: "{n} addresses" },
+    podsSelectorMatches: {
+      one: "{n} pod the selector matches",
+      other: "{n} pods the selector matches",
+    },
+    addressesInEndpoints: {
+      one: "{n} address in the Endpoints object",
+      other: "{n} addresses in the Endpoints object",
+    },
+    unroutedMatched: {
+      one: "{n} address the selector matched carries no port",
+      other: "{n} addresses the selector matched carry no port",
+    },
+    portsMatchNothing: {
+      one: "{ports} matches no port this pod's containers declare",
+      other: "{ports} match no port this pod's containers declare",
+    },
+    slicesRead: {
+      one: "The count comes from {n} EndpointSlice, which is what kube-proxy reads.",
+      other:
+        "The count comes from {n} EndpointSlices, which is what kube-proxy reads.",
+    },
+    addressesAgree: {
+      one: "{n} address, and the slices agree.",
+      other: "{n} addresses, and the slices agree.",
+    },
     disruptionsAllowed: {
       one: "{n} disruption allowed",
       other: "{n} disruptions allowed",

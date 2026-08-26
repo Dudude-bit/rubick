@@ -93,8 +93,8 @@ function Lists({ published }: { published: ServicePublished }) {
   const [all, setAll] = useState(false);
   const rows = all ? published.endpoints : published.endpoints.slice(0, SHOWN);
   const hidden = published.endpoints.length - rows.length;
-  const topology = topologyNote(published);
-  const source = sourceNote(published);
+  const topology = topologyNote(published, t);
+  const source = sourceNote(published, t);
   const zoned = published.endpoints.some((endpoint) => endpoint.zone !== null);
 
   return (
@@ -102,7 +102,7 @@ function Lists({ published }: { published: ServicePublished }) {
       <Section>
         <SectionHeader
           title={t("nav", "published")}
-          count={publishedSummary(published)}
+          count={publishedSummary(published, t)}
           description={source ?? undefined}
           actions={
             hidden > 0 || all ? (
@@ -136,7 +136,7 @@ function Lists({ published }: { published: ServicePublished }) {
             </TableHeader>
             <TableBody>
               {rows.map((endpoint) => {
-                const state = endpointState(endpoint);
+                const state = endpointState(endpoint, t);
                 return (
                   <TableRow key={endpoint.address} data-quiet>
                     <TableCell>
@@ -214,7 +214,7 @@ function Lists({ published }: { published: ServicePublished }) {
                     />
                   </TableCell>
                   <TableCell className="text-err">
-                    {unpublishedNote(entry)}
+                    {unpublishedNote(entry, t)}
                   </TableCell>
                 </TableRow>
               ))}

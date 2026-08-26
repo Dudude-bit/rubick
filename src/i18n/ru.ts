@@ -1242,6 +1242,40 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    epKeptForCompat:
+      "{addresses} {from} Этот объект оставлен для совместимости.",
+    epListsOf:
+      "Этот объект перечисляет {listed} адресов из {real}. {from} {why}",
+    epDisagree:
+      "Этот объект перечисляет {listed} адресов, а срезы публикуют {real}. {from} Они расходятся — это бывает недолго, пока контроллеры догоняют друг друга.",
+    epReady: "готов",
+    epReadyTerminating: "готов, завершается",
+    epServingTerminating: "обслуживает, завершается",
+    epServingNotReady: "обслуживает, не готов",
+    epTerminating: "завершается",
+    epNotReady: "не готов",
+    epFromLegacy: "из устаревшего объекта Endpoints",
+    epDeducedFromPods: "выведено из готовности подов",
+    epLegacyAnswered:
+      "Этот кластер не отдал ни одного EndpointSlice, ответил устаревший объект Endpoints. Он не отличает завершающийся адрес от отсутствующего.",
+    epDeduction:
+      "Не ответили ни EndpointSlices, ни объект Endpoints, поэтому это вывод, а не ответ самого кластера.",
+    epZoneReach: "клиент в {zone} достаёт до {n} из {total}",
+    epHintsOn:
+      "Подсказки включены, поэтому трафик остаётся в зоне клиента: {reach}.",
+    epInSliceNoPort: "в срезе, где нет порта",
+    epInNoSlice: "ни в одном срезе",
+    epReadyAnd: "Готов, и {where}",
+    epNotReadyNeverPublished:
+      "{state} — под, который не Ready, не публикуется никогда",
+    epNotReadyWord: "Не готов",
+    epTargetPort: "targetPort: {name}",
+    epLegacyCompat:
+      "Это объект, который управляющий слой пишет для совместимости. Он не умеет выражать serving или terminating, поэтому завершающийся адрес в нём просто отсутствует.",
+    epOverCapacity:
+      "Управляющий слой обрезает этот объект на 1000 и пометил его аннотацией endpoints.kubernetes.io/over-capacity.",
+    epCannotExpress:
+      "Он не умеет выражать serving или terminating, поэтому завершающийся адрес в нём просто отсутствует.",
     delLabelledNotListed:
       "Помечен как доставленный через {claim}, который его не перечисляет",
     delLabelledNoOwner:
@@ -3182,6 +3216,53 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    endpointsAcrossSlices: "{endpoints} в {slices}",
+    endpointsCount: {
+      one: "{n} эндпоинт",
+      few: "{n} эндпоинта",
+      other: "{n} эндпоинтов",
+    },
+    slicesCount: {
+      one: "{n} срезе",
+      few: "{n} срезах",
+      other: "{n} срезах",
+    },
+    addressesCount: {
+      one: "{n} адрес",
+      few: "{n} адреса",
+      other: "{n} адресов",
+    },
+    podsSelectorMatches: {
+      one: "{n} под, подходящий под селектор",
+      few: "{n} пода, подходящих под селектор",
+      other: "{n} подов, подходящих под селектор",
+    },
+    addressesInEndpoints: {
+      one: "{n} адрес в объекте Endpoints",
+      few: "{n} адреса в объекте Endpoints",
+      other: "{n} адресов в объекте Endpoints",
+    },
+    unroutedMatched: {
+      one: "{n} адрес, подошедший под селектор, не несёт порта",
+      few: "{n} адреса, подошедших под селектор, не несут порта",
+      other: "{n} адресов, подошедших под селектор, не несут порта",
+    },
+    portsMatchNothing: {
+      one: "{ports} не совпадает ни с одним портом, объявленным контейнерами этого пода",
+      few: "{ports} не совпадают ни с одним портом, объявленным контейнерами этого пода",
+      other:
+        "{ports} не совпадают ни с одним портом, объявленным контейнерами этого пода",
+    },
+    slicesRead: {
+      one: "Счёт берётся из {n} EndpointSlice — именно его читает kube-proxy.",
+      few: "Счёт берётся из {n} EndpointSlice — именно их читает kube-proxy.",
+      other: "Счёт берётся из {n} EndpointSlice — именно их читает kube-proxy.",
+    },
+    addressesAgree: {
+      one: "{n} адрес, и срезы согласны.",
+      few: "{n} адреса, и срезы согласны.",
+      other: "{n} адресов, и срезы согласны.",
+    },
     disruptionsAllowed: {
       one: "разрешено {n} прерывание",
       few: "разрешено {n} прерывания",
