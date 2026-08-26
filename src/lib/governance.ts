@@ -212,7 +212,13 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
     return {
       tone: "err",
       title: t("readings", "hpaNoMetrics", { name }),
-      detail: `${sentence(active?.message ?? active?.reason ?? t("readings", "hpaNoMetricsDefault"))} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.`,
+      detail: t("readings", "hpaNoMetricsDetail", {
+        said: sentence(
+          active?.message ??
+            active?.reason ??
+            t("readings", "hpaNoMetricsDefault")
+        ),
+      }),
     };
   }
 
@@ -239,7 +245,11 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
         name,
         max: auto.facts.maxReplicas,
       }),
-      detail: `${sentence(limited?.message ?? t("readings", "hpaAtCeilingDefault"))} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.`,
+      detail: t("readings", "hpaAtCeilingDetail", {
+        said: sentence(
+          limited?.message ?? t("readings", "hpaAtCeilingDefault")
+        ),
+      }),
     };
   }
 
@@ -344,15 +354,17 @@ export function budgetFinding(budget: Budget, t: T): Finding | null {
         healthy: facts.currentHealthy,
         required: facts.desiredHealthy,
       }),
-      detail:
-        "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering any of these pods does not fail — it waits, indefinitely.",
+      detail: t("readings", "pdbBelowFloorDetail"),
     };
   }
 
   return {
     tone: "neutral",
     title: t("readings", "pdbExactlyMet", { name: budget.object.name }),
-    detail: `The budget is exactly met: ${facts.currentHealthy} healthy against a floor of ${facts.desiredHealthy}. A node drain covering these pods waits until another replica is ready, which is the budget doing its job rather than a fault.`,
+    detail: t("readings", "pdbExactlyMetDetail", {
+      healthy: facts.currentHealthy,
+      required: facts.desiredHealthy,
+    }),
   };
 }
 
@@ -442,7 +454,7 @@ export function autoscalerScaleWarnings(
         key: "hpa:several",
         subject: t("readings", "hpaSeveralTitle", { n: found.length }),
         lead: t("readings", "hpaSeveralHead", { n: found.length }),
-        description: `${names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives either of them, and no single range on this page is the range.`,
+        description: t("readings", "hpaSeveralDetail", { names }),
         to: null,
       },
     ];
@@ -466,7 +478,11 @@ export function autoscalerScaleWarnings(
           name: auto.object.name,
         }),
         lead: t("readings", "hpaOwnsStuckHead", { name: auto.object.name }),
-        description: `It cannot act right now (${why}), so the number you set will stand — until it can, at which point it takes the count back to somewhere between ${facts.minReplicas} and ${facts.maxReplicas} without announcing it.`,
+        description: t("readings", "hpaStuckDetail", {
+          why,
+          min: facts.minReplicas,
+          max: facts.maxReplicas,
+        }),
         to: null,
       },
     ];
@@ -477,7 +493,10 @@ export function autoscalerScaleWarnings(
       key: `hpa:${auto.object.name}`,
       subject: t("readings", "hpaAutoscalerNamed", { name: auto.object.name }),
       lead: t("readings", "hpaWillRevertHead", { name: auto.object.name }),
-      description: `It keeps this between ${facts.minReplicas} and ${facts.maxReplicas} and re-reads its metrics about every fifteen seconds, so a count set by hand lasts until the next pass. To change it for good, change the autoscaler's bounds.`,
+      description: t("readings", "hpaWillRevertDetail", {
+        min: facts.minReplicas,
+        max: facts.maxReplicas,
+      }),
       to: null,
     },
   ];

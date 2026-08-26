@@ -148,6 +148,8 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    routing: "Маршрутизация",
+    priority: "Приоритет",
     entryPoints: "Точки входа",
     subsets: "Подмножества",
     action: "Действие",
@@ -308,7 +310,6 @@ export const ru: Catalogue = {
     external: "Внешний",
     progress: "Ход",
     reason: "Причина",
-    routing: "Маршрутизация",
     runtime: "Среда выполнения",
     scheduling: "Планирование",
     provisioning: "Выделение",
@@ -1313,6 +1314,38 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    traefikRouting: "Маршрутизация",
+    traefikRouteNumber: {
+      one: "Маршрут {n}",
+      few: "Маршрут {n}",
+      many: "Маршрут {n}",
+      other: "Маршрут {n}",
+    },
+    traefikPriorityDefault: {
+      one: "{n} — длина правила, значение Traefik по умолчанию",
+      few: "{n} — длина правила, значение Traefik по умолчанию",
+      many: "{n} — длина правила, значение Traefik по умолчанию",
+      other: "{n} — длина правила, значение Traefik по умолчанию",
+    },
+    traefikRoute: "Маршрут",
+    traefikEveryEntryPoint: "все точки входа — ни одна не названа",
+    traefikH2c: "h2c — gRPC, а не то, чем ходит браузер",
+    traefikNotRead: "не прочитано — {why}",
+    traefikDefaultCertificate: "сертификат прокси по умолчанию",
+    traefikNoTlsDeclared: "не объявлен — его всё ещё может нести точка входа",
+    traefikRuleEmpty: "правило пустое",
+    traefikRuleNotPlain: "это не простой список условий",
+    traefikRuleNegated:
+      "оно с отрицанием, поэтому условие внутри не является требованием",
+    traefikRuleUnreadable: "ни хост, ни путь в нём прочитать не удалось",
+    traefikAnyPath: "любой путь",
+    traefikPathExact: "{path} (точно)",
+    hpaNoMetricsDetail:
+      "{said} По самой нагрузке этого не видно: число реплик, условия и события выглядят ровно так же, как у здорового автомасштабатора, — просто число перестаёт меняться.",
+    hpaAtCeilingDetail:
+      "{said} Пока это так, оба числа реплик выглядят как здоровое устойчивое состояние, и больше ничто на этой странице этого не показывает: вырасти нагрузке позволит увеличение maxReplicas.",
+    hpaStuckDetail:
+      "Сейчас он действовать не может ({why}), поэтому заданное вами число сохранится — пока он не сможет, и тогда без предупреждения вернёт счёт куда-то между {min} и {max}.",
     logFormatJson: "Структурированный JSON с разобранными полями",
     logFormatLogfmt: 'Пары ключ=значение (например, level=info msg="hello")',
     logFormatKlog: "Формат логов Kubernetes с префиксом уровня (I/W/E/F)",
@@ -2436,6 +2469,9 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    anEmptySpec: "Пустой spec",
+    nothingConfigured: "Ничего не настроено",
+    emptyParens: "(пусто)",
     noRevision: "ревизии нет",
     fluxNotReconciledYet: "ещё не сверялся",
     fluxFrozenSource: "заморожен · источник не отвечает",

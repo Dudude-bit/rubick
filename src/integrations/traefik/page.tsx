@@ -54,6 +54,7 @@
  * leads to a connection error is worse than no button.
  */
 
+import { sayWords } from "@/i18n/say";
 import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
@@ -676,7 +677,7 @@ function PathRow({
   return (
     <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
-        {describePath(route.clause.path)}
+        {describePath(route.clause.path, t)}
         {route.pathType && route.pathType !== "Prefix" && (
           <span className="ml-1 text-fg-fnt">{route.pathType}</span>
         )}
@@ -799,7 +800,7 @@ function HostChain({
       {group.routes.length > 1 && (
         <span className="text-[10px] text-fg-fnt">
           {t("empty", "thePathThrough", {
-            path: describePath(route.clause.path),
+            path: describePath(route.clause.path, t),
           })}
         </span>
       )}
@@ -838,7 +839,7 @@ function HostChain({
             }
           >
             {group.host ?? t("empty", "anyHost")}
-            {route.clause.path ? ` ${describePath(route.clause.path)}` : ""}
+            {route.clause.path ? ` ${describePath(route.clause.path, t)}` : ""}
           </Cell>
         </Column>
         <Column label="Middleware">
@@ -960,7 +961,9 @@ function RawRule({ route }: { route: TraefikRoute }) {
     <div className="mt-1 border-l-2 border-hair pl-2.5">
       <p className="text-[11px] text-fg-mut">
         {rule.refused
-          ? t("empty", "ruleShownAsWrittenBecause", { reason: rule.refused })
+          ? t("empty", "ruleShownAsWrittenBecause", {
+              reason: sayWords(rule.refused, t),
+            })
           : t("empty", "shownExactlyAsWritten", {
               n: rule.unread.length,
               list: rule.unread.join(", "),

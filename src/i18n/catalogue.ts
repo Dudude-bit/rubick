@@ -183,6 +183,8 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    routing: "Routing",
+    priority: "Priority",
     entryPoints: "Entry Points",
     subsets: "Subsets",
     action: "Action",
@@ -343,7 +345,6 @@ export const en = {
     external: "External",
     progress: "Progress",
     reason: "Reason",
-    routing: "Routing",
     runtime: "Runtime",
     scheduling: "Scheduling",
     provisioning: "Provisioning",
@@ -1321,6 +1322,31 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    traefikRouting: "Routing",
+    traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
+    traefikPriorityDefault: {
+      one: "{n} — the rule's length, Traefik's default",
+      other: "{n} — the rule's length, Traefik's default",
+    },
+    traefikRoute: "Route",
+    traefikEveryEntryPoint: "every entry point — none named",
+    traefikH2c: "h2c — gRPC, not a browser's way in",
+    traefikNotRead: "not read — {why}",
+    traefikDefaultCertificate: "the proxy's default certificate",
+    traefikNoTlsDeclared: "none declared — an entry point may still carry it",
+    traefikRuleEmpty: "the rule is empty",
+    traefikRuleNotPlain: "it is not a plain list of matchers",
+    traefikRuleNegated:
+      "it is negated, so a matcher in it is not a requirement",
+    traefikRuleUnreadable: "no host or path in it could be read",
+    traefikAnyPath: "any path",
+    traefikPathExact: "{path} (exact)",
+    hpaNoMetricsDetail:
+      "{said} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.",
+    hpaAtCeilingDetail:
+      "{said} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.",
+    hpaStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back to somewhere between {min} and {max} without announcing it.",
     logFormatJson: "Structured JSON log format with parsed fields",
     logFormatLogfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
     logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
@@ -2303,6 +2329,9 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    anEmptySpec: "An empty spec",
+    nothingConfigured: "Nothing configured",
+    emptyParens: "(empty)",
     noRevision: "no revision",
     fluxNotReconciledYet: "not reconciled yet",
     fluxFrozenSource: "frozen · source failing",

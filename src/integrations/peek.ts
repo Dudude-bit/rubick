@@ -9,6 +9,7 @@
  */
 
 import type { CustomResourceDetailInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 import {
   peekIngressRoute,
   peekMiddleware,
@@ -18,7 +19,7 @@ import {
 export type { VendorPeekBody, VendorPeekGroup } from "./traefik/peek";
 
 const BY_CRD: Array<
-  [RegExp, (resource: CustomResourceDetailInfo) => VendorPeekBody]
+  [RegExp, (resource: CustomResourceDetailInfo, t: T) => VendorPeekBody]
 > = [
   // Both API groups: a v2 cluster serves `traefik.containo.us` only.
   [/^ingressroutes\.traefik\./, peekIngressRoute],
@@ -27,6 +28,6 @@ const BY_CRD: Array<
 
 export function vendorPeek(
   crdName: string
-): ((resource: CustomResourceDetailInfo) => VendorPeekBody) | null {
+): ((resource: CustomResourceDetailInfo, t: T) => VendorPeekBody) | null {
   return BY_CRD.find(([pattern]) => pattern.test(crdName))?.[1] ?? null;
 }

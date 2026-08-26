@@ -974,7 +974,7 @@ function customResourceSource(crdName: string): PeekSource {
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
     (resource: CustomResourceDetailInfo, _target, t) => {
       const status = resource.status as Record<string, unknown> | null;
-      const body = vendor?.(resource);
+      const body = vendor?.(resource, t);
       return {
         status: body?.status ?? customResourceState(status),
         createdAt: resource.createdAt,
