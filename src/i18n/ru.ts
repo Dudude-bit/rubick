@@ -1314,6 +1314,17 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    tlsFromVendor: "от {by}",
+    tlsHostFrom: "{host} — от {by}",
+    awsAcmNamed: "ACM {name}",
+    awsAcmCertificate: "сертификат из ACM",
+    awsAcmDiscovered: "сертификат, найденный в ACM",
+    awsHttpOnly: "только HTTP-слушатель",
+    azureCertOnGateway: "{name} на Application Gateway",
+    azureSomeCertOnGateway: "сертификат на Application Gateway",
+    istioMeshOnly: "только внутри меша",
+    mapEntryPoint: "Точка входа",
+    mapZeroReady: "0 готовых",
     traefikRouting: "Маршрутизация",
     traefikRouteNumber: {
       one: "Маршрут {n}",

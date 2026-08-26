@@ -13,6 +13,8 @@
  * rides on the Service node as its tag.
  */
 
+import type { T } from "@/i18n/useT";
+
 import { ResourceType } from "@/lib/resource-registry";
 
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
@@ -62,7 +64,8 @@ function publishedAt(group: HostGroup, sources: TraefikSources): string[] {
 
 export function routingMap(
   groups: HostGroup[],
-  sources: TraefikSources
+  sources: TraefikSources,
+  t: T
 ): RoutingMapData {
   const entryPoints = new Map<string, MapNode>();
   const services = new Map<string, MapNode>();
@@ -119,7 +122,7 @@ export function routingMap(
           tag: !backing.known
             ? undefined
             : backing.stop
-              ? { text: "0 ready", tone: "err" }
+              ? { text: t("readings", "mapZeroReady"), tone: "err" }
               : {
                   text: `${backing.ready + backing.draining} ready`,
                   tone: backing.ready === 0 ? "warn" : "mute",
@@ -136,7 +139,7 @@ export function routingMap(
     const at = publishedAt(group, sources);
     return {
       id,
-      label: group.host ?? "any host",
+      label: group.host ?? t("action", "anyHost"),
       // The address the hostname has to resolve to, beside the path count.
       // Without it the column is a list of names somebody still has to go and
       // look up one at a time, which is the errand a map is supposed to end.
@@ -150,15 +153,18 @@ export function routingMap(
       to: hostFilterPath(group.host),
       tag: tls
         ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-        : { text: "no TLS", tone: "warn" },
+        : { text: t("empty", "noTls"), tone: "warn" },
     };
   });
 
   return {
     columns: [
-      { label: "Entry point", nodes: [...entryPoints.values()] },
-      { label: "Host", nodes: hosts },
-      { label: "Service", nodes: [...services.values()] },
+      {
+        label: t("readings", "mapEntryPoint"),
+        nodes: [...entryPoints.values()],
+      },
+      { label: t("columns", "host"), nodes: hosts },
+      { label: t("columns", "service"), nodes: [...services.values()] },
     ],
     edges,
   };

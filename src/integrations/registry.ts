@@ -317,9 +317,10 @@ export interface IngressTls {
   terminated: boolean;
   /**
    * What holds it, for the sentence: "an ACM certificate", "shop-cert". Never
-   * branched on — the surface prints it.
+   * branched on — the surface prints it. A key, because this is answered
+   * inside a query; a Secret's own name goes through the verbatim one.
    */
-  by: string;
+  by: Saying;
 }
 
 /**

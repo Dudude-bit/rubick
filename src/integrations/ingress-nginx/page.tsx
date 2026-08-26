@@ -278,8 +278,8 @@ function MapTab({
 }) {
   const t = useT();
   const data = useMemo(
-    () => (sources ? routingMap(groups, sources) : null),
-    [groups, sources]
+    () => (sources ? routingMap(groups, sources, t) : null),
+    [groups, sources, t]
   );
 
   if (loading) {

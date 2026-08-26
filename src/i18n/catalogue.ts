@@ -1322,6 +1322,17 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    tlsFromVendor: "from {by}",
+    tlsHostFrom: "{host} — from {by}",
+    awsAcmNamed: "ACM {name}",
+    awsAcmCertificate: "an ACM certificate",
+    awsAcmDiscovered: "a certificate discovered in ACM",
+    awsHttpOnly: "an HTTP listener only",
+    azureCertOnGateway: "{name} on the Application Gateway",
+    azureSomeCertOnGateway: "a certificate on the Application Gateway",
+    istioMeshOnly: "mesh only",
+    mapEntryPoint: "Entry point",
+    mapZeroReady: "0 ready",
     traefikRouting: "Routing",
     traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
     traefikPriorityDefault: {

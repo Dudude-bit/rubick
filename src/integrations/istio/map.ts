@@ -12,6 +12,8 @@
  * VirtualService as routing nowhere.
  */
 
+import type { T } from "@/i18n/useT";
+
 import { ResourceType } from "@/lib/resource-registry";
 
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
@@ -29,7 +31,8 @@ function toneOf(group: IstioHostGroup): MapTone {
 
 export function routingMap(
   groups: IstioHostGroup[],
-  sources: IstioSources
+  sources: IstioSources,
+  t: T
 ): RoutingMapData {
   const gateways = new Map<string, MapNode>();
   const destinations = new Map<string, MapNode>();
@@ -94,7 +97,7 @@ export function routingMap(
               : !backing.known
                 ? undefined
                 : backing.stop
-                  ? { text: "0 ready", tone: "err" }
+                  ? { text: t("readings", "mapZeroReady"), tone: "err" }
                   : {
                       text: `${backing.ready + backing.draining} ready`,
                       tone: backing.ready === 0 ? "warn" : "mute",
@@ -115,15 +118,17 @@ export function routingMap(
       sub: `${group.routes.length} route${group.routes.length === 1 ? "" : "s"}`,
       tone,
       to: hostFilterPath(group.host),
-      tag: group.meshOnly ? { text: "mesh only", tone: "mute" } : undefined,
+      tag: group.meshOnly
+        ? { text: t("readings", "istioMeshOnly"), tone: "mute" }
+        : undefined,
     };
   });
 
   return {
     columns: [
       { label: "Gateway", nodes: [...gateways.values()], width: 200 },
-      { label: "Host", nodes: hosts },
-      { label: "Destination", nodes: [...destinations.values()] },
+      { label: t("columns", "host"), nodes: hosts },
+      { label: t("columns", "destination"), nodes: [...destinations.values()] },
     ],
     edges,
   };

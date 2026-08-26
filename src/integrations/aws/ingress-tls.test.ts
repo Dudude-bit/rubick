@@ -18,6 +18,13 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { ingressTls } from "./ingress-tls";
 
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const ingress = (annotations: Record<string, string>, className = "alb") =>
   ({ name: "shop", namespace: "web", className, annotations }) as never;
 
@@ -36,7 +43,7 @@ describe("whether an ALB Ingress serves TLS", () => {
 
     const [answers] = await ingressTls(ask());
     expect(answers[0].terminated).toBe(true);
-    expect(answers[0].by).toContain("abcd-1234");
+    expect(sayWords(answers[0].by, t)).toContain("abcd-1234");
   });
 
   /**

@@ -1,3 +1,4 @@
+import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -277,9 +278,10 @@ export function IngressList() {
           : []
       );
       if (hosts.length === 0) return null;
-      const by =
-        vendorTls.of(ingress, hosts[0])?.by ??
-        t("empty", "theLoadBalancerInFront");
+      const said = vendorTls.of(ingress, hosts[0])?.by;
+      const by = said
+        ? sayWords(said, t)
+        : t("empty", "theLoadBalancerInFront");
       return { hosts, by };
     },
     [t, vendorTls]

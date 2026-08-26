@@ -53,13 +53,28 @@ function answerFor(
       // saying it does would put an https:// link in front of a connection
       // that is refused. Silence, so `spec.tls` keeps the last word.
       if (certificateStatusOf(found) !== "Active") return [];
-      return [{ host, terminated: true, by: name }];
+      return [
+        {
+          host,
+          terminated: true,
+          by: { key: "verbatimLine", values: { said: name } },
+        },
+      ];
     }
     // Google holds the domains of a pre-shared certificate, so nothing in
     // this cluster says which hosts it covers — but an Ingress carrying one
     // is serving HTTPS, and that much is stated.
     if (preShared.length > 0) {
-      return [{ host, terminated: true, by: preShared.join(", ") }];
+      return [
+        {
+          host,
+          terminated: true,
+          by: {
+            key: "verbatimLine",
+            values: { said: preShared.join(", ") },
+          },
+        },
+      ];
     }
     return [];
   });
