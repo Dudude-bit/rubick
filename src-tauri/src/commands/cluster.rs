@@ -19,13 +19,28 @@ use crate::state::AppState;
 /// in such a build and then upgrading does not silently unpin it.
 fn read_kubeconfig_overrides() -> Vec<std::path::PathBuf> {
     crate::commands::settings::helpers::read_config(|c| {
-        if c.kubernetes.kubeconfig_paths.is_empty() {
-            c.kubernetes.kubeconfig_path.clone().into_iter().collect()
-        } else {
-            c.kubernetes.kubeconfig_paths.clone()
-        }
+        pinned_files(
+            &c.kubernetes.kubeconfig_paths,
+            c.kubernetes.kubeconfig_path.as_ref(),
+        )
     })
     .unwrap_or_default()
+}
+
+/// The two fields reconciled, as a rule rather than as a read of the disk.
+///
+/// The list wins where there is one. `kubeconfig_path` is what a build
+/// without several files writes, and is still honoured so that pinning a
+/// file in such a build and then upgrading does not silently unpin it.
+fn pinned_files(
+    paths: &[std::path::PathBuf],
+    single: Option<&std::path::PathBuf>,
+) -> Vec<std::path::PathBuf> {
+    if paths.is_empty() {
+        single.cloned().into_iter().collect()
+    } else {
+        paths.to_vec()
+    }
 }
 
 /// List all available Kubernetes contexts
@@ -361,7 +376,7 @@ pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<Kubecon
 
 #[cfg(test)]
 mod tests {
-    use super::kubeconfig_candidates;
+    use super::{kubeconfig_candidates, pinned_files};
 
     #[test]
     fn env_kubeconfig_lists_every_file_it_would_merge() {
@@ -405,6 +420,34 @@ mod tests {
         );
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].origin, "override");
+    }
+
+    /// A file pinned by a build that had never heard of the list is still
+    /// read after upgrading. Ignoring the old field would silently unpin
+    /// somebody's cluster the first time they ran a newer build.
+    #[test]
+    fn a_single_pinned_file_survives_the_upgrade() {
+        let one = std::path::PathBuf::from("/tmp/pinned");
+        assert_eq!(pinned_files(&[], Some(&one)), vec![one]);
+    }
+
+    /// And the list wins once there is one, whatever the old field still
+    /// holds — it holds the first of them, so honouring it would read that
+    /// file twice and the others not at all.
+    #[test]
+    fn the_list_wins_over_the_field_it_replaced() {
+        let first = std::path::PathBuf::from("/tmp/work");
+        let second = std::path::PathBuf::from("/tmp/home");
+        assert_eq!(
+            pinned_files(&[first.clone(), second.clone()], Some(&first)),
+            vec![first, second]
+        );
+    }
+
+    /// Neither set is the default lookup, which is not a path at all.
+    #[test]
+    fn nothing_pinned_is_an_empty_list() {
+        assert!(pinned_files(&[], None).is_empty());
     }
 
     /// Several pinned files are all read, in the order they were pinned —
