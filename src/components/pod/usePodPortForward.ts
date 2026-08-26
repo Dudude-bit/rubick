@@ -66,8 +66,8 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     if (!pod) return;
     if (!currentContext) {
       toast({
-        title: t("action", "noClusterSelected"),
-        description: "Connect to a cluster to start port-forwarding.",
+        title: t("cluster", "noClusterSelected"),
+        description: t("action", "connectToForward"),
         variant: "destructive",
       });
       return;
@@ -78,7 +78,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
 
     if (!localPort || !remotePort) {
       toast({
-        title: "Invalid port",
+        title: t("action", "invalidPort"),
         description: t("action", "portsOutOfRange"),
         variant: "destructive",
       });

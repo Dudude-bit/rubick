@@ -8,6 +8,8 @@
  * @module stores/clusterStore
  */
 
+import { translate } from "@/i18n";
+import { currentLocale } from "./localeStore";
 import { create } from "zustand";
 
 import type { ContextInfo } from "@/generated/types";
@@ -209,7 +211,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   connect: async (context?: string) => {
     const targetContext = context ?? get().currentContext;
     if (!targetContext) {
-      set({ error: "No cluster selected", errorContext: null });
+      set({
+        error: translate(currentLocale(), "cluster", "noClusterSelected"),
+        errorContext: null,
+      });
       return;
     }
 

@@ -79,7 +79,7 @@ export function StorageClassDetail() {
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection
-          title="Storage class"
+          title={t("columns", "storageClass")}
           items={facts}
           className="max-w-lg"
         />

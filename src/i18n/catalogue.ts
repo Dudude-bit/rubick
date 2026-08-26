@@ -41,6 +41,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    allNamespacesLower: "all namespaces",
     dataTable: "Data table",
     protectsVerb: "protects",
     scalesVerb: "scales",
@@ -183,6 +184,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    providerId: "Provider ID",
     resourceVersion: "Resource version",
     uid: "UID",
     apiVersion: "API version",
@@ -451,6 +453,7 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
     addressOnClipboard:
       "The {site} address is on your clipboard instead: {url}",
@@ -467,7 +470,6 @@ export const en = {
     comfortableView: "Comfortable view",
     searchEllipsis: "Search...",
     verbAnyway: "{verb} anyway",
-    noClusterSelected: "No cluster selected",
     portsOutOfRange: "Ports must be between 1 and 65535.",
     portForwardStartFailed: "Failed to start port-forward",
     portForwardStopFailed: "Failed to stop port-forward",
@@ -523,7 +525,6 @@ export const en = {
     searchFailed: "Search failed",
     chartInstalled: "Chart installed",
     chartInstalledDetail: 'Release "{name}" has been installed successfully.',
-    installationFailed: "Installation failed",
     releaseUpgraded: "Release upgraded",
     releaseUpgradedDetail: 'Release "{name}" has been upgraded successfully.',
     upgradeFailed: "Upgrade failed",
@@ -2030,6 +2031,8 @@ export const en = {
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
   },
   cluster: {
+    nameMissingParens: "{name} (missing)",
+    noClusterSelected: "No cluster selected",
     metricsNotInstalled: "Metrics server not installed",
     metricsNotInstalledBody:
       "Install metrics-server to see CPU and memory usage.",
@@ -2154,6 +2157,7 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",

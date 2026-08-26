@@ -18,6 +18,12 @@ import {
   type ScopeTab,
 } from "./scopeTabStore";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
   id: "t1",
   context: null,
@@ -278,12 +284,12 @@ describe("titles", () => {
 
   it("spells the whole tab for a tooltip", () => {
     expect(
-      tabTitle(tab({ context: "prod", namespace: "web", href: "/nodes" }))
+      tabTitle(tab({ context: "prod", namespace: "web", href: "/nodes" }), t)
     ).toBe("prod · web · nodes");
-    expect(tabTitle(tab({ href: "/" }))).toBe(
+    expect(tabTitle(tab({ href: "/" }), t)).toBe(
       "no cluster · all namespaces · overview"
     );
-    expect(tabTitle(tab({ context: "old", missing: true }))).toBe(
+    expect(tabTitle(tab({ context: "old", missing: true }), t)).toBe(
       "old (missing) · all namespaces · overview"
     );
   });

@@ -512,10 +512,13 @@ export function IngressDetail() {
                         className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
                       >
                         <span className="font-mono text-fg-mut">
-                          {isWildcard ? "All hosts" : rule.host}
+                          {isWildcard ? t("empty", "allHosts") : rule.host}
                         </span>
                         {!covered && (
-                          <span className="text-warn"> · no TLS</span>
+                          <span className="text-warn">
+                            {" "}
+                            · {t("empty", "noTls")}
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>,

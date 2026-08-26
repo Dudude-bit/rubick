@@ -388,7 +388,7 @@ function ScopeTabItem({
         <div
           role="tab"
           aria-selected={active}
-          aria-label={tabTitle(tab, alias)}
+          aria-label={tabTitle(tab, t, alias)}
           data-active={active}
           onClick={() => {
             if (!active) activateTab(tab.id);
@@ -521,7 +521,7 @@ function ScopeTabItem({
           <button
             type="button"
             aria-label={t("action", "closeNamed", {
-              name: tabTitle(tab, alias),
+              name: tabTitle(tab, t, alias),
             })}
             onClick={(event) => {
               event.stopPropagation();

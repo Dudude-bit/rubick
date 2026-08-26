@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    allNamespacesLower: "все неймспейсы",
     dataTable: "Таблица данных",
     protectsVerb: "защищает",
     scalesVerb: "масштабирует",
@@ -148,6 +149,7 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    providerId: "ID провайдера",
     resourceVersion: "Версия ресурса",
     uid: "UID",
     apiVersion: "Версия API",
@@ -416,6 +418,7 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
     addressOnClipboard: "Адрес {site} скопирован в буфер обмена: {url}",
     couldNotOpenBrowser: "Не удалось открыть браузер",
@@ -431,7 +434,6 @@ export const ru: Catalogue = {
     comfortableView: "Свободный вид",
     searchEllipsis: "Поиск…",
     verbAnyway: "{verb} всё равно",
-    noClusterSelected: "Кластер не выбран",
     portsOutOfRange: "Порты должны быть от 1 до 65535.",
     portForwardStartFailed: "Не удалось запустить проброс порта",
     portForwardStopFailed: "Не удалось остановить проброс порта",
@@ -490,7 +492,6 @@ export const ru: Catalogue = {
     searchFailed: "Поиск не удался",
     chartInstalled: "Чарт установлен",
     chartInstalledDetail: "Релиз «{name}» установлен.",
-    installationFailed: "Установка не удалась",
     releaseUpgraded: "Релиз обновлён",
     releaseUpgradedDetail: "Релиз «{name}» обновлён.",
     upgradeFailed: "Обновление не удалось",
@@ -2160,6 +2161,8 @@ export const ru: Catalogue = {
       "Сырая конфигурация nginx, вставляемая в блок server дословно. Показана ровно как написана: приложение её не пересказывает, потому что она может переписать, перенаправить или запретить что угодно на этом маршруте.",
   },
   cluster: {
+    nameMissingParens: "{name} (отсутствует)",
+    noClusterSelected: "Кластер не выбран",
     metricsNotInstalled: "metrics-server не установлен",
     metricsNotInstalledBody:
       "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
@@ -2292,6 +2295,7 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",

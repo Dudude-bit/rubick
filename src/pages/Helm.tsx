@@ -290,7 +290,7 @@ export function Helm() {
     },
     onError: (error) => {
       toast({
-        title: t("action", "installationFailed"),
+        title: t("settings", "installationFailed"),
         description: normalizeTauriError(error),
         variant: "destructive",
       });

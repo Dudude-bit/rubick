@@ -114,7 +114,7 @@ export function PersistentVolumeClaimDetail() {
       tone: pvc?.volume ? undefined : "warn",
     },
     {
-      label: "Storage class",
+      label: t("columns", "storageClass"),
       value: pvc?.storageClass ? (
         <ResourceRef
           kind={ResourceType.StorageClass}

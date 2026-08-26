@@ -23,6 +23,7 @@
  * @module stores/scopeTabStore
  */
 
+import type { T } from "@/i18n/useT";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -416,10 +417,16 @@ export function tabRouteLabel(href: string): string {
  * strip with a name that matches nothing they can act on, or a name that
  * matches nothing they can see.
  */
-export function tabTitle(tab: ScopeTab, alias?: string): string {
-  const name = tab.context ?? "no cluster";
+export function tabTitle(tab: ScopeTab, t: T, alias?: string): string {
+  const name = tab.context ?? t("cluster", "noCluster");
   const cluster = alias ? `${alias} (${name})` : name;
-  const named = tab.missing ? `${cluster} (missing)` : cluster;
+  const named = tab.missing
+    ? t("cluster", "nameMissingParens", { name: cluster })
+    : cluster;
   const namespaces = tabScope(tab);
-  return `${named} · ${namespaces.length === 0 ? "all namespaces" : namespaces.join(", ")} · ${tabRouteLabel(tab.href)}`;
+  return `${named} · ${
+    namespaces.length === 0
+      ? t("nav", "allNamespacesLower")
+      : namespaces.join(", ")
+  } · ${tabRouteLabel(tab.href)}`;
 }

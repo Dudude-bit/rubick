@@ -184,7 +184,7 @@ export function NodeDetail() {
         ...(placement.providerId
           ? [
               {
-                label: "Provider ID",
+                label: t("columns", "providerId"),
                 value: placement.providerId,
                 mono: true,
               },
