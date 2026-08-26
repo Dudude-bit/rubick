@@ -340,6 +340,7 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    verbAnyway: "{verb} всё равно",
     noClusterSelected: "Кластер не выбран",
     portsOutOfRange: "Порты должны быть от 1 до 65535.",
     portForwardStartFailed: "Не удалось запустить проброс порта",
@@ -1242,6 +1243,51 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
+    delEditWhatApplies:
+      "Чтобы изменить насовсем, поменяйте то, что применяет {name}.",
+    delEditManifests: "Чтобы изменить насовсем, правьте манифесты в {path}.",
+    argoOutOfSync: "рассинхронизирован",
+    argoNotComparing: "не сверяется",
+    argoSyncFailing: "синхронизация не проходит",
+    argoCannotCompare:
+      "{name} не может сверяться со своим репозиторием, поэтому ничего не применяется и правка здесь останется — пока кто-нибудь это не починит, и тогда её отменят.",
+    argoSelfHeals:
+      "Argo самовосстанавливает это приложение: сделанная здесь правка будет отменена при следующей сверке, примерно через пять минут.",
+    argoAutoSyncNoHeal:
+      "Автосинхронизация включена, а самовосстановление нет, поэтому правка здесь останется до следующего коммита, затрагивающего этот объект.",
+    argoNoAutoSync:
+      "Автосинхронизация выключена, поэтому правка здесь останется, пока кто-нибудь не синхронизирует приложение.",
+    fluxSuspendedWord: "приостановлен",
+    fluxNotReconcilingWord: "не сверяется",
+    fluxKustSuspended:
+      "{name} приостановлен, поэтому ничего не применяется и правка здесь останется — пока его не возобновят, и тогда её отменят.",
+    fluxKustStopped:
+      "{name} не сверяется, поэтому правка здесь останется, пока он не заработает снова, — и тогда её отменят.",
+    fluxKustReapplies:
+      "{name} переприменяет свои манифесты каждые {interval}, поэтому правка здесь будет отменена на следующем проходе.",
+    fluxRelSuspended:
+      "{name} приостановлен, поэтому правка здесь останется, пока его не возобновят.",
+    fluxRelStopped:
+      "{name} не обновляет релиз, поэтому правка здесь останется, пока он не заработает снова.",
+    fluxRelUpgrades:
+      "{name} обновляет релиз по своему расписанию, и ручная правка будет заменена значением из самого чарта.",
+    promCpuHistory: "загрузку CPU за окно длиннее, чем открыто это приложение",
+    promMemoryHistory: "историю памяти",
+    promVolumeFullness: "насколько том на самом деле заполнен",
+    promNetworkBytes: "байты, входящие в нагрузку и выходящие из неё",
+    promFromCadvisor: "cAdvisor, через kubelet",
+    promFromKubelet: "kubelet",
+    promNoNodesListed:
+      "Узлы этого кластера перечислить не удалось, поэтому знания Prometheus сравнивать не с чем.",
+    promNoNodeLabel:
+      "Ничего здесь не несёт имени узла — ни kube_node_info, ни метка node у cAdvisor, — поэтому отсюда не установить, за каким кластером следит этот Prometheus. Семейства метрик ниже всё равно прочитаны, и они — более надёжное свидетельство.",
+    promCouldNotTell: "определить не удалось",
+    promNoNodesToCompare: "сравнивать не с чем",
+    promAnotherCluster: "следит за другим кластером",
+    promPartOfIt: "следит за его частью",
+    promMoreThanThis: "следит не только за этим",
+    promThisCluster: "следит за этим кластером",
     epKeptForCompat:
       "{addresses} {from} Этот объект оставлен для совместимости.",
     epListsOf:
@@ -1947,6 +1993,19 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noRevision: "ревизии нет",
+    fluxNotReconciledYet: "ещё не сверялся",
+    fluxFrozenSource: "заморожен · источник не отвечает",
+    fluxWaitingDependency: "ждёт зависимость",
+    fluxFetchStale: "загрузка не идёт · артефакт устарел",
+    fluxNeverFetched: "ни разу не загружался",
+    fluxNotFetchedYet: "ещё не загружался",
+    fluxFetchedUnused: "загружен · никем не используется",
+    fluxFetched: "загружен",
+    fluxSaidNothingMore: "Контроллер не назвал причину.",
+    notBoundYet: "не привязан",
+    spotReclaim:
+      "Облако может забрать этот узел в любой момент. Уходящие отсюда поды — это устройство сервиса, а не сбой.",
     endpointsFor: "Сетевые адреса служб в {scope}",
     persistentVolumesAre:
       "Хранилище уровня кластера, выделенное администратором",

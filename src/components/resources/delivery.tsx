@@ -37,7 +37,8 @@ import { useT } from "@/i18n/useT";
  * urgent of the two.
  */
 export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
-  const marks = deliveryMarks(deliveries);
+  const t = useT();
+  const marks = deliveryMarks(deliveries, t);
   if (marks.length === 0) return null;
 
   return (

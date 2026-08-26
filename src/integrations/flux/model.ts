@@ -42,6 +42,7 @@
  * what makes this page the only place the whole picture exists.
  */
 
+import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { conditionOf, conditionsOf, getValueByPath } from "../kit";
 import { shortRevision } from "../gitops";
@@ -80,8 +81,8 @@ export function readRevision(raw: string | null): FluxRevision | null {
 }
 
 /** How a revision is written on a row. */
-export function revisionText(revision: FluxRevision | null): string {
-  if (!revision) return "no revision";
+export function revisionText(revision: FluxRevision | null, t: T): string {
+  if (!revision) return t("empty", "noRevision");
   if (!revision.commit) return revision.raw;
   return revision.ref
     ? `${revision.ref}@${shortRevision(revision.commit)}`
@@ -108,7 +109,7 @@ export type FluxFinding =
       kind: "frozen";
       severity: "err";
       source: FluxSource;
-      message: string;
+      message: string | null;
       applied: FluxRevision | null;
     }
   /** The source is not delivering, and this has applied nothing at all. */
@@ -118,17 +119,17 @@ export type FluxFinding =
       source: FluxSource | null;
       /** Whether the source ever produced an artifact, which changes the sentence. */
       everFetched: boolean;
-      message: string;
+      message: string | null;
     }
   /** It says why itself. */
   | {
       kind: "notReady";
       severity: "err";
       reason: string | null;
-      message: string;
+      message: string | null;
     }
   /** Retries are exhausted; it will not try again without a change. */
-  | { kind: "stalled"; severity: "err"; message: string }
+  | { kind: "stalled"; severity: "err"; message: string | null }
   /** What this one is holding up. */
   | { kind: "blocking"; severity: "err"; blocked: string[] }
   /** What is holding this one up, and what is actually wrong with it. */
@@ -144,7 +145,7 @@ export type FluxFinding =
   | {
       kind: "fetchFailing";
       severity: "err";
-      message: string;
+      message: string | null;
       frozen: string[];
       everFetched: boolean;
     };
@@ -465,7 +466,7 @@ function findingsFor(
         kind: "frozen",
         severity: "err",
         source,
-        message: source.message ?? "The source reports itself not ready.",
+        message: source.message,
         applied: reconciler.applied,
       });
     } else {
@@ -474,7 +475,7 @@ function findingsFor(
         severity: "err",
         source,
         everFetched: source.artifact !== null,
-        message: source.message ?? "The source reports itself not ready.",
+        message: source.message,
       });
     }
   } else if (reachedItsSource && reconciler.sourceRef && !source) {
@@ -483,7 +484,7 @@ function findingsFor(
       severity: "err",
       source: null,
       everFetched: false,
-      message: `No ${reconciler.sourceRef.kind} named ${reconciler.sourceRef.name} exists in ${reconciler.sourceRef.namespace}, so there is nothing for this to apply.`,
+      message: null,
     });
   }
 
@@ -492,8 +493,7 @@ function findingsFor(
       kind: "notReady",
       severity: "err",
       reason: reconciler.reason,
-      message:
-        reconciler.message ?? "It reports Ready=False and says nothing more.",
+      message: reconciler.message,
     });
   }
 
@@ -544,8 +544,7 @@ function sourceFindings(
     findings.push({
       kind: "fetchFailing",
       severity: "err",
-      message:
-        source.message ?? "It reports Ready=False and says nothing more.",
+      message: source.message,
       frozen,
       everFetched: source.artifact !== null,
     });
@@ -570,12 +569,18 @@ function worstOf(findings: FluxFinding[]): "err" | "warn" | null {
  * CLI included — calls it healthy while it reconciles nothing. This is the one
  * place that refuses to.
  */
-export function reconcilerState(reconciler: FluxReconciler): {
+export function reconcilerState(
+  reconciler: FluxReconciler,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
   if (reconciler.suspended) {
-    return { text: "suspended", tone: reconciler.worst ?? "warn" };
+    return {
+      text: t("action", "suspendedLower"),
+      tone: reconciler.worst ?? "warn",
+    };
   }
   if (reconciler.ready === false) {
     // A reconciler queued behind a broken dependency is not itself broken,
@@ -583,37 +588,42 @@ export function reconcilerState(reconciler: FluxReconciler): {
     // across four rows.
     return {
       text: reconciler.findings.some((finding) => finding.kind === "waiting")
-        ? "waiting on a dependency"
-        : "not ready",
+        ? t("empty", "fluxWaitingDependency")
+        : t("empty", "notReadyLower"),
       tone: reconciler.worst ?? "err",
     };
   }
   if (reconciler.ready === null) {
-    return { text: "not reconciled yet", tone: "warn" };
+    return { text: t("empty", "fluxNotReconciledYet"), tone: "warn" };
   }
   if (reconciler.findings.some((finding) => finding.kind === "frozen")) {
-    return { text: "frozen · source failing", tone: "err" };
+    return { text: t("empty", "fluxFrozenSource"), tone: "err" };
   }
-  return { text: "ready", tone: reconciler.worst ?? "ok" };
+  return { text: t("empty", "readyLower"), tone: reconciler.worst ?? "ok" };
 }
 
-export function sourceState(source: FluxSource): {
+export function sourceState(
+  source: FluxSource,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
-  if (source.suspended) return { text: "suspended", tone: "warn" };
+  if (source.suspended)
+    return { text: t("action", "suspendedLower"), tone: "warn" };
   if (source.ready === false) {
     return {
       text: source.artifact
-        ? "fetch failing · artifact is stale"
-        : "never fetched",
+        ? t("empty", "fluxFetchStale")
+        : t("empty", "fluxNeverFetched"),
       tone: "err",
     };
   }
-  if (source.ready === null) return { text: "not fetched yet", tone: "warn" };
+  if (source.ready === null)
+    return { text: t("empty", "fluxNotFetchedYet"), tone: "warn" };
   if (source.usedBy.length === 0)
-    return { text: "fetched · unused", tone: "warn" };
-  return { text: "fetched", tone: "ok" };
+    return { text: t("empty", "fluxFetchedUnused"), tone: "warn" };
+  return { text: t("empty", "fluxFetched"), tone: "ok" };
 }
 
 function rank(worst: "err" | "warn" | null): number {

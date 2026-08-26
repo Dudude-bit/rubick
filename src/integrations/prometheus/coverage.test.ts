@@ -16,6 +16,11 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { coverage, verdict } from "./coverage";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const node = (name: string) => ({ name }) as never;
 const series = (names: string[]) =>
   names.map((name) => ({ labels: { node: name }, points: [] }));
@@ -40,7 +45,7 @@ describe("whether this Prometheus is watching this cluster", () => {
     const found = await coverage();
     expect(found.matched).toBe(2);
     expect(found.unseen).toEqual([]);
-    expect(verdict(found)).toMatchObject({ tone: "ok" });
+    expect(verdict(found, t)).toMatchObject({ tone: "ok" });
   });
 
   /** The one this page exists for. */
@@ -55,7 +60,7 @@ describe("whether this Prometheus is watching this cluster", () => {
     const found = await coverage();
     expect(found.matched).toBe(0);
     expect(found.foreign).toEqual(["other-1", "other-2"]);
-    expect(verdict(found)).toMatchObject({ tone: "err" });
+    expect(verdict(found, t)).toMatchObject({ tone: "err" });
   });
 
   /**
@@ -108,7 +113,7 @@ describe("whether this Prometheus is watching this cluster", () => {
 
     const found = await coverage();
     expect(found.foreign).toEqual(["someone-else"]);
-    expect(verdict(found)).toMatchObject({ tone: "ok" });
+    expect(verdict(found, t)).toMatchObject({ tone: "ok" });
   });
 
   /**
@@ -139,8 +144,8 @@ describe("whether this Prometheus is watching this cluster", () => {
     );
 
     const found = await coverage();
-    expect(found.problem).toContain("kube_node_info");
-    expect(verdict(found)).toMatchObject({ tone: "warn" });
+    expect(t("readings", found.problem!)).toContain("kube_node_info");
+    expect(verdict(found, t)).toMatchObject({ tone: "warn" });
   });
 });
 
@@ -201,7 +206,7 @@ describe("a Prometheus that carries no node names", () => {
     const found = await coverage();
     expect(found.foreign).toEqual([]);
     expect(found.unseen).toEqual([]);
-    expect(found.problem).toContain("cannot be established");
+    expect(t("readings", found.problem!)).toContain("cannot be established");
   });
 
   it("reads a name that arrived under instance rather than node", async () => {
@@ -263,7 +268,7 @@ describe("a Prometheus that carries no node names", () => {
     );
 
     const found = await coverage();
-    expect(found.problem).toContain("cannot be established");
+    expect(t("readings", found.problem!)).toContain("cannot be established");
     // Not reported as a cluster it does not watch: `unseen` drives that
     // sentence, and an unanswerable question must not fill it.
     expect(found.unseen).toEqual([]);

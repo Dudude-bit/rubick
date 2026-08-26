@@ -212,8 +212,7 @@ function placement(node: NodeInfo, t: Translate): PeekGroup[] {
           ? [
               {
                 label: t("columns", "spot"),
-                value:
-                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+                value: t("empty", "spotReclaim"),
                 tone: "warn" as const,
               },
             ]
@@ -244,8 +243,13 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               tone: pod.nodeName ? undefined : "warn",
             },
             {
-              label: "Pod IP",
-              value: <CopyableAddress value={pod.podIp} label="Pod IP" />,
+              label: t("columns", "podIp"),
+              value: (
+                <CopyableAddress
+                  value={pod.podIp}
+                  label={t("columns", "podIp")}
+                />
+              ),
             },
             {
               label: t("columns", "restarts"),
@@ -464,7 +468,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           { label: t("columns", "schedule"), value: cron.schedule, mono: true },
           {
             label: t("columns", "timeZone"),
-            value: cron.timezone || "cluster local",
+            value: cron.timezone || t("empty", "clusterLocal"),
           },
           {
             label: t("columns", "lastRun"),
@@ -537,8 +541,8 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             value: (
               <CopyableAddress
                 value={service.clusterIp}
-                label="Cluster IP"
-                fallback="none"
+                label={t("columns", "clusterIp")}
+                fallback={t("empty", "none")}
               />
             ),
           },
@@ -556,7 +560,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             value: (
               <CopyableAddresses
                 values={[...service.externalIps, ...service.loadBalancerIps]}
-                label="External address"
+                label={t("columns", "externalAddress")}
               />
             ),
           },
@@ -566,7 +570,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               Object.entries(service.selector).map(
                 ([key, value]) => `${key}=${value}`
               ),
-              "none — endpoints are managed by hand"
+              t("empty", "endpointsByHand")
             ),
             mono: true,
           },
@@ -583,7 +587,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "class"),
-            value: ingress.className || "cluster default",
+            value: ingress.className || t("empty", "clusterDefault"),
           },
           {
             label: t("columns", "address"),
@@ -592,16 +596,16 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             value: ingress.loadBalancerIps.length ? (
               <CopyableAddresses
                 values={ingress.loadBalancerIps}
-                label="Ingress address"
+                label={t("columns", "ingressAddress")}
               />
             ) : (
-              "not assigned yet"
+              t("empty", "notAssignedYet")
             ),
             tone: ingress.loadBalancerIps.length ? undefined : "warn",
           },
           {
             label: t("columns", "tlsHosts"),
-            value: list(ingress.tlsHosts, "none"),
+            value: list(ingress.tlsHosts, t("empty", "none")),
             mono: true,
           },
         ],
@@ -623,7 +627,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                   </span>
                 </>
               ) : (
-                "no backend"
+                t("empty", "noBackend")
               ),
             }))
           ),
@@ -719,7 +723,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             {
               label: t("columns", "capacity"),
-              value: claim.capacity || "not provisioned yet",
+              value: claim.capacity || t("empty", "notProvisionedYet"),
               mono: !!claim.capacity,
               tone: claim.capacity ? undefined : "warn",
             },
@@ -727,14 +731,14 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               label: t("columns", "volume"),
               value: claim.volume
                 ? ref("PersistentVolume", claim.volume)
-                : "not bound",
+                : t("empty", "notBoundYet"),
               tone: claim.volume ? undefined : "warn",
             },
             {
               label: t("columns", "storageClass"),
               value: claim.storageClass
                 ? ref("StorageClass", claim.storageClass)
-                : "cluster default",
+                : t("empty", "clusterDefault"),
             },
             {
               label: t("columns", "accessModes"),
@@ -828,7 +832,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               label: t("columns", "expansion"),
               value: storageClass.allowVolumeExpansion
                 ? "allowed"
-                : "not allowed",
+                : t("empty", "notAllowed"),
             },
             {
               label: t("cluster", "hueDefault"),
@@ -870,7 +874,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                       (address) => address.type === "InternalIP"
                     )?.address
                   }
-                  label="Internal IP"
+                  label={t("columns", "internalIp")}
                 />
               ),
             },

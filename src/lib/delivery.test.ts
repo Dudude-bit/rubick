@@ -34,7 +34,7 @@ function source(over: Partial<DeliverySource> = {}): DeliverySource {
     sync: "synced",
     lastAppliedAt: null,
     warning: null,
-    note: "Auto-sync is off, so an edit here stands until somebody syncs it.",
+    note: { key: "argoNoAutoSync" },
     ...over,
   };
 }
@@ -84,11 +84,11 @@ describe("the Overview line is earned, never granted", () => {
 
   it("warns, in the vendor's own words, when an edit will be put back", () => {
     const line = deliveryLine(
-      [delivered({ drift: "reverted", note: "Argo self-heals this." })],
+      [delivered({ drift: "reverted", note: { key: "argoSelfHeals" } })],
       t
     );
     expect(line?.tone).toBe("info");
-    expect(line?.detail).toContain("Argo self-heals this.");
+    expect(line?.detail).toContain("Argo self-heals this Application");
   });
 
   it("says how long ago it was last applied when live has drifted", () => {
@@ -108,7 +108,12 @@ describe("the Overview line is earned, never granted", () => {
 
   it("separates a stopped reconciler from an edit that simply stands", () => {
     const line = deliveryLine(
-      [delivered({ drift: "unmanaged", note: "apps is suspended." })],
+      [
+        delivered({
+          drift: "unmanaged",
+          note: { key: "fluxKustSuspended", values: { name: "apps" } },
+        }),
+      ],
       t
     );
     expect(line?.tone).toBe("warn");
@@ -160,7 +165,7 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
   });
 
   it("marks an unconfirmed claim as unconfirmed, not as provenance", () => {
-    const [mark] = deliveryMarks([claimed()]);
+    const [mark] = deliveryMarks([claimed()], t);
     expect(mark.text).toBe("Argo CD · shop · unconfirmed");
     expect(mark.tone).toBe("warn");
   });

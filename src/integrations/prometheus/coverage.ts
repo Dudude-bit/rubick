@@ -24,6 +24,17 @@
  * picture and very different repairs.
  */
 
+import type { T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+
+/**
+ * A line this module can say, named rather than written.
+ *
+ * The metric table is built once at module load, so a sentence chosen there
+ * is in whatever language happened to be first. Keys survive a language
+ * change; sentences do not.
+ */
+type Reading = keyof (typeof en)["readings"];
 import { commands } from "@/lib/commands";
 import type { PromSeries } from "@/generated/types";
 
@@ -37,30 +48,36 @@ const NODE_LABELS = ["node", "instance", "nodename"] as const;
  * point is to answer "why is that chart empty", and only the exact name the
  * query uses can.
  */
+/**
+ * What each metric family buys the reader, and who scrapes it.
+ *
+ * The metric names are Prometheus's own and never move; the two sentences
+ * about each are catalogue keys.
+ */
 export const FAMILIES: Array<{
   metric: string;
-  powers: string;
-  from: string;
+  powers: Reading;
+  from: Reading;
 }> = [
   {
     metric: "container_cpu_usage_seconds_total",
-    powers: "CPU over a window longer than this app has been open",
-    from: "cAdvisor, via the kubelet",
+    powers: "promCpuHistory",
+    from: "promFromCadvisor",
   },
   {
     metric: "container_memory_working_set_bytes",
-    powers: "memory history",
-    from: "cAdvisor, via the kubelet",
+    powers: "promMemoryHistory",
+    from: "promFromCadvisor",
   },
   {
     metric: "kubelet_volume_stats_used_bytes",
-    powers: "how full a volume actually is",
-    from: "the kubelet",
+    powers: "promVolumeFullness",
+    from: "promFromKubelet",
   },
   {
     metric: "container_network_receive_bytes_total",
-    powers: "bytes in and out of a workload",
-    from: "cAdvisor, via the kubelet",
+    powers: "promNetworkBytes",
+    from: "promFromCadvisor",
   },
 ];
 
@@ -82,7 +99,7 @@ export interface Coverage {
    */
   series: Record<string, number | null>;
   /** Set where the comparison could not be made at all. */
-  problem: string | null;
+  problem: Reading | null;
 }
 
 const nameFrom = (series: PromSeries): string | null => {
@@ -124,8 +141,7 @@ export async function coverage(): Promise<Coverage> {
   if (nodes === null) {
     return {
       ...empty,
-      problem:
-        "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
+      problem: "promNoNodesListed",
     };
   }
 
@@ -202,8 +218,7 @@ export async function coverage(): Promise<Coverage> {
       clusterNodes: nodes.length,
       missing,
       series,
-      problem:
-        "Nothing here carries a node name — neither kube_node_info nor cAdvisor's node label — so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
+      problem: "promNoNodeLabel",
     };
   }
   const unseen = nodes
@@ -223,19 +238,23 @@ export async function coverage(): Promise<Coverage> {
 }
 
 /** What the comparison amounts to, in one word for the row. */
-export function verdict(found: Coverage): {
+export function verdict(
+  found: Coverage,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
-  if (found.problem !== null) return { text: "could not tell", tone: "warn" };
+  if (found.problem !== null)
+    return { text: t("readings", "promCouldNotTell"), tone: "warn" };
   if (found.clusterNodes === 0)
-    return { text: "no nodes to compare", tone: "warn" };
+    return { text: t("readings", "promNoNodesToCompare"), tone: "warn" };
   if (found.matched === 0) {
-    return { text: "watching another cluster", tone: "err" };
+    return { text: t("readings", "promAnotherCluster"), tone: "err" };
   }
   if (found.unseen.length > 0)
-    return { text: "watching part of it", tone: "warn" };
+    return { text: t("readings", "promPartOfIt"), tone: "warn" };
   if (found.foreign.length > 0)
-    return { text: "watching more than this", tone: "ok" };
-  return { text: "watching this cluster", tone: "ok" };
+    return { text: t("readings", "promMoreThanThis"), tone: "ok" };
+  return { text: t("readings", "promThisCluster"), tone: "ok" };
 }

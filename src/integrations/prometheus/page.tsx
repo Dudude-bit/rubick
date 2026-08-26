@@ -70,7 +70,7 @@ export default function PrometheusPage() {
     );
   }
 
-  const state = found.data ? verdict(found.data) : null;
+  const state = found.data ? verdict(found.data, t) : null;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -91,7 +91,7 @@ export default function PrometheusPage() {
             />
             {found.data.problem ? (
               <Finding tone="warn" title={t("empty", "promComparisonFailed")}>
-                {found.data.problem}
+                {t("readings", found.data.problem)}
               </Finding>
             ) : (
               <div className="flex flex-col gap-3">
@@ -191,13 +191,15 @@ export default function PrometheusPage() {
                       </Cell>
                     </Column>
                     <Column label={t("columns", "powers")}>
-                      <Cell title={family.powers}>{family.powers}</Cell>
+                      <Cell title={t("readings", family.powers)}>
+                        {t("readings", family.powers)}
+                      </Cell>
                     </Column>
                     <Column label={t("columns", "scrapedFrom")}>
                       <Cell
                         under={absent ? t("empty", "noSeriesAtAll") : undefined}
                       >
-                        {family.from}
+                        {t("readings", family.from)}
                       </Cell>
                     </Column>
                   </Chain>

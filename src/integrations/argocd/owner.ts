@@ -167,19 +167,19 @@ function sourceOf(app: ArgoApp, resource: ArgoResource) {
     sync: resource.sync === null ? null : outOfSync ? "drifted" : "synced",
     lastAppliedAt: app.lastSyncAt,
     warning: outOfSync
-      ? "out of sync"
+      ? { key: "argoOutOfSync" as const }
       : stalled
-        ? "not comparing"
+        ? { key: "argoNotComparing" as const }
         : failing
-          ? "sync failing"
+          ? { key: "argoSyncFailing" as const }
           : null,
     note: stalled
-      ? `${app.name} cannot compare against its repository, so nothing is being applied and an edit here stands — until somebody fixes it, at which point it is undone.`
+      ? { key: "argoCannotCompare" as const, values: { name: app.name } }
       : app.selfHeal
-        ? "Argo self-heals this Application: an edit made here is put back on its next comparison, within about three minutes."
+        ? { key: "argoSelfHeals" as const }
         : app.autoSync
-          ? "Auto-sync is on but self-heal is off, so an edit here stands until the next commit touches this object."
-          : "Auto-sync is off, so an edit here stands until somebody syncs the Application.",
+          ? { key: "argoAutoSyncNoHeal" as const }
+          : { key: "argoNoAutoSync" as const },
   } as const;
 }
 

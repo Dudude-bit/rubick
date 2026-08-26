@@ -30,11 +30,13 @@
 
 import { commands } from "@/lib/commands";
 import { crdObjectPath, conditionOf, getValueByPath } from "../kit";
+import type { T } from "@/i18n/useT";
 import type {
   Delivery,
   DeliveryOwner,
   DeliveryQuery,
   DeliverySource,
+  Saying,
 } from "../gitops";
 import type { CustomResourceInfo } from "@/generated/types";
 import { HELM_RELEASES_CRD, KUSTOMIZATIONS_CRD } from "./data";
@@ -171,12 +173,16 @@ function ownerRef(
  * stopped fetching both keep `Ready=True` from the last run that worked, which
  * is the state that looks perfect and is the reason this is read separately.
  */
-function stalledReason(owner: CustomResourceInfo): string | null {
-  if (getValueByPath(owner, "spec.suspend") === true) return "suspended";
+/** A translator for the branches that provably take no words. */
+const noWords: T = () => "";
+
+function stalledReason(owner: CustomResourceInfo): Saying | null {
+  if (getValueByPath(owner, "spec.suspend") === true)
+    return { key: "fluxSuspendedWord" };
   const ready = conditionOf(owner, "Ready");
-  if (ready?.status === "False") return "not reconciling";
+  if (ready?.status === "False") return { key: "fluxNotReconcilingWord" };
   const stalled = conditionOf(owner, "Stalled");
-  if (stalled?.status === "True") return "not reconciling";
+  if (stalled?.status === "True") return { key: "fluxNotReconcilingWord" };
   return null;
 }
 
@@ -190,7 +196,9 @@ function kustomizationSource(owner: CustomResourceInfo): DeliverySource {
     vendor: VENDOR,
     vendorId: VENDOR_ID,
     owner: ownerRef("Kustomization", owner),
-    revision: revision ? revisionText(revision) : null,
+    // `revisionText` only reaches for a word when there is no revision, and
+    // the guard above means there is one.
+    revision: revision ? revisionText(revision, noWords) : null,
     repoUrl: null,
     path: (getValueByPath(owner, "spec.path") as string) ?? null,
     // Flux does not diff; it re-applies its own fields on every reconcile,
@@ -201,11 +209,14 @@ function kustomizationSource(owner: CustomResourceInfo): DeliverySource {
       (conditionOf(owner, "Ready")?.lastTransitionTime as string) ?? null,
     warning: stalled,
     note:
-      stalled === "suspended"
-        ? `${owner.name} is suspended, so nothing is being applied and an edit here stands — until somebody resumes it, at which point it is undone.`
+      stalled?.key === "fluxSuspendedWord"
+        ? { key: "fluxKustSuspended" as const, values: { name: owner.name } }
         : stalled
-          ? `${owner.name} is not reconciling, so an edit here stands until it starts again — at which point it is undone.`
-          : `${owner.name} re-applies its manifests every ${interval ?? "interval"}, so an edit here is undone on the next reconcile.`,
+          ? { key: "fluxKustStopped" as const, values: { name: owner.name } }
+          : {
+              key: "fluxKustReapplies" as const,
+              values: { name: owner.name, interval: interval ?? "interval" },
+            },
   };
 }
 
@@ -226,10 +237,10 @@ function releaseSource(owner: CustomResourceInfo): DeliverySource {
       (conditionOf(owner, "Ready")?.lastTransitionTime as string) ?? null,
     warning: stalled,
     note:
-      stalled === "suspended"
-        ? `${owner.name} is suspended, so an edit here stands until somebody resumes it.`
+      stalled?.key === "fluxSuspendedWord"
+        ? { key: "fluxRelSuspended" as const, values: { name: owner.name } }
         : stalled
-          ? `${owner.name} is not upgrading the release, so an edit here stands until it starts again.`
-          : `${owner.name} upgrades the release on its interval, and a hand edit is replaced by the chart's own value.`,
+          ? { key: "fluxRelStopped" as const, values: { name: owner.name } }
+          : { key: "fluxRelUpgrades" as const, values: { name: owner.name } },
   };
 }

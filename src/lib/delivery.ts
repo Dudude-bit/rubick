@@ -218,12 +218,15 @@ export interface DeliveryMark {
  * wearing a delivery label that nothing honours is a fact worth seeing and is
  * not the same fact as being delivered.
  */
-export function deliveryMarks(deliveries: Delivery[]): DeliveryMark[] {
+export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
   return deliveries.map((entry) => {
     if (entry.state === "claimed") {
       return {
         vendorId: entry.vendorId,
-        text: `${entry.vendor} · ${entry.claim} · unconfirmed`,
+        text: t("readings", "delUnconfirmedMark", {
+          vendor: entry.vendor,
+          claim: entry.claim,
+        }),
         to: entry.owner?.to ?? null,
         tone: "warn" as const,
       };
@@ -231,7 +234,12 @@ export function deliveryMarks(deliveries: Delivery[]): DeliveryMark[] {
     const { source } = entry;
     return {
       vendorId: source.vendorId,
-      text: [source.vendor, source.owner.name, source.warning]
+      text: [
+        source.vendor,
+        source.owner.name,
+        source.warning &&
+          t("readings", source.warning.key, source.warning.values),
+      ]
         .filter((part): part is string => Boolean(part))
         .join(" · "),
       to: source.owner.to,
@@ -348,7 +356,9 @@ export function deliveryLine(
       title: t("readings", "delDrifted", { since }),
       detail: t("readings", "delDriftedDetail", {
         vendor: source.vendor,
-        note: source.note ?? "",
+        note: source.note
+          ? t("readings", source.note.key, source.note.values)
+          : "",
       }).trim(),
       where,
       to: source.owner.to,
@@ -359,9 +369,9 @@ export function deliveryLine(
     return {
       tone: "warn",
       title: t("readings", "delStopped"),
-      detail:
-        source.note ??
-        t("readings", "delStoppedDetail", { name: source.owner.name }),
+      detail: source.note
+        ? t("readings", source.note.key, source.note.values)
+        : t("readings", "delStoppedDetail", { name: source.owner.name }),
       where,
       to: source.owner.to,
     };
@@ -371,7 +381,9 @@ export function deliveryLine(
     return {
       tone: "info",
       title: t("readings", "delFromGit"),
-      detail: source.note ?? "",
+      detail: source.note
+        ? t("readings", source.note.key, source.note.values)
+        : "",
       where,
       to: source.owner.to,
     };
@@ -420,7 +432,11 @@ export function deliveryCell(
       tone: "warn",
     };
   }
-  if (source.warning) return { text: source.warning, tone: "warn" };
+  if (source.warning)
+    return {
+      text: t("readings", source.warning.key, source.warning.values),
+      tone: "warn",
+    };
   return null;
 }
 
@@ -493,12 +509,14 @@ export function deliveryIntercept(
     title: t("readings", "delVendorWillUndo", { verb, vendor: source.vendor }),
     subject: source.vendor,
     lead: t("readings", "delVendorWillUndoDetail", { vendor: source.vendor }),
-    description: `${source.note ?? ""} ${
+    description: `${
+      source.note ? t("readings", source.note.key, source.note.values) : ""
+    } ${
       source.path
-        ? `To change it for good, edit the manifests under ${source.path}.`
-        : `To change it for good, change what ${source.owner.name} applies.`
+        ? t("readings", "delEditManifests", { path: source.path })
+        : t("readings", "delEditWhatApplies", { name: source.owner.name })
     }`.trim(),
-    confirmLabel: `${verb} anyway`,
+    confirmLabel: t("action", "verbAnyway", { verb }),
     where: {
       path: source.path,
       revision: source.revision,

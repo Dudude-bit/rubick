@@ -376,6 +376,7 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    verbAnyway: "{verb} anyway",
     noClusterSelected: "No cluster selected",
     portsOutOfRange: "Ports must be between 1 and 65535.",
     portForwardStartFailed: "Failed to start port-forward",
@@ -1251,6 +1252,50 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
+    delEditWhatApplies: "To change it for good, change what {name} applies.",
+    delEditManifests: "To change it for good, edit the manifests under {path}.",
+    argoOutOfSync: "out of sync",
+    argoNotComparing: "not comparing",
+    argoSyncFailing: "sync failing",
+    argoCannotCompare:
+      "{name} cannot compare against its repository, so nothing is being applied and an edit here stands — until somebody fixes it, at which point it is undone.",
+    argoSelfHeals:
+      "Argo self-heals this Application: an edit made here is put back on its next comparison, within about five minutes.",
+    argoAutoSyncNoHeal:
+      "Auto-sync is on but self-heal is off, so an edit here stands until the next commit touches this object.",
+    argoNoAutoSync:
+      "Auto-sync is off, so an edit here stands until somebody syncs the Application.",
+    fluxSuspendedWord: "suspended",
+    fluxNotReconcilingWord: "not reconciling",
+    fluxKustSuspended:
+      "{name} is suspended, so nothing is being applied and an edit here stands — until somebody resumes it, at which point it is undone.",
+    fluxKustStopped:
+      "{name} is not reconciling, so an edit here stands until it starts again — at which point it is undone.",
+    fluxKustReapplies:
+      "{name} re-applies its manifests every {interval}, so an edit here is undone on the next pass.",
+    fluxRelSuspended:
+      "{name} is suspended, so an edit here stands until somebody resumes it.",
+    fluxRelStopped:
+      "{name} is not upgrading the release, so an edit here stands until it starts again.",
+    fluxRelUpgrades:
+      "{name} upgrades the release on its interval, and a hand edit is replaced by the chart's own value.",
+    promCpuHistory: "CPU over a window longer than this app has been open",
+    promMemoryHistory: "memory history",
+    promVolumeFullness: "how full a volume actually is",
+    promNetworkBytes: "bytes in and out of a workload",
+    promFromCadvisor: "cAdvisor, via the kubelet",
+    promFromKubelet: "the kubelet",
+    promNoNodesListed:
+      "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
+    promNoNodeLabel:
+      "Nothing here carries a node name — neither kube_node_info nor cAdvisor's node label — so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
+    promCouldNotTell: "could not tell",
+    promNoNodesToCompare: "no nodes to compare",
+    promAnotherCluster: "watching another cluster",
+    promPartOfIt: "watching part of it",
+    promMoreThanThis: "watching more than this",
+    promThisCluster: "watching this cluster",
     epKeptForCompat:
       "{addresses} {from} This object is kept for compatibility.",
     epListsOf: "This object lists {listed} of {real} addresses. {from} {why}",
@@ -1937,6 +1982,19 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noRevision: "no revision",
+    fluxNotReconciledYet: "not reconciled yet",
+    fluxFrozenSource: "frozen · source failing",
+    fluxWaitingDependency: "waiting on a dependency",
+    fluxFetchStale: "fetch failing · artifact is stale",
+    fluxNeverFetched: "never fetched",
+    fluxNotFetchedYet: "not fetched yet",
+    fluxFetchedUnused: "fetched · unused",
+    fluxFetched: "fetched",
+    fluxSaidNothingMore: "The controller gave no reason.",
+    notBoundYet: "not bound",
+    spotReclaim:
+      "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
     endpointsFor: "Network endpoints for services in {scope}",
     persistentVolumesAre:
       "Cluster-wide storage resources provisioned by an administrator",
