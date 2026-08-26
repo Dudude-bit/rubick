@@ -59,7 +59,7 @@ describe("a custom resource's connections", () => {
       claimed: false,
       related: [
         {
-          relation: "controlled by",
+          relation: "relControlledBy",
           kind: "HelmRelease",
           name: "sealed-secrets",
           namespace: "kube-system",
@@ -79,7 +79,7 @@ describe("a custom resource's connections", () => {
         claimed: true,
         related: [
           {
-            relation: "manages",
+            relation: "relManages",
             kind: "Deployment",
             name: "api",
             namespace: "shop",
@@ -99,7 +99,7 @@ describe("a custom resource's connections", () => {
       claimed: true,
       related: [
         {
-          relation: "manages",
+          relation: "relManages",
           kind: "Certificate",
           name: "shop-tls",
           namespace: "shop",
@@ -124,7 +124,7 @@ describe("a custom resource's connections", () => {
       claimed: true,
       related: [
         {
-          relation: "manages",
+          relation: "relManages",
           kind: "Deployment",
           name: "api",
           namespace: "shop",

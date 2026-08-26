@@ -84,16 +84,16 @@ describe("what an Argo Application is connected to", () => {
     const related = await relatedTo(subject);
     expect(related).toEqual([
       expect.objectContaining({
-        relation: "governed by",
+        relation: "relGovernedBy",
         kind: "AppProject",
         name: "prod",
       }),
       expect.objectContaining({
-        relation: "manages",
+        relation: "relManages",
         name: "api",
         tone: undefined,
       }),
-      expect.objectContaining({ relation: "manages", kind: "Service" }),
+      expect.objectContaining({ relation: "relManages", kind: "Service" }),
     ]);
   });
 
@@ -191,7 +191,7 @@ describe("what an Argo Application is connected to", () => {
     listCustomResources.mockResolvedValue([application([])]);
     const related = await relatedTo(subject);
     expect(related).not.toBeNull();
-    expect(related?.filter((entry) => entry.relation === "manages")).toEqual(
+    expect(related?.filter((entry) => entry.relation === "relManages")).toEqual(
       []
     );
   });

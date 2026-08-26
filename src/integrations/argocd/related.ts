@@ -32,7 +32,7 @@ function managed(resource: ArgoResource): RelatedObject {
   const unhealthy = resource.health === "Degraded";
 
   return {
-    relation: "manages",
+    relation: "relManages",
     kind: resource.kind,
     name: resource.name,
     namespace: resource.namespace,
@@ -77,7 +77,7 @@ function said(
  */
 function project(app: ArgoApp): RelatedObject {
   return {
-    relation: "governed by",
+    relation: "relGovernedBy",
     kind: "AppProject",
     name: app.project,
     // An AppProject lives beside the Application, in Argo's own namespace.

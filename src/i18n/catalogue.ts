@@ -1334,6 +1334,16 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    relReadsFrom: "reads from",
+    relWaitsFor: "waits for",
+    relManages: "manages",
+    relGovernedBy: "governed by",
+    relIssuedBy: "issued by",
+    relIssuesInto: "issues into",
+    relServing: "serving",
+    relMountedNotCovering: "mounted but not covering",
+    relControlledBy: "controlled by",
+    relOwnedBy: "owned by",
     govSeveralAutoscalers: {
       one: "{n} autoscaler claims this",
       other: "{n} autoscalers claim this — each undoes the other",

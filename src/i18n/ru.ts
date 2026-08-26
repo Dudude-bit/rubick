@@ -1326,6 +1326,16 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    relReadsFrom: "читает из",
+    relWaitsFor: "ждёт",
+    relManages: "управляет",
+    relGovernedBy: "подчиняется",
+    relIssuedBy: "выпущен",
+    relIssuesInto: "выпускает в",
+    relServing: "обслуживает",
+    relMountedNotCovering: "смонтирован, но не покрывает",
+    relControlledBy: "управляется",
+    relOwnedBy: "принадлежит",
     govSeveralAutoscalers: {
       one: "{n} автомасштабатор претендует на это",
       few: "{n} автомасштабатора претендуют на это — и отменяют друг друга",

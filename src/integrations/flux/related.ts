@@ -35,7 +35,7 @@ const SOURCE_GROUP = new Map(
 );
 
 function ref(
-  relation: string,
+  relation: RelatedObject["relation"],
   source: SourceRef,
   fallbackGroup: string
 ): RelatedObject {
@@ -67,13 +67,13 @@ export async function relatedTo(subject: {
 
   return [
     ...(reconciler.sourceRef
-      ? [ref("reads from", reconciler.sourceRef, subject.group)]
+      ? [ref("relReadsFrom", reconciler.sourceRef, subject.group)]
       : []),
     // A dependency is another reconciler in the same group as this one, which
     // is why the subject's group is the fallback: `dependsOn` names a kind
     // and a namespace and no group at all.
     ...reconciler.dependsOn.map((dependency) =>
-      ref("waits for", dependency, subject.group)
+      ref("relWaitsFor", dependency, subject.group)
     ),
   ];
 }

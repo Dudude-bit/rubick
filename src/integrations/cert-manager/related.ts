@@ -73,7 +73,7 @@ export async function relatedTo(subject: {
   if (issuerName) {
     const issuerKind = text(spec, "issuerRef", "kind") ?? "Issuer";
     related.push({
-      relation: "issued by",
+      relation: "relIssuedBy",
       kind: issuerKind,
       name: issuerName,
       // A ClusterIssuer is cluster-scoped, and addressing it inside the
@@ -86,7 +86,7 @@ export async function relatedTo(subject: {
   const secretName = text(spec, "secretName");
   if (secretName) {
     related.push({
-      relation: "issues into",
+      relation: "relIssuesInto",
       kind: "Secret",
       name: secretName,
       namespace,
@@ -109,7 +109,7 @@ export async function relatedTo(subject: {
     );
     for (const host of use.hosts) {
       related.push({
-        relation: host.covered ? "serving" : "mounted but not covering",
+        relation: host.covered ? "relServing" : "relMountedNotCovering",
         kind: "Ingress",
         name: host.ingress.name,
         namespace: host.ingress.namespace,

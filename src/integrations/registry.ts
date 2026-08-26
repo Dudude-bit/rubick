@@ -341,9 +341,10 @@ export interface RelatedObject {
   /**
    * What this object does with that one, in the operator's own terms:
    * "manages", "issues into", "reads from", "waits for". Printed as the row's
-   * label and never branched on.
+   * label and never branched on — a catalogue key, since these are made
+   * inside a query and the panel groups by them.
    */
-  relation: string;
+  relation: keyof (typeof en)["readings"];
   kind: string;
   name: string;
   namespace: string | null;
