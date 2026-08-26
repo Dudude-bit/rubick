@@ -102,6 +102,8 @@
  * an event bus, third-party loading. What has to be right is the boundary.
  */
 
+import type { Saying } from "@/i18n/say";
+
 import type { LucideIcon } from "lucide-react";
 
 import type { en } from "@/i18n/catalogue";
@@ -772,8 +774,7 @@ export type ProbeResult =
  * inventory and `1 renewal failing` is why you came. Borrowing a tone for
  * inventory spends the only signal this row has.
  */
-export interface VendorFact {
-  text: string;
+export type VendorFact = {
   /** Only a problem has one. */
   tone?: "warn" | "err";
   /**
@@ -782,7 +783,30 @@ export interface VendorFact {
    * the app already built for the objects it counted.
    */
   to?: string;
-}
+} & (
+  | {
+      /**
+       * What the line says, as a catalogue key. Facts are composed inside a
+       * query, where the reader's language is not in scope — see
+       * {@link Saying}.
+       *
+       * Several, where one line counts several things: `3 Gateways · 2
+       * VirtualServices`. Each part is counted in its own language and the
+       * page joins them, because a count is not a substring one language can
+       * hand to another.
+       */
+      say: Saying | Saying[];
+      text?: never;
+    }
+  | {
+      /**
+       * A value that is not language: a hostname, a version, an address.
+       * Translating one would be a bug, so it takes this side instead.
+       */
+      text: string;
+      say?: never;
+    }
+);
 
 /**
  * The row a vendor gets in Settings → Integrations.

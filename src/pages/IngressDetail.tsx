@@ -43,7 +43,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
-import { covers, expiryOf } from "@/lib/certificates";
+import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
@@ -323,7 +323,7 @@ export function IngressDetail() {
       value: !hasTls
         ? t("empty", "noneTrafficUnencrypted")
         : soonest
-          ? soonest.text
+          ? expiryText(soonest, t)
           : hasCatchAllTls
             ? t("empty", "catchAllCertificate")
             : t("count", "hosts", { n: tlsHosts.length }),
@@ -717,7 +717,9 @@ export function IngressDetail() {
                   : "text-fg-fnt"
             )}
           >
-            {!hasTls ? "no TLS" : (soonest?.tone && soonest.text) || "TLS"}
+            {!hasTls
+              ? t("empty", "noTls")
+              : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
           </span>
         </>
       }

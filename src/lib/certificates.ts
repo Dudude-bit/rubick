@@ -28,6 +28,8 @@
  * tone as everything else on the page.
  */
 
+import { sayWords, spanWords, type Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import type { CertificateFacts } from "@/generated/types";
 
 /** The last point a normal change still fits, or a third of the lifetime. */
@@ -36,16 +38,18 @@ const ACT_SOON_DAYS = 14;
 const NO_PROCESS_LEFT_DAYS = 3;
 
 const DAY = 86_400_000;
-const HOUR = 3_600_000;
-const MINUTE = 60_000;
 
 export type ExpiryTone = "warn" | "err" | null;
 
 export interface Expiry {
   /** `null` where the fact is true but not news. */
   tone: ExpiryTone;
-  /** "expires in 4 days", "expired 3 days ago", "valid for 61 days". */
-  text: string;
+  /**
+   * "expires in 4 days", "expired 3 days ago", "valid for 61 days" — as a
+   * key, because an expiry is read inside a query as often as inside a
+   * component. Render it with {@link expiryText}.
+   */
+  text: Saying;
   /** Whole days from now until `notAfter`; negative once it has passed. */
   days: number;
   /**
@@ -63,10 +67,6 @@ export interface Expiry {
   renewalOverdue: boolean;
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 /**
  * A span in the largest unit that still gives it a number.
  *
@@ -76,10 +76,8 @@ function plural(count: number, noun: string): string {
  * The floor is a minute: below that the number stops being useful before
  * it stops being true.
  */
-export function span(ms: number): string {
-  if (ms >= DAY) return plural(Math.floor(ms / DAY), "day");
-  if (ms >= HOUR) return plural(Math.floor(ms / HOUR), "hour");
-  return plural(Math.max(1, Math.floor(ms / MINUTE)), "minute");
+export function expiryText(expiry: Expiry, t: T): string {
+  return sayWords(expiry.text, t);
 }
 
 /**
@@ -101,7 +99,7 @@ export function expiryOf(
   if (Number.isNaN(notAfter)) {
     return {
       tone: "warn",
-      text: "no readable expiry date",
+      text: { key: "certNoExpiryDate" },
       days: 0,
       left: 0,
       expired: false,
@@ -113,7 +111,7 @@ export function expiryOf(
     const days = Math.ceil((notBefore - now) / DAY);
     return {
       tone: "err",
-      text: `not valid for another ${plural(days, "day")}`,
+      text: { key: "certNotValidYet", values: { n: days } },
       days: Math.floor((notAfter - now) / DAY),
       left: notAfter - now,
       expired: false,
@@ -126,7 +124,10 @@ export function expiryOf(
     const days = Math.floor(-left / DAY);
     return {
       tone: "err",
-      text: days === 0 ? "expired today" : `expired ${plural(days, "day")} ago`,
+      text:
+        days === 0
+          ? { key: "certExpiredToday" }
+          : { key: "certExpiredAgo", values: { n: days } },
       days: -days,
       left,
       expired: true,
@@ -151,7 +152,7 @@ export function expiryOf(
   if (left <= interruptAt) {
     return {
       tone: "err",
-      text: `expires in ${span(left)}`,
+      text: { key: "certExpiresIn", values: { spanMs: left } },
       days,
       left,
       expired: false,
@@ -161,7 +162,7 @@ export function expiryOf(
   if (left <= actAt) {
     return {
       tone: "warn",
-      text: `expires in ${span(left)}`,
+      text: { key: "certExpiresIn", values: { spanMs: left } },
       days,
       left,
       expired: false,
@@ -170,7 +171,7 @@ export function expiryOf(
   }
   return {
     tone: null,
-    text: `valid for ${span(left)}`,
+    text: { key: "certValidFor", values: { spanMs: left } },
     days,
     left,
     expired: false,
@@ -211,12 +212,16 @@ export function managedExpiryOf(
 
   if (renewal > now) {
     if (base.tone !== "warn") return base;
-    return { ...base, tone: null, text: `renews in ${span(renewal - now)}` };
+    return {
+      ...base,
+      tone: null,
+      text: { key: "certRenewsIn", values: { spanMs: renewal - now } },
+    };
   }
   return {
     ...base,
     tone: base.tone === "err" ? "err" : "warn",
-    text: `renewal overdue — expires in ${span(notAfter - now)}`,
+    text: { key: "certRenewalOverdue", values: { spanMs: notAfter - now } },
     renewalOverdue: true,
   };
 }
@@ -224,9 +229,12 @@ export function managedExpiryOf(
 /** How far past its own plan a renewal is: "11 hours overdue". */
 export function overdueBy(
   renewalTime: string,
+  t: T,
   now: number = Date.now()
 ): string {
-  return `${span(now - Date.parse(renewalTime))} overdue`;
+  return t("readings", "certOverdueBy", {
+    span: spanWords(now - Date.parse(renewalTime), t),
+  });
 }
 
 /** Who vouched for it, in the words the certificate itself uses. */

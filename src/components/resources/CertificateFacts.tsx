@@ -11,7 +11,12 @@
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
-import { expiryOf, issuedBy, uncoveredHosts } from "@/lib/certificates";
+import {
+  expiryOf,
+  expiryText,
+  issuedBy,
+  uncoveredHosts,
+} from "@/lib/certificates";
 import { TONE_CLASS } from "./key-values";
 import { KeyValueList } from "./detail-kv";
 import type { CertificateFacts, TlsCertificate } from "@/generated/types";
@@ -56,7 +61,7 @@ export function CertificateLine({
   return (
     <span className="flex flex-wrap items-baseline gap-x-2">
       <span className={cn("text-xs", toneClass(expiry.tone))}>
-        {expiry.text}
+        {expiryText(expiry, t)}
       </span>
       <span className="text-[11px] text-fg-fnt">{issuedBy(cert)}</span>
       {uncovered.length > 0 && (
@@ -140,7 +145,7 @@ export function CertificateSection({
             : []),
           {
             label: t("columns", "servingNow"),
-            value: expiry.text,
+            value: expiryText(expiry, t),
             tone: expiry.tone ?? undefined,
           },
           { label: t("columns", "valid"), value: dates },

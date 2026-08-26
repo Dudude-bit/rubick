@@ -10,7 +10,6 @@
 import { commands } from "@/lib/commands";
 
 import { integrationPagePath } from "../paths";
-import { plural } from "../kit";
 import type { VendorFact } from "../registry";
 import { APPLICATIONS_CRD } from "./data";
 import { readApplication } from "./model";
@@ -24,7 +23,14 @@ export async function facts(): Promise<VendorFact[]> {
   );
   const apps = objects.map(readApplication);
 
-  const lines: VendorFact[] = [{ text: plural(apps.length, "Application") }];
+  const lines: VendorFact[] = [
+    {
+      say: {
+        key: "kindCount",
+        values: { n: apps.length, kind: "Application" },
+      },
+    },
+  ];
 
   const failing = apps.filter((app) =>
     app.findings.some(
@@ -33,7 +39,10 @@ export async function facts(): Promise<VendorFact[]> {
     )
   ).length;
   if (failing > 0) {
-    lines.push({ text: `${failing} failing to sync`, tone: "err" });
+    lines.push({
+      say: { key: "factFailingToSync", values: { n: failing } },
+      tone: "err",
+    });
   }
 
   const drifted = apps.filter((app) =>
@@ -41,13 +50,16 @@ export async function facts(): Promise<VendorFact[]> {
   ).length;
   if (drifted > 0) {
     lines.push({
-      text: `${drifted} out of sync with nothing fixing it`,
+      say: { key: "factDriftedUnfixed", values: { n: drifted } },
       tone: "warn",
     });
   }
 
   if (apps.length > 0) {
-    lines.push({ text: "Show them", to: integrationPagePath("argocd") });
+    lines.push({
+      say: { key: "factShowThem" },
+      to: integrationPagePath("argocd"),
+    });
   }
 
   return lines;

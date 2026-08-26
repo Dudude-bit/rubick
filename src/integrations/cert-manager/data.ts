@@ -41,6 +41,8 @@
  */
 
 import { useMemo } from "react";
+
+import { useT } from "@/i18n/useT";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -156,6 +158,7 @@ export function usePicture(): {
   isPending: boolean;
   error: Error | null;
 } {
+  const t = useT();
   // The context first, the page's key after — the same composed key the
   // sidebar row uses, so the two still share one cache entry and cluster B
   // never reads cluster A's certificates.
@@ -179,6 +182,7 @@ export function usePicture(): {
       requests.items,
       orders.items,
       challenges.items,
+      t,
       walk.data.ingresses,
       // Only a cluster with no routing CRDs at all may be told a certificate
       // is used by nothing: a Traefik `IngressRoute` mounts Secrets too, and
@@ -194,7 +198,7 @@ export function usePicture(): {
         (read) => read.unread ?? []
       ),
     };
-  }, [certificates.data, walk.data]);
+  }, [certificates.data, walk.data, t]);
 
   return {
     data,

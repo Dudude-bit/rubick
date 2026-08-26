@@ -43,11 +43,6 @@ export function crdObjectPath(
   return getCustomResourceUrl(crdName, name, namespace);
 }
 
-/** "1 certificate", "7 certificates". */
-export function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 /**
  * One entry of the `status.conditions` array every operator writes.
  *

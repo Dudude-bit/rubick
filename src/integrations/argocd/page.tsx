@@ -39,7 +39,7 @@ import {
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { formatAge } from "@/lib/utils";
-import { conditionsOf, crdObjectsPath, getValueByPath, plural } from "../kit";
+import { conditionsOf, crdObjectsPath, getValueByPath } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -209,7 +209,10 @@ export default function ArgoCdPage() {
           applications.isPending
             ? undefined
             : t("empty", "acrossEveryNamespace", {
-                count: plural(apps.length, "Application"),
+                count: t("readings", "kindCount", {
+                  n: apps.length,
+                  kind: "Application",
+                }),
               })
         }
         description={t("empty", "argoPageDescription")}
@@ -319,7 +322,10 @@ function ApplicationsTab({
               : worthALook > 0
                 ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: apps.length })}`
                 : t("empty", "allInSync", {
-                    count: plural(apps.length, "Application"),
+                    count: t("readings", "kindCount", {
+                      n: apps.length,
+                      kind: "Application",
+                    }),
                   })}
         </span>
       </div>
@@ -912,7 +918,10 @@ function AppSetsTab({
                     : generated.map((app) => app.name).join(", ")}
                 </span>
                 <span className="text-[11px] text-fg-fnt">
-                  {plural(generated.length, "Application")}
+                  {t("readings", "kindCount", {
+                    n: generated.length,
+                    kind: "Application",
+                  })}
                 </span>
               </div>
               {error && (
@@ -1003,7 +1012,10 @@ function ProjectsTab({
                       .join(", ")}
               </span>
               <span className="text-[11px] text-fg-fnt">
-                {plural(members.length, "Application")}
+                {t("readings", "kindCount", {
+                  n: members.length,
+                  kind: "Application",
+                })}
               </span>
             </div>
           );

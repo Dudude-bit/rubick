@@ -17,7 +17,9 @@
  * which the whole app already has.
  */
 
-import type { en } from "@/i18n/catalogue";
+import type { Saying } from "@/i18n/say";
+
+export type { Saying };
 
 /** The object that delivers something, and where it is in this app. */
 export interface DeliveryOwner {
@@ -111,19 +113,6 @@ export interface DeliverySource {
   warning: Saying | null;
   /** Why, where the answer is not obvious from {@link drift} alone. */
   note: Saying | null;
-}
-
-/**
- * A line the app will say, named rather than written.
- *
- * These are produced inside a query, where the reader's language is not in
- * scope and would be frozen into the cached answer if it were — switch to
- * Russian and the delivery mark would keep its English until something else
- * caused a refetch. A key survives that; a sentence does not.
- */
-export interface Saying {
-  key: keyof (typeof en)["readings"];
-  values?: Record<string, string | number>;
 }
 
 /**

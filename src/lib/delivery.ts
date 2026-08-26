@@ -29,6 +29,7 @@
  *   a problem earns a mark and inventory does not.
  */
 
+import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { load } from "js-yaml";
 
@@ -237,8 +238,7 @@ export function deliveryMarks(deliveries: Delivery[], t: T): DeliveryMark[] {
       text: [
         source.vendor,
         source.owner.name,
-        source.warning &&
-          t("readings", source.warning.key, source.warning.values),
+        source.warning && sayWords(source.warning, t),
       ]
         .filter((part): part is string => Boolean(part))
         .join(" · "),
@@ -356,9 +356,7 @@ export function deliveryLine(
       title: t("readings", "delDrifted", { since }),
       detail: t("readings", "delDriftedDetail", {
         vendor: source.vendor,
-        note: source.note
-          ? t("readings", source.note.key, source.note.values)
-          : "",
+        note: source.note ? sayWords(source.note, t) : "",
       }).trim(),
       where,
       to: source.owner.to,
@@ -370,7 +368,7 @@ export function deliveryLine(
       tone: "warn",
       title: t("readings", "delStopped"),
       detail: source.note
-        ? t("readings", source.note.key, source.note.values)
+        ? sayWords(source.note, t)
         : t("readings", "delStoppedDetail", { name: source.owner.name }),
       where,
       to: source.owner.to,
@@ -381,9 +379,7 @@ export function deliveryLine(
     return {
       tone: "info",
       title: t("readings", "delFromGit"),
-      detail: source.note
-        ? t("readings", source.note.key, source.note.values)
-        : "",
+      detail: source.note ? sayWords(source.note, t) : "",
       where,
       to: source.owner.to,
     };
@@ -434,7 +430,7 @@ export function deliveryCell(
   }
   if (source.warning)
     return {
-      text: t("readings", source.warning.key, source.warning.values),
+      text: sayWords(source.warning, t),
       tone: "warn",
     };
   return null;
@@ -509,9 +505,7 @@ export function deliveryIntercept(
     title: t("readings", "delVendorWillUndo", { verb, vendor: source.vendor }),
     subject: source.vendor,
     lead: t("readings", "delVendorWillUndoDetail", { vendor: source.vendor }),
-    description: `${
-      source.note ? t("readings", source.note.key, source.note.values) : ""
-    } ${
+    description: `${source.note ? sayWords(source.note, t) : ""} ${
       source.path
         ? t("readings", "delEditManifests", { path: source.path })
         : t("readings", "delEditWhatApplies", { name: source.owner.name })

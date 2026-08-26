@@ -9,7 +9,6 @@
 
 import type { T } from "@/i18n/useT";
 import { integrationPagePath } from "../paths";
-import { plural } from "../kit";
 import type { VendorFact } from "../registry";
 import { fetchMesh } from "./data";
 import { hostGroups } from "./model";
@@ -23,10 +22,20 @@ export async function facts(): Promise<VendorFact[]> {
 
   const lines: VendorFact[] = [
     {
-      text: `${plural(mesh.gateways.length, "Gateway")} · ${plural(
-        mesh.virtualServices.length,
-        "VirtualService"
-      )} · ${plural(mesh.destinationRules.length, "DestinationRule")}`,
+      say: [
+        {
+          key: "kindCount",
+          values: { n: mesh.gateways.length, kind: "Gateway" },
+        },
+        {
+          key: "kindCount",
+          values: { n: mesh.virtualServices.length, kind: "VirtualService" },
+        },
+        {
+          key: "kindCount",
+          values: { n: mesh.destinationRules.length, kind: "DestinationRule" },
+        },
+      ],
     },
   ];
 
@@ -39,15 +48,20 @@ export async function facts(): Promise<VendorFact[]> {
 
   if (unreachable > 0) {
     lines.push({
-      text: `${plural(unreachable, "host")} no Gateway serves`,
+      say: { key: "factHostsNoGateway", values: { n: unreachable } },
       tone: "err",
     });
   } else if (groups.length > 0) {
-    lines.push({ text: `${plural(groups.length, "host")} routed` });
+    lines.push({
+      say: { key: "factHostsRouted", values: { n: groups.length } },
+    });
   }
 
   if (groups.length > 0) {
-    lines.push({ text: "Show them", to: integrationPagePath("istio") });
+    lines.push({
+      say: { key: "factShowThem" },
+      to: integrationPagePath("istio"),
+    });
   }
 
   return lines;

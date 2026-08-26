@@ -3,10 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   covers,
   expiryOf,
+  expiryText,
+  type Expiry,
   managedExpiryOf,
   overdueBy,
   uncoveredHosts,
 } from "./certificates";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+/** The expiry with its sentence rendered — what these expectations read. */
+const said = (expiry: Expiry) => ({ ...expiry, text: expiryText(expiry, t) });
 
 const at = (iso: string) => Date.parse(iso);
 const facts = (notAfter: string, notBefore = "2026-01-01T00:00:00Z") => ({
@@ -25,7 +36,7 @@ describe("expiryOf", () => {
   it("says nothing loud about a certificate with months left", () => {
     const expiry = expiryOf(facts("2026-10-09T12:00:00Z"), NOW);
     expect(expiry.tone).toBeNull();
-    expect(expiry.text).toBe("valid for 61 days");
+    expect(expiryText(expiry, t)).toBe("valid for 61 days");
   });
 
   /**
@@ -36,7 +47,7 @@ describe("expiryOf", () => {
   it("warns inside a fortnight and escalates inside three days", () => {
     expect(expiryOf(facts("2026-08-24T12:00:00Z"), NOW).tone).toBeNull();
     expect(expiryOf(facts("2026-08-23T12:00:00Z"), NOW).tone).toBe("warn");
-    expect(expiryOf(facts("2026-08-13T12:00:00Z"), NOW)).toMatchObject({
+    expect(said(expiryOf(facts("2026-08-13T12:00:00Z"), NOW))).toMatchObject({
       tone: "warn",
       text: "expires in 4 days",
     });
@@ -48,14 +59,14 @@ describe("expiryOf", () => {
    * which reads as a rendering bug rather than as an emergency.
    */
   it("counts the last day in hours", () => {
-    expect(expiryOf(facts("2026-08-09T20:00:00Z"), NOW).text).toBe(
+    expect(expiryText(expiryOf(facts("2026-08-09T20:00:00Z"), NOW), t)).toBe(
       "expires in 8 hours"
     );
   });
 
   /** Would break if an already-dead certificate stopped reading as dead. */
   it("says how long ago it expired", () => {
-    expect(expiryOf(facts("2026-08-06T12:00:00Z"), NOW)).toMatchObject({
+    expect(said(expiryOf(facts("2026-08-06T12:00:00Z"), NOW))).toMatchObject({
       tone: "err",
       expired: true,
       text: "expired 3 days ago",
@@ -73,7 +84,7 @@ describe("expiryOf", () => {
       NOW
     );
     expect(expiry.tone).toBe("err");
-    expect(expiry.text).toContain("not valid for another");
+    expect(expiryText(expiry, t)).toContain("not valid for another");
   });
 
   /**
@@ -87,7 +98,7 @@ describe("expiryOf", () => {
       NOW
     );
     expect(expiry.tone).toBeNull();
-    expect(expiry.text).toBe("valid for 5 days");
+    expect(expiryText(expiry, t)).toBe("valid for 5 days");
   });
 
   /**
@@ -97,10 +108,10 @@ describe("expiryOf", () => {
    */
   it("scales both thresholds to a short certificate's lifetime", () => {
     expect(
-      expiryOf(facts("2026-08-11T12:00:00Z", "2026-08-04T12:00:00Z"), NOW)
+      said(expiryOf(facts("2026-08-11T12:00:00Z", "2026-08-04T12:00:00Z"), NOW))
     ).toMatchObject({ tone: "warn", text: "expires in 2 days" });
     expect(
-      expiryOf(facts("2026-08-10T00:00:00Z", "2026-08-03T00:00:00Z"), NOW)
+      said(expiryOf(facts("2026-08-10T00:00:00Z", "2026-08-03T00:00:00Z"), NOW))
     ).toMatchObject({ tone: "err", text: "expires in 12 hours" });
   });
 
@@ -113,7 +124,10 @@ describe("expiryOf", () => {
       facts("2026-08-09T17:00:00Z", "2026-08-08T17:00:00Z"),
       NOW
     );
-    expect(expiry).toMatchObject({ tone: "warn", text: "expires in 5 hours" });
+    expect(said(expiry)).toMatchObject({
+      tone: "warn",
+      text: "expires in 5 hours",
+    });
   });
 
   /**
@@ -132,11 +146,17 @@ describe("expiryOf", () => {
    */
   it("counts the last hour in minutes", () => {
     expect(
-      expiryOf(facts("2026-08-09T12:20:00Z", "2026-08-02T12:00:00Z"), NOW).text
+      expiryText(
+        expiryOf(facts("2026-08-09T12:20:00Z", "2026-08-02T12:00:00Z"), NOW),
+        t
+      )
     ).toBe("expires in 20 minutes");
     // And never zero: under a minute is still a minute, not a bug.
     expect(
-      expiryOf(facts("2026-08-09T12:00:30Z", "2026-08-02T12:00:00Z"), NOW).text
+      expiryText(
+        expiryOf(facts("2026-08-09T12:00:30Z", "2026-08-02T12:00:00Z"), NOW),
+        t
+      )
     ).toBe("expires in 1 minute");
   });
 
@@ -172,7 +192,7 @@ describe("managedExpiryOf", () => {
       NOW
     );
     expect(expiry.tone).toBeNull();
-    expect(expiry.text).toBe("renews in 1 day");
+    expect(expiryText(expiry, t)).toBe("renews in 1 day");
     expect(expiry.renewalOverdue).toBe(false);
   });
 
@@ -182,7 +202,7 @@ describe("managedExpiryOf", () => {
       "2026-08-09T15:00:00Z",
       NOW
     );
-    expect(expiry.text).toBe("renews in 3 hours");
+    expect(expiryText(expiry, t)).toBe("renews in 3 hours");
   });
 
   /**
@@ -197,7 +217,7 @@ describe("managedExpiryOf", () => {
       NOW
     );
     expect(expiry.tone).toBeNull();
-    expect(expiry.text).toBe("valid for 61 days");
+    expect(expiryText(expiry, t)).toBe("valid for 61 days");
   });
 
   /**
@@ -211,7 +231,7 @@ describe("managedExpiryOf", () => {
       "2026-08-09T01:00:00Z",
       NOW
     );
-    expect(expiry).toMatchObject({
+    expect(said(expiry)).toMatchObject({
       tone: "warn",
       text: "renewal overdue — expires in 2 days",
       renewalOverdue: true,
@@ -228,7 +248,7 @@ describe("managedExpiryOf", () => {
       "2026-08-09T14:00:00Z",
       NOW
     );
-    expect(expiry).toMatchObject({
+    expect(said(expiry)).toMatchObject({
       tone: "err",
       text: "expires in 10 hours",
       renewalOverdue: false,
@@ -241,7 +261,7 @@ describe("managedExpiryOf", () => {
       "2026-08-09T00:00:00Z",
       NOW
     );
-    expect(expiry).toMatchObject({
+    expect(said(expiry)).toMatchObject({
       tone: "err",
       text: "renewal overdue — expires in 14 hours",
       renewalOverdue: true,
@@ -255,7 +275,7 @@ describe("managedExpiryOf", () => {
       "2026-08-06T12:00:00Z",
       NOW
     );
-    expect(expiry).toMatchObject({
+    expect(said(expiry)).toMatchObject({
       tone: "err",
       expired: true,
       text: "expired 1 day ago",
@@ -272,8 +292,8 @@ describe("managedExpiryOf", () => {
 
 describe("overdueBy", () => {
   it("says how far past the plan a renewal is", () => {
-    expect(overdueBy("2026-08-09T01:00:00Z", NOW)).toBe("11 hours overdue");
-    expect(overdueBy("2026-08-07T12:00:00Z", NOW)).toBe("2 days overdue");
+    expect(overdueBy("2026-08-09T01:00:00Z", t, NOW)).toBe("11 hours overdue");
+    expect(overdueBy("2026-08-07T12:00:00Z", t, NOW)).toBe("2 days overdue");
   });
 });
 

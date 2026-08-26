@@ -12,7 +12,7 @@
  * disagree with the Certificates page about the same certificate.
  */
 
-import { managedExpiryOf, span } from "@/lib/certificates";
+import { managedExpiryOf } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
 import type { CustomResourceInfo } from "@/generated/types";
 
@@ -20,7 +20,6 @@ import {
   crdObjectPath,
   crdObjectsPath,
   getValueByPath,
-  plural,
   readyStatus,
 } from "../kit";
 import type { VendorFact } from "../registry";
@@ -79,7 +78,7 @@ export async function facts(): Promise<VendorFact[]> {
     .sort((a, b) => a.expiry.left - b.expiry.left);
 
   const lines: VendorFact[] = [
-    { text: plural(certificates.length, "certificate") },
+    { say: { key: "factCertificates", values: { n: certificates.length } } },
   ];
 
   if (expiring.length > 0) {
@@ -89,14 +88,23 @@ export async function facts(): Promise<VendorFact[]> {
       // "Renewal overdue" is the diagnosis, so it beats reciting the date;
       // the plain expiry sentence survives for the certificate nobody wrote
       // a plan for.
-      text:
+      say:
         expiring.length === 1
           ? soonest.renewalOverdue
-            ? "1 renewal overdue"
-            : `1 ${soonest.text}`
+            ? { key: "factRenewalOverdue" as const }
+            : {
+                key: "factOneExpiring" as const,
+                values: { what: soonest.text },
+              }
           : overdue.length === expiring.length
-            ? `${expiring.length} renewals overdue`
-            : `${expiring.length} expiring, soonest in ${span(soonest.left)}`,
+            ? {
+                key: "factRenewalsOverdue" as const,
+                values: { n: expiring.length },
+              }
+            : {
+                key: "factExpiringSoonest" as const,
+                values: { n: expiring.length, spanMs: soonest.left },
+              },
       tone: expiring.some(({ expiry }) => expiry.tone === "err")
         ? "err"
         : "warn",
@@ -104,15 +112,16 @@ export async function facts(): Promise<VendorFact[]> {
   }
   if (failingRenewal.length > 0) {
     lines.push({
-      text: `${failingRenewal.length} ${
-        failingRenewal.length === 1 ? "renewal" : "renewals"
-      } failing`,
+      say: {
+        key: "factRenewalsFailing",
+        values: { n: failingRenewal.length },
+      },
       tone: "err",
     });
   }
   if (neverIssued.length > 0) {
     lines.push({
-      text: `${plural(neverIssued.length, "certificate")} never issued`,
+      say: { key: "factNeverIssued", values: { n: neverIssued.length } },
       tone: "err",
     });
   }
@@ -128,7 +137,7 @@ export async function facts(): Promise<VendorFact[]> {
   ];
   if (certificates.length > 0) {
     lines.push({
-      text: problems.length === 1 ? "Show it" : "Show them",
+      say: { key: problems.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         problems.length === 1
           ? crdObjectPath(

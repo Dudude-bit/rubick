@@ -34,7 +34,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
-import { overdueBy } from "@/lib/certificates";
+import { expiryText, overdueBy } from "@/lib/certificates";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -563,7 +563,7 @@ function Facts({ row }: { row: CertRow }) {
             </span>
             {row.expiry?.renewalOverdue && (
               <span className="ml-2 text-warn">
-                {overdueBy(row.renewalTime)}
+                {overdueBy(row.renewalTime, t)}
               </span>
             )}
           </span>
@@ -692,7 +692,7 @@ function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
           <>
             {(row.expiry
               ? t("empty", "certificateStillServedUntil", {
-                  expiry: row.expiry.text,
+                  expiry: expiryText(row.expiry, t),
                 })
               : t("empty", "certificateStillServed")
             )

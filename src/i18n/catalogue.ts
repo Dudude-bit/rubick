@@ -1267,6 +1267,112 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    verbatimLine: "{said}",
+    gcpStatusOnDomain: "{status} on {domain}",
+    awsIngressClassParams: {
+      one: "{n} IngressClassParams",
+      other: "{n} IngressClassParams",
+    },
+    awsBindingsUnapplied: {
+      one: "{n} binding the controller could not apply",
+      other: "{n} bindings the controller could not apply",
+    },
+    azureBindings: { one: "{n} binding", other: "{n} bindings" },
+    azureProhibited: {
+      one: "{n} prohibited target",
+      other: "{n} prohibited targets",
+    },
+    azureNoIdentityNamed: {
+      one: "no AzureIdentity named {name}",
+      other: "no AzureIdentity named {name}",
+    },
+    azureDanglingBindings: {
+      one: "{n} binding names an identity that does not exist",
+      other: "{n} bindings name an identity that does not exist",
+    },
+    gcpCertificatesFailed: {
+      one: "{n} certificate failed",
+      other: "{n} certificates failed",
+    },
+    gcpNotServingYet: {
+      one: "{n} not serving yet",
+      other: "{n} not serving yet",
+    },
+    factOneExpiring: "1 {what}",
+    factCertificates: { one: "{n} certificate", other: "{n} certificates" },
+    factRenewalsOverdue: {
+      one: "{n} renewal overdue",
+      other: "{n} renewals overdue",
+    },
+    factExpiringSoonest: {
+      one: "{n} expiring, soonest in {span}",
+      other: "{n} expiring, soonest in {span}",
+    },
+    factRenewalsFailing: {
+      one: "{n} renewal failing",
+      other: "{n} renewals failing",
+    },
+    factNeverIssued: {
+      one: "{n} certificate never issued",
+      other: "{n} certificates never issued",
+    },
+    certOverdueBy: "{span} overdue",
+    certNeverIssuedShort: "never issued",
+    certRenewalFailing: "renewal failing",
+    certRenewing: "renewing",
+    certIssued: "issued",
+    certNoExpiryDate: "no readable expiry date",
+    certExpiredToday: "expired today",
+    certExpiresIn: "expires in {span}",
+    certValidFor: "valid for {span}",
+    certRenewsIn: "renews in {span}",
+    certRenewalOverdue: "renewal overdue — expires in {span}",
+    certNotValidYet: {
+      one: "not valid for another {n} day",
+      other: "not valid for another {n} days",
+    },
+    certExpiredAgo: {
+      one: "expired {n} day ago",
+      other: "expired {n} days ago",
+    },
+    spanDays: { one: "{n} day", other: "{n} days" },
+    spanHours: { one: "{n} hour", other: "{n} hours" },
+    spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    factShowThem: "Show them",
+    factShowIt: "Show it",
+    factNoIngressClass: "claims no IngressClass",
+    factNotReady: "not ready",
+    factRenewalOverdue: "1 renewal overdue",
+    kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
+    factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factNotReconciled: {
+      one: "{n} not reconciled",
+      other: "{n} not reconciled",
+    },
+    factSuspendedCount: { one: "{n} suspended", other: "{n} suspended" },
+    factSourceNotFetching: {
+      one: "{n} source not fetching",
+      other: "{n} sources not fetching",
+    },
+    factHosts: { one: "{n} host", other: "{n} hosts" },
+    factMiddlewares: { one: "{n} middleware", other: "{n} middlewares" },
+    factServesClasses: {
+      one: "serves class {names}",
+      other: "serves classes {names}",
+    },
+    factFailingToSync: {
+      one: "{n} failing to sync",
+      other: "{n} failing to sync",
+    },
+    factDriftedUnfixed: {
+      one: "{n} out of sync with nothing fixing it",
+      other: "{n} out of sync with nothing fixing them",
+    },
+    factHostsNoGateway: {
+      one: "{n} host no Gateway serves",
+      other: "{n} hosts no Gateway serves",
+    },
+    factHostsRouted: { one: "{n} host routed", other: "{n} hosts routed" },
     istioOrJoin: " or ",
     istioAndMoreBelow: "{said}, and more below",
     istioAndJoin: ", and ",
