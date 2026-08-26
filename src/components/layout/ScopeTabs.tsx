@@ -494,7 +494,7 @@ function ScopeTabItem({
               // punctuation.
               className={cn(segClass(open === "ns"), "min-w-14 shrink-6")}
             >
-              <span className="min-w-0 truncate">{scopeLabel(scope)}</span>
+              <span className="min-w-0 truncate">{scopeLabel(scope, t)}</span>
               <span aria-hidden="true" className="flex-none text-[9px]">
                 ▾
               </span>
@@ -538,7 +538,7 @@ function ScopeTabItem({
       <TooltipContent side="bottom" align="start" className="max-w-[340px]">
         <p className="text-fg">{route}</p>
         <p className="truncate font-mono">
-          {context ?? t("cluster", "noCluster")} / {scopeLabel(scope)}
+          {context ?? t("cluster", "noCluster")} / {scopeLabel(scope, t)}
         </p>
         {tab.missing && (
           <p className="mt-0.5">{t("cluster", "missingTabHint")}</p>

@@ -680,7 +680,7 @@ export function IngressDetail() {
       ),
     },
     yamlTab({
-      title: "Ingress YAML",
+      title: t("action", "kindYaml", { kind: "Ingress" }),
       yaml: ingressYaml,
       resourceKind: ResourceType.Ingress,
       resourceName: name || "",

@@ -275,7 +275,7 @@ export function DaemonSetDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "DaemonSet YAML",
+        title: t("action", "kindYaml", { kind: "DaemonSet" }),
         resourceKind: ResourceType.DaemonSet,
         resourceName: daemonSet?.name || name || "",
         namespace: daemonSet?.namespace || namespace,

@@ -306,7 +306,7 @@ export function NodeDetail() {
     },
     connectionsTab(connections),
     yamlTab({
-      title: "Node YAML",
+      title: t("action", "kindYaml", { kind: "Node" }),
       yaml: nodeYaml,
       resourceKind: ResourceType.Node,
       resourceName: name || "",

@@ -284,7 +284,7 @@ export function StatefulSetDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "StatefulSet YAML",
+        title: t("action", "kindYaml", { kind: "StatefulSet" }),
         resourceKind: ResourceType.StatefulSet,
         resourceName: statefulSet?.name || name || "",
         namespace: statefulSet?.namespace || namespace,

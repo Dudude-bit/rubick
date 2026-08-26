@@ -527,7 +527,7 @@ export function DeploymentDetail() {
       ),
     },
     yamlTab({
-      title: "Deployment YAML",
+      title: t("action", "kindYaml", { kind: "Deployment" }),
       yaml: deploymentYaml,
       resourceKind: ResourceType.Deployment,
       resourceName: name || "",

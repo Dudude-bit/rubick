@@ -256,7 +256,7 @@ export function JobDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "Job YAML",
+        title: t("action", "kindYaml", { kind: "Job" }),
         resourceKind: ResourceType.Job,
         resourceName: job?.name || name || "",
         namespace: job?.namespace || namespace,

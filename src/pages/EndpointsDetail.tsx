@@ -278,7 +278,7 @@ export function EndpointsDetail() {
       ),
     },
     yamlTab({
-      title: "Endpoints YAML",
+      title: t("action", "kindYaml", { kind: "Endpoints" }),
       yaml: endpointsYaml,
       resourceKind: ResourceType.Endpoints,
       resourceName: name || "",

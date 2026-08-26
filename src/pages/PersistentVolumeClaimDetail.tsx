@@ -182,7 +182,7 @@ export function PersistentVolumeClaimDetail() {
       ),
     },
     yamlTab({
-      title: "PersistentVolumeClaim YAML",
+      title: t("action", "kindYaml", { kind: "PersistentVolumeClaim" }),
       yaml: pvcYaml,
       resourceKind: ResourceType.PersistentVolumeClaim,
       resourceName: name || "",

@@ -610,7 +610,7 @@ export function PodDetail() {
               roleOverride={silence ? "neutral" : undefined}
               title={
                 silence
-                  ? silenceNote(silence)
+                  ? silenceNote(silence, t)
                   : `${t("columns", "phase")} ${pod.status.phase}`
               }
             />

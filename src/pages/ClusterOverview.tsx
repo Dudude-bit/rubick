@@ -71,7 +71,7 @@ export function ClusterOverview() {
 
   if (!overview) return null;
 
-  const scope = scopeLabel(namespaceScope);
+  const scope = scopeLabel(namespaceScope, t);
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">

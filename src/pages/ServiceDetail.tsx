@@ -237,7 +237,7 @@ export function ServiceDetail() {
       ),
     },
     yamlTab({
-      title: "Service YAML",
+      title: t("action", "kindYaml", { kind: "Service" }),
       yaml: serviceYaml,
       resourceKind: ResourceType.Service,
       resourceName: name || "",

@@ -100,7 +100,7 @@ export function StorageClassDetail() {
       ),
     },
     yamlTab({
-      title: "StorageClass YAML",
+      title: t("action", "kindYaml", { kind: "StorageClass" }),
       yaml: scYaml,
       resourceKind: ResourceType.StorageClass,
       resourceName: name || "",

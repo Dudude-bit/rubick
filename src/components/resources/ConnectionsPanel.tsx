@@ -61,6 +61,7 @@ function Name({ object }: { object: ObjectRef }) {
  * or promise a page for a revision this app cannot show.
  */
 function Outside({ end }: { end: OutsideEnd }) {
+  const t = useT();
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
       <Link
@@ -73,7 +74,7 @@ function Outside({ end }: { end: OutsideEnd }) {
         (end.link ? (
           <button
             type="button"
-            onClick={() => openExternal(end.link!.url, end.link!.site)}
+            onClick={() => openExternal(end.link!.url, end.link!.site, t)}
             className="inline-flex items-baseline gap-0.5 font-mono text-[11px] text-info hover:underline"
           >
             {shortRevision(end.revision)}

@@ -103,9 +103,9 @@ export function sourceNote(published: ServicePublished, t: T): string | null {
         ? t("count", "unroutedMatched", { n: published.unrouted })
         : null;
     case "legacyEndpoints":
-      return "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from a dead one, and it stops at 1000.";
+      return t("readings", "legacyEndpointsNote");
     case "podReadiness":
-      return "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.";
+      return t("readings", "podReadinessNote");
   }
 }
 
@@ -197,7 +197,7 @@ export function legacyNote(
   t: T
 ): string {
   if (!published || published.source !== "slices") {
-    return "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.";
+    return t("readings", "legacyEndpointsShort");
   }
   const real = endpointCount(published) + published.unrouted;
   const from = t("count", "slicesRead", { n: published.slices });

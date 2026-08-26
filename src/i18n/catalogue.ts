@@ -183,6 +183,9 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    resourceVersion: "Resource version",
+    uid: "UID",
+    apiVersion: "API version",
     aDrainWaits: "A drain waits",
     setBy: "Set by",
     cpu: "CPU",
@@ -448,6 +451,11 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    siteHasItAt: "{site} has it at {url}",
+    addressOnClipboard:
+      "The {site} address is on your clipboard instead: {url}",
+    couldNotOpenBrowser: "Could not open your browser",
+    kindYaml: "{kind} YAML",
     debugBusybox: "BusyBox (minimal)",
     debugAlpine: "Alpine (shell + apk)",
     debugNetshoot: "Netshoot (network tools)",
@@ -1334,6 +1342,21 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    helmRelease: "Helm release",
+    crdEstablished: "Established",
+    crdNotEstablished: "Not established",
+    legacyEndpointsNote:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from a dead one, and it stops at 1000.",
+    podReadinessNote:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.",
+    legacyEndpointsShort:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
+    podPhase: "Phase {phase}",
+    nodeStoppedReportingAgo:
+      "Node {node} stopped reporting {age}. This status is the last one it sent, not the pod's state now.",
+    nodeStoppedReporting:
+      "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
+    allContainers: "all containers",
     traefikAnotherEntryPoint: "another entry point",
     certSelfSigned: "self-signed — nothing above it vouched for this",
     certIssuedBy: "issued by {name}",

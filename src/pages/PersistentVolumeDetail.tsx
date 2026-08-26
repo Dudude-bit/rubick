@@ -103,7 +103,7 @@ export function PersistentVolumeDetail() {
     },
     connectionsTab(connections, deliveryQuery),
     yamlTab({
-      title: "PersistentVolume YAML",
+      title: t("action", "kindYaml", { kind: "PersistentVolume" }),
       yaml: pvYaml,
       resourceKind: ResourceType.PersistentVolume,
       resourceName: name || "",

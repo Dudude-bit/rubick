@@ -101,7 +101,7 @@ export function ConfigMapDetail() {
       ),
     },
     yamlTab({
-      title: "ConfigMap YAML",
+      title: t("action", "kindYaml", { kind: "ConfigMap" }),
       yaml: configMapYaml,
       resourceKind: ResourceType.ConfigMap,
       resourceName: name || "",

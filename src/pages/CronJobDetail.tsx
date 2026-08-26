@@ -333,7 +333,7 @@ export function CronJobDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "CronJob YAML",
+        title: t("action", "kindYaml", { kind: "CronJob" }),
         resourceKind: ResourceType.CronJob,
         resourceName: cronJob?.name || name || "",
         namespace: cronJob?.namespace || namespace,

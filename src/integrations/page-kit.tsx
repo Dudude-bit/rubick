@@ -296,7 +296,7 @@ export function OutLink({
   const go = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    void openExternal(href, site);
+    void openExternal(href, site, t);
   };
 
   return (

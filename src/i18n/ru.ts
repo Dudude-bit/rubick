@@ -148,6 +148,9 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    resourceVersion: "Версия ресурса",
+    uid: "UID",
+    apiVersion: "Версия API",
     aDrainWaits: "Слив ждёт",
     setBy: "Задаёт",
     cpu: "CPU",
@@ -413,6 +416,10 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    siteHasItAt: "{site} — по адресу {url}",
+    addressOnClipboard: "Адрес {site} скопирован в буфер обмена: {url}",
+    couldNotOpenBrowser: "Не удалось открыть браузер",
+    kindYaml: "{kind} YAML",
     debugBusybox: "BusyBox (минимальный)",
     debugAlpine: "Alpine (оболочка + apk)",
     debugNetshoot: "Netshoot (сетевые инструменты)",
@@ -1326,6 +1333,21 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    helmRelease: "релиз Helm",
+    crdEstablished: "Установлено",
+    crdNotEstablished: "Не установлено",
+    legacyEndpointsNote:
+      "В этом кластере EndpointSlices не отдаются, поэтому ответил старый объект Endpoints. Он не отличает завершающийся адрес от мёртвого и обрывается на 1000.",
+    podReadinessNote:
+      "Ни EndpointSlices, ни объект Endpoints не ответили, поэтому это вывод, а не слова самого кластера: поды, попавшие под селектор, каждый со своим условием Ready.",
+    legacyEndpointsShort:
+      "Это объект, который управляющий слой пишет для совместимости. Он не умеет выражать «обслуживает» и «завершается» и обрывается на 1000 адресах — но здесь ни один EndpointSlice не ответил, так что читать больше нечего.",
+    podPhase: "Фаза {phase}",
+    nodeStoppedReportingAgo:
+      "Узел {node} перестал отчитываться {age}. Этот статус — последний, что он прислал, а не текущее состояние пода.",
+    nodeStoppedReporting:
+      "Узел {node} перестал отчитываться. Этот статус — последний, что он прислал, а не текущее состояние пода.",
+    allContainers: "все контейнеры",
     traefikAnotherEntryPoint: "другая точка входа",
     certSelfSigned: "самоподписанный — за него никто выше не поручился",
     certIssuedBy: "выпущен: {name}",

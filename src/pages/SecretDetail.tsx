@@ -128,7 +128,7 @@ export function SecretDetail() {
       ),
     },
     yamlTab({
-      title: "Secret YAML",
+      title: t("action", "kindYaml", { kind: "Secret" }),
       yaml: secretYaml,
       resourceKind: ResourceType.Secret,
       resourceName: name || "",

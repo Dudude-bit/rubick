@@ -19,6 +19,8 @@
  * writes a sentence, the other fills a column.
  */
 
+import type { T } from "@/i18n/useT";
+
 export interface MountLike {
   container: string;
   path: string;
@@ -70,9 +72,9 @@ export function groupMounts<T extends MountLike>(mounts: T[]): MountGroup<T>[] {
  * the same words on every pod, which the eye learns to skip. Names are for
  * the case they actually answer, which is *some* of the containers.
  */
-export function mountedBy(containers: string[], total?: number): string {
+export function mountedBy(containers: string[], t: T, total?: number): string {
   if (total !== undefined && containers.length === total) {
-    return total === 1 ? "" : "all containers";
+    return total === 1 ? "" : t("readings", "allContainers");
   }
   return containers.join(", ");
 }

@@ -151,7 +151,7 @@ function DeliveryWhere({
             {t("empty", "inRevision")}{" "}
             <button
               type="button"
-              onClick={() => openExternal(link.url, link.site)}
+              onClick={() => openExternal(link.url, link.site, t)}
               className="inline-flex items-center gap-0.5 font-mono text-info hover:underline"
             >
               {shortRevision(where.revision)}
