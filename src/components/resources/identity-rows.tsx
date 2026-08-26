@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import { ResourceRef } from "./ResourceRef";
 import type { KeyValue } from "./key-values";
 
@@ -14,10 +15,11 @@ import type { KeyValue } from "./key-values";
  */
 export function serviceAccountRow(
   name: string | null | undefined,
-  namespace: string | null | undefined
+  namespace: string | null | undefined,
+  t: T
 ): KeyValue {
   return {
-    label: "Service account",
+    label: t("columns", "serviceAccount"),
     value: name ? (
       <ResourceRef
         kind="ServiceAccount"

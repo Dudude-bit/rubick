@@ -400,6 +400,6 @@ function policy(
           t("action", "noStartingDeadline"),
       mono: cronJob?.startingDeadlineSeconds != null,
     },
-    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
+    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace, t),
   ];
 }

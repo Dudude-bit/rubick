@@ -161,10 +161,10 @@ export function ToolPathsPanel() {
                 <StatusBadge
                   status={
                     pending
-                      ? "Checking"
+                      ? t("settings", "checking")
                       : tool.state?.available
-                        ? "Available"
-                        : "Not found"
+                        ? t("settings", "available")
+                        : t("settings", "notFound")
                   }
                   roleOverride={
                     pending ? "pending" : tool.state?.available ? "ok" : "warn"

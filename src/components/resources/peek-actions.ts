@@ -120,7 +120,7 @@ function actionsFor(
       // The node page offers exactly one thing; cordon and drain exist in the
       // backend but have never had a control, and the peek is not the place
       // to introduce one.
-      return [{ id: "debug", label: "Debug node", icon: Bug }];
+      return [{ id: "debug", label: t("action", "debugNode"), icon: Bug }];
     case "Service":
       return [
         serviceForwardAction(detail as ServiceInfo | undefined, t, context),

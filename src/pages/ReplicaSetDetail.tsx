@@ -158,7 +158,7 @@ export function ReplicaSetDetail() {
         ),
       mono: revision !== null,
     },
-    serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace),
+    serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace, t),
   ];
 
   const tabs = [

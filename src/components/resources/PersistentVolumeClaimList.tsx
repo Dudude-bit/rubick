@@ -145,7 +145,9 @@ export function PersistentVolumeClaimList() {
   return (
     <ResourceList<PersistentVolumeClaimInfo>
       title="Persistent Volume Claims"
-      description={`Requests for storage by pods in ${scope.inWords}`}
+      description={t("empty", "pvcListDescription", {
+        scope: scope.inWords,
+      })}
       queryKey={queryKeys.resources(
         ResourceType.PersistentVolumeClaim,
         currentNamespace

@@ -46,7 +46,7 @@ export function AboutSettings() {
       <SettingsGroup>
         <SettingRow
           label={t("settings", "version")}
-          keywords="build release"
+          keywords={t("settings", "searchVersionWords")}
           control={
             <span className="font-mono text-xs text-fg">
               {appInfo?.version ?? "…"}
@@ -55,7 +55,7 @@ export function AboutSettings() {
         />
         <SettingRow
           label="Tauri"
-          keywords="runtime webview"
+          keywords={t("settings", "searchRuntimeWords")}
           control={
             <span className="font-mono text-xs text-fg-mut">
               {appInfo?.tauriVersion ?? "…"}
@@ -64,7 +64,7 @@ export function AboutSettings() {
         />
         <SettingRow
           label={t("settings", "framework")}
-          keywords="react typescript"
+          keywords={t("settings", "searchFrameworkWords")}
           control={
             <span className="text-xs text-fg-mut">React + TypeScript</span>
           }
@@ -79,7 +79,7 @@ export function AboutSettings() {
               : t("settings", "upToDate")
           }
           hint={t("settings", "updateHint")}
-          keywords="update upgrade install download"
+          keywords={t("settings", "searchUpdateWords")}
           control={
             available && !downloading ? (
               <Button
@@ -146,7 +146,7 @@ export function AboutSettings() {
         <SettingRow
           label={t("settings", "autoUpdates")}
           hint={t("settings", "autoUpdatesHint")}
-          keywords="auto check background"
+          keywords={t("settings", "searchAutoUpdateWords")}
           control={
             <Switch
               aria-label={t("settings", "autoUpdates")}

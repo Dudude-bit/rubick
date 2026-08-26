@@ -62,13 +62,13 @@ export function DetailError({
         <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
         <h2 className="text-[13px] font-semibold tracking-tight text-err">
           {isNotFound
-            ? `${resourceKind} not found`
-            : `Could not read this ${kind}`}
+            ? t("empty", "kindNotFound", { kind: resourceKind })
+            : t("empty", "kindCouldNotRead", { kind })}
         </h2>
       </div>
       <p className="text-xs text-fg-mut">
         {isNotFound
-          ? `The ${kind} may have been deleted or recreated under a new name.`
+          ? t("empty", "kindMayBeGone", { kind })
           : typeof error === "string"
             ? error
             : (error?.message ?? t("empty", "clusterDidNotAnswer"))}
@@ -84,7 +84,11 @@ export function DetailError({
         />
         {isNotFound && onFindReplacement && (
           <DetailAction
-            label={isSearching ? "Searching…" : "Find replacement"}
+            label={
+              isSearching
+                ? t("action", "searchingEllipsis")
+                : t("action", "findReplacement")
+            }
             icon={RefreshCw}
             onClick={onFindReplacement}
             busy={isSearching}

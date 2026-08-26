@@ -402,6 +402,10 @@ function declaration(
       label: t("columns", "updateStrategy"),
       value: statefulSet?.updateStrategy || "RollingUpdate",
     },
-    serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),
+    serviceAccountRow(
+      statefulSet?.serviceAccountName,
+      statefulSet?.namespace,
+      t
+    ),
   ];
 }

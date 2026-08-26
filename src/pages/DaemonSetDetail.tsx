@@ -357,6 +357,6 @@ function declaration(
       label: t("action", "updateStrategy"),
       value: daemonSet?.updateStrategy || "RollingUpdate",
     },
-    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace),
+    serviceAccountRow(daemonSet?.serviceAccountName, daemonSet?.namespace, t),
   ];
 }

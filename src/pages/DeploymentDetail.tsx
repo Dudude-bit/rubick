@@ -324,7 +324,7 @@ export function DeploymentDetail() {
       label: t("columns", "strategy"),
       value: deployment?.strategy || "RollingUpdate",
     },
-    serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace),
+    serviceAccountRow(deployment?.serviceAccountName, deployment?.namespace, t),
   ];
 
   const tabs: DetailTab[] = [

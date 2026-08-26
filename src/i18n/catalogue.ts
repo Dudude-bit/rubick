@@ -183,6 +183,8 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    aDrainWaits: "A drain waits",
+    setBy: "Set by",
     cpu: "CPU",
     pods: "Pods",
     ip: "IP",
@@ -446,6 +448,13 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    debugBusybox: "BusyBox (minimal)",
+    debugAlpine: "Alpine (shell + apk)",
+    debugNetshoot: "Netshoot (network tools)",
+    debugUbuntu: "Ubuntu",
+    debugCustom: "Custom...",
+    findReplacement: "Find replacement",
+    searchingEllipsis: "Searching…",
     compactView: "Compact view",
     comfortableView: "Comfortable view",
     searchEllipsis: "Search...",
@@ -1325,6 +1334,12 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govSeveralAutoscalers: {
+      one: "{n} autoscaler claims this",
+      other: "{n} autoscalers claim this — each undoes the other",
+    },
+    govWhatDrainRespects: "what a drain must respect",
+    govWhoSetsIt: "who sets it",
     nginxNoController:
       "Nothing in this cluster carries {selector}, so the controller's own configuration could not be read.",
     nginxManifestUnreadable:
@@ -2064,6 +2079,30 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    notOnPathPlain: "{label} is not on PATH. Set the path below.",
+    provenanceNothingFound: "nothing was found",
+    provenancePinned: "pinned here, in this app",
+    provenanceEnv: "named by $KUBECONFIG",
+    provenanceDefault:
+      "found by the default lookup, since $KUBECONFIG is unset",
+    notOnPathSearched: {
+      one: "Not on PATH — {n} location searched, including the app's own.",
+      other: "Not on PATH — {n} locations searched, including the app's own.",
+    },
+    provenanceEnvMerged: {
+      one: "named by $KUBECONFIG, merged with {n} more file",
+      other: "named by $KUBECONFIG, merged with {n} more files",
+    },
+    searchVersionWords: "build release",
+    searchRuntimeWords: "runtime webview",
+    searchFrameworkWords: "react typescript",
+    searchUpdateWords: "update upgrade install download",
+    searchAutoUpdateWords: "auto check background",
+    searchLanguageWords: "language locale translation русский",
+    searchThemeWords: "dark light appearance",
+    searchColourWords: "color coloring tint kind",
+    searchRegistryWords:
+      "registry registries image pull credentials docker ecr gcr harbor basic bearer token username password",
     contextConnected: "connected",
     contextReady: "ready",
     contextCannotConnect: "cannot connect",
@@ -2351,6 +2390,11 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    kindMayBeGone:
+      "The {kind} may have been deleted or recreated under a new name.",
+    kindCouldNotRead: "Could not read this {kind}",
+    kindNotFound: "{kind} not found",
+    pvcListDescription: "Requests for storage by pods in {scope}",
     expandRepeats: "Expand {count} repeats",
     anEmptySpec: "An empty spec",
     nothingConfigured: "Nothing configured",

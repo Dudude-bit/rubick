@@ -351,6 +351,6 @@ function timing(
           },
         ]
       : []),
-    serviceAccountRow(job?.serviceAccountName, job?.namespace),
+    serviceAccountRow(job?.serviceAccountName, job?.namespace, t),
   ];
 }

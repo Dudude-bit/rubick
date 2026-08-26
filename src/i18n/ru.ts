@@ -148,6 +148,8 @@ export const ru: Catalogue = {
     settings: "Настройки",
   },
   columns: {
+    aDrainWaits: "Слив ждёт",
+    setBy: "Задаёт",
     cpu: "CPU",
     pods: "Поды",
     ip: "IP",
@@ -411,6 +413,13 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    debugBusybox: "BusyBox (минимальный)",
+    debugAlpine: "Alpine (оболочка + apk)",
+    debugNetshoot: "Netshoot (сетевые инструменты)",
+    debugUbuntu: "Ubuntu",
+    debugCustom: "Свой…",
+    findReplacement: "Найти замену",
+    searchingEllipsis: "Поиск…",
     compactView: "Компактный вид",
     comfortableView: "Свободный вид",
     searchEllipsis: "Поиск…",
@@ -1317,6 +1326,14 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govSeveralAutoscalers: {
+      one: "{n} автомасштабатор претендует на это",
+      few: "{n} автомасштабатора претендуют на это — и отменяют друг друга",
+      many: "{n} автомасштабаторов претендуют на это — и отменяют друг друга",
+      other: "{n} автомасштабатора претендуют на это — и отменяют друг друга",
+    },
+    govWhatDrainRespects: "что должен учитывать слив",
+    govWhoSetsIt: "кто его задаёт",
     nginxNoController:
       "Ничто в этом кластере не несёт {selector}, поэтому собственную конфигурацию контроллера прочитать не удалось.",
     nginxManifestUnreadable:
@@ -2196,6 +2213,38 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",
+    provenanceNothingFound: "ничего не найдено",
+    provenancePinned: "закреплён здесь, в этом приложении",
+    provenanceEnv: "назван в $KUBECONFIG",
+    provenanceDefault: "найден обычным поиском, поскольку $KUBECONFIG не задан",
+    notOnPathSearched: {
+      one: "Нет в PATH — проверено {n} место, включая собственное для приложения.",
+      few: "Нет в PATH — проверено {n} места, включая собственное для приложения.",
+      many: "Нет в PATH — проверено {n} мест, включая собственное для приложения.",
+      other:
+        "Нет в PATH — проверено {n} места, включая собственное для приложения.",
+    },
+    provenanceEnvMerged: {
+      one: "назван в $KUBECONFIG, объединён ещё с {n} файлом",
+      few: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
+      many: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
+      other: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
+    },
+    searchVersionWords: "сборка релиз версия build release",
+    searchRuntimeWords: "среда выполнения webview runtime",
+    searchFrameworkWords: "react typescript фреймворк",
+    searchUpdateWords:
+      "обновление обновить установить загрузить update upgrade install download",
+    searchAutoUpdateWords:
+      "автоматически проверять фоном auto check background",
+    searchLanguageWords:
+      "язык локаль перевод русский language locale translation",
+    searchThemeWords: "тёмная светлая тема оформление dark light appearance",
+    searchColourWords:
+      "цвет раскраска оттенок вид colour color coloring tint kind",
+    searchRegistryWords:
+      "реестр реестры образ учётные данные registry registries image pull credentials docker ecr gcr harbor basic bearer token username password",
     contextConnected: "подключён",
     contextReady: "готов",
     contextCannotConnect: "подключиться нельзя",
@@ -2491,6 +2540,11 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    kindMayBeGone:
+      "Объект ({kind}) мог быть удалён или пересоздан под новым именем.",
+    kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
+    kindNotFound: "{kind} не найден",
+    pvcListDescription: "Запросы на хранилище от подов в {scope}",
     expandRepeats: "Развернуть повторы: {count}",
     anEmptySpec: "Пустой spec",
     nothingConfigured: "Ничего не настроено",

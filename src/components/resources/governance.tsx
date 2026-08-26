@@ -122,7 +122,9 @@ export function governanceRows(
     if (several) {
       findings.push({
         tone: "warn",
-        title: `${scaling.length} autoscalers claim this — each undoes the other`,
+        title: t("readings", "govSeveralAutoscalers", {
+          n: scaling.length,
+        }),
         detail: several.description,
       });
     }
@@ -130,7 +132,7 @@ export function governanceRows(
 
   for (const auto of scaling) {
     rows.push({
-      label: "Set by",
+      label: t("columns", "setBy"),
       value: (
         <>
           <ResourceRef
@@ -156,7 +158,7 @@ export function governanceRows(
 
   for (const budget of protecting) {
     rows.push({
-      label: "A drain waits",
+      label: t("columns", "aDrainWaits"),
       value: (
         <>
           <ResourceRef

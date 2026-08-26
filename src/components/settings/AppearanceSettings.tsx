@@ -46,7 +46,7 @@ export function AppearanceSettings() {
         label={t("settings", "language")}
         hint={t("settings", "languageHint")}
         htmlFor="setting-language"
-        keywords="language locale translation русский"
+        keywords={t("settings", "searchLanguageWords")}
         control={
           // A list, not the radio row the theme uses: six options and growing,
           // and a language is looked up by name rather than scanned. Each one
@@ -82,7 +82,7 @@ export function AppearanceSettings() {
       <SettingRow
         label={t("settings", "theme")}
         hint={t("settings", "themeHint")}
-        keywords="dark light appearance"
+        keywords={t("settings", "searchThemeWords")}
         control={
           <RadioGroup
             value={theme}
@@ -112,7 +112,7 @@ export function AppearanceSettings() {
         hint={t("settings", "resourceColouringHint")}
         // The app spells it the British way throughout; somebody who types
         // the other spelling is looking for exactly this row.
-        keywords="color coloring tint kind"
+        keywords={t("settings", "searchColourWords")}
         control={
           <RadioGroup
             value={resourceColouring}

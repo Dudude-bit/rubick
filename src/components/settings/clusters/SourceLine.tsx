@@ -6,7 +6,7 @@ import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useSettingSearchMatch } from "../settings-search";
 import { cn } from "@/lib/utils";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The file every other line on this screen is downstream of, and how it
@@ -40,7 +40,7 @@ export function SourceLine() {
   // here; the app cannot unset somebody's environment variable.
   const files = source?.candidates ?? [];
 
-  const provenance = describeProvenance(source);
+  const provenance = describeProvenance(source, t);
   const visible = useSettingSearchMatch(
     primary?.path ?? "",
     provenance,
@@ -213,15 +213,19 @@ export function SourceLine() {
  * and a list of four have to read differently; the reader who set the
  * variable is the only person who can say which of the four is wrong.
  */
-function describeProvenance(source: KubeconfigSource | undefined): string {
-  if (!source || source.candidates.length === 0) return "nothing was found";
+function describeProvenance(
+  source: KubeconfigSource | undefined,
+  t: T
+): string {
+  if (!source || source.candidates.length === 0)
+    return t("settings", "provenanceNothingFound");
   const origin = source.candidates[0].origin;
-  if (origin === "override") return "pinned here, in this app";
+  if (origin === "override") return t("settings", "provenancePinned");
   if (origin === "env") {
     const extra = source.candidates.length - 1;
     return extra > 0
-      ? `named by $KUBECONFIG, merged with ${extra} more file${extra === 1 ? "" : "s"}`
-      : "named by $KUBECONFIG";
+      ? t("settings", "provenanceEnvMerged", { n: extra })
+      : t("settings", "provenanceEnv");
   }
-  return "found by the default lookup, since $KUBECONFIG is unset";
+  return t("settings", "provenanceDefault");
 }
