@@ -1334,6 +1334,16 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    envInline: "встроенное",
+    envSecret: "секрет",
+    envConfigMap: "configmap",
+    envFieldRef: "fieldRef",
+    envResourceRef: "resourceRef",
+    envFromSecret: "секрет · envFrom",
+    envFromConfigMap: "configmap · envFrom",
+    envAllSources: "все источники",
+    envFromWord: "envFrom",
+    readyOfNodes: "{ready} из {desired} узлов",
     helmRelease: "релиз Helm",
     crdEstablished: "Установлено",
     crdNotEstablished: "Не установлено",

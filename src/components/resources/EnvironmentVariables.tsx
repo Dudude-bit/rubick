@@ -53,15 +53,16 @@ type SourceType =
   | "envFromSecret"
   | "envFromConfigMap";
 
-const SOURCE_LABEL: Record<SourceType, string> = {
-  direct: "inline",
-  secret: "secret",
-  configmap: "configmap",
-  field: "fieldRef",
-  resource: "resourceRef",
-  envFromSecret: "secret · envFrom",
-  envFromConfigMap: "configmap · envFrom",
-};
+/** What each source is called, as catalogue keys: read at import. */
+const SOURCE_LABEL = {
+  direct: "envInline",
+  secret: "envSecret",
+  configmap: "envConfigMap",
+  field: "envFieldRef",
+  resource: "envResourceRef",
+  envFromSecret: "envFromSecret",
+  envFromConfigMap: "envFromConfigMap",
+} as const satisfies Record<SourceType, string>;
 
 /** Which filter option a row answers to. One mapping, so the control
  *  offering an option and the list honouring it cannot drift. */
@@ -72,15 +73,15 @@ function filterOf(sourceType: SourceType): FilterOption {
 }
 
 /** The picker names a source with the same word its rows do. */
-const FILTER_LABEL: Record<FilterOption, string> = {
-  all: "all sources",
+const FILTER_LABEL = {
+  all: "envAllSources",
   direct: SOURCE_LABEL.direct,
   secret: SOURCE_LABEL.secret,
   configmap: SOURCE_LABEL.configmap,
   field: SOURCE_LABEL.field,
   resource: SOURCE_LABEL.resource,
-  envFrom: "envFrom",
-};
+  envFrom: "envFromWord",
+} as const satisfies Record<FilterOption, string>;
 
 const FILTER_ORDER = [
   "direct",
@@ -112,13 +113,14 @@ function SourceCell({
   sourceKey?: string;
   namespace?: string;
 }) {
+  const t = useT();
   const isSecret = type === "secret" || type === "envFromSecret";
   const isConfigMap = type === "configmap" || type === "envFromConfigMap";
   return (
     <span className="text-[11px] text-fg-fnt">
       {/* The word already says the kind, so the reference does not repeat
           it — `configmap app-config`, not `configmap ConfigMap/app-config`. */}
-      {SOURCE_LABEL[type]}
+      {t("readings", SOURCE_LABEL[type])}
       {name && " "}
       {name &&
         (namespace && (isSecret || isConfigMap) ? (
@@ -545,7 +547,7 @@ export function EnvironmentVariables({
                     {FILTER_ORDER.filter((option) => sources.has(option)).map(
                       (option) => (
                         <SelectItem key={option} value={option}>
-                          {FILTER_LABEL[option]}
+                          {t("readings", FILTER_LABEL[option])}
                         </SelectItem>
                       )
                     )}

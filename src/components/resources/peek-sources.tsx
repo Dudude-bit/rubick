@@ -396,7 +396,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "ready"),
-            value: `${set.ready} of ${set.desired} nodes`,
+            value: t("readings", "readyOfNodes", {
+              ready: set.ready,
+              desired: set.desired,
+            }),
             tone: set.ready < set.desired ? "warn" : undefined,
           },
           { label: t("columns", "current"), value: set.current, mono: true },

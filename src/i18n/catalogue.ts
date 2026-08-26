@@ -1343,6 +1343,16 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    envInline: "inline",
+    envSecret: "secret",
+    envConfigMap: "configmap",
+    envFieldRef: "fieldRef",
+    envResourceRef: "resourceRef",
+    envFromSecret: "secret · envFrom",
+    envFromConfigMap: "configmap · envFrom",
+    envAllSources: "all sources",
+    envFromWord: "envFrom",
+    readyOfNodes: "{ready} of {desired} nodes",
     helmRelease: "Helm release",
     crdEstablished: "Established",
     crdNotEstablished: "Not established",
