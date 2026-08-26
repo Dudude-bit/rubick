@@ -189,7 +189,7 @@ function describeFormat(logs: StreamedLogLine[], t: ReturnType<typeof useT>) {
   if (counts.size === 1) {
     return {
       label: dominant,
-      description: FORMAT_DESCRIPTIONS[dominant],
+      description: t("readings", FORMAT_DESCRIPTIONS[dominant]),
     };
   }
 
@@ -197,7 +197,7 @@ function describeFormat(logs: StreamedLogLine[], t: ReturnType<typeof useT>) {
   if (share >= 90) {
     return {
       label: `${dominant} (${share}%)`,
-      description: FORMAT_DESCRIPTIONS[dominant],
+      description: t("readings", FORMAT_DESCRIPTIONS[dominant]),
     };
   }
   return {

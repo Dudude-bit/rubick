@@ -18,6 +18,14 @@ import { useT } from "@/i18n/useT";
  * connecting, and a second cluster switcher hidden in Settings is how two
  * of them drift apart.
  */
+/** The four states a context can be in, in words. */
+const CONTEXT_STATUS = {
+  connected: "contextConnected",
+  ready: "contextReady",
+  "cannot connect": "contextCannotConnect",
+  "cannot tell": "contextCannotTell",
+} as const;
+
 export function ContextRow({
   context,
   binding,
@@ -40,8 +48,8 @@ export function ContextRow({
    */
   fromFile?: string;
 }) {
-  const reading = readContext(context, { binaries, binding, connected });
   const t = useT();
+  const reading = readContext(context, { binaries, binding, connected }, t);
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
   const colour = clusterColor(context.name, mark.hue);
@@ -160,7 +168,7 @@ export function ContextRow({
               : "text-fg-fnt"
         )}
       >
-        {reading.status}
+        {t("settings", CONTEXT_STATUS[reading.status])}
       </span>
     </div>
   );

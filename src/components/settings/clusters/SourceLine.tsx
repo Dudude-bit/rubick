@@ -44,7 +44,7 @@ export function SourceLine() {
   const visible = useSettingSearchMatch(
     primary?.path ?? "",
     provenance,
-    "kubeconfig file source contexts $KUBECONFIG default lookup override"
+    t("settings", "searchKubeconfigWords")
   );
 
   /**

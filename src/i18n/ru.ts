@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    dataTable: "Таблица данных",
     protectsVerb: "защищает",
     scalesVerb: "масштабирует",
     actsOn: "действует на",
@@ -406,6 +407,9 @@ export const ru: Catalogue = {
     delivery: "Доставка",
   },
   action: {
+    compactView: "Компактный вид",
+    comfortableView: "Свободный вид",
+    searchEllipsis: "Поиск…",
     verbAnyway: "{verb} всё равно",
     noClusterSelected: "Кластер не выбран",
     portsOutOfRange: "Порты должны быть от 1 до 65535.",
@@ -1309,6 +1313,12 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    logFormatJson: "Структурированный JSON с разобранными полями",
+    logFormatLogfmt: 'Пары ключ=значение (например, level=info msg="hello")',
+    logFormatKlog: "Формат логов Kubernetes с префиксом уровня (I/W/E/F)",
+    logFormatLogback: "Формат Java Logback со временем и уровнем",
+    logFormatPlain: "Обычный текст без структуры",
+    noTimestamp: "времени нет",
     awsPortNumber: "порт {port}",
     awsNoTargetGroup: "целевая группа не указана",
     gcpEveryPort: "любой порт",
@@ -2131,6 +2141,25 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    contextConnected: "подключён",
+    contextReady: "готов",
+    contextCannotConnect: "подключиться нельзя",
+    contextCannotTell: "определить нельзя",
+    searchMissingWords: "не найден отсутствует путь",
+    searchContextWords: "контекст kubeconfig аутентификация",
+    searchKubeconfigWords:
+      "kubeconfig файл источник контексты $KUBECONFIG по умолчанию поиск переопределение",
+    searchToolsWords: "kubectl helm cli инструменты бинарник путь версия",
+    searchCloudWords:
+      "облако профили gcp google azure adc az вход учётные данные",
+    searchNoContextsWords: "нет контекстов kubeconfig пусто кластеры",
+    searchIntegrationsWords: "интеграции расширения",
+    toolsNoProfiles: "— не заданы.",
+    toolsNoGcp: "для GCP нет",
+    toolsNoAzure: "для Azure нет",
+    toolsProfiles: "— {gcp}, {azure}.",
+    toolsGcpCount: "{n} GCP",
+    toolsAzureCount: "{n} Azure",
     lookingForBinary: "Ищем исполняемый файл…",
     kubeconfigRestored: "Kubeconfig восстановлен",
     kubeconfigUpdated: "Kubeconfig изменён",

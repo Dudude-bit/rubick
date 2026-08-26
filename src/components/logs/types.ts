@@ -24,6 +24,8 @@ export type ViewMode = "compact" | "table" | "raw";
  * timestamp or running six regexes inside those loops is the difference
  * between a viewer and a stall.
  */
+
+import type { T } from "@/i18n/useT";
 export type StreamedLogLine = LogLine & {
   id: number;
   /** ms since epoch; carried forward from the last line of the same stream when the line has no timestamp. */
@@ -133,13 +135,14 @@ export const LEVEL_COLORS = byRole({
   mut: "text-fg-fnt",
 });
 
-export const FORMAT_DESCRIPTIONS: Record<LogFormat, string> = {
-  json: "Structured JSON log format with parsed fields",
-  logfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
-  klog: "Kubernetes log format with severity prefix (I/W/E/F)",
-  logback: "Java Logback format with timestamp and level",
-  plain: "Plain text without structured formatting",
-};
+/** What each format is, as catalogue keys: this table is read at import. */
+export const FORMAT_DESCRIPTIONS = {
+  json: "logFormatJson",
+  logfmt: "logFormatLogfmt",
+  klog: "logFormatKlog",
+  logback: "logFormatLogback",
+  plain: "logFormatPlain",
+} as const satisfies Record<LogFormat, string>;
 
 /**
  * Wall clock, 24-hour, fixed width. `toLocaleTimeString` was the reason the
@@ -156,8 +159,8 @@ export function formatTimestamp(timestamp: string | null): string {
 }
 
 /** The same clock with milliseconds, for the detail where there is room. */
-export function formatTimestampPrecise(timestamp: string | null): string {
-  if (!timestamp) return "no timestamp";
+export function formatTimestampPrecise(timestamp: string | null, t: T): string {
+  if (!timestamp) return t("readings", "noTimestamp");
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   const ms = String(date.getMilliseconds()).padStart(3, "0");

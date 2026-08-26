@@ -118,7 +118,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
 function NothingInstalled({ couldNotLook }: { couldNotLook: boolean }) {
   const t = useT();
   const visible = useSettingSearchMatch(
-    "integrations extensions",
+    t("settings", "searchIntegrationsWords"),
     EXTENSION_NAMES.join(" ")
   );
   return (

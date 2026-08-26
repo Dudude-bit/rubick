@@ -248,7 +248,7 @@ export function DataTable<TData, TValue>({
   data,
   isLoading = false,
   searchKey,
-  searchPlaceholder = "Search...",
+  searchPlaceholder,
   enableVirtualScroll,
   fill = false,
   virtualScrollHeight = VIRTUAL_SCROLL_DEFAULT_HEIGHT,
@@ -697,8 +697,8 @@ export function DataTable<TData, TValue>({
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <input
               type="text"
-              aria-label={searchPlaceholder}
-              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
+              placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
               onChange={(event) => setSearchValue(event.target.value)}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
@@ -735,7 +735,9 @@ export function DataTable<TData, TValue>({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isCompact ? "Comfortable view" : "Compact view"}
+                {isCompact
+                  ? t("action", "comfortableView")
+                  : t("action", "compactView")}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -744,7 +746,7 @@ export function DataTable<TData, TValue>({
           ref={containerRef}
           className={cn(fill && "flex min-h-0 flex-col")}
           role={keyboardNavEnabled ? "grid" : undefined}
-          aria-label={keyboardNavEnabled ? "Data table" : undefined}
+          aria-label={keyboardNavEnabled ? t("nav", "dataTable") : undefined}
         >
           <Table
             // The scroll port has to be the element the header sticks to and

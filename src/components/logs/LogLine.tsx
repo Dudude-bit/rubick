@@ -1,3 +1,4 @@
+import { useT } from "@/i18n/useT";
 import { memo } from "react";
 import type { LogLevel, LogLine as LogLineType } from "@/generated/types";
 import { runSpanMs, type LogRun } from "./grouping";
@@ -201,12 +202,13 @@ function LineDetail({
   onFieldClick?: (key: string, value: string) => void;
   onLevelClick?: (level: LogLevel) => void;
 }) {
+  const t = useT();
   const level = log.level ?? "unknown";
   return (
     <div className="ml-16 mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-[11px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-fnt">
         <span className="tabular-nums text-fg-mut">
-          {formatTimestampPrecise(log.timestamp)}
+          {formatTimestampPrecise(log.timestamp, t)}
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -231,7 +233,9 @@ function LineDetail({
         >
           level={LEVEL_WORDS[level]}
         </button>
-        <span title={FORMAT_DESCRIPTIONS[log.format]}>{log.format}</span>
+        <span title={t("readings", FORMAT_DESCRIPTIONS[log.format])}>
+          {log.format}
+        </span>
       </div>
       <p className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-fg-mid">
         {log.message}

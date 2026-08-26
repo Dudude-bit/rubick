@@ -41,6 +41,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    dataTable: "Data table",
     protectsVerb: "protects",
     scalesVerb: "scales",
     actsOn: "acts on",
@@ -441,6 +442,9 @@ export const en = {
     delivery: "Delivery",
   },
   action: {
+    compactView: "Compact view",
+    comfortableView: "Comfortable view",
+    searchEllipsis: "Search...",
     verbAnyway: "{verb} anyway",
     noClusterSelected: "No cluster selected",
     portsOutOfRange: "Ports must be between 1 and 65535.",
@@ -1317,6 +1321,12 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    logFormatJson: "Structured JSON log format with parsed fields",
+    logFormatLogfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
+    logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
+    logFormatLogback: "Java Logback format with timestamp and level",
+    logFormatPlain: "Plain text without structured formatting",
+    noTimestamp: "no timestamp",
     awsPortNumber: "port {port}",
     awsNoTargetGroup: "no target group named",
     gcpEveryPort: "every port",
@@ -2006,6 +2016,25 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    contextConnected: "connected",
+    contextReady: "ready",
+    contextCannotConnect: "cannot connect",
+    contextCannotTell: "cannot tell",
+    searchMissingWords: "not found missing path",
+    searchContextWords: "context kubeconfig authentication",
+    searchKubeconfigWords:
+      "kubeconfig file source contexts $KUBECONFIG default lookup override",
+    searchToolsWords: "kubectl helm cli tools binary path version",
+    searchCloudWords:
+      "cloud profiles gcp google azure adc az login credentials",
+    searchNoContextsWords: "no contexts kubeconfig empty clusters",
+    searchIntegrationsWords: "integrations extensions",
+    toolsNoProfiles: "— none defined.",
+    toolsNoGcp: "none for GCP",
+    toolsNoAzure: "none for Azure",
+    toolsProfiles: "— {gcp}, {azure}.",
+    toolsGcpCount: "{n} GCP",
+    toolsAzureCount: "{n} Azure",
     lookingForBinary: "Looking for the binary…",
     kubeconfigRestored: "Kubeconfig restored",
     kubeconfigUpdated: "Kubeconfig updated",

@@ -172,9 +172,8 @@ function ListCaption({ count }: { count: number }) {
 }
 
 function NoContexts() {
-  const visible = useSettingSearchMatch(
-    "no contexts kubeconfig empty clusters"
-  );
+  const t = useT();
+  const visible = useSettingSearchMatch(t("settings", "searchNoContextsWords"));
   return (
     <div className={visible ? "max-w-[64ch] py-8" : "hidden"} hidden={!visible}>
       <h3 className="text-xs font-medium text-fg">
