@@ -1334,6 +1334,22 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    argoMissing: "missing",
+    argoFailedToApply: "failed to apply",
+    argoDegraded: "degraded",
+    argoProgressing: "progressing",
+    azureNoIdentityNamedPlain: "no identity named",
+    azureUserAssignedMsi: "user-assigned MSI",
+    azureServicePrincipal: "service principal",
+    azureServicePrincipalCert: "service principal (certificate)",
+    azureBinds: "binds {name}",
+    azureToPodsLabelled: "to pods labelled aadpodidbinding={selector}",
+    azureNamesNeither: "names neither an identity nor a selector",
+    azureAnyHostname: "any hostname",
+    argoSynced: "synced",
+    argoNotCompared: "not compared",
+    argoThisCluster: "this cluster",
+    argoNamespaceCount: { one: "{n} namespace", other: "{n} namespaces" },
     relReadsFrom: "reads from",
     relWaitsFor: "waits for",
     relManages: "manages",
@@ -2089,6 +2105,9 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    updateAvailableTitle: "Update available",
+    updateAvailableToast:
+      "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
     provenanceNothingFound: "nothing was found",
     provenancePinned: "pinned here, in this app",

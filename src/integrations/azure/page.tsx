@@ -196,9 +196,9 @@ export default function AksAddonsPage() {
                 <Column label={t("columns", "says")}>
                   <Cell
                     bad={dangling.includes(binding)}
-                    title={bindingSummary(binding)}
+                    title={bindingSummary(binding, t)}
                   >
-                    {bindingSummary(binding)}
+                    {bindingSummary(binding, t)}
                   </Cell>
                 </Column>
                 <Column label={t("columns", "identity")}>

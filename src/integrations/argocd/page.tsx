@@ -268,7 +268,7 @@ function ApplicationsTab({
       (app) =>
         app.name.toLowerCase().includes(needle) ||
         app.project.toLowerCase().includes(needle) ||
-        destinationOf(app).toLowerCase().includes(needle) ||
+        destinationOf(app, t).toLowerCase().includes(needle) ||
         app.sources.some((source) =>
           source.repoUrl.toLowerCase().includes(needle)
         ) ||
@@ -276,7 +276,7 @@ function ApplicationsTab({
           resource.name.toLowerCase().includes(needle)
         )
     );
-  }, [apps, filter]);
+  }, [apps, filter, t]);
 
   if (loading) {
     return (
@@ -360,7 +360,7 @@ function AppRow({
   last: boolean;
 }) {
   const t = useT();
-  const state = appState(app);
+  const state = appState(app, t);
   const changed = differing(app);
   const url = applicationUrl(ui, app);
 
@@ -377,7 +377,7 @@ function AppRow({
         <>
           {t("empty", "argoProjectDestination", {
             project: app.project,
-            destination: destinationOf(app),
+            destination: destinationOf(app, t),
           })}
           {app.generatedBy &&
             ` · ${t("empty", "generatedByName", {
@@ -632,18 +632,19 @@ function ResourceLine({
   resource: ArgoResource;
   crdFor: CrdLookup;
 }) {
+  const t = useT();
   const tone = resourceTone(resource);
   const said =
     resource.sync === "Missing"
-      ? "missing"
+      ? t("readings", "argoMissing")
       : resource.outcome === "SyncFailed"
-        ? "failed to apply"
+        ? t("readings", "argoFailedToApply")
         : resource.sync !== null && resource.sync !== "Synced"
-          ? "out of sync"
+          ? t("readings", "argoOutOfSync")
           : resource.health === "Degraded"
-            ? "degraded"
+            ? t("readings", "argoDegraded")
             : resource.health === "Progressing"
-              ? "progressing"
+              ? t("readings", "argoProgressing")
               : null;
 
   return (

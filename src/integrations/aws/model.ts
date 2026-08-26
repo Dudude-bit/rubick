@@ -92,9 +92,9 @@ export function bindingFailure(binding: CustomResourceInfo): string | null {
   const ready = conditionOf(binding, "Ready");
   if (!ready || ready.status !== "False") return null;
   return (
-    ready.message?.trim() ||
-    ready.reason?.trim() ||
-    "the controller marked it not ready"
+    // The controller's own words, or nothing: our sentence in this slot
+    // would read as its own, which it is not.
+    ready.message?.trim() || ready.reason?.trim() || null
   );
 }
 

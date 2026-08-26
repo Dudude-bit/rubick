@@ -25,7 +25,7 @@ const identityColumns: CrdColumn[] = [
   {
     id: "type",
     header: "type",
-    accessor: (resource) => identityType(resource),
+    accessor: (resource, t) => identityType(resource, t),
     cell: dash,
   },
   {
@@ -100,7 +100,7 @@ const prohibitedColumns: CrdColumn[] = [
   {
     id: "target",
     header: "leavesAlone",
-    accessor: (resource) => prohibitedTargetSummary(resource),
+    accessor: (resource, t) => prohibitedTargetSummary(resource, t),
     cell: dash,
   },
 ];

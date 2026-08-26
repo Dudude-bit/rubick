@@ -1,3 +1,4 @@
+import { useT } from "@/i18n/useT";
 import { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
@@ -29,6 +30,7 @@ interface UsePodsWithMetricsOptions {
  * with the same namespace will share the cached data.
  */
 export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
+  const t = useT();
   const { isConnected, currentNamespace } = useClusterStore();
   const enabled = isConnected && options?.enabled !== false;
 
@@ -48,11 +50,14 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
       if (watchFailed) return;
       setWatchFailed(true);
       toast({
-        title: "Real-time updates unavailable",
-        description: `Pods: falling back to periodic refresh. ${err}`,
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "fallingBackToPolling", {
+          title: "Pods",
+          error: err,
+        }),
       });
     },
-    [toast, watchFailed]
+    [toast, watchFailed, t]
   );
 
   const {

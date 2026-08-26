@@ -1326,6 +1326,27 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    argoMissing: "отсутствует",
+    argoFailedToApply: "применить не удалось",
+    argoDegraded: "деградировал",
+    argoProgressing: "в процессе",
+    azureNoIdentityNamedPlain: "identity не указана",
+    azureUserAssignedMsi: "назначаемая пользователем MSI",
+    azureServicePrincipal: "сервисный принципал",
+    azureServicePrincipalCert: "сервисный принципал (сертификат)",
+    azureBinds: "привязывает {name}",
+    azureToPodsLabelled: "к подам с меткой aadpodidbinding={selector}",
+    azureNamesNeither: "не называет ни identity, ни селектор",
+    azureAnyHostname: "любое имя хоста",
+    argoSynced: "синхронизировано",
+    argoNotCompared: "не сверялось",
+    argoThisCluster: "этот кластер",
+    argoNamespaceCount: {
+      one: "{n} неймспейс",
+      few: "{n} неймспейса",
+      many: "{n} неймспейсов",
+      other: "{n} неймспейса",
+    },
     relReadsFrom: "читает из",
     relWaitsFor: "ждёт",
     relManages: "управляет",
@@ -2223,6 +2244,9 @@ export const ru: Catalogue = {
     },
   },
   settings: {
+    updateAvailableTitle: "Доступно обновление",
+    updateAvailableToast:
+      "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",
     provenanceNothingFound: "ничего не найдено",
     provenancePinned: "закреплён здесь, в этом приложении",

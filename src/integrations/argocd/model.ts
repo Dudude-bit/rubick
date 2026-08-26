@@ -36,6 +36,7 @@
  * the API, the diff arrives through the same seam without this file changing.
  */
 
+import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
 
@@ -126,7 +127,7 @@ export type ArgoFinding =
   | {
       kind: "syncFailing";
       severity: "err";
-      message: string;
+      message: string | null;
       since: string | null;
       retries: number;
     }
@@ -134,7 +135,7 @@ export type ArgoFinding =
   | {
       kind: "syncFailedOnce";
       severity: "err";
-      message: string;
+      message: string | null;
       since: string | null;
     }
   /** Out of sync with nothing on its way to fix it. */
@@ -321,10 +322,12 @@ function syncFailed(app: ArgoApp, hadResults: boolean): boolean {
 function findingsFor(app: ArgoApp, hadResults: boolean): ArgoFinding[] {
   const findings: ArgoFinding[] = [];
   const failed = syncFailed(app, hadResults);
+  // Argo's own words, or nothing: our sentence in this slot would read as
+  // the controller's, which it is not.
   const message =
     app.operationMessage ??
     app.resources.find((resource) => resource.message)?.message ??
-    "Argo reported the sync as failed and said nothing more.";
+    null;
 
   if (failed && app.autoSync) {
     findings.push({
@@ -458,16 +461,19 @@ export function resourceTone(resource: ArgoResource): "err" | "warn" | null {
  * which is which; a status column that claimed to tell them apart would be
  * inventing a word Argo does not have.
  */
-export function appState(app: ArgoApp): {
+export function appState(
+  app: ArgoApp,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
   const words = [
     app.sync === "Synced"
-      ? "synced"
+      ? t("readings", "argoSynced")
       : app.sync === "OutOfSync"
-        ? "out of sync"
-        : "not compared",
+        ? t("readings", "argoOutOfSync")
+        : t("readings", "argoNotCompared"),
     app.health.toLowerCase(),
   ];
   return {
@@ -487,14 +493,15 @@ export function byTrouble(apps: ArgoApp[]): ArgoApp[] {
 }
 
 /** How many namespaces an Application actually writes into. */
-export function destinationOf(app: ArgoApp): string {
+export function destinationOf(app: ArgoApp, t: T): string {
   const namespaces = new Set(
     app.resources
       .map((resource) => resource.namespace)
       .filter((namespace): namespace is string => Boolean(namespace))
   );
   if (app.destination.namespace) namespaces.add(app.destination.namespace);
-  if (namespaces.size === 0) return app.destination.server ?? "this cluster";
+  if (namespaces.size === 0)
+    return app.destination.server ?? t("readings", "argoThisCluster");
   if (namespaces.size === 1) return [...namespaces][0];
-  return `${namespaces.size} namespaces`;
+  return t("readings", "argoNamespaceCount", { n: namespaces.size });
 }
