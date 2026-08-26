@@ -238,10 +238,11 @@ export function overdueBy(
 }
 
 /** Who vouched for it, in the words the certificate itself uses. */
-export function issuedBy(facts: CertificateFacts): string {
-  if (facts.selfSigned)
-    return "self-signed — nothing above it vouched for this";
-  return facts.issuer ? `issued by ${facts.issuer}` : "issuer not named";
+export function issuedBy(facts: CertificateFacts, t: T): string {
+  if (facts.selfSigned) return t("readings", "certSelfSigned");
+  return facts.issuer
+    ? t("readings", "certIssuedBy", { name: facts.issuer })
+    : t("readings", "certIssuerNotNamed");
 }
 
 /**

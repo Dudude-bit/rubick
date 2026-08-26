@@ -111,6 +111,7 @@ import {
   type HostGroup,
   type TraefikRoute,
   type TraefikSources,
+  UNNAMED_TARGET,
 } from "./model";
 import { describePath, fullyRead } from "./rule";
 import { useT } from "@/i18n/useT";
@@ -1261,7 +1262,9 @@ function EntryPointsTab({
           {t("empty", "cannotSayWhatTraefikListensOn")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ?? t("empty", "entryPointsAreStatic")}
+          {controller.problem
+            ? sayWords(controller.problem, t)
+            : t("empty", "entryPointsAreStatic")}
         </p>
       </div>
     );
@@ -1299,7 +1302,12 @@ function EntryPointsTab({
               </span>
               <span className="truncate text-fg-mut">
                 {entry.redirectTo
-                  ? t("empty", "redirectsTo", { target: entry.redirectTo })
+                  ? t("empty", "redirectsTo", {
+                      target:
+                        entry.redirectTo === UNNAMED_TARGET
+                          ? t("readings", "traefikAnotherEntryPoint")
+                          : entry.redirectTo,
+                    })
                   : t("count", "hostsLandHere", { n: landing.length })}
               </span>
             </div>
@@ -1385,12 +1393,14 @@ function ControllerTab({
               </span>
             )}
             {controller.problem && (
-              <p className="text-[11px] text-warn">{controller.problem}</p>
+              <p className="text-[11px] text-warn">
+                {sayWords(controller.problem, t)}
+              </p>
             )}
           </div>
         ) : (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         )}
       </Section>

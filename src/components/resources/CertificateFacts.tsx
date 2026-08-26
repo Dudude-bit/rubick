@@ -63,7 +63,7 @@ export function CertificateLine({
       <span className={cn("text-xs", toneClass(expiry.tone))}>
         {expiryText(expiry, t)}
       </span>
-      <span className="text-[11px] text-fg-fnt">{issuedBy(cert)}</span>
+      <span className="text-[11px] text-fg-fnt">{issuedBy(cert, t)}</span>
       {uncovered.length > 0 && (
         <span className="text-[11px] text-err">
           {t("empty", "doesNotCover", { names: uncovered.join(", ") })}
@@ -149,7 +149,7 @@ export function CertificateSection({
             tone: expiry.tone ?? undefined,
           },
           { label: t("columns", "valid"), value: dates },
-          { label: t("columns", "issuedBy"), value: issuedBy(cert) },
+          { label: t("columns", "issuedBy"), value: issuedBy(cert, t) },
           { label: t("columns", "serial"), value: cert.serial, mono: true },
         ]}
       />

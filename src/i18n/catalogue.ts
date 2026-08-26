@@ -1334,6 +1334,16 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    traefikAnotherEntryPoint: "another entry point",
+    certSelfSigned: "self-signed — nothing above it vouched for this",
+    certIssuedBy: "issued by {name}",
+    certIssuerNotNamed: "issuer not named",
+    traefikNoController:
+      "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
+    traefikManifestUnreadable:
+      "Its manifest could not be read, so its entry points are unknown — {why}",
+    traefikNoArgs:
+      "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
       "{host} is a name only the cluster can resolve — this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
     reachNoScheme:

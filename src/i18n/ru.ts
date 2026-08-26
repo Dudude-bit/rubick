@@ -1326,6 +1326,16 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    traefikAnotherEntryPoint: "другая точка входа",
+    certSelfSigned: "самоподписанный — за него никто выше не поручился",
+    certIssuedBy: "выпущен: {name}",
+    certIssuerNotNamed: "издатель не указан",
+    traefikNoController:
+      "Ничто в этом кластере не несёт {selector}, поэтому собственную конфигурацию прокси прочитать не удалось.",
+    traefikManifestUnreadable:
+      "Его манифест прочитать не удалось, поэтому точки входа неизвестны — {why}",
+    traefikNoArgs:
+      "Он запущен без аргументов, поэтому его точки входа заданы в файле конфигурации, который приложение прочитать не может.",
     reachClusterDns:
       "{host} — имя, которое умеет разрешать только кластер, а это приложение работает на вашей машине и спрашивает отсюда, а не изнутри кластера. Либо укажите адрес, доступный отсюда (имя из Ingress, адрес LoadBalancer), либо пробросьте порт и используйте его: kubectl port-forward -n <namespace> svc/<service> 9090:9090, затем http://localhost:9090.",
     reachNoScheme:

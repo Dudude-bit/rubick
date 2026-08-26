@@ -470,6 +470,14 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
  * flags the proxy was started with, which is why nothing in a cluster can
  * answer "what does this listen on" without reading the workload itself.
  */
+/**
+ * The target of a redirection that names none.
+ *
+ * A sentinel rather than a sentence: this is read in a query, and the page
+ * says it in the reader's language.
+ */
+export const UNNAMED_TARGET = "\u0000unnamed";
+
 export function readEntryPoints(args: string[]): EntryPoint[] {
   const found = new Map<string, EntryPoint>();
 
@@ -508,7 +516,7 @@ export function readEntryPoints(args: string[]): EntryPoint[] {
       // A redirection block with only a scheme still redirects; the target
       // is unknown, and saying "somewhere" beats saying nothing.
       const entry = at(name);
-      entry.redirectTo = entry.redirectTo ?? "another entry point";
+      entry.redirectTo = entry.redirectTo ?? UNNAMED_TARGET;
     }
   }
 
