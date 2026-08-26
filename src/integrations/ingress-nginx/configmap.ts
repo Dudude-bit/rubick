@@ -18,7 +18,8 @@
  * disagreeing.
  */
 
-import { RAW_NOTE, sayFor, type RawReason } from "./annotations";
+import type { T } from "@/i18n/useT";
+import { rawNote, sayFor, type RawReason } from "./annotations";
 
 export interface SettingReading {
   key: string;
@@ -29,7 +30,7 @@ export interface SettingReading {
   overridable: boolean;
 }
 
-export { RAW_NOTE };
+export { rawNote };
 
 function bool(value: string): boolean | null {
   const lowered = value.trim().toLowerCase();
@@ -51,133 +52,112 @@ function some(value: string): string | null {
  * The keys that exist only here — the ones that are about the proxy rather
  * than about a route, and so have no annotation to share a sentence with.
  */
-const GLOBAL: Record<string, (value: string) => string | null> = {
-  "allow-snippet-annotations": (value) => {
+const GLOBAL: Record<string, (value: string, t: T) => string | null> = {
+  "allow-snippet-annotations": (value, t) => {
     const on = bool(value);
     if (on === null) return null;
     return on
-      ? "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet."
-      : "configuration-snippet and server-snippet on an Ingress are ignored — an Ingress carrying one is not doing what it says.";
+      ? t("readings", "ngxSnippetsAllowed")
+      : t("readings", "ngxSnippetsIgnored");
   },
-  "annotations-risk-level": (value) =>
+  "annotations-risk-level": (value, t) =>
     ({
-      critical:
-        "Every annotation is honoured, including the ones that can execute configuration.",
-      high: "Annotations up to the High risk level are honoured; Critical ones — the snippets — are ignored.",
-      medium:
-        "Only Low and Medium risk annotations are honoured; anything above is ignored.",
-      low: "Only Low risk annotations are honoured; most of the interesting ones are ignored.",
+      critical: t("readings", "ngxRiskCritical"),
+      high: t("readings", "ngxRiskHigh"),
+      medium: t("readings", "ngxRiskMedium"),
+      low: t("readings", "ngxRiskLow"),
     })[value.trim().toLowerCase()] ?? null,
-  "use-forwarded-headers": (value) => {
+  "use-forwarded-headers": (value, t) => {
     const on = bool(value);
     if (on === null) return null;
     return on
       ? "X-Forwarded-For from the client is trusted and passed through, which is right behind a load balancer and wrong when nginx faces the internet."
-      : "X-Forwarded-For from the client is replaced with the address nginx actually saw.";
+      : t("readings", "ngxForwardedReplaced");
   },
-  "compute-full-forwarded-for": (value) =>
-    bool(value)
-      ? "The client's address is appended to X-Forwarded-For rather than replacing it."
-      : null,
-  "enable-real-ip": (value) =>
-    bool(value)
-      ? "The client's real address is taken from the proxy protocol or the forwarded header rather than from the connection."
-      : null,
-  "proxy-real-ip-cidr": (value) => {
+  "compute-full-forwarded-for": (value, t) =>
+    bool(value) ? t("readings", "ngxForwardedAppended") : null,
+  "enable-real-ip": (value, t) =>
+    bool(value) ? t("readings", "ngxRealIpFromProxy") : null,
+  "proxy-real-ip-cidr": (value, t) => {
     const ranges = some(value);
     return ranges === null
       ? null
-      : `Forwarded headers are trusted only from ${ranges}; from anywhere else they are ignored.`;
+      : t("readings", "ngxTrustedRanges", { ranges });
   },
-  "server-tokens": (value) => {
+  "server-tokens": (value, t) => {
     const on = bool(value);
     if (on === null) return null;
     return on
-      ? "Responses carry the nginx version in the Server header."
-      : "The nginx version is kept out of responses and error pages.";
+      ? t("readings", "ngxServerTokensOn")
+      : t("readings", "ngxServerTokensOff");
   },
-  "ssl-protocols": (value) => {
+  "ssl-protocols": (value, t) => {
     const versions = some(value);
     return versions === null
       ? null
-      : `Only ${versions} are offered to clients; anything older is refused at the handshake.`;
+      : t("readings", "ngxTlsVersions", { versions });
   },
-  hsts: (value) => {
+  hsts: (value, t) => {
     const on = bool(value);
     if (on === null) return null;
-    return on
-      ? "Every TLS response tells the browser to refuse plain HTTP to this host in future."
-      : "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.";
+    return on ? t("readings", "ngxHstsOn") : t("readings", "ngxHstsOff");
   },
-  "hsts-max-age": (value) => {
+  "hsts-max-age": (value, t) => {
     const age = whole(value);
-    return age === null
-      ? null
-      : `The browser is told to remember that for ${age} seconds.`;
+    return age === null ? null : t("readings", "ngxHstsAge", { age });
   },
-  "use-http2": (value) => {
+  "use-http2": (value, t) => {
     const on = bool(value);
     if (on === null) return null;
-    return on
-      ? "HTTP/2 is offered on the TLS listener."
-      : "HTTP/2 is switched off; every client falls back to HTTP/1.1.";
+    return on ? t("readings", "ngxHttp2On") : t("readings", "ngxHttp2Off");
   },
-  "use-gzip": (value) =>
-    bool(value) ? "Responses are compressed before they leave nginx." : null,
-  "worker-processes": (value) => {
+  "use-gzip": (value, t) => (bool(value) ? t("readings", "ngxGzipOn") : null),
+  "worker-processes": (value, t) => {
     const trimmed = value.trim().toLowerCase();
     if (trimmed === "auto") {
-      return "One nginx worker per CPU the container is allowed.";
+      return t("readings", "ngxWorkersAuto");
     }
     const count = whole(value);
-    return count === null
-      ? null
-      : `${count} nginx worker${count === 1 ? "" : "s"}, whatever the container's CPU allowance is.`;
+    return count === null ? null : t("count", "ngxWorkers", { n: count });
   },
-  "max-worker-connections": (value) => {
+  "max-worker-connections": (value, t) => {
     const count = whole(value);
     return count === null
       ? null
-      : `One worker holds at most ${count} connections; past that new ones wait.`;
+      : t("readings", "ngxWorkerConnections", { count });
   },
-  "keep-alive": (value) => {
+  "keep-alive": (value, t) => {
     const wait = whole(value);
     return wait === null
       ? null
-      : `An idle client connection is held open for ${wait} seconds before nginx closes it.`;
+      : t("readings", "ngxKeepaliveTimeout", { wait });
   },
-  "keep-alive-requests": (value) => {
+  "keep-alive-requests": (value, t) => {
     const count = whole(value);
     return count === null
       ? null
-      : `A client connection is reused for ${count} requests and then closed.`;
+      : t("readings", "ngxKeepaliveRequests", { count });
   },
-  "upstream-keepalive-connections": (value) => {
+  "upstream-keepalive-connections": (value, t) => {
     const count = whole(value);
     return count === null
       ? null
-      : `${count} idle connections per backend are kept open for reuse.`;
+      : t("readings", "ngxUpstreamKeepalive", { count });
   },
-  "disable-access-log": (value) =>
-    bool(value)
-      ? "Nothing is written to the access log, so this controller's logs will not show a request that reached it."
-      : null,
-  "error-log-level": (value) =>
+  "disable-access-log": (value, t) =>
+    bool(value) ? t("readings", "ngxAccessLogOff") : null,
+  "error-log-level": (value, t) =>
     ({
-      debug: "The error log carries everything, including per-request detail.",
-      info: "The error log carries informational messages and worse.",
-      notice: "The error log carries notices and worse.",
-      warn: "The error log carries warnings and worse.",
-      error: "The error log carries errors only.",
+      debug: t("readings", "ngxErrorDebug"),
+      info: t("readings", "ngxErrorInfo"),
+      notice: t("readings", "ngxErrorNotice"),
+      warn: t("readings", "ngxErrorWarn"),
+      error: t("readings", "ngxErrorError"),
     })[value.trim().toLowerCase()] ?? null,
-  "enable-modsecurity": (value) =>
-    bool(value)
-      ? "Every request is passed through ModSecurity before it reaches a backend."
-      : null,
-  "enable-owasp-modsecurity-crs": (value) =>
-    bool(value)
-      ? "ModSecurity runs with the OWASP core rule set loaded."
-      : null,
+  "enable-modsecurity": (value, t) =>
+    bool(value) ? t("readings", "ngxModsecOn") : null,
+  "enable-owasp-modsecurity-crs": (value, t) =>
+    bool(value) ? t("readings", "ngxModsecOwasp") : null,
 };
 
 /** How many settings this app will state a sentence about, its own plus the
@@ -193,10 +173,10 @@ export const GLOBAL_KEYS = Object.keys(GLOBAL).length;
  * one route behaves differently from the rest needs to know which they are
  * looking at.
  */
-export function readSetting(key: string, value: string): SettingReading {
+export function readSetting(key: string, value: string, t: T): SettingReading {
   const own = GLOBAL[key];
   if (own) {
-    const said = own(value);
+    const said = own(value, t);
     return {
       key,
       value,
@@ -208,7 +188,7 @@ export function readSetting(key: string, value: string): SettingReading {
 
   const shared = sayFor(key);
   if (shared) {
-    const said = shared(value, {});
+    const said = shared(value, {}, t);
     return {
       key,
       value,
@@ -228,8 +208,11 @@ export function readSetting(key: string, value: string): SettingReading {
  * of global settings — nobody arrives at it chasing a request through a
  * chain — and a reader here is looking up a key they already have in mind.
  */
-export function readSettings(data: Record<string, string>): SettingReading[] {
+export function readSettings(
+  data: Record<string, string>,
+  t: T
+): SettingReading[] {
   return Object.entries(data)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => readSetting(key, value));
+    .map(([key, value]) => readSetting(key, value, t));
 }

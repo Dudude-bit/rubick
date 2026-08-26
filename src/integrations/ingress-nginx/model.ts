@@ -26,6 +26,7 @@
  * grouped under the host it shadows and read as a share of it.
  */
 
+import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   IngressClassSummary,
@@ -248,8 +249,8 @@ function canaryOf(annotations: Record<string, string>): Canary | null {
   };
 }
 
-function routesFrom(ingress: IngressInfo, index: number): NginxRoute[] {
-  const annotations = readAnnotations(ingress.annotations);
+function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
+  const annotations = readAnnotations(ingress.annotations, t);
   const canary = canaryOf(ingress.annotations);
 
   const routes = ingress.rules.flatMap((rule, ruleIndex) =>
@@ -312,10 +313,10 @@ function routesFrom(ingress: IngressInfo, index: number): NginxRoute[] {
 }
 
 /** Every route this nginx serves. */
-export function allRoutes(sources: NginxSources): NginxRoute[] {
+export function allRoutes(sources: NginxSources, t: T): NginxRoute[] {
   return sources.ingresses
     .filter((ingress) => claimsIngress(ingress, sources.classes, CONTROLLER))
-    .flatMap(routesFrom);
+    .flatMap((ingress, index) => routesFrom(ingress, index, t));
 }
 
 export function backingOf(
@@ -461,8 +462,8 @@ export function splitOf(routes: NginxRoute[]): HostSplit | null {
  * By trouble rather than by name, because the reader who opens this has a
  * URL that is not working and eighty hosts that are.
  */
-export function hostGroups(sources: NginxSources): NginxHostGroup[] {
-  const routes = allRoutes(sources);
+export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
+  const routes = allRoutes(sources, t);
   const byHost = new Map<string, NginxRoute[]>();
   for (const route of routes) {
     const key = route.host ?? "";

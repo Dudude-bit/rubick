@@ -1,4 +1,9 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import type {
   IngressClassSummary,
@@ -131,7 +136,8 @@ describe("what a defaultBackend Ingress serves", () => {
             resourceBackend: null,
           },
         },
-      ])
+      ]),
+      t
     );
 
     expect(routes).toHaveLength(1);
@@ -152,7 +158,7 @@ describe("which Ingresses are this controller's", () => {
     const theirs = ingress("blog", "blog.test", { className: "traefik" });
     const unclassed = ingress("legacy", "legacy.test", { className: null });
 
-    const routes = allRoutes(sources([mine, theirs, unclassed]));
+    const routes = allRoutes(sources([mine, theirs, unclassed]), t);
     expect(routes.map((route) => route.source.name)).toEqual(["shop"]);
   });
 });
@@ -172,7 +178,8 @@ describe("a canary reads as one weighted host", () => {
           service: "web-next",
           annotations: canary("20"),
         }),
-      ])
+      ]),
+      t
     );
 
     expect(groups).toHaveLength(1);
@@ -190,7 +197,8 @@ describe("a canary reads as one weighted host", () => {
             service: "web-next",
             annotations: canary("20"),
           }),
-        ])
+        ]),
+        t
       )
     );
 
@@ -216,7 +224,8 @@ describe("a canary reads as one weighted host", () => {
               [`${PREFIX}canary-by-header`]: "X-Canary",
             }),
           }),
-        ])
+        ]),
+        t
       )
     );
     expect(split?.primaryShare).toBeNull();
@@ -236,7 +245,8 @@ describe("a canary reads as one weighted host", () => {
           service: "web-next",
           annotations: canary("20"),
         }),
-      ])
+      ]),
+      t
     );
     expect(
       groups[0].findings.filter((finding) => finding.kind === "duplicate")
@@ -254,7 +264,8 @@ describe("a canary reads as one weighted host", () => {
         ingress("lonely-canary", "lonely.test", {
           annotations: canary("20"),
         }),
-      ])
+      ]),
+      t
     );
     expect(groups[0].findings.map((finding) => finding.kind)).toContain(
       "orphanCanary"
@@ -279,7 +290,7 @@ describe("a backend that is not a Service", () => {
       resourceBackend: "StorageBucket/assets",
     };
 
-    const groups = hostGroups(sources([withResource]));
+    const groups = hostGroups(sources([withResource]), t);
     expect(groups[0].routes[0].service).toBeNull();
     expect(groups[0].routes[0].resourceBackend).toBe("StorageBucket/assets");
     expect(
@@ -295,7 +306,8 @@ describe("the findings", () => {
       sources([
         ingress("old", "shop.test", { createdAt: "2020-01-01T00:00:00Z" }),
         ingress("new", "shop.test", { createdAt: "2024-01-01T00:00:00Z" }),
-      ])
+      ]),
+      t
     );
     const duplicate = groups[0].findings.find(
       (finding) => finding.kind === "duplicate"
@@ -317,7 +329,8 @@ describe("the findings", () => {
         ingress("plain", "plain.test", {
           annotations: { [`${PREFIX}ssl-redirect`]: "true" },
         }),
-      ])
+      ]),
+      t
     );
     const clear = groups[0].findings.find(
       (finding) => finding.kind === "clear"
@@ -328,7 +341,8 @@ describe("the findings", () => {
   /** Would break if a host with a certificate were called clear. */
   it("says nothing about a host that is served over TLS", () => {
     const groups = hostGroups(
-      sources([ingress("secure", "secure.test", { secretName: "shop-tls" })])
+      sources([ingress("secure", "secure.test", { secretName: "shop-tls" })]),
+      t
     );
     expect(
       groups[0].findings.filter((finding) => finding.kind === "clear")
@@ -338,7 +352,8 @@ describe("the findings", () => {
   /** Would break if a backend nobody created stopped being an outage. */
   it("stops the chain at a Service that does not exist", () => {
     const groups = hostGroups(
-      sources([ingress("ghost", "ghost.test", { service: "never-made" })])
+      sources([ingress("ghost", "ghost.test", { service: "never-made" })]),
+      t
     );
     const stop = groups[0].findings.find((finding) => finding.kind === "stop");
     expect(stop?.kind === "stop" && stop.stop.reason).toBe("backendMissing");
@@ -351,7 +366,8 @@ describe("the findings", () => {
       sources([
         ingress("aaa", "aaa.test", { secretName: "tls" }),
         ingress("zzz", "zzz.test", { service: "never-made" }),
-      ])
+      ]),
+      t
     );
     expect(groups[0].host).toBe("zzz.test");
   });
@@ -394,16 +410,19 @@ describe("a host whose TLS ends in front of nginx", () => {
    * them at once, which is how it stops being read.
    */
   it("is not served in the clear when something in front holds the certificate", () => {
-    const [group] = hostGroups(fronted());
+    const [group] = hostGroups(fronted(), t);
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
   });
 
   /** Evidence, not inference. */
   it("still warns when nothing in front terminates it", () => {
-    const [group] = hostGroups({
-      ...fronted(),
-      ingresses: [ingress("shop", "shop.example.com"), plainIngress()],
-    });
+    const [group] = hostGroups(
+      {
+        ...fronted(),
+        ingresses: [ingress("shop", "shop.example.com"), plainIngress()],
+      },
+      t
+    );
     expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
   });
 });

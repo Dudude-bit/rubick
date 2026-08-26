@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 /**
  * ingress-nginx's behaviour is a program written in annotations, and this
  * reads the part of it that can be read exactly.
@@ -103,13 +104,17 @@ function oneOf(value: string, options: Record<string, string>): string | null {
   return options[value.trim().toLowerCase()] ?? null;
 }
 
-const seconds = (value: string) => {
+const seconds = (value: string, t: T) => {
   const number = whole(value);
-  return number === null ? null : `${number} second${number === 1 ? "" : "s"}`;
+  return number === null ? null : t("count", "nginxSeconds", { n: number });
 };
 
 /** What an entry may look at: its own value, and its Ingress's other keys. */
-type Say = (value: string, siblings: Record<string, string>) => string | null;
+type Say = (
+  value: string,
+  siblings: Record<string, string>,
+  t: T
+) => string | null;
 
 /**
  * The annotations worth a sentence, in the order they are read in.
@@ -123,396 +128,373 @@ const TABLE: ReadonlyArray<{ suffix: string; say: Say }> = [
   // Encryption
   {
     suffix: "ssl-redirect",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const on = bool(value);
       if (on === null) return null;
       return on
-        ? "Plain HTTP is answered with a redirect to HTTPS."
-        : "Plain HTTP is served as it arrives; nothing upgrades the connection.";
+        ? t("readings", "nginxSslRedirectOn")
+        : t("readings", "nginxSslRedirectOff");
     },
   },
   {
     suffix: "force-ssl-redirect",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const on = bool(value);
       if (on === null) return null;
       return on
-        ? "Plain HTTP is redirected to HTTPS even though this Ingress declares no certificate of its own."
-        : "The forced redirect to HTTPS is switched off here.";
+        ? t("readings", "nginxForceSslOn")
+        : t("readings", "nginxForceSslOff");
     },
   },
   {
     suffix: "ssl-passthrough",
-    say: (value) =>
-      bool(value)
-        ? "TLS is handed to the backend untouched — nginx terminates nothing and never sees the path."
-        : null,
+    say: (value, _siblings, t) =>
+      bool(value) ? t("readings", "nginxSslPassthrough") : null,
   },
   {
     suffix: "backend-protocol",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        http: "nginx speaks plain HTTP to the backend.",
-        https: "nginx speaks HTTPS to the backend.",
-        grpc: "nginx speaks gRPC to the backend.",
-        grpcs: "nginx speaks gRPC over TLS to the backend.",
-        fcgi: "nginx speaks FastCGI to the backend.",
-        ajp: "nginx speaks AJP to the backend.",
+        http: t("readings", "nginxBackendHttp"),
+        https: t("readings", "nginxBackendHttps"),
+        grpc: t("readings", "nginxBackendGrpc"),
+        grpcs: t("readings", "nginxBackendGrpcs"),
+        fcgi: t("readings", "nginxBackendFcgi"),
+        ajp: t("readings", "nginxBackendAjp"),
       }),
   },
 
   // What the path becomes
   {
     suffix: "rewrite-target",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const target = some(value);
       return target === null
         ? null
-        : `The path is rewritten to ${target} before the backend sees it.`;
+        : t("readings", "nginxRewriteTarget", { target });
     },
   },
   {
     suffix: "use-regex",
-    say: (value) =>
-      bool(value)
-        ? "The paths on this Ingress are read as regular expressions rather than as prefixes."
-        : null,
+    say: (value, _siblings, t) =>
+      bool(value) ? t("readings", "nginxRegexPaths") : null,
   },
   {
     suffix: "app-root",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const root = some(value);
-      return root === null ? null : `A request for / is redirected to ${root}.`;
+      return root === null ? null : t("readings", "nginxAppRoot", { root });
     },
   },
   {
     suffix: "permanent-redirect",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const to = some(value);
       return to === null
         ? null
-        : `Every request here is answered with a permanent redirect to ${to}; the backend is never reached.`;
+        : t("readings", "nginxPermanentRedirect", { to });
     },
   },
   {
     suffix: "temporal-redirect",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const to = some(value);
       return to === null
         ? null
-        : `Every request here is answered with a temporary redirect to ${to}.`;
+        : t("readings", "nginxTemporalRedirect", { to });
     },
   },
   {
     suffix: "from-to-www-redirect",
-    say: (value) =>
-      bool(value)
-        ? "A request for the www form of this host is redirected to the bare one."
-        : null,
+    say: (value, _siblings, t) =>
+      bool(value) ? t("readings", "nginxFromWww") : null,
   },
   {
     suffix: "upstream-vhost",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const host = some(value);
       return host === null
         ? null
-        : `The backend is sent Host: ${host} rather than the hostname the client asked for.`;
+        : t("readings", "nginxUpstreamHost", { host });
     },
   },
 
   // Limits
   {
     suffix: "proxy-body-size",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const limit = size(value);
       if (limit === null) return null;
       return limit === "0"
-        ? "A request body of any size is accepted — there is no limit."
-        : `A request body larger than ${limit} is refused with 413.`;
+        ? t("readings", "nginxBodyUnlimited")
+        : t("readings", "nginxBodyLimit", { limit });
     },
   },
   {
     suffix: "proxy-buffer-size",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const limit = size(value);
       return limit === null
         ? null
-        : `Up to ${limit} is set aside for the backend's response headers; a larger set of headers fails with 502.`;
+        : t("readings", "nginxHeaderBuffer", { limit });
     },
   },
   {
     suffix: "proxy-buffering",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        on: "The response is buffered in nginx before any of it reaches the client.",
-        off: "The response is streamed to the client as it arrives, which is what a long poll or an event stream needs.",
+        on: t("readings", "nginxBuffered"),
+        off: t("readings", "nginxStreamed"),
       }),
   },
   {
     suffix: "proxy-read-timeout",
-    say: (value) => {
-      const wait = seconds(value);
-      return wait === null
-        ? null
-        : `nginx waits up to ${wait} between reads from the backend before giving up with 504.`;
+    say: (value, _siblings, t) => {
+      const wait = seconds(value, t);
+      return wait === null ? null : t("readings", "nginxReadTimeout", { wait });
     },
   },
   {
     suffix: "proxy-send-timeout",
-    say: (value) => {
-      const wait = seconds(value);
-      return wait === null
-        ? null
-        : `nginx waits up to ${wait} while sending the request to the backend.`;
+    say: (value, _siblings, t) => {
+      const wait = seconds(value, t);
+      return wait === null ? null : t("readings", "nginxSendTimeout", { wait });
     },
   },
   {
     suffix: "proxy-connect-timeout",
-    say: (value) => {
-      const wait = seconds(value);
+    say: (value, _siblings, t) => {
+      const wait = seconds(value, t);
       return wait === null
         ? null
-        : `nginx gives up after ${wait} if the backend does not accept the connection.`;
+        : t("readings", "nginxConnectTimeout", { wait });
     },
   },
   {
     suffix: "limit-rps",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const rate = whole(value);
       return rate === null
         ? null
-        : `One client address is allowed ${rate} request${rate === 1 ? "" : "s"} a second; the rest are refused with 503.`;
+        : t("count", "nginxRatePerSecond", { n: rate });
     },
   },
   {
     suffix: "limit-rpm",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const rate = whole(value);
       return rate === null
         ? null
-        : `One client address is allowed ${rate} request${rate === 1 ? "" : "s"} a minute; the rest are refused with 503.`;
+        : t("count", "nginxRatePerMinute", { n: rate });
     },
   },
   {
     suffix: "limit-connections",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const count = whole(value);
       return count === null
         ? null
-        : `One client address may hold ${count} connection${count === 1 ? "" : "s"} at a time.`;
+        : t("count", "nginxConnections", { n: count });
     },
   },
 
   // Who is let through
   {
     suffix: "whitelist-source-range",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const ranges = list(value);
       return ranges === null
         ? null
-        : `Only clients in ${ranges} are served; every other address is refused with 403.`;
+        : t("readings", "nginxWhitelist", { ranges });
     },
   },
   {
     suffix: "denylist-source-range",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const ranges = list(value);
       return ranges === null
         ? null
-        : `Clients in ${ranges} are refused with 403; everybody else is served.`;
+        : t("readings", "nginxDenylist", { ranges });
     },
   },
   {
     suffix: "auth-type",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        basic:
-          "Every request must carry HTTP basic authentication or it is refused with 401.",
-        digest:
-          "Every request must carry HTTP digest authentication or it is refused with 401.",
+        basic: t("readings", "nginxAuthBasic"),
+        digest: t("readings", "nginxAuthDigest"),
       }),
   },
   {
     suffix: "auth-secret",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const secret = some(value);
       return secret === null
         ? null
-        : `The user names and password hashes are read from the Secret ${secret}.`;
+        : t("readings", "nginxAuthSecret", { secret });
     },
   },
   {
     suffix: "auth-realm",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const realm = some(value);
-      return realm === null
-        ? null
-        : `The browser's password prompt is labelled “${realm}”.`;
+      return realm === null ? null : t("readings", "nginxAuthRealm", { realm });
     },
   },
   {
     suffix: "auth-url",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const url = some(value);
-      return url === null
-        ? null
-        : `Every request is first sent to ${url}; anything but a 2xx from it refuses the request.`;
+      return url === null ? null : t("readings", "nginxAuthUrl", { url });
     },
   },
   {
     suffix: "auth-signin",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const url = some(value);
-      return url === null
-        ? null
-        : `A request the authentication service refused is redirected to ${url} to sign in.`;
+      return url === null ? null : t("readings", "nginxAuthSignin", { url });
     },
   },
   {
     suffix: "enable-cors",
-    say: (value) =>
-      bool(value)
-        ? "A browser on another origin is allowed to call this route."
-        : null,
+    say: (value, _siblings, t) =>
+      bool(value) ? t("readings", "nginxCorsOn") : null,
   },
   {
     suffix: "cors-allow-origin",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const origins = list(value);
       return origins === null
         ? null
-        : `Cross-origin calls are allowed from ${origins}.`;
+        : t("readings", "nginxCorsOrigins", { origins });
     },
   },
 
   // How traffic is split
   {
     suffix: "canary",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const on = bool(value);
       if (on === null) return null;
       return on
-        ? "This is a second route for a host another Ingress already serves, and nginx sends it a share of that host's traffic."
-        : "Canary routing is switched off here, so this route is served like any other.";
+        ? t("readings", "nginxCanaryOn")
+        : t("readings", "nginxCanaryOff");
     },
   },
   {
     suffix: "canary-weight",
-    say: (value, siblings) => {
+    say: (value, siblings, t) => {
       const weight = whole(value);
       if (weight === null) return null;
       const total = whole(siblings[`${PREFIX}canary-weight-total`] ?? "100");
       if (total === null || total === 0) return null;
       return total === 100
-        ? `${weight}% of this host's requests take this route instead of the one it shadows.`
-        : `${weight} of every ${total} requests for this host take this route instead of the one it shadows.`;
+        ? t("readings", "nginxCanaryWeightPercent", { weight })
+        : t("readings", "nginxCanaryWeightOf", { weight, total });
     },
   },
   {
     suffix: "canary-weight-total",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const total = whole(value);
       return total === null
         ? null
-        : `The weight above is a share of ${total} rather than a percentage.`;
+        : t("readings", "nginxCanaryTotal", { total });
     },
   },
   {
     suffix: "canary-by-header",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const header = some(value);
       return header === null
         ? null
-        : `A request carrying ${header}: always takes this route, and one carrying ${header}: never never does — which is checked before any weight is.`;
+        : t("readings", "nginxCanaryHeader", { header });
     },
   },
   {
     suffix: "canary-by-header-value",
-    say: (value, siblings) => {
+    say: (value, siblings, t) => {
       const wanted = some(value);
       if (wanted === null) return null;
       const header = some(siblings[`${PREFIX}canary-by-header`] ?? "");
       return header === null
         ? null
-        : `A request whose ${header} header is exactly ${wanted} takes this route.`;
+        : t("readings", "nginxCanaryHeaderValue", { header, wanted });
     },
   },
   {
     suffix: "canary-by-cookie",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const cookie = some(value);
       return cookie === null
         ? null
-        : `A request carrying the cookie ${cookie}=always takes this route, and ${cookie}=never never does.`;
+        : t("readings", "nginxCanaryCookie", { cookie });
     },
   },
 
   // Which pod, and what the endpoints mean
   {
     suffix: "affinity",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        cookie:
-          "One client keeps reaching the same backend pod, tracked with a cookie nginx sets.",
+        cookie: t("readings", "nginxStickyCookie"),
       }),
   },
   {
     suffix: "affinity-mode",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        balanced:
-          "Stickiness is given up when the set of pods changes, so a rollout rebalances.",
-        persistent:
-          "A client stays pinned to its pod across rollouts, so a scale-up takes no share of the existing traffic.",
+        balanced: t("readings", "nginxStickyRebalance"),
+        persistent: t("readings", "nginxStickyPersist"),
       }),
   },
   {
     suffix: "session-cookie-name",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const name = some(value);
-      return name === null ? null : `The stickiness cookie is called ${name}.`;
+      return name === null
+        ? null
+        : t("readings", "nginxStickyCookieName", { name });
     },
   },
   {
     suffix: "load-balance",
-    say: (value) =>
+    say: (value, _siblings, t) =>
       oneOf(value, {
-        round_robin: "Requests go to the backend's pods in turn.",
-        ewma: "Each request goes to whichever pod has been answering fastest.",
+        round_robin: t("readings", "nginxRoundRobin"),
+        ewma: t("readings", "nginxLeastTime"),
       }),
   },
   {
     suffix: "service-upstream",
-    say: (value) =>
-      bool(value)
-        ? "Requests are sent to the Service's cluster IP rather than to its pods, so kube-proxy picks the pod and nginx never sees the endpoints."
-        : null,
+    say: (value, _siblings, t) =>
+      bool(value) ? t("readings", "nginxServiceUpstream") : null,
   },
   {
     suffix: "default-backend",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const service = some(value);
       return service === null
         ? null
-        : `A request this route cannot serve is answered by the Service ${service} instead.`;
+        : t("readings", "nginxDefaultBackend", { service });
     },
   },
   {
     suffix: "custom-http-errors",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const codes = list(value);
       return codes === null
         ? null
-        : `A ${codes} from the backend is replaced by the default backend's own body rather than passed through.`;
+        : t("readings", "nginxCustomErrors", { codes });
     },
   },
   {
     suffix: "server-alias",
-    say: (value) => {
+    say: (value, _siblings, t) => {
       const aliases = list(value);
       return aliases === null
         ? null
-        : `This route also answers for ${aliases}.`;
+        : t("readings", "nginxServerAlias", { aliases });
     },
   },
 ];
@@ -540,6 +522,7 @@ export function sayFor(suffix: string): Say | undefined {
 export function readAnnotation(
   key: string,
   value: string,
+  t: T,
   siblings: Record<string, string> = {}
 ): AnnotationReading {
   const suffix = key.slice(PREFIX.length);
@@ -551,7 +534,7 @@ export function readAnnotation(
   const say = BY_SUFFIX.get(suffix);
   if (!say) return { key, value, said: null, raw: "notInTheTable" };
 
-  const said = say(value, siblings);
+  const said = say(value, siblings, t);
   return said === null
     ? { key, value, said: null, raw: "unreadableValue" }
     : { key, value, said, raw: null };
@@ -565,7 +548,8 @@ export function readAnnotation(
  * has to be read in full rather than glanced at.
  */
 export function readAnnotations(
-  annotations: Record<string, string>
+  annotations: Record<string, string>,
+  t: T
 ): AnnotationReading[] {
   const mine = Object.entries(annotations).filter(([key]) =>
     key.startsWith(PREFIX)
@@ -580,15 +564,22 @@ export function readAnnotations(
 
   return mine
     .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
-    .map(([key, value]) => readAnnotation(key, value, annotations));
+    .map(([key, value]) => readAnnotation(key, value, t, annotations));
 }
 
-/** The sentence a raw line carries instead of a paraphrase. */
-export const RAW_NOTE: Record<RawReason, string> = {
-  notInTheTable:
-    "Shown as written — this app has no sentence for this key, and a guessed one would be worse than the key.",
-  unreadableValue:
-    "Shown as written — the key is one this app knows and the value is not a shape it can state.",
-  snippet:
-    "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
-};
+/**
+ * The sentence a raw line carries instead of a paraphrase.
+ *
+ * A function rather than a table: the sentences are prose and the table was
+ * built once, at module load, in whatever language happened to be first.
+ */
+export function rawNote(reason: RawReason, t: T): string {
+  switch (reason) {
+    case "notInTheTable":
+      return t("readings", "nginxRawUnknownKey");
+    case "unreadableValue":
+      return t("readings", "nginxRawUnknownValue");
+    case "snippet":
+      return t("readings", "nginxRawSnippet");
+  }
+}

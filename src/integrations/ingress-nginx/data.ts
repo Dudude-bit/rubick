@@ -15,6 +15,7 @@
  * kubelet from the container's own environment.
  */
 
+import type { T } from "@/i18n/useT";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -58,8 +59,12 @@ export async function fetchRouteSources(): Promise<RouteSources> {
  * page pivoted by host would disagree with the page it links to.
  */
 export function countHosts(sources: RouteSources): number {
+  // The count reads `route.host` and nothing else, so it cannot depend on
+  // the language — and threading a translator in so that a number could
+  // ignore it would be a parameter that exists to be discarded.
+  const noWords: T = () => "";
   const hosts = new Set(
-    allRoutes({ ...sources, services: [], published: [] }).map(
+    allRoutes({ ...sources, services: [], published: [] }, noWords).map(
       (route) => route.host ?? ""
     )
   );

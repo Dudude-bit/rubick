@@ -53,7 +53,7 @@ import {
   TroubleRow,
   type Tone,
 } from "../page-kit";
-import { RAW_NOTE, type AnnotationReading } from "./annotations";
+import { rawNote, type AnnotationReading } from "./annotations";
 import { readSettings, type SettingReading } from "./configmap";
 import {
   sourcesFrom,
@@ -93,9 +93,9 @@ export default function IngressNginxPage() {
   const routes = useMemo(
     () =>
       routeSources.data
-        ? allRoutes({ ...routeSources.data, services: [], published: [] })
+        ? allRoutes({ ...routeSources.data, services: [], published: [] }, t)
         : [],
-    [routeSources.data]
+    [routeSources.data, t]
   );
   const certificates = useRouteCertificates(routes);
 
@@ -164,7 +164,7 @@ export default function IngressNginxPage() {
     : null;
 
   const groups = useMemo(
-    () => (sources ? hostGroups(sources) : []),
+    () => (sources ? hostGroups(sources, t) : []),
     // `sources` is rebuilt every render; the inputs it is built from are what
     // actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,7 +187,7 @@ export default function IngressNginxPage() {
 
   const troubled = groups.filter((group) => group.worst !== null);
   const settings = controller.data?.config
-    ? readSettings(controller.data.config.data)
+    ? readSettings(controller.data.config.data, t)
     : [];
 
   const tabs: DetailTab[] = [
@@ -881,7 +881,7 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
             {reading.value}
           </pre>
           <p className="mt-0.5 text-[11px] text-fg-fnt">
-            {RAW_NOTE[reading.raw!]}
+            {rawNote(reading.raw!, t)}
           </p>
         </>
       )}
@@ -1143,7 +1143,7 @@ function SettingsTab({
                       : "text-[11.5px] text-fg-fnt"
                   }
                 >
-                  {setting.said ?? RAW_NOTE[setting.raw!]}
+                  {setting.said ?? rawNote(setting.raw!, t)}
                 </span>
                 {setting.overridable && (
                   <span className="text-[11px] text-fg-fnt">

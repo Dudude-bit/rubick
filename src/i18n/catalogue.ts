@@ -1241,6 +1241,170 @@ export const en = {
       "usage history, volume fullness and traffic on pods and workloads",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
+
+  /**
+   * What an integration says about a vendor's own setting.
+   *
+   * Its own section because `vendor` is one blurb per extension and a test
+   * holds it to exactly that — a key there with no vendor behind it reads as
+   * copy for something the app no longer offers.
+   */
+  readings: {
+    ngxSnippetsAllowed:
+      "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet.",
+    ngxSnippetsIgnored:
+      "configuration-snippet and server-snippet on an Ingress are ignored — an Ingress carrying one is not doing what it says.",
+    ngxRiskCritical:
+      "Every annotation is honoured, including the ones that can execute configuration.",
+    ngxRiskHigh:
+      "Annotations up to the High risk level are honoured; Critical ones — the snippets — are ignored.",
+    ngxRiskMedium:
+      "Only Low and Medium risk annotations are honoured; anything above is ignored.",
+    ngxRiskLow:
+      "Only Low risk annotations are honoured; most of the interesting ones are ignored.",
+    ngxForwardedTrusted:
+      "X-Forwarded-For from the client is trusted and passed through, which is right behind a load balancer and wrong when nginx is exposed directly.",
+    ngxForwardedReplaced:
+      "X-Forwarded-For from the client is replaced with the address nginx actually saw.",
+    ngxForwardedAppended:
+      "The client's address is appended to X-Forwarded-For rather than replacing it.",
+    ngxRealIpFromProxy:
+      "The client's real address is taken from the proxy protocol or the forwarded header rather than from the connection.",
+    ngxTrustedRanges:
+      "Forwarded headers are trusted only from {ranges}; from anywhere else they are ignored.",
+    ngxServerTokensOn:
+      "Responses carry the nginx version in the Server header.",
+    ngxServerTokensOff:
+      "The nginx version is kept out of responses and error pages.",
+    ngxTlsVersions:
+      "Only {versions} are offered to clients; anything older is refused at the handshake.",
+    ngxHstsOn:
+      "Every TLS response tells the browser to refuse plain HTTP to this host in future.",
+    ngxHstsOff:
+      "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.",
+    ngxHstsAge: "The browser is told to remember that for {age} seconds.",
+    ngxHttp2On: "HTTP/2 is offered on the TLS listener.",
+    ngxHttp2Off: "HTTP/2 is switched off; every client falls back to HTTP/1.1.",
+    ngxGzipOn: "Responses are compressed before they leave nginx.",
+    ngxWorkersAuto: "One nginx worker per CPU the container is allowed.",
+    ngxWorkerConnections:
+      "One worker holds at most {count} connections; past that new ones wait.",
+    ngxKeepaliveTimeout:
+      "An idle client connection is held open for {wait} seconds before nginx closes it.",
+    ngxKeepaliveRequests:
+      "A client connection is reused for {count} requests and then closed.",
+    ngxUpstreamKeepalive:
+      "{count} idle connections per backend are kept open for reuse.",
+    ngxAccessLogOff:
+      "Nothing is written to the access log, so this controller's logs will not show a request that reached it.",
+    ngxErrorDebug:
+      "The error log carries everything, including per-request detail.",
+    ngxErrorInfo: "The error log carries informational messages and worse.",
+    ngxErrorNotice: "The error log carries notices and worse.",
+    ngxErrorWarn: "The error log carries warnings and worse.",
+    ngxErrorError: "The error log carries errors only.",
+    ngxModsecOn:
+      "Every request is passed through ModSecurity before it reaches a backend.",
+    ngxModsecOwasp: "ModSecurity runs with the OWASP core rule set loaded.",
+    nginxRewriteTarget:
+      "The path is rewritten to {target} before the backend sees it.",
+    nginxAppRoot: "A request for / is redirected to {root}.",
+    nginxPermanentRedirect:
+      "Every request here is answered with a permanent redirect to {to}; the backend is never reached.",
+    nginxTemporalRedirect:
+      "Every request here is answered with a temporary redirect to {to}.",
+    nginxUpstreamHost:
+      "The backend is sent Host: {host} rather than the hostname the client asked for.",
+    nginxBodyLimit: "A request body larger than {limit} is refused with 413.",
+    nginxHeaderBuffer:
+      "Up to {limit} is set aside for the backend's response headers; a larger set of headers fails with 502.",
+    nginxReadTimeout:
+      "nginx waits up to {wait} between reads from the backend before giving up with 504.",
+    nginxSendTimeout:
+      "nginx waits up to {wait} while sending the request to the backend.",
+    nginxConnectTimeout:
+      "nginx gives up after {wait} if the backend does not accept the connection.",
+    nginxWhitelist:
+      "Only clients in {ranges} are served; every other address is refused with 403.",
+    nginxDenylist:
+      "Clients in {ranges} are refused with 403; everybody else is served.",
+    nginxAuthSecret:
+      "The user names and password hashes are read from the Secret {secret}.",
+    nginxAuthRealm: "The browser's password prompt is labelled “{realm}”.",
+    nginxAuthUrl:
+      "Every request is first sent to {url}; anything but a 2xx from it refuses the request.",
+    nginxAuthSignin:
+      "A request the authentication service refused is redirected to {url} to sign in.",
+    nginxCorsOrigins: "Cross-origin calls are allowed from {origins}.",
+    nginxCanaryWeightPercent:
+      "{weight}% of this host's requests take this route instead of the one it shadows.",
+    nginxCanaryWeightOf:
+      "{weight} of every {total} requests for this host take this route instead of the one it shadows.",
+    nginxCanaryTotal:
+      "The weight above is a share of {total} rather than a percentage.",
+    nginxCanaryHeader:
+      "A request carrying {header}: always takes this route, and one carrying {header}: never never does — which is checked before any weight is.",
+    nginxCanaryHeaderValue:
+      "A request whose {header} header is exactly {wanted} takes this route.",
+    nginxCanaryCookie:
+      "A request carrying the cookie {cookie}=always takes this route, and {cookie}=never never does.",
+    nginxStickyCookieName: "The stickiness cookie is called {name}.",
+    nginxDefaultBackend:
+      "A request this route cannot serve is answered by the Service {service} instead.",
+    nginxCustomErrors:
+      "A {codes} from the backend is replaced by the default backend's own body rather than passed through.",
+    nginxServerAlias: "This route also answers for {aliases}.",
+    nginxSslRedirectOn: "Plain HTTP is answered with a redirect to HTTPS.",
+    nginxSslRedirectOff:
+      "Plain HTTP is served as it arrives; nothing upgrades the connection.",
+    nginxForceSslOn:
+      "Plain HTTP is redirected to HTTPS even though this Ingress declares no certificate of its own.",
+    nginxForceSslOff: "The forced redirect to HTTPS is switched off here.",
+    nginxSslPassthrough:
+      "TLS is handed to the backend untouched — nginx terminates nothing and never sees the path.",
+    nginxBackendHttp: "nginx speaks plain HTTP to the backend.",
+    nginxBackendHttps: "nginx speaks HTTPS to the backend.",
+    nginxBackendGrpc: "nginx speaks gRPC to the backend.",
+    nginxBackendGrpcs: "nginx speaks gRPC over TLS to the backend.",
+    nginxBackendFcgi: "nginx speaks FastCGI to the backend.",
+    nginxBackendAjp: "nginx speaks AJP to the backend.",
+    nginxRegexPaths:
+      "The paths on this Ingress are read as regular expressions rather than as prefixes.",
+    nginxFromWww:
+      "A request for the www form of this host is redirected to the bare one.",
+    nginxBodyUnlimited:
+      "A request body of any size is accepted — there is no limit.",
+    nginxBuffered:
+      "The response is buffered in nginx before any of it reaches the client.",
+    nginxStreamed:
+      "The response is streamed to the client as it arrives, which is what a long poll or an event stream needs.",
+    nginxAuthBasic:
+      "Every request must carry HTTP basic authentication or it is refused with 401.",
+    nginxAuthDigest:
+      "Every request must carry HTTP digest authentication or it is refused with 401.",
+    nginxCorsOn: "A browser on another origin is allowed to call this route.",
+    nginxCanaryOn:
+      "This is a second route for a host another Ingress already serves, and nginx sends it a share of that host's traffic.",
+    nginxCanaryOff:
+      "Canary routing is switched off here, so this route is served like any other.",
+    nginxStickyCookie:
+      "One client keeps reaching the same backend pod, tracked with a cookie nginx sets.",
+    nginxStickyRebalance:
+      "Stickiness is given up when the set of pods changes, so a rollout rebalances.",
+    nginxStickyPersist:
+      "A client stays pinned to its pod across rollouts, so a scale-up takes no share of the existing traffic.",
+    nginxRoundRobin: "Requests go to the backend's pods in turn.",
+    nginxLeastTime:
+      "Each request goes to whichever pod has been answering fastest.",
+    nginxServiceUpstream:
+      "Requests are sent to the Service's cluster IP rather than to its pods, so kube-proxy picks the pod and nginx never sees the endpoints.",
+    nginxRawUnknownKey:
+      "Shown as written — this app has no sentence for this key, and a guessed one would be worse than the key.",
+    nginxRawUnknownValue:
+      "Shown as written — the key is one this app knows and the value is not a shape it can state.",
+    nginxRawSnippet:
+      "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
+  },
   cluster: {
     metricsNotInstalled: "Metrics server not installed",
     metricsNotInstalledBody:
@@ -2840,6 +3004,25 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    ngxWorkers: {
+      one: "{n} nginx worker, whatever the container's CPU allowance is.",
+      other: "{n} nginx workers, whatever the container's CPU allowance is.",
+    },
+    nginxSeconds: { one: "{n} second", other: "{n} seconds" },
+    nginxRatePerSecond: {
+      one: "One client address is allowed {n} request a second; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a second; the rest are refused with 503.",
+    },
+    nginxRatePerMinute: {
+      one: "One client address is allowed {n} request a minute; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a minute; the rest are refused with 503.",
+    },
+    nginxConnections: {
+      one: "One client address may hold {n} connection at a time.",
+      other: "One client address may hold {n} connections at a time.",
+    },
     readyOfTotal: "{ready} of {total} ready",
     restartsWithLast: {
       one: "{n} restart, last {ago} ago",
