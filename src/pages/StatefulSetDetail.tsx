@@ -361,7 +361,7 @@ export function StatefulSetDetail() {
           moment the reader was on Logs, which is when Scale still has to
           work. It draws nothing until it is open, and portals when it is. */}
       <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        warnings={scaleWarnings(connections.data, intercept("Scale"), t)}
         open={scaleOpen}
         onOpenChange={setScaleOpen}
         kind={ResourceType.StatefulSet}

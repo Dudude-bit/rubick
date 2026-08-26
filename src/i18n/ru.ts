@@ -1241,6 +1241,52 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    hpaPinnedAt: "закреплено на {n}",
+    hpaRange: "от {min} до {max} реплик",
+    hpaCannotReach: "{name} не достаёт до того, что масштабирует",
+    hpaCannotReachDetail:
+      "Автомасштабировщик называет {kind} {target} и не может прочитать его масштаб, поэтому ничего не масштабирует.",
+    hpaStandingBy: "{name} ждёт, пока это сведено к нулю",
+    hpaStandingByDetail:
+      "Автомасштабировщик не поднимает нагрузку с нуля. Задайте число реплик вручную — дальше он подхватит.",
+    hpaNoMetrics:
+      "{name} этого не масштабирует — он не может прочитать метрики",
+    hpaNoMetricsDefault: "Источник метрик не ответил.",
+    hpaAtFloor: "{name} держит это на своём минимуме {min}",
+    hpaAtFloorDetail:
+      "Метрики говорят, что хватило бы меньшего числа реплик; их держит minReplicas.",
+    hpaAtCeiling: "{name} хочет больше реплик, чем {max} — это его потолок",
+    hpaAtCeilingDefault: "Желаемое число реплик выше maxReplicas.",
+    hpaRunning: "работает {n}",
+    hpaWanted: "хочет {n}",
+    hpaNothingComputed: "ничего не вычислено",
+    hpaLastScaled: "последнее масштабирование {ago} назад",
+    pdbAtLeast: "минимум {n} доступно",
+    pdbAtMost: "максимум {n} недоступно",
+    pdbNoRule: "правило не задано",
+    pdbNoDisruption: "прерывания запрещены",
+    pdbRoom: "{allowed} · здоровы {healthy} из {selected} выбранных",
+    pdbBelowFloor:
+      "{name} ниже собственного минимума — здоровы {healthy}, нужно {required}",
+    pdbBelowFloorDetail:
+      "Вытеснение пода здесь отклоняется и будет отклоняться, пока не вернутся недостающие реплики. Слив узла, задевающий эту нагрузку, не завершится.",
+    pdbExactlyMet: "{name} сейчас не допускает прерываний",
+    pdbExactlyMetDetail:
+      "Бюджет соблюдён в точности: здоровы {healthy} при минимуме {required}. Слив узла, задевающий эту нагрузку, будет ждать.",
+    hpaSeveralTitle: "автомасштабировщиков: {n}",
+    hpaSeveralHead: "Эту нагрузку заявляют {n} автомасштабировщика.",
+    hpaSeveralDetail:
+      "{names} — каждый ставит spec.replicas по своим показаниям и отменяет другого на следующем проходе. Ничего из заданного здесь не переживёт.",
+    hpaCannotActNow: "он сейчас не может действовать",
+    hpaOwnsStuckHead: "{name} владеет этим числом реплик и застрял.",
+    hpaOwnsStuckDetail:
+      "Прямо сейчас он действовать не может ({why}), поэтому заданное вами число устоит — но как только сможет, он заберёт счёт обратно.",
+    hpaWillRevertHead: "{name} вернёт это число обратно.",
+    hpaWillRevertDetail:
+      "Он держит это между {min} и {max} и перечитывает метрики примерно раз в пятнадцать секунд.",
+    hpaAutoscalerNamed: "Автомасштабировщик {name}",
+    docNoReplicaCount: "в документе нет числа реплик",
+    cannotTell: "определить нельзя",
     shellFinished: "завершился, подключаться не к чему",
     shellExited: "вышел с кодом {code}, подключаться не к чему",
     shellNotStarted: "ещё не запускался",
@@ -3105,6 +3151,11 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    disruptionsAllowed: {
+      one: "разрешено {n} прерывание",
+      few: "разрешено {n} прерывания",
+      other: "разрешено {n} прерываний",
+    },
     attemptsCount: {
       one: "{n} попытка",
       few: "{n} попытки",

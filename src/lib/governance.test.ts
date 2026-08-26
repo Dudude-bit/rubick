@@ -153,7 +153,7 @@ describe("reading the two governing kinds", () => {
 describe("what an autoscaler is worth saying", () => {
   it("says nothing about one that is simply working", () => {
     const auto = autoscalers(conns([governs(hpa("hpa-ok"))]))[0];
-    expect(autoscalerFinding(auto)).toBeNull();
+    expect(autoscalerFinding(auto, t)).toBeNull();
   });
 
   it("is loudest about one that cannot read its metrics", () => {
@@ -176,14 +176,14 @@ describe("what an autoscaler is worth saying", () => {
         ),
       ])
     )[0];
-    const finding = autoscalerFinding(auto);
+    const finding = autoscalerFinding(auto, t);
     expect(finding?.tone).toBe("err");
     expect(finding?.title).toContain("cannot read its metrics");
     expect(metricReadings(auto.facts)[0].current).toBeNull();
     // `desiredReplicas` stays at zero on an autoscaler that never computed,
     // and "0 wanted" beside two running pods reads as an imminent scale to
     // nothing rather than as an unset field.
-    expect(autoscalerReplicas(auto.facts)).toContain("nothing computed");
+    expect(autoscalerReplicas(auto.facts, t)).toContain("nothing computed");
   });
 
   it("calls a ceiling a ceiling and a floor a floor", () => {
@@ -203,8 +203,8 @@ describe("what an autoscaler is worth saying", () => {
         ),
       ])
     )[0];
-    expect(autoscalerFinding(ceiling)?.tone).toBe("warn");
-    expect(autoscalerFinding(ceiling)?.title).toContain("ceiling");
+    expect(autoscalerFinding(ceiling, t)?.tone).toBe("warn");
+    expect(autoscalerFinding(ceiling, t)?.title).toContain("ceiling");
 
     const floor = autoscalers(
       conns([
@@ -224,8 +224,8 @@ describe("what an autoscaler is worth saying", () => {
     )[0];
     // The same condition, the same status word, and a different finding —
     // which is why the reason is read rather than the status alone.
-    expect(autoscalerFinding(floor)?.tone).toBe("neutral");
-    expect(autoscalerFinding(floor)?.title).toContain("floor");
+    expect(autoscalerFinding(floor, t)?.tone).toBe("neutral");
+    expect(autoscalerFinding(floor, t)?.title).toContain("floor");
   });
 
   it("says nothing about a scale-down stabilisation window", () => {
@@ -245,14 +245,14 @@ describe("what an autoscaler is worth saying", () => {
         ),
       ])
     )[0];
-    expect(autoscalerFinding(auto)).toBeNull();
+    expect(autoscalerFinding(auto, t)).toBeNull();
   });
 });
 
 describe("the tone a disruption budget is allowed", () => {
   it("says nothing while there is room", () => {
     expect(
-      budgetFinding(budgets(conns([governs(pdb("pdb-log"))]))[0])
+      budgetFinding(budgets(conns([governs(pdb("pdb-log"))]))[0], t)
     ).toBeNull();
   });
 
@@ -275,7 +275,7 @@ describe("the tone a disruption budget is allowed", () => {
         ),
       ])
     )[0];
-    const finding = budgetFinding(budget);
+    const finding = budgetFinding(budget, t);
     expect(finding?.tone).toBe("neutral");
     expect(finding?.title).toContain("no disruption");
   });
@@ -293,7 +293,7 @@ describe("the tone a disruption budget is allowed", () => {
         ),
       ])
     )[0];
-    expect(budgetFinding(budget)?.tone).toBe("warn");
+    expect(budgetFinding(budget, t)?.tone).toBe("warn");
   });
 });
 
@@ -335,7 +335,7 @@ describe("what the Scale dialog reads", () => {
    * nothing about it is the same defect the delivery intercept was built for.
    */
   it("warns about an autoscaler", () => {
-    const warnings = scaleWarnings(conns([governs(hpa("hpa-busy"))]), null);
+    const warnings = scaleWarnings(conns([governs(hpa("hpa-busy"))]), null, t);
     expect(warnings).toHaveLength(1);
     expect(warnings[0].lead).toContain("hpa-busy");
     expect(warnings[0].description).toContain("1 and 2");
@@ -357,14 +357,19 @@ describe("what the Scale dialog reads", () => {
           })
         ),
       ]),
-      null
+      null,
+      t
     );
     expect(warnings[0].description).toContain("will stand");
     expect(warnings[0].description).toContain("FailedGetResourceMetric");
   });
 
   it("carries both reasons, soonest first, without repeating itself", () => {
-    const warnings = scaleWarnings(conns([governs(hpa("hpa-busy"))]), delivery);
+    const warnings = scaleWarnings(
+      conns([governs(hpa("hpa-busy"))]),
+      delivery,
+      t
+    );
     expect(warnings.map((w) => w.subject)).toEqual([
       "The autoscaler hpa-busy",
       "Argo CD",
@@ -375,7 +380,8 @@ describe("what the Scale dialog reads", () => {
   it("refuses to state a range when two autoscalers claim one workload", () => {
     const warnings = scaleWarnings(
       conns([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
-      null
+      null,
+      t
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0].description).toContain("hpa-a, hpa-b");
@@ -383,7 +389,7 @@ describe("what the Scale dialog reads", () => {
   });
 
   it("is silent on a workload nothing governs and nothing delivers", () => {
-    expect(scaleWarnings(conns([]), null)).toEqual([]);
+    expect(scaleWarnings(conns([]), null, t)).toEqual([]);
   });
 });
 
@@ -426,7 +432,7 @@ describe("what the YAML editor's apply reads", () => {
     const after = before.replace("    spec: {}", "    spec: { nodeName: n1 }");
     expect(after).not.toBe(before);
     expect(
-      applyWarnings(governed, null, changesReplicaCount(before, after))
+      applyWarnings(governed, null, changesReplicaCount(before, after), t)
     ).toEqual([]);
     expect(changesReplicaCount(doc(3), doc(3) + "# a comment\n")).toBe(false);
   });
@@ -435,7 +441,8 @@ describe("what the YAML editor's apply reads", () => {
     const warnings = applyWarnings(
       conns([governs(hpa("hpa-busy"))]),
       null,
-      changesReplicaCount(doc(3), doc(5))
+      changesReplicaCount(doc(3), doc(5)),
+      t
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0].lead).toContain("hpa-busy");
@@ -446,7 +453,7 @@ describe("what the YAML editor's apply reads", () => {
    * was edited — the gate above must never be allowed to swallow it.
    */
   it("warns about delivery on any save, replicas or not", () => {
-    const warnings = applyWarnings(conns([]), delivery, false);
+    const warnings = applyWarnings(conns([]), delivery, false, t);
     expect(warnings.map((w) => w.subject)).toEqual(["Argo CD"]);
   });
 
@@ -454,7 +461,8 @@ describe("what the YAML editor's apply reads", () => {
     const warnings = applyWarnings(
       conns([governs(hpa("hpa-busy"))]),
       delivery,
-      true
+      true,
+      t
     );
     expect(warnings.map((w) => w.subject)).toEqual([
       "The autoscaler hpa-busy",

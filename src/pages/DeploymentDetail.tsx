@@ -618,7 +618,7 @@ export function DeploymentDetail() {
           reader is on. Inside the Overview's panel they would be unmounted the
           moment that tab was not the open one. */}
       <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        warnings={scaleWarnings(connections.data, intercept("Scale"), t)}
         open={scaleDialogOpen}
         onOpenChange={setScaleDialogOpen}
         kind={ResourceType.Deployment}

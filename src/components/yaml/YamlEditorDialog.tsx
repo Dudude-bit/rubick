@@ -182,7 +182,7 @@ export function YamlEditorDialog() {
     open && replicasMoved
   );
 
-  const warnings = applyWarnings(governance.data, intercept, replicasMoved);
+  const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);

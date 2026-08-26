@@ -31,6 +31,7 @@
  *   other block repeats it. The header is exempt — it is identity.
  */
 
+import { useT } from "@/i18n/useT";
 import type { ReactNode } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -142,7 +143,8 @@ export function CountBlock({
   children,
   governance,
 }: CountBlockProps) {
-  const { rows, findings, sets, guards } = governanceRows(governance?.data);
+  const t = useT();
+  const { rows, findings, sets, guards } = governanceRows(governance?.data, t);
 
   return (
     <Section>

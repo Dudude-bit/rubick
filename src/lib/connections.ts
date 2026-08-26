@@ -199,9 +199,9 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
     case "ingress":
       return facts.className;
     case "autoscaler":
-      return join(autoscalerRange(facts), autoscalerReplicas(facts));
+      return join(autoscalerRange(facts, t), autoscalerReplicas(facts, t));
     case "budget":
-      return join(budgetRule(facts), budgetRoom(facts));
+      return join(budgetRule(facts, t), budgetRoom(facts, t));
     case "node":
       return nodeCapacity(facts);
   }

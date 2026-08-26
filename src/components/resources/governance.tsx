@@ -19,6 +19,7 @@
  * failed attached to it.
  */
 
+import type { T } from "@/i18n/useT";
 import { ResourceRef } from "./ResourceRef";
 import {
   autoscalerFinding,
@@ -51,9 +52,9 @@ import type { ResourceConnections } from "@/generated/types";
  * something other than the count — an autoscaler that computed nothing — the
  * finding under the rows says so in words.
  */
-function nowValue(facts: AutoscalerFacts) {
+function nowValue(facts: AutoscalerFacts, t: T) {
   const readings = metricReadings(facts);
-  const scaled = lastScaled(facts);
+  const scaled = lastScaled(facts, t);
   if (readings.length === 0 && scaled === null) return null;
 
   return (
@@ -101,7 +102,8 @@ export interface Governance {
  * until the workload recovers, and keeps its coloured sentence.
  */
 export function governanceRows(
-  conns: ResourceConnections | null | undefined
+  conns: ResourceConnections | null | undefined,
+  t: T
 ): Governance {
   const rows: KeyValue[] = [];
   const findings: Finding[] = [];
@@ -114,7 +116,7 @@ export function governanceRows(
   // and the caption is now the composition's fixed subject line. It is not a
   // qualifier anyway: neither range on the page is the range while it is true.
   if (scaling.length > 1) {
-    const several = autoscalerScaleWarnings(conns).find(
+    const several = autoscalerScaleWarnings(conns, t).find(
       (warning) => warning.key === "hpa:several"
     );
     if (several) {
@@ -137,15 +139,18 @@ export function governanceRows(
             namespace={auto.object.namespace}
             showKind={false}
           />
-          <span className="text-fg-fnt"> · {autoscalerRange(auto.facts)}</span>
+          <span className="text-fg-fnt">
+            {" "}
+            · {autoscalerRange(auto.facts, t)}
+          </span>
         </>
       ),
     });
 
-    const now = nowValue(auto.facts);
+    const now = nowValue(auto.facts, t);
     if (now) rows.push({ label: "Now", value: now });
 
-    const finding = autoscalerFinding(auto);
+    const finding = autoscalerFinding(auto, t);
     if (finding) findings.push(finding);
   }
 
@@ -162,13 +167,13 @@ export function governanceRows(
           />
           <span className="text-fg-fnt">
             {" "}
-            keeps {budgetRule(budget.facts)} — {budgetRoom(budget.facts)}
+            keeps {budgetRule(budget.facts, t)} — {budgetRoom(budget.facts, t)}
           </span>
         </>
       ),
     });
 
-    const finding = budgetFinding(budget);
+    const finding = budgetFinding(budget, t);
     if (finding && finding.tone !== "neutral") findings.push(finding);
   }
 

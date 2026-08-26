@@ -324,7 +324,7 @@ export function useObjectActions({
           kind={kind}
           current={(detail as ScalableInfo | undefined)?.replicas.desired ?? 0}
           busy={scale.isPending}
-          warnings={scaleWarnings(governance.data, intercept("Scale"))}
+          warnings={scaleWarnings(governance.data, intercept("Scale"), t)}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}

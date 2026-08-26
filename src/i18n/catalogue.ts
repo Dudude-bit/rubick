@@ -1250,6 +1250,52 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    hpaPinnedAt: "pinned at {n}",
+    hpaRange: "{min} to {max} replicas",
+    hpaCannotReach: "{name} cannot reach what it scales",
+    hpaCannotReachDetail:
+      "The autoscaler names {kind} {target} and cannot read its scale, so it is not scaling anything.",
+    hpaStandingBy: "{name} is standing by while this is scaled to zero",
+    hpaStandingByDetail:
+      "An autoscaler does not scale a workload up from zero. Set a replica count by hand and it takes over from there.",
+    hpaNoMetrics: "{name} is not scaling this — it cannot read its metrics",
+    hpaNoMetricsDefault: "The metric source did not answer.",
+    hpaAtFloor: "{name} is holding this at its floor of {min}",
+    hpaAtFloorDetail:
+      "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
+    hpaAtCeiling:
+      "{name} wants more replicas than {max} — this is at its ceiling",
+    hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
+    hpaRunning: "{n} running",
+    hpaWanted: "{n} wanted",
+    hpaNothingComputed: "nothing computed",
+    hpaLastScaled: "last scaled {ago} ago",
+    pdbAtLeast: "at least {n} available",
+    pdbAtMost: "at most {n} unavailable",
+    pdbNoRule: "no rule stated",
+    pdbNoDisruption: "no disruption allowed",
+    pdbRoom: "{allowed} · {healthy} healthy of {selected} selected",
+    pdbBelowFloor:
+      "{name} is below its own floor — {healthy} healthy, {required} required",
+    pdbBelowFloorDetail:
+      "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering this workload will not finish.",
+    pdbExactlyMet: "{name} allows no disruption right now",
+    pdbExactlyMetDetail:
+      "The budget is exactly met: {healthy} healthy against a floor of {required}. A node drain covering this workload will wait.",
+    hpaSeveralTitle: "{n} autoscalers",
+    hpaSeveralHead: "{n} autoscalers claim this workload.",
+    hpaSeveralDetail:
+      "{names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives.",
+    hpaCannotActNow: "it is not currently able to act",
+    hpaOwnsStuckHead: "{name} owns this replica count, and is stuck.",
+    hpaOwnsStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back.",
+    hpaWillRevertHead: "{name} will put this number back.",
+    hpaWillRevertDetail:
+      "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
+    hpaAutoscalerNamed: "The autoscaler {name}",
+    docNoReplicaCount: "the document has no replica count",
+    cannotTell: "cannot tell",
     shellFinished: "finished, nothing to attach to",
     shellExited: "exited {code}, nothing to attach to",
     shellNotStarted: "has not started",
@@ -3034,6 +3080,10 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    disruptionsAllowed: {
+      one: "{n} disruption allowed",
+      other: "{n} disruptions allowed",
+    },
     attemptsCount: { one: "{n} attempt", other: "{n} attempts" },
     ngxWorkers: {
       one: "{n} nginx worker, whatever the container's CPU allowance is.",
