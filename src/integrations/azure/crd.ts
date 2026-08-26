@@ -24,19 +24,19 @@ const dash = (value: unknown) =>
 const identityColumns: CrdColumn[] = [
   {
     id: "type",
-    header: "Type",
+    header: "type",
     accessor: (resource) => identityType(resource),
     cell: dash,
   },
   {
     id: "resource",
-    header: "Identity",
+    header: "identity",
     accessor: (resource) => identityResource(resource),
     cell: dash,
   },
   {
     id: "clientId",
-    header: "Client ID",
+    header: "clientId",
     accessor: (resource) => identityClientId(resource),
     cell: dash,
   },
@@ -45,13 +45,13 @@ const identityColumns: CrdColumn[] = [
 const bindingColumns: CrdColumn[] = [
   {
     id: "identity",
-    header: "Binds",
+    header: "binds",
     accessor: (resource) => bindingIdentity(resource),
     cell: dash,
   },
   {
     id: "selector",
-    header: "To pods labelled",
+    header: "toPodsLabelled",
     accessor: (resource) => {
       const selector = bindingSelector(resource);
       return selector === null ? null : `aadpodidbinding=${selector}`;
@@ -71,26 +71,26 @@ const bindingColumns: CrdColumn[] = [
 const assignedColumns: CrdColumn[] = [
   {
     id: "pod",
-    header: "Pod",
+    header: "pod",
     accessor: (resource) => getValueByPath(resource, "spec.pod"),
     cell: dash,
   },
   {
     id: "identity",
-    header: "Identity",
+    header: "identity",
     accessor: (resource) =>
       getValueByPath(resource, "spec.azureIdentityRef.metadata.name"),
     cell: dash,
   },
   {
     id: "node",
-    header: "Node",
+    header: "node",
     accessor: (resource) => getValueByPath(resource, "spec.nodename"),
     cell: dash,
   },
   {
     id: "status",
-    header: "Status",
+    header: "status",
     accessor: (resource) => getValueByPath(resource, "status.status"),
     cell: dash,
   },
@@ -99,7 +99,7 @@ const assignedColumns: CrdColumn[] = [
 const prohibitedColumns: CrdColumn[] = [
   {
     id: "target",
-    header: "Leaves alone",
+    header: "leavesAlone",
     accessor: (resource) => prohibitedTargetSummary(resource),
     cell: dash,
   },

@@ -17,7 +17,7 @@ import type { CrdView } from "../registry";
 const ingressRouteColumns: CrdColumn[] = [
   {
     id: "entryPoints",
-    header: "Entry Points",
+    header: "entryPoints",
     accessor: (resource) => {
       const entryPoints = getValueByPath(resource, "spec.entryPoints") as
         string[] | undefined;
@@ -30,7 +30,7 @@ const ingressRouteColumns: CrdColumn[] = [
   },
   {
     id: "hosts",
-    header: "Hosts",
+    header: "hosts",
     accessor: (resource) => {
       const routes = getValueByPath(resource, "spec.routes") as
         Array<{ match?: string }> | undefined;
@@ -56,7 +56,7 @@ const ingressRouteColumns: CrdColumn[] = [
   },
   {
     id: "services",
-    header: "Services",
+    header: "services",
     accessor: (resource) => {
       const routes = getValueByPath(resource, "spec.routes") as
         | Array<{
@@ -84,7 +84,7 @@ const ingressRouteColumns: CrdColumn[] = [
   },
   {
     id: "middlewares",
-    header: "Middlewares",
+    header: "middlewares",
     accessor: (resource) => {
       const routes = getValueByPath(resource, "spec.routes") as
         | Array<{
@@ -109,7 +109,7 @@ const ingressRouteColumns: CrdColumn[] = [
   },
   {
     id: "tls",
-    header: "TLS",
+    header: "tls",
     accessor: (resource) => {
       const tls = getValueByPath(resource, "spec.tls") as
         | {
@@ -133,7 +133,7 @@ const ingressRouteColumns: CrdColumn[] = [
 const middlewareColumns: CrdColumn[] = [
   {
     id: "type",
-    header: "Type",
+    header: "type",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
         Record<string, unknown> | undefined;
@@ -176,8 +176,8 @@ const middlewareColumns: CrdColumn[] = [
   },
   {
     id: "details",
-    header: "Details",
-    accessor: (resource) => {
+    header: "details",
+    accessor: (resource, t) => {
       const spec = getValueByPath(resource, "spec") as
         Record<string, unknown> | undefined;
       if (!spec) return null;
@@ -206,10 +206,10 @@ const middlewareColumns: CrdColumn[] = [
         return `→ ${redirect.scheme ?? "https"}${redirect.permanent ? " (301)" : " (302)"}`;
       }
       if (spec.basicAuth || spec.digestAuth || spec.forwardAuth) {
-        return "Auth enabled";
+        return t("readings", "traefikAuthEnabled");
       }
       if (spec.headers) {
-        return "Custom headers";
+        return t("readings", "traefikCustomHeaders");
       }
       if (spec.chain) {
         const chain = spec.chain as { middlewares?: Array<{ name: string }> };
@@ -228,19 +228,19 @@ const middlewareColumns: CrdColumn[] = [
 const tlsOptionColumns: CrdColumn[] = [
   {
     id: "minVersion",
-    header: "Min Version",
+    header: "minVersion",
     accessor: (resource) => getValueByPath(resource, "spec.minVersion"),
     cell: (value) => String(value ?? "Default"),
   },
   {
     id: "maxVersion",
-    header: "Max Version",
+    header: "maxVersion",
     accessor: (resource) => getValueByPath(resource, "spec.maxVersion"),
     cell: (value) => String(value ?? "Default"),
   },
   {
     id: "cipherSuites",
-    header: "Cipher Suites",
+    header: "cipherSuites",
     accessor: (resource) => {
       const cipherSuites = getValueByPath(resource, "spec.cipherSuites") as
         string[] | undefined;
@@ -251,7 +251,7 @@ const tlsOptionColumns: CrdColumn[] = [
   },
   {
     id: "sniStrict",
-    header: "SNI Strict",
+    header: "sniStrict",
     accessor: (resource) => getValueByPath(resource, "spec.sniStrict"),
     cell: (value) => (value === true ? "Yes" : "No"),
   },

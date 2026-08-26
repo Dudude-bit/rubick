@@ -25,7 +25,7 @@ const dash = (value: unknown) =>
 const targetGroupBindingColumns: CrdColumn[] = [
   {
     id: "service",
-    header: "Service",
+    header: "service",
     accessor: (resource) => {
       const service = boundService(resource);
       const port = boundPort(resource);
@@ -35,13 +35,13 @@ const targetGroupBindingColumns: CrdColumn[] = [
   },
   {
     id: "targetGroup",
-    header: "Target group",
+    header: "targetGroup",
     accessor: (resource) => targetGroupLabel(resource),
     cell: dash,
   },
   {
     id: "targetType",
-    header: "Targets",
+    header: "targets",
     accessor: (resource) => bindingSummary(resource),
     cell: dash,
   },
@@ -50,7 +50,7 @@ const targetGroupBindingColumns: CrdColumn[] = [
     // Not "Status": the column is empty for every healthy binding *and* for
     // every binding on a cluster whose controller is not running, and a
     // header promising status would make that emptiness read as "fine".
-    header: "Controller says",
+    header: "controllerSays",
     accessor: (resource) => bindingFailure(resource),
     cell: dash,
   },
@@ -59,7 +59,7 @@ const targetGroupBindingColumns: CrdColumn[] = [
 const ingressClassParamsColumns: CrdColumn[] = [
   {
     id: "applies",
-    header: "Applies",
+    header: "applies",
     accessor: (resource) => ingressClassParamsSummary(resource),
     cell: dash,
   },

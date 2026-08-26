@@ -56,7 +56,7 @@ const fluxStatusConfig: CrdStatus = {
 const helmReleaseColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string; reason?: string }> | undefined;
@@ -74,7 +74,7 @@ const helmReleaseColumns: CrdColumn[] = [
   },
   {
     id: "chart",
-    header: "Chart",
+    header: "chart",
     accessor: (resource) => {
       const chartSpec = getValueByPath(resource, "spec.chart.spec") as
         | {
@@ -89,7 +89,7 @@ const helmReleaseColumns: CrdColumn[] = [
   },
   {
     id: "version",
-    header: "Version",
+    header: "version",
     accessor: (resource) => {
       // Try to get installed version from status first
       const lastAppliedRevision = getValueByPath(
@@ -111,7 +111,7 @@ const helmReleaseColumns: CrdColumn[] = [
   },
   {
     id: "sourceRef",
-    header: "Source",
+    header: "source",
     accessor: (resource) => {
       const chartSpec = getValueByPath(resource, "spec.chart.spec") as
         | {
@@ -127,13 +127,13 @@ const helmReleaseColumns: CrdColumn[] = [
   },
   {
     id: "targetNamespace",
-    header: "Target NS",
+    header: "targetNS",
     accessor: (resource) => getValueByPath(resource, "spec.targetNamespace"),
     cell: (value) => String(value ?? "(same)"),
   },
   {
     id: "suspended",
-    header: "Suspended",
+    header: "suspended",
     accessor: (resource) => getValueByPath(resource, "spec.suspend") === true,
     cell: (value) => (value ? "Yes" : "No"),
   },
@@ -145,7 +145,7 @@ const helmReleaseColumns: CrdColumn[] = [
 const helmRepositoryColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string }> | undefined;
@@ -159,7 +159,7 @@ const helmRepositoryColumns: CrdColumn[] = [
   },
   {
     id: "url",
-    header: "URL",
+    header: "url",
     accessor: (resource) => getValueByPath(resource, "spec.url"),
     cell: (value) => {
       if (!value) return "-";
@@ -173,7 +173,7 @@ const helmRepositoryColumns: CrdColumn[] = [
   },
   {
     id: "type",
-    header: "Type",
+    header: "type",
     accessor: (resource) => {
       const repoType = getValueByPath(resource, "spec.type") as
         string | undefined;
@@ -183,13 +183,13 @@ const helmRepositoryColumns: CrdColumn[] = [
   },
   {
     id: "interval",
-    header: "Interval",
+    header: "interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
     cell: (value) => String(value ?? "-"),
   },
   {
     id: "artifact",
-    header: "Last Fetched",
+    header: "lastFetched",
     accessor: (resource) =>
       getValueByPath(resource, "status.artifact.lastUpdateTime"),
     cell: (value) => {
@@ -207,7 +207,7 @@ const helmRepositoryColumns: CrdColumn[] = [
 const helmChartColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string }> | undefined;
@@ -221,13 +221,13 @@ const helmChartColumns: CrdColumn[] = [
   },
   {
     id: "chart",
-    header: "Chart",
+    header: "chart",
     accessor: (resource) => getValueByPath(resource, "spec.chart"),
     cell: (value) => String(value ?? "-"),
   },
   {
     id: "version",
-    header: "Version",
+    header: "version",
     accessor: (resource) => {
       // Try artifact version first (actual fetched version)
       const artifactRevision = getValueByPath(
@@ -243,7 +243,7 @@ const helmChartColumns: CrdColumn[] = [
   },
   {
     id: "sourceRef",
-    header: "Source",
+    header: "source",
     accessor: (resource) => {
       const sourceRef = getValueByPath(resource, "spec.sourceRef") as
         | {
@@ -259,7 +259,7 @@ const helmChartColumns: CrdColumn[] = [
   },
   {
     id: "interval",
-    header: "Interval",
+    header: "interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
     cell: (value) => String(value ?? "-"),
   },

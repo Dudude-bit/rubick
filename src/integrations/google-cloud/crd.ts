@@ -32,13 +32,13 @@ const dash = (value: unknown) =>
 const backendConfigColumns: CrdColumn[] = [
   {
     id: "healthCheck",
-    header: "Health check",
+    header: "healthCheck",
     accessor: (resource) => healthCheckOf(resource),
     cell: dash,
   },
   {
     id: "behaviour",
-    header: "Applies",
+    header: "applies",
     accessor: (resource) => backendConfigSummary(resource),
     cell: dash,
   },
@@ -47,7 +47,7 @@ const backendConfigColumns: CrdColumn[] = [
 const frontendConfigColumns: CrdColumn[] = [
   {
     id: "behaviour",
-    header: "Applies",
+    header: "applies",
     accessor: (resource) => frontendConfigSummary(resource),
     cell: dash,
   },
@@ -56,7 +56,7 @@ const frontendConfigColumns: CrdColumn[] = [
 const managedCertificateColumns: CrdColumn[] = [
   {
     id: "certificateStatus",
-    header: "Status",
+    header: "status",
     accessor: (resource) => certificateStatusOf(resource),
     // Not a badge, and deliberately: an empty status is what the controller
     // writes before it has looked at the certificate *and* what a cluster
@@ -66,13 +66,13 @@ const managedCertificateColumns: CrdColumn[] = [
   },
   {
     id: "domains",
-    header: "Domains",
+    header: "domains",
     accessor: (resource) => certificateDomains(resource).join(", "),
     cell: dash,
   },
   {
     id: "notProvisioned",
-    header: "Not provisioned",
+    header: "notProvisioned",
     // The column the list page exists for. A certificate with four domains
     // and one FailedNotVisible reads as "Provisioning" at the top level for
     // as long as anybody leaves it, and this is the only place that names

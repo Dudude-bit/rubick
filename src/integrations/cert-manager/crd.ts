@@ -47,7 +47,7 @@ const certificateStatusConfig: CrdStatus = {
 const certificateColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string }> | undefined;
@@ -61,13 +61,13 @@ const certificateColumns: CrdColumn[] = [
   },
   {
     id: "secret",
-    header: "Secret",
+    header: "secret",
     accessor: (resource) => getValueByPath(resource, "spec.secretName"),
     cell: (value) => String(value ?? "-"),
   },
   {
     id: "issuer",
-    header: "Issuer",
+    header: "issuer",
     accessor: (resource) => {
       const issuerRef = getValueByPath(resource, "spec.issuerRef") as
         { name: string; kind?: string } | undefined;
@@ -79,7 +79,7 @@ const certificateColumns: CrdColumn[] = [
   },
   {
     id: "dnsNames",
-    header: "DNS Names",
+    header: "dnsNames",
     accessor: (resource) => {
       const dnsNames = getValueByPath(resource, "spec.dnsNames") as
         string[] | undefined;
@@ -89,7 +89,7 @@ const certificateColumns: CrdColumn[] = [
   },
   {
     id: "expiry",
-    header: "Expires",
+    header: "expires",
     accessor: (resource) => getValueByPath(resource, "status.notAfter"),
     cell: (value) => {
       if (!value) return "-";
@@ -109,7 +109,7 @@ const certificateColumns: CrdColumn[] = [
 const issuerColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string }> | undefined;
@@ -123,7 +123,7 @@ const issuerColumns: CrdColumn[] = [
   },
   {
     id: "type",
-    header: "Type",
+    header: "type",
     accessor: (resource) => {
       const spec = getValueByPath(resource, "spec") as
         Record<string, unknown> | undefined;
@@ -141,8 +141,8 @@ const issuerColumns: CrdColumn[] = [
   },
   {
     id: "server",
-    header: "Server/Details",
-    accessor: (resource) => {
+    header: "serverDetails",
+    accessor: (resource, t) => {
       const spec = getValueByPath(resource, "spec") as
         Record<string, unknown> | undefined;
       if (!spec) return null;
@@ -158,7 +158,7 @@ const issuerColumns: CrdColumn[] = [
       }
       if (spec.ca) {
         const ca = spec.ca as { secretName?: string };
-        return `CA: ${ca.secretName ?? "unknown"}`;
+        return `CA: ${ca.secretName ?? t("empty", "unknownLower")}`;
       }
       if (spec.selfSigned) return "Self-Signed";
       if (spec.vault) {
@@ -177,7 +177,7 @@ const issuerColumns: CrdColumn[] = [
 const certificateRequestColumns: CrdColumn[] = [
   {
     id: "ready",
-    header: "Ready",
+    header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
         Array<{ type: string; status: string }> | undefined;
@@ -197,7 +197,7 @@ const certificateRequestColumns: CrdColumn[] = [
   },
   {
     id: "issuer",
-    header: "Issuer",
+    header: "issuer",
     accessor: (resource) => {
       const issuerRef = getValueByPath(resource, "spec.issuerRef") as
         { name: string; kind?: string } | undefined;
@@ -209,7 +209,7 @@ const certificateRequestColumns: CrdColumn[] = [
   },
   {
     id: "requestor",
-    header: "Requestor",
+    header: "requestor",
     accessor: (resource) => getValueByPath(resource, "spec.username"),
     cell: (value) => String(value ?? "-"),
   },

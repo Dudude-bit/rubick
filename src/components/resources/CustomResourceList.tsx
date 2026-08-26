@@ -130,11 +130,11 @@ export function CustomResourceList({
         cols.push({
           size: UNKNOWN_COLUMN_SIZE,
           id: pc.id,
-          header: pc.header,
+          header: t("columns", pc.header),
           cell: ({ row }) => {
-            const value = pc.accessor(row.original);
+            const value = pc.accessor(row.original, t);
             if (pc.cell) {
-              return pc.cell(value);
+              return pc.cell(value, t);
             }
             // Default formatting with the status config the vendor supplied
             if (crdView && typeof value === "string") {
@@ -169,7 +169,7 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, crdView, getDetailPath]);
+  }, [crdKind, scope, printerColumns, crdView, getDetailPath, t]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
