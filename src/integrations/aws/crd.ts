@@ -7,6 +7,7 @@
  * complained — so those are the columns.
  */
 
+import { joinSayings } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
 import { conditionStatus, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
@@ -42,7 +43,7 @@ const targetGroupBindingColumns: CrdColumn[] = [
   {
     id: "targetType",
     header: "targets",
-    accessor: (resource) => bindingSummary(resource),
+    accessor: (resource, t) => joinSayings(bindingSummary(resource), t),
     cell: dash,
   },
   {

@@ -15,6 +15,7 @@
  * Deployment with no Service in front of it must not cost a diagram to say so.
  */
 
+import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -225,6 +226,7 @@ function EdgeNote({
   edge: ServiceEdges | undefined;
   object: ObjectRef;
 }) {
+  const t = useT();
   if (!edge?.available || edge.error) return null;
   const configs = edge.configs.get(
     edgeKey(object.namespace ?? "", object.name)
@@ -248,7 +250,7 @@ function EdgeNote({
           ) : (
             <span className="font-mono">{config.source.name}</span>
           )}{" "}
-          {config.summary}
+          {joinSayings(config.summary, t)}
           {config.problem && (
             <span
               className={
@@ -256,7 +258,7 @@ function EdgeNote({
               }
             >
               {" — "}
-              {config.problem.text}
+              {sayWords(config.problem.text, t)}
             </span>
           )}
         </p>

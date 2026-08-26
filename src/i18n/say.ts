@@ -90,3 +90,8 @@ export function errorWords(error: unknown, t: T): string {
   if (error instanceof SaidError) return sayWords(error.saying, t);
   return error instanceof Error ? error.message : String(error);
 }
+
+/** Several sayings on one line, the way a summary reads them. */
+export function joinSayings(parts: Saying[], t: T, separator = " · "): string {
+  return parts.map((part) => sayWords(part, t)).join(separator);
+}

@@ -13,6 +13,7 @@
  * detection and there is nothing to ask the cluster.
  */
 
+import { joinSayings, sayWords } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
 import { NO_STATUS, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
@@ -33,13 +34,16 @@ const backendConfigColumns: CrdColumn[] = [
   {
     id: "healthCheck",
     header: "healthCheck",
-    accessor: (resource) => healthCheckOf(resource),
+    accessor: (resource, t) => {
+      const said = healthCheckOf(resource);
+      return said === null ? null : sayWords(said, t);
+    },
     cell: dash,
   },
   {
     id: "behaviour",
     header: "applies",
-    accessor: (resource) => backendConfigSummary(resource),
+    accessor: (resource, t) => joinSayings(backendConfigSummary(resource), t),
     cell: dash,
   },
 ];
@@ -48,7 +52,7 @@ const frontendConfigColumns: CrdColumn[] = [
   {
     id: "behaviour",
     header: "applies",
-    accessor: (resource) => frontendConfigSummary(resource),
+    accessor: (resource, t) => joinSayings(frontendConfigSummary(resource), t),
     cell: dash,
   },
 ];

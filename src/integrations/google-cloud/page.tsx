@@ -20,6 +20,7 @@
  * verdict's clothes.
  */
 
+import { joinSayings } from "@/i18n/say";
 import { useMemo, useState } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -329,7 +330,10 @@ function FrontBlock({ front }: { front: GkeFront }) {
             bad={!front.frontendConfig.found}
             title={
               front.frontendConfig.found
-                ? frontendConfigSummary(front.frontendConfig.found)
+                ? joinSayings(
+                    frontendConfigSummary(front.frontendConfig.found),
+                    t
+                  )
                 : undefined
             }
           >
@@ -341,7 +345,10 @@ function FrontBlock({ front }: { front: GkeFront }) {
                 crd={FRONTEND_CONFIG_CRD}
                 className="text-fg underline-offset-2 hover:underline"
               >
-                {frontendConfigSummary(front.frontendConfig.found)}
+                {joinSayings(
+                  frontendConfigSummary(front.frontendConfig.found),
+                  t
+                )}
               </ObjectLink>
             ) : (
               t("empty", "nameAbsent", { name: front.frontendConfig.name })
@@ -456,7 +463,10 @@ function RouteChain({
               }
               title={
                 config.found
-                  ? `${config.name} — ${backendConfigSummary(config.found)}`
+                  ? `${config.name} — ${joinSayings(
+                      backendConfigSummary(config.found),
+                      t
+                    )}`
                   : undefined
               }
             >
@@ -468,7 +478,10 @@ function RouteChain({
                   crd={BACKEND_CONFIG_CRD}
                   className="text-fg underline-offset-2 hover:underline"
                 >
-                  {backendConfigSummary(config.found, { cdn: false })}
+                  {joinSayings(
+                    backendConfigSummary(config.found, { cdn: false }),
+                    t
+                  )}
                 </ObjectLink>
               ) : (
                 t("empty", "nameAbsent", { name: config.name })

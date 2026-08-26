@@ -18,6 +18,7 @@
  * one credential up.
  */
 
+import type { Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -32,39 +33,60 @@ const PREFIX = "appgw.ingress.kubernetes.io/";
  * does: how the backend is reached, how long it is given, how it is checked,
  * and what is in front of it.
  */
-const READ: Array<{ key: string; say: (value: string) => string | null }> = [
-  { key: "backend-protocol", say: (v) => `speaks ${v} to the pods` },
-  { key: "backend-path-prefix", say: (v) => `rewrites the path to ${v}` },
-  { key: "backend-hostname", say: (v) => `sends Host: ${v}` },
-  { key: "request-timeout", say: (v) => `${v}s request timeout` },
+const READ: Array<{ key: string; say: (value: string) => Saying | null }> = [
+  {
+    key: "backend-protocol",
+    say: (v) => ({ key: "agicSpeaks", values: { protocol: v } }),
+  },
+  {
+    key: "backend-path-prefix",
+    say: (v) => ({ key: "agicRewritesPath", values: { path: v } }),
+  },
+  {
+    key: "backend-hostname",
+    say: (v) => ({ key: "agicSendsHost", values: { host: v } }),
+  },
+  {
+    key: "request-timeout",
+    say: (v) => ({ key: "agicRequestTimeout", values: { n: Number(v) } }),
+  },
   {
     key: "connection-draining-timeout",
-    say: (v) => `${v}s draining`,
+    say: (v) => ({ key: "agicDraining", values: { n: Number(v) } }),
   },
-  { key: "health-probe-path", say: (v) => `probes ${v}` },
-  { key: "health-probe-status-codes", say: (v) => `accepts ${v}` },
+  {
+    key: "health-probe-path",
+    say: (v) => ({ key: "agicProbes", values: { path: v } }),
+  },
+  {
+    key: "health-probe-status-codes",
+    say: (v) => ({ key: "agicAccepts", values: { codes: v } }),
+  },
   {
     key: "health-probe-unhealthy-threshold",
-    say: (v) => `out after ${v} failed probes`,
+    say: (v) => ({ key: "agicOutAfter", values: { n: Number(v) } }),
   },
   {
     key: "cookie-based-affinity",
-    say: (v) => (v === "true" ? "cookie affinity" : null),
+    say: (v) => (v === "true" ? { key: "agicCookieAffinity" } : null),
   },
   {
     key: "ssl-redirect",
-    say: (v) => (v === "true" ? "redirects to HTTPS" : null),
+    say: (v) => (v === "true" ? { key: "agicSslRedirect" } : null),
   },
   {
     key: "use-private-ip",
-    say: (v) => (v === "true" ? "on the private IP" : null),
+    say: (v) => (v === "true" ? { key: "agicPrivateIp" } : null),
   },
-  { key: "rewrite-rule-set", say: (v) => `rewrite set ${v}` },
+  {
+    key: "rewrite-rule-set",
+    say: (v) => ({ key: "agicRewriteSet", values: { name: v } }),
+  },
   {
     key: "waf-policy-for-path",
     // A WAF policy is a resource id a hundred and sixty characters long; the
     // name at the end is what the reader recognises.
-    say: (v) => `WAF ${v.split("/").pop() ?? v}`,
+    say: (v) => ({ key: "agicWaf", values: { name: v.split("/").pop() ?? v } }),
   },
 ];
 
@@ -105,7 +127,7 @@ export async function serviceEdge({
         },
         // An AGIC Ingress with no annotations is a real and common object: it
         // gets the gateway's defaults, and saying so is better than a blank.
-        summary: said.length > 0 ? said.join(" · ") : "gateway defaults",
+        summary: said.length > 0 ? said : [{ key: "azureGatewayDefaults" }],
         problem: null,
       },
     ];

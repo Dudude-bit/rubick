@@ -479,7 +479,14 @@ describe("TrafficChain", () => {
                     name: "shop-backend",
                     to: "",
                   },
-                  summary: "every port · health check HTTP :8080/healthz",
+                  summary: [
+                    {
+                      key: "verbatimLine",
+                      values: {
+                        said: "every port · health check HTTP :8080/healthz",
+                      },
+                    },
+                  ],
                   problem: null,
                 },
               ],
@@ -511,9 +518,16 @@ describe("TrafficChain", () => {
               [
                 {
                   source: { kind: "BackendConfig", name: "ghost", to: "" },
-                  summary: "every port",
+                  summary: [
+                    { key: "verbatimLine", values: { said: "every port" } },
+                  ],
                   problem: {
-                    text: "no BackendConfig named ghost in this namespace — nothing is applied",
+                    text: {
+                      key: "verbatimLine" as const,
+                      values: {
+                        said: "no BackendConfig named ghost in this namespace — nothing is applied",
+                      },
+                    },
                     tone: "err",
                   },
                 },

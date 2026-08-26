@@ -21,6 +21,7 @@
  * and is the next tier up.
  */
 
+import type { Saying } from "@/i18n/say";
 import type { CustomResourceInfo } from "@/generated/types";
 import { conditionOf, getValueByPath } from "../kit";
 
@@ -61,14 +62,21 @@ export function targetGroupLabel(binding: CustomResourceInfo): string | null {
 }
 
 /** One line for a chain hop: which group, how targeted, on which port. */
-export function bindingSummary(binding: CustomResourceInfo): string {
-  const parts = [
-    targetGroupLabel(binding),
-    text(binding, "spec.targetType"),
-    boundPort(binding) === null ? null : `port ${boundPort(binding)}`,
-    text(binding, "spec.ipAddressType"),
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "no target group named";
+export function bindingSummary(binding: CustomResourceInfo): Saying[] {
+  const port = boundPort(binding);
+  const parts: Array<Saying | null> = [
+    verbatimOrNull(targetGroupLabel(binding)),
+    verbatimOrNull(text(binding, "spec.targetType")),
+    port === null ? null : { key: "awsPortNumber", values: { port } },
+    verbatimOrNull(text(binding, "spec.ipAddressType")),
+  ];
+  const said = parts.filter((part): part is Saying => part !== null);
+  return said.length > 0 ? said : [{ key: "awsNoTargetGroup" }];
+}
+
+/** A value the object itself supplied, which is nobody's to translate. */
+function verbatimOrNull(said: string | null): Saying | null {
+  return said === null ? null : { key: "verbatimLine", values: { said } };
 }
 
 /**

@@ -18,6 +18,7 @@
  * ELB API, one credential up.
  */
 
+import { joinSayings } from "@/i18n/say";
 import { useMemo, useState } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -361,7 +362,11 @@ function MembersBlock({
                     <Cell
                       key={backend}
                       bad={failure !== null}
-                      title={bound ? bindingSummary(bound) : undefined}
+                      title={
+                        bound
+                          ? joinSayings(bindingSummary(bound), t)
+                          : undefined
+                      }
                     >
                       {bound ? (
                         <ObjectLink
@@ -371,7 +376,7 @@ function MembersBlock({
                           crd={TARGET_GROUP_BINDING_CRD}
                           className="text-fg underline-offset-2 hover:underline"
                         >
-                          {bindingSummary(bound)}
+                          {joinSayings(bindingSummary(bound), t)}
                         </ObjectLink>
                       ) : (
                         <span className="text-fg-fnt">

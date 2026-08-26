@@ -291,8 +291,11 @@ export interface VolumeFullness {
 export interface EdgeConfig {
   /** The object that states it, and where the reader continues. */
   source: { kind: string; name: string; to: string };
-  /** What it configures, in the object's own terms. */
-  summary: string;
+  /**
+   * What it configures, in the object's own terms — as keys, since this is
+   * composed inside a query. Several, joined on one line.
+   */
+  summary: Saying[];
   /**
    * Stated only where the object itself states it — a status field a
    * controller wrote, or a name that resolves to no object in the cluster.
@@ -300,7 +303,7 @@ export interface EdgeConfig {
    * status at all, and reading its silence as health would invent the most
    * confident wrong claim in the app.
    */
-  problem: { text: string; tone: "warn" | "err" } | null;
+  problem: { text: Saying; tone: "warn" | "err" } | null;
 }
 
 /** What terminates TLS for one host, where `spec.tls` does not. */
