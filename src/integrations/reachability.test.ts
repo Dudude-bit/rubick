@@ -12,6 +12,13 @@ import { describe, expect, it } from "vitest";
 
 import { explain, unreachable } from "./reachability";
 
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const DNS =
   "dns error: failed to lookup address information: Name or service not known";
 const REFUSED = "connection refused";
@@ -71,10 +78,10 @@ describe("an address only the cluster can resolve", () => {
 
   /** The sentence has to carry the way out, not just the diagnosis. */
   it("names both ways out", () => {
-    const said = explain({
-      kind: "cluster-dns",
-      host: "prometheus.monitoring",
-    });
+    const said = sayWords(
+      explain({ kind: "cluster-dns", host: "prometheus.monitoring" }),
+      t
+    );
     expect(said).toContain("runs on your machine");
     expect(said).toContain("port-forward");
   });

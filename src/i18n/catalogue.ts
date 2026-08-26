@@ -1334,6 +1334,22 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    reachClusterDns:
+      "{host} is a name only the cluster can resolve — this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+    reachNoScheme:
+      "{host} has no scheme — write http:// or https:// in front of it.",
+    connReasonAndShape: "{said} — {shape}",
+    lokiHoldsNoneShort: "holds none of it",
+    lokiCouldNotTell: "could not tell",
+    lokiHoldsPart: "holds part of it",
+    lokiHoldsAll: "holding this cluster",
+    connDidNotSayWhy: "it did not say why",
+    connDidNotAnswer: "did not answer — {reason}",
+    connAnsweredAgo: "answered {age}",
+    connKeeps: "keeps {retention}",
+    connRanges: "ranges {ranges}",
+    lokiPageLimit: "up to {n} lines a page",
+    promResolutionOf: "{range} in {resolution}",
     argoMissing: "missing",
     argoFailedToApply: "failed to apply",
     argoDegraded: "degraded",

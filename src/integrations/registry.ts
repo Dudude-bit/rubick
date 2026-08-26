@@ -769,7 +769,15 @@ export type ProbeResult =
        */
       retention?: string | null;
     }
-  | { ok: false; at: number; reason: string };
+  | {
+      ok: false;
+      at: number;
+      /**
+       * Why, as a {@link Saying}: a probe runs where the reader's language
+       * is not in scope, and the transport's own words ride inside it.
+       */
+      reason: Saying;
+    };
 
 /**
  * One thing an extension is currently doing for this cluster.

@@ -17,6 +17,12 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { coverage, verdict } from "./coverage";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const page = (lines: number) =>
   ({
     lines: Array.from({ length: lines }, () => ({ ts: "1", line: {} })),
@@ -32,7 +38,7 @@ describe("whether this Loki holds this cluster's logs", () => {
 
     const found = await coverage(["web", "api"]);
     expect(found.namespaces.every((entry) => entry.holds)).toBe(true);
-    expect(verdict(found)).toMatchObject({ tone: "ok" });
+    expect(verdict(found, t)).toMatchObject({ tone: "ok" });
   });
 
   /** One line is proof, so one line is all that is asked for. */
@@ -49,7 +55,7 @@ describe("whether this Loki holds this cluster's logs", () => {
     vi.mocked(commands.lokiQueryRange).mockResolvedValue(page(0));
 
     const found = await coverage(["web", "api"]);
-    expect(verdict(found)).toMatchObject({ tone: "err" });
+    expect(verdict(found, t)).toMatchObject({ tone: "err" });
   });
 
   /** Part of a cluster is a different sentence from none of it. */
@@ -59,7 +65,7 @@ describe("whether this Loki holds this cluster's logs", () => {
     );
 
     const found = await coverage(["web", "api"]);
-    expect(verdict(found)).toMatchObject({ tone: "warn" });
+    expect(verdict(found, t)).toMatchObject({ tone: "warn" });
   });
 
   /**
@@ -73,6 +79,6 @@ describe("whether this Loki holds this cluster's logs", () => {
 
     const found = await coverage(["web"]);
     expect(found.namespaces[0].problem).toContain("401");
-    expect(verdict(found)).toMatchObject({ tone: "warn" });
+    expect(verdict(found, t)).toMatchObject({ tone: "warn" });
   });
 });

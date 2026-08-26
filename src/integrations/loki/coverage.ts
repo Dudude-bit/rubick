@@ -21,6 +21,7 @@
  * A page that cost a hundred queries to say "yes" would not be worth opening.
  */
 
+import type { T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { escapeLabel } from "./queries";
 
@@ -74,14 +75,20 @@ export async function coverage(namespaces: string[]): Promise<Coverage> {
   return { namespaces: namespacesRead, windowMs: WINDOW_MS };
 }
 
-export function verdict(found: Coverage): {
+export function verdict(
+  found: Coverage,
+  t: T
+): {
   text: string;
   tone: "ok" | "warn" | "err";
 } {
   const asked = found.namespaces.filter((entry) => entry.problem === null);
-  if (asked.length === 0) return { text: "could not tell", tone: "warn" };
+  if (asked.length === 0)
+    return { text: t("readings", "lokiCouldNotTell"), tone: "warn" };
   const holding = asked.filter((entry) => entry.holds).length;
-  if (holding === 0) return { text: "holds none of it", tone: "err" };
-  if (holding < asked.length) return { text: "holds part of it", tone: "warn" };
-  return { text: "holding this cluster", tone: "ok" };
+  if (holding === 0)
+    return { text: t("readings", "lokiHoldsNoneShort"), tone: "err" };
+  if (holding < asked.length)
+    return { text: t("readings", "lokiHoldsPart"), tone: "warn" };
+  return { text: t("readings", "lokiHoldsAll"), tone: "ok" };
 }

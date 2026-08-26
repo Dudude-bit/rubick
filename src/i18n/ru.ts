@@ -1326,6 +1326,22 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    reachClusterDns:
+      "{host} — имя, которое умеет разрешать только кластер, а это приложение работает на вашей машине и спрашивает отсюда, а не изнутри кластера. Либо укажите адрес, доступный отсюда (имя из Ingress, адрес LoadBalancer), либо пробросьте порт и используйте его: kubectl port-forward -n <namespace> svc/<service> 9090:9090, затем http://localhost:9090.",
+    reachNoScheme:
+      "У {host} нет схемы — допишите впереди http:// или https://.",
+    connReasonAndShape: "{said} — {shape}",
+    lokiHoldsNoneShort: "не хранит ничего из этого",
+    lokiCouldNotTell: "определить не удалось",
+    lokiHoldsPart: "хранит часть",
+    lokiHoldsAll: "хранит этот кластер",
+    connDidNotSayWhy: "он не сказал почему",
+    connDidNotAnswer: "не ответил — {reason}",
+    connAnsweredAgo: "ответил {age}",
+    connKeeps: "хранит {retention}",
+    connRanges: "диапазоны {ranges}",
+    lokiPageLimit: "до {n} строк на страницу",
+    promResolutionOf: "{range} с шагом {resolution}",
     argoMissing: "отсутствует",
     argoFailedToApply: "применить не удалось",
     argoDegraded: "деградировал",

@@ -604,7 +604,9 @@ function TestResult({ result }: { result: ProbeResult }) {
   }
   return (
     <p className="text-[11px] text-err" role="status">
-      {t("settings", "probeDidNotAnswer", { reason: result.reason })}
+      {t("settings", "probeDidNotAnswer", {
+        reason: sayWords(result.reason, t),
+      })}
     </p>
   );
 }
