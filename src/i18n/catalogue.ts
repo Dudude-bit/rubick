@@ -92,6 +92,7 @@ export const en = {
       "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list}, and {last}",
+    twoAnd: "{a} and {b}",
     ingressBackendNeverCreated:
       "The Ingress routes this path to a backend that was never created, so the controller has nothing to send the request to.",
     connectionRefusedNothingBehind:
@@ -1250,6 +1251,36 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    delLabelledNotListed:
+      "Labelled as delivered by {claim}, which does not list it",
+    delLabelledNoOwner:
+      "Labelled as delivered by {claim}, and no {kind} by that name exists",
+    delLabelClaimDetail:
+      "The label is a claim anybody can write, and the {kind} it names does not have this object in its inventory.",
+    delNothingApplyingDetail:
+      "Nothing here is applying this object. A {kind} that was deleted without pruning, or a manifest that was removed from git, leaves a label behind.",
+    delTwoDeliver: "{vendors} both deliver this object",
+    delTwoDeliverDetail:
+      "{names} each list it and each re-apply it, so whichever reconciles last wins and the other undoes it on its next pass.",
+    delSince: " — {name} last applied it {ago} ago",
+    delDrifted: "Live differs from git{since}",
+    delDriftedDetail:
+      "{vendor} says this object no longer matches what was applied. {note}",
+    delStopped: "Nothing is applying this object right now",
+    delStoppedDetail: "{name} has stopped reconciling.",
+    delFromGit: "Delivered from git — an edit made here does not stick",
+    delNotDelivered: "not delivered",
+    delLabelledNotListedShort: "labelled, not listed",
+    delTwoControllers: "two controllers",
+    delOutOfSyncAge: "out of sync · {ago}",
+    delOutOfSync: "out of sync",
+    delScaleAnyway: "Scale anyway",
+    delVendorWillUndo: "{verb} — {vendor} will undo this",
+    delVendorWillUndoDetail: "{vendor} will undo this.",
+    delApplyLabelNotHonoured:
+      "Apply — this object's delivery label is not honoured",
+    delApplyLabelDetail:
+      "Nothing is applying this object, whatever its label says.",
     hpaPinnedAt: "pinned at {n}",
     hpaRange: "{min} to {max} replicas",
     hpaCannotReach: "{name} cannot reach what it scales",

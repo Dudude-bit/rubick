@@ -81,7 +81,8 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
  * would be worth exactly as much as a badge on every row.
  */
 export function DeliveryBanner({ deliveries }: { deliveries: Delivery[] }) {
-  const line = deliveryLine(deliveries);
+  const t = useT();
+  const line = deliveryLine(deliveries, t);
   if (!line) return null;
   return <DeliveryLineBody line={line} />;
 }
@@ -175,7 +176,8 @@ function DeliveryWhere({
  * is faint and not a warning — it is worth knowing and it is not a fault.
  */
 export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
-  const cell = deliveryCell(deliveries);
+  const t = useT();
+  const cell = deliveryCell(deliveries, t);
   if (!cell) return null;
   return (
     <span

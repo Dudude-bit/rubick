@@ -29,6 +29,7 @@
  *   a problem earns a mark and inventory does not.
  */
 
+import type { T } from "@/i18n/useT";
 import { load } from "js-yaml";
 
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
@@ -267,7 +268,23 @@ export interface DeliveryLine {
  * - the label says delivered and nothing confirms it;
  * - two controllers both deliver it, and are undoing each other.
  */
-export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
+/** "a and b", "a, b, and c" — the last join is a word, so it comes from the catalogue. */
+function joinNames(names: string[], t: T): string {
+  if (names.length <= 1) return names[0] ?? "";
+  // Two names take no comma before the joining word; three or more do.
+  if (names.length === 2) {
+    return t("nav", "twoAnd", { a: names[0], b: names[1] });
+  }
+  return t("nav", "listAndLast", {
+    list: names.slice(0, -1).join(", "),
+    last: names[names.length - 1],
+  });
+}
+
+export function deliveryLine(
+  deliveries: Delivery[],
+  t: T
+): DeliveryLine | null {
   const sources = delivered(deliveries);
   const unconfirmed = claimedOnly(deliveries);
 
@@ -277,8 +294,11 @@ export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
     return {
       tone: "warn",
       title: claim.owner
-        ? `Labelled as delivered by ${claim.claim}, which does not list it`
-        : `Labelled as delivered by ${claim.claim}, and no ${claim.ownerKind} by that name exists`,
+        ? t("readings", "delLabelledNotListed", { claim: claim.claim })
+        : t("readings", "delLabelledNoOwner", {
+            claim: claim.claim,
+            kind: claim.ownerKind,
+          }),
       detail: claim.owner
         ? `The label is a claim anybody can write, and the ${claim.ownerKind} it names does not have this object in its inventory. Nothing is applying it, so an edit here stands — and nothing will put it back if it is deleted.`
         : `Nothing here is applying this object. A ${claim.ownerKind} that was deleted without pruning, or a manifest committed with the label already in it, both leave exactly this.`,
@@ -293,8 +313,17 @@ export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
     );
     return {
       tone: "warn",
-      title: `${sources.map((source) => source.vendor).join(" and ")} both deliver this object`,
-      detail: `${names.join(" and ")} each list it and each re-apply it, so whichever reconciles last wins and the other undoes it on its next pass. One of them has to stop owning it; nothing you change here settles it.`,
+      title: t("readings", "delTwoDeliver", {
+        // The joining word is a word: English puts "and" there, Russian puts
+        // "и" with no comma before it.
+        vendors: joinNames(
+          sources.map((source) => source.vendor),
+          t
+        ),
+      }),
+      detail: t("readings", "delTwoDeliverDetail", {
+        names: joinNames(names, t),
+      }),
       where: null,
       to: sources[0].owner.to,
     };
@@ -309,13 +338,18 @@ export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
 
   if (source.sync === "drifted") {
     const since = source.lastAppliedAt
-      ? ` — ${source.owner.name} last applied it ${formatAge(source.lastAppliedAt)} ago`
+      ? t("readings", "delSince", {
+          name: source.owner.name,
+          ago: formatAge(source.lastAppliedAt),
+        })
       : "";
     return {
       tone: "warn",
-      title: `Live differs from git${since}`,
-      detail:
-        `${source.vendor} says this object no longer matches what was applied. ${source.note ?? ""}`.trim(),
+      title: t("readings", "delDrifted", { since }),
+      detail: t("readings", "delDriftedDetail", {
+        vendor: source.vendor,
+        note: source.note ?? "",
+      }).trim(),
       where,
       to: source.owner.to,
     };
@@ -324,8 +358,10 @@ export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
   if (source.drift === "unmanaged") {
     return {
       tone: "warn",
-      title: "Nothing is applying this object right now",
-      detail: source.note ?? `${source.owner.name} has stopped reconciling.`,
+      title: t("readings", "delStopped"),
+      detail:
+        source.note ??
+        t("readings", "delStoppedDetail", { name: source.owner.name }),
       where,
       to: source.owner.to,
     };
@@ -334,7 +370,7 @@ export function deliveryLine(deliveries: Delivery[]): DeliveryLine | null {
   if (source.drift === "reverted") {
     return {
       tone: "info",
-      title: "Delivered from git — an edit made here does not stick",
+      title: t("readings", "delFromGit"),
       detail: source.note ?? "",
       where,
       to: source.owner.to,
@@ -360,20 +396,27 @@ export interface DeliveryCell {
  * and it is not a fault — it is how you find the thing somebody applied by
  * hand at three in the morning and never wrote down.
  */
-export function deliveryCell(deliveries: Delivery[]): DeliveryCell | null {
-  if (deliveries.length === 0) return { text: "not delivered", tone: "faint" };
+export function deliveryCell(
+  deliveries: Delivery[],
+  t: T
+): DeliveryCell | null {
+  if (deliveries.length === 0)
+    return { text: t("readings", "delNotDelivered"), tone: "faint" };
 
   const sources = delivered(deliveries);
   if (sources.length === 0)
-    return { text: "labelled, not listed", tone: "warn" };
-  if (sources.length > 1) return { text: "two controllers", tone: "warn" };
+    return { text: t("readings", "delLabelledNotListedShort"), tone: "warn" };
+  if (sources.length > 1)
+    return { text: t("readings", "delTwoControllers"), tone: "warn" };
 
   const source = sources[0];
   if (source.sync === "drifted") {
     return {
       text: source.lastAppliedAt
-        ? `out of sync · ${formatAge(source.lastAppliedAt)}`
-        : "out of sync",
+        ? t("readings", "delOutOfSyncAge", {
+            ago: formatAge(source.lastAppliedAt),
+          })
+        : t("readings", "delOutOfSync"),
       tone: "warn",
     };
   }
@@ -390,7 +433,10 @@ export function matchesDeliveryFilter(
 ): boolean {
   if (filter === "all") return true;
   if (filter === "notDelivered") return deliveries.length === 0;
-  const cell = deliveryCell(deliveries);
+  // The filter reads the tone and never the words, so it asks in no
+  // language rather than making every caller supply one.
+  const noWords: T = () => "";
+  const cell = deliveryCell(deliveries, noWords);
   return cell?.tone === "warn";
 }
 
@@ -434,7 +480,8 @@ export interface DeliveryIntercept {
  */
 export function deliveryIntercept(
   deliveries: Delivery[],
-  verb: string
+  verb: string,
+  t: T
 ): DeliveryIntercept | null {
   const sources = delivered(deliveries).filter(
     (source) => source.drift === "reverted"
@@ -443,9 +490,9 @@ export function deliveryIntercept(
   const source = sources[0];
 
   return {
-    title: `${verb} — ${source.vendor} will undo this`,
+    title: t("readings", "delVendorWillUndo", { verb, vendor: source.vendor }),
     subject: source.vendor,
-    lead: `${source.vendor} will undo this.`,
+    lead: t("readings", "delVendorWillUndoDetail", { vendor: source.vendor }),
     description: `${source.note ?? ""} ${
       source.path
         ? `To change it for good, edit the manifests under ${source.path}.`
@@ -485,9 +532,10 @@ export function deliveryIntercept(
  * word for overriding a consequence, and there is no consequence to override.
  */
 export function deliveryApplyIntercept(
-  deliveries: Delivery[]
+  deliveries: Delivery[],
+  t: T
 ): DeliveryIntercept | null {
-  const reverting = deliveryIntercept(deliveries, "Apply");
+  const reverting = deliveryIntercept(deliveries, "Apply", t);
   if (reverting) return reverting;
 
   const claim = claimedOnly(deliveries)[0];
@@ -495,9 +543,9 @@ export function deliveryApplyIntercept(
 
   const disowned = claim.owner !== null;
   return {
-    title: `Apply — this object's delivery label is not honoured`,
+    title: t("readings", "delApplyLabelNotHonoured"),
     subject: claim.vendor,
-    lead: `Nothing is applying this object, whatever its label says.`,
+    lead: t("readings", "delApplyLabelDetail"),
     // The vendor's name is data, so the sentence is built to need no article
     // in front of it — "a Argo CD label" is the shape that comes out otherwise.
     description: disowned

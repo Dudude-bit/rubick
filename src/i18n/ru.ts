@@ -63,6 +63,7 @@ export const ru: Catalogue = {
       "Service не публикует эндпоинт для пода, который не проходит проверку готовности, поэтому трафик отклоняется, пока поды спокойно работают — из-за этого все списки в приложении рисуют их здоровыми. Срезы говорят то же самое: все адреса за этим Service в них есть, и ни один не обслуживает.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list} и {last}",
+    twoAnd: "{a} и {b}",
     ingressBackendNeverCreated:
       "Ingress направляет этот путь на бэкенд, которого никогда не создавали, — контроллеру просто некуда отправить запрос.",
     connectionRefusedNothingBehind:
@@ -1241,6 +1242,36 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    delLabelledNotListed:
+      "Помечен как доставленный через {claim}, который его не перечисляет",
+    delLabelledNoOwner:
+      "Помечен как доставленный через {claim}, но {kind} с таким именем не существует",
+    delLabelClaimDetail:
+      "Метка — это заявление, которое может написать кто угодно, а у названного в ней {kind} этого объекта в описи нет.",
+    delNothingApplyingDetail:
+      "Здесь этот объект никто не применяет. Удалённый без очистки {kind} или убранный из git манифест оставляют метку после себя.",
+    delTwoDeliver: "{vendors} — оба доставляют этот объект",
+    delTwoDeliverDetail:
+      "{names} — каждый перечисляет его и каждый применяет заново, поэтому побеждает тот, кто согласовал последним, а другой отменяет это на следующем проходе.",
+    delSince: " — {name} применил его {ago} назад",
+    delDrifted: "Живое отличается от git{since}",
+    delDriftedDetail:
+      "{vendor} говорит, что объект больше не совпадает с тем, что было применено. {note}",
+    delStopped: "Прямо сейчас этот объект никто не применяет",
+    delStoppedDetail: "{name} перестал согласовывать.",
+    delFromGit: "Доставляется из git — правка, сделанная здесь, не удержится",
+    delNotDelivered: "не доставляется",
+    delLabelledNotListedShort: "помечен, но не перечислен",
+    delTwoControllers: "два контроллера",
+    delOutOfSyncAge: "рассинхронизирован · {ago}",
+    delOutOfSync: "рассинхронизирован",
+    delScaleAnyway: "Всё равно масштабировать",
+    delVendorWillUndo: "{verb} — {vendor} это отменит",
+    delVendorWillUndoDetail: "{vendor} это отменит.",
+    delApplyLabelNotHonoured:
+      "Применить — метка доставки этого объекта не действует",
+    delApplyLabelDetail:
+      "Этот объект никто не применяет, что бы ни говорила его метка.",
     hpaPinnedAt: "закреплено на {n}",
     hpaRange: "от {min} до {max} реплик",
     hpaCannotReach: "{name} не достаёт до того, что масштабирует",

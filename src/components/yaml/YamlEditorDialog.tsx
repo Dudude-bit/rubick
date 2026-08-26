@@ -163,7 +163,7 @@ export function YamlEditorDialog() {
     [originalContent]
   );
   const { deliveries } = useDelivery(delivery);
-  const intercept = deliveryApplyIntercept(deliveries);
+  const intercept = deliveryApplyIntercept(deliveries, t);
 
   // The autoscaler owns `spec.replicas` and nothing else, so it is asked
   // about only when that field is what moved — see `applyWarnings`. Asked

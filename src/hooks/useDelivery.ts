@@ -22,6 +22,7 @@
  * never see.
  */
 
+import { useT } from "@/i18n/useT";
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 
@@ -178,6 +179,7 @@ function digestOf(parts: string[]): string {
 export function useDeliveryIntercept(
   object: DeliveryQuery | null
 ): (verb: string) => DeliveryIntercept | null {
+  const t = useT();
   const { deliveries } = useDelivery(object);
-  return (verb: string) => deliveryIntercept(deliveries, verb);
+  return (verb: string) => deliveryIntercept(deliveries, verb, t);
 }
