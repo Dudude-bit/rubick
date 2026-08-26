@@ -1241,6 +1241,36 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    shellFinished: "завершился, подключаться не к чему",
+    shellExited: "вышел с кодом {code}, подключаться не к чему",
+    shellNotStarted: "ещё не запускался",
+    shellBetweenRestarts: "не работает между перезапусками",
+    shellNotRunningWhy: "не работает · {reason}",
+    shellNotRunning: "не работает",
+    shellStateUnknown: "состояние неизвестно, подключаться не к чему",
+    logsPrintedBeforeExit: "Что он напечатал перед выходом — во вкладке Logs.",
+    logsAttemptsLast:
+      "{attempts}{when} — что напечатал упавший запуск, во вкладке Logs.",
+    logsFinishedComplete: "Завершился{took}{when} — его лог полон.",
+    logsTook: " за {took}",
+    logsWhen: ", {when}",
+    logsLastWhen: ", последняя {when}",
+    logsNoneInitUnfinished: "Логов пока нет — init не завершился.",
+    logsNoneNotStarted: "Логов пока нет — он ещё не запускался.",
+    logsNeverRanBlocked: "Не запускался — последовательность ещё на {on}.",
+    logsNeverRan: "Не запускался.",
+    logsSidecarRunning:
+      "Запущен во время init и не завершается — последовательность пошла дальше, как только он был готов.",
+    groupInitCaption:
+      "выполняются по порядку до старта пода, каждый ждёт предыдущего",
+    groupSidecarCaption: "запущены во время init и работают до сих пор",
+    groupAppBlocked: "не запускались — под всё ещё в init",
+    groupAppCaption: "работают вместе всю жизнь пода",
+    groupInitCaptionEach:
+      "выполняются по порядку до старта каждого пода, каждый ждёт предыдущего",
+    groupSidecarCaptionEach:
+      "запускаются во время init и работают всю жизнь каждого пода",
+    groupAppCaptionEach: "работают вместе всю жизнь каждого пода",
     ngxSnippetsAllowed:
       "Ingress в этом кластере может вставлять сырую конфигурацию nginx через configuration-snippet и server-snippet.",
     ngxSnippetsIgnored:
@@ -3075,6 +3105,11 @@ export const ru: Catalogue = {
       "В этом пространстве имён этим Secret никто не управляет, поэтому сам он не обновится — заменяет его тот, кто положил сюда сертификат.",
   },
   count: {
+    attemptsCount: {
+      one: "{n} попытка",
+      few: "{n} попытки",
+      other: "{n} попыток",
+    },
     ngxWorkers: {
       one: "{n} воркер nginx, какой бы ни была квота контейнера по CPU.",
       few: "{n} воркера nginx, какой бы ни была квота контейнера по CPU.",

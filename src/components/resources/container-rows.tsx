@@ -149,15 +149,16 @@ interface Group {
 }
 
 export function ContainerRows(props: ContainerRowsProps) {
+  const t = useT();
   const { namespace, podName, onOpenShell, onUpdateImage, onOpenLogs } = props;
 
   const groups: Group[] = props.pod
-    ? containerSequence(podContainers(props.pod)).map((group) => ({
+    ? containerSequence(podContainers(props.pod), t).map((group) => ({
         ...group,
         rows: group.steps.map((step) => ({ container: step.container, step })),
       }))
     : props.template
-      ? templateSequence(props.template).map((group) => ({
+      ? templateSequence(props.template, t).map((group) => ({
           ...group,
           rows: group.containers.map((container) => ({ container })),
         }))

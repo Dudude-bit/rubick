@@ -1250,6 +1250,36 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    shellFinished: "finished, nothing to attach to",
+    shellExited: "exited {code}, nothing to attach to",
+    shellNotStarted: "has not started",
+    shellBetweenRestarts: "not running between restarts",
+    shellNotRunningWhy: "not running · {reason}",
+    shellNotRunning: "not running",
+    shellStateUnknown: "state unknown, nothing to attach to",
+    logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
+    logsAttemptsLast:
+      "{attempts}{when} — what the run that failed printed is in Logs.",
+    logsFinishedComplete: "Finished{took}{when} — its log is complete.",
+    logsTook: " in {took}",
+    logsWhen: ", {when}",
+    logsLastWhen: ", last {when}",
+    logsNoneInitUnfinished: "No logs yet — init has not finished.",
+    logsNoneNotStarted: "No logs yet — it has not started.",
+    logsNeverRanBlocked: "Never ran — the sequence is still on {on}.",
+    logsNeverRan: "Never ran.",
+    logsSidecarRunning:
+      "Started during init and does not finish — the sequence went on once it was ready.",
+    groupInitCaption:
+      "run in order before the pod starts, each waiting on the last",
+    groupSidecarCaption: "started during init and still running",
+    groupAppBlocked: "never started — the pod is still in init",
+    groupAppCaption: "run together for the life of the pod",
+    groupInitCaptionEach:
+      "run in order before each pod starts, each waiting on the last",
+    groupSidecarCaptionEach:
+      "start during init and run for the life of each pod",
+    groupAppCaptionEach: "run together for the life of each pod",
     ngxSnippetsAllowed:
       "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet.",
     ngxSnippetsIgnored:
@@ -3004,6 +3034,7 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
   },
   count: {
+    attemptsCount: { one: "{n} attempt", other: "{n} attempts" },
     ngxWorkers: {
       one: "{n} nginx worker, whatever the container's CPU allowance is.",
       other: "{n} nginx workers, whatever the container's CPU allowance is.",
