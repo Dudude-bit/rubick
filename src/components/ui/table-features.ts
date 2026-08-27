@@ -31,9 +31,13 @@ import {
 /**
  * Sorting, per-column filtering, one search box over every column, hiding
  * columns, and column widths — what `DataTable` actually offers. Row selection,
- * pinning, grouping, pagination and resizing are deliberately absent: the app
- * does none of them, and in v9 leaving them out is what keeps them out of the
- * bundle.
+ * pinning, pagination and resizing are deliberately absent: the app does none
+ * of them, and in v9 leaving them out is what keeps them out of the bundle.
+ *
+ * Grouping is absent for a different reason. The lists *do* group — the
+ * namespace captions on a Pods list — but by `RowGrouping`, which draws caption
+ * rows between the table's own rows and hides the column it took over. That is
+ * a rendering concern, not a row model, so TanStack's grouping never applied.
  *
  * No `sortFns`/`filterFns` registries: those name the *extra* functions a
  * column may ask for by string, and no column here asks for one. Every column
