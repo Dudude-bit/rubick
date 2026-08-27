@@ -248,7 +248,11 @@ export function LogToolbar({
         onValueChange={(value) => onLimitChange(parseInt(value))}
       >
         <SelectTrigger
-          className="h-6 w-26 px-2 text-xs"
+          // Wide enough for the longest label in the longest language, not
+          // for the English one: "Keep 5,000" fits in w-26 and «Хранить
+          // 5 000» does not, and a clipped number is the one thing this
+          // control exists to show.
+          className="h-6 w-32 px-2 text-xs"
           title={t("action", "keepLinesHint")}
         >
           <SelectValue />

@@ -53,13 +53,15 @@ export interface PeekTabDefinition {
   mark?: Extract<DetailTabMark, { shows: "count" }>;
 }
 
-const OVERVIEW: PeekTabDefinition = {
+/** The two ends every kind gets, named at call time like the rest. */
+const overviewTab = (t: T): PeekTabDefinition => ({
   id: "overview",
-  label: "Overview",
+  label: t("nav", "overview"),
   glyph: viewGlyph(Info),
-};
+});
 const YAML: PeekTabDefinition = {
   id: "yaml",
+  // A format, not a word — the same in every language the app speaks.
   label: "YAML",
   glyph: viewGlyph(Braces),
 };
@@ -97,7 +99,7 @@ export function peekTabsFor(
 
   if (crd) {
     return [
-      OVERVIEW,
+      overviewTab(t),
       {
         id: "connections",
         label: t("columns", "connections"),
@@ -110,10 +112,10 @@ export function peekTabsFor(
   if (resolved === "Pod") {
     const pod = detail as PodInfo | undefined;
     middle.push(
-      { id: "logs", label: "Logs", glyph: viewGlyph(AlignLeft) },
+      { id: "logs", label: t("action", "logs"), glyph: viewGlyph(AlignLeft) },
       {
         id: "containers",
-        label: "Containers",
+        label: t("columns", "containers"),
         // A container has no kind of its own; it is what a Pod is made of,
         // so it arrives under the Pod's cube and the Pod's hue.
         glyph: kindGlyph(ResourceType.Pod),
@@ -124,7 +126,7 @@ export function peekTabsFor(
     const keyed = detail as ConfigMapInfo | SecretInfo | undefined;
     middle.push({
       id: "data",
-      label: "Data",
+      label: t("columns", "data"),
       glyph: viewGlyph(Table2),
       mark: keyed ? countMark(keyed.dataKeys.length) : undefined,
     });
@@ -137,7 +139,7 @@ export function peekTabsFor(
     });
   }
 
-  return [OVERVIEW, ...middle, YAML];
+  return [overviewTab(t), ...middle, YAML];
 }
 
 /**
