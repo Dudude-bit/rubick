@@ -4260,6 +4260,12 @@ export const ru: Catalogue = {
     resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
+    gwServingUnknown: "Непонятно — что-то не удалось прочитать",
+    gwCheckingInstall: "Проверяем, установлен ли Gateway API…",
+    gwCouldNotCheckInstall:
+      "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",
+    gwCouldNotReadVerdicts:
+      "Не удалось прочитать Gateway, поэтому ни один вердикт ниже не вердикт.",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} в {slices}",

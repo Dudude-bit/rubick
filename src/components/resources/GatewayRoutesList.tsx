@@ -271,6 +271,8 @@ export function GatewayRoutesList() {
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const {
     detection,
+    detectionLoading,
+    detectionError,
     served,
     routes,
     isLoading,
@@ -367,7 +369,7 @@ export function GatewayRoutesList() {
   const topology = useMemo(
     () =>
       gatewayTopology(
-        gateways.data ?? [],
+        gateways.data,
         filtered,
         backing.data ? { ...backing.data, backingKnown: true } : undefined,
         t,
@@ -518,6 +520,23 @@ export function GatewayRoutesList() {
           <p className="py-8 text-xs text-fg-fnt">
             {t("empty", "readingRoutes")}
           </p>
+        ) : detectionError ? (
+          // Every kind query is gated on the CRD scan, so a scan that failed
+          // leaves this page with an empty list and nothing to say about it.
+          // "No routes in the current scope" would be a claim about a cluster
+          // nobody managed to ask.
+          <div className="max-w-[68ch] py-8">
+            <p className="text-xs text-err">
+              {t("empty", "gwCouldNotCheckInstall")}
+            </p>
+            <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+              {verbatim(detectionError.message)}
+            </p>
+          </div>
+        ) : detectionLoading ? (
+          <p className="py-8 text-xs text-fg-fnt">
+            {t("empty", "gwCheckingInstall")}
+          </p>
         ) : total + board.mesh.length === 0 ? (
           <p className="py-8 text-xs text-fg-fnt">
             {routes.length === 0
@@ -527,7 +546,12 @@ export function GatewayRoutesList() {
         ) : !board.verdictsKnown ? (
           <>
             <p className="px-0.5 pb-1.5 pt-4 text-[11px] text-fg-fnt">
-              {t("empty", "gwReadingVerdicts")}
+              {/* Still reading and could not read look the same from here —
+                  both leave `data` undefined — but they are not the same
+                  thing to wait for. */}
+              {gateways.error || classes.error
+                ? t("empty", "gwCouldNotReadVerdicts")
+                : t("empty", "gwReadingVerdicts")}
             </p>
             <div className="border-t border-hair">
               {[...board.notServing, ...board.serving, ...board.mesh].map(

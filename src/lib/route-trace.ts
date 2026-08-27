@@ -87,6 +87,16 @@ export interface RouteTrace {
    *  sectionName keeps two attachments to one gateway distinct. */
   gateway: { name: string; namespace: string; sectionName: string | null };
   serving: boolean;
+  /**
+   * False when a step could not read its source.
+   *
+   * `serving` is computed from the steps that broke, and a step that could
+   * not look is not a step that found nothing — a reader without cluster-wide
+   * Gateway rights would otherwise get a green verdict on a route nobody
+   * verified. A refusal still counts as known: an `err` is an answer. So does
+   * the unprobed last mile, which is blind on every healthy trace.
+   */
+  servingKnown: boolean;
   /** 1-based index of the first broken step, where one is. */
   stopStep: number | null;
   steps: TraceStep[];
@@ -898,6 +908,12 @@ function traceFor(
   ];
 
   const firstBroken = steps.findIndex((step) => step.state === "err");
+  // Blind because the cluster could not be read, not because nobody has
+  // probed yet: the last mile is `who: "machine"` and is blind on every
+  // healthy trace by design, so counting it would make every verdict unknown.
+  const unread = steps.some(
+    (step) => step.state === "blind" && step.who !== "machine"
+  );
   if (firstBroken >= 0) {
     for (const step of steps.slice(firstBroken + 1)) {
       step.state = "off";
@@ -916,6 +932,7 @@ function traceFor(
       sectionName: parent.sectionName,
     },
     serving: firstBroken < 0,
+    servingKnown: firstBroken >= 0 || !unread,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,
     steps,
     probe,

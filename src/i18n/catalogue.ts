@@ -4028,6 +4028,12 @@ export const en = {
     resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
+    gwServingUnknown: "Can't tell — something here could not be read",
+    gwCheckingInstall: "Checking whether Gateway API is installed…",
+    gwCouldNotCheckInstall:
+      "Could not check whether Gateway API is installed, so this page cannot say what is here.",
+    gwCouldNotReadVerdicts:
+      "The gateways could not be read, so no verdict below is a verdict.",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} across {slices}",

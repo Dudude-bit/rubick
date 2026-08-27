@@ -77,7 +77,12 @@ function useRouteKind(
 export function useGatewayRoutes(namespace: string | null) {
   const { toast } = useToast();
   const t = useT();
-  const detection = useGatewayApi().data;
+  // The scan's own state travels with its answer. Without it a page cannot
+  // tell "no routes here" from "we have not looked yet" or "we could not
+  // look" — every kind query is gated on this scan, so all three arrive as
+  // an empty list.
+  const scan = useGatewayApi();
+  const detection = scan.data;
   const served = useMemo(
     () => new Set(detection?.kinds.map((k) => k.kind) ?? []),
     [detection]
@@ -142,6 +147,8 @@ export function useGatewayRoutes(namespace: string | null) {
 
   return {
     detection,
+    detectionLoading: scan.isLoading,
+    detectionError: (scan.error as Error | null) ?? null,
     served,
     routes,
     isLoading:

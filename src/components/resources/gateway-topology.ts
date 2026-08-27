@@ -99,12 +99,20 @@ function refusedBy(
 }
 
 export function gatewayTopology(
-  gateways: GatewayInfo[],
+  /**
+   * `undefined` while the list has not been read — the same shape `backing`
+   * uses, and for the same reason. A route names a parent this map has to
+   * draw either way; whether that parent is *missing* is a claim only a list
+   * that was actually read can make.
+   */
+  gateways: GatewayInfo[] | undefined,
   routes: RouteInfo[],
   backing: BackingSources | undefined,
   t: T,
   workloads?: WorkloadSources
 ): RoutingMapData {
+  const gatewaysKnown = gateways !== undefined;
+  const drawn = gateways ?? [];
   const gatewayNodes = new Map<string, MapNode>();
   const kindNodes = new Map<string, MapNode>();
   // The worst verdict flowing into each funnel node, for its gateway edge.
@@ -124,7 +132,7 @@ export function gatewayTopology(
     edges.push({ from, to, tone });
   };
 
-  for (const gateway of gateways) {
+  for (const gateway of drawn) {
     const { tone, sub } = gatewayTone(gateway);
     gatewayNodes.set(`gw/${gateway.namespace}/${gateway.name}`, {
       id: `gw/${gateway.namespace}/${gateway.name}`,
@@ -165,12 +173,17 @@ export function gatewayTopology(
       const ns = parent.namespace ?? route.namespace;
       const gatewayId = `gw/${ns}/${parent.name}`;
       if (!gatewayNodes.has(gatewayId)) {
+        // Only a list that was read can say the gateway is not in it. Unread,
+        // the node still gets drawn — the route does name it — but muted and
+        // unlabelled, the way an unread backend is.
         gatewayNodes.set(gatewayId, {
           id: gatewayId,
           label: parent.name,
           sub: ns,
-          tone: "err",
-          tag: { text: t("columns", "missingTag"), tone: "err" },
+          tone: gatewaysKnown ? "err" : "mute",
+          tag: gatewaysKnown
+            ? { text: t("columns", "missingTag"), tone: "err" }
+            : undefined,
         });
       }
       const verdict: MapTone = refusedBy(route, parent.name, ns)
@@ -258,7 +271,7 @@ export function gatewayTopology(
   // The first mile: every address a drawn gateway publishes, deduplicated —
   // two gateways behind one LB are two edges out of one node.
   const ipNodes = new Map<string, MapNode>();
-  for (const gateway of gateways) {
+  for (const gateway of drawn) {
     const gatewayId = `gw/${gateway.namespace}/${gateway.name}`;
     if (!gatewayNodes.has(gatewayId)) continue;
     for (const address of gateway.addresses) {

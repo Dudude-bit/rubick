@@ -146,6 +146,20 @@ describe("the gateway topology map", () => {
     expect(gateways[0].object).toBeUndefined();
   });
 
+  /**
+   * The list above was read and the gateway was not in it — that is a fact.
+   * An unread list is not: a namespace-scoped reader gets a 403 on the
+   * cluster-wide list, and calling every parent "missing" turns a permission
+   * into a cluster full of red.
+   */
+  it("does not call a gateway missing when the list was never read", () => {
+    const data = gatewayTopology(undefined, [route("promo")], undefined, t);
+    const gateways = data.columns[0].nodes;
+    expect(gateways).toHaveLength(1);
+    expect(gateways[0].tone).toBe("mute");
+    expect(gateways[0].tag).toBeUndefined();
+  });
+
   it("marks the refused attachment on the edge, in addition to the route", () => {
     const data = gatewayTopology(
       [gateway("edge")],

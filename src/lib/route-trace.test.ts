@@ -222,6 +222,38 @@ const ids = (trace: { steps: { id: string }[] }) =>
   trace.steps.map((step) => step.id);
 
 describe("routeTraces", () => {
+  /**
+   * The whole point of a verdict is that somebody checked. A namespace-scoped
+   * reader gets a 403 on the cluster-wide Gateway list, every step that needs
+   * it comes back blind, and nothing broke — so the old arithmetic, which
+   * counted only `err`, called that "Serving" and painted it green forever.
+   */
+  it("does not call a route serving when it could not read the sources", () => {
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({ topologyKnown: false }),
+      t
+    );
+
+    expect(trace.steps.some((step) => step.state === "blind")).toBe(true);
+    expect(trace.steps.some((step) => step.state === "err")).toBe(false);
+    expect(trace.servingKnown).toBe(false);
+  });
+
+  /** A refusal is an answer: nothing unread makes it less of one. */
+  it("still knows the verdict when a step refused rather than went unread", () => {
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({ topologyKnown: false, gateways: [] }),
+      t
+    );
+
+    if (trace.steps.some((step) => step.state === "err")) {
+      expect(trace.servingKnown).toBe(true);
+      expect(trace.serving).toBe(false);
+    }
+  });
+
   it("walks a healthy route green, leaving only the last mile unchecked", () => {
     const [trace] = routeTraces(route("healthy"), sources(), t);
 
@@ -231,6 +263,7 @@ describe("routeTraces", () => {
       sectionName: "http",
     });
     expect(trace.serving).toBe(true);
+    expect(trace.servingKnown).toBe(true);
     expect(trace.stopStep).toBeNull();
     expect(ids(trace)).toEqual([
       "class",

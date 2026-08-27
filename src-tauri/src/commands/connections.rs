@@ -273,7 +273,7 @@ fn traffic_into(
             ns,
             &svc_ref,
             &snapshot.gateway_routes,
-            &snapshot.gateways,
+            snapshot.gateways.as_deref(),
             out,
         );
     }
@@ -292,7 +292,7 @@ fn gateway_traffic_into(
     ns: &str,
     svc_ref: &ObjectRef,
     routes: &[crate::resources::RouteInfo],
-    gateways: &[crate::resources::GatewayInfo],
+    gateways: Option<&[crate::resources::GatewayInfo]>,
     out: &mut Neighbourhood,
 ) {
     use crate::resources::GATEWAY_API_GROUP;
@@ -340,12 +340,17 @@ fn gateway_traffic_into(
                 .namespace
                 .clone()
                 .unwrap_or_else(|| route.namespace.clone());
+            // Absent list means nobody asked, which is a different answer
+            // from "asked, and it is not there" — and only the second one
+            // may be drawn as a break in the chain.
             let found = gateways
-                .iter()
-                .find(|g| g.name == parent.name && g.namespace == gw_ns);
-
+                .and_then(|list| {
+                    list.iter()
+                        .find(|g| g.name == parent.name && g.namespace == gw_ns)
+                })
+                .map(Some);
             let gw_ref = match found {
-                Some(g) => ObjectRef::new(
+                Some(Some(g)) => ObjectRef::new(
                     "Gateway",
                     &g.name,
                     Some(g.namespace.clone()),
@@ -354,14 +359,18 @@ fn gateway_traffic_into(
                 .with_facts(ObjectFacts::Gateway {
                     class_name: g.class_name.clone(),
                 }),
-                None => ObjectRef::new(
+                _ => ObjectRef::new(
                     "Gateway",
                     &parent.name,
                     Some(gw_ns.clone()),
-                    Existence::Missing,
+                    if gateways.is_some() {
+                        Existence::Missing
+                    } else {
+                        Existence::NotChecked
+                    },
                 ),
             };
-            if found.is_none() {
+            if found.is_none() && gateways.is_some() {
                 out.stops.push(ChainStop::GatewayMissing {
                     route: route_ref.clone(),
                     gateway: gw_ref.clone(),
@@ -1200,7 +1209,7 @@ struct Snapshot {
     /// Every Gateway in the cluster, unscoped: a route in this namespace
     /// ordinarily attaches to a Gateway in another one, and a
     /// namespace-scoped list would call every such parent missing.
-    gateways: Vec<crate::resources::GatewayInfo>,
+    gateways: Option<Vec<crate::resources::GatewayInfo>>,
 }
 
 /// A list whose failure is part of the answer rather than the end of it, and
@@ -1296,19 +1305,24 @@ impl Snapshot {
 ///
 /// The detection is the frontend's cached one-scan-per-cluster answer —
 /// passed in rather than re-derived here, so a workload page costs no CRD
-/// list. A kind whose list fails is read as absent for this call; the page
-/// draws the chain it has rather than failing the whole neighbourhood.
+/// list. A route kind whose list fails is read as absent for this call; the
+/// page draws the chain it has rather than failing the whole neighbourhood.
+///
+/// The gateways come back as `None` when that list was never read — no
+/// detection, the kind not served, or the list refused. "The API server does
+/// not have this Gateway" is a claim only a list that answered can make, and
+/// a namespace-scoped reader gets a 403 on this cluster-wide one.
 async fn gateway_lists(
     ctx: &ResourceContext,
     gateway: Option<&crate::resources::GatewayApiDetection>,
 ) -> (
     Vec<crate::resources::RouteInfo>,
-    Vec<crate::resources::GatewayInfo>,
+    Option<Vec<crate::resources::GatewayInfo>>,
 ) {
     use crate::resources::{GatewayInfo, RouteInfo};
 
     let Some(detection) = gateway.filter(|d| d.installed) else {
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), None);
     };
 
     let params = ListParams::default();
@@ -1325,7 +1339,7 @@ async fn gateway_lists(
         async move { (kind, api_resource, api.list(&params).await) }
     });
     let mut routes = Vec::new();
-    let mut gateways = Vec::new();
+    let mut gateways: Option<Vec<crate::resources::GatewayInfo>> = None;
     for (kind, api_resource, list) in futures::future::join_all(fetches).await {
         let Ok(list) = list else { continue };
         match kind.as_str() {
@@ -1335,9 +1349,11 @@ async fn gateway_lists(
                 }));
             }
             "Gateway" => {
-                gateways.extend(list.items.into_iter().map(|obj| {
-                    GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
-                }));
+                gateways
+                    .get_or_insert_with(Vec::new)
+                    .extend(list.items.into_iter().map(|obj| {
+                        GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
+                    }));
             }
             _ => {}
         }
@@ -1729,7 +1745,7 @@ async fn service_connections(
         ns,
         &subject,
         &snapshot.gateway_routes,
-        &snapshot.gateways,
+        snapshot.gateways.as_deref(),
         out,
     );
     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
@@ -2218,7 +2234,7 @@ status:
             "shop",
             &service("shop", "promo"),
             &[route(HEALTHY_ROUTE)],
-            &[gateway(EDGE_GATEWAY)],
+            Some(&[gateway(EDGE_GATEWAY)]),
             &mut out,
         );
 
@@ -2268,7 +2284,7 @@ status:
             "shop",
             &service("shop", "checkout"),
             &[route(HEALTHY_ROUTE)],
-            &[gateway(EDGE_GATEWAY)],
+            Some(&[gateway(EDGE_GATEWAY)]),
             &mut out,
         );
         assert!(out.edges.is_empty());
@@ -2293,7 +2309,7 @@ spec:
             "shop",
             &service("shop", "promo"),
             &[route(cross)],
-            &[],
+            Some(&[]),
             &mut out,
         );
         assert!(out.edges.is_empty());
@@ -2324,7 +2340,7 @@ status:
             "shop",
             &service("shop", "promo"),
             &[route(refused)],
-            &[gateway(EDGE_GATEWAY)],
+            Some(&[gateway(EDGE_GATEWAY)]),
             &mut out,
         );
 
@@ -2372,7 +2388,7 @@ status:
             "shop",
             &service("shop", "promo"),
             &[route(unresolved)],
-            &[gateway(EDGE_GATEWAY)],
+            Some(&[gateway(EDGE_GATEWAY)]),
             &mut out,
         );
 
@@ -2401,7 +2417,7 @@ spec:
             "shop",
             &service("shop", "promo"),
             &[route(orphan)],
-            &[],
+            Some(&[]),
             &mut out,
         );
 
@@ -2419,6 +2435,33 @@ spec:
             .find(|e| e.to.kind == "Gateway")
             .expect("the edge is still drawn, to a missing ref");
         assert!(matches!(to_gateway.to.existence, Existence::Missing));
+    }
+
+    /// The list that was read and did not hold it says "missing". A list
+    /// nobody read says nothing — a namespace-scoped reader is refused this
+    /// cluster-wide one, and every route they open would otherwise draw a
+    /// break in a chain that is fine.
+    #[test]
+    fn an_unread_gateway_list_is_not_a_missing_gateway() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            None,
+            &mut out,
+        );
+
+        assert!(
+            out.stops.is_empty(),
+            "an unread list must not produce a GatewayMissing stop"
+        );
+        let gw = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("the route still names its parent");
+        assert_eq!(gw.to.existence, Existence::NotChecked);
     }
 
     #[test]
@@ -2439,7 +2482,7 @@ spec:
             "shop",
             &service("shop", "promo"),
             &[route(mesh)],
-            &[],
+            Some(&[]),
             &mut out,
         );
         // The backend edge is real; the Service parentRef must produce

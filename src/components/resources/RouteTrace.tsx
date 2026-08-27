@@ -613,15 +613,26 @@ function TraceCard({
   return (
     <div>
       <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-sm">
+        {/* Three readings, not two: a trace that could not read a source
+            has no verdict to give, and a green dot there is a claim nobody
+            checked. The halo reads its colour from the theme's own token —
+            the literals it used to carry were the dark palette's, so the
+            light canvas got the wrong glow. */}
         <span
           className={`h-2 w-2 flex-none rounded-full ${
-            trace.serving
-              ? "bg-ok shadow-[0_0_0_4px_hsl(152_44%_49%/0.14)]"
-              : "bg-err shadow-[0_0_0_4px_hsl(358_81%_68%/0.18)]"
+            !trace.servingKnown
+              ? "bg-fg-fnt shadow-[0_0_0_4px_hsl(var(--fg-fnt)/0.14)]"
+              : trace.serving
+                ? "bg-ok shadow-[0_0_0_4px_hsl(var(--ok)/0.14)]"
+                : "bg-err shadow-[0_0_0_4px_hsl(var(--err)/0.18)]"
           }`}
         />
         <span className="font-semibold text-fg">
-          {trace.serving ? t("empty", "gwServing") : t("empty", "gwNotServing")}
+          {!trace.servingKnown
+            ? t("empty", "gwServingUnknown")
+            : trace.serving
+              ? t("empty", "gwServing")
+              : t("empty", "gwNotServing")}
         </span>
         <span className="text-xs text-fg-mut">
           <CopyableAddresses
