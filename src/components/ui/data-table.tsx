@@ -259,7 +259,7 @@ export function DataTable<TData, TValue>({
   getRowId,
   emptyMessage,
   grouping = null,
-  rowLabel = "rows",
+  rowLabel,
 }: DataTableProps<TData, TValue>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -878,9 +878,20 @@ export function DataTable<TData, TValue>({
           list is whole, the search narrows it, and long ones scroll. */}
         <div className="flex flex-none items-center justify-between text-[11px] text-fg-fnt">
           <div>
-            {filteredRows === totalRows
-              ? `${totalRows} ${totalRows === 1 ? rowLabel.replace(/s$/, "") : rowLabel}`
-              : `${filteredRows} of ${totalRows} ${rowLabel}`}
+            {/* The noun is the kind's own plural and stays as the cluster
+              spells it; only the frame around it is translated. Without one
+              — a table of something with no kind — the frame counts rows. */}
+            {rowLabel === undefined
+              ? t("readings", "rowCount", { n: filteredRows })
+              : filteredRows === totalRows
+                ? `${totalRows} ${
+                    totalRows === 1 ? rowLabel.replace(/s$/, "") : rowLabel
+                  }`
+                : t("readings", "rowsOfTotal", {
+                    shown: filteredRows,
+                    total: totalRows,
+                    label: rowLabel,
+                  })}
           </div>
         </div>
       </div>

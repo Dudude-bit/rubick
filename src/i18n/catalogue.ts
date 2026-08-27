@@ -1344,6 +1344,8 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    rowsOfTotal: "{shown} of {total} {label}",
+    rowCount: { one: "{n} row", other: "{n} rows" },
     limitWord: "limit",
     capacityWord: "capacity",
     usageShareOf: "{percent}% of {noun}",

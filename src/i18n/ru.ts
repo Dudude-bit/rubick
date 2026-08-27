@@ -1335,6 +1335,13 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    rowsOfTotal: "{shown} из {total} — {label}",
+    rowCount: {
+      one: "{n} строка",
+      few: "{n} строки",
+      many: "{n} строк",
+      other: "{n} строки",
+    },
     limitWord: "лимит",
     capacityWord: "ёмкость",
     usageShareOf: "{percent}% от значения «{noun}»",

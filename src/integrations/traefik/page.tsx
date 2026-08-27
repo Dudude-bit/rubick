@@ -308,7 +308,7 @@ export default function TraefikPage() {
     },
     {
       id: "entrypoints",
-      label: "Entry points",
+      label: t("nav", "entryPoints"),
       glyph: viewGlyph(Plug),
       mark:
         controller.data && controller.data.entryPoints.length > 0
