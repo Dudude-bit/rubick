@@ -723,6 +723,7 @@ export interface PodMetrics {
 export interface TcpProbe {
   ms: number | null;
   error: string | null;
+  reason: TcpProbeReason | null;
 }
 
 export interface ResolveProbe {
@@ -1729,6 +1730,8 @@ export type SearchContextStatus =
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
+
+export type TcpProbeReason = "refused" | "timedOut";
 
 export type ContainerState =
   | { type: "running" }

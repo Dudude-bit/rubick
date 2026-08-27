@@ -111,8 +111,8 @@ export const en = {
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list}, and {last}",
     twoAnd: "{a} and {b}",
-    ingressBackendNeverCreated:
-      "The Ingress routes this path to a backend that was never created, so the controller has nothing to send the request to.",
+    backendNeverCreated:
+      "{kind} routes this path to a backend that was never created, so the controller has nothing to send the request to.",
     connectionRefusedNothingBehind:
       "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
     endpointsByHandNoneWritten:
@@ -4039,6 +4039,10 @@ export const en = {
     gwCouldNotReadVerdicts:
       "The gateways could not be read, so no verdict below is a verdict.",
     gwNoConditionsYet: "No controller has written conditions yet.",
+    gwProbeRefused:
+      "refused — the address answers, but nothing listens on this port",
+    gwProbeTimedOut:
+      "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} across {slices}",

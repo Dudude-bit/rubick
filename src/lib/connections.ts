@@ -317,7 +317,9 @@ export function describeStop(
     case "backendMissing":
       return {
         title: t("nav", "stopNoServiceNamed", { name: stop.service.name }),
-        note: t("nav", "ingressBackendNeverCreated"),
+        // The kind that names the backend, not a hardcoded "Ingress": a
+        // Gateway API route reaches this same branch.
+        note: t("nav", "backendNeverCreated", { kind: stop.ingress.kind }),
       };
     case "selectsNothing":
       return {

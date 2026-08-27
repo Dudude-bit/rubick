@@ -358,11 +358,28 @@ pub async fn probe_resolve_host(
 }
 
 /// One timed TCP connection from this machine.
+/// Why a TCP probe did not connect, where this app recognises the failure.
+///
+/// The name rather than the sentence: a string composed here has no path
+/// into the catalogue, and the trace panel renders this field beside a dozen
+/// siblings that all speak the reader's language.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TcpProbeReason {
+    /// The address answers and nothing listens on the port.
+    Refused,
+    /// The packets go unanswered — a firewall, or the wrong address.
+    TimedOut,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TcpProbe {
     pub ms: Option<u64>,
+    /// The operating system's own words, quoted rather than composed — kept
+    /// for the failures below that this app has no name for.
     pub error: Option<String>,
+    pub reason: Option<TcpProbeReason>,
 }
 
 /// A probe target is a hostname OR an address literal — a Gateway's
@@ -382,7 +399,7 @@ pub async fn probe_tcp_connect(address: String, port: u16) -> Result<TcpProbe> {
     validate_probe_target(&address)?;
 
     let started = Instant::now();
-    let (ms, error) = match tokio::time::timeout(
+    let (ms, error, reason) = match tokio::time::timeout(
         Duration::from_secs(3),
         tokio::net::TcpStream::connect((address.as_str(), port)),
     )
@@ -391,23 +408,18 @@ pub async fn probe_tcp_connect(address: String, port: u16) -> Result<TcpProbe> {
         Ok(Ok(_)) => (
             Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)),
             None,
-        ),
-        // A refusal and a timeout are different diagnoses: refused means the
-        // address answers and nothing listens on the port; a timeout means
-        // the packets go unanswered — a firewall, or the address is wrong.
-        Ok(Err(err)) if err.kind() == std::io::ErrorKind::ConnectionRefused => (
             None,
-            Some("refused — the address answers, but nothing listens on this port".to_string()),
         ),
-        Ok(Err(err)) => (None, Some(err.to_string())),
-        Err(_) => (
-            None,
-            Some(
-                "timed out after 3s — packets go unanswered; a firewall, or the wrong address"
-                    .to_string(),
-            ),
-        ),
+        // A refusal and a timeout are different diagnoses, and both are ones
+        // this app has a name for — so it hands over the name and lets the
+        // panel say it in the reader's language. Anything else is the
+        // operating system's own words, quoted.
+        Ok(Err(err)) if err.kind() == std::io::ErrorKind::ConnectionRefused => {
+            (None, None, Some(TcpProbeReason::Refused))
+        }
+        Ok(Err(err)) => (None, Some(err.to_string()), None),
+        Err(_) => (None, None, Some(TcpProbeReason::TimedOut)),
     };
 
-    Ok(TcpProbe { ms, error })
+    Ok(TcpProbe { ms, error, reason })
 }

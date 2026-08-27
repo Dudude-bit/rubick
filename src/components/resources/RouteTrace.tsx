@@ -418,7 +418,11 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
           : "mut"
       : "err";
   const tcpTone =
-    tcp.status === "finished" && tcp.result.error == null ? "ok" : "err";
+    tcp.status === "finished" &&
+    tcp.result.error == null &&
+    tcp.result.reason == null
+      ? "ok"
+      : "err";
   const connectTarget =
     address ?? (dns.status === "finished" ? dns.result.resolved[0] : null);
 
@@ -580,8 +584,21 @@ function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
                 <span className="text-err">— {tcp.message}</span>
               )}
               {tcp.status === "finished" &&
-                (tcp.result.error ? (
-                  <span className="text-err">— {tcp.result.error}</span>
+                (tcp.result.reason || tcp.result.error ? (
+                  // A failure this app has a name for is said in the
+                  // reader's language; anything else is the operating
+                  // system's own words, quoted.
+                  <span className="text-err">
+                    —{" "}
+                    {tcp.result.reason
+                      ? t(
+                          "empty",
+                          tcp.result.reason === "refused"
+                            ? "gwProbeRefused"
+                            : "gwProbeTimedOut"
+                        )
+                      : tcp.result.error}
+                  </span>
                 ) : (
                   parts(t("empty", "gwAnswersIn", {}), {
                     ms: <span className="tabular-nums">{tcp.result.ms}</span>,

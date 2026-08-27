@@ -83,8 +83,8 @@ export const ru: Catalogue = {
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list} и {last}",
     twoAnd: "{a} и {b}",
-    ingressBackendNeverCreated:
-      "Ingress направляет этот путь на бэкенд, которого никогда не создавали, — контроллеру просто некуда отправить запрос.",
+    backendNeverCreated:
+      "{kind} направляет этот путь на бэкенд, которого никогда не создавали, — контроллеру просто некуда отправить запрос.",
     connectionRefusedNothingBehind:
       "Всё, что доходит до этого адреса, получает отказ в соединении. Service есть и подключён — за ним просто никого нет.",
     endpointsByHandNoneWritten:
@@ -4271,6 +4271,9 @@ export const ru: Catalogue = {
     gwCouldNotReadVerdicts:
       "Не удалось прочитать Gateway, поэтому ни один вердикт ниже не вердикт.",
     gwNoConditionsYet: "Ни один контроллер ещё не записал условия.",
+    gwProbeRefused: "отказано — адрес отвечает, но этот порт никто не слушает",
+    gwProbeTimedOut:
+      "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} в {slices}",
