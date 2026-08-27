@@ -125,7 +125,7 @@ jobs:
           echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Build, sign, and release
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5  # action-v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f  # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (minisign). Unrelated to Apple code signing —
@@ -155,7 +155,11 @@ jobs:
           # with `releaseBody` (a string). Body comes from the
           # changelog-extraction step above.
           releaseBody: ${{ steps.changelog.outputs.notes }}
+          # v1 fails outright if the release for this tag already exists
+          # and is published. Re-running a release therefore only works
+          # while the draft is still a draft — publish last, not first.
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          # Renamed from `includeUpdaterJson` in tauri-action v1.0.0.
+          uploadUpdaterJson: true
           args: --target ${{ matrix.target }}
