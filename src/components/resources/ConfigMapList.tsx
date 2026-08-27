@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 
 import type { ConfigMapInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";

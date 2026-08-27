@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { T } from "@/i18n/T";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
 import { ResourceList } from "./ResourceList";

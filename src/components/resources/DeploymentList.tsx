@@ -1,5 +1,5 @@
 import { workloadStatus } from "@/lib/workload-status";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { Scale, RotateCw } from "lucide-react";
 

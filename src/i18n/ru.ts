@@ -1347,6 +1347,12 @@ export const ru: Catalogue = {
       many: "{n} строк",
       other: "{n} строки",
     },
+    longListTrim: {
+      one: "{n} строка — сузьте область или поиск",
+      few: "{n} строки — сузьте область или поиск",
+      many: "{n} строк — сузьте область или поиск",
+      other: "{n} строки — сузьте область или поиск",
+    },
     limitWord: "лимит",
     capacityWord: "ёмкость",
     usageShareOf: "{percent}% от значения «{noun}»",

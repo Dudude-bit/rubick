@@ -9,7 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
 import { DataTable } from "./data-table";
@@ -173,7 +173,7 @@ describe("DataTable rows", () => {
 
   const renderTable = (props?: { quickAction?: () => void }) =>
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={columns}
         data={DATA}
         getRowHref={href}
@@ -311,14 +311,7 @@ describe("row grouping", () => {
     data: Item[],
     grouping: RowGrouping<Item>,
     cols: ColumnDef<Item>[] = columns
-  ) =>
-    wrap(
-      <DataTable<Item, unknown>
-        columns={cols}
-        data={data}
-        grouping={grouping}
-      />
-    );
+  ) => wrap(<DataTable<Item> columns={cols} data={data} grouping={grouping} />);
 
   const byLetter: RowGrouping<Item> = {
     keyOf: (row) => (row.name.startsWith("a") ? "the a pool" : null),
@@ -376,6 +369,46 @@ describe("row grouping", () => {
   });
 });
 
+/**
+ * Nothing in the app puts a sort control on a header yet, so no other test
+ * reaches this. It is pinned anyway because of *how* sorting is configured:
+ * v9 resolves a column's `auto` sort function out of the `sortFns` registry
+ * named in the feature set, and a registry that is missing or wrong makes
+ * every column silently unsortable rather than failing anywhere. Without this
+ * the day somebody adds a sort header is the day they find that out.
+ */
+describe("sorting a column", () => {
+  const sortable: ColumnDef<Item>[] = [
+    {
+      accessorKey: "name",
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting()}>
+          Name
+        </button>
+      ),
+      cell: ({ row }) => row.original.name,
+    },
+    columns[1],
+  ];
+
+  const namesInOrder = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.querySelector("td")?.textContent);
+
+  it("reverses the rows when its header is toggled twice", () => {
+    wrap(<DataTable<Item> columns={sortable} data={DATA} />);
+    expect(namesInOrder()).toEqual(["a-1", "b-2"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(namesInOrder()).toEqual(["a-1", "b-2"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(namesInOrder()).toEqual(["b-2", "a-1"]);
+  });
+});
+
 describe("column widths", () => {
   const headers = () => screen.getAllByRole("columnheader");
   const widthOf = (name: string) =>
@@ -389,7 +422,7 @@ describe("column widths", () => {
    */
   it("writes each column's declared size onto its header", () => {
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={[
           { ...columns[0], size: 320 },
           { ...columns[1], size: 90 },
@@ -416,7 +449,7 @@ describe("column widths", () => {
       onClick: () => {},
     });
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={[{ ...columns[0], size: 320 }]}
         data={DATA}
         quickActions={[action("One")]}
@@ -429,7 +462,7 @@ describe("column widths", () => {
     cleanup();
 
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={[{ ...columns[0], size: 320 }]}
         data={DATA}
         quickActions={[action("One"), action("Two"), action("Three")]}
@@ -447,7 +480,7 @@ describe("column widths", () => {
 describe("the row's quick actions", () => {
   const withActions = () =>
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={columns}
         data={DATA}
         quickActions={[{ icon: Eye, label: "View", onClick: () => {} }]}
@@ -507,7 +540,7 @@ describe("the row's quick actions", () => {
     const table = () => (
       <MemoryRouter initialEntries={["/pods"]}>
         <TooltipProvider>
-          <DataTable<Item, unknown>
+          <DataTable<Item>
             columns={columns}
             data={DATA}
             getRowHref={href}
@@ -535,7 +568,7 @@ describe("a list past the virtualisation threshold", () => {
 
   const long = () =>
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={columns}
         data={many}
         getRowHref={href}
@@ -587,7 +620,7 @@ describe("a list past the virtualisation threshold", () => {
    */
   it("lands a keyboard jump on the right line when captions are drawn", () => {
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={columns}
         data={pods(500, 50)}
         getRowHref={href}
@@ -673,7 +706,7 @@ describe("a list past the virtualisation threshold", () => {
     const tree = (data: Item[]) => (
       <MemoryRouter initialEntries={["/pods"]}>
         <TooltipProvider>
-          <DataTable<Item, unknown>
+          <DataTable<Item>
             columns={columns}
             data={data}
             getRowHref={href}
@@ -725,11 +758,7 @@ describe("the size band the layout switches on", () => {
   const table = (count: number) => (
     <MemoryRouter initialEntries={["/pods"]}>
       <TooltipProvider>
-        <DataTable<Item, unknown>
-          columns={columns}
-          data={pods(count)}
-          grouping={null}
-        />
+        <DataTable<Item> columns={columns} data={pods(count)} grouping={null} />
       </TooltipProvider>
     </MemoryRouter>
   );
@@ -767,7 +796,7 @@ describe("a table given the page's height", () => {
 
   const filled = (count: number) =>
     wrap(
-      <DataTable<Item, unknown>
+      <DataTable<Item>
         columns={columns}
         data={pods(count)}
         fill

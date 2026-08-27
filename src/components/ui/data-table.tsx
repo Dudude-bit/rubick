@@ -2,16 +2,17 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   flexRender,
-  getCoreRowModel,
-  useReactTable,
-  getSortedRowModel,
-  getFilteredRowModel,
-  type ColumnDef,
-  type SortingState,
+  useTable,
   type ColumnFiltersState,
-  type VisibilityState,
-  type Row,
+  type ColumnVisibilityState,
+  type RowData,
+  type SortingState,
 } from "@tanstack/react-table";
+import {
+  tableStack,
+  type ColumnDef,
+  type Row,
+} from "@/components/ui/table-features";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Table,
@@ -46,8 +47,8 @@ import { cn } from "@/lib/utils";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+interface DataTableProps<TData extends RowData> {
+  columns: ColumnDef<TData>[];
   data: TData[];
   isLoading?: boolean;
   searchKey?: string;
@@ -168,7 +169,7 @@ const RowActions = React.createContext<QuickAction<never>[]>([]);
 
 const NO_ACTIONS: QuickAction<never>[] = [];
 
-function RowActionsProvider<TData>({
+function RowActionsProvider<TData extends RowData>({
   actions,
   children,
 }: {
@@ -184,7 +185,7 @@ function RowActionsProvider<TData>({
   );
 }
 
-function ActionsCell<TData>({ row }: { row: Row<TData> }) {
+function ActionsCell<TData extends RowData>({ row }: { row: Row<TData> }) {
   const actions = React.useContext(
     RowActions
   ) as unknown as QuickAction<TData>[];
@@ -202,9 +203,9 @@ function ActionsCell<TData>({ row }: { row: Row<TData> }) {
   );
 }
 
-function createActionsColumn<TData, TValue>(
+function createActionsColumn<TData extends RowData>(
   count: number
-): ColumnDef<TData, TValue> {
+): ColumnDef<TData> {
   return {
     id: ACTIONS_COLUMN_ID,
     header: () => null,
@@ -223,7 +224,7 @@ function createActionsColumn<TData, TValue>(
  * Descriptors rather than rendered nodes: the virtualiser needs to count and
  * measure the lines before anything decides which of them to draw.
  */
-type BodyItem<TData> =
+type BodyItem<TData extends RowData> =
   | { key: string; caption: React.ReactNode; row?: undefined }
   | { key: string; caption?: undefined; row: Row<TData>; rowIndex: number };
 
@@ -243,7 +244,7 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
   }
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends RowData>({
   columns,
   data,
   isLoading = false,
@@ -260,7 +261,7 @@ export function DataTable<TData, TValue>({
   emptyMessage,
   grouping = null,
   rowLabel,
-}: DataTableProps<TData, TValue>) {
+}: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
@@ -307,8 +308,8 @@ export function DataTable<TData, TValue>({
     return seen.size >= (grouping.minGroups ?? 1);
   }, [data, grouping]);
 
-  const columnVisibility = React.useMemo<VisibilityState>(() => {
-    const state: VisibilityState = {};
+  const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
+    const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
@@ -341,24 +342,18 @@ export function DataTable<TData, TValue>({
     const filteredColumns = columns.filter(
       (col) => col.id !== ACTIONS_COLUMN_ID && col.id !== "actions"
     );
-    return [
-      ...filteredColumns,
-      createActionsColumn<TData, TValue>(actionCount),
-    ];
+    return [...filteredColumns, createActionsColumn<TData>(actionCount)];
   }, [columns, actionCount]);
 
-  // TanStack Table's useReactTable returns functions that React
-  // Compiler can't safely memoize. The library-level fix is upstream
-  // — until it lands, we silence the lint here. The runtime impact
-  // is benign: the table re-renders cheaply on parent state changes.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
+  const table = useTable({
+    // Which features exist is now part of the table's type, and the app names
+    // them in one place rather than at every list. Row models come with them:
+    // in v9 the sorted and filtered ones are slots on the feature set, not
+    // functions handed in here.
+    features: tableStack,
     data,
     columns: columnsWithActions,
     getRowId,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
@@ -455,6 +450,14 @@ export function DataTable<TData, TValue>({
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
   // column grid, and every cell would have to carry its own width again.
+  //
+  // TanStack Virtual returns functions React Compiler cannot safely memoize,
+  // so it declines to compile this component. That used to be true of the
+  // table hook as well, and the disable sat there; v9's `useTable` is
+  // compatible, which is what let this one surface. The runtime cost is the
+  // same either way — the table re-renders cheaply — and it goes away when
+  // the fix lands upstream.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: items.length,
     enabled: shouldVirtualScroll,
@@ -579,7 +582,10 @@ export function DataTable<TData, TValue>({
         key={row.id}
         data-index={line}
         ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
-        data-state={row.getIsSelected() && "selected"}
+        // No `data-state="selected"`: nothing in this app ever selects a row
+        // — no checkbox column, no selection state, no handler — so the answer
+        // was always "no". `TableRow` keeps the style for whoever wires
+        // selection up later.
         // `rowProps` carries `data-focused`, which is what reveals the row's
         // actions — read by CSS rather than by React, because hovering a row
         // used to set state, and that rebuilt every column definition and
@@ -712,9 +718,7 @@ export function DataTable<TData, TValue>({
             {isLong && (
               <div className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                <span>
-                  {data.length} rows — narrow the scope or search to trim
-                </span>
+                <span>{t("readings", "longListTrim", { n: data.length })}</span>
               </div>
             )}
             <Tooltip>

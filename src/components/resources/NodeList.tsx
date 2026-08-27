@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { useNavigate } from "react-router-dom";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";

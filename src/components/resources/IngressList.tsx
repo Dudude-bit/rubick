@@ -2,7 +2,7 @@ import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import {
   createContext,
   useCallback,

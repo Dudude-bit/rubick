@@ -1351,6 +1351,10 @@ export const en = {
     warnRevertCount: "{count} things will put this number back.",
     rowsOfTotal: "{shown} of {total} {label}",
     rowCount: { one: "{n} row", other: "{n} rows" },
+    longListTrim: {
+      one: "{n} row — narrow the scope or search to trim",
+      other: "{n} rows — narrow the scope or search to trim",
+    },
     limitWord: "limit",
     capacityWord: "capacity",
     usageShareOf: "{percent}% of {noun}",

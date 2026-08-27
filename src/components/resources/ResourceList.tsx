@@ -1,6 +1,6 @@
 import { ReactNode, useMemo, useState } from "react";
 import { T } from "@/i18n/T";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowData } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -42,7 +42,8 @@ const DELIVERY_COLUMN: ColumnDef<never> = {
   cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
 };
 
-const deliveryColumn = <Row,>() => DELIVERY_COLUMN as ColumnDef<Row>;
+const deliveryColumn = <Row extends RowData>() =>
+  DELIVERY_COLUMN as ColumnDef<Row>;
 
 export interface ResourceDeleteConfig<Row> {
   /** Function to delete a resource */
