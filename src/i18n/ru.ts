@@ -1335,6 +1335,35 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    limitWord: "лимит",
+    capacityWord: "ёмкость",
+    usageShareOf: "{percent}% от значения «{noun}»",
+    usageRestarted: "перезапуск",
+    usageNothingYet: "{label}: пока ничего не записано.",
+    usageNow: "сейчас {value}",
+    usagePeak: "пик {value}",
+    usageLimitIs: "{noun} {value}",
+    usageNoLimit: "{noun} не задан, масштаб по {value} потребления",
+    usageNoneDeclared: "{noun} не объявлен",
+    usageAgainstDeclared: "относительно объявленных значений «{noun}»",
+    usageReadingsWatched: {
+      one: "{label}: {n} отсчёт под наблюдением",
+      few: "{label}: {n} отсчёта под наблюдением",
+      many: "{label}: {n} отсчётов под наблюдением",
+      other: "{label}: {n} отсчёта под наблюдением",
+    },
+    usageReadingsRecorded: {
+      one: "{label}: записан {n} отсчёт, и ни одного с остановки",
+      few: "{label}: записано {n} отсчёта, и ни одного с остановки",
+      many: "{label}: записано {n} отсчётов, и ни одного с остановки",
+      other: "{label}: записано {n} отсчёта, и ни одного с остановки",
+    },
+    usageRestarts: {
+      one: "{n} перезапуск",
+      few: "{n} перезапуска",
+      many: "{n} перезапусков",
+      other: "{n} перезапуска",
+    },
     envInline: "встроенное",
     envSecret: "секрет",
     envConfigMap: "configmap",

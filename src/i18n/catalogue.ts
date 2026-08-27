@@ -1344,6 +1344,26 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    limitWord: "limit",
+    capacityWord: "capacity",
+    usageShareOf: "{percent}% of {noun}",
+    usageRestarted: "restarted",
+    usageNothingYet: "{label}: nothing recorded yet.",
+    usageNow: "now {value}",
+    usagePeak: "peak {value}",
+    usageLimitIs: "{noun} {value}",
+    usageNoLimit: "no {noun} set, scaled to {value} used",
+    usageNoneDeclared: "no {noun}s declared",
+    usageAgainstDeclared: "against declared {noun}s",
+    usageReadingsWatched: {
+      one: "{label}: {n} reading watched",
+      other: "{label}: {n} readings watched",
+    },
+    usageReadingsRecorded: {
+      one: "{label}: {n} reading recorded, none since it stopped",
+      other: "{label}: {n} readings recorded, none since it stopped",
+    },
+    usageRestarts: { one: "{n} restart", other: "{n} restarts" },
     envInline: "inline",
     envSecret: "secret",
     envConfigMap: "configmap",

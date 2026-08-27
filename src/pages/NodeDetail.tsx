@@ -229,7 +229,7 @@ export function NodeDetail() {
             memoryLimit={
               node?.capacity.memory ? parseMemory(node.capacity.memory) : null
             }
-            limitNoun="capacity"
+            limitNoun="capacityWord"
             sampledAt={nodeSampledAt}
             status={nodeStatus}
             history={node?.name ? { kind: "node", node: node.name } : undefined}

@@ -43,7 +43,7 @@ export interface UsageBlockProps {
   cpuLimit: number | null;
   memoryLimit: number | null;
   /** What the ceiling is called here: a pod has limits, a node a capacity. */
-  limitNoun?: string;
+  limitNoun?: "limitWord" | "capacityWord";
   /** The sentence shown when there is no ceiling at all. */
   noLimitNote?: EmptyKey;
   restarts?: number | null;
@@ -99,7 +99,7 @@ export function UsageBlock({
   memory,
   cpuLimit,
   memoryLimit,
-  limitNoun = "limit",
+  limitNoun = "limitWord",
   noLimitNote = NO_LIMIT_NOTE,
   restarts,
   sampledAt,
@@ -165,8 +165,10 @@ export function UsageBlock({
     ? // The block cannot promise a comparison the workload does not
       // declare — that pairing is what made an empty track read as 0%.
       neither
-      ? `no ${limitNoun}s declared`
-      : `against declared ${limitNoun}s`
+      ? t("readings", "usageNoneDeclared", { noun: t("readings", limitNoun) })
+      : t("readings", "usageAgainstDeclared", {
+          noun: t("readings", limitNoun),
+        })
     : past.window !== null
       ? [
           scope,
