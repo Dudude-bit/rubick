@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-08-27
+
+Gateway API, end to end. Routes, gateways, classes and policies are pages of
+their own; a route says whether it is serving and, where it is not, which of
+the eight links between a listener and a pod is the one that broke. A map
+draws the whole road when the list is not enough, and a probe from your own
+machine answers the last question the cluster cannot: whether any of it is
+reachable from here.
+
+### Added — the routes page
+
+Every route in scope, of all five kinds, on one list: what it serves, what is
+behind it, and which gateway carries it. Serving and not-serving are separate
+groups, the broken ordered by how early they break. Mesh routes — the ones
+attached to a Service rather than a gateway — are kept out of the judging and
+named in their own place, because nothing about a gateway applies to them.
+
+A filter narrows by name, host or gateway. A one-pixel mark in the sidebar
+says whether anything is wrong before you open the page, and says nothing at
+all while the verdicts are still being read.
+
+### Added — the trace
+
+Open a route and the eight links are laid out in the order you would debug
+them: the class, the gateway, its listener, the namespace, the references,
+the backend, its endpoints, and whether the address answers. The first break
+is expanded with the controller's own words; the rest stay folded.
+
+A trace that could not read something says so instead of guessing. A reader
+whose rights stop at one namespace cannot see the cluster-wide gateway list,
+and a green verdict drawn without it would be a claim nobody checked.
+
+### Added — probes from this machine
+
+DNS and TCP, on demand and never automatically: the packets leave your
+network, and "reachable from here" is only an honest answer when you asked
+for it. A published address that is a hostname is resolved before it is
+compared, so a cloud load balancer no longer reads as a mismatch.
+
+### Added — the map
+
+Listeners, kinds, routes, backends and the workloads behind them, in columns,
+with the verdict on every edge. Route kinds carry their own hue so the same
+route reads the same at both zooms.
+
+### Added — gateways, classes and policies
+
+Gateways list their listeners and how many routes each carries; a listener's
+port dials straight into the traffic chain. Classes say who claimed them.
+BackendTLSPolicy attachment is shown where it applies and reverse-looked-up
+from the backend it targets. All of it joins the cross-cluster search.
+
+### Fixed — a namespace's contents, and what the peek says about them
+
+Peeking a namespace lists what lives in it. Peeking a gateway shows its spec
+and live policy attachment. Hostnames and addresses are one click from the
+clipboard, and a Service's ports forward on click, as they do everywhere else.
+
 ## [4.5.1] - 2026-08-27
 
 ### Fixed — a filtered feed that found nothing said the scope was empty
