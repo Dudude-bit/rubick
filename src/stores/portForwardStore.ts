@@ -107,6 +107,21 @@ interface PortForwardState {
   ) => Promise<PortForwardConfig>;
   removeConfig: (id: string) => Promise<void>;
   refreshSessions: () => Promise<void>;
+  /**
+   * Start a forward against a pod, without a saved config behind it.
+   *
+   * Here rather than at the call site because the call sites forgot. Two of
+   * the three ways to start a forward called `commands.portForwardPod`
+   * straight and left the store empty, so the forward held a local port,
+   * carried traffic, and appeared in no list the app draws — including the
+   * one with the Stop button on it. The only way to get the port back was to
+   * quit. A start that records itself cannot be half-done.
+   */
+  startPod: (
+    pod: string,
+    namespace: string,
+    request: PortForwardRequest
+  ) => Promise<PortForwardSession>;
   startConfig: (configId: string) => Promise<PortForwardSession>;
   stopSession: (sessionId: string) => Promise<void>;
   startAllForContext: (
@@ -251,29 +266,26 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
     set({ sessions: sessions.map(mapSession) });
   },
 
+  startPod: async (pod, namespace, request) => {
+    const session = await commands.portForwardPod(pod, namespace, request);
+    const mapped = mapSession(session);
+    set((state) => ({
+      sessions: [...state.sessions.filter((s) => s.id !== mapped.id), mapped],
+    }));
+    return mapped;
+  },
+
   startConfig: async (configId) => {
     const config = get().configs.find((item) => item.id === configId);
     if (!config) {
       throw new Error("Port-forward config not found");
     }
 
-    const portForwardConfig: PortForwardRequest = {
+    return get().startPod(config.pod, config.namespace, {
       localPort: config.localPort,
       remotePort: config.remotePort,
       autoReconnect: config.autoReconnect,
-    };
-
-    const session = await commands.portForwardPod(
-      config.pod,
-      config.namespace,
-      portForwardConfig
-    );
-
-    const mapped = mapSession(session);
-    set((state) => ({
-      sessions: [...state.sessions.filter((s) => s.id !== mapped.id), mapped],
-    }));
-    return mapped;
+    });
   },
 
   stopSession: async (sessionId) => {

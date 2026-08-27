@@ -23,6 +23,7 @@
  * which is what keeps it a tier-two page with nothing to configure.
  */
 
+import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   CustomResourceInfo,
@@ -183,7 +184,8 @@ interface RouteSpec {
 
 function routesOf(
   object: CustomResourceInfo,
-  services: ServiceInfo[]
+  services: ServiceInfo[],
+  t: T
 ): IstioRoute[] {
   const spec = (object.spec ?? {}) as Record<string, unknown>;
   const namespace = object.namespace ?? "";
@@ -221,7 +223,7 @@ function routesOf(
         },
         name: entry.name ?? null,
         protocol,
-        matches: readMatches(entry.match),
+        matches: readMatches(entry.match, t),
         destinations,
         weightSum:
           weights.length > 0 && weights.length === destinations.length
@@ -392,7 +394,7 @@ const WEIGHT_TOTAL = 100;
  * because "what serves this hostname" is the question and one object
  * answering for four of them is four answers.
  */
-export function hostGroups(sources: IstioSources): IstioHostGroup[] {
+export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
   const byHost = new Map<
     string,
     { routes: IstioRoute[]; named: string[]; namespace: string }
@@ -404,7 +406,7 @@ export function hostGroups(sources: IstioSources): IstioHostGroup[] {
       gateways?: string[];
     };
     const namespace = object.namespace ?? "";
-    const routes = routesOf(object, sources.services);
+    const routes = routesOf(object, sources.services, t);
     // No `gateways` at all means the mesh gateway, which is Istio's default
     // and is in-mesh traffic rather than a missing reference.
     const named = spec.gateways ?? [MESH];

@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ContextInfo } from "@/generated/types";
 
 const setKubeconfigPath = vi.fn(async (_path: string) => undefined);
+const setKubeconfigPaths = vi.fn(async (_paths: string[]) => undefined);
+const getKubeconfigPaths = vi.fn(async (): Promise<string[]> => []);
 const listContexts = vi.fn(async (): Promise<ContextInfo[]> => CONTEXTS);
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(async () => null) }));
@@ -34,6 +36,8 @@ vi.mock("@/lib/commands", () => ({
       error: null,
     })),
     setKubeconfigPath: (path: string) => setKubeconfigPath(path),
+    getKubeconfigPaths: () => getKubeconfigPaths(),
+    setKubeconfigPaths: (paths: string[]) => setKubeconfigPaths(paths),
     clearKubeconfigPath: vi.fn(async () => undefined),
     getCliPaths: vi.fn(async () => ({})),
     listGcpProfiles: vi.fn(async () => [{ name: "deploy", profile: {} }]),
@@ -192,6 +196,86 @@ describe("Clusters settings", () => {
       renderPane();
       await screen.findByText(/Client certificate/);
       expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+    });
+  });
+
+  /**
+   * A work file and a home file, without pasting them into one — and the
+   * half of it a native file dialog keeps out of reach of a live check.
+   */
+  describe("several kubeconfig files", () => {
+    it("adds to what is being read rather than replacing it", async () => {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      vi.mocked(open).mockResolvedValue("/home/u/work.yaml" as never);
+
+      const user = userEvent.setup();
+      renderPane();
+      await user.click(
+        await screen.findByRole("button", { name: "Add a file" })
+      );
+
+      // Nothing is pinned, so the app is reading `$KUBECONFIG` or the default
+      // path. Starting from the empty pin list would make Add a file mean
+      // replace this file, dropping the clusters visible a second earlier.
+      await waitFor(() =>
+        expect(setKubeconfigPaths).toHaveBeenCalledWith([
+          "/home/u/.kube/config",
+          "/home/u/work.yaml",
+        ])
+      );
+    });
+
+    it("keeps the order it was given, because the order is the merge", async () => {
+      getKubeconfigPaths.mockResolvedValue(["/home/u/work.yaml"]);
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      vi.mocked(open).mockResolvedValue([
+        "/home/u/home.yaml",
+        "/home/u/lab.yaml",
+      ] as never);
+
+      const user = userEvent.setup();
+      renderPane();
+      await user.click(
+        await screen.findByRole("button", { name: "Add a file" })
+      );
+
+      await waitFor(() =>
+        expect(setKubeconfigPaths).toHaveBeenCalledWith([
+          "/home/u/work.yaml",
+          "/home/u/home.yaml",
+          "/home/u/lab.yaml",
+        ])
+      );
+    });
+
+    /** The merge ignores a repeat, and a list with one twice reads as a slip. */
+    it("does not pin the same file twice", async () => {
+      getKubeconfigPaths.mockResolvedValue(["/home/u/work.yaml"]);
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      vi.mocked(open).mockResolvedValue("/home/u/work.yaml" as never);
+
+      const user = userEvent.setup();
+      renderPane();
+      await user.click(
+        await screen.findByRole("button", { name: "Add a file" })
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(setKubeconfigPaths).not.toHaveBeenCalled();
+    });
+
+    it("changes nothing when the dialog is cancelled", async () => {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      vi.mocked(open).mockResolvedValue(null as never);
+
+      const user = userEvent.setup();
+      renderPane();
+      await user.click(
+        await screen.findByRole("button", { name: "Add a file" })
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(setKubeconfigPaths).not.toHaveBeenCalled();
     });
   });
 });

@@ -9,8 +9,8 @@
 
 import { useCallback, useState } from "react";
 
-import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { PodInfo } from "@/generated/types";
@@ -36,15 +36,14 @@ function parsePortValue(value: string): number | null {
 
 export function usePodPortForward(pod: PodInfo | undefined) {
   const { toast } = useToast();
+  const t = useT();
   const currentContext = useClusterStore((state) => state.currentContext);
 
   const addPortForwardConfig = usePortForwardStore((state) => state.addConfig);
   const startPortForwardConfig = usePortForwardStore(
     (state) => state.startConfig
   );
-  const refreshPortForwards = usePortForwardStore(
-    (state) => state.refreshSessions
-  );
+  const startPortForwardPod = usePortForwardStore((state) => state.startPod);
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
   const stopPortForwardSession = usePortForwardStore(
     (state) => state.stopSession
@@ -67,8 +66,8 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     if (!pod) return;
     if (!currentContext) {
       toast({
-        title: "No cluster selected",
-        description: "Connect to a cluster to start port-forwarding.",
+        title: t("cluster", "noClusterSelected"),
+        description: t("action", "connectToForward"),
         variant: "destructive",
       });
       return;
@@ -79,8 +78,8 @@ export function usePodPortForward(pod: PodInfo | undefined) {
 
     if (!localPort || !remotePort) {
       toast({
-        title: "Invalid port",
-        description: "Ports must be between 1 and 65535.",
+        title: t("action", "invalidPort"),
+        description: t("action", "portsOutOfRange"),
         variant: "destructive",
       });
       return;
@@ -101,18 +100,17 @@ export function usePodPortForward(pod: PodInfo | undefined) {
         });
         await startPortForwardConfig(config.id);
       } else {
-        await commands.portForwardPod(pod.name, pod.namespace, {
+        await startPortForwardPod(pod.name, pod.namespace, {
           localPort,
           remotePort,
           autoReconnect: form.autoReconnect,
         });
       }
 
-      await refreshPortForwards();
       setOpen(false);
     } catch (err) {
       toast({
-        title: "Failed to start port-forward",
+        title: t("action", "portForwardStartFailed"),
         description: String(err),
         variant: "destructive",
       });
@@ -125,8 +123,9 @@ export function usePodPortForward(pod: PodInfo | undefined) {
     form,
     addPortForwardConfig,
     startPortForwardConfig,
-    refreshPortForwards,
+    startPortForwardPod,
     toast,
+    t,
   ]);
 
   const handleStopSession = useCallback(
@@ -135,13 +134,13 @@ export function usePodPortForward(pod: PodInfo | undefined) {
         await stopPortForwardSession(sessionId);
       } catch (err) {
         toast({
-          title: "Failed to stop port-forward",
+          title: t("action", "portForwardStopFailed"),
           description: String(err),
           variant: "destructive",
         });
       }
     },
-    [stopPortForwardSession, toast]
+    [stopPortForwardSession, toast, t]
   );
 
   const activePortForwards =

@@ -65,7 +65,7 @@ export default function LokiPage() {
     );
   }
 
-  const state = found.data ? verdict(found.data) : null;
+  const state = found.data ? verdict(found.data, t) : null;
   const refused = found.data?.namespaces.filter(
     (entry) => entry.problem !== null
   );

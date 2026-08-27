@@ -14,6 +14,7 @@
  * know what to ask for.
  */
 
+import { useT } from "@/i18n/useT";
 import { useMemo } from "react";
 
 import { inScope, scopeIn, scopeLabel } from "@/lib/namespace-scope";
@@ -35,6 +36,7 @@ export interface NamespaceScope {
 }
 
 export function useNamespaceScope(): NamespaceScope {
+  const t = useT();
   const scope = useClusterStore((state) => state.namespaceScope);
 
   return useMemo(() => {
@@ -43,13 +45,13 @@ export function useNamespaceScope(): NamespaceScope {
       scope,
       isAll: scope.length === 0,
       several,
-      label: scopeLabel(scope),
-      inWords: scopeIn(scope),
+      label: scopeLabel(scope, t),
+      inWords: scopeIn(scope, t),
       matches: (namespace) => inScope(scope, namespace),
       narrow: (items) =>
         several
           ? items.filter((item) => inScope(scope, item.namespace))
           : items,
     };
-  }, [scope]);
+  }, [scope, t]);
 }

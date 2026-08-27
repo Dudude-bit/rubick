@@ -27,6 +27,13 @@ import type { CustomResourceInfo } from "@/generated/types";
 
 import { useIntegrations } from "./index";
 
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const DAY = 86_400_000;
 const inDays = (days: number) =>
   new Date(Date.now() + days * DAY).toISOString();
@@ -67,7 +74,15 @@ function certManagerLines(
   const state = statuses.find(
     (status) => status.vendor.id === "cert-manager"
   )?.facts;
-  return state?.state === "ready" ? state.facts.map((fact) => fact.text) : [];
+  return state?.state === "ready"
+    ? state.facts.map((fact) =>
+        fact.text !== undefined
+          ? fact.text
+          : (Array.isArray(fact.say) ? fact.say : [fact.say])
+              .map((part) => sayWords(part, t))
+              .join(" · ")
+      )
+    : [];
 }
 
 beforeEach(() => {

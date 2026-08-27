@@ -1,6 +1,6 @@
 [package]
 name = "k8s-gui"
-version = "4.4.2"
+version = "4.5.1"
 edition = "2021"
 rust-version = "1.91"
 authors = ["Rubick Team"]
@@ -40,8 +40,8 @@ k8s-openapi = { version = "0.23", features = ["v1_31"] }
 gcp_auth = "0.12"
 
 # Azure AKS authentication
-azure_identity = "0.21"
-azure_core = "0.21"
+azure_identity = "1.0"
+azure_core = "1.0"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -61,7 +61,7 @@ secrecy = "0.10"
 # X.509 is parsed here and never in the webview: a certificate's facts are
 # small, its bytes are not, and the private key beside it must never leave
 # this process.
-x509-parser = "0.16"
+x509-parser = "0.18"
 
 # Logging and tracing — the subscriber is initialised in k8s-gui-common.
 tracing = "0.1"
@@ -79,13 +79,13 @@ toml = "0.8"
 # Utilities
 uuid = { version = "1.11", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-base64 = "0.22"
+base64 = "0.23"
 url = "2.5"
 regex = "1.11"
 parking_lot = "0.12"
 dashmap = "6.1"
 rand = "0.10"
-sha2 = "0.10"
+sha2 = "0.11"
 tokio-util = { version = "0.7", features = ["io", "compat"] }
 urlencoding = "2.1"
 flate2 = "1.0"

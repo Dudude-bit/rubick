@@ -81,7 +81,7 @@ export function DrainDialog({
                   </span>{" "}
                   —{" "}
                   {t("empty", "budgetRuleHealthyCovering", {
-                    rule: budgetRule(budget.facts),
+                    rule: budgetRule(budget.facts, t),
                     healthy: budget.facts.currentHealthy,
                     expected: budget.facts.expectedPods,
                     pods: t("cluster", "podCount", { n: pods }),

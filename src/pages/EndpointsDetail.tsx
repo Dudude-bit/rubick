@@ -112,7 +112,7 @@ export function EndpointsDetail() {
       ? [
           {
             label: t("nav", "published"),
-            value: publishedSummary(published),
+            value: publishedSummary(published, t),
             tone:
               published.draining > 0 || published.unrouted > 0
                 ? ("warn" as const)
@@ -154,7 +154,8 @@ export function EndpointsDetail() {
                 : legacyNote(
                     backends.length,
                     endpoints?.overCapacity ?? false,
-                    published
+                    published,
+                    t
                   )
             }
           />
@@ -277,7 +278,7 @@ export function EndpointsDetail() {
       ),
     },
     yamlTab({
-      title: "Endpoints YAML",
+      title: t("action", "kindYaml", { kind: "Endpoints" }),
       yaml: endpointsYaml,
       resourceKind: ResourceType.Endpoints,
       resourceName: name || "",

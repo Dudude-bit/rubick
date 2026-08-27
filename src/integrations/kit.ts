@@ -8,6 +8,8 @@
  * tree being free of plain functions.
  */
 
+import type { en } from "@/i18n/catalogue";
+import type { T } from "@/i18n/useT";
 import type {
   CustomResourceInfo,
   CustomResourceDetailInfo,
@@ -41,11 +43,6 @@ export function crdObjectPath(
   name: string
 ): string {
   return getCustomResourceUrl(crdName, name, namespace);
-}
-
-/** "1 certificate", "7 certificates". */
-export function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 /**
@@ -98,10 +95,16 @@ export function readyStatus(
 /** A column a vendor adds to the list of one of its own kinds. */
 export interface CrdColumn {
   id: string;
-  header: string;
-  accessor: (resource: CustomResourceInfo) => unknown;
+  /**
+   * The heading, as a catalogue key. These tables are built once at import,
+   * where the reader's language is not yet known and would be frozen in if
+   * it were.
+   */
+  header: keyof (typeof en)["columns"];
+  /** Takes the translator: some of these compose a sentence per row. */
+  accessor: (resource: CustomResourceInfo, t: T) => unknown;
   /** Without one the value is stringified, and `null` draws an em dash. */
-  cell?: (value: unknown) => React.ReactNode;
+  cell?: (value: unknown, t: T) => React.ReactNode;
 }
 
 export interface CrdStatus {

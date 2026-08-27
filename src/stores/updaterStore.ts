@@ -7,6 +7,8 @@
  * @module stores/updaterStore
  */
 
+import { translate } from "@/i18n";
+import { currentLocale } from "./localeStore";
 import { create } from "zustand";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -150,7 +152,10 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     } catch (error) {
       set({
         downloading: false,
-        error: error instanceof Error ? error.message : "Installation failed",
+        error:
+          error instanceof Error
+            ? error.message
+            : translate(currentLocale(), "settings", "installationFailed"),
       });
     }
   },

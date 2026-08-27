@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 
 import type { PersistentVolumeInfo } from "@/generated/types";
@@ -36,13 +36,13 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     // A namespace and a claim name together, so as wide as a name column.
     size: 240,
     accessorKey: "claim",
-    header: "Claim",
+    header: () => <T section="columns" k="claim" />,
     cell: ({ row }) => <ClaimRef claim={row.original.claim} />,
   },
   {
     size: 160,
     accessorKey: "storageClass",
-    header: "Storage Class",
+    header: () => <T section="columns" k="storageClass" />,
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
   {
@@ -56,8 +56,7 @@ export const PersistentVolumeList =
   createResourceListPage<PersistentVolumeInfo>({
     resourceType: ResourceType.PersistentVolume,
     title: "Persistent Volumes",
-    description:
-      "Cluster-wide storage resources provisioned by an administrator",
+    description: ({ t }) => t("empty", "persistentVolumesAre"),
     scope: "cluster",
     searchKey: "name",
     fetcher: () => commands.listPersistentVolumes(null),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { activityLabel } from "./activity-label";
 
-const none = { ports: 0, terminals: 0, jobs: 0 };
+const none = { ports: 0, terminals: 0 };
 
 describe("what the activity trigger calls itself", () => {
   it("is a plain invitation when nothing is running", () => {
@@ -19,17 +19,15 @@ describe("what the activity trigger calls itself", () => {
     expect(activityLabel({ ...none, ports: 3 })).toBe("3 port forwards");
   });
 
-  it("names terminals and jobs the same way", () => {
+  it("names terminals the same way", () => {
     expect(activityLabel({ ...none, terminals: 1 })).toBe("1 terminal");
     expect(activityLabel({ ...none, terminals: 2 })).toBe("2 terminals");
-    expect(activityLabel({ ...none, jobs: 1 })).toBe("1 job");
-    expect(activityLabel({ ...none, jobs: 4 })).toBe("4 jobs");
   });
 
-  /** Three nouns do not fit an eleven-pixel status line, so the total wins. */
+  /** Two nouns do not fit an eleven-pixel status line, so the total wins. */
   it("falls back to a total once two kinds are running", () => {
-    expect(activityLabel({ ports: 1, terminals: 2, jobs: 0 })).toBe("3 active");
-    expect(activityLabel({ ports: 1, terminals: 1, jobs: 1 })).toBe("3 active");
+    expect(activityLabel({ ports: 1, terminals: 2 })).toBe("3 active");
+    expect(activityLabel({ ports: 2, terminals: 1 })).toBe("3 active");
   });
 
   /**
@@ -44,8 +42,6 @@ describe("what the activity trigger calls itself", () => {
     expect(ports(5)).toBe("5 пробросов");
     expect(ports(21)).toBe("21 проброс");
     expect(activityLabel(none, "ru")).toBe("активность");
-    expect(activityLabel({ ports: 1, terminals: 1, jobs: 1 }, "ru")).toBe(
-      "активных: 3"
-    );
+    expect(activityLabel({ ports: 2, terminals: 1 }, "ru")).toBe("активных: 3");
   });
 });

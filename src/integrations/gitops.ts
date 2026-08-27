@@ -17,6 +17,10 @@
  * which the whole app already has.
  */
 
+import type { Saying } from "@/i18n/say";
+
+export type { Saying };
+
 /** The object that delivers something, and where it is in this app. */
 export interface DeliveryOwner {
   kind: string;
@@ -106,9 +110,9 @@ export interface DeliverySource {
    * are different failures and the vendors have different vocabularies for
    * them. `null` where the delivery is doing exactly what it says.
    */
-  warning: string | null;
+  warning: Saying | null;
   /** Why, where the answer is not obvious from {@link drift} alone. */
-  note: string | null;
+  note: Saying | null;
 }
 
 /**

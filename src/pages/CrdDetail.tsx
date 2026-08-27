@@ -365,7 +365,7 @@ export function CrdDetail() {
       ),
     },
     yamlTab({
-      title: "CustomResourceDefinition YAML",
+      title: t("action", "kindYaml", { kind: "CustomResourceDefinition" }),
       yaml,
       onCopy: () => yaml && copyToClipboard(yaml),
       resourceKind: ResourceType.CustomResourceDefinition,
@@ -386,7 +386,11 @@ export function CrdDetail() {
         statusBadge={
           crd && (
             <StatusBadge
-              status={notEstablished ? "Not established" : "Established"}
+              status={
+                notEstablished
+                  ? t("readings", "crdNotEstablished")
+                  : t("readings", "crdEstablished")
+              }
               roleOverride={notEstablished ? "err" : "ok"}
             />
           )

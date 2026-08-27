@@ -55,7 +55,13 @@ export async function serviceEdge({
         // condition. A binding with no conditions — which is every binding
         // that is working, and every binding on a cluster whose controller
         // is not running — says nothing here rather than saying "fine".
-        problem: failure === null ? null : { text: failure, tone: "err" },
+        problem:
+          failure === null
+            ? null
+            : {
+                text: { key: "verbatimLine", values: { said: failure } },
+                tone: "err",
+              },
       };
     });
 }

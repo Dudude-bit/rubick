@@ -44,6 +44,7 @@ import {
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
 import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { StatefulSetDetailInfo } from "@/generated/types";
@@ -73,7 +74,9 @@ export function StatefulSetDetail() {
 
   const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
-  const { data: pods = [] } = useLiveQuery({
+  // The failure travels rather than becoming an empty list; see the same
+  // change on the DaemonSet page.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["statefulset-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -96,8 +99,8 @@ export function StatefulSetDetail() {
             pod.name.startsWith(`${name}-`) &&
             /^\d+$/.test(pod.name.slice(name.length + 1))
         );
-      } catch {
-        return [];
+      } catch (err) {
+        throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
     enabled: !!namespace && !!name,
@@ -246,7 +249,7 @@ export function StatefulSetDetail() {
           </>
         ),
       },
-      connectionsTab(connections, deliveryQuery),
+      connectionsTab(connections, t, deliveryQuery),
       {
         id: "container-template",
         label: t("columns", "template"),
@@ -258,7 +261,7 @@ export function StatefulSetDetail() {
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
-        content: <PodListCard pods={pods} />,
+        content: <PodListCard pods={pods} error={podsError} />,
       },
       {
         id: "conditions",
@@ -281,7 +284,7 @@ export function StatefulSetDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "StatefulSet YAML",
+        title: t("action", "kindYaml", { kind: "StatefulSet" }),
         resourceKind: ResourceType.StatefulSet,
         resourceName: statefulSet?.name || name || "",
         namespace: statefulSet?.namespace || namespace,
@@ -291,6 +294,7 @@ export function StatefulSetDetail() {
       t,
       statefulSet,
       pods,
+      podsError,
       yaml,
       copyYaml,
       namespace,
@@ -357,7 +361,7 @@ export function StatefulSetDetail() {
           moment the reader was on Logs, which is when Scale still has to
           work. It draws nothing until it is open, and portals when it is. */}
       <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"))}
+        warnings={scaleWarnings(connections.data, intercept("Scale"), t)}
         open={scaleOpen}
         onOpenChange={setScaleOpen}
         kind={ResourceType.StatefulSet}
@@ -398,6 +402,10 @@ function declaration(
       label: t("columns", "updateStrategy"),
       value: statefulSet?.updateStrategy || "RollingUpdate",
     },
-    serviceAccountRow(statefulSet?.serviceAccountName, statefulSet?.namespace),
+    serviceAccountRow(
+      statefulSet?.serviceAccountName,
+      statefulSet?.namespace,
+      t
+    ),
   ];
 }

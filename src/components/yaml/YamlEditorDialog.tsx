@@ -163,7 +163,7 @@ export function YamlEditorDialog() {
     [originalContent]
   );
   const { deliveries } = useDelivery(delivery);
-  const intercept = deliveryApplyIntercept(deliveries);
+  const intercept = deliveryApplyIntercept(deliveries, t);
 
   // The autoscaler owns `spec.replicas` and nothing else, so it is asked
   // about only when that field is what moved — see `applyWarnings`. Asked
@@ -182,7 +182,7 @@ export function YamlEditorDialog() {
     open && replicasMoved
   );
 
-  const warnings = applyWarnings(governance.data, intercept, replicasMoved);
+  const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
@@ -440,10 +440,7 @@ export function YamlEditorDialog() {
               of the decision the mark is behind a scrim and unreadable, and
               the only thing safe to leave out is the second naming of the
               owner, which the lead sentence carries anyway. */}
-          <ActionWarnings
-            warnings={warnings}
-            headingFor={(count) => `${count} things will undo this apply.`}
-          />
+          <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
 
           {hasChanges && (
             // The diff is arbitrarily wide and this dialog is a grid, whose

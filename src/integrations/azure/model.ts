@@ -25,6 +25,7 @@
  * to explain why an Ingress they wrote is being ignored.
  */
 
+import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
 
@@ -47,15 +48,18 @@ const text = (resource: CustomResourceInfo, path: string): string | null => {
  * object; the words are what a reader can act on, and an unrecognised number
  * keeps its number rather than being called something.
  */
-export function identityType(identity: CustomResourceInfo): string | null {
+export function identityType(
+  identity: CustomResourceInfo,
+  t: T
+): string | null {
   const value = getValueByPath(identity, "spec.type");
   switch (value) {
     case 0:
-      return "user-assigned MSI";
+      return t("readings", "azureUserAssignedMsi");
     case 1:
-      return "service principal";
+      return t("readings", "azureServicePrincipal");
     case 2:
-      return "service principal (certificate)";
+      return t("readings", "azureServicePrincipalCert");
     default:
       return value === undefined || value === null ? null : String(value);
   }
@@ -77,11 +81,13 @@ export function identityResource(identity: CustomResourceInfo): string | null {
   return parts[parts.length - 1] ?? id;
 }
 
-export function identitySummary(identity: CustomResourceInfo): string {
-  const parts = [identityType(identity), identityResource(identity)].filter(
+export function identitySummary(identity: CustomResourceInfo, t: T): string {
+  const parts = [identityType(identity, t), identityResource(identity)].filter(
     Boolean
   );
-  return parts.length > 0 ? parts.join(" · ") : "no identity named";
+  return parts.length > 0
+    ? parts.join(" · ")
+    : t("readings", "azureNoIdentityNamedPlain");
 }
 
 /** The `AzureIdentity` a binding points at, by name and unvalidated. */
@@ -98,16 +104,18 @@ export function bindingSelector(binding: CustomResourceInfo): string | null {
  * "web-identity binds pods labelled aadpodidbinding=web", which is the whole
  * object in one line and the sentence three list pages could not say.
  */
-export function bindingSummary(binding: CustomResourceInfo): string {
+export function bindingSummary(binding: CustomResourceInfo, t: T): string {
   const identity = bindingIdentity(binding);
   const selector = bindingSelector(binding);
   const parts = [
-    identity === null ? null : `binds ${identity}`,
-    selector === null ? null : `to pods labelled aadpodidbinding=${selector}`,
+    identity === null ? null : t("readings", "azureBinds", { name: identity }),
+    selector === null
+      ? null
+      : t("readings", "azureToPodsLabelled", { selector }),
   ].filter(Boolean);
   return parts.length > 0
     ? parts.join(" ")
-    : "names neither an identity nor a selector";
+    : t("readings", "azureNamesNeither");
 }
 
 /**
@@ -132,14 +140,17 @@ export function danglingBindings(
   });
 }
 
-export function prohibitedTargetSummary(target: CustomResourceInfo): string {
+export function prohibitedTargetSummary(
+  target: CustomResourceInfo,
+  t: T
+): string {
   const host = text(target, "spec.hostname");
   const paths = getValueByPath(target, "spec.paths");
   const list = Array.isArray(paths)
     ? paths.filter((path) => typeof path === "string")
     : [];
   const parts = [
-    host === null ? "any hostname" : host,
+    host === null ? t("readings", "azureAnyHostname") : host,
     list.length > 0 ? list.join(", ") : null,
   ].filter(Boolean);
   return parts.join(" · ");

@@ -17,6 +17,26 @@ import type { CustomResourceInfo } from "@/generated/types";
 
 import { facts } from "./facts";
 
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+import type { VendorFact } from "../registry";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+/** A fact as the pane reads it: tone, link, and the words it will show. */
+const said = (fact: VendorFact) => ({
+  ...(fact.tone !== undefined && { tone: fact.tone }),
+  ...(fact.to !== undefined && { to: fact.to }),
+  words:
+    fact.text !== undefined
+      ? fact.text
+      : (Array.isArray(fact.say) ? fact.say : [fact.say])
+          .map((part) => sayWords(part, t))
+          .join(" · "),
+});
+
 const DAY = 86_400_000;
 const inDays = (days: number) =>
   new Date(Date.now() + days * DAY).toISOString();
@@ -61,8 +81,8 @@ describe("cert-manager facts", () => {
       certificate({ renewalTime: inDays(1.5) }),
       certificate({ renewalTime: inDays(1.5) }),
     ]);
-    const lines = await facts();
-    expect(lines[0].text).toBe("2 certificates");
+    const lines = (await facts()).map(said);
+    expect(lines[0].words).toBe("2 certificates");
     expect(lines.every((line) => line.tone === undefined)).toBe(true);
   });
 
@@ -71,8 +91,8 @@ describe("cert-manager facts", () => {
       certificate({ renewalTime: inDays(1.5) }),
       certificate({ renewalTime: inDays(-0.5) }),
     ]);
-    const lines = await facts();
-    expect(lines).toContainEqual({ text: "1 renewal overdue", tone: "warn" });
+    const lines = (await facts()).map(said);
+    expect(lines).toContainEqual({ words: "1 renewal overdue", tone: "warn" });
   });
 
   it("counts several missed renewals", async () => {
@@ -80,8 +100,8 @@ describe("cert-manager facts", () => {
       certificate({ renewalTime: inDays(-0.5) }),
       certificate({ renewalTime: inDays(-1) }),
     ]);
-    const lines = await facts();
-    expect(lines).toContainEqual({ text: "2 renewals overdue", tone: "warn" });
+    const lines = (await facts()).map(said);
+    expect(lines).toContainEqual({ words: "2 renewals overdue", tone: "warn" });
   });
 
   /**
@@ -90,8 +110,11 @@ describe("cert-manager facts", () => {
    */
   it("keeps the plain sentence where there is no plan", async () => {
     listed([certificate({})]);
-    const lines = await facts();
-    expect(lines).toContainEqual({ text: "1 expires in 2 days", tone: "warn" });
+    const lines = (await facts()).map(said);
+    expect(lines).toContainEqual({
+      words: "1 expires in 2 days",
+      tone: "warn",
+    });
   });
 
   /**
@@ -104,9 +127,9 @@ describe("cert-manager facts", () => {
       certificate({ renewalTime: inDays(-0.5) }),
       certificate({ notAfter: inDays(1.4), notBefore: inDays(-5.6) }),
     ]);
-    const lines = await facts();
+    const lines = (await facts()).map(said);
     expect(lines).toContainEqual({
-      text: "2 expiring, soonest in 1 day",
+      words: "2 expiring, soonest in 1 day",
       tone: "warn",
     });
   });
@@ -121,9 +144,9 @@ describe("cert-manager facts", () => {
       certificate({ notAfter: inDays(0.75), notBefore: inDays(-6.25) }),
       certificate({ notAfter: inDays(0.27), notBefore: inDays(-6.73) }),
     ]);
-    const lines = await facts();
+    const lines = (await facts()).map(said);
     expect(lines).toContainEqual({
-      text: "2 expiring, soonest in 6 hours",
+      words: "2 expiring, soonest in 6 hours",
       tone: "err",
     });
   });

@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import {
   Sheet,
   SheetContent,
@@ -6,11 +5,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Activity, Network, Terminal, Loader2 } from "lucide-react";
+import { Activity, Network, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
-import { useBackgroundJobStore } from "@/stores/backgroundJobStore";
 import {
   useActivityPanelStore,
   type ActivityTab,
@@ -19,7 +17,6 @@ import { activityLabel } from "@/lib/activity-label";
 import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
-import { BackgroundJobsTab } from "./activity/BackgroundJobsTab";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -32,7 +29,6 @@ const TABS: Array<{
 }> = [
   { id: "ports", label: "ports", icon: Network },
   { id: "terminals", label: "terminals", icon: Terminal },
-  { id: "jobs", label: "jobs", icon: Loader2 },
 ];
 
 export function ActivityPanel() {
@@ -55,15 +51,6 @@ export function ActivityPanel() {
   // loop with React error #185 ("Maximum update depth exceeded").
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
   const terminalSessions = useTerminalSessionStore((state) => state.sessions);
-  const jobs = useBackgroundJobStore((state) => state.jobs);
-
-  const activeJobs = useMemo(
-    () =>
-      jobs.filter(
-        (job) => job.status === "pending" || job.status === "running"
-      ),
-    [jobs]
-  );
 
   const activeTerminals = terminalSessions.filter(
     (s) => s.status === "connected"
@@ -72,10 +59,9 @@ export function ActivityPanel() {
   const counts: Record<TabId, number> = {
     ports: portForwardSessions.length,
     terminals: activeTerminals,
-    jobs: activeJobs.length,
   };
 
-  const totalActive = counts.ports + counts.terminals + counts.jobs;
+  const totalActive = counts.ports + counts.terminals;
   const label = activityLabel(counts, useLocale());
 
   const handleClose = () => setOpen(false);
@@ -140,7 +126,6 @@ export function ActivityPanel() {
         <div className="min-h-0 flex-1 overflow-auto">
           {tab === "ports" && <PortForwardsTab />}
           {tab === "terminals" && <TerminalsTab onClose={handleClose} />}
-          {tab === "jobs" && <BackgroundJobsTab />}
         </div>
       </SheetContent>
     </Sheet>

@@ -127,6 +127,11 @@ impl ShellCommand {
         let mut cmd = Command::new(&self.program);
 
         cmd.args(&self.args);
+        // The timeout below enforces itself by dropping the future, and a
+        // dropped `tokio::process` child is not a killed one by default: a
+        // credential plugin that hangs kept running after the app had given
+        // up waiting for it, holding its pipes for the life of the process.
+        cmd.kill_on_drop(true);
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.stdin(Stdio::null());

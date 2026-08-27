@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -13,6 +13,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -129,11 +130,11 @@ export function CustomResourceList({
         cols.push({
           size: UNKNOWN_COLUMN_SIZE,
           id: pc.id,
-          header: pc.header,
+          header: t("columns", pc.header),
           cell: ({ row }) => {
-            const value = pc.accessor(row.original);
+            const value = pc.accessor(row.original, t);
             if (pc.cell) {
-              return pc.cell(value);
+              return pc.cell(value, t);
             }
             // Default formatting with the status config the vendor supplied
             if (crdView && typeof value === "string") {
@@ -168,7 +169,7 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, crdView, getDetailPath]);
+  }, [crdKind, scope, printerColumns, crdView, getDetailPath, t]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
@@ -176,7 +177,9 @@ export function CustomResourceList({
   // user lacks the `watch` verb on the CRD), the toast fires and
   // the list falls back to its default poll rate.
   const queryKey = useMemo(
-    () => ["custom-resources", crdName, namespace ?? "all"] as const,
+    // Not `as const`: one of the two readers wants a mutable array, and a
+    // copy made for it is what defeated this memo in the first place.
+    () => queryKeys.customResourceList(crdName, namespace),
     [crdName, namespace]
   );
   const subscribeCustomResource = useCallback(
@@ -209,7 +212,10 @@ export function CustomResourceList({
   const { resyncing } = useResourceWatch<CustomResourceListItem>({
     enabled: true,
     subscribe: subscribeCustomResource,
-    queryKey: [...queryKey],
+    // The memoised array itself, not a copy of it: the watch effect has this
+    // in its dependencies, and a fresh array on every render tore the subscription
+    // down and opened another one on every single render.
+    queryKey,
     onError: handleWatchError,
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
@@ -219,7 +225,7 @@ export function CustomResourceList({
       title={(count) =>
         t("count", "kindInstances", { kind: crdKind, n: count })
       }
-      queryKey={[...queryKey]}
+      queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={async () => {
         const result = await commands.listCustomResources(

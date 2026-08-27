@@ -18,6 +18,7 @@
  * a guess wearing a verdict's clothes.
  */
 
+import type { Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 
 import { crdObjectPath } from "../kit";
@@ -49,14 +50,20 @@ export async function serviceEdge({
   );
 
   return refs.map((ref): EdgeConfig => {
-    const scope = ref.port === null ? "every port" : `port ${ref.port}`;
+    const scope: Saying =
+      ref.port === null
+        ? { key: "gcpEveryPort" }
+        : { key: "gcpPortNumber", values: { port: ref.port } };
     const found = configs.find((config) => config.name === ref.name);
     if (!found) {
       return {
         source: { kind: "BackendConfig", name: ref.name, to: "" },
-        summary: `named for ${scope}`,
+        summary: [{ key: "gcpNamedFor", values: { scope } }],
         problem: {
-          text: `no BackendConfig named ${ref.name} in this namespace — nothing is applied`,
+          text: {
+            key: "gcpNoBackendConfig",
+            values: { name: ref.name },
+          },
           tone: "err",
         },
       };
@@ -67,7 +74,7 @@ export async function serviceEdge({
         name: ref.name,
         to: crdObjectPath(BACKEND_CONFIG_CRD, namespace, ref.name),
       },
-      summary: `${scope} · ${backendConfigSummary(found)}`,
+      summary: [scope, ...backendConfigSummary(found)],
       problem: null,
     };
   });

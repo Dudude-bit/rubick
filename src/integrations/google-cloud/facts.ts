@@ -17,7 +17,7 @@
 
 import { commands } from "@/lib/commands";
 
-import { crdObjectPath, crdObjectsPath, plural } from "../kit";
+import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   BACKEND_CONFIG_CRD,
@@ -37,11 +37,20 @@ export async function facts(): Promise<VendorFact[]> {
 
   const lines: VendorFact[] = [
     {
-      text: [
-        plural(backendConfigs.length, "BackendConfig"),
-        plural(frontendConfigs.length, "FrontendConfig"),
-        plural(certificates.length, "ManagedCertificate"),
-      ].join(" · "),
+      say: [
+        {
+          key: "kindCount",
+          values: { n: backendConfigs.length, kind: "BackendConfig" },
+        },
+        {
+          key: "kindCount",
+          values: { n: frontendConfigs.length, kind: "FrontendConfig" },
+        },
+        {
+          key: "kindCount",
+          values: { n: certificates.length, kind: "ManagedCertificate" },
+        },
+      ],
     },
   ];
 
@@ -64,9 +73,15 @@ export async function facts(): Promise<VendorFact[]> {
     // "1 certificate failed" is a reason to open four pages.
     const domain = failed.length === 1 ? failingDomains(failed[0])[0] : null;
     lines.push({
-      text: domain
-        ? `${domain.status} on ${domain.domain}`
-        : `${plural(failed.length, "certificate")} failed`,
+      say: domain
+        ? {
+            key: "gcpStatusOnDomain" as const,
+            values: { status: domain.status, domain: domain.domain },
+          }
+        : {
+            key: "gcpCertificatesFailed" as const,
+            values: { n: failed.length },
+          },
       tone: "err",
     });
   }
@@ -76,7 +91,7 @@ export async function facts(): Promise<VendorFact[]> {
       // definition, and Google takes up to an hour over one at the best of
       // times. It is worth a colour only because an Ingress serving no HTTPS
       // looks identical to a broken one until you know this is why.
-      text: `${provisioning.length} not serving yet`,
+      say: { key: "gcpNotServingYet", values: { n: provisioning.length } },
       tone: "warn",
     });
   }
@@ -84,7 +99,7 @@ export async function facts(): Promise<VendorFact[]> {
   const problems = [...failed, ...provisioning];
   if (certificates.length > 0) {
     lines.push({
-      text: problems.length === 1 ? "Show it" : "Show them",
+      say: { key: problems.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         problems.length === 1
           ? crdObjectPath(

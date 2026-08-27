@@ -43,7 +43,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
-import { covers, expiryOf } from "@/lib/certificates";
+import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
@@ -323,7 +323,7 @@ export function IngressDetail() {
       value: !hasTls
         ? t("empty", "noneTrafficUnencrypted")
         : soonest
-          ? soonest.text
+          ? expiryText(soonest, t)
           : hasCatchAllTls
             ? t("empty", "catchAllCertificate")
             : t("count", "hosts", { n: tlsHosts.length }),
@@ -435,7 +435,7 @@ export function IngressDetail() {
         </Section>
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "rules",
       label: t("columns", "rules"),
@@ -512,10 +512,13 @@ export function IngressDetail() {
                         className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
                       >
                         <span className="font-mono text-fg-mut">
-                          {isWildcard ? "All hosts" : rule.host}
+                          {isWildcard ? t("empty", "allHosts") : rule.host}
                         </span>
                         {!covered && (
-                          <span className="text-warn"> · no TLS</span>
+                          <span className="text-warn">
+                            {" "}
+                            · {t("empty", "noTls")}
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>,
@@ -680,7 +683,7 @@ export function IngressDetail() {
       ),
     },
     yamlTab({
-      title: "Ingress YAML",
+      title: t("action", "kindYaml", { kind: "Ingress" }),
       yaml: ingressYaml,
       resourceKind: ResourceType.Ingress,
       resourceName: name || "",
@@ -717,7 +720,9 @@ export function IngressDetail() {
                   : "text-fg-fnt"
             )}
           >
-            {!hasTls ? "no TLS" : (soonest?.tone && soonest.text) || "TLS"}
+            {!hasTls
+              ? t("empty", "noTls")
+              : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
           </span>
         </>
       }

@@ -11,11 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Search } from "lucide-react";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { filterEvents } from "@/lib/event-filter";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
@@ -65,6 +68,7 @@ export function Events() {
   const scope = useNamespaceScope();
   const [eventType, setEventType] = useState<string>("all");
   const [eventLimit, setEventLimit] = useState<string>("500");
+  const [query, setQuery] = useState<string>("");
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
   const several = scope.several;
@@ -141,6 +145,12 @@ export function Events() {
     [several, answers, single.data]
   );
 
+  // Narrowed before the cut, not after it. The limit buys a pool of the
+  // latest N; searching what is left after the cut would search the newest
+  // rows only and report "none" about a cluster that has plenty, just older
+  // than the window. Filtering first spends the pool on the rows asked for.
+  const matching = useMemo(() => filterEvents(pool, query), [pool, query]);
+
   const isLoading = several ? parts.isLoading : single.isLoading;
   const freshness = several ? parts.freshness : single.freshness;
 
@@ -150,11 +160,17 @@ export function Events() {
     );
   }
 
-  // Everything the reader asked for exists, so anything past the limit is
-  // what the limit is hiding — whether the API server cut it or the join
-  // did. Saying so beats an honest-looking feed that silently ends.
-  const capped = limit !== null && pool.length >= limit;
-  const events = capped ? pool.slice(0, limit) : pool;
+  // Two ceilings, and a filter makes them diverge. `windowFull` is about
+  // the pool the limit bought — cut by the apiserver per namespace and by
+  // the join above — and it is the only one that says whether anything was
+  // left unread. `capped` is about the list on screen. Unfiltered they are
+  // the same number; filtered, `matching` can be three rows out of a pool
+  // that stopped at five hundred, and reporting *that* as uncapped tells
+  // the reader the search was exhaustive when it was not.
+  const windowFull = limit !== null && pool.length >= limit;
+  const capped = limit !== null && matching.length >= limit;
+  const events = capped ? matching.slice(0, limit) : matching;
+  const filtering = query.trim() !== "";
   const warningCount = events.filter((e) => e.type === "Warning").length;
   const normalCount = events.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
@@ -167,10 +183,23 @@ export function Events() {
           t,
           warningCount,
           normalCount,
-          capped ? eventLimit : null
+          windowFull ? eventLimit : null
         )}
         actions={
           <>
+            {/* Same shape as the lists' search box: a text entry, not a
+              panel, so it only draws a background once it is in use. */}
+            <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+              <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                aria-label={t("action", "filterEventsPlaceholder")}
+                placeholder={t("action", "filterEventsPlaceholder")}
+                className="w-36 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
+              />
+            </div>
             <div
               className="flex items-center gap-0.5"
               role="group"
@@ -228,9 +257,27 @@ export function Events() {
               events={events}
               showObject
               showNamespace={!currentNamespace}
-              emptyMessage={t("empty", "noEventsInScope", {
-                scope: scope.inWords,
-              })}
+              // A feed filtered down to nothing has not told the reader
+              // their scope is quiet — it has told them their query missed.
+              // Three states, not two: the scope is quiet, the query
+              // missed everything that was read, or the query missed
+              // everything that was read *and* the reading stopped at the
+              // limit. The last one must not be worded as the second — the
+              // events being looked for may be one page older.
+              emptyMessage={
+                filtering
+                  ? windowFull
+                    ? t("empty", "noEventsMatchInWindow", {
+                        n: eventLimit,
+                        scope: scope.inWords,
+                        query: query.trim(),
+                      })
+                    : t("empty", "noEventsMatch", {
+                        scope: scope.inWords,
+                        query: query.trim(),
+                      })
+                  : t("empty", "noEventsInScope", { scope: scope.inWords })
+              }
             />
           )}
         </SectionBody>

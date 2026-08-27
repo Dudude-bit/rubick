@@ -40,6 +40,8 @@
  * too, because that union is what keeps the mark table exhaustive.
  */
 
+import { sayWords } from "@/i18n/say";
+
 import {
   useMutation,
   useQueries,
@@ -318,7 +320,7 @@ function useConnections(): Map<string, ConnectionState> {
             saved: connection.data,
             reason:
               probe?.data?.ok === false
-                ? probe.data.reason
+                ? sayWords(probe.data.reason, t)
                 : t("empty", "noAnswer"),
           },
         ];
@@ -636,7 +638,7 @@ function connectionFacts(
         facts: vendor.connect.facts(connection.saved, {
           ok: false,
           at: Date.now(),
-          reason: connection.reason,
+          reason: { key: "verbatimLine", values: { said: connection.reason } },
         }),
       };
     case "connected":
@@ -707,7 +709,10 @@ export function useConnectionEditor(vendorId: string): {
         : Promise.resolve({
             ok: false as const,
             at: Date.now(),
-            reason: t("empty", "noSuchIntegration"),
+            reason: {
+              key: "verbatimLine" as const,
+              values: { said: t("empty", "noSuchIntegration") },
+            },
           }),
     isSaving: saving.isPending,
   };

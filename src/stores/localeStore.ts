@@ -52,3 +52,14 @@ export function useLocale(): Locale {
   const choice = useLocaleStore((state) => state.choice);
   return choice ?? systemLocale();
 }
+
+/**
+ * The reader's language, outside React.
+ *
+ * A store action has no hook to call, and the two or three sentences one
+ * writes still have to reach the reader in their own language. Read at the
+ * moment of writing, which is when the state it goes into is set.
+ */
+export function currentLocale(): Locale {
+  return useLocaleStore.getState().choice ?? systemLocale();
+}

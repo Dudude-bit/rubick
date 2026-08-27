@@ -26,6 +26,7 @@ import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import type { EmptyKey } from "@/components/resources/usage-chart";
 
 export interface UsageBlockProps {
   /** "Usage" on a workload, "Headroom" on a node. */
@@ -42,9 +43,9 @@ export interface UsageBlockProps {
   cpuLimit: number | null;
   memoryLimit: number | null;
   /** What the ceiling is called here: a pod has limits, a node a capacity. */
-  limitNoun?: string;
+  limitNoun?: "limitWord" | "capacityWord";
   /** The sentence shown when there is no ceiling at all. */
-  noLimitNote?: string;
+  noLimitNote?: EmptyKey;
   restarts?: number | null;
   /** `dataUpdatedAt` of the metrics query. */
   sampledAt: number | null | undefined;
@@ -98,7 +99,7 @@ export function UsageBlock({
   memory,
   cpuLimit,
   memoryLimit,
-  limitNoun = "limit",
+  limitNoun = "limitWord",
   noLimitNote = NO_LIMIT_NOTE,
   restarts,
   sampledAt,
@@ -148,12 +149,12 @@ export function UsageBlock({
     ? // A ceiling is only worth naming beside a series that can be read
       // against it. Under two "not reporting" rows it is noise.
       neither && kept
-      ? noLimitNote
+      ? t("empty", noLimitNote)
       : null
     : available && samples.length > 0 && samples.length < 2
-      ? WATCHING_NOTE
+      ? t("empty", WATCHING_NOTE)
       : available && samples.length >= 2 && neither
-        ? noLimitNote
+        ? t("empty", noLimitNote)
         : null;
 
   // The integration extends the core answer and never replaces it: until a
@@ -164,8 +165,10 @@ export function UsageBlock({
     ? // The block cannot promise a comparison the workload does not
       // declare — that pairing is what made an empty track read as 0%.
       neither
-      ? `no ${limitNoun}s declared`
-      : `against declared ${limitNoun}s`
+      ? t("readings", "usageNoneDeclared", { noun: t("readings", limitNoun) })
+      : t("readings", "usageAgainstDeclared", {
+          noun: t("readings", limitNoun),
+        })
     : past.window !== null
       ? [
           scope,

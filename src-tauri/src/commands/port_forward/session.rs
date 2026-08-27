@@ -13,8 +13,8 @@ use kube::Api;
 use std::sync::Arc;
 use tauri::State;
 use tokio::net::TcpListener;
-use tokio::sync::oneshot;
 use tokio::time::{sleep, Duration};
+use tokio_util::sync::CancellationToken;
 
 use super::types::{emit_port_forward_status, PortForwardRequest, PortForwardSessionInfo};
 
@@ -27,14 +27,23 @@ use super::types::{emit_port_forward_status, PortForwardRequest, PortForwardSess
 /// pattern in commands/logs.rs.
 struct PortForwardCleanup {
     sessions: Arc<DashMap<String, PortForwardSession>>,
-    controls: Arc<DashMap<String, oneshot::Sender<()>>>,
+    controls: Arc<DashMap<String, CancellationToken>>,
     key: String,
+    /// Cancelled here, not only by the Stop button.
+    ///
+    /// The connections are detached tasks, so the session ending is the only
+    /// thing that can reach them — and the session can end without anybody
+    /// pressing Stop: the listener errors, or this task panics. Firing on
+    /// drop means every exit path takes the connections with it, which is
+    /// what "the session is over" has to mean if the maps are empty.
+    cancel: CancellationToken,
 }
 
 impl Drop for PortForwardCleanup {
     fn drop(&mut self) {
         self.sessions.remove(&self.key);
         self.controls.remove(&self.key);
+        self.cancel.cancel();
     }
 }
 
@@ -130,10 +139,17 @@ async fn forward_connection(
     mut local_stream: tokio::net::TcpStream,
     event_tx: tokio::sync::broadcast::Sender<AppEvent>,
     session_id: String,
+    cancel: CancellationToken,
 ) {
     let mut attempt: u32 = 0;
 
     loop {
+        // Checked at the top as well as inside the waits: a connection
+        // accepted in the same breath as Stop would otherwise open a stream
+        // to a session that no longer exists.
+        if cancel.is_cancelled() {
+            return;
+        }
         let attempt_result = match current_client(&clients, &context) {
             Ok(client) => {
                 let ctx = ResourceContext::from_client(client, namespace.clone());
@@ -163,8 +179,21 @@ async fn forward_connection(
                 }
 
                 if let Some(mut remote_stream) = portforwarder.take_stream(remote_port) {
-                    let _ =
-                        tokio::io::copy_bidirectional(&mut local_stream, &mut remote_stream).await;
+                    // Stop has to reach the bytes in flight, not just the
+                    // door. `copy_bidirectional` runs until one side closes,
+                    // so a stopped forward with `psql` on it kept serving
+                    // that session for as long as the client cared to hold
+                    // it — the list said the forward was gone and the socket
+                    // disagreed. Losing the select drops both halves, which
+                    // closes the local socket and is what the client should
+                    // see: the forward went away.
+                    tokio::select! {
+                        _ = tokio::io::copy_bidirectional(
+                            &mut local_stream,
+                            &mut remote_stream,
+                        ) => {}
+                        () = cancel.cancelled() => {}
+                    }
                 } else {
                     emit_port_forward_status(
                         &event_tx,
@@ -210,7 +239,14 @@ async fn forward_connection(
                             Some(note),
                             Some(attempt),
                         );
-                        sleep(after).await;
+                        // The backoff is up to ten seconds, and a stopped
+                        // forward spent every one of them still saying
+                        // "reconnecting" about itself. Waking early on
+                        // cancellation ends the retry rather than the wait.
+                        tokio::select! {
+                            () = sleep(after) => {}
+                            () = cancel.cancelled() => return,
+                        }
                     }
                 }
             }
@@ -271,10 +307,10 @@ pub async fn port_forward_pod(
         .port_forward_sessions
         .insert(session_id.clone(), session.clone());
 
-    let (cancel_tx, mut cancel_rx) = oneshot::channel::<()>();
+    let cancel = CancellationToken::new();
     state
         .port_forward_controls
-        .insert(session_id.clone(), cancel_tx);
+        .insert(session_id.clone(), cancel.clone());
 
     let event_tx = state.event_tx.clone();
     let session_id_for_task = session_id.clone();
@@ -297,6 +333,7 @@ pub async fn port_forward_pod(
             sessions: sessions.clone(),
             controls: controls.clone(),
             key: session_id_for_task.clone(),
+            cancel: cancel.clone(),
         };
 
         emit_port_forward_status(
@@ -315,7 +352,7 @@ pub async fn port_forward_pod(
 
         loop {
             tokio::select! {
-                _ = &mut cancel_rx => {
+                () = cancel.cancelled() => {
                     break;
                 }
                 accept_result = listener.accept() => {
@@ -327,6 +364,7 @@ pub async fn port_forward_pod(
                             let namespace = namespace_for_task.clone();
                             let clients = clients_for_task.clone();
                             let context = context_for_task.clone();
+                            let cancel = cancel.clone();
 
                             tokio::spawn(async move {
                                 forward_connection(
@@ -340,6 +378,7 @@ pub async fn port_forward_pod(
                                     stream,
                                     event_tx,
                                     session_id,
+                                    cancel,
                                 ).await;
                             });
                         }
@@ -388,8 +427,8 @@ pub fn stop_port_forward(forward_id: String, state: State<'_, AppState>) -> Resu
     // Remove from both maps atomically to avoid race conditions
     // The background task will also try to remove, but that's fine (no-op if already removed)
     state.port_forward_sessions.remove(&forward_id);
-    if let Some((_, cancel_tx)) = state.port_forward_controls.remove(&forward_id) {
-        let _ = cancel_tx.send(());
+    if let Some((_, cancel)) = state.port_forward_controls.remove(&forward_id) {
+        cancel.cancel();
     }
 
     Ok(())
@@ -526,11 +565,10 @@ mod tests {
     #[test]
     fn cleanup_guard_removes_from_both_maps_on_drop() {
         let sessions: Arc<DashMap<String, PortForwardSession>> = Arc::new(DashMap::new());
-        let controls: Arc<DashMap<String, oneshot::Sender<()>>> = Arc::new(DashMap::new());
+        let controls: Arc<DashMap<String, CancellationToken>> = Arc::new(DashMap::new());
 
         sessions.insert("k".to_string(), make_test_session("k"));
-        let (tx, _rx) = oneshot::channel::<()>();
-        controls.insert("k".to_string(), tx);
+        controls.insert("k".to_string(), CancellationToken::new());
         assert_eq!(sessions.len(), 1);
         assert_eq!(controls.len(), 1);
 
@@ -539,6 +577,7 @@ mod tests {
                 sessions: sessions.clone(),
                 controls: controls.clone(),
                 key: "k".to_string(),
+                cancel: CancellationToken::new(),
             };
         }
 
@@ -560,16 +599,74 @@ mod tests {
         // listener task is still running. The guard's Drop must not
         // panic when the keys are no longer in either map.
         let sessions: Arc<DashMap<String, PortForwardSession>> = Arc::new(DashMap::new());
-        let controls: Arc<DashMap<String, oneshot::Sender<()>>> = Arc::new(DashMap::new());
+        let controls: Arc<DashMap<String, CancellationToken>> = Arc::new(DashMap::new());
 
         let guard = PortForwardCleanup {
             sessions: sessions.clone(),
             controls: controls.clone(),
             key: "missing".to_string(),
+            cancel: CancellationToken::new(),
         };
         drop(guard); // must not panic
 
         assert_eq!(sessions.len(), 0);
         assert_eq!(controls.len(), 0);
+    }
+
+    /// The session ending has to reach the connections, and the maps going
+    /// empty is not what reaches them — they are detached tasks holding a
+    /// clone of the token and nothing else. This is the listener-error and
+    /// panic path: nobody pressed Stop, and the forwards still have to stop.
+    #[test]
+    fn the_session_ending_cancels_the_connections_it_spawned() {
+        let cancel = CancellationToken::new();
+        let held_by_a_connection = cancel.clone();
+        assert!(!held_by_a_connection.is_cancelled());
+
+        drop(PortForwardCleanup {
+            sessions: Arc::new(DashMap::new()),
+            controls: Arc::new(DashMap::new()),
+            key: "k".to_string(),
+            cancel,
+        });
+
+        assert!(
+            held_by_a_connection.is_cancelled(),
+            "a connection outliving its session keeps proxying bytes for a \
+             forward the list says is gone"
+        );
+    }
+
+    /// Stop is the ordinary path, and it has to reach the same clones.
+    #[tokio::test]
+    async fn stop_reaches_a_connection_already_in_flight() {
+        let cancel = CancellationToken::new();
+        let in_flight = cancel.clone();
+
+        // What `forward_connection` waits on while bytes are moving.
+        let connection = tokio::spawn(async move {
+            in_flight.cancelled().await;
+            "stopped"
+        });
+
+        cancel.cancel();
+
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), connection)
+                .await
+                .expect("a stopped forward must not outlive its Stop")
+                .expect("connection task panicked"),
+            "stopped"
+        );
+    }
+
+    /// A connection accepted in the same breath as Stop must not go on to
+    /// open a stream: the token was already cancelled when it started, and
+    /// nothing it is about to await would tell it so.
+    #[test]
+    fn a_connection_accepted_after_stop_does_not_start() {
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        assert!(cancel.is_cancelled());
     }
 }

@@ -1,4 +1,5 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import { workloadStatus } from "@/lib/workload-status";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { Scale, RotateCw } from "lucide-react";
 
@@ -43,10 +44,8 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "status",
     header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
-      const available = row.original.replicas.available || 0;
-      const total = row.original.replicas.desired;
-      const status = available === total ? "Available" : "Progressing";
-      return <StatusBadge status={status} />;
+      const { available, desired } = row.original.replicas;
+      return <StatusBadge status={workloadStatus(available || 0, desired)} />;
     },
   },
   createAgeColumn<DeploymentInfoWithMetrics>(),

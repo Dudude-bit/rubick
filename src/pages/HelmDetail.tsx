@@ -480,7 +480,7 @@ export function HelmDetail() {
         resource={release}
         isLoading={isLoading}
         error={error}
-        resourceKind="Helm release"
+        resourceKind={t("readings", "helmRelease")}
         listUrl="/helm"
         listLabel="Helm"
         // The Helm list filters by a namespace of its own that this scope does

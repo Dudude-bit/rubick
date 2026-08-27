@@ -10,6 +10,17 @@ import {
   healthCheckOf,
 } from "./model";
 
+import { translate } from "@/i18n";
+import { joinSayings, sayWords, type Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+/** A saying in words, or null where there was nothing to say. */
+const said = (saying: Saying | null) =>
+  saying === null ? null : sayWords(saying, t);
+
 const resource = (
   spec: unknown,
   status: unknown = null
@@ -84,14 +95,18 @@ describe("what a BackendConfig configures", () => {
      *  fills that in from the backend — and printing one would tell the
      *  reader this object says something it does not. */
     expect(
-      healthCheckOf(resource({ healthCheck: { type: "HTTP", port: 8080 } }))
+      said(
+        healthCheckOf(resource({ healthCheck: { type: "HTTP", port: 8080 } }))
+      )
     ).toBe("health check HTTP :8080");
-    expect(healthCheckOf(resource({ timeoutSec: 30 }))).toBeNull();
+    expect(said(healthCheckOf(resource({ timeoutSec: 30 })))).toBeNull();
     expect(
-      healthCheckOf(
-        resource({
-          healthCheck: { type: "HTTP", port: 8080, requestPath: "/healthz" },
-        })
+      said(
+        healthCheckOf(
+          resource({
+            healthCheck: { type: "HTTP", port: 8080, requestPath: "/healthz" },
+          })
+        )
       )
     ).toBe("health check HTTP :8080/healthz");
   });
@@ -100,19 +115,24 @@ describe("what a BackendConfig configures", () => {
     /** Would break if an empty BackendConfig drew a blank note. It exists,
      *  it is attached, and it changes nothing — which is a real answer and
      *  a different one from "there is no config here". */
-    expect(backendConfigSummary(resource({}))).toBe("sets nothing");
+    expect(joinSayings(backendConfigSummary(resource({})), t)).toBe(
+      "sets nothing"
+    );
   });
 
   it("gathers what changes a request into one clause", () => {
     expect(
-      backendConfigSummary(
-        resource({
-          healthCheck: { type: "HTTP", port: 8080, requestPath: "/healthz" },
-          timeoutSec: 30,
-          cdn: { enabled: true },
-          iap: { enabled: false },
-          securityPolicy: { name: "block-bots" },
-        })
+      joinSayings(
+        backendConfigSummary(
+          resource({
+            healthCheck: { type: "HTTP", port: 8080, requestPath: "/healthz" },
+            timeoutSec: 30,
+            cdn: { enabled: true },
+            iap: { enabled: false },
+            securityPolicy: { name: "block-bots" },
+          })
+        ),
+        t
       )
     ).toBe(
       "health check HTTP :8080/healthz · 30s timeout · CDN on · Cloud Armor block-bots"
@@ -135,7 +155,7 @@ describe("what a BackendConfig configures", () => {
       mode: "CACHE_ALL_STATIC",
       detail: "default 3600s",
     });
-    expect(backendConfigSummary(config, { cdn: false })).toBe(
+    expect(joinSayings(backendConfigSummary(config, { cdn: false }), t)).toBe(
       "health check HTTP :8080/healthz"
     );
     expect(cdnOf(resource({}))).toBeNull();

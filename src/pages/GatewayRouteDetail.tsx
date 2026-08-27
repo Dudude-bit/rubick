@@ -204,7 +204,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
                               </span>
                             ) : state.stop ? (
                               <span className="text-err">
-                                {describeStop(state.stop).title}
+                                {describeStop(state.stop, t).title}
                               </span>
                             ) : state.service?.type === "ExternalName" ? (
                               <span className="text-fg-mut">

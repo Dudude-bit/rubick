@@ -1,4 +1,4 @@
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
@@ -33,6 +33,41 @@ import { useT } from "@/i18n/useT";
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
 
+/**
+ * A pod on a node that stopped reporting keeps whatever the kubelet last
+ * wrote. The label stays kubectl's — this is what the cluster holds — but
+ * the colour drops to neutral, because confident green about a machine
+ * nobody can reach is a lie.
+ */
+function PodStatusCell({ pod }: { pod: PodRow }) {
+  const t = useT();
+  const silence = pod.nodeSilence;
+  return (
+    <StatusBadge
+      status={pod.status.display}
+      roleOverride={silence ? "neutral" : undefined}
+      title={
+        silence
+          ? silenceNote(silence, t)
+          : t("readings", "podPhase", { phase: pod.status.phase })
+      }
+    />
+  );
+}
+
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function PodIpCell({ pod }: { pod: PodRow }) {
+  const t = useT();
+  return (
+    <CopyableAddress
+      value={pod.podIp}
+      label={t("columns", "podIp")}
+      fallback="-"
+      className="text-fg-mut"
+    />
+  );
+}
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -48,24 +83,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
-    cell: ({ row }) => {
-      // A pod on a node that stopped reporting keeps whatever status the
-      // kubelet last wrote. The label stays kubectl's — this is the status
-      // the cluster holds — but the colour drops to neutral, because a
-      // confident green about a machine nobody can reach is the lie.
-      const silence = row.original.nodeSilence;
-      return (
-        <StatusBadge
-          status={row.original.status.display}
-          roleOverride={silence ? "neutral" : undefined}
-          title={
-            silence
-              ? silenceNote(silence)
-              : `Phase ${row.original.status.phase}`
-          }
-        />
-      );
-    },
+    cell: ({ row }) => <PodStatusCell pod={row.original} />,
   },
   createCpuColumn<PodRow>(),
   createMemoryColumn<PodRow>(),
@@ -136,15 +154,8 @@ export const columns: ColumnDef<PodRow>[] = [
   {
     size: 130,
     id: "ip",
-    header: "IP",
-    cell: ({ row }) => (
-      <CopyableAddress
-        value={row.original.podIp}
-        label="Pod IP"
-        fallback="-"
-        className="text-fg-mut"
-      />
-    ),
+    header: () => <T section="columns" k="ip" />,
+    cell: ({ row }) => <PodIpCell pod={row.original} />,
   },
   createAgeColumn<PodRow>(),
 ];

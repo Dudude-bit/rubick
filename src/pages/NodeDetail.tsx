@@ -184,7 +184,7 @@ export function NodeDetail() {
         ...(placement.providerId
           ? [
               {
-                label: "Provider ID",
+                label: t("columns", "providerId"),
                 value: placement.providerId,
                 mono: true,
               },
@@ -229,7 +229,7 @@ export function NodeDetail() {
             memoryLimit={
               node?.capacity.memory ? parseMemory(node.capacity.memory) : null
             }
-            limitNoun="capacity"
+            limitNoun="capacityWord"
             sampledAt={nodeSampledAt}
             status={nodeStatus}
             history={node?.name ? { kind: "node", node: node.name } : undefined}
@@ -304,9 +304,9 @@ export function NodeDetail() {
         />
       ),
     },
-    connectionsTab(connections),
+    connectionsTab(connections, t),
     yamlTab({
-      title: "Node YAML",
+      title: t("action", "kindYaml", { kind: "Node" }),
       yaml: nodeYaml,
       resourceKind: ResourceType.Node,
       resourceName: name || "",

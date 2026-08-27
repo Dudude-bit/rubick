@@ -1,3 +1,4 @@
+import type { VendorFact } from "../registry";
 import { Flame } from "lucide-react";
 
 import { commands } from "@/lib/commands";
@@ -90,15 +91,25 @@ export default defineVendor({
           draft?.insecureTls ?? null
         );
         if (!answer.ok) {
-          const said = answer.reason ?? "it did not say why";
+          const said = answer.reason ?? null;
           // The transport's own words stay — somebody searching for
           // "Name or service not known" has to find it — and the shape of
           // the address adds the half it cannot know. See `../reachability`.
-          const shape = unreachable(draft?.url ?? "", said);
+          const shape = unreachable(draft?.url ?? "", said ?? "");
           return {
             ok: false,
             at: answer.at,
-            reason: shape ? `${said} — ${explain(shape)}` : said,
+            reason: shape
+              ? {
+                  key: "connReasonAndShape",
+                  values: {
+                    said: said ?? "",
+                    shape: explain(shape),
+                  },
+                }
+              : said === null
+                ? { key: "connDidNotSayWhy" }
+                : { key: "verbatimLine", values: { said } },
           };
         }
         return {
@@ -113,26 +124,45 @@ export default defineVendor({
         return {
           ok: false,
           at: Date.now(),
-          reason: normalizeTauriError(error),
+          reason: {
+            key: "verbatimLine",
+            values: { said: normalizeTauriError(error) },
+          },
         };
       }
     },
-    facts: (saved: SavedConnection, probe: ProbeResult) => {
+    facts: (saved: SavedConnection, probe: ProbeResult): VendorFact[] => {
       if (!probe.ok) {
         return [
           { text: hostOf(saved.url) },
-          { text: `did not answer — ${probe.reason}`, tone: "err" as const },
+          {
+            say: {
+              key: "connDidNotAnswer" as const,
+              values: { reason: probe.reason ?? "" },
+            },
+            tone: "err" as const,
+          },
         ];
       }
       return [
         { text: hostOf(saved.url) },
-        { text: `answered ${agoOf(probe.at)}` },
+        { say: { key: "connAnsweredAgo", values: { age: agoOf(probe.at) } } },
         // What the address buys, named rather than implied — the row's whole
         // job is to say what you get for having plumbed it.
-        { text: `ranges ${USAGE_RANGES.join(" · ")}` },
+        {
+          say: {
+            key: "connRanges" as const,
+            values: { ranges: USAGE_RANGES.join(" · ") },
+          },
+        },
         // One range's resolution spelled out, so "what does a bucket hide"
         // is answerable from this row rather than only from a chart caption.
-        { text: `1h in ${RANGE_SPECS["1h"].resolution}` },
+        {
+          say: {
+            key: "promResolutionOf" as const,
+            values: { range: "1h", resolution: RANGE_SPECS["1h"].resolution },
+          },
+        },
       ];
     },
   },

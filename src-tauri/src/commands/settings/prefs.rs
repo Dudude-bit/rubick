@@ -125,29 +125,6 @@ pub fn add_yaml_history_entry(resource_key: String, entry: YamlHistoryEntryDto) 
     })
 }
 
-#[tauri::command]
-pub fn get_all_yaml_history() -> Result<std::collections::HashMap<String, Vec<YamlHistoryEntryDto>>>
-{
-    read_config(|config| {
-        config
-            .yaml_editor
-            .history
-            .iter()
-            .map(|(k, v)| {
-                let entries = v
-                    .iter()
-                    .map(|e| YamlHistoryEntryDto {
-                        timestamp: e.timestamp,
-                        content: e.content.clone(),
-                        label: e.label.clone(),
-                    })
-                    .collect();
-                (k.clone(), entries)
-            })
-            .collect()
-    })
-}
-
 // ============================================================================
 // Infrastructure builder canvas state
 // ============================================================================
@@ -252,14 +229,22 @@ pub fn save_cluster_preferences(
     last_context: Option<String>,
     context: Option<String>,
     namespace: Option<String>,
+    scope: Option<Vec<String>>,
 ) -> Result<()> {
     with_config(|config| {
         if let Some(ctx) = last_context {
             config.cluster_preferences.last_context = Some(ctx);
         }
 
-        if let (Some(ctx), Some(ns)) = (context, namespace) {
+        if let (Some(ctx), Some(ns)) = (context.clone(), namespace) {
             config.cluster_preferences.namespaces.insert(ctx, ns);
+        }
+
+        // Written even when empty: clearing the selection back to the whole
+        // cluster is a choice, and leaving the old list behind would restore
+        // it the next time that context is opened.
+        if let (Some(ctx), Some(scope)) = (context, scope) {
+            config.cluster_preferences.scopes.insert(ctx, scope);
         }
     })
 }

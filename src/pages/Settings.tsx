@@ -18,7 +18,7 @@ import {
 } from "@/components/settings/settings-sections";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The nav does not fold, and the arithmetic is why.
@@ -31,7 +31,7 @@ import { useT } from "@/i18n/useT";
  * strip layout here would be a branch that cannot run.
  */
 
-function sectionContent(id: string, connected: boolean, active: boolean) {
+function sectionContent(id: string, connected: boolean, active: boolean, t: T) {
   void connected;
   void active;
   switch (id) {
@@ -43,7 +43,7 @@ function sectionContent(id: string, connected: boolean, active: boolean) {
       // Registries keeps its own editor, which is not built from rows —
       // so the section is indexed as one thing.
       return (
-        <SettingsSearchable keywords="registry registries image pull credentials docker ecr gcr harbor basic bearer token username password">
+        <SettingsSearchable keywords={t("settings", "searchRegistryWords")}>
           <RegistrySettings />
         </SettingsSearchable>
       );
@@ -118,7 +118,8 @@ function SettingsShell({ activeId }: { activeId: string }) {
                   {sectionContent(
                     section.id,
                     Boolean(currentContext),
-                    isActive
+                    isActive,
+                    t
                   )}
                 </SettingsSectionScope>
               </div>

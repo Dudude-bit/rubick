@@ -280,6 +280,8 @@ fn main() {
             // Kubeconfig override
             commands::settings::get_kubeconfig_path,
             commands::settings::set_kubeconfig_path,
+            commands::settings::set_kubeconfig_paths,
+            commands::settings::get_kubeconfig_paths,
             commands::settings::clear_kubeconfig_path,
             // Registry configurations
             commands::settings::list_registry_configs,
@@ -291,7 +293,6 @@ fn main() {
             // YAML editor history
             commands::settings::get_yaml_history,
             commands::settings::add_yaml_history_entry,
-            commands::settings::get_all_yaml_history,
             // Infrastructure builder state
             commands::settings::get_infrastructure_state,
             commands::settings::save_infrastructure_state,

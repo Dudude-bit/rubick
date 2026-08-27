@@ -12,6 +12,7 @@ import {
   type VendorFact,
 } from "@/integrations";
 import { cn } from "@/lib/utils";
+import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -117,7 +118,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
 function NothingInstalled({ couldNotLook }: { couldNotLook: boolean }) {
   const t = useT();
   const visible = useSettingSearchMatch(
-    "integrations extensions",
+    t("settings", "searchIntegrationsWords"),
     EXTENSION_NAMES.join(" ")
   );
   return (
@@ -322,23 +323,39 @@ function Facts({ facts }: { facts: IntegrationStatus["facts"] }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
       {facts.facts.map((fact) => (
-        <Fact key={fact.text} fact={fact} />
+        <Fact key={factKey(fact)} fact={fact} />
       ))}
     </div>
   );
 }
 
+/** Stable across a language change, which the words themselves are not. */
+function factKey(fact: VendorFact): string {
+  if (fact.text !== undefined) return fact.text;
+  const say = Array.isArray(fact.say) ? fact.say : [fact.say];
+  return say.map((part) => part.key).join("·");
+}
+
 function Fact({ fact }: { fact: VendorFact }) {
+  const t = useT();
   const tone =
     fact.tone === "err"
       ? "text-err"
       : fact.tone === "warn"
         ? "text-warn"
         : "text-fg-mut";
-  if (!fact.to) return <span className={tone}>{fact.text}</span>;
+  // Each part is counted in its own language before the join: "3 Gateways"
+  // is not a string one language can hand to another.
+  const words =
+    fact.text !== undefined
+      ? fact.text
+      : (Array.isArray(fact.say) ? fact.say : [fact.say])
+          .map((part) => sayWords(part, t))
+          .join(" · ");
+  if (!fact.to) return <span className={tone}>{words}</span>;
   return (
     <Link to={fact.to} className="text-info hover:underline">
-      {fact.text}
+      {words}
     </Link>
   );
 }

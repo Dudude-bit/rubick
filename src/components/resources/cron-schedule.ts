@@ -7,6 +7,8 @@
  * in the bundle, so the next occurrence is computed here.
  */
 
+import type { T } from "@/i18n/useT";
+
 export interface CronFields {
   minutes: Set<number>;
   hours: Set<number>;
@@ -46,15 +48,16 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
-const WEEKDAY_LABELS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+/** Sunday first, because cron counts days from Sunday. */
+const WEEKDAY_KEYS = [
+  "weekdaySunday",
+  "weekdayMonday",
+  "weekdayTuesday",
+  "weekdayWednesday",
+  "weekdayThursday",
+  "weekdayFriday",
+  "weekdaySaturday",
+] as const;
 
 function parseField(
   field: string,
@@ -254,7 +257,7 @@ function evenStep(
  * always on screen next to this, and a wrong plain-English reading of it is
  * worse than none.
  */
-export function describeCron(schedule: string): string | null {
+export function describeCron(schedule: string, t: T): string | null {
   const fields = parseCron(schedule);
   if (!fields) return null;
 
@@ -265,35 +268,50 @@ export function describeCron(schedule: string): string | null {
 
   const minuteStep = evenStep(rawMin, fields.minutes, 60);
   if (minuteStep && rawHour === "*" && everyDay) {
-    return minuteStep === 1 ? "every minute" : `every ${minuteStep} minutes`;
+    return minuteStep === 1
+      ? t("readings", "cronEveryMinute")
+      : t("readings", "cronEveryMinutes", { n: minuteStep });
   }
 
   if (minute !== null && rawHour === "*" && everyDay) {
-    return `hourly at :${String(minute).padStart(2, "0")}`;
+    return t("readings", "cronHourlyAt", {
+      minute: String(minute).padStart(2, "0"),
+    });
   }
 
   const hourStep = evenStep(rawHour, fields.hours, 24);
   if (minute !== null && hourStep && hourStep > 1 && everyDay) {
-    return `every ${hourStep} hours, at :${String(minute).padStart(2, "0")}`;
+    return t("readings", "cronEveryHours", {
+      n: hourStep,
+      minute: String(minute).padStart(2, "0"),
+    });
   }
 
   if (minute === null || hour === null) return null;
 
-  if (everyDay) return `daily at ${clock(hour, minute)}`;
+  if (everyDay)
+    return t("readings", "cronDailyAt", { clock: clock(hour, minute) });
 
   if (rawDom === "*" && rawMonth === "*") {
     const day = only(fields.daysOfWeek);
     if (day !== null) {
-      return `every ${WEEKDAY_LABELS[day % 7]} at ${clock(hour, minute)}`;
+      return t("readings", "cronWeeklyAt", {
+        day: t("readings", WEEKDAY_KEYS[day % 7]),
+        clock: clock(hour, minute),
+      });
     }
-    if (fields.raw[4] === "1-5") return `weekdays at ${clock(hour, minute)}`;
+    if (fields.raw[4] === "1-5")
+      return t("readings", "cronWeekdaysAt", { clock: clock(hour, minute) });
     return null;
   }
 
   if (rawDow === "*" && rawMonth === "*") {
     const day = only(fields.daysOfMonth);
     if (day !== null) {
-      return `monthly on day ${day} at ${clock(hour, minute)}`;
+      return t("readings", "cronMonthlyAt", {
+        day,
+        clock: clock(hour, minute),
+      });
     }
   }
 

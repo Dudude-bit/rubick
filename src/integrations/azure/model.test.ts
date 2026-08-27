@@ -9,6 +9,12 @@ import {
   prohibitedTargetSummary,
 } from "./model";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const object = (
   kind: string,
   name: string,
@@ -33,14 +39,16 @@ describe("what an Azure identity is", () => {
     /** Would break if an unrecognised type were called something. `0`, `1`
      *  and `2` are the whole documented set; anything else is a version we
      *  have not read, and the number is at least true. */
-    expect(identityType(object("AzureIdentity", "a", { type: 0 }))).toBe(
+    expect(identityType(object("AzureIdentity", "a", { type: 0 }), t)).toBe(
       "user-assigned MSI"
     );
-    expect(identityType(object("AzureIdentity", "a", { type: 1 }))).toBe(
+    expect(identityType(object("AzureIdentity", "a", { type: 1 }), t)).toBe(
       "service principal"
     );
-    expect(identityType(object("AzureIdentity", "a", { type: 9 }))).toBe("9");
-    expect(identityType(object("AzureIdentity", "a", {}))).toBeNull();
+    expect(identityType(object("AzureIdentity", "a", { type: 9 }), t)).toBe(
+      "9"
+    );
+    expect(identityType(object("AzureIdentity", "a", {}), t)).toBeNull();
   });
 
   it("shortens a resource id to the identity's own name", () => {
@@ -53,7 +61,8 @@ describe("what an Azure identity is", () => {
           type: 0,
           resourceID:
             "/subscriptions/0000/resourcegroups/prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shop-api",
-        })
+        }),
+        t
       )
     ).toBe("user-assigned MSI · shop-api");
   });
@@ -66,7 +75,8 @@ describe("what a binding binds", () => {
         object("AzureIdentityBinding", "shop", {
           azureIdentity: "shop-identity",
           selector: "shop",
-        })
+        }),
+        t
       )
     ).toBe("binds shop-identity to pods labelled aadpodidbinding=shop");
   });
@@ -127,14 +137,16 @@ describe("what an App Gateway ingress is told to leave alone", () => {
      *  being ignored. */
     expect(
       prohibitedTargetSummary(
-        object("AzureIngressProhibitedTarget", "all", { paths: ["/legacy/*"] })
+        object("AzureIngressProhibitedTarget", "all", { paths: ["/legacy/*"] }),
+        t
       )
     ).toBe("any hostname · /legacy/*");
     expect(
       prohibitedTargetSummary(
         object("AzureIngressProhibitedTarget", "one", {
           hostname: "shop.example.com",
-        })
+        }),
+        t
       )
     ).toBe("shop.example.com");
   });

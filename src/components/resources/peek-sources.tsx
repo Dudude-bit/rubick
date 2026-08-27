@@ -1,3 +1,4 @@
+import { workloadStatus } from "@/lib/workload-status";
 import type { ReactNode } from "react";
 import { load as parseYaml } from "js-yaml";
 
@@ -27,6 +28,7 @@ import {
 import { vendorPeek } from "@/integrations";
 import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
+import type { T as Translate } from "@/i18n/useT";
 import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
 import { redirectOnly } from "@/lib/route-trace";
@@ -67,14 +69,17 @@ export interface PeekSummary {
 
 interface PeekSource {
   fetch: (name: string, namespace: string | null) => Promise<unknown>;
-  summarise: (data: unknown, target: PeekTarget) => PeekSummary;
+  summarise: (data: unknown, target: PeekTarget, t: Translate) => PeekSummary;
 }
 
 function source<T>(
   fetch: (name: string, namespace: string | null) => Promise<T>,
-  summarise: (data: T, target: PeekTarget) => PeekSummary
+  summarise: (data: T, target: PeekTarget, t: Translate) => PeekSummary
 ): PeekSource {
-  return { fetch, summarise: (data, target) => summarise(data as T, target) };
+  return {
+    fetch,
+    summarise: (data, target, t) => summarise(data as T, target, t),
+  };
 }
 
 /** A condition, in the reason-first wording every condition row speaks. */
@@ -229,12 +234,13 @@ const ref = (kind: string, name: string, namespace?: string | null) => (
  */
 function controlledBy(
   owners: ReadonlyArray<{ kind: string; name: string }> | undefined,
-  namespace: string | null
+  namespace: string | null,
+  t: Translate
 ): PeekGroup[] {
   if (!owners?.length) return [];
   return [
     {
-      title: "Controlled by",
+      title: t("columns", "controlledBy"),
       items: owners.map((owner) => ({
         label: owner.kind,
         value: ref(owner.kind, owner.name, namespace),
@@ -247,7 +253,7 @@ function controlledBy(
  * Every image the thing runs, in run order, each row saying which kind of
  * container it belongs to.
  *
- * Given the lists rather than an array, because `images(x.containers)` is
+ * Given the lists rather than an array, because `images(x.containers, t)` is
  * precisely how this group came to leave out a mesh proxy on all five
  * workload kinds. There is no room for the sequence UI in a peek row, so
  * the phase arrives as the word beside the name that the pod's Containers
@@ -255,13 +261,14 @@ function controlledBy(
  * images cannot tell which one their pod is actually serving from.
  */
 function images(
-  lists: ContainerLists<{ name: string; image: string; phase: ContainerPhase }>
+  lists: ContainerLists<{ name: string; image: string; phase: ContainerPhase }>,
+  t: Translate
 ): PeekGroup[] {
   const containers = declaredContainers(lists);
   if (!containers.length) return [];
   return [
     {
-      title: "Images",
+      title: t("columns", "images"),
       count: containers.length > 1 ? containers.length : undefined,
       items: containers.map((container) => ({
         label: (
@@ -313,25 +320,37 @@ const list = (values: string[], empty = "—") =>
  * spot" and has no pool of "none"; it is a cluster nobody here recognises,
  * and the honest form of that is silence.
  */
-function placement(node: NodeInfo): PeekGroup[] {
+function placement(node: NodeInfo, t: Translate): PeekGroup[] {
   const facts = nodePlacement(node);
   if (!statesPlacement(facts)) return [];
 
   return [
     {
-      title: "Placement",
+      title: t("columns", "placement"),
       items: [
         ...(facts.pool
-          ? [{ label: "Pool", value: facts.pool, mono: true }]
+          ? [{ label: t("columns", "pool"), value: facts.pool, mono: true }]
           : []),
         ...(facts.machine
-          ? [{ label: "Instance type", value: facts.machine, mono: true }]
+          ? [
+              {
+                label: t("columns", "instanceType"),
+                value: facts.machine,
+                mono: true,
+              },
+            ]
           : []),
         ...(facts.zone
-          ? [{ label: "Zone", value: facts.zone, mono: true }]
+          ? [{ label: t("columns", "zone"), value: facts.zone, mono: true }]
           : []),
         ...(facts.region
-          ? [{ label: "Region", value: facts.region, mono: true }]
+          ? [
+              {
+                label: t("settings", "region"),
+                value: facts.region,
+                mono: true,
+              },
+            ]
           : []),
         // Only ever set by a label that says so, and worth the one warn
         // colour on the panel: a node that can vanish on an hour's notice
@@ -339,23 +358,21 @@ function placement(node: NodeInfo): PeekGroup[] {
         ...(facts.spot
           ? [
               {
-                label: "Spot",
-                value:
-                  "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+                label: t("columns", "spot"),
+                value: t("empty", "spotReclaim"),
                 tone: "warn" as const,
               },
             ]
           : []),
         // From `providerID`'s scheme and nothing else — a pool label can be
         // typed by anyone; this is the cloud signing its work.
-        ...(facts.cloud ? [{ label: "Cloud", value: facts.cloud }] : []),
+        ...(facts.cloud
+          ? [{ label: t("columns", "cloud"), value: facts.cloud }]
+          : []),
       ],
     },
   ];
 }
-
-const workloadStatus = (ready: number, desired: number) =>
-  desired > 0 && ready >= desired ? "Ready" : "Progressing";
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   // What other objects ask of a namespace: whether it is Active, and the
@@ -509,44 +526,58 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   TLSRoute: gatewayRouteSource("TLSRoute"),
   TCPRoute: gatewayRouteSource("TCPRoute"),
   UDPRoute: gatewayRouteSource("UDPRoute"),
-  Pod: source(commands.getPod, (pod) => {
+  Pod: source(commands.getPod, (pod, _target, t) => {
     const readiness = podReadiness(pod);
     return {
       status: pod.status.display,
       createdAt: pod.createdAt,
       groups: [
         {
-          title: "Placement",
+          title: t("columns", "placement"),
           items: [
             {
-              label: "Node",
+              label: t("columns", "node"),
               value: pod.nodeName ? ref("Node", pod.nodeName) : "unscheduled",
               tone: pod.nodeName ? undefined : "warn",
             },
             {
-              label: "Pod IP",
-              value: <CopyableAddress value={pod.podIp} label="Pod IP" />,
+              label: t("columns", "podIp"),
+              value: (
+                <CopyableAddress
+                  value={pod.podIp}
+                  label={t("columns", "podIp")}
+                />
+              ),
             },
             {
-              label: "Restarts",
-              value: describeRestarts(pod),
+              label: t("columns", "restarts"),
+              value: describeRestarts(pod, t),
               tone: pod.restartCount > 0 ? "warn" : undefined,
             },
             {
-              label: "Containers",
-              value: `${readiness.ready} of ${readiness.total} ready`,
+              label: t("columns", "containers"),
+              value: t("count", "readyOfTotal", {
+                ready: readiness.ready,
+                total: readiness.total,
+              }),
               tone: readiness.allReady ? undefined : "warn",
             },
             // Only when it disagrees with the badge above. `Phase Running`
             // under a `Running` badge is the same word twice; `Phase
             // Running` under `CrashLoopBackOff` is the fact an SRE came for.
             ...(pod.status.phase !== pod.status.display
-              ? [{ label: "Phase", value: pod.status.phase, mono: true }]
+              ? [
+                  {
+                    label: t("columns", "phase"),
+                    value: pod.status.phase,
+                    mono: true,
+                  },
+                ]
               : []),
             ...(pod.status.message || pod.status.reason
               ? [
                   {
-                    label: "Reason",
+                    label: t("columns", "reason"),
                     value: pod.status.message || pod.status.reason || "",
                     tone: "err" as const,
                   },
@@ -554,22 +585,22 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               : []),
           ],
         },
-        ...controlledBy(pod.ownerReferences, pod.namespace),
+        ...controlledBy(pod.ownerReferences, pod.namespace, t),
         // Every image, init and sidecar included: "which proxy build was
         // injected into this pod" is a question asked of this row, and the
         // app container's image never answers it.
-        ...images(pod),
+        ...images(pod, t),
         {
-          title: "Requests and limits",
+          title: t("columns", "requestsAndLimits"),
           items: [
             {
               label: "CPU",
-              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? "unlimited"}`,
+              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? t("empty", "unlimited")}`,
               mono: true,
             },
             {
-              label: "Memory",
-              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? "unlimited"}`,
+              label: t("columns", "memory"),
+              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? t("empty", "unlimited")}`,
               mono: true,
             },
           ],
@@ -578,7 +609,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     };
   }),
 
-  Deployment: source(commands.getDeployment, (deployment) => ({
+  Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
     status: workloadStatus(
       deployment.replicas.ready,
       deployment.replicas.desired
@@ -586,193 +617,238 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     createdAt: deployment.createdAt,
     groups: [
       {
-        title: "Rollout",
+        title: t("columns", "rollout"),
         items: [
           {
-            label: "Replicas",
-            value: `${deployment.replicas.ready} of ${deployment.replicas.desired} ready`,
+            label: t("columns", "replicas"),
+            value: t("count", "readyOfTotal", {
+              ready: deployment.replicas.ready,
+              total: deployment.replicas.desired,
+            }),
             tone:
               deployment.replicas.ready < deployment.replicas.desired
                 ? "warn"
                 : undefined,
           },
-          { label: "Updated", value: deployment.replicas.updated, mono: true },
           {
-            label: "Available",
+            label: t("columns", "updated"),
+            value: deployment.replicas.updated,
+            mono: true,
+          },
+          {
+            label: t("settings", "available"),
             value: deployment.replicas.available,
             mono: true,
           },
-          { label: "Strategy", value: deployment.strategy || "—" },
+          {
+            label: t("columns", "strategy"),
+            value: deployment.strategy || "—",
+          },
         ],
       },
-      ...controlledBy(deployment.ownerReferences, deployment.namespace),
-      ...images(deployment),
+      ...controlledBy(deployment.ownerReferences, deployment.namespace, t),
+      ...images(deployment, t),
     ],
   })),
 
-  StatefulSet: source(commands.getStatefulset, (set) => ({
+  StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
     status: workloadStatus(set.replicas.ready, set.replicas.desired),
     createdAt: set.createdAt,
     groups: [
       {
-        title: "Replicas",
+        title: t("columns", "replicas"),
         items: [
           {
-            label: "Ready",
+            label: t("columns", "ready"),
             value: `${set.replicas.ready} of ${set.replicas.desired}`,
             tone:
               set.replicas.ready < set.replicas.desired ? "warn" : undefined,
           },
-          { label: "Current", value: set.replicas.current, mono: true },
           {
-            label: "Service",
+            label: t("columns", "current"),
+            value: set.replicas.current,
+            mono: true,
+          },
+          {
+            label: t("settings", "serviceLabel"),
             value: set.serviceName
               ? ref("Service", set.serviceName, set.namespace)
               : "—",
           },
-          { label: "Update strategy", value: set.updateStrategy || "—" },
+          {
+            label: t("columns", "updateStrategy"),
+            value: set.updateStrategy || "—",
+          },
         ],
       },
-      ...images(set),
+      ...images(set, t),
     ],
   })),
 
-  DaemonSet: source(commands.getDaemonset, (set) => ({
+  DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
     status: workloadStatus(set.ready, set.desired),
     createdAt: set.createdAt,
     groups: [
       {
-        title: "Scheduling",
+        title: t("columns", "scheduling"),
         items: [
           {
-            label: "Ready",
-            value: `${set.ready} of ${set.desired} nodes`,
+            label: t("columns", "ready"),
+            value: t("readings", "readyOfNodes", {
+              ready: set.ready,
+              desired: set.desired,
+            }),
             tone: set.ready < set.desired ? "warn" : undefined,
           },
-          { label: "Current", value: set.current, mono: true },
-          { label: "Up to date", value: set.upToDate, mono: true },
-          { label: "Available", value: set.available, mono: true },
-          { label: "Update strategy", value: set.updateStrategy || "—" },
+          { label: t("columns", "current"), value: set.current, mono: true },
+          {
+            label: t("columns", "upToDateCount"),
+            value: set.upToDate,
+            mono: true,
+          },
+          {
+            label: t("settings", "available"),
+            value: set.available,
+            mono: true,
+          },
+          {
+            label: t("columns", "updateStrategy"),
+            value: set.updateStrategy || "—",
+          },
         ],
       },
-      ...images(set),
+      ...images(set, t),
     ],
   })),
 
-  Job: source(commands.getJob, (job) => ({
+  Job: source(commands.getJob, (job, _target, t) => ({
     status: job.status,
     createdAt: job.createdAt,
     groups: [
       {
-        title: "Progress",
+        title: t("columns", "progress"),
         items: [
           {
-            label: "Succeeded",
+            label: t("columns", "succeeded"),
             value: `${job.succeeded} of ${job.completions ?? 1}`,
           },
           {
-            label: "Failed",
+            label: t("settings", "failed"),
             value: job.failed,
             mono: true,
             tone: job.failed > 0 ? "err" : undefined,
           },
-          { label: "Active", value: job.active, mono: true },
+          { label: t("columns", "active"), value: job.active, mono: true },
           {
-            label: "Backoff limit",
+            label: t("columns", "backoffLimit"),
             value: job.backoffLimit ?? "—",
             mono: true,
           },
-          { label: "Started", value: formatDate(job.startTime) ?? "—" },
-          { label: "Completed", value: formatDate(job.completionTime) ?? "—" },
+          {
+            label: t("action", "started"),
+            value: formatDate(job.startTime) ?? "—",
+          },
+          {
+            label: t("columns", "completed"),
+            value: formatDate(job.completionTime) ?? "—",
+          },
         ],
       },
-      ...controlledBy(job.ownerReferences, job.namespace),
-      ...images(job),
+      ...controlledBy(job.ownerReferences, job.namespace, t),
+      ...images(job, t),
     ],
   })),
 
-  CronJob: source(commands.getCronjob, (cron) => ({
+  CronJob: source(commands.getCronjob, (cron, _target, t) => ({
     status: cron.suspend ? "Suspended" : "Active",
     createdAt: cron.createdAt,
     groups: [
       {
-        title: "Schedule",
+        title: t("columns", "schedule"),
         items: [
-          { label: "Schedule", value: cron.schedule, mono: true },
-          { label: "Time zone", value: cron.timezone || "cluster local" },
+          { label: t("columns", "schedule"), value: cron.schedule, mono: true },
           {
-            label: "Last run",
+            label: t("columns", "timeZone"),
+            value: cron.timezone || t("empty", "clusterLocal"),
+          },
+          {
+            label: t("columns", "lastRun"),
             value: formatDate(cron.lastSchedule) ?? "never",
           },
           {
-            label: "Last success",
+            label: t("columns", "lastSuccess"),
             value: formatDate(cron.lastSuccessfulTime) ?? "never",
           },
-          { label: "Active jobs", value: cron.active, mono: true },
-          { label: "Concurrency", value: cron.concurrencyPolicy || "Allow" },
+          { label: t("columns", "activeJobs"), value: cron.active, mono: true },
+          {
+            label: t("action", "concurrency"),
+            value: cron.concurrencyPolicy || "Allow",
+          },
         ],
       },
-      ...images(cron),
+      ...images(cron, t),
     ],
   })),
 
-  ConfigMap: source(commands.getConfigmap, (configMap) => ({
+  ConfigMap: source(commands.getConfigmap, (configMap, _target, t) => ({
     createdAt: configMap.createdAt,
     groups: [
       {
-        title: "Data",
+        title: t("columns", "data"),
         count: configMap.dataKeys.length,
         items: configMap.dataKeys.map((key) => ({
           label: key,
           value: "",
           mono: true,
         })),
-        emptyMessage: "No keys",
+        emptyMessage: t("empty", "noKeys"),
       },
     ],
   })),
 
-  Secret: source(commands.getSecret, (secret) => ({
+  Secret: source(commands.getSecret, (secret, _target, t) => ({
     createdAt: secret.createdAt,
     groups: [
       {
-        title: "Type",
-        items: [{ label: "Type", value: secret.type, mono: true }],
+        title: t("columns", "type"),
+        items: [
+          { label: t("columns", "type"), value: secret.type, mono: true },
+        ],
       },
       {
         // Names only. A peek is read over someone's shoulder; the values
         // stay behind the detail page's explicit reveal.
-        title: "Keys",
+        title: t("columns", "keys"),
         count: secret.dataKeys.length,
         items: secret.dataKeys.map((key) => ({
           label: key,
           value: "",
           mono: true,
         })),
-        emptyMessage: "No keys",
+        emptyMessage: t("empty", "noKeys"),
       },
     ],
   })),
 
-  Service: source(commands.getService, (service) => ({
+  Service: source(commands.getService, (service, _target, t) => ({
     createdAt: service.createdAt,
     groups: [
       {
-        title: "Routing",
+        title: t("columns", "routing"),
         items: [
-          { label: "Type", value: service.type },
+          { label: t("columns", "type"), value: service.type },
           {
-            label: "Cluster IP",
+            label: t("columns", "clusterIp"),
             value: (
               <CopyableAddress
                 value={service.clusterIp}
-                label="Cluster IP"
-                fallback="none"
+                label={t("columns", "clusterIp")}
+                fallback={t("empty", "none")}
               />
             ),
           },
           {
-            label: "Ports",
+            label: t("columns", "ports"),
             // Every port forwards, like everywhere else — the service-side
             // number is the click, the target and protocol stay prose.
             value:
@@ -795,21 +871,21 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               ),
           },
           {
-            label: "External",
+            label: t("columns", "external"),
             value: (
               <CopyableAddresses
                 values={[...service.externalIps, ...service.loadBalancerIps]}
-                label="External address"
+                label={t("columns", "externalAddress")}
               />
             ),
           },
           {
-            label: "Selector",
+            label: t("nav", "selector"),
             value: list(
               Object.entries(service.selector).map(
                 ([key, value]) => `${key}=${value}`
               ),
-              "none — endpoints are managed by hand"
+              t("empty", "endpointsByHand")
             ),
             mono: true,
           },
@@ -818,36 +894,39 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     ],
   })),
 
-  Ingress: source(commands.getIngress, (ingress, target) => ({
+  Ingress: source(commands.getIngress, (ingress, target, t) => ({
     createdAt: ingress.createdAt,
     groups: [
       {
-        title: "Routing",
+        title: t("columns", "routing"),
         items: [
-          { label: "Class", value: ingress.className || "cluster default" },
           {
-            label: "Address",
+            label: t("columns", "class"),
+            value: ingress.className || t("empty", "clusterDefault"),
+          },
+          {
+            label: t("columns", "address"),
             // The empty state keeps its own tone, so it stays plain text
             // rather than the component's faint fallback.
             value: ingress.loadBalancerIps.length ? (
               <CopyableAddresses
                 values={ingress.loadBalancerIps}
-                label="Ingress address"
+                label={t("columns", "ingressAddress")}
               />
             ) : (
-              "not assigned yet"
+              t("empty", "notAssignedYet")
             ),
             tone: ingress.loadBalancerIps.length ? undefined : "warn",
           },
           {
-            label: "TLS hosts",
-            value: list(ingress.tlsHosts, "none"),
+            label: t("columns", "tlsHosts"),
+            value: list(ingress.tlsHosts, t("empty", "none")),
             mono: true,
           },
         ],
       },
       {
-        title: "Rules",
+        title: t("columns", "rules"),
         count: ingress.rules.length || undefined,
         items: [
           ...ingress.rules.flatMap((rule) =>
@@ -863,7 +942,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                   </span>
                 </>
               ) : (
-                "no backend"
+                t("empty", "noBackend")
               ),
             }))
           ),
@@ -873,7 +952,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           ...(ingress.defaultBackend?.backendService
             ? [
                 {
-                  label: "anything unmatched",
+                  label: t("empty", "anythingUnmatched"),
                   value: (
                     <>
                       {ref(
@@ -890,12 +969,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               ]
             : []),
         ],
-        emptyMessage: "No rules and no default backend",
+        emptyMessage: t("empty", "noRulesNoBackend"),
       },
     ],
   })),
 
-  Endpoints: source(commands.getEndpoints, (endpoints, target) => {
+  Endpoints: source(commands.getEndpoints, (endpoints, target, t) => {
     const addresses = endpoints.subsets.flatMap((subset) => subset.addresses);
     const notReady = endpoints.subsets.flatMap(
       (subset) => subset.notReadyAddresses
@@ -905,17 +984,21 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
       createdAt: endpoints.createdAt,
       groups: [
         {
-          title: "Backends",
+          title: t("nav", "backends"),
           items: [
-            { label: "Ready", value: addresses.length, mono: true },
             {
-              label: "Not ready",
+              label: t("columns", "ready"),
+              value: addresses.length,
+              mono: true,
+            },
+            {
+              label: t("columns", "notReadyCount"),
               value: notReady.length,
               mono: true,
               tone: notReady.length ? "warn" : undefined,
             },
             {
-              label: "Ports",
+              label: t("columns", "ports"),
               value: list(
                 endpoints.subsets.flatMap((subset) =>
                   subset.ports.map((port) => `${port.port}/${port.protocol}`)
@@ -938,60 +1021,67 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                 )
               : (address.hostname ?? "—"),
           })),
-          emptyMessage: "Nothing is backing this service",
+          emptyMessage: t("empty", "nothingBackingService"),
         },
       ],
     };
   }),
 
-  PersistentVolumeClaim: source(commands.getPersistentVolumeClaim, (claim) => ({
-    status: claim.status,
-    age: claim.age,
-    groups: [
-      {
-        title: "Storage",
-        items: [
-          {
-            label: "Capacity",
-            value: claim.capacity || "not provisioned yet",
-            mono: !!claim.capacity,
-            tone: claim.capacity ? undefined : "warn",
-          },
-          {
-            label: "Volume",
-            value: claim.volume
-              ? ref("PersistentVolume", claim.volume)
-              : "not bound",
-            tone: claim.volume ? undefined : "warn",
-          },
-          {
-            label: "Storage class",
-            value: claim.storageClass
-              ? ref("StorageClass", claim.storageClass)
-              : "cluster default",
-          },
-          {
-            label: "Access modes",
-            value: list(claim.accessModes),
-            mono: true,
-          },
-        ],
-      },
-    ],
-  })),
+  PersistentVolumeClaim: source(
+    commands.getPersistentVolumeClaim,
+    (claim, _target, t) => ({
+      status: claim.status,
+      age: claim.age,
+      groups: [
+        {
+          title: t("nav", "storage"),
+          items: [
+            {
+              label: t("columns", "capacity"),
+              value: claim.capacity || t("empty", "notProvisionedYet"),
+              mono: !!claim.capacity,
+              tone: claim.capacity ? undefined : "warn",
+            },
+            {
+              label: t("columns", "volume"),
+              value: claim.volume
+                ? ref("PersistentVolume", claim.volume)
+                : t("empty", "notBoundYet"),
+              tone: claim.volume ? undefined : "warn",
+            },
+            {
+              label: t("columns", "storageClass"),
+              value: claim.storageClass
+                ? ref("StorageClass", claim.storageClass)
+                : t("empty", "clusterDefault"),
+            },
+            {
+              label: t("columns", "accessModes"),
+              value: list(claim.accessModes),
+              mono: true,
+            },
+          ],
+        },
+      ],
+    })
+  ),
 
   PersistentVolume: source(
     (name) => commands.getPersistentVolume(name),
-    (volume) => ({
+    (volume, _target, t) => ({
       status: volume.status,
       age: volume.age,
       groups: [
         {
-          title: "Storage",
+          title: t("nav", "storage"),
           items: [
-            { label: "Capacity", value: volume.capacity, mono: true },
             {
-              label: "Claim",
+              label: t("columns", "capacity"),
+              value: volume.capacity,
+              mono: true,
+            },
+            {
+              label: t("columns", "claim"),
               // The detail page and the list have used `ClaimRef` here since
               // it existed; the peek was printing the same `ns/name` as text,
               // so the same fact carried a glyph on two screens and neither
@@ -1003,21 +1093,24 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               ),
             },
             {
-              label: "Storage class",
+              label: t("columns", "storageClass"),
               value: volume.storageClass
                 ? ref("StorageClass", volume.storageClass)
                 : "none",
             },
-            { label: "Reclaim policy", value: volume.reclaimPolicy },
             {
-              label: "Access modes",
+              label: t("columns", "reclaimPolicy"),
+              value: volume.reclaimPolicy,
+            },
+            {
+              label: t("columns", "accessModes"),
               value: list(volume.accessModes),
               mono: true,
             },
             ...(volume.reason
               ? [
                   {
-                    label: "Reason",
+                    label: t("columns", "reason"),
                     value: volume.reason,
                     tone: "err" as const,
                   },
@@ -1031,27 +1124,33 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
 
   StorageClass: source(
     (name) => commands.getStorageClass(name),
-    (storageClass) => ({
+    (storageClass, _target, t) => ({
       age: storageClass.age,
       groups: [
         {
-          title: "Provisioning",
+          title: t("columns", "provisioning"),
           items: [
             {
-              label: "Provisioner",
+              label: t("columns", "provisioner"),
               value: storageClass.provisioner,
               mono: true,
             },
-            { label: "Reclaim policy", value: storageClass.reclaimPolicy },
-            { label: "Binding mode", value: storageClass.volumeBindingMode },
             {
-              label: "Expansion",
-              value: storageClass.allowVolumeExpansion
-                ? "allowed"
-                : "not allowed",
+              label: t("columns", "reclaimPolicy"),
+              value: storageClass.reclaimPolicy,
             },
             {
-              label: "Default",
+              label: t("columns", "bindingMode"),
+              value: storageClass.volumeBindingMode,
+            },
+            {
+              label: t("columns", "expansion"),
+              value: storageClass.allowVolumeExpansion
+                ? "allowed"
+                : t("empty", "notAllowed"),
+            },
+            {
+              label: t("cluster", "hueDefault"),
               value: storageClass.isDefault ? "yes" : "no",
             },
           ],
@@ -1062,19 +1161,27 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
 
   Node: source(
     (name) => commands.getNode(name),
-    (node) => ({
+    (node, _target, t) => ({
       status: node.status.ready ? "Ready" : "NotReady",
       createdAt: node.createdAt,
       groups: [
         {
-          title: "Machine",
+          title: t("columns", "machine"),
           items: [
-            { label: "Roles", value: list(node.roles, "worker") },
-            { label: "Kubelet", value: node.version, mono: true },
-            { label: "Platform", value: `${node.os}/${node.arch}`, mono: true },
-            { label: "Runtime", value: node.containerRuntime, mono: true },
+            { label: t("columns", "roles"), value: list(node.roles, "worker") },
+            { label: t("columns", "kubelet"), value: node.version, mono: true },
             {
-              label: "Internal IP",
+              label: t("columns", "platform"),
+              value: `${node.os}/${node.arch}`,
+              mono: true,
+            },
+            {
+              label: t("columns", "runtime"),
+              value: node.containerRuntime,
+              mono: true,
+            },
+            {
+              label: t("columns", "internalIp"),
               value: (
                 <CopyableAddress
                   value={
@@ -1082,25 +1189,25 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                       (address) => address.type === "InternalIP"
                     )?.address
                   }
-                  label="Internal IP"
+                  label={t("columns", "internalIp")}
                 />
               ),
             },
           ],
         },
-        ...placement(node),
+        ...placement(node, t),
         {
-          title: "Capacity",
+          title: t("columns", "capacity"),
           items: [
             { label: "CPU", value: node.allocatable.cpu ?? "—", mono: true },
             {
-              label: "Memory",
+              label: t("columns", "memory"),
               value: node.allocatable.memory ?? "—",
               mono: true,
             },
             { label: "Pods", value: node.allocatable.pods ?? "—", mono: true },
             {
-              label: "Taints",
+              label: t("columns", "taints"),
               value: node.taints.length
                 ? list(node.taints.map((taint) => taint.key))
                 : "none",
@@ -1115,17 +1222,17 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
 
   CustomResourceDefinition: source(
     (name) => commands.getCrd(name),
-    (crd) => ({
+    (crd, _target, t) => ({
       createdAt: crd.createdAt,
       groups: [
         {
-          title: "Definition",
+          title: t("nav", "definition"),
           items: [
-            { label: "Group", value: crd.group, mono: true },
-            { label: "Kind", value: crd.kind, mono: true },
-            { label: "Scope", value: crd.scope },
+            { label: t("columns", "group"), value: crd.group, mono: true },
+            { label: t("columns", "kind"), value: crd.kind, mono: true },
+            { label: t("columns", "scope"), value: crd.scope },
             {
-              label: "Versions",
+              label: t("nav", "versions"),
               value: list(
                 crd.versions
                   .filter((version) => version.served)
@@ -1135,7 +1242,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               ),
               mono: true,
             },
-            { label: "Short names", value: list(crd.shortNames, "none") },
+            {
+              label: t("columns", "shortNames"),
+              value: list(crd.shortNames, "none"),
+            },
           ],
         },
       ],
@@ -1177,33 +1287,33 @@ function customResourceSource(crdName: string): PeekSource {
   const vendor = vendorPeek(crdName);
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
-    (resource: CustomResourceDetailInfo) => {
+    (resource: CustomResourceDetailInfo, _target, t) => {
       const status = resource.status as Record<string, unknown> | null;
-      const body = vendor?.(resource);
+      const body = vendor?.(resource, t);
       return {
         status: body?.status ?? customResourceState(status),
         createdAt: resource.createdAt,
         groups: [
-          ...controlledBy(resource.ownerReferences, resource.namespace),
+          ...controlledBy(resource.ownerReferences, resource.namespace, t),
           ...(body?.groups ?? [
             {
-              title: "Status",
+              title: t("columns", "status"),
               items: flatten(status, MANIFEST_ROW_LIMIT),
-              emptyMessage: "Nothing reported yet",
+              emptyMessage: t("empty", "nothingReportedYet"),
             },
             {
-              title: "Spec",
+              title: t("columns", "spec"),
               items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
-              emptyMessage: "No spec",
+              emptyMessage: t("empty", "noSpec"),
             },
           ]),
           {
-            title: "Labels",
+            title: t("columns", "labels"),
             count: Object.keys(resource.labels).length || undefined,
             items: Object.entries(resource.labels)
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([label, value]) => ({ label, value, mono: true })),
-            emptyMessage: "No labels",
+            emptyMessage: t("empty", "noLabels"),
           },
         ],
       };
@@ -1250,17 +1360,23 @@ function manifestSource(kind: string): PeekSource {
   return source(
     (name, namespace) =>
       commands.getManifest(kind, getApiVersion(kind), name, namespace),
-    (text) => summariseManifest(text)
+    (text, _target, t) => summariseManifest(text, t)
   );
 }
 
 const MANIFEST_ROW_LIMIT = 12;
 
-function summariseManifest(text: string): PeekSummary {
+function summariseManifest(text: string, t: Translate): PeekSummary {
   const manifest = parseYaml(text);
   if (!manifest || typeof manifest !== "object") {
     return {
-      groups: [{ title: "Manifest", items: [], emptyMessage: "Empty" }],
+      groups: [
+        {
+          title: t("action", "manifestTab"),
+          items: [],
+          emptyMessage: t("empty", "nothingReportedYet"),
+        },
+      ],
     };
   }
   const record = manifest as Record<string, unknown>;
@@ -1277,22 +1393,22 @@ function summariseManifest(text: string): PeekSummary {
     createdAt: asText(metadata.creationTimestamp) ?? null,
     groups: [
       {
-        title: "Status",
+        title: t("columns", "status"),
         items: flatten(status, MANIFEST_ROW_LIMIT),
-        emptyMessage: "Nothing reported yet",
+        emptyMessage: t("empty", "nothingReportedYet"),
       },
       {
-        title: "Spec",
+        title: t("columns", "spec"),
         items: flatten(record.spec, MANIFEST_ROW_LIMIT),
-        emptyMessage: "No spec",
+        emptyMessage: t("empty", "noSpec"),
       },
       {
-        title: "Labels",
+        title: t("columns", "labels"),
         count: Object.keys(labels).length || undefined,
         items: Object.entries(labels)
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([label, value]) => ({ label, value, mono: true })),
-        emptyMessage: "No labels",
+        emptyMessage: t("empty", "noLabels"),
       },
     ],
   };

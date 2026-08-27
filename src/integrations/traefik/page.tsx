@@ -54,6 +54,7 @@
  * leads to a connection error is worse than no button.
  */
 
+import { sayWords } from "@/i18n/say";
 import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import type { ServiceStop } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
@@ -110,6 +111,7 @@ import {
   type HostGroup,
   type TraefikRoute,
   type TraefikSources,
+  UNNAMED_TARGET,
 } from "./model";
 import { describePath, fullyRead } from "./rule";
 import { useT } from "@/i18n/useT";
@@ -306,7 +308,7 @@ export default function TraefikPage() {
     },
     {
       id: "entrypoints",
-      label: "Entry points",
+      label: t("nav", "entryPoints"),
       glyph: viewGlyph(Plug),
       mark:
         controller.data && controller.data.entryPoints.length > 0
@@ -393,8 +395,8 @@ function MapTab({
 }) {
   const t = useT();
   const data = useMemo(
-    () => (sources ? routingMap(groups, sources) : null),
-    [groups, sources]
+    () => (sources ? routingMap(groups, sources, t) : null),
+    [groups, sources, t]
   );
 
   if (loading) {
@@ -676,7 +678,7 @@ function PathRow({
   return (
     <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
-        {describePath(route.clause.path)}
+        {describePath(route.clause.path, t)}
         {route.pathType && route.pathType !== "Prefix" && (
           <span className="ml-1 text-fg-fnt">{route.pathType}</span>
         )}
@@ -799,7 +801,7 @@ function HostChain({
       {group.routes.length > 1 && (
         <span className="text-[10px] text-fg-fnt">
           {t("empty", "thePathThrough", {
-            path: describePath(route.clause.path),
+            path: describePath(route.clause.path, t),
           })}
         </span>
       )}
@@ -838,7 +840,7 @@ function HostChain({
             }
           >
             {group.host ?? t("empty", "anyHost")}
-            {route.clause.path ? ` ${describePath(route.clause.path)}` : ""}
+            {route.clause.path ? ` ${describePath(route.clause.path, t)}` : ""}
           </Cell>
         </Column>
         <Column label="Middleware">
@@ -960,7 +962,9 @@ function RawRule({ route }: { route: TraefikRoute }) {
     <div className="mt-1 border-l-2 border-hair pl-2.5">
       <p className="text-[11px] text-fg-mut">
         {rule.refused
-          ? t("empty", "ruleShownAsWrittenBecause", { reason: rule.refused })
+          ? t("empty", "ruleShownAsWrittenBecause", {
+              reason: sayWords(rule.refused, t),
+            })
           : t("empty", "shownExactlyAsWritten", {
               n: rule.unread.length,
               list: rule.unread.join(", "),
@@ -1117,7 +1121,7 @@ function describeFinding(
       // The same three sentences the traffic chain uses, so "no pod carries
       // app=promo" reads identically whether it was reached from a
       // Deployment or from a hostname.
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest502", {
           reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
@@ -1258,7 +1262,9 @@ function EntryPointsTab({
           {t("empty", "cannotSayWhatTraefikListensOn")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ?? t("empty", "entryPointsAreStatic")}
+          {controller.problem
+            ? sayWords(controller.problem, t)
+            : t("empty", "entryPointsAreStatic")}
         </p>
       </div>
     );
@@ -1296,7 +1302,12 @@ function EntryPointsTab({
               </span>
               <span className="truncate text-fg-mut">
                 {entry.redirectTo
-                  ? t("empty", "redirectsTo", { target: entry.redirectTo })
+                  ? t("empty", "redirectsTo", {
+                      target:
+                        entry.redirectTo === UNNAMED_TARGET
+                          ? t("readings", "traefikAnotherEntryPoint")
+                          : entry.redirectTo,
+                    })
                   : t("count", "hostsLandHere", { n: landing.length })}
               </span>
             </div>
@@ -1382,12 +1393,14 @@ function ControllerTab({
               </span>
             )}
             {controller.problem && (
-              <p className="text-[11px] text-warn">{controller.problem}</p>
+              <p className="text-[11px] text-warn">
+                {sayWords(controller.problem, t)}
+              </p>
             )}
           </div>
         ) : (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         )}
       </Section>

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
+import type { T as Translate } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -186,7 +187,9 @@ export function readContext(
     binaries: Map<string, string | null>;
     binding: ContextBindingInfo | undefined;
     connected: boolean;
-  }
+  },
+  // Aliased: `T` in this file is the JSX component that renders one line.
+  t: Translate
 ): ContextReading {
   const needs =
     context.auth.kind === "exec" ? execBinary(context.exec_command) : null;
@@ -228,8 +231,8 @@ export function readContext(
       context.exec_command ?? "",
       context.auth.kind,
       bound ? `${VENDOR_LABEL[bound.vendor]} profile ${bound.profile}` : "",
-      missingBinary ? "not found missing path" : "",
-      "context kubeconfig authentication",
+      missingBinary ? t("settings", "searchMissingWords") : "",
+      t("settings", "searchContextWords"),
     ].join(" "),
   };
 }

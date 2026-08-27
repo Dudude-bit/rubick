@@ -19,6 +19,8 @@
  * out are.
  */
 
+import type { Saying } from "@/i18n/say";
+
 /**
  * Suffixes a cluster DNS name ends in, and the bare `namespace` form.
  *
@@ -102,11 +104,11 @@ export function unreachable(url: string, reason: string): Unreachable {
  * caller, because `dns error: … Name or service not known` is still what
  * happened and somebody searching for it should find it in the app.
  */
-export function explain(found: NonNullable<Unreachable>): string {
+export function explain(found: NonNullable<Unreachable>): Saying {
   switch (found.kind) {
     case "cluster-dns":
-      return `${found.host} is a name only the cluster can resolve — this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.`;
+      return { key: "reachClusterDns", values: { host: found.host } };
     case "no-scheme":
-      return `${found.host} has no scheme — write http:// or https:// in front of it.`;
+      return { key: "reachNoScheme", values: { host: found.host } };
   }
 }

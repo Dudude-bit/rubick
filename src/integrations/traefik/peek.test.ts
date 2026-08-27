@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { peekIngressRoute, peekMiddleware } from "./peek";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const resource = (
   spec: unknown,
   kind = "IngressRoute"
@@ -47,7 +53,8 @@ describe("what an IngressRoute peek says", () => {
             services: [{ name: "api", port: 8080 }],
           },
         ],
-      })
+      }),
+      t
     );
 
     expect(rows(summary, "Routing")).toContainEqual(["Entry points", "web"]);
@@ -74,7 +81,8 @@ describe("what an IngressRoute peek says", () => {
     const summary = peekIngressRoute(
       resource({
         routes: [{ match, services: [{ name: "web", port: 80 }] }],
-      })
+      }),
+      t
     );
 
     expect(rows(summary, "Route")).toContainEqual([
@@ -85,18 +93,19 @@ describe("what an IngressRoute peek says", () => {
 
   /** `tls: {}` means the default certificate, not "no TLS". */
   it("reads the three spellings of TLS apart", () => {
-    const bare = peekIngressRoute(resource({ routes: [] }));
+    const bare = peekIngressRoute(resource({ routes: [] }), t);
     expect(rows(bare, "Routing")).toContainEqual([
       "TLS",
       "none declared — an entry point may still carry it",
     ]);
 
     const named = peekIngressRoute(
-      resource({ routes: [], tls: { secretName: "wildcard-tls" } })
+      resource({ routes: [], tls: { secretName: "wildcard-tls" } }),
+      t
     );
     expect(rows(named, "Routing")).toContainEqual(["TLS", "wildcard-tls"]);
 
-    const empty = peekIngressRoute(resource({ routes: [], tls: {} }));
+    const empty = peekIngressRoute(resource({ routes: [], tls: {} }), t);
     expect(rows(empty, "Routing")).toContainEqual([
       "TLS",
       "the proxy's default certificate",
@@ -110,7 +119,8 @@ describe("what a Middleware peek says", () => {
       resource(
         { redirectRegex: { regex: "^https?://x/(.*)", replacement: "/$1" } },
         "Middleware"
-      )
+      ),
+      t
     );
 
     const items = rows(summary, "redirectRegex");

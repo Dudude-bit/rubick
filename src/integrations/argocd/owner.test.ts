@@ -164,6 +164,6 @@ describe("per-object sync, which Argo does publish", () => {
     const [answer] = await ownerOf([api()]);
     if (answer?.state !== "delivered") throw new Error("unreachable");
     expect(answer.source.sync).toBe("drifted");
-    expect(answer.source.warning).toBe("out of sync");
+    expect(answer.source.warning?.key).toBe("argoOutOfSync");
   });
 });

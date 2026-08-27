@@ -64,7 +64,7 @@ export function PersistentVolumeDetail() {
       tone: pv?.claim ? undefined : "warn",
     },
     {
-      label: "Storage class",
+      label: t("columns", "storageClass"),
       value: pv?.storageClass ? (
         <ResourceRef
           kind={ResourceType.StorageClass}
@@ -101,9 +101,9 @@ export function PersistentVolumeDetail() {
         <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     yamlTab({
-      title: "PersistentVolume YAML",
+      title: t("action", "kindYaml", { kind: "PersistentVolume" }),
       yaml: pvYaml,
       resourceKind: ResourceType.PersistentVolume,
       resourceName: name || "",

@@ -274,7 +274,7 @@ function ReconcilerRow({
   last: boolean;
 }) {
   const t = useT();
-  const state = reconcilerState(reconciler);
+  const state = reconcilerState(reconciler, t);
   const source = reconciler.source;
 
   return (
@@ -330,7 +330,7 @@ function ReconcilerRow({
               source?.artifact?.revision?.commit &&
               source.artifact.revision.commit !== reconciler.applied.commit
                 ? t("empty", "sourceHasRevision", {
-                    revision: revisionText(source.artifact.revision),
+                    revision: revisionText(source.artifact.revision, t),
                   })
                 : reconciler.lastReconciledAt
                   ? t("action", "agoSuffix", {
@@ -341,7 +341,7 @@ function ReconcilerRow({
           >
             {reconciler.applied
               ? t("empty", "appliedRevision", {
-                  revision: revisionText(reconciler.applied),
+                  revision: revisionText(reconciler.applied, t),
                 })
               : t("empty", "nothingApplied")}
           </Cell>
@@ -365,7 +365,7 @@ function ReconcilerRow({
                 ? t("empty", "heldInHelmStorage")
                 : reconciler.applied
                   ? t("empty", "fromRevision", {
-                      revision: revisionText(reconciler.applied),
+                      revision: revisionText(reconciler.applied, t),
                     })
                   : t("empty", "nothingAppliedYet")
             }
@@ -484,14 +484,14 @@ function describe(
         note: finding.wasReady
           ? t("empty", "fluxSuspendedWasReady", {
               kind: reconciler.kind,
-              revision: revisionText(finding.applied),
+              revision: revisionText(finding.applied, t),
             })
           : t("empty", "fluxSuspendedNeverRan"),
       };
     case "frozen":
       return {
         title: t("empty", "fluxFrozenTitle", {
-          revision: revisionText(finding.applied),
+          revision: revisionText(finding.applied, t),
         }),
         verbatim: finding.message,
         note: (
@@ -515,6 +515,7 @@ function describe(
             ? t("empty", "fluxSourceStoppedNeverApplied")
             : t("empty", "fluxSourceNeverFetched"),
         verbatim: finding.message,
+        note: finding.message ? undefined : t("empty", "fluxSaidNothingMore"),
       };
     case "notReady":
       return {
@@ -522,6 +523,7 @@ function describe(
           ? t("empty", "fluxNotReconcilingReason", { reason: finding.reason })
           : t("empty", "fluxNotReconciling"),
         verbatim: finding.message,
+        note: finding.message ? undefined : t("empty", "fluxSaidNothingMore"),
       };
     case "stalled":
       return {
@@ -621,7 +623,7 @@ function SourceRow({
   last: boolean;
 }) {
   const t = useT();
-  const state = sourceState(source);
+  const state = sourceState(source, t);
   const link = source.url ? gitRepoLink(source.url) : null;
   const crd = crdOf(source.kind);
   const failing = source.findings.find(
@@ -667,7 +669,7 @@ function SourceRow({
         </span>
         <span className="min-w-0 truncate">
           {source.artifact
-            ? `${revisionText(source.artifact.revision)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at) })}` : ""}`
+            ? `${revisionText(source.artifact.revision, t)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at) })}` : ""}`
             : t("action", "never")}
         </span>
         <span className="font-mono text-fg-mid">
@@ -732,7 +734,7 @@ function SourceFinding({
           {finding.everFetched
             ? t("empty", "fluxFrozenStillApplying", {
                 n: finding.frozen.length,
-                revision: revisionText(source.artifact?.revision ?? null),
+                revision: revisionText(source.artifact?.revision ?? null, t),
                 fetched: source.artifact?.at
                   ? t("empty", "fluxFetchedAgo", {
                       age: formatAge(source.artifact.at),

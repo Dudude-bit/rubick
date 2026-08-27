@@ -1,7 +1,8 @@
+import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import {
   createContext,
   useCallback,
@@ -205,7 +206,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   {
     size: 80,
     accessorKey: "tlsHosts",
-    header: "TLS",
+    header: () => <T section="columns" k="tls" />,
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
   },
   createAgeColumn<IngressInfo>(),
@@ -277,9 +278,10 @@ export function IngressList() {
           : []
       );
       if (hosts.length === 0) return null;
-      const by =
-        vendorTls.of(ingress, hosts[0])?.by ??
-        t("empty", "theLoadBalancerInFront");
+      const said = vendorTls.of(ingress, hosts[0])?.by;
+      const by = said
+        ? sayWords(said, t)
+        : t("empty", "theLoadBalancerInFront");
       return { hosts, by };
     },
     [t, vendorTls]

@@ -49,10 +49,7 @@ export function ScaleDialog({
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
-        <ActionWarnings
-          warnings={warnings}
-          headingFor={(count) => `${count} things will put this number back.`}
-        />
+        <ActionWarnings warnings={warnings} headingFor="warnRevertCount" />
         <ScaleForm
           current={current}
           busy={busy}

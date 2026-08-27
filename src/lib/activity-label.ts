@@ -8,7 +8,7 @@
  *
  * So when only one kind of activity is running — which is the common case —
  * the trigger says which. Only a genuine mixture falls back to the total,
- * because listing three things does not fit an eleven-pixel line.
+ * because listing both does not fit an eleven-pixel line.
  *
  * The counting is the catalogue's job, not this file's: "1 проброс, 2 проброса,
  * 5 пробросов" is three forms chosen by the number, and the English
@@ -20,13 +20,11 @@ import { translate, type Locale } from "@/i18n";
 export interface ActivityCounts {
   ports: number;
   terminals: number;
-  jobs: number;
 }
 
 const KEYS = {
   ports: "portForwards",
   terminals: "terminalCount",
-  jobs: "jobCount",
 } as const;
 
 export function activityLabel(
@@ -45,6 +43,6 @@ export function activityLabel(
   }
 
   return translate(locale, "activity", "active", {
-    n: counts.ports + counts.terminals + counts.jobs,
+    n: counts.ports + counts.terminals,
   });
 }

@@ -1,4 +1,9 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
   endpointState,
@@ -56,15 +61,17 @@ describe("the state of one address", () => {
   it("tells draining apart from not ready", () => {
     expect(
       endpointState(
-        endpoint({ ready: false, serving: true, terminating: true })
+        endpoint({ ready: false, serving: true, terminating: true }),
+        t
       )
     ).toEqual({ text: "serving, terminating", tone: "warn" });
     expect(
       endpointState(
-        endpoint({ ready: false, serving: false, terminating: false })
+        endpoint({ ready: false, serving: false, terminating: false }),
+        t
       )
     ).toEqual({ text: "not ready", tone: "err" });
-    expect(endpointState(endpoint())).toEqual({ text: "ready", tone: "ok" });
+    expect(endpointState(endpoint(), t)).toEqual({ text: "ready", tone: "ok" });
   });
 });
 
@@ -72,17 +79,17 @@ describe("where the answer came from", () => {
   /** A cluster below 1.21 serves no slices. Reporting a confident empty there
    *  would be the app inventing an outage out of its own API version. */
   it("says which object answered when it was not the slices", () => {
-    expect(sourceNote(published())).toBeNull();
-    expect(sourceNote(published({ source: "legacyEndpoints" }))).toContain(
+    expect(sourceNote(published(), t)).toBeNull();
+    expect(sourceNote(published({ source: "legacyEndpoints" }), t)).toContain(
       "served no EndpointSlices"
     );
-    expect(sourceNote(published({ source: "podReadiness" }))).toContain(
+    expect(sourceNote(published({ source: "podReadiness" }), t)).toContain(
       "a deduction rather than the cluster's own word"
     );
   });
 
   it("counts the slices it read", () => {
-    expect(publishedSummary(published({ ready: 3, slices: 2 }))).toBe(
+    expect(publishedSummary(published({ ready: 3, slices: 2 }), t)).toBe(
       "3 endpoints across 2 slices"
     );
   });
@@ -95,7 +102,12 @@ describe("the legacy object", () => {
    * same class of lie as a sidecar count that skipped a container.
    */
   it("says how much of the answer it is holding when it was truncated", () => {
-    const note = legacyNote(1000, true, published({ ready: 1240, slices: 12 }));
+    const note = legacyNote(
+      1000,
+      true,
+      published({ ready: 1240, slices: 12 }),
+      t
+    );
     expect(note).toContain("This object lists 1000 of 1240 addresses");
     expect(note).toContain("12 EndpointSlices");
     expect(note).toContain("endpoints.kubernetes.io/over-capacity");
@@ -104,13 +116,13 @@ describe("the legacy object", () => {
   /** Not every disagreement is truncation. A draining address is absent from
    *  this object entirely, because it has no word for it. */
   it("names the other reason it disagrees", () => {
-    const note = legacyNote(0, false, published({ draining: 1 }));
+    const note = legacyNote(0, false, published({ draining: 1 }), t);
     expect(note).toContain("This object lists 0 of 1 addresses");
     expect(note).toContain("draining is simply absent");
   });
 
   it("says they agree when they do", () => {
-    expect(legacyNote(3, false, published({ ready: 3 }))).toContain(
+    expect(legacyNote(3, false, published({ ready: 3 }), t)).toContain(
       "3 addresses, and the slices agree"
     );
   });
@@ -129,11 +141,14 @@ describe("what is not published", () => {
    *  Service: Ready, and reachable by nothing. */
   it("names the port when the app can derive it", () => {
     expect(
-      unpublishedNote({
-        pod: pod("shop-api-v3n9d", true),
-        unnamedPorts: ["metrics"],
-        inSlice: true,
-      })
+      unpublishedNote(
+        {
+          pod: pod("shop-api-v3n9d", true),
+          unnamedPorts: ["metrics"],
+          inSlice: true,
+        },
+        t
+      )
     ).toBe(
       "Ready, and in a slice that carries no port — targetPort: metrics matches no port this pod's containers declare"
     );
@@ -143,11 +158,14 @@ describe("what is not published", () => {
    *  written down in any object this call reads. */
   it("stops at what it holds when it cannot", () => {
     expect(
-      unpublishedNote({
-        pod: pod("shop-api-q4xkp", true),
-        unnamedPorts: [],
-        inSlice: false,
-      })
+      unpublishedNote(
+        {
+          pod: pod("shop-api-q4xkp", true),
+          unnamedPorts: [],
+          inSlice: false,
+        },
+        t
+      )
     ).toBe("Ready, and in no slice at all");
   });
 });
@@ -156,7 +174,7 @@ describe("topology", () => {
   /** Off on the overwhelming majority of Services, and a caption over a gap
    *  is worse than no caption. */
   it("says nothing when hints are off", () => {
-    expect(topologyNote(published({ endpoints: [endpoint()] }))).toBeNull();
+    expect(topologyNote(published({ endpoints: [endpoint()] }), t)).toBeNull();
   });
 
   it("says what a client in each zone reaches", () => {
@@ -167,7 +185,8 @@ describe("topology", () => {
           endpoint({ zone: "west1-b", hintZones: ["west1-b"] }),
           endpoint({ zone: "west1-c", hintZones: ["west1-c"] }),
         ],
-      })
+      }),
+      t
     );
     expect(note).toContain("a client in west1-b reaches 1 of 2");
     expect(note).toContain("a client in west1-c reaches 1 of 2");

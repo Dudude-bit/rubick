@@ -34,7 +34,11 @@ import {
   type UsagePoint,
   type UsageSample,
 } from "@/lib/usage-history";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+
+/** A line this chart is allowed to say, by the name the catalogue gives it. */
+export type EmptyKey = keyof typeof en.empty;
 
 /**
  * Tall enough to read a shape off. The 42px band this replaces turned every
@@ -77,13 +81,15 @@ function peakOf(points: readonly UsagePoint[]): number | null {
   return peak;
 }
 
-/** What a band says before it has two readings to join. */
-export const WATCHING_NOTE =
-  "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.";
-
-/** What a band says when nothing declares a ceiling for it. */
-export const NO_LIMIT_NOTE =
-  "No limit set — the scale is what it has used, and nothing stops it taking the node's.";
+/**
+ * What a band says before it has two readings to join, and what it says when
+ * nothing declares a ceiling.
+ *
+ * Keys rather than sentences: both are read by somebody looking at a chart,
+ * and a chart is not the place the app is allowed to change language.
+ */
+export const WATCHING_NOTE = "watchingFromNow" as const;
+export const NO_LIMIT_NOTE = "noLimitSet" as const;
 
 export interface UsageChartProps {
   label: string;
@@ -92,13 +98,13 @@ export interface UsageChartProps {
   /** The declared ceiling, or null when the object has none. */
   limit: number | null;
   /** What the ceiling is called here — a pod has limits, a node a capacity. */
-  limitNoun?: string;
+  limitNoun?: "limitWord" | "capacityWord";
   /**
    * Sentence for the no-limit case. Defaulted here rather than only at the
    * call site: a band that silently omitted it would be the very bug this
    * replaces — a scale with no stated denominator.
    */
-  noLimitNote?: string | null;
+  noLimitNote?: EmptyKey | null;
   /** Live value, used before the buffer has anything to draw. */
   current: number | null;
   /** Set when the block is saying the same thing once for both bands. */
@@ -126,7 +132,7 @@ export function UsageChart({
   type,
   samples,
   limit,
-  limitNoun = "limit",
+  limitNoun = "limitWord",
   noLimitNote = NO_LIMIT_NOTE,
   current,
   suppressNote = false,
@@ -204,9 +210,9 @@ export function UsageChart({
         {suppressNote || (drawn === 0 && value === null)
           ? null
           : drawn <= 1 && live
-            ? WATCHING_NOTE
-            : limit === null || limit <= 0
-              ? noLimitNote
+            ? t("empty", WATCHING_NOTE)
+            : (limit === null || limit <= 0) && noLimitNote !== null
+              ? t("empty", noLimitNote)
               : null}
       </Note>
     </div>
@@ -230,7 +236,7 @@ interface BandProps {
   limit: number | null;
   type: "cpu" | "memory";
   label: string;
-  limitNoun: string;
+  limitNoun: "limitWord" | "capacityWord";
   /** See {@link UsageChartProps.live}. */
   live: boolean;
 }
@@ -245,6 +251,7 @@ interface Row {
 }
 
 function Band(props: BandProps) {
+  const t = useT();
   const { points, drawn, max, limit, type, limitNoun } = props;
   const gradient = React.useId();
   const [band, width] = useBandWidth();
@@ -283,7 +290,7 @@ function Band(props: BandProps) {
       className={cn("relative w-full", tone)}
       style={{ height: BAND_H }}
       role="img"
-      aria-label={describe(props)}
+      aria-label={describe(props, t)}
     >
       <div className="absolute inset-0">
         <AreaChart
@@ -452,7 +459,7 @@ interface TooltipPayload {
 interface UsageTooltipProps {
   type: "cpu" | "memory";
   limit: number | null;
-  limitNoun: string;
+  limitNoun: "limitWord" | "capacityWord";
   now: number;
   /** Supplied by recharts. */
   active?: boolean;
@@ -468,6 +475,7 @@ function UsageTooltip({
   active,
   payload,
 }: UsageTooltipProps) {
+  const t = useT();
   const point = payload?.[0]?.payload;
   if (!active || !point || point.v === null) return null;
   const share =
@@ -485,10 +493,16 @@ function UsageTooltip({
         {share !== null && (
           <span className="text-fg-fnt">
             {" "}
-            · {share}% of {limitNoun}
+            {" · "}
+            {t("readings", "usageShareOf", {
+              percent: share,
+              noun: t("readings", limitNoun),
+            })}
           </span>
         )}
-        {point.restart && <span className="text-err"> · restarted</span>}
+        {point.restart && (
+          <span className="text-err"> · {t("readings", "usageRestarted")}</span>
+        )}
       </div>
     </div>
   );
@@ -499,28 +513,34 @@ function UsageTooltip({
  * only way to learn: the peak matters more than the current value here,
  * because the peak is what the buckets were kept for.
  */
-function describe({
-  points,
-  drawn,
-  max,
-  limit,
-  type,
-  label,
-  limitNoun,
-  live,
-}: BandProps): string {
-  if (drawn === 0) return `${label}: nothing recorded yet.`;
+function describe(
+  { points, drawn, max, limit, type, label, limitNoun, live }: BandProps,
+  t: T
+): string {
+  if (drawn === 0) return t("readings", "usageNothingYet", { label });
   const newest = live ? latestValue(points) : null;
+  const noun = t("readings", limitNoun);
   const parts = [
-    `${label}: ${drawn} reading${drawn === 1 ? "" : "s"} ${live ? "watched" : "recorded, none since it stopped"}`,
-    newest !== null ? `now ${formatQuantity(newest, type)}` : null,
-    `peak ${formatQuantity(peakOf(points) ?? 0, type)}`,
+    live
+      ? t("readings", "usageReadingsWatched", { label, n: drawn })
+      : t("readings", "usageReadingsRecorded", { label, n: drawn }),
+    newest !== null
+      ? t("readings", "usageNow", { value: formatQuantity(newest, type) })
+      : null,
+    t("readings", "usagePeak", {
+      value: formatQuantity(peakOf(points) ?? 0, type),
+    }),
     limit !== null && limit > 0
-      ? `${limitNoun} ${formatQuantity(limit, type)}`
-      : `no ${limitNoun} set, scaled to ${formatQuantity(max, type)} used`,
+      ? t("readings", "usageLimitIs", {
+          noun,
+          value: formatQuantity(limit, type),
+        })
+      : t("readings", "usageNoLimit", {
+          noun,
+          value: formatQuantity(max, type),
+        }),
   ].filter(Boolean);
   const restarts = restartIndices(points).length;
-  if (restarts > 0)
-    parts.push(`${restarts} restart${restarts === 1 ? "" : "s"}`);
+  if (restarts > 0) parts.push(t("readings", "usageRestarts", { n: restarts }));
   return `${parts.join(", ")}.`;
 }

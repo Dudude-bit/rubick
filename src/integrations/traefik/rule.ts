@@ -33,6 +33,9 @@
  * collided with other placeholders as a phantom duplicate.
  */
 
+import type { Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
 /** How a path term constrains the request. */
 export interface RulePath {
   kind: "prefix" | "exact";
@@ -68,7 +71,7 @@ export interface RuleReading {
    * Why nothing at all could be read, in words a reader can act on. `null`
    * when at least one clause came out.
    */
-  refused: string | null;
+  refused: Saying | null;
 }
 
 const HOST = new Set(["host"]);
@@ -355,7 +358,12 @@ function parseAtom(
 export function readRule(rule: string): RuleReading {
   const raw = rule;
   if (rule.trim() === "") {
-    return { raw, clauses: [], unread: [], refused: "the rule is empty" };
+    return {
+      raw,
+      clauses: [],
+      unread: [],
+      refused: { key: "traefikRuleEmpty" },
+    };
   }
 
   const tokens = tokenize(rule);
@@ -364,7 +372,7 @@ export function readRule(rule: string): RuleReading {
       raw,
       clauses: [],
       unread: [],
-      refused: "it is not a plain list of matchers",
+      refused: { key: "traefikRuleNotPlain" },
     };
   }
   if (tokens.some((token) => token.kind === "op" && token.op === "!")) {
@@ -372,7 +380,7 @@ export function readRule(rule: string): RuleReading {
       raw,
       clauses: [],
       unread: [],
-      refused: "it is negated, so a matcher in it is not a requirement",
+      refused: { key: "traefikRuleNegated" },
     };
   }
 
@@ -382,7 +390,7 @@ export function readRule(rule: string): RuleReading {
       raw,
       clauses: [],
       unread: [],
-      refused: "it is not a plain list of matchers",
+      refused: { key: "traefikRuleNotPlain" },
     };
   }
   const alternatives = parsed.alternatives;
@@ -395,7 +403,7 @@ export function readRule(rule: string): RuleReading {
         raw,
         clauses: [],
         unread: [],
-        refused: "it is not a plain list of matchers",
+        refused: { key: "traefikRuleNotPlain" },
       };
     }
     const read = readAlternative(alternative);
@@ -408,7 +416,7 @@ export function readRule(rule: string): RuleReading {
       raw,
       clauses: [],
       unread: [],
-      refused: "no host or path in it could be read",
+      refused: { key: "traefikRuleUnreadable" },
     };
   }
 
@@ -421,7 +429,9 @@ export function fullyRead(reading: RuleReading): boolean {
 }
 
 /** "/api", "/api (exact)", or the em dash a route with no path term gets. */
-export function describePath(path: RulePath | null): string {
-  if (!path) return "any path";
-  return path.kind === "exact" ? `${path.value} (exact)` : path.value;
+export function describePath(path: RulePath | null, t: T): string {
+  if (!path) return t("readings", "traefikAnyPath");
+  return path.kind === "exact"
+    ? t("readings", "traefikPathExact", { path: path.value })
+    : path.value;
 }

@@ -1,12 +1,12 @@
 import * as React from "react";
-import { FileText, FolderOpen } from "lucide-react";
+import { FileText, FolderOpen, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useSettingSearchMatch } from "../settings-search";
 import { cn } from "@/lib/utils";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The file every other line on this screen is downstream of, and how it
@@ -32,12 +32,19 @@ export function SourceLine() {
   const primary = source?.candidates[0];
   const contexts = source?.counts?.contexts;
   const busy = kubeconfig.isPending;
+  const pinned = kubeconfig.paths;
+  // Every file being read, however it got there. `$KUBECONFIG` can name
+  // several and the app merges them exactly the same way — the reader
+  // wanting to know which cluster came from which file does not care which
+  // of the two knobs put it there. Only a pinned file can be un-pinned
+  // here; the app cannot unset somebody's environment variable.
+  const files = source?.candidates ?? [];
 
-  const provenance = describeProvenance(source);
+  const provenance = describeProvenance(source, t);
   const visible = useSettingSearchMatch(
     primary?.path ?? "",
     provenance,
-    "kubeconfig file source contexts $KUBECONFIG default lookup override"
+    t("settings", "searchKubeconfigWords")
   );
 
   /**
@@ -132,6 +139,14 @@ export function SourceLine() {
             )}
             <button
               type="button"
+              onClick={() => void kubeconfig.add()}
+              disabled={busy}
+              className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            >
+              {t("settings", "addKubeconfigFile")}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setTyped(kubeconfig.overridePath ?? "");
                 setEditing(true);
@@ -142,6 +157,50 @@ export function SourceLine() {
             </button>
           </span>
         </>
+      )}
+      {files.length > 1 && (
+        <ul className="mt-1 w-full space-y-0.5">
+          {files.map((file) => {
+            const path = file.path;
+            const removable = pinned.includes(path);
+            return (
+              <li
+                key={path}
+                className="group flex items-baseline gap-2 rounded px-1 py-0.5 hover:bg-hover"
+              >
+                <span className="font-mono text-[11px] text-fg-mid">
+                  {path}
+                </span>
+                <span className="text-[11px] text-fg-fnt">
+                  {file && file.contexts.length > 0
+                    ? t("count", "contextsFromFile", {
+                        n: file.contexts.length,
+                      })
+                    : t("settings", "everyContextClaimedElsewhere")}
+                </span>
+                {!file.exists && (
+                  <span className="text-[11px] text-err">
+                    {t("settings", "fileNotThere")}
+                  </span>
+                )}
+                {removable && (
+                  <button
+                    type="button"
+                    aria-label={t("settings", "removeKubeconfigFile")}
+                    onClick={() => kubeconfig.remove(path)}
+                    disabled={busy}
+                    className="ml-auto rounded p-0.5 text-fg-fnt opacity-0 transition-opacity hover:text-err focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info group-hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+          <li className="px-1 pt-0.5 text-[11px] text-fg-fnt">
+            {t("settings", "mergedFirstWins")}
+          </li>
+        </ul>
       )}
     </div>
   );
@@ -154,15 +213,19 @@ export function SourceLine() {
  * and a list of four have to read differently; the reader who set the
  * variable is the only person who can say which of the four is wrong.
  */
-function describeProvenance(source: KubeconfigSource | undefined): string {
-  if (!source || source.candidates.length === 0) return "nothing was found";
+function describeProvenance(
+  source: KubeconfigSource | undefined,
+  t: T
+): string {
+  if (!source || source.candidates.length === 0)
+    return t("settings", "provenanceNothingFound");
   const origin = source.candidates[0].origin;
-  if (origin === "override") return "pinned here, in this app";
+  if (origin === "override") return t("settings", "provenancePinned");
   if (origin === "env") {
     const extra = source.candidates.length - 1;
     return extra > 0
-      ? `named by $KUBECONFIG, merged with ${extra} more file${extra === 1 ? "" : "s"}`
-      : "named by $KUBECONFIG";
+      ? t("settings", "provenanceEnvMerged", { n: extra })
+      : t("settings", "provenanceEnv");
   }
-  return "found by the default lookup, since $KUBECONFIG is unset";
+  return t("settings", "provenanceDefault");
 }

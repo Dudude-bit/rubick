@@ -6,15 +6,60 @@
 use super::{AuthProvider, AuthResult};
 use crate::error::{AuthError, Error, Result};
 use async_trait::async_trait;
-use azure_core::auth::TokenCredential;
+use azure_core::credentials::{Secret, TokenCredential};
+use std::sync::Arc;
+
+/// Which sign-in Azure is actually asked for.
+///
+/// `DefaultAzureCredential` used to decide this invisibly, and `azure_identity`
+/// 1.0 removed it on purpose. Two of the legs it walked — managed identity and
+/// workload identity — can only ever succeed for code running *inside* Azure,
+/// which a desktop client is not; asking for them here only bought a slower
+/// failure. What is left is the two that can work on somebody's laptop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Source {
+    /// A service principal named by the environment, the way CI and scripted
+    /// setups supply one.
+    ServicePrincipal {
+        tenant_id: String,
+        client_id: String,
+        secret: String,
+    },
+    /// Whatever `az login` left behind, for the tenant if one is known.
+    AzureCli { tenant_id: Option<String> },
+}
+
+impl Source {
+    /// A service principal needs all three parts; two of them is a half-filled
+    /// environment, not a credential, and trying it would report the wrong
+    /// problem to somebody who is simply logged in with `az`.
+    fn pick(tenant_id: Option<String>, client_id: Option<String>, secret: Option<String>) -> Self {
+        let full = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
+        match (full(tenant_id.clone()), full(client_id), full(secret)) {
+            (Some(tenant_id), Some(client_id), Some(secret)) => Self::ServicePrincipal {
+                tenant_id,
+                client_id,
+                secret,
+            },
+            _ => Self::AzureCli {
+                tenant_id: full(tenant_id),
+            },
+        }
+    }
+}
 
 /// Azure AKS authentication provider
 ///
 /// Uses `azure_identity` to obtain access tokens through:
-/// - `DefaultAzureCredential` chain (environment, managed identity, CLI, etc.)
-/// - Azure CLI credentials (fallback option)
+/// - a service principal from the environment, when one is fully specified
+/// - Azure CLI credentials
 pub struct AzureAksAuth {
-    /// Whether to use Azure CLI credentials as fallback
+    /// Whether to fall back to `az login` when a service principal fails.
+    ///
+    /// This used to be close to meaningless: the old chain tried the CLI
+    /// itself, so the flag only bought a second identical attempt. Now it
+    /// decides something real — with it off, a service principal that fails
+    /// says so instead of being quietly covered for by whoever is logged in.
     use_cli_fallback: bool,
     /// Tenant ID for authentication (optional)
     tenant_id: Option<String>,
@@ -41,47 +86,89 @@ impl AzureAksAuth {
 
     /// Get an access token using `azure_identity`
     async fn get_token(&self) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
-        // Try DefaultAzureCredential first
-        let credential = self.create_credential()?;
+        let source = self.source();
+        let credential = Self::credential(&source)?;
 
-        match self.fetch_token(&credential).await {
+        match self.fetch_token(credential.as_ref()).await {
             Ok(result) => Ok(result),
-            Err(e) if self.use_cli_fallback => {
-                tracing::warn!(
-                    "DefaultAzureCredential failed, trying Azure CLI fallback: {}",
-                    e
-                );
+            // Only worth a second attempt when the first one was something
+            // else. If the CLI is what already failed there is nothing left
+            // to fall back to, and retrying it would just repeat the error
+            // under a misleading heading.
+            Err(e)
+                if self.use_cli_fallback && matches!(source, Source::ServicePrincipal { .. }) =>
+            {
+                tracing::warn!("Service principal sign-in failed, trying Azure CLI: {}", e);
                 self.get_token_with_cli().await
             }
             Err(e) => Err(e),
         }
     }
 
-    /// Create the `DefaultAzureCredential`
-    fn create_credential(&self) -> Result<azure_identity::DefaultAzureCredential> {
-        // Set AZURE_TENANT_ID environment variable if tenant_id is provided
-        // This is used by EnvironmentCredential in the DefaultAzureCredential chain
-        if let Some(ref tenant) = self.tenant_id {
-            std::env::set_var("AZURE_TENANT_ID", tenant);
-        }
+    /// Which credential this provider will present.
+    ///
+    /// A tenant named by the kubeconfig wins over one named by the
+    /// environment: it is the one that describes *this* cluster.
+    fn source(&self) -> Source {
+        self.source_from(|key| std::env::var(key).ok())
+    }
 
-        azure_identity::DefaultAzureCredential::create(
-            azure_identity::TokenCredentialOptions::default(),
+    /// The same choice against a named environment, so a test can make one.
+    fn source_from(&self, env: impl Fn(&str) -> Option<String>) -> Source {
+        Source::pick(
+            self.tenant_id.clone().or_else(|| env("AZURE_TENANT_ID")),
+            env("AZURE_CLIENT_ID"),
+            env("AZURE_CLIENT_SECRET"),
         )
-        .map_err(|e| {
-            Error::Auth(AuthError::AzureAuth(format!(
-                "Failed to create Azure credential: {e}"
-            )))
-        })
+    }
+
+    /// Build the credential a source describes.
+    fn credential(source: &Source) -> Result<Arc<dyn TokenCredential>> {
+        let built: Arc<dyn TokenCredential> = match source {
+            Source::ServicePrincipal {
+                tenant_id,
+                client_id,
+                secret,
+            } => azure_identity::ClientSecretCredential::new(
+                tenant_id,
+                client_id.clone(),
+                Secret::new(secret.clone()),
+                None,
+            )
+            .map_err(|e| {
+                Error::Auth(AuthError::AzureAuth(format!(
+                    "Failed to create Azure credential: {e}"
+                )))
+            })?,
+            Source::AzureCli { tenant_id } => {
+                // The tenant travels as an option rather than through
+                // `AZURE_TENANT_ID`, which is what the old code set. That was
+                // a process-wide write: connect to a cluster in one tenant and
+                // every later cluster that named none inherited it.
+                let options =
+                    tenant_id
+                        .clone()
+                        .map(|tenant_id| azure_identity::AzureCliCredentialOptions {
+                            tenant_id: Some(tenant_id),
+                            ..Default::default()
+                        });
+                azure_identity::AzureCliCredential::new(options).map_err(|e| {
+                    Error::Auth(AuthError::AzureAuth(format!(
+                        "Failed to create Azure credential: {e}"
+                    )))
+                })?
+            }
+        };
+        Ok(built)
     }
 
     /// Fetch token using the provided credential
     async fn fetch_token(
         &self,
-        credential: &azure_identity::DefaultAzureCredential,
+        credential: &dyn TokenCredential,
     ) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
         let token_response = credential
-            .get_token(&[&self.scope])
+            .get_token(&[&self.scope], None)
             .await
             .map_err(|e| {
                 Error::Auth(AuthError::AzureAuth(format!(
@@ -90,36 +177,38 @@ impl AzureAksAuth {
                 )))
             })?;
 
-        let token = token_response.token.secret().to_string();
-
-        // Convert expiry time
-        let expires_at = {
-            let unix_timestamp = token_response.expires_on.unix_timestamp();
-            chrono::DateTime::<chrono::Utc>::from_timestamp(unix_timestamp, 0)
-        };
-
-        Ok((token, expires_at))
+        Ok(Self::read(&token_response))
     }
 
     /// Fallback to Azure CLI credentials
     async fn get_token_with_cli(&self) -> Result<(String, Option<chrono::DateTime<chrono::Utc>>)> {
-        let credential = azure_identity::AzureCliCredential::new();
-
-        let token_response = credential.get_token(&[&self.scope]).await.map_err(|e| {
-            Error::Auth(AuthError::AzureAuth(format!(
-                "Azure CLI authentication failed: {e}. \
-                     Please run 'az login' to authenticate."
-            )))
+        let credential = Self::credential(&Source::AzureCli {
+            tenant_id: self.tenant_id.clone(),
         })?;
 
+        let token_response = credential
+            .get_token(&[&self.scope], None)
+            .await
+            .map_err(|e| {
+                Error::Auth(AuthError::AzureAuth(format!(
+                    "Azure CLI authentication failed: {e}. \
+                     Please run 'az login' to authenticate."
+                )))
+            })?;
+
+        Ok(Self::read(&token_response))
+    }
+
+    /// The two things this app wants out of an access token.
+    fn read(
+        token_response: &azure_core::credentials::AccessToken,
+    ) -> (String, Option<chrono::DateTime<chrono::Utc>>) {
         let token = token_response.token.secret().to_string();
-
-        let expires_at = {
-            let unix_timestamp = token_response.expires_on.unix_timestamp();
-            chrono::DateTime::<chrono::Utc>::from_timestamp(unix_timestamp, 0)
-        };
-
-        Ok((token, expires_at))
+        let expires_at = chrono::DateTime::<chrono::Utc>::from_timestamp(
+            token_response.expires_on.unix_timestamp(),
+            0,
+        );
+        (token, expires_at)
     }
 }
 
@@ -250,6 +339,94 @@ mod tests {
     fn test_azure_aks_auth_with_tenant() {
         let auth = AzureAksAuth::new(true, Some("tenant-id".to_string()));
         assert_eq!(auth.name(), "azure_aks");
+    }
+
+    /// A named environment, so these say what they mean regardless of whose
+    /// machine runs them.
+    fn env_of(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let named: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        move |key| named.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+    }
+
+    #[test]
+    fn a_fully_named_service_principal_is_the_one_used() {
+        let auth = AzureAksAuth::new(true, None);
+        let source = auth.source_from(env_of(&[
+            ("AZURE_TENANT_ID", "t"),
+            ("AZURE_CLIENT_ID", "c"),
+            ("AZURE_CLIENT_SECRET", "s"),
+        ]));
+        assert_eq!(
+            source,
+            Source::ServicePrincipal {
+                tenant_id: "t".to_string(),
+                client_id: "c".to_string(),
+                secret: "s".to_string(),
+            }
+        );
+    }
+
+    /// Two thirds of a service principal is a half-filled environment. Trying
+    /// it would report a missing secret to somebody who is simply logged in
+    /// with `az` and never asked for one.
+    #[test]
+    fn a_half_named_service_principal_is_not_used_at_all() {
+        let auth = AzureAksAuth::new(true, None);
+        for env in [
+            vec![("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c")],
+            vec![("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_SECRET", "s")],
+            vec![
+                ("AZURE_TENANT_ID", "t"),
+                ("AZURE_CLIENT_ID", "c"),
+                ("AZURE_CLIENT_SECRET", "   "),
+            ],
+        ] {
+            assert_eq!(
+                auth.source_from(env_of(&env)),
+                Source::AzureCli {
+                    tenant_id: Some("t".to_string())
+                },
+                "for {env:?}"
+            );
+        }
+    }
+
+    /// The kubeconfig describes *this* cluster; the environment describes the
+    /// machine. When both name a tenant the cluster's is the right one.
+    #[test]
+    fn the_tenant_from_the_kubeconfig_beats_the_one_from_the_environment() {
+        let auth = AzureAksAuth::new(true, Some("from-kubeconfig".to_string()));
+        assert_eq!(
+            auth.source_from(env_of(&[("AZURE_TENANT_ID", "from-environment")])),
+            Source::AzureCli {
+                tenant_id: Some("from-kubeconfig".to_string())
+            }
+        );
+    }
+
+    /// The old code passed the tenant by writing `AZURE_TENANT_ID`, which is
+    /// process-wide: a cluster in one tenant left it set for every cluster
+    /// asked about afterwards, and one that named no tenant silently borrowed
+    /// it. Asking about the second cluster must come back empty-handed.
+    #[test]
+    fn a_tenant_does_not_leak_from_one_cluster_to_the_next() {
+        let env = env_of(&[]);
+        let first = AzureAksAuth::new(true, Some("tenant-a".to_string()));
+        assert_eq!(
+            first.source_from(&env),
+            Source::AzureCli {
+                tenant_id: Some("tenant-a".to_string())
+            }
+        );
+
+        let second = AzureAksAuth::new(true, None);
+        assert_eq!(
+            second.source_from(&env),
+            Source::AzureCli { tenant_id: None }
+        );
     }
 
     #[test]

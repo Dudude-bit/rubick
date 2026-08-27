@@ -7,6 +7,8 @@
  * the same hostname served twice, not a second place a request goes.
  */
 
+import type { T } from "@/i18n/useT";
+
 import { ResourceType } from "@/lib/resource-registry";
 
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
@@ -24,7 +26,8 @@ function toneOf(group: NginxHostGroup): MapTone {
 
 export function routingMap(
   groups: NginxHostGroup[],
-  sources: NginxSources
+  sources: NginxSources,
+  t: T
 ): RoutingMapData {
   const services = new Map<string, MapNode>();
   const edges: MapEdge[] = [];
@@ -63,7 +66,7 @@ export function routingMap(
           tag: !backing.known
             ? undefined
             : backing.stop
-              ? { text: "0 ready", tone: "err" }
+              ? { text: t("readings", "mapZeroReady"), tone: "err" }
               : {
                   text: `${backing.ready + backing.draining} ready`,
                   tone: backing.ready === 0 ? "warn" : "mute",
@@ -79,7 +82,7 @@ export function routingMap(
 
     return {
       id,
-      label: group.host ?? "any host",
+      label: group.host ?? t("action", "anyHost"),
       sub: `${group.routes.length} path${group.routes.length === 1 ? "" : "s"}`,
       tone,
       to: hostFilterPath(group.host),
@@ -95,14 +98,14 @@ export function routingMap(
           }
         : group.tlsSecrets.length > 0
           ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-          : { text: "no TLS", tone: "warn" },
+          : { text: t("empty", "noTls"), tone: "warn" },
     };
   });
 
   return {
     columns: [
-      { label: "Host", nodes: hosts, width: 216 },
-      { label: "Service", nodes: [...services.values()] },
+      { label: t("columns", "host"), nodes: hosts, width: 216 },
+      { label: t("columns", "service"), nodes: [...services.values()] },
     ],
     edges,
   };

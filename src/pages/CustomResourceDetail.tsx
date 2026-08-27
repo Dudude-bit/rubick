@@ -250,13 +250,17 @@ export function CustomResourceDetail() {
   const finalizers = resource?.finalizers ?? [];
 
   const facts: KeyValue[] = [
-    { label: "API version", value: resource?.apiVersion ?? "—", mono: true },
+    {
+      label: t("columns", "apiVersion"),
+      value: resource?.apiVersion ?? "—",
+      mono: true,
+    },
     { label: t("columns", "kind"), value: resource?.kind ?? "—", mono: true },
-    { label: "UID", value: resource?.uid ?? "—", mono: true },
+    { label: t("columns", "uid"), value: resource?.uid ?? "—", mono: true },
     ...(resource?.resourceVersion
       ? [
           {
-            label: "Resource version",
+            label: t("columns", "resourceVersion"),
             value: resource.resourceVersion,
             mono: true,
           },

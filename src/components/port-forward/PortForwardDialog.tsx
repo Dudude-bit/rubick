@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
-import { commands } from "@/lib/commands";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -49,6 +48,10 @@ export function PortForwardDialog({
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const sessions = usePortForwardStore((state) => state.sessions);
+  const addConfig = usePortForwardStore((state) => state.addConfig);
+  const startConfig = usePortForwardStore((state) => state.startConfig);
+  const startPod = usePortForwardStore((state) => state.startPod);
+  const stopSession = usePortForwardStore((state) => state.stopSession);
   const statusBySession = usePortForwardStore((state) => state.statusBySession);
   const currentContext = useClusterStore((state) => state.currentContext);
 
@@ -122,7 +125,12 @@ export function PortForwardDialog({
     setBusy(true);
     try {
       if (form.saveConfig && currentContext) {
-        await commands.createPortForwardConfig({
+        // Saving is not starting. This branch used to only write the config
+        // to disk and then fall into the same "Forward started" toast as the
+        // branch that starts one — so ticking the box turned Start into a
+        // button that saved something and announced a forward that was never
+        // listening.
+        const config = await addConfig({
           context: currentContext,
           name: form.name.trim() || `${podName}:${remotePort}`,
           pod: podName,
@@ -132,8 +140,9 @@ export function PortForwardDialog({
           autoReconnect: form.autoReconnect,
           autoStart: form.autoStart,
         });
+        await startConfig(config.id);
       } else {
-        await commands.portForwardPod(podName, podNamespace, {
+        await startPod(podName, podNamespace, {
           localPort,
           remotePort,
           autoReconnect: form.autoReconnect,
@@ -161,7 +170,7 @@ export function PortForwardDialog({
 
   const handleStopPortForward = async (sessionId: string) => {
     try {
-      await commands.stopPortForward(sessionId);
+      await stopSession(sessionId);
       toast({
         title: t("activity", "forwardStopped"),
       });

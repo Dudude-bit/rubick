@@ -9,7 +9,6 @@
  */
 
 import { integrationPagePath } from "../paths";
-import { plural } from "../kit";
 import type { VendorFact } from "../registry";
 import { countHosts, fetchRouteSources } from "./data";
 import { CONTROLLER } from "./model";
@@ -24,25 +23,34 @@ export async function facts(): Promise<VendorFact[]> {
     (ingressClass) => ingressClass.controller === CONTROLLER
   );
 
-  const lines: VendorFact[] = [{ text: plural(hosts, "host") }];
+  const lines: VendorFact[] = [
+    { say: { key: "factHosts", values: { n: hosts } } },
+  ];
 
   lines.push(
     served.length > 0
       ? {
-          text: `serves ${served.length === 1 ? "class" : "classes"} ${served
-            .map((ingressClass) => ingressClass.name)
-            .join(", ")}`,
+          say: {
+            key: "factServesClasses",
+            values: {
+              n: served.length,
+              names: served.map((ingressClass) => ingressClass.name).join(", "),
+            },
+          },
         }
       : {
           // Running, and no Ingress can reach it by class. Worth a colour:
           // it is the state that looks like nothing is wrong.
-          text: "claims no IngressClass",
+          say: { key: "factNoIngressClass" },
           tone: "warn",
         }
   );
 
   if (hosts > 0) {
-    lines.push({ text: "Show them", to: integrationPagePath("ingress-nginx") });
+    lines.push({
+      say: { key: "factShowThem" },
+      to: integrationPagePath("ingress-nginx"),
+    });
   }
 
   return lines;

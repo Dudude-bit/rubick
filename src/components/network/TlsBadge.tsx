@@ -1,3 +1,4 @@
+import { useT } from "@/i18n/useT";
 import {
   Tooltip,
   TooltipContent,
@@ -26,11 +27,12 @@ interface TlsBadgeProps {
  * right, and left "No TLS" looking like a failure rather than a choice.
  */
 export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
+  const t = useT();
   const explicitCount = tlsHosts.length;
   const vendorHosts = vendor?.hosts ?? [];
 
   if (explicitCount === 0 && !hasCatchAllTls && vendorHosts.length === 0) {
-    return <span className="text-fg-fnt">no TLS</span>;
+    return <span className="text-fg-fnt">{t("empty", "noTls")}</span>;
   }
 
   // The controller's answer is not a Secret in this cluster, so it is counted
@@ -42,7 +44,9 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
           TLS {vendorHosts.length}
         </TooltipTrigger>
         <TooltipContent>
-          <div className="text-xs">from {vendor?.by}</div>
+          <div className="text-xs">
+            {vendor && t("readings", "tlsFromVendor", { by: vendor.by })}
+          </div>
           {vendorHosts.map((host) => (
             <div key={host} className="text-xs">
               {host}
@@ -62,7 +66,9 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
 
   const hosts = [
     ...(hasCatchAllTls ? [...tlsHosts, "+ catch-all certificate"] : tlsHosts),
-    ...vendorHosts.map((host) => `${host} — from ${vendor?.by}`),
+    ...vendorHosts.map((host) =>
+      vendor ? t("readings", "tlsHostFrom", { host, by: vendor.by }) : host
+    ),
   ];
 
   return (

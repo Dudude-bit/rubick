@@ -104,7 +104,7 @@ describe("Flux publishes no per-object drift, and this says so", () => {
     ]);
     const [answer] = await ownerOf([podinfo()]);
     if (answer?.state !== "delivered") throw new Error("unreachable");
-    expect(answer.source.warning).toBe("suspended");
+    expect(answer.source.warning?.key).toBe("fluxSuspendedWord");
     expect(answer.source.drift).toBe("unmanaged");
   });
 });

@@ -15,6 +15,8 @@
  * kubelet from the container's own environment.
  */
 
+import type { Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -58,8 +60,12 @@ export async function fetchRouteSources(): Promise<RouteSources> {
  * page pivoted by host would disagree with the page it links to.
  */
 export function countHosts(sources: RouteSources): number {
+  // The count reads `route.host` and nothing else, so it cannot depend on
+  // the language — and threading a translator in so that a number could
+  // ignore it would be a parameter that exists to be discarded.
+  const noWords: T = () => "";
   const hosts = new Set(
-    allRoutes({ ...sources, services: [], published: [] }).map(
+    allRoutes({ ...sources, services: [], published: [] }, noWords).map(
       (route) => route.host ?? ""
     )
   );
@@ -85,7 +91,7 @@ export interface GlobalConfig {
   name: string;
   data: Record<string, string>;
   /** Why there is nothing above, in words rather than an empty object. */
-  problem: string | null;
+  problem: Saying | null;
 }
 
 export interface ControllerInfo {
@@ -100,7 +106,7 @@ export interface ControllerInfo {
   /** The class names this controller was told to answer for, from its flags. */
   watching: { controllerClass: string | null; ingressClass: string | null };
   config: GlobalConfig | null;
-  problem: string | null;
+  problem: Saying | null;
 }
 
 /** `--configmap=ns/name`, `--configmap ns/name`, either spelling. */
@@ -114,7 +120,7 @@ function flagValue(args: string[], flag: string): string | null {
 }
 
 async function fetchController(): Promise<ControllerInfo> {
-  const none = (problem: string): ControllerInfo => ({
+  const none = (problem: Saying): ControllerInfo => ({
     workload: null,
     args: [],
     watching: { controllerClass: null, ingressClass: null },
@@ -133,9 +139,10 @@ async function fetchController(): Promise<ControllerInfo> {
 
   const deployment = deployments[0];
   if (!deployment) {
-    return none(
-      `Nothing in this cluster carries ${CONTROLLER_SELECTOR}, so the controller's own configuration could not be read — including which ConfigMap is the global one.`
-    );
+    return none({
+      key: "nginxNoController",
+      values: { selector: CONTROLLER_SELECTOR },
+    });
   }
 
   const workload = {
@@ -160,9 +167,12 @@ async function fetchController(): Promise<ControllerInfo> {
       args: [],
       watching: { controllerClass: null, ingressClass: null },
       config: null,
-      problem: `Its manifest could not be read, so the global ConfigMap it uses is unknown — ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      problem: {
+        key: "nginxManifestUnreadable",
+        values: {
+          why: error instanceof Error ? error.message : String(error),
+        },
+      },
     };
   }
 
@@ -180,8 +190,7 @@ async function fetchController(): Promise<ControllerInfo> {
       args,
       watching,
       config: null,
-      problem:
-        "This controller was started with no --configmap flag, so it has no global ConfigMap and every setting comes from its own defaults or from an Ingress.",
+      problem: { key: "nginxNoConfigMapFlag" },
     };
   }
 
@@ -214,9 +223,13 @@ async function fetchController(): Promise<ControllerInfo> {
         namespace,
         name,
         data: {},
-        problem: `The controller reads ${namespace}/${name}, and it could not be read here — ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        problem: {
+          key: "nginxConfigMapUnreadable",
+          values: {
+            where: `${namespace}/${name}`,
+            why: error instanceof Error ? error.message : String(error),
+          },
+        },
       },
       problem: null,
     };

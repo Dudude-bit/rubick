@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Link } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2, List } from "lucide-react";
 import {
   DropdownMenuItem,

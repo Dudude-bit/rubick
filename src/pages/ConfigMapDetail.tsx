@@ -78,7 +78,7 @@ export function ConfigMapDetail() {
         />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "metadata",
       label: t("nav", "metadata"),
@@ -101,7 +101,7 @@ export function ConfigMapDetail() {
       ),
     },
     yamlTab({
-      title: "ConfigMap YAML",
+      title: t("action", "kindYaml", { kind: "ConfigMap" }),
       yaml: configMapYaml,
       resourceKind: ResourceType.ConfigMap,
       resourceName: name || "",

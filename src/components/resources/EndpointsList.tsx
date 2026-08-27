@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { CircleDot } from "lucide-react";
 
@@ -25,7 +25,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
   {
     size: 200,
     id: "endpoints",
-    header: "Endpoints",
+    header: () => <T section="columns" k="endpoints" />,
     cell: ({ row }) => {
       const readyCount = row.original.subsets.reduce(
         (acc, s) => acc + s.addresses.length,
@@ -163,8 +163,8 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
 export const EndpointsList = createResourceListPage<EndpointsInfo>({
   resourceType: ResourceType.Endpoints,
   title: "Endpoints",
-  description: ({ scope }) =>
-    `Network endpoints for services in ${scope.inWords}`,
+  description: ({ scope, t }) =>
+    t("empty", "endpointsFor", { scope: scope.inWords }),
   searchKey: "name",
   fetcher: ({ namespace }) =>
     commands.listEndpoints({

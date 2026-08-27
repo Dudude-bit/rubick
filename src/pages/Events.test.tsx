@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -139,6 +140,81 @@ describe("what the limit is counted against", () => {
     expect(
       await screen.findByText(/500 normal · latest 500/)
     ).toBeInTheDocument();
+    // Five hundred rows in jsdom is the most expensive render in the suite.
+    // Alone it takes about a second; sharing eight cores with the rest of
+    // the files it has been seen at twelve, which the 5s default turns into
+    // a failure that says "timed out" about code that is working. The number
+    // is headroom for a loaded machine, not an expectation.
+  }, 30_000);
+});
+
+describe("narrowing the feed", () => {
+  /**
+   * The filter runs against the whole pool the limit bought, not against
+   * what is left after the cut. Searching the cut would read the newest 500
+   * rows and report "none" about a cluster that has the row, just further
+   * back than the window.
+   */
+  it("searches the pool, not the page", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["prod"],
+      currentNamespace: "prod",
+    });
+    listEvents.mockImplementation(async () => {
+      const rows = feed("prod", 40);
+      // The one row worth finding is the oldest, past any small cut.
+      rows[rows.length - 1] = {
+        ...rows[rows.length - 1],
+        involvedObject: {
+          kind: "Pod",
+          name: "needle-pod",
+          namespace: "prod",
+          uid: null,
+        },
+      };
+      return rows;
+    });
+    mount();
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    const box = screen.getByPlaceholderText(/filter events/i);
+    await userEvent.type(box, "needle");
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("needle-pod")
+    );
+    expect(document.body.textContent).not.toContain("prod-pod-0");
+  });
+
+  /**
+   * A feed filtered down to nothing has not told the reader their scope is
+   * quiet. It has told them their query missed, and those have different
+   * next moves.
+   */
+  it("says the query missed rather than that the scope is empty", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["prod"],
+      currentNamespace: "prod",
+    });
+    listEvents.mockImplementation(async () => feed("prod", 5));
+    mount();
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    await userEvent.type(
+      screen.getByPlaceholderText(/filter events/i),
+      "nothing-matches-this"
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/matches/i)).toBeInTheDocument()
+    );
+    expect(document.body.textContent).not.toMatch(/No events in .* yet/);
   });
 });
 
@@ -165,4 +241,31 @@ describe("what the join costs", () => {
     expect(sort).not.toHaveBeenCalled();
     sort.mockRestore();
   });
+
+  /**
+   * The filter and the limit are two different ceilings, and a search that
+   * finds nothing must not be worded as an empty scope. Nothing here says
+   * the pod has no events — only that none of the ones actually read match,
+   * and the reading stopped at the limit somebody chose.
+   */
+  it("says the search stopped at the limit rather than that the scope is quiet", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["prod"],
+      currentNamespace: "prod",
+    });
+    // A full window: the apiserver gave back everything the limit allows.
+    listEvents.mockImplementation(async () => feed("prod", 500));
+    mount();
+
+    await screen.findByText(/500 normal/);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Filter events/i),
+      "nothing-matches-this"
+    );
+
+    const said = await screen.findByText(/latest 500 events/i);
+    expect(said).toBeInTheDocument();
+    // The honest half: it says what was searched, not what exists.
+    expect(said.textContent).toMatch(/not read/i);
+  }, 30_000);
 });

@@ -16,6 +16,7 @@
  * own voice rather than going quiet.
  */
 
+import { sayWords } from "@/i18n/say";
 import { useCallback, useMemo, useState } from "react";
 import type { ServiceStop } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
@@ -53,7 +54,7 @@ import {
   TroubleRow,
   type Tone,
 } from "../page-kit";
-import { RAW_NOTE, type AnnotationReading } from "./annotations";
+import { rawNote, type AnnotationReading } from "./annotations";
 import { readSettings, type SettingReading } from "./configmap";
 import {
   sourcesFrom,
@@ -93,9 +94,9 @@ export default function IngressNginxPage() {
   const routes = useMemo(
     () =>
       routeSources.data
-        ? allRoutes({ ...routeSources.data, services: [], published: [] })
+        ? allRoutes({ ...routeSources.data, services: [], published: [] }, t)
         : [],
-    [routeSources.data]
+    [routeSources.data, t]
   );
   const certificates = useRouteCertificates(routes);
 
@@ -164,7 +165,7 @@ export default function IngressNginxPage() {
     : null;
 
   const groups = useMemo(
-    () => (sources ? hostGroups(sources) : []),
+    () => (sources ? hostGroups(sources, t) : []),
     // `sources` is rebuilt every render; the inputs it is built from are what
     // actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,7 +188,7 @@ export default function IngressNginxPage() {
 
   const troubled = groups.filter((group) => group.worst !== null);
   const settings = controller.data?.config
-    ? readSettings(controller.data.config.data)
+    ? readSettings(controller.data.config.data, t)
     : [];
 
   const tabs: DetailTab[] = [
@@ -278,8 +279,8 @@ function MapTab({
 }) {
   const t = useT();
   const data = useMemo(
-    () => (sources ? routingMap(groups, sources) : null),
-    [groups, sources]
+    () => (sources ? routingMap(groups, sources, t) : null),
+    [groups, sources, t]
   );
 
   if (loading) {
@@ -881,7 +882,7 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
             {reading.value}
           </pre>
           <p className="mt-0.5 text-[11px] text-fg-fnt">
-            {RAW_NOTE[reading.raw!]}
+            {rawNote(reading.raw!, t)}
           </p>
         </>
       )}
@@ -951,7 +952,7 @@ function describeFinding(
 ): { title: string; note: string } {
   switch (finding.kind) {
     case "stop": {
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest503", {
           reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
@@ -1088,7 +1089,9 @@ function SettingsTab({
           {t("empty", "noGlobalNginxSettings")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {controller.problem ?? t("empty", "controllerNamesNoConfigMap")}
+          {controller.problem
+            ? sayWords(controller.problem, t)
+            : t("empty", "controllerNamesNoConfigMap")}
         </p>
       </div>
     );
@@ -1115,7 +1118,7 @@ function SettingsTab({
         {t("empty", "namedInConfigmapFlagPost")}
       </p>
       {config.problem ? (
-        <p className="text-[11px] text-warn">{config.problem}</p>
+        <p className="text-[11px] text-warn">{sayWords(config.problem, t)}</p>
       ) : settings.length === 0 ? (
         <p className="text-[11px] text-fg-fnt">
           {t("empty", "configMapEmptyDefaults")}
@@ -1143,7 +1146,7 @@ function SettingsTab({
                       : "text-[11.5px] text-fg-fnt"
                   }
                 >
-                  {setting.said ?? RAW_NOTE[setting.raw!]}
+                  {setting.said ?? rawNote(setting.raw!, t)}
                 </span>
                 {setting.overridable && (
                   <span className="text-[11px] text-fg-fnt">
@@ -1206,12 +1209,14 @@ function ControllerTab({
               </span>
             )}
             {controller.problem && (
-              <p className="text-[11px] text-warn">{controller.problem}</p>
+              <p className="text-[11px] text-warn">
+                {sayWords(controller.problem, t)}
+              </p>
             )}
           </div>
         ) : (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         )}
       </Section>

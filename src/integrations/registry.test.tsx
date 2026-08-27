@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { DetectedExtension } from "@/generated/types";
 
+import { translate } from "@/i18n";
+
 const detect = vi.fn<() => Promise<DetectedExtension[]>>();
 
 vi.mock("@/lib/commands", () => ({
@@ -100,7 +102,10 @@ describe("useCrdView", () => {
     ["appgw.ingress.k8s.io", "AzureIngressProhibitedTarget", "Leaves alone"],
   ])("draws %s/%s with the vendor's own columns", (group, kind, header) => {
     const columns = view(group, kind)?.columnsFor(kind);
-    expect(columns?.map((c) => c.header)).toContain(header);
+    // The heading is a key now; what the reader sees is what this pins.
+    expect(columns?.map((c) => translate("en", "columns", c.header))).toContain(
+      header
+    );
   });
 
   /**

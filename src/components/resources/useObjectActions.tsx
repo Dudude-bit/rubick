@@ -216,7 +216,7 @@ export function useObjectActions({
     onError: failed("scale"),
   });
 
-  const plan = planPeekActions(kind, detail, {
+  const plan = planPeekActions(kind, detail, t, {
     backend: backendQuery.data,
     backendPending:
       backendQuery.isPending && backendQuery.fetchStatus !== "idle",
@@ -278,8 +278,8 @@ export function useObjectActions({
       : null
     : podForward(pod);
 
-  const deletion = describeDeletion(kind, name, namespace, detail);
-  const bareRestart = describeBareRestart(name, namespace);
+  const deletion = describeDeletion(kind, name, namespace, detail, t);
+  const bareRestart = describeBareRestart(name, namespace, t);
 
   const dialogs = (
     <>
@@ -324,7 +324,7 @@ export function useObjectActions({
           kind={kind}
           current={(detail as ScalableInfo | undefined)?.replicas.desired ?? 0}
           busy={scale.isPending}
-          warnings={scaleWarnings(governance.data, intercept("Scale"))}
+          warnings={scaleWarnings(governance.data, intercept("Scale"), t)}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}

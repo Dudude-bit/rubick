@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { certificateRows, issuerRows, worstCertificateTone } from "./model";
 import type { CustomResourceInfo } from "@/generated/types";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const DAY = 86_400_000;
 const inDays = (days: number) =>
   new Date(Date.now() + days * DAY).toISOString();
@@ -112,7 +118,8 @@ describe("ordering by trouble", () => {
       ],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(rows.map((row) => row.name)).toEqual([
       "never",
@@ -147,7 +154,8 @@ describe("ordering by trouble", () => {
       ],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(rows.map((row) => row.name)).toEqual(["omega", "alpha"]);
   });
@@ -162,7 +170,8 @@ describe("ordering by trouble", () => {
       [certificate({ ready: false, notAfter: null })],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(never.neverIssued).toBe(true);
     expect(never.state).toEqual({ text: "never issued", tone: "err" });
@@ -171,7 +180,8 @@ describe("ordering by trouble", () => {
       [certificate({ ready: false, notAfter: inDays(20) })],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(renewing.neverIssued).toBe(false);
     expect(renewing.state).toEqual({ text: "renewal failing", tone: "err" });
@@ -182,7 +192,8 @@ describe("ordering by trouble", () => {
       [certificate({ ready: true, notAfter: inDays(60) })],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(row.state.tone).toBe("ok");
     expect(row.steps).toEqual([]);
@@ -205,7 +216,8 @@ describe("ordering by trouble", () => {
       ],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(row.state).toEqual({ text: "renews in 1 day", tone: "ok" });
   });
@@ -223,7 +235,8 @@ describe("ordering by trouble", () => {
       ],
       [],
       [],
-      []
+      [],
+      t
     );
     expect(row.state).toEqual({
       text: "renewal overdue — expires in 2 days",
@@ -318,7 +331,7 @@ describe("the walk", () => {
       },
     });
 
-    const [row] = certificateRows([cert], [request], [order], [challenge]);
+    const [row] = certificateRows([cert], [request], [order], [challenge], t);
     expect(row.steps.map((step) => step.kind)).toEqual([
       "Certificate",
       "CertificateRequest",
@@ -351,13 +364,13 @@ describe("the walk", () => {
       annotations: { "cert-manager.io/certificate-revision": "4" },
     });
 
-    const [row] = certificateRows([cert], [old, fresh], [], []);
+    const [row] = certificateRows([cert], [old, fresh], [], [], t);
     expect(row.steps[1].name).toBe("new");
   });
 
   it("stops at the point nothing has been requested yet", () => {
     const cert = certificate({ uid: "cert-1", ready: false, notAfter: null });
-    const [row] = certificateRows([cert], [], [], []);
+    const [row] = certificateRows([cert], [], [], [], t);
     expect(row.steps.map((step) => step.kind)).toEqual(["Certificate"]);
   });
 });
@@ -413,7 +426,8 @@ describe("issuers", () => {
       ],
       [],
       [],
-      []
+      [],
+      t
     );
     const [row] = issuerRows([issuer("le", { namespace: "shop" })], [], certs);
     expect(row.serves).toBe(1);

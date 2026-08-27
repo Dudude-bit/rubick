@@ -39,7 +39,7 @@ import {
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { formatAge } from "@/lib/utils";
-import { conditionsOf, crdObjectsPath, getValueByPath, plural } from "../kit";
+import { conditionsOf, crdObjectsPath, getValueByPath } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -209,7 +209,10 @@ export default function ArgoCdPage() {
           applications.isPending
             ? undefined
             : t("empty", "acrossEveryNamespace", {
-                count: plural(apps.length, "Application"),
+                count: t("readings", "kindCount", {
+                  n: apps.length,
+                  kind: "Application",
+                }),
               })
         }
         description={t("empty", "argoPageDescription")}
@@ -265,7 +268,7 @@ function ApplicationsTab({
       (app) =>
         app.name.toLowerCase().includes(needle) ||
         app.project.toLowerCase().includes(needle) ||
-        destinationOf(app).toLowerCase().includes(needle) ||
+        destinationOf(app, t).toLowerCase().includes(needle) ||
         app.sources.some((source) =>
           source.repoUrl.toLowerCase().includes(needle)
         ) ||
@@ -273,7 +276,7 @@ function ApplicationsTab({
           resource.name.toLowerCase().includes(needle)
         )
     );
-  }, [apps, filter]);
+  }, [apps, filter, t]);
 
   if (loading) {
     return (
@@ -319,7 +322,10 @@ function ApplicationsTab({
               : worthALook > 0
                 ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: apps.length })}`
                 : t("empty", "allInSync", {
-                    count: plural(apps.length, "Application"),
+                    count: t("readings", "kindCount", {
+                      n: apps.length,
+                      kind: "Application",
+                    }),
                   })}
         </span>
       </div>
@@ -354,7 +360,7 @@ function AppRow({
   last: boolean;
 }) {
   const t = useT();
-  const state = appState(app);
+  const state = appState(app, t);
   const changed = differing(app);
   const url = applicationUrl(ui, app);
 
@@ -371,7 +377,7 @@ function AppRow({
         <>
           {t("empty", "argoProjectDestination", {
             project: app.project,
-            destination: destinationOf(app),
+            destination: destinationOf(app, t),
           })}
           {app.generatedBy &&
             ` · ${t("empty", "generatedByName", {
@@ -626,18 +632,19 @@ function ResourceLine({
   resource: ArgoResource;
   crdFor: CrdLookup;
 }) {
+  const t = useT();
   const tone = resourceTone(resource);
   const said =
     resource.sync === "Missing"
-      ? "missing"
+      ? t("readings", "argoMissing")
       : resource.outcome === "SyncFailed"
-        ? "failed to apply"
+        ? t("readings", "argoFailedToApply")
         : resource.sync !== null && resource.sync !== "Synced"
-          ? "out of sync"
+          ? t("readings", "argoOutOfSync")
           : resource.health === "Degraded"
-            ? "degraded"
+            ? t("readings", "argoDegraded")
             : resource.health === "Progressing"
-              ? "progressing"
+              ? t("readings", "argoProgressing")
               : null;
 
   return (
@@ -912,7 +919,10 @@ function AppSetsTab({
                     : generated.map((app) => app.name).join(", ")}
                 </span>
                 <span className="text-[11px] text-fg-fnt">
-                  {plural(generated.length, "Application")}
+                  {t("readings", "kindCount", {
+                    n: generated.length,
+                    kind: "Application",
+                  })}
                 </span>
               </div>
               {error && (
@@ -1003,7 +1013,10 @@ function ProjectsTab({
                       .join(", ")}
               </span>
               <span className="text-[11px] text-fg-fnt">
-                {plural(members.length, "Application")}
+                {t("readings", "kindCount", {
+                  n: members.length,
+                  kind: "Application",
+                })}
               </span>
             </div>
           );

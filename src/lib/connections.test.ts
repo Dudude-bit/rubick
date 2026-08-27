@@ -1,4 +1,9 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
   chainSilence,
@@ -145,7 +150,8 @@ describe("the traffic chain", () => {
             { endpoints: [endpointOf("log-demo-a"), endpointOf("log-demo-b")] }
           ),
         ]
-      )
+      ),
+      t
     )[0];
 
     expect(path.hops.map((hop) => hop.at)).toEqual([
@@ -196,7 +202,8 @@ describe("the traffic chain", () => {
             tls: false,
           },
         },
-      ])
+      ]),
+      t
     )[0];
 
     const hop = path.hops[0];
@@ -238,7 +245,8 @@ describe("the traffic chain", () => {
           to: gateway,
           relation: { verb: "attachesTo", sectionName: "https" },
         },
-      ])
+      ]),
+      t
     )[0];
 
     const [gatewayHop, routeHopDrawn] = path.hops;
@@ -290,7 +298,8 @@ describe("the traffic chain", () => {
             message: "no listener hostname matches",
           },
         ]
-      )
+      ),
+      t
     )[0];
 
     const stop = path.hops.find((hop) => hop.at === "stop");
@@ -331,7 +340,8 @@ describe("the traffic chain", () => {
           },
         ],
         [{ reason: "gatewayMissing", route, gateway: ghost }]
-      )
+      ),
+      t
     )[0];
 
     const gatewayHop = path.hops[0];
@@ -364,7 +374,8 @@ describe("the traffic chain", () => {
             weight: 0,
           },
         },
-      ])
+      ]),
+      t
     )[0];
 
     const routeHopDrawn = path.hops[0];
@@ -407,6 +418,7 @@ describe("the traffic chain", () => {
           },
         },
       ]),
+      t,
       {
         routing: new Map([
           [
@@ -480,12 +492,12 @@ describe("the traffic chain", () => {
       },
     ];
 
-    const unread = trafficChains(connections(deployment, edges))[0];
+    const unread = trafficChains(connections(deployment, edges), t)[0];
     const first = unread.hops[0];
     if (first.at !== "object") throw new Error("expected the Ingress hop");
     expect(first.publishedAt).toBeNull();
 
-    const read = trafficChains(connections(deployment, edges), {
+    const read = trafficChains(connections(deployment, edges), t, {
       routing: new Map([
         [
           "Ingress/k8s-gui-test/log-demo",
@@ -528,6 +540,7 @@ describe("the traffic chain", () => {
           },
         },
       ]),
+      t,
       {
         routing: new Map([
           [
@@ -579,6 +592,7 @@ describe("the traffic chain", () => {
             },
           },
         ]),
+        t,
         {
           routing: new Map([
             [
@@ -655,7 +669,8 @@ describe("the traffic chain", () => {
             pods: 2,
           },
         ]
-      )
+      ),
+      t
     )[0];
 
     expect(path.broken).toBe(true);
@@ -680,7 +695,7 @@ describe("the traffic chain", () => {
         { reason: "selectsNothing", service: svc, selector: "app=tls-demo" },
         { reason: "noneReady", service: svc, selector: "app=x", pods: 2 },
       ] satisfies ChainStop[]
-    ).map((stop) => describeStop(stop).title);
+    ).map((stop) => describeStop(stop, t).title);
 
     expect(new Set(titles).size).toBe(3);
     expect(titles[0]).toContain("No Service named demo");
@@ -700,8 +715,8 @@ describe("the traffic chain", () => {
       },
     ]);
 
-    expect(trafficChains(conns)).toEqual([]);
-    expect(chainSilence(conns)).toContain("No Service in this namespace");
+    expect(trafficChains(conns, t)).toEqual([]);
+    expect(chainSilence(conns, t)).toContain("No Service in this namespace");
   });
 
   it("says an ExternalName resolves elsewhere rather than drawing an empty chain", () => {
@@ -717,8 +732,8 @@ describe("the traffic chain", () => {
     });
     const conns = connections(svc, []);
 
-    expect(trafficChains(conns)).toEqual([]);
-    expect(chainSilence(conns)).toContain("example.com");
+    expect(trafficChains(conns, t)).toEqual([]);
+    expect(chainSilence(conns, t)).toContain("example.com");
   });
 });
 
@@ -742,7 +757,7 @@ describe("the groups", () => {
   it("phrases a usage from what the backend sent, not from the pod spec", () => {
     /** `Usage` carries the path and the key. Rebuilding "mounted at /etc/app"
      *  from a volume list is how the two spellings drift apart. */
-    expect(describeUsages([mount, env])).toEqual([
+    expect(describeUsages([mount, env], t)).toEqual([
       "mounted at /etc/app, and APP_MESSAGE reads app.conf",
     ]);
   });
@@ -753,12 +768,15 @@ describe("the groups", () => {
      *  sentence. Lines make it readable — and the two containers mounting
      *  one path share a line rather than printing that path twice. */
     expect(
-      describeUsages([
-        mount,
-        { ...mount, container: "seed" },
-        env,
-        { how: "envFrom", container: "app" },
-      ])
+      describeUsages(
+        [
+          mount,
+          { ...mount, container: "seed" },
+          env,
+          { how: "envFrom", container: "app" },
+        ],
+        t
+      )
     ).toEqual([
       "app, seed · mounted at /etc/app",
       "app · APP_MESSAGE reads app.conf",
@@ -772,10 +790,13 @@ describe("the groups", () => {
      *  line per container printed that path once per container, and the
      *  containers are left off a line no other line contends with. */
     expect(
-      describeUsages([
-        { ...mount, container: "ingest", projected: true, readOnly: true },
-        { ...mount, container: "web", projected: true, readOnly: true },
-      ])
+      describeUsages(
+        [
+          { ...mount, container: "ingest", projected: true, readOnly: true },
+          { ...mount, container: "web", projected: true, readOnly: true },
+        ],
+        t
+      )
     ).toEqual(["projected into /etc/app, read-only"]);
   });
 
@@ -784,10 +805,13 @@ describe("the groups", () => {
      *  two mounts, not one: grouping keys on what the line says, so the
      *  read-only flag splits them and the containers say which is which. */
     expect(
-      describeUsages([
-        { ...mount, container: "seed" },
-        { ...mount, readOnly: true },
-      ])
+      describeUsages(
+        [
+          { ...mount, container: "seed" },
+          { ...mount, readOnly: true },
+        ],
+        t
+      )
     ).toEqual([
       "seed · mounted at /etc/app",
       "app · mounted at /etc/app, read-only",
@@ -819,7 +843,8 @@ describe("the groups", () => {
             usages: [{ ...mount, path: "/var/lib/data" }],
           },
         },
-      ])
+      ]),
+      t
     );
 
     const needs = groups.find((group) => group.key === "needs");
@@ -846,7 +871,8 @@ describe("the groups", () => {
             why: "the app does not read HorizontalPodAutoscalers, so it cannot say whether one scales this",
           },
         ]
-      )
+      ),
+      t
     );
 
     const unasked = groups.find((group) => group.key === "unasked");
@@ -885,7 +911,8 @@ describe("a governing edge says which query reached it", () => {
             selector: "app in (expr-demo),track notin (canary)",
           },
         },
-      ])
+      ]),
+      t
     );
 
     const row = groups.find((group) => group.key === "governs")?.rows[0];
@@ -913,7 +940,8 @@ describe("a governing edge says which query reached it", () => {
           to: pod("expr-demo-a", true),
           relation: { verb: "governs", selector: "app in (expr-demo)" },
         },
-      ])
+      ]),
+      t
     );
 
     expect(
@@ -952,7 +980,8 @@ describe("a node, which is the same edge read from the other end", () => {
         placed("log-demo-a", "k8s-gui-test"),
         placed("coredns-x", "kube-system"),
         placed("log-demo-b", "k8s-gui-test"),
-      ])
+      ]),
+      t
     );
 
     const here = groups.find((group) => group.key === "placed");
@@ -980,7 +1009,8 @@ describe("a node, which is the same edge read from the other end", () => {
       },
     };
     const groups = connectionGroups(
-      connections(cordoned, [placed("log-demo-a", "k8s-gui-test")])
+      connections(cordoned, [placed("log-demo-a", "k8s-gui-test")]),
+      t
     );
     expect(groups.find((group) => group.key === "placed")?.caption).toContain(
       "cordoned"
@@ -997,7 +1027,8 @@ describe("a node, which is the same edge read from the other end", () => {
           to: node(),
           relation: { verb: "runsOn" },
         },
-      ])
+      ]),
+      t
     );
     const placement = groups.find((group) => group.key === "placement");
     expect(placement?.title).toBe("Runs on");
@@ -1043,7 +1074,8 @@ describe("what the Service publishes", () => {
             }
           ),
         ]
-      )
+      ),
+      t
     )[0];
 
     expect(path.broken).toBe(false);
@@ -1063,14 +1095,17 @@ describe("what the Service publishes", () => {
    * as "it does not work".
    */
   it("names the port a Service asks for that no container declares", () => {
-    const said = describeStop({
-      reason: "publishesNothing",
-      service: service("named-port-demo", "app=named-port-demo"),
-      selector: "app=named-port-demo",
-      pods: 2,
-      readyPods: 2,
-      unnamedPorts: ["http"],
-    });
+    const said = describeStop(
+      {
+        reason: "publishesNothing",
+        service: service("named-port-demo", "app=named-port-demo"),
+        selector: "app=named-port-demo",
+        pods: 2,
+        readyPods: 2,
+        unnamedPorts: ["http"],
+      },
+      t
+    );
 
     expect(said.title).toBe("This Service publishes no endpoint");
     expect(said.note).toContain("2 pods match its selector");
@@ -1082,14 +1117,17 @@ describe("what the Service publishes", () => {
   /** And it declines to explain what it cannot see. A pod missing from every
    *  slice for a reason nothing states gets no invented cause. */
   it("says only what it holds when the reason is not derivable", () => {
-    const said = describeStop({
-      reason: "publishesNothing",
-      service: service("mystery", "app=mystery"),
-      selector: "app=mystery",
-      pods: 1,
-      readyPods: 1,
-      unnamedPorts: [],
-    });
+    const said = describeStop(
+      {
+        reason: "publishesNothing",
+        service: service("mystery", "app=mystery"),
+        selector: "app=mystery",
+        pods: 1,
+        readyPods: 1,
+        unnamedPorts: [],
+      },
+      t
+    );
 
     expect(said.note).toContain("not something these objects state");
     expect(said.note).not.toContain("targetPort");
@@ -1112,7 +1150,8 @@ describe("what the Service publishes", () => {
             why: "readiness here is each pod's own Ready condition",
           },
         ]
-      )
+      ),
+      t
     );
 
     const unasked = groups.find((group) => group.key === "unasked");
@@ -1137,7 +1176,7 @@ describe("where a pod's replica count is really set", () => {
   });
 
   const ownerRows = (subject: ObjectRef, edges: ConnectionEdge[]) =>
-    connectionGroups(connections(subject, edges)).find(
+    connectionGroups(connections(subject, edges), t).find(
       (group) => group.key === "owners"
     )?.rows ?? [];
 

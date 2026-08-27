@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
 import { StorageClassRef } from "./storage-refs";
@@ -45,7 +45,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
     size: 300,
     accessorKey: "volume",
-    header: "Volume",
+    header: () => <T section="columns" k="volume" />,
     cell: ({ row }) =>
       row.original.volume ? (
         <ResourceRef
@@ -62,7 +62,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 160,
     accessorKey: "storageClass",
-    header: "Storage Class",
+    header: () => <T section="columns" k="storageClass" />,
     cell: ({ row }) => (
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),
@@ -145,7 +145,9 @@ export function PersistentVolumeClaimList() {
   return (
     <ResourceList<PersistentVolumeClaimInfo>
       title="Persistent Volume Claims"
-      description={`Requests for storage by pods in ${scope.inWords}`}
+      description={t("empty", "pvcListDescription", {
+        scope: scope.inWords,
+      })}
       queryKey={queryKeys.resources(
         ResourceType.PersistentVolumeClaim,
         currentNamespace

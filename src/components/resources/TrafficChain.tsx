@@ -15,6 +15,7 @@
  * Deployment with no Service in front of it must not cost a diagram to say so.
  */
 
+import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -207,6 +208,7 @@ function EdgeNote({
   edge: ServiceEdges | undefined;
   object: ObjectRef;
 }) {
+  const t = useT();
   if (!edge?.available || edge.error) return null;
   const configs = edge.configs.get(
     edgeKey(object.namespace ?? "", object.name)
@@ -230,7 +232,7 @@ function EdgeNote({
           ) : (
             <span className="font-mono">{config.source.name}</span>
           )}{" "}
-          {config.summary}
+          {joinSayings(config.summary, t)}
           {config.problem && (
             <span
               className={
@@ -238,7 +240,7 @@ function EdgeNote({
               }
             >
               {" — "}
-              {config.problem.text}
+              {sayWords(config.problem.text, t)}
             </span>
           )}
         </p>
@@ -513,7 +515,7 @@ export function TrafficChain({
   // condition. `trafficChains` is pure and answers an empty list for no data,
   // which is exactly what the hook should be asked about in that case.
   const paths = data
-    ? trafficChains(data, {
+    ? trafficChains(data, t, {
         certificates: certificates ?? routed.certificates,
         controller,
         routing: routed.routing,
@@ -546,7 +548,7 @@ export function TrafficChain({
   }
 
   if (paths.length === 0) {
-    const silence = chainSilence(data);
+    const silence = chainSilence(data, t);
     // A quiet single line, and no heading over it: a heading plus one
     // sentence is two lines spent saying that nothing is there.
     return silence ? <p className="text-xs text-fg-fnt">{silence}</p> : null;

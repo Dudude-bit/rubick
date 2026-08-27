@@ -8,14 +8,39 @@ use crate::client::{ClusterInfo, ContextInfo};
 use crate::error::Result;
 use crate::state::AppState;
 
-/// Read the persisted kubeconfig override path from `AppConfig`. Returns
-/// None on read failure (treated as "no override") so a corrupted
-/// config file doesn't lock the user out of the default `~/.kube/config`
-/// path entirely.
-fn read_kubeconfig_override() -> Option<std::path::PathBuf> {
-    crate::commands::settings::helpers::read_config(|c| c.kubernetes.kubeconfig_path.clone())
-        .ok()
-        .flatten()
+/// The pinned kubeconfig files, in merge order.
+///
+/// Empty on a read failure — treated as "nothing pinned" — so a corrupted
+/// config file does not lock somebody out of the default `~/.kube/config`
+/// lookup entirely.
+///
+/// The list wins where there is one; `kubeconfig_path` is what a build
+/// without several files writes, and is still read so that pinning a file
+/// in such a build and then upgrading does not silently unpin it.
+fn read_kubeconfig_overrides() -> Vec<std::path::PathBuf> {
+    crate::commands::settings::helpers::read_config(|c| {
+        pinned_files(
+            &c.kubernetes.kubeconfig_paths,
+            c.kubernetes.kubeconfig_path.as_ref(),
+        )
+    })
+    .unwrap_or_default()
+}
+
+/// The two fields reconciled, as a rule rather than as a read of the disk.
+///
+/// The list wins where there is one. `kubeconfig_path` is what a build
+/// without several files writes, and is still honoured so that pinning a
+/// file in such a build and then upgrading does not silently unpin it.
+fn pinned_files(
+    paths: &[std::path::PathBuf],
+    single: Option<&std::path::PathBuf>,
+) -> Vec<std::path::PathBuf> {
+    if paths.is_empty() {
+        single.cloned().into_iter().collect()
+    } else {
+        paths.to_vec()
+    }
 }
 
 /// List all available Kubernetes contexts
@@ -24,7 +49,7 @@ pub async fn list_contexts(state: State<'_, AppState>) -> Result<Vec<ContextInfo
     // Ensure kubeconfig is loaded
     state
         .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_override())
+        .load_kubeconfig_resolved(read_kubeconfig_overrides())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
@@ -40,7 +65,7 @@ pub async fn list_contexts(state: State<'_, AppState>) -> Result<Vec<ContextInfo
 pub async fn get_current_context(state: State<'_, AppState>) -> Result<Option<String>> {
     state
         .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_override())
+        .load_kubeconfig_resolved(read_kubeconfig_overrides())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
@@ -62,7 +87,7 @@ pub async fn switch_context(context: String, state: State<'_, AppState>) -> Resu
     // Load kubeconfig if not already loaded
     state
         .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_override())
+        .load_kubeconfig_resolved(read_kubeconfig_overrides())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
@@ -101,7 +126,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
     // Load kubeconfig if not already loaded
     state
         .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_override())
+        .load_kubeconfig_resolved(read_kubeconfig_overrides())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
@@ -212,6 +237,13 @@ pub struct KubeconfigCandidate {
     pub exists: bool,
     /// Why this path is in the list: `override`, `env` or `default`.
     pub origin: String,
+    /// The contexts this file is the source of, once several are merged.
+    ///
+    /// Empty where there is only one file — every context came from it and
+    /// saying so on each row is noise — and empty for a name another file
+    /// claimed first, which is the merge rule and worth being able to see.
+    #[serde(default)]
+    pub contexts: Vec<String>,
 }
 
 /// What the file that was read actually held. Absent when nothing parsed.
@@ -243,6 +275,34 @@ fn candidate(path: &std::path::Path, origin: &str) -> KubeconfigCandidate {
         exists: path.exists(),
         path: path.to_string_lossy().into_owned(),
         origin: origin.to_string(),
+        contexts: Vec::new(),
+    }
+}
+
+/// Hand each candidate the contexts that were read from it.
+///
+/// Matched on the canonical path, because that is what the loader recorded
+/// and what a symlinked `~/.kube/config` resolves to — comparing the typed
+/// path would leave every row empty on exactly the setup where naming the
+/// file matters most.
+fn attach_contexts(
+    candidates: &mut [KubeconfigCandidate],
+    origins: &std::collections::HashMap<String, std::path::PathBuf>,
+) {
+    if origins.is_empty() {
+        return;
+    }
+    for entry in candidates.iter_mut() {
+        let canonical = std::path::Path::new(&entry.path)
+            .canonicalize()
+            .unwrap_or_else(|_| std::path::PathBuf::from(&entry.path));
+        let mut names: Vec<String> = origins
+            .iter()
+            .filter(|(_, from)| **from == canonical)
+            .map(|(context, _)| context.clone())
+            .collect();
+        names.sort();
+        entry.contexts = names;
     }
 }
 
@@ -251,11 +311,14 @@ fn candidate(path: &std::path::Path, origin: &str) -> KubeconfigCandidate {
 /// on the platform's path separator and merges), otherwise the one
 /// default path.
 fn kubeconfig_candidates(
-    override_path: Option<std::path::PathBuf>,
+    overrides: Vec<std::path::PathBuf>,
     env: Option<&str>,
 ) -> Vec<KubeconfigCandidate> {
-    if let Some(path) = override_path {
-        return vec![candidate(&path, "override")];
+    if !overrides.is_empty() {
+        return overrides
+            .iter()
+            .map(|path| candidate(path, "override"))
+            .collect();
     }
     if let Some(value) = env.filter(|v| !v.is_empty()) {
         let separator = if cfg!(windows) { ';' } else { ':' };
@@ -276,17 +339,23 @@ fn kubeconfig_candidates(
 #[tauri::command]
 pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<KubeconfigSource> {
     let kubeconfig_env = std::env::var("KUBECONFIG").ok();
-    let override_path = read_kubeconfig_override();
-    let candidates = kubeconfig_candidates(override_path.clone(), kubeconfig_env.as_deref());
+    let overrides = read_kubeconfig_overrides();
+    let candidates = kubeconfig_candidates(overrides.clone(), kubeconfig_env.as_deref());
 
     // Load through the same path the rest of the app uses, so a failure
     // here is the failure the cluster list would have hit.
     let error = state
         .client_manager
-        .load_kubeconfig_resolved(override_path)
+        .load_kubeconfig_resolved(overrides)
         .await
         .err()
         .map(|e| e.to_string());
+
+    let mut candidates = candidates;
+    attach_contexts(
+        &mut candidates,
+        &state.client_manager.context_origins().await,
+    );
 
     let counts = match state.client_manager.kubeconfig_clone().await {
         Ok(kubeconfig) => Some(KubeconfigCounts {
@@ -307,12 +376,12 @@ pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<Kubecon
 
 #[cfg(test)]
 mod tests {
-    use super::kubeconfig_candidates;
+    use super::{kubeconfig_candidates, pinned_files};
 
     #[test]
     fn env_kubeconfig_lists_every_file_it_would_merge() {
         let candidates = kubeconfig_candidates(
-            None,
+            Vec::new(),
             Some(if cfg!(windows) {
                 "a.yaml;b.yaml"
             } else {
@@ -326,7 +395,7 @@ mod tests {
 
     #[test]
     fn unset_kubeconfig_falls_back_to_the_one_default_path() {
-        let candidates = kubeconfig_candidates(None, None);
+        let candidates = kubeconfig_candidates(Vec::new(), None);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].origin, "default");
         assert!(candidates[0].path.ends_with("config"));
@@ -334,18 +403,67 @@ mod tests {
 
     #[test]
     fn empty_kubeconfig_is_treated_as_unset() {
-        assert_eq!(kubeconfig_candidates(None, Some(""))[0].origin, "default");
+        assert_eq!(
+            kubeconfig_candidates(Vec::new(), Some(""))[0].origin,
+            "default"
+        );
     }
 
-    /// An override is the only file that would be read, so listing the
-    /// default path beside it would say the app looked somewhere it did not.
+    /// A pinned file is the only one that would be read, so listing what
+    /// `$KUBECONFIG` names beside it would say the app looked somewhere it
+    /// did not.
     #[test]
     fn an_override_is_the_only_candidate() {
         let candidates = kubeconfig_candidates(
-            Some(std::path::PathBuf::from("/tmp/pinned")),
+            vec![std::path::PathBuf::from("/tmp/pinned")],
             Some("a.yaml"),
         );
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].origin, "override");
+    }
+
+    /// A file pinned by a build that had never heard of the list is still
+    /// read after upgrading. Ignoring the old field would silently unpin
+    /// somebody's cluster the first time they ran a newer build.
+    #[test]
+    fn a_single_pinned_file_survives_the_upgrade() {
+        let one = std::path::PathBuf::from("/tmp/pinned");
+        assert_eq!(pinned_files(&[], Some(&one)), vec![one]);
+    }
+
+    /// And the list wins once there is one, whatever the old field still
+    /// holds — it holds the first of them, so honouring it would read that
+    /// file twice and the others not at all.
+    #[test]
+    fn the_list_wins_over_the_field_it_replaced() {
+        let first = std::path::PathBuf::from("/tmp/work");
+        let second = std::path::PathBuf::from("/tmp/home");
+        assert_eq!(
+            pinned_files(&[first.clone(), second.clone()], Some(&first)),
+            vec![first, second]
+        );
+    }
+
+    /// Neither set is the default lookup, which is not a path at all.
+    #[test]
+    fn nothing_pinned_is_an_empty_list() {
+        assert!(pinned_files(&[], None).is_empty());
+    }
+
+    /// Several pinned files are all read, in the order they were pinned —
+    /// which is what decides the merge.
+    #[test]
+    fn every_pinned_file_is_a_candidate_in_order() {
+        let candidates = kubeconfig_candidates(
+            vec![
+                std::path::PathBuf::from("/tmp/work"),
+                std::path::PathBuf::from("/tmp/home"),
+            ],
+            Some("ignored.yaml"),
+        );
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].path, "/tmp/work");
+        assert_eq!(candidates[1].path, "/tmp/home");
+        assert!(candidates.iter().all(|c| c.origin == "override"));
     }
 }

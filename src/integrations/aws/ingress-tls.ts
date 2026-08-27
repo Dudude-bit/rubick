@@ -17,6 +17,7 @@
  */
 
 import { commands } from "@/lib/commands";
+import type { Saying } from "@/i18n/say";
 import type { IngressTls } from "../registry";
 
 const PREFIX = "alb.ingress.kubernetes.io/";
@@ -38,10 +39,12 @@ export function claimsIngress(ingress: {
 }
 
 /** The last segment of an ACM ARN, which is what a reader recognises. */
-function certificateLabel(arn: string): string {
+function certificateLabel(arn: string): Saying {
   const first = arn.split(",")[0]?.trim() ?? arn;
   const tail = first.split("/").pop();
-  return tail ? `ACM ${tail}` : "an ACM certificate";
+  return tail
+    ? { key: "awsAcmNamed", values: { name: tail } }
+    : { key: "awsAcmCertificate" };
 }
 
 /**
@@ -88,7 +91,7 @@ async function answerFor(input: {
   const https = listensOnHttps(ingress.annotations[LISTEN_PORTS]);
   const redirects = ingress.annotations[SSL_REDIRECT] !== undefined;
 
-  const answer = (terminated: boolean, by: string): IngressTls[] =>
+  const answer = (terminated: boolean, by: Saying): IngressTls[] =>
     input.hosts.map((host) => ({ host, terminated, by }));
 
   if (arn !== undefined && arn !== "")
@@ -97,9 +100,9 @@ async function answerFor(input: {
     // No ARN written down, and the listener set says HTTPS. The controller
     // discovers the certificate in ACM by hostname, which this app cannot
     // read — so the fact is stated and its source is not invented.
-    return answer(true, "a certificate discovered in ACM");
+    return answer(true, { key: "awsAcmDiscovered" });
   }
-  if (https === false) return answer(false, "an HTTP listener only");
+  if (https === false) return answer(false, { key: "awsHttpOnly" });
   // Nothing said either way. `spec.tls` keeps the last word rather than this
   // guessing at a certificate in an account it cannot see.
   return [];

@@ -11,6 +11,12 @@ import {
   wireNamespace,
 } from "./namespace-scope";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 describe("what the backend is told", () => {
   /**
    * Would break if a multi-namespace scope ever reached a list command. Every
@@ -103,11 +109,11 @@ describe("what is in scope", () => {
 
 describe("what the scope is called", () => {
   it("names one and two, and counts past that", () => {
-    expect(scopeLabel([])).toBe("All namespaces");
-    expect(scopeLabel(["prod"])).toBe("prod");
-    expect(scopeLabel(["prod", "staging"])).toBe("prod, staging");
-    expect(scopeLabel(["a", "b", "c"])).toBe("3 namespaces");
-    expect(scopeIn([])).toBe("any namespace");
-    expect(scopeIn(["prod", "staging"])).toBe("2 namespaces");
+    expect(scopeLabel([], t)).toBe("All namespaces");
+    expect(scopeLabel(["prod"], t)).toBe("prod");
+    expect(scopeLabel(["prod", "staging"], t)).toBe("prod, staging");
+    expect(scopeLabel(["a", "b", "c"], t)).toBe("3 namespaces");
+    expect(scopeIn([], t)).toBe("any namespace");
+    expect(scopeIn(["prod", "staging"], t)).toBe("2 namespaces");
   });
 });

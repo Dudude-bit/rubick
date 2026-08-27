@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -36,7 +36,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // A CSI driver name in full: `pd.csi.storage.gke.io`, `rancher.io/local-path`.
     size: 240,
     accessorKey: "provisioner",
-    header: "Provisioner",
+    header: () => <T section="columns" k="provisioner" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.provisioner}</span>
     ),
@@ -108,7 +108,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
 export const StorageClassList = createResourceListPage<StorageClassInfo>({
   resourceType: ResourceType.StorageClass,
   title: "Storage Classes",
-  description: "Describes the classes of storage available in the cluster",
+  description: ({ t }) => t("empty", "storageClassesAre"),
   scope: "cluster",
   searchKey: "name",
   fetcher: () => commands.listStorageClasses(null),

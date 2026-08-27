@@ -29,6 +29,7 @@
  * the target it is actually compared against.
  */
 
+import type { T } from "@/i18n/useT";
 import { load } from "js-yaml";
 
 import type {
@@ -134,10 +135,13 @@ function sentence(text: string): string {
 }
 
 /** "1 to 5 replicas", or "pinned at 3" for the degenerate range. */
-export function autoscalerRange(facts: AutoscalerFacts): string {
+export function autoscalerRange(facts: AutoscalerFacts, t: T): string {
   return facts.minReplicas === facts.maxReplicas
-    ? `pinned at ${facts.maxReplicas}`
-    : `${facts.minReplicas} to ${facts.maxReplicas} replicas`;
+    ? t("readings", "hpaPinnedAt", { n: facts.maxReplicas })
+    : t("readings", "hpaRange", {
+        min: facts.minReplicas,
+        max: facts.maxReplicas,
+      });
 }
 
 export interface MetricReading {
@@ -172,7 +176,7 @@ export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
  * HPA that cannot read a metric never gets as far as being limited — so the
  * first true one is the whole answer and the rest is detail.
  */
-export function autoscalerFinding(auto: Autoscaler): Finding | null {
+export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
   const { conditions } = auto.facts;
   const able = condition(conditions, "AbleToScale");
   const active = condition(conditions, "ScalingActive");
@@ -182,10 +186,13 @@ export function autoscalerFinding(auto: Autoscaler): Finding | null {
   if (isFalse(able)) {
     return {
       tone: "err",
-      title: `${name} cannot reach what it scales`,
+      title: t("readings", "hpaCannotReach", { name }),
       detail: able?.message
         ? sentence(able.message)
-        : `The autoscaler names ${auto.target.kind} ${auto.target.name} and cannot read its scale, so it is not scaling anything.`,
+        : t("readings", "hpaCannotReachDetail", {
+            kind: auto.target.kind,
+            target: auto.target.name,
+          }),
     };
   }
 
@@ -196,16 +203,22 @@ export function autoscalerFinding(auto: Autoscaler): Finding | null {
     if (active?.reason === "ScalingDisabled") {
       return {
         tone: "neutral",
-        title: `${name} is standing by while this is scaled to zero`,
+        title: t("readings", "hpaStandingBy", { name }),
         detail: active.message
           ? sentence(active.message)
-          : "An autoscaler does not scale a workload up from zero. Set a replica count by hand and it takes over from there.",
+          : t("readings", "hpaStandingByDetail"),
       };
     }
     return {
       tone: "err",
-      title: `${name} is not scaling this — it cannot read its metrics`,
-      detail: `${sentence(active?.message ?? active?.reason ?? "The metric source did not answer.")} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.`,
+      title: t("readings", "hpaNoMetrics", { name }),
+      detail: t("readings", "hpaNoMetricsDetail", {
+        said: sentence(
+          active?.message ??
+            active?.reason ??
+            t("readings", "hpaNoMetricsDefault")
+        ),
+      }),
     };
   }
 
@@ -216,9 +229,11 @@ export function autoscalerFinding(auto: Autoscaler): Finding | null {
     if (limited?.reason === "TooFewReplicas") {
       return {
         tone: "neutral",
-        title: `${name} is holding this at its floor of ${auto.facts.minReplicas}`,
-        detail:
-          "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
+        title: t("readings", "hpaAtFloor", {
+          name,
+          min: auto.facts.minReplicas,
+        }),
+        detail: t("readings", "hpaAtFloorDetail"),
       };
     }
     if (limited?.reason === "ScaleDownStabilized") {
@@ -226,8 +241,15 @@ export function autoscalerFinding(auto: Autoscaler): Finding | null {
     }
     return {
       tone: "warn",
-      title: `${name} wants more replicas than ${auto.facts.maxReplicas} — this is at its ceiling`,
-      detail: `${sentence(limited?.message ?? "The desired replica count is above maxReplicas.")} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.`,
+      title: t("readings", "hpaAtCeiling", {
+        name,
+        max: auto.facts.maxReplicas,
+      }),
+      detail: t("readings", "hpaAtCeilingDetail", {
+        said: sentence(
+          limited?.message ?? t("readings", "hpaAtCeilingDefault")
+        ),
+      }),
     };
   }
 
@@ -243,14 +265,18 @@ export function autoscalerFinding(auto: Autoscaler): Finding | null {
  * worst number on the page: it reads as an autoscaler about to delete
  * everything, and it is the field being unset.
  */
-export function autoscalerReplicas(facts: AutoscalerFacts): string {
+export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
   const computed = !isFalse(condition(facts.conditions, "ScalingActive"));
   const parts = [
-    `${facts.currentReplicas} running`,
-    computed ? `${facts.desiredReplicas} wanted` : "nothing computed",
+    t("readings", "hpaRunning", { n: facts.currentReplicas }),
+    computed
+      ? t("readings", "hpaWanted", { n: facts.desiredReplicas })
+      : t("readings", "hpaNothingComputed"),
   ];
   if (facts.lastScaleTime)
-    parts.push(`last scaled ${formatAge(facts.lastScaleTime)} ago`);
+    parts.push(
+      t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime) })
+    );
   return parts.join(" · ");
 }
 
@@ -261,19 +287,19 @@ export function autoscalerReplicas(facts: AutoscalerFacts): string {
  * it belong to the workload's own block now, and this clause does not: it is
  * the one thing the autoscaler knows that the count itself cannot say.
  */
-export function lastScaled(facts: AutoscalerFacts): string | null {
+export function lastScaled(facts: AutoscalerFacts, t: T): string | null {
   return facts.lastScaleTime
-    ? `last scaled ${formatAge(facts.lastScaleTime)} ago`
+    ? t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime) })
     : null;
 }
 
 /** "at least 1 available" / "at most 1 unavailable". */
-export function budgetRule(facts: BudgetFacts): string {
+export function budgetRule(facts: BudgetFacts, t: T): string {
   if (facts.minAvailable !== null)
-    return `at least ${facts.minAvailable} available`;
+    return t("readings", "pdbAtLeast", { n: facts.minAvailable });
   if (facts.maxUnavailable !== null)
-    return `at most ${facts.maxUnavailable} unavailable`;
-  return "no rule stated";
+    return t("readings", "pdbAtMost", { n: facts.maxUnavailable });
+  return t("readings", "pdbNoRule");
 }
 
 /**
@@ -284,14 +310,16 @@ export function budgetRule(facts: BudgetFacts): string {
  * "2 of 15 healthy" reads as a workload in ruins. "of 15 selected" says the
  * denominator is a match count, which is what it is.
  */
-export function budgetRoom(facts: BudgetFacts): string {
+export function budgetRoom(facts: BudgetFacts, t: T): string {
   const allowed =
     facts.disruptionsAllowed === 0
-      ? "no disruption allowed"
-      : facts.disruptionsAllowed === 1
-        ? "1 disruption allowed"
-        : `${facts.disruptionsAllowed} disruptions allowed`;
-  return `${allowed} · ${facts.currentHealthy} healthy of ${facts.expectedPods} selected`;
+      ? t("readings", "pdbNoDisruption")
+      : t("count", "disruptionsAllowed", { n: facts.disruptionsAllowed });
+  return t("readings", "pdbRoom", {
+    allowed,
+    healthy: facts.currentHealthy,
+    selected: facts.expectedPods,
+  });
 }
 
 /**
@@ -313,7 +341,7 @@ export function budgetRoom(facts: BudgetFacts): string {
  * warning, and it is a warning about the workload rather than about the
  * budget.
  */
-export function budgetFinding(budget: Budget): Finding | null {
+export function budgetFinding(budget: Budget, t: T): Finding | null {
   const facts = budget.facts;
   if (facts.disruptionsAllowed > 0) return null;
 
@@ -321,16 +349,22 @@ export function budgetFinding(budget: Budget): Finding | null {
   if (short) {
     return {
       tone: "warn",
-      title: `${budget.object.name} is below its own floor — ${facts.currentHealthy} healthy, ${facts.desiredHealthy} required`,
-      detail:
-        "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering any of these pods does not fail — it waits, indefinitely.",
+      title: t("readings", "pdbBelowFloor", {
+        name: budget.object.name,
+        healthy: facts.currentHealthy,
+        required: facts.desiredHealthy,
+      }),
+      detail: t("readings", "pdbBelowFloorDetail"),
     };
   }
 
   return {
     tone: "neutral",
-    title: `${budget.object.name} allows no disruption right now`,
-    detail: `The budget is exactly met: ${facts.currentHealthy} healthy against a floor of ${facts.desiredHealthy}. A node drain covering these pods waits until another replica is ready, which is the budget doing its job rather than a fault.`,
+    title: t("readings", "pdbExactlyMet", { name: budget.object.name }),
+    detail: t("readings", "pdbExactlyMetDetail", {
+      healthy: facts.currentHealthy,
+      required: facts.desiredHealthy,
+    }),
   };
 }
 
@@ -406,7 +440,8 @@ export interface ActionWarning {
  *   reading and each undoes the other, so no range on the page is the range.
  */
 export function autoscalerScaleWarnings(
-  conns: ResourceConnections | undefined
+  conns: ResourceConnections | undefined,
+  t: T
 ): ActionWarning[] {
   if (!conns) return [];
   const found = autoscalers(conns);
@@ -417,9 +452,9 @@ export function autoscalerScaleWarnings(
     return [
       {
         key: "hpa:several",
-        subject: `${found.length} autoscalers`,
-        lead: `${found.length} autoscalers claim this workload.`,
-        description: `${names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives either of them, and no single range on this page is the range.`,
+        subject: t("readings", "hpaSeveralTitle", { n: found.length }),
+        lead: t("readings", "hpaSeveralHead", { n: found.length }),
+        description: t("readings", "hpaSeveralDetail", { names }),
         to: null,
       },
     ];
@@ -435,13 +470,19 @@ export function autoscalerScaleWarnings(
     const why =
       condition(facts.conditions, "ScalingActive")?.reason ??
       condition(facts.conditions, "AbleToScale")?.reason ??
-      "it is not currently able to act";
+      t("readings", "hpaCannotActNow");
     return [
       {
         key: `hpa:${auto.object.name}`,
-        subject: `The autoscaler ${auto.object.name}`,
-        lead: `${auto.object.name} owns this replica count, and is stuck.`,
-        description: `It cannot act right now (${why}), so the number you set will stand — until it can, at which point it takes the count back to somewhere between ${facts.minReplicas} and ${facts.maxReplicas} without announcing it.`,
+        subject: t("readings", "hpaAutoscalerNamed", {
+          name: auto.object.name,
+        }),
+        lead: t("readings", "hpaOwnsStuckHead", { name: auto.object.name }),
+        description: t("readings", "hpaStuckDetail", {
+          why,
+          min: facts.minReplicas,
+          max: facts.maxReplicas,
+        }),
         to: null,
       },
     ];
@@ -450,9 +491,12 @@ export function autoscalerScaleWarnings(
   return [
     {
       key: `hpa:${auto.object.name}`,
-      subject: `The autoscaler ${auto.object.name}`,
-      lead: `${auto.object.name} will put this number back.`,
-      description: `It keeps this between ${facts.minReplicas} and ${facts.maxReplicas} and re-reads its metrics about every fifteen seconds, so a count set by hand lasts until the next pass. To change it for good, change the autoscaler's bounds.`,
+      subject: t("readings", "hpaAutoscalerNamed", { name: auto.object.name }),
+      lead: t("readings", "hpaWillRevertHead", { name: auto.object.name }),
+      description: t("readings", "hpaWillRevertDetail", {
+        min: facts.minReplicas,
+        max: facts.maxReplicas,
+      }),
       to: null,
     },
   ];
@@ -471,9 +515,10 @@ export function autoscalerScaleWarnings(
  */
 export function scaleWarnings(
   conns: ResourceConnections | undefined,
-  intercept: DeliveryIntercept | null
+  intercept: DeliveryIntercept | null,
+  t: T
 ): ActionWarning[] {
-  return [...autoscalerScaleWarnings(conns), ...deliveryWarning(intercept)];
+  return [...autoscalerScaleWarnings(conns, t), ...deliveryWarning(intercept)];
 }
 
 /** A delivery intercept as one of the stacked warnings, or none. */
@@ -518,10 +563,11 @@ export function deliveryWarning(
 export function applyWarnings(
   conns: ResourceConnections | undefined,
   intercept: DeliveryIntercept | null,
-  replicasMoved: boolean
+  replicasMoved: boolean,
+  t: T
 ): ActionWarning[] {
   return [
-    ...(replicasMoved ? autoscalerScaleWarnings(conns) : []),
+    ...(replicasMoved ? autoscalerScaleWarnings(conns, t) : []),
     ...deliveryWarning(intercept),
   ];
 }
@@ -547,7 +593,7 @@ export function changesReplicaCount(original: string, edited: string): boolean {
   return before !== after;
 }
 
-/** Distinguishes "the document has no replica count" from "cannot tell". */
+/** Distinguishes t("readings", "docNoReplicaCount") from t("readings", "cannotTell"). */
 const UNREADABLE = Symbol("unreadable");
 
 function replicaCountIn(text: string): number | null | typeof UNREADABLE {

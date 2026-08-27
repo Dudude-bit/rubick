@@ -395,7 +395,7 @@ export function DebugPodDialog({
               <SelectContent>
                 {DEBUG_IMAGES.map((img) => (
                   <SelectItem key={img.value} value={img.value}>
-                    {img.label}
+                    {t("action", img.label)}
                   </SelectItem>
                 ))}
               </SelectContent>

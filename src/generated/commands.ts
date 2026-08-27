@@ -327,8 +327,16 @@ export async function getKubeconfigPath(): Promise<string | null> {
   return invoke<string | null>("get_kubeconfig_path");
 }
 
+export async function getKubeconfigPaths(): Promise<string[]> {
+  return invoke<string[]>("get_kubeconfig_paths");
+}
+
 export async function setKubeconfigPath(path: string): Promise<void> {
   return invoke<void>("set_kubeconfig_path", { path });
+}
+
+export async function setKubeconfigPaths(paths: string[]): Promise<void> {
+  return invoke<void>("set_kubeconfig_paths", { paths });
 }
 
 export async function clearKubeconfigPath(): Promise<void> {
@@ -358,12 +366,6 @@ export async function addYamlHistoryEntry(
   entry: YamlHistoryEntryDto
 ): Promise<void> {
   return invoke<void>("add_yaml_history_entry", { resourceKey, entry });
-}
-
-export async function getAllYamlHistory(): Promise<
-  Record<string, YamlHistoryEntryDto[]>
-> {
-  return invoke<Record<string, YamlHistoryEntryDto[]>>("get_all_yaml_history");
 }
 
 export async function getInfrastructureState(
@@ -410,12 +412,14 @@ export async function getClusterPreferences(): Promise<ClusterPreferences> {
 export async function saveClusterPreferences(
   lastContext: string | null,
   context: string | null,
-  namespace: string | null
+  namespace: string | null,
+  scope: string[] | null
 ): Promise<void> {
   return invoke<void>("save_cluster_preferences", {
     lastContext,
     context,
     namespace,
+    scope,
   });
 }
 

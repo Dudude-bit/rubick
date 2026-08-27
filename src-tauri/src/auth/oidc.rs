@@ -355,8 +355,11 @@ mod tests {
 
     #[test]
     fn test_code_challenge_generation() {
-        let verifier = "test-verifier";
-        let challenge = generate_code_challenge(verifier);
-        assert!(!challenge.is_empty());
+        // The vector from RFC 7636 appendix B. A challenge is checked by the
+        // identity provider, not by us, so a wrong digest shows up as a login
+        // that fails against a real server and nowhere earlier -- which is why
+        // this asserts the exact string rather than that one was produced.
+        let challenge = generate_code_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk");
+        assert_eq!(challenge, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
     }
 }

@@ -158,7 +158,7 @@ export function ReplicaSetDetail() {
         ),
       mono: revision !== null,
     },
-    serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace),
+    serviceAccountRow(replicaSet?.serviceAccountName, replicaSet?.namespace, t),
   ];
 
   const tabs = [
@@ -264,7 +264,7 @@ export function ReplicaSetDetail() {
     yamlTab({
       yaml,
       onCopy: copyYaml,
-      title: "ReplicaSet YAML",
+      title: t("action", "kindYaml", { kind: "ReplicaSet" }),
       resourceKind: ResourceType.ReplicaSet,
       resourceName: replicaSet?.name || name || "",
       namespace: replicaSet?.namespace || namespace,

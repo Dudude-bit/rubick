@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest";
 import { ResourceType } from "@/lib/resource-registry";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 
-const labels = (kind: string) => peekTabsFor(kind).map((tab) => tab.label);
-const ids = (kind: string) => peekTabsFor(kind).map((tab) => tab.id);
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const labels = (kind: string) => peekTabsFor(kind, t).map((tab) => tab.label);
+const ids = (kind: string) => peekTabsFor(kind, t).map((tab) => tab.id);
 const tab = (kind: string, id: PeekTabId, detail?: unknown) =>
-  peekTabsFor(kind, detail).find((entry) => entry.id === id)!;
+  peekTabsFor(kind, t, detail).find((entry) => entry.id === id)!;
 
 describe("peekTabsFor", () => {
   it("gives every kind an overview and a manifest", () => {
@@ -52,7 +58,7 @@ describe("peekTabsFor", () => {
 describe("the glyph a peek tab carries", () => {
   it("gives one to every tab of every kind, so the strip is not half marked", () => {
     for (const kind of ["Pod", "ConfigMap", "Deployment", "CronJob", "Node"]) {
-      for (const entry of peekTabsFor(kind)) {
+      for (const entry of peekTabsFor(kind, t)) {
         expect(entry.glyph).toBeDefined();
       }
     }
@@ -113,21 +119,23 @@ describe("the marks a peek can afford", () => {
 
 describe("resolvePeekTab", () => {
   it("keeps the reader's tab when the new target has it", () => {
-    expect(resolvePeekTab("logs", peekTabsFor("Pod"))).toBe("logs");
+    expect(resolvePeekTab("logs", peekTabsFor("Pod", t))).toBe("logs");
   });
 
   it("falls back to overview when the new target has no such tab", () => {
-    expect(resolvePeekTab("logs", peekTabsFor("ConfigMap"))).toBe("overview");
-    expect(resolvePeekTab("data", peekTabsFor("Pod"))).toBe("overview");
+    expect(resolvePeekTab("logs", peekTabsFor("ConfigMap", t))).toBe(
+      "overview"
+    );
+    expect(resolvePeekTab("data", peekTabsFor("Pod", t))).toBe("overview");
   });
 
   // The request is remembered even while it cannot be honoured, so walking
   // Pod → ConfigMap → Pod lands back on Logs.
   it("does not consume the request it fell back from", () => {
     const requested = "logs";
-    expect(resolvePeekTab(requested, peekTabsFor("ConfigMap"))).toBe(
+    expect(resolvePeekTab(requested, peekTabsFor("ConfigMap", t))).toBe(
       "overview"
     );
-    expect(resolvePeekTab(requested, peekTabsFor("Pod"))).toBe("logs");
+    expect(resolvePeekTab(requested, peekTabsFor("Pod", t))).toBe("logs");
   });
 });

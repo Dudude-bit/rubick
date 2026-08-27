@@ -37,7 +37,8 @@ import { useT } from "@/i18n/useT";
  * urgent of the two.
  */
 export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
-  const marks = deliveryMarks(deliveries);
+  const t = useT();
+  const marks = deliveryMarks(deliveries, t);
   if (marks.length === 0) return null;
 
   return (
@@ -81,7 +82,8 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
  * would be worth exactly as much as a badge on every row.
  */
 export function DeliveryBanner({ deliveries }: { deliveries: Delivery[] }) {
-  const line = deliveryLine(deliveries);
+  const t = useT();
+  const line = deliveryLine(deliveries, t);
   if (!line) return null;
   return <DeliveryLineBody line={line} />;
 }
@@ -149,7 +151,7 @@ function DeliveryWhere({
             {t("empty", "inRevision")}{" "}
             <button
               type="button"
-              onClick={() => openExternal(link.url, link.site)}
+              onClick={() => openExternal(link.url, link.site, t)}
               className="inline-flex items-center gap-0.5 font-mono text-info hover:underline"
             >
               {shortRevision(where.revision)}
@@ -175,7 +177,8 @@ function DeliveryWhere({
  * is faint and not a warning — it is worth knowing and it is not a fault.
  */
 export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
-  const cell = deliveryCell(deliveries);
+  const t = useT();
+  const cell = deliveryCell(deliveries, t);
   if (!cell) return null;
   return (
     <span

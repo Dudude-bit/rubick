@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 // The plan never calls a command; it only needs the module to load.
 vi.mock("@/lib/commands", () => ({ commands: {} }));
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import type { ContainerState, PodInfo, ServiceInfo } from "@/generated/types";
 import {
   describeBareRestart,
@@ -80,21 +82,24 @@ function pod(overrides: Partial<PodInfo> = {}): PodInfo {
 const labels = (actions: PeekAction[]) => actions.map((action) => action.label);
 const find = (actions: PeekAction[], id: string) =>
   actions.find((action) => action.id === id);
+/** The English catalogue, which is what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const all = (kind: string, detail?: unknown, context = {}) => {
-  const plan = planPeekActions(kind, detail, context);
+  const plan = planPeekActions(kind, detail, t, context);
   return [...plan.inline, ...plan.menu];
 };
 
 describe("planPeekActions", () => {
   it("keeps the two most-used pod actions in the row and folds the rest away", () => {
-    const plan = planPeekActions("Pod", pod());
+    const plan = planPeekActions("Pod", pod(), t);
     expect(labels(plan.inline)).toEqual(["Shell", "Port forward"]);
     expect(labels(plan.menu)).toEqual(["Debug", "Restart", "Delete"]);
   });
 
   // Five controls or fewer and there is nothing to hide behind.
   it("leaves a short row whole", () => {
-    const plan = planPeekActions("Deployment", undefined);
+    const plan = planPeekActions("Deployment", undefined, t);
     expect(labels(plan.inline)).toEqual(["Scale", "Restart", "Delete"]);
     expect(plan.menu).toEqual([]);
   });
@@ -228,7 +233,7 @@ describe("restarting a pod nothing owns", () => {
   });
 
   it("spells out that nothing will bring it back", () => {
-    expect(describeBareRestart("bare-demo", "k8s-gui-test")).toMatchObject({
+    expect(describeBareRestart("bare-demo", "k8s-gui-test", t)).toMatchObject({
       title: "Restart pod k8s-gui-test/bare-demo?",
       description: expect.stringContaining("nothing will recreate it"),
     });
@@ -298,7 +303,7 @@ describe("a Service's port forward", () => {
 describe("describeDeletion", () => {
   it("names the object and what goes with it", () => {
     expect(
-      describeDeletion("Pod", "log-demo-1", "k8s-gui-test", pod())
+      describeDeletion("Pod", "log-demo-1", "k8s-gui-test", pod(), t)
     ).toMatchObject({
       title: "Delete pod k8s-gui-test/log-demo-1?",
       description: expect.stringContaining("ReplicaSet log-demo-6cf"),
@@ -310,22 +315,29 @@ describe("describeDeletion", () => {
       "Pod",
       "bare-demo",
       "k8s-gui-test",
-      pod({ ownerReferences: [] })
+      pod({ ownerReferences: [] }),
+      t
     );
     expect(copy.description).toContain("nothing will bring it back");
   });
 
   it("counts the pods a Deployment takes with it", () => {
-    const copy = describeDeletion("Deployment", "web", "k8s-gui-test", {
-      replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
-    });
+    const copy = describeDeletion(
+      "Deployment",
+      "web",
+      "k8s-gui-test",
+      {
+        replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
+      },
+      t
+    );
     expect(copy.description).toContain("3 pods");
   });
 
   it("drops the namespace for a cluster-scoped object", () => {
-    expect(describeDeletion("PersistentVolume", "pv-1", null, {}).title).toBe(
-      "Delete persistentvolume pv-1?"
-    );
+    expect(
+      describeDeletion("PersistentVolume", "pv-1", null, {}, t).title
+    ).toBe("Delete persistentvolume pv-1?");
   });
 });
 

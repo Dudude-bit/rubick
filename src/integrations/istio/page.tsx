@@ -73,7 +73,7 @@ export default function IstioPage() {
     : null;
 
   const groups = useMemo(
-    () => (sources ? hostGroups(sources) : []),
+    () => (sources ? hostGroups(sources, t) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mesh.data, backing.data]
   );
@@ -215,8 +215,8 @@ function MapTab({
 }) {
   const t = useT();
   const data = useMemo(
-    () => (sources ? routingMap(groups, sources) : null),
-    [groups, sources]
+    () => (sources ? routingMap(groups, sources, t) : null),
+    [groups, sources, t]
   );
 
   if (loading) {
@@ -418,7 +418,9 @@ function RuleRow({
       <span className="truncate font-mono text-fg-mid">
         {route.matches.length === 0
           ? t("empty", "everyRequest")
-          : route.matches.map(describeMatch).join(" or ")}
+          : route.matches
+              .map((match) => describeMatch(match, t))
+              .join(t("readings", "istioOrJoin"))}
         {route.protocol !== "http" && (
           <span className="ml-1 text-fg-fnt">{route.protocol}</span>
         )}
@@ -502,7 +504,7 @@ function HostChain({
           {t("empty", "theRuleFor")}{" "}
           {route.matches.length === 0
             ? t("empty", "everyRequest")
-            : describeMatch(route.matches[0])}
+            : describeMatch(route.matches[0], t)}
         </span>
       )}
       <Chain>
@@ -541,7 +543,7 @@ function HostChain({
                 ? t("empty", "everyRequest")
                 : unread.length > 0
                   ? t("empty", "shownInFullBelow")
-                  : describeMatch(route.matches[0])
+                  : describeMatch(route.matches[0], t)
             }
           >
             {route.source.name}
@@ -751,7 +753,7 @@ function describeFinding(
       };
     }
     case "stop": {
-      const said = describeStop(finding.stop);
+      const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "istioRouteResolves503", {
           detail: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,

@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 
 import type { JobInfo } from "@/generated/types";

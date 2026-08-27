@@ -323,7 +323,7 @@ export function PodShell({
           className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
         >
           {containers.map((c) => {
-            const why = whyNoShell(c);
+            const why = whyNoShell(c, t);
             const selected = target?.name === c.name;
             const phase = PHASE_LABEL[c.phase];
             return (

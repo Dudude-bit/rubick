@@ -9,6 +9,12 @@ import type {
 import { routingMap } from "./map";
 import { hostGroups, type TraefikSources } from "./model";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
   controller: "traefik.io/ingress-controller",
@@ -85,7 +91,7 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
 
 function mapOf(over: Partial<TraefikSources>) {
   const src = sources(over);
-  return routingMap(hostGroups(src), src);
+  return routingMap(hostGroups(src), src, t);
 }
 
 describe("the routing map", () => {

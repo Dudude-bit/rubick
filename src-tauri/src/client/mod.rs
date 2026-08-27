@@ -9,6 +9,7 @@ use kube::{
     config::{KubeConfigOptions, Kubeconfig},
     Client, Config,
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -29,6 +30,26 @@ pub struct K8sClientManager {
 
     /// Default kubeconfig path
     kubeconfig_path: RwLock<Option<PathBuf>>,
+
+    /// Which file each context's name was read from.
+    ///
+    /// Several pinned files merge into one kubeconfig — kube's own rule,
+    /// the same one kubectl follows for `$KUBECONFIG`: the first file to
+    /// name something wins. Once merged, nothing in the result says where
+    /// any of it came from, and "which file is this cluster in" is the
+    /// question somebody with a work file and a home file is actually
+    /// asking.
+    context_origins: RwLock<HashMap<String, PathBuf>>,
+
+    /// Why the last load failed, when one did.
+    ///
+    /// The error used to travel out to the caller and stop there, so a
+    /// kubeconfig that would not parse left this manager holding `None` —
+    /// the same thing it holds when there is no kubeconfig at all. The
+    /// Diagnostics panel, whose whole job is telling those two apart, could
+    /// only say "no kubeconfig loaded" to somebody staring at a file that
+    /// plainly exists. Kept here so the panel can name the reason.
+    kubeconfig_error: RwLock<Option<String>>,
 
     /// The file the loaded kubeconfig actually came from.
     ///
@@ -54,17 +75,32 @@ impl K8sClientManager {
             kubeconfig: RwLock::new(None),
             kubeconfig_path: RwLock::new(None),
             kubeconfig_source: RwLock::new(None),
+            kubeconfig_error: RwLock::new(None),
+            context_origins: RwLock::new(HashMap::new()),
             credential_deadlines: DashMap::new(),
         }
     }
 
     /// Load kubeconfig from default locations
     pub async fn load_kubeconfig(&self) -> Result<()> {
-        let kubeconfig = Kubeconfig::read().map_err(|e| {
-            Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig: {e}"
-            )))
-        })?;
+        // `$KUBECONFIG` naming several files is the same merge pinning
+        // several files performs, so it goes down the same path — which is
+        // also the only one that records which file each context came from.
+        // `Kubeconfig::read` merges internally and the result says nothing
+        // about where any of it originated.
+        let listed = env_kubeconfig_files();
+        if listed.len() > 1 {
+            return self.load_kubeconfig_from_paths(listed).await;
+        }
+
+        let kubeconfig = match Kubeconfig::read() {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                let why = format!("Failed to read kubeconfig: {e}");
+                *self.kubeconfig_error.write().await = Some(why.clone());
+                return Err(Error::Auth(AuthError::Kubeconfig(why)));
+            }
+        };
 
         // Record which file that was. `Kubeconfig::read` does not say, and a
         // screen asking "where did this come from" cannot answer from the
@@ -77,6 +113,8 @@ impl K8sClientManager {
             .or_else(|| dirs::home_dir().map(|h| h.join(".kube").join("config")));
 
         *self.kubeconfig.write().await = Some(kubeconfig);
+        *self.kubeconfig_error.write().await = None;
+        *self.context_origins.write().await = HashMap::new();
         Ok(())
     }
 
@@ -89,15 +127,108 @@ impl K8sClientManager {
         self.kubeconfig.read().await.clone()
     }
 
+    /// Why the last load failed, if it did.
+    ///
+    /// `None` alongside a `None` kubeconfig means nothing has been loaded
+    /// yet — which is a different thing from a file that would not parse,
+    /// and the two must not be drawn the same way.
+    pub async fn kubeconfig_error(&self) -> Option<String> {
+        self.kubeconfig_error.read().await.clone()
+    }
+
     /// Load kubeconfig from an explicit path if `override_path` is
     /// Some, otherwise fall back to the default `$KUBECONFIG` / `~/.kube/config`
     /// search. The auth-flow callers route their `AppConfig.kubeconfig_path`
     /// override through here so we don't have to fork every callsite.
-    pub async fn load_kubeconfig_resolved(&self, override_path: Option<PathBuf>) -> Result<()> {
-        match override_path {
-            Some(path) => self.load_kubeconfig_from_path(path).await,
-            None => self.load_kubeconfig().await,
+    pub async fn load_kubeconfig_resolved(&self, overrides: Vec<PathBuf>) -> Result<()> {
+        let mut overrides = overrides.into_iter();
+        let (Some(first), rest) = (overrides.next(), overrides) else {
+            return self.load_kubeconfig().await;
+        };
+        let rest: Vec<PathBuf> = rest.collect();
+        if rest.is_empty() {
+            // One file is not a merge, and going through the merge path
+            // would leave an origin map saying what the single-file path
+            // deliberately leaves empty.
+            return self.load_kubeconfig_from_path(first).await;
         }
+        let mut all = Vec::with_capacity(rest.len() + 1);
+        all.push(first);
+        all.extend(rest);
+        self.load_kubeconfig_from_paths(all).await
+    }
+
+    /// Load several pinned files as one kubeconfig.
+    ///
+    /// Merged in the order given, and the merge is kube's own — the first
+    /// file to name a context, cluster or user is the one that wins, which
+    /// is the rule `kubectl` applies to `$KUBECONFIG` and therefore the one
+    /// a reader already has in their head.
+    ///
+    /// A file that will not parse fails the whole load rather than being
+    /// skipped. Dropping it silently would leave the reader looking at a
+    /// cluster list with holes in it and nothing on screen to say which file
+    /// is broken or that one is.
+    pub async fn load_kubeconfig_from_paths(&self, paths: Vec<PathBuf>) -> Result<()> {
+        let mut merged: Option<Kubeconfig> = None;
+        let mut origins: HashMap<String, PathBuf> = HashMap::new();
+        let mut canonical: Vec<PathBuf> = Vec::new();
+
+        for path in paths {
+            let path = canonicalize_kubeconfig_path(&path)?;
+            let parsed = match Kubeconfig::read_from(&path) {
+                Ok(parsed) => parsed,
+                Err(e) => {
+                    let why = format!("Failed to read kubeconfig from {}: {e}", path.display());
+                    *self.kubeconfig_error.write().await = Some(why.clone());
+                    *self.kubeconfig_source.write().await = Some(path);
+                    return Err(Error::Auth(AuthError::Kubeconfig(why)));
+                }
+            };
+
+            // Recorded before the merge, and only for names not already
+            // claimed: after merging, the winner's file is the answer and
+            // the loser's name is not in the result at all.
+            for context in &parsed.contexts {
+                origins
+                    .entry(context.name.clone())
+                    .or_insert_with(|| path.clone());
+            }
+
+            merged = Some(match merged {
+                None => parsed,
+                Some(first) => first.merge(parsed).map_err(|e| {
+                    Error::Auth(AuthError::Kubeconfig(format!(
+                        "Could not merge {}: {e}",
+                        path.display()
+                    )))
+                })?,
+            });
+            canonical.push(path);
+        }
+
+        let Some(kubeconfig) = merged else {
+            // Callers filter the empty case before getting here, and there
+            // is nothing sensible to merge from no files.
+            return Err(Error::Config("No kubeconfig files to merge".to_string()));
+        };
+
+        // The first file is what a screen naming "the" kubeconfig shows; the
+        // whole list is what the settings screen lists.
+        *self.kubeconfig_path.write().await = canonical.first().cloned();
+        *self.kubeconfig_source.write().await = canonical.first().cloned();
+        *self.context_origins.write().await = origins;
+        *self.kubeconfig.write().await = Some(kubeconfig);
+        *self.kubeconfig_error.write().await = None;
+        Ok(())
+    }
+
+    /// Which file a context was read from, where more than one was pinned.
+    ///
+    /// Empty for a single file, because then every context came from it and
+    /// saying so on every row is noise.
+    pub async fn context_origins(&self) -> HashMap<String, PathBuf> {
+        self.context_origins.read().await.clone()
     }
 
     /// Get a clone of the loaded kubeconfig
@@ -117,16 +248,24 @@ impl K8sClientManager {
         // trusted input. Returns a clear error if the file is missing.
         let path = canonicalize_kubeconfig_path(&path)?;
 
-        let kubeconfig = Kubeconfig::read_from(&path).map_err(|e| {
-            Error::Auth(AuthError::Kubeconfig(format!(
-                "Failed to read kubeconfig from {}: {e}",
-                path.display()
-            )))
-        })?;
+        let kubeconfig = match Kubeconfig::read_from(&path) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                let why = format!("Failed to read kubeconfig from {}: {e}", path.display());
+                *self.kubeconfig_error.write().await = Some(why.clone());
+                // The path is recorded even though the read failed: naming
+                // the file somebody has to go fix is most of the answer, and
+                // a panel that cannot name it sends them looking.
+                *self.kubeconfig_source.write().await = Some(path);
+                return Err(Error::Auth(AuthError::Kubeconfig(why)));
+            }
+        };
 
         *self.kubeconfig_path.write().await = Some(path.clone());
         *self.kubeconfig_source.write().await = Some(path);
+        *self.context_origins.write().await = HashMap::new();
         *self.kubeconfig.write().await = Some(kubeconfig);
+        *self.kubeconfig_error.write().await = None;
         Ok(())
     }
 
@@ -431,6 +570,28 @@ fn auth_for_user(kubeconfig: &Kubeconfig, user: &str) -> ContextAuth {
 /// before any `Kubeconfig::read_from(...)` so a stray `..` segment
 /// or a stale symlink can't quietly load a different file than
 /// the user thinks they're loading.
+/// The files `$KUBECONFIG` names and that are actually there.
+///
+/// Missing entries are dropped rather than failing the load, which is what
+/// `kubectl` does with them: a stale path in a shell profile should not
+/// leave somebody with no clusters at all. Empty when the variable is unset
+/// or names nothing readable, and the caller falls back to the default.
+fn env_kubeconfig_files() -> Vec<PathBuf> {
+    let separator = if cfg!(windows) { ';' } else { ':' };
+    std::env::var("KUBECONFIG")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .split(separator)
+                .filter(|entry| !entry.is_empty())
+                .map(PathBuf::from)
+                .filter(|path| path.exists())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub(crate) fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<PathBuf> {
     let expanded: PathBuf = if let Some(stripped) = path
         .to_str()
@@ -592,7 +753,7 @@ users:
 
         let manager = K8sClientManager::new();
         manager
-            .load_kubeconfig_resolved(Some(override_path.clone()))
+            .load_kubeconfig_resolved(vec![override_path.clone()])
             .await
             .expect("load with override");
 
@@ -637,7 +798,7 @@ users:
         unsafe {
             std::env::set_var("KUBECONFIG", &fake_kubeconfig);
         }
-        let result = manager.load_kubeconfig_resolved(None).await;
+        let result = manager.load_kubeconfig_resolved(Vec::new()).await;
         unsafe {
             match prior {
                 Some(v) => std::env::set_var("KUBECONFIG", v),
@@ -649,7 +810,119 @@ users:
         let recorded = manager.kubeconfig_path.read().await.clone();
         assert!(
             recorded.is_none(),
-            "load_kubeconfig_resolved(None) must NOT record an override path"
+            "load_kubeconfig_resolved(no paths) must NOT record an override path"
+        );
+    }
+
+    fn write_kubeconfig(dir: &std::path::Path, name: &str, contexts: &[&str]) -> PathBuf {
+        let path = dir.join(name);
+        let mut file = std::fs::File::create(&path).expect("fixture");
+        writeln!(file, "apiVersion: v1\nkind: Config\ncontexts:").expect("write");
+        for context in contexts {
+            writeln!(
+                file,
+                "  - name: {context}\n    context:\n      cluster: {context}\n      user: {context}"
+            )
+            .expect("write");
+        }
+        writeln!(file, "clusters: []\nusers: []").expect("write");
+        path
+    }
+
+    /// Two files, one cluster list. The whole point of #80: a work file and
+    /// a home file without having to paste them into one.
+    #[tokio::test]
+    async fn several_files_become_one_cluster_list() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let work = write_kubeconfig(dir.path(), "work.yaml", &["prod", "stage"]);
+        let home = write_kubeconfig(dir.path(), "home.yaml", &["nas"]);
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![work, home])
+            .await
+            .expect("both files parse");
+
+        let kubeconfig = manager.kubeconfig().await.expect("merged");
+        let mut names: Vec<&str> = kubeconfig
+            .contexts
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+        names.sort_unstable();
+        assert_eq!(names, ["nas", "prod", "stage"]);
+    }
+
+    /// Which file a context came from, which is the question somebody with
+    /// two files is actually asking.
+    #[tokio::test]
+    async fn each_context_remembers_the_file_it_came_from() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let work = write_kubeconfig(dir.path(), "work.yaml", &["prod"]);
+        let home = write_kubeconfig(dir.path(), "home.yaml", &["nas"]);
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![work.clone(), home.clone()])
+            .await
+            .expect("both files parse");
+
+        let origins = manager.context_origins().await;
+        assert_eq!(origins.get("prod"), Some(&work.canonicalize().unwrap()));
+        assert_eq!(origins.get("nas"), Some(&home.canonicalize().unwrap()));
+    }
+
+    /// kube merges the way kubectl does: the first file to name something
+    /// wins, and the later one does not overwrite it. A reader who put their
+    /// work file first expects work's `prod` to be the `prod` they get.
+    #[tokio::test]
+    async fn the_first_file_to_name_a_context_keeps_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = write_kubeconfig(dir.path(), "first.yaml", &["shared"]);
+        let second = write_kubeconfig(dir.path(), "second.yaml", &["shared", "extra"]);
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![first.clone(), second])
+            .await
+            .expect("both files parse");
+
+        let kubeconfig = manager.kubeconfig().await.expect("merged");
+        assert_eq!(
+            kubeconfig
+                .contexts
+                .iter()
+                .filter(|c| c.name == "shared")
+                .count(),
+            1,
+            "a name claimed twice is one context, not two"
+        );
+        assert_eq!(
+            manager.context_origins().await.get("shared"),
+            Some(&first.canonicalize().unwrap()),
+            "the file that won the merge is the one named"
+        );
+    }
+
+    /// A file that will not parse fails the load rather than being skipped.
+    /// Skipping would leave a cluster list with holes in it and nothing on
+    /// screen to say which file is broken, or that one is.
+    #[tokio::test]
+    async fn one_unreadable_file_fails_the_whole_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let good = write_kubeconfig(dir.path(), "good.yaml", &["prod"]);
+        let bad = dir.path().join("bad.yaml");
+        std::fs::write(&bad, "clusters: [ this is not\n  a kubeconfig\n").expect("write");
+
+        let manager = K8sClientManager::new();
+        let failed = manager
+            .load_kubeconfig_resolved(vec![good, bad.clone()])
+            .await;
+
+        let err = failed.expect_err("a broken file is not a partial success");
+        assert!(
+            err.to_string().contains("bad.yaml"),
+            "the error has to name the file to go and fix: {err}"
         );
     }
 

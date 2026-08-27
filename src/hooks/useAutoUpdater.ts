@@ -7,6 +7,7 @@
  * @module hooks/useAutoUpdater
  */
 
+import { useT } from "@/i18n/useT";
 import { useEffect, useRef } from "react";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { toast } from "@/components/ui/use-toast";
@@ -29,6 +30,7 @@ const UPDATE_CHECK_INTERVAL = 30 * 60 * 1000;
  * ```
  */
 export function useAutoUpdater() {
+  const t = useT();
   const {
     autoCheckEnabled,
     settingsLoaded,
@@ -56,8 +58,10 @@ export function useAutoUpdater() {
       if (update && !hasShownToast.current) {
         hasShownToast.current = true;
         toast({
-          title: "Update Available",
-          description: `Version ${update.version} is available. Go to Settings to download.`,
+          title: t("settings", "updateAvailableTitle"),
+          description: t("settings", "updateAvailableToast", {
+            version: update.version,
+          }),
         });
       }
     };
@@ -77,7 +81,7 @@ export function useAutoUpdater() {
         intervalRef.current = null;
       }
     };
-  }, [settingsLoaded, autoCheckEnabled, checkForUpdates]);
+  }, [settingsLoaded, autoCheckEnabled, checkForUpdates, t]);
 
   // Reset toast flag when update is dismissed
   useEffect(() => {

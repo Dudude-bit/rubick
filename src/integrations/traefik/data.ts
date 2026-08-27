@@ -16,6 +16,7 @@
  * by two of the four tabs.
  */
 
+import type { Saying } from "@/i18n/say";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -168,7 +169,7 @@ export interface ControllerInfo {
   args: string[];
   entryPoints: EntryPoint[];
   /** Why there is nothing above, in words rather than an empty object. */
-  problem: string | null;
+  problem: Saying | null;
 }
 
 /**
@@ -181,7 +182,7 @@ export interface ControllerInfo {
  * app can answer.
  */
 export async function fetchController(): Promise<ControllerInfo> {
-  const none = (problem: string): ControllerInfo => ({
+  const none = (problem: Saying): ControllerInfo => ({
     workload: null,
     args: [],
     entryPoints: [],
@@ -203,9 +204,10 @@ export async function fetchController(): Promise<ControllerInfo> {
   const deployment = deployments[0];
   const daemonSet = daemonSets[0];
   if (!deployment && !daemonSet) {
-    return none(
-      `Nothing in this cluster carries ${CONTROLLER_SELECTOR}, so the proxy's own configuration could not be read.`
-    );
+    return none({
+      key: "traefikNoController",
+      values: { selector: CONTROLLER_SELECTOR },
+    });
   }
 
   const workload = deployment
@@ -240,9 +242,12 @@ export async function fetchController(): Promise<ControllerInfo> {
       workload,
       args: [],
       entryPoints: [],
-      problem: `Its manifest could not be read, so its entry points are unknown — ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      problem: {
+        key: "traefikManifestUnreadable",
+        values: {
+          why: error instanceof Error ? error.message : String(error),
+        },
+      },
     };
   }
 
@@ -250,10 +255,7 @@ export async function fetchController(): Promise<ControllerInfo> {
     workload,
     args,
     entryPoints: readEntryPoints(args),
-    problem:
-      args.length === 0
-        ? "It was started with no arguments, so its entry points come from a configuration file this app cannot see."
-        : null,
+    problem: args.length === 0 ? { key: "traefikNoArgs" } : null,
   };
 }
 

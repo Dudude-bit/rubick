@@ -114,7 +114,7 @@ export function PersistentVolumeClaimDetail() {
       tone: pvc?.volume ? undefined : "warn",
     },
     {
-      label: "Storage class",
+      label: t("columns", "storageClass"),
       value: pvc?.storageClass ? (
         <ResourceRef
           kind={ResourceType.StorageClass}
@@ -139,7 +139,7 @@ export function PersistentVolumeClaimDetail() {
         <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "events",
       label: "Events",
@@ -182,7 +182,7 @@ export function PersistentVolumeClaimDetail() {
       ),
     },
     yamlTab({
-      title: "PersistentVolumeClaim YAML",
+      title: t("action", "kindYaml", { kind: "PersistentVolumeClaim" }),
       yaml: pvcYaml,
       resourceKind: ResourceType.PersistentVolumeClaim,
       resourceName: name || "",

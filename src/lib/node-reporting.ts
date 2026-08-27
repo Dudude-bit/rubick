@@ -20,6 +20,8 @@
  * is unhealthy, the reading is not stale. Only `Unknown`, or a Ready condition
  * that is missing altogether, means nobody is answering for those pods.
  */
+
+import type { T } from "@/i18n/useT";
 import type { NodeInfo } from "@/generated/types";
 
 /** A node whose Ready condition stopped being asserted either way. */
@@ -102,12 +104,16 @@ export function withNodeSilence<T extends { nodeName?: string | null }>(
  */
 export function silenceNote(
   silence: NodeSilence,
+  t: T,
   now: Date = new Date()
 ): string {
-  const head = `Node ${silence.node} stopped reporting`;
   const when = silence.since ? ago(silence.since, now) : null;
-  const since = when ? ` ${when}` : "";
-  return `${head}${since}. This status is the last one it sent, not the pod's state now.`;
+  return when
+    ? t("readings", "nodeStoppedReportingAgo", {
+        node: silence.node,
+        age: when,
+      })
+    : t("readings", "nodeStoppedReporting", { node: silence.node });
 }
 
 /** `4m ago`, or null when the timestamp is unusable. */

@@ -124,7 +124,7 @@ function Mounts({
   return (
     <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
       {groupMounts(volume.mounts).map(({ key, mount, containers }) => {
-        const who = mountedBy(containers, containerCount);
+        const who = mountedBy(containers, t, containerCount);
         return (
           <span key={key} className="block">
             {who && (

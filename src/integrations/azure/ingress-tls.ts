@@ -52,7 +52,10 @@ async function answerFor(input: {
     return input.hosts.map((host) => ({
       host,
       terminated: true,
-      by: `${certificate} on the Application Gateway`,
+      by: {
+        key: "azureCertOnGateway",
+        values: { name: certificate },
+      },
     }));
   }
   // A redirect to HTTPS is only ever created beside a listener to redirect
@@ -62,7 +65,7 @@ async function answerFor(input: {
     return input.hosts.map((host) => ({
       host,
       terminated: true,
-      by: "a certificate on the Application Gateway",
+      by: { key: "azureSomeCertOnGateway" },
     }));
   }
   return [];

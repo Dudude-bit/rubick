@@ -132,14 +132,14 @@ function PeekContent({
   // The Overview fetch is also what a tab is marked from, so the strip is
   // built after it rather than beside it.
   const tabs = useMemo(
-    () => peekTabsFor(target.kind, data, target.crd),
-    [target.kind, data, target.crd]
+    () => peekTabsFor(target.kind, t, data, target.crd),
+    [target.kind, data, target.crd, t]
   );
   const activeTab = resolvePeekTab(requestedTab, tabs);
 
   const summary = useMemo(
-    () => (data === undefined ? null : source.summarise(data, target)),
-    [data, source, target]
+    () => (data === undefined ? null : source.summarise(data, target, t)),
+    [data, source, target, t]
   );
 
   const age = useRealtimeAge(summary?.createdAt ?? null);

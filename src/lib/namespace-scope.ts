@@ -56,6 +56,8 @@
  * feature before that was settled wrote one.
  */
 
+import type { T } from "@/i18n/useT";
+
 /**
  * How many namespaces one window may watch at once.
  *
@@ -130,16 +132,16 @@ export function inScope(
 }
 
 /** What the scope is called, for a tab strip and a page description. */
-export function scopeLabel(scope: readonly string[]): string {
-  if (scope.length === 0) return "All namespaces";
+export function scopeLabel(scope: readonly string[], t: T): string {
+  if (scope.length === 0) return t("cluster", "allNamespaces");
   if (scope.length === 1) return scope[0];
   if (scope.length === 2) return `${scope[0]}, ${scope[1]}`;
-  return `${scope.length} namespaces`;
+  return t("readings", "argoNamespaceCount", { n: scope.length });
 }
 
 /** The same thing inside a sentence: "no events in …". */
-export function scopeIn(scope: readonly string[]): string {
-  if (scope.length === 0) return "any namespace";
+export function scopeIn(scope: readonly string[], t: T): string {
+  if (scope.length === 0) return t("empty", "anyNamespace");
   if (scope.length === 1) return scope[0];
-  return `${scope.length} namespaces`;
+  return t("readings", "argoNamespaceCount", { n: scope.length });
 }

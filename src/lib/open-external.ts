@@ -14,7 +14,13 @@ import { toast } from "@/components/ui/use-toast";
  * nothing would look like a dead control, so the address goes where the reader
  * can still use it and the toast says which it is.
  */
-export async function openExternal(url: string, site: string): Promise<void> {
+
+import type { T } from "@/i18n/useT";
+export async function openExternal(
+  url: string,
+  site: string,
+  t: T
+): Promise<void> {
   try {
     await open(url);
   } catch {
@@ -23,10 +29,10 @@ export async function openExternal(url: string, site: string): Promise<void> {
       .then(() => true)
       .catch(() => false);
     toast({
-      title: "Could not open your browser",
+      title: t("action", "couldNotOpenBrowser"),
       description: copied
-        ? `The ${site} address is on your clipboard instead: ${url}`
-        : `${site} has it at ${url}`,
+        ? t("action", "addressOnClipboard", { site, url })
+        : t("action", "siteHasItAt", { site, url }),
       variant: "destructive",
     });
   }

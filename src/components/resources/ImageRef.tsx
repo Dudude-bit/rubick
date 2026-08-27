@@ -129,7 +129,7 @@ function RegistryLinkMark({
     // The row underneath usually navigates, and a click that both leaves for
     // the browser and opens a detail page is a click nobody meant to make.
     event.stopPropagation();
-    void openExternal(link.url, link.site);
+    void openExternal(link.url, link.site, t);
   };
 
   return (

@@ -1,3 +1,4 @@
+import { useT } from "@/i18n/useT";
 import { memo } from "react";
 import type { LogLevel, LogLine as LogLineType } from "@/generated/types";
 import { runSpanMs, type LogRun } from "./grouping";
@@ -116,6 +117,7 @@ export const LogLineComponent = memo(function LogLineComponent({
   onFieldClick,
   onLevelClick,
 }: LogLineProps) {
+  const t = useT();
   const level = log.level ?? "unknown";
   const messageColor = LEVEL_MESSAGE_COLORS[level];
 
@@ -160,7 +162,11 @@ export const LogLineComponent = memo(function LogLineComponent({
           )}
           <button
             type="button"
-            title={expanded ? "Hide line detail" : "Show line detail"}
+            title={
+              expanded
+                ? t("empty", "hideLineDetail")
+                : t("empty", "showLineDetail")
+            }
             aria-expanded={expanded}
             className={`text-left hover:underline hover:decoration-dotted ${messageColor}`}
             onClick={() => onToggleDetail(lineId)}
@@ -201,12 +207,13 @@ function LineDetail({
   onFieldClick?: (key: string, value: string) => void;
   onLevelClick?: (level: LogLevel) => void;
 }) {
+  const t = useT();
   const level = log.level ?? "unknown";
   return (
     <div className="ml-16 mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-[11px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-fnt">
         <span className="tabular-nums text-fg-mut">
-          {formatTimestampPrecise(log.timestamp)}
+          {formatTimestampPrecise(log.timestamp, t)}
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -231,7 +238,9 @@ function LineDetail({
         >
           level={LEVEL_WORDS[level]}
         </button>
-        <span title={FORMAT_DESCRIPTIONS[log.format]}>{log.format}</span>
+        <span title={t("readings", FORMAT_DESCRIPTIONS[log.format])}>
+          {log.format}
+        </span>
       </div>
       <p className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-fg-mid">
         {log.message}
@@ -277,6 +286,7 @@ export const LogRunRow = memo(function LogRunRow({
   containerColor: string | undefined;
   onToggle: (id: number) => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -285,8 +295,8 @@ export const LogRunRow = memo(function LogRunRow({
       aria-expanded={expanded}
       title={
         expanded
-          ? "Collapse these repeats"
-          : `Expand ${formatCount(run.count)} repeats`
+          ? t("empty", "collapseRepeats")
+          : t("empty", "expandRepeats", { count: formatCount(run.count) })
       }
       data-testid="log-run"
     >

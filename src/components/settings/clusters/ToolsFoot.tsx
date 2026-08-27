@@ -5,7 +5,7 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useSettingSearchMatch } from "../settings-search";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The binaries, in one line, at the foot — with what depends on them.
@@ -46,8 +46,8 @@ export function ToolsFoot({
   });
 
   const visible = useSettingSearchMatch(
-    "kubectl helm cli tools binary path version",
-    "cloud profiles gcp google azure adc az login credentials",
+    t("settings", "searchToolsWords"),
+    t("settings", "searchCloudWords"),
     kubectl?.version ?? "",
     helm?.version ?? ""
   );
@@ -76,7 +76,7 @@ export function ToolsFoot({
       <Foot onClick={onManageProfiles} expanded={profilesOpen}>
         {t("settings", "cloudProfiles")}
       </Foot>
-      {` ${profileSummary(gcpProfiles?.length, azureProfiles?.length)}`}
+      {` ${profileSummary(gcpProfiles?.length, azureProfiles?.length, t)}`}
     </p>
   );
 }
@@ -103,12 +103,23 @@ function Tool({
   );
 }
 
-function profileSummary(gcp: number | undefined, azure: number | undefined) {
+function profileSummary(
+  gcp: number | undefined,
+  azure: number | undefined,
+  t: T
+) {
   if (gcp === undefined || azure === undefined) return "";
-  if (gcp === 0 && azure === 0) return "— none defined.";
-  return `— ${gcp > 0 ? `${gcp} GCP` : "none for GCP"}, ${
-    azure > 0 ? `${azure} Azure` : "none for Azure"
-  }.`;
+  if (gcp === 0 && azure === 0) return t("settings", "toolsNoProfiles");
+  return t("settings", "toolsProfiles", {
+    gcp:
+      gcp > 0
+        ? t("settings", "toolsGcpCount", { n: gcp })
+        : t("settings", "toolsNoGcp"),
+    azure:
+      azure > 0
+        ? t("settings", "toolsAzureCount", { n: azure })
+        : t("settings", "toolsNoAzure"),
+  });
 }
 
 function Foot({

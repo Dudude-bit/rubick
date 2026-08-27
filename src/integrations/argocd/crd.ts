@@ -45,25 +45,25 @@ const text = (value: unknown) => String(value ?? "-");
 const applicationColumns: CrdColumn[] = [
   {
     id: "sync",
-    header: "Sync",
+    header: "sync",
     accessor: (resource) => getValueByPath(resource, "status.sync.status"),
     cell: text,
   },
   {
     id: "health",
-    header: "Health",
+    header: "health",
     accessor: (resource) => getValueByPath(resource, "status.health.status"),
     cell: text,
   },
   {
     id: "project",
-    header: "Project",
+    header: "project",
     accessor: (resource) => getValueByPath(resource, "spec.project"),
     cell: text,
   },
   {
     id: "repo",
-    header: "Repository",
+    header: "repository",
     accessor: (resource) =>
       getValueByPath(resource, "spec.source.repoURL") ??
       getValueByPath(resource, "spec.sources[0].repoURL"),
@@ -72,14 +72,14 @@ const applicationColumns: CrdColumn[] = [
   },
   {
     id: "destination",
-    header: "Destination",
+    header: "destination",
     accessor: (resource) =>
       getValueByPath(resource, "spec.destination.namespace"),
     cell: text,
   },
   {
     id: "autoSync",
-    header: "Auto-sync",
+    header: "autoSync",
     accessor: (resource) =>
       getValueByPath(resource, "spec.syncPolicy.automated") != null,
     cell: (value) => (value ? "on" : "off"),
@@ -89,7 +89,7 @@ const applicationColumns: CrdColumn[] = [
 const applicationSetColumns: CrdColumn[] = [
   {
     id: "generators",
-    header: "Generators",
+    header: "generators",
     accessor: (resource) => {
       const generators = getValueByPath(resource, "spec.generators");
       return Array.isArray(generators)
@@ -102,7 +102,7 @@ const applicationSetColumns: CrdColumn[] = [
   },
   {
     id: "goTemplate",
-    header: "Template",
+    header: "template",
     accessor: (resource) =>
       getValueByPath(resource, "spec.template.metadata.name"),
     cell: text,
@@ -112,7 +112,7 @@ const applicationSetColumns: CrdColumn[] = [
 const projectColumns: CrdColumn[] = [
   {
     id: "repos",
-    header: "Source repos",
+    header: "sourceRepos",
     accessor: (resource) => {
       const repos = getValueByPath(resource, "spec.sourceRepos");
       return Array.isArray(repos) ? repos.join(", ") : null;
@@ -121,7 +121,7 @@ const projectColumns: CrdColumn[] = [
   },
   {
     id: "destinations",
-    header: "Destinations",
+    header: "destinations",
     accessor: (resource) => {
       const destinations = getValueByPath(resource, "spec.destinations");
       return Array.isArray(destinations) ? destinations.length : 0;

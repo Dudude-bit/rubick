@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import {
   RefreshCw,
   Trash2,
@@ -39,6 +39,7 @@ import type { HelmRelease } from "@/generated/types";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
+import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 
@@ -288,7 +289,9 @@ export function HelmReleasesTab({
             <SelectValue placeholder={t("action", "allNamespaces")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("action", "allNamespaces")}</SelectItem>
+            <SelectItem value={EVERY_NAMESPACE}>
+              {t("action", "allNamespaces")}
+            </SelectItem>
             {namespaces.map((ns) => (
               <SelectItem key={ns} value={ns}>
                 {ns}

@@ -58,7 +58,6 @@ interface YamlEditorState {
   getResourceHistory: () => HistoryEntry[];
   resetToOriginal: () => void;
   formatYaml: () => void;
-  loadHistory: () => Promise<void>;
 }
 
 function getResourceKeyString(key: ResourceKey | null): string {
@@ -257,23 +256,6 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       });
     } catch {
       // If parsing fails, keep original content
-    }
-  },
-
-  loadHistory: async () => {
-    try {
-      const allHistory = await commands.getAllYamlHistory();
-      const history: Record<string, HistoryEntry[]> = {};
-      for (const [key, entries] of Object.entries(allHistory)) {
-        history[key] = entries.map((e) => ({
-          timestamp: e.timestamp,
-          content: e.content,
-          label: e.label ?? undefined,
-        }));
-      }
-      set({ history });
-    } catch (error) {
-      console.error("Failed to load all YAML history:", error);
     }
   },
 }));

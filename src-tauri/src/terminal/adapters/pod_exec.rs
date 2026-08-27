@@ -30,6 +30,17 @@ pub struct PodExecAdapter {
     // Store streams separately since AttachedProcess.stdin()/stdout() consume via .take()
     stdin_writer: Option<Box<dyn AsyncWrite + Unpin + Send + Sync>>,
     stdout_reader: Option<Box<dyn AsyncRead + Unpin + Send + Sync>>,
+    /// Whether the stream has ended.
+    ///
+    /// Separate from `attached`, because "a connection was made" and "it is
+    /// over" are different questions and only one of them changes when the
+    /// shell exits. The manager learns both through the same `Ok(None)` —
+    /// EOF and a quiet tick are indistinguishable to it — so `is_running` is
+    /// the only place that can tell them apart, and without this it answered
+    /// "still running" forever: the session task span on a 50ms tick, the
+    /// entry stayed in the session map, and the pane went on drawing a
+    /// terminal whose shell had exited.
+    finished: bool,
 }
 
 impl PodExecAdapter {
@@ -51,6 +62,7 @@ impl PodExecAdapter {
             attached: None,
             stdin_writer: None,
             stdout_reader: None,
+            finished: false,
         }
     }
 }
@@ -87,6 +99,9 @@ impl TerminalAdapter for PodExecAdapter {
             .map(|r| Box::new(r) as Box<dyn AsyncRead + Unpin + Send + Sync>);
 
         self.attached = Some(attached);
+        // A reconnect is a new stream, and the old one having ended says
+        // nothing about it.
+        self.finished = false;
         Ok(())
     }
 
@@ -102,7 +117,8 @@ impl TerminalAdapter for PodExecAdapter {
                 .await
             {
                 Ok(Ok(0)) => {
-                    // EOF - connection closed
+                    // EOF: the shell exited or the container went away.
+                    self.finished = true;
                     Ok(None)
                 }
                 Ok(Ok(n)) => {
@@ -161,6 +177,6 @@ impl TerminalAdapter for PodExecAdapter {
     }
 
     fn is_running(&self) -> bool {
-        self.attached.is_some()
+        self.attached.is_some() && !self.finished
     }
 }

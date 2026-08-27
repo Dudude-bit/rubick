@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import type {
   ContainerInfo,
   ContainerPhase,
@@ -276,21 +277,24 @@ const NOT_STARTED = new Set([
  * whether they misremembered its name, and the answer to "why can I not
  * shell into `prepare`" is a fact about `prepare`, not an absence.
  */
-export function whyNoShell(container: ContainerInfo): string | null {
+export function whyNoShell(container: ContainerInfo, t: T): string | null {
   const { state } = container;
   if (state.type === "running") return null;
   if (state.type === "terminated") {
     return state.termination.exitCode === 0
-      ? "finished, nothing to attach to"
-      : `exited ${state.termination.exitCode}, nothing to attach to`;
+      ? t("readings", "shellFinished")
+      : t("readings", "shellExited", { code: state.termination.exitCode });
   }
   if (state.type === "waiting") {
     const reason = state.reason ?? "";
-    if (NOT_STARTED.has(reason.toLowerCase())) return "has not started";
-    if (container.lastTerminated) return "not running between restarts";
-    return reason ? `not running · ${reason}` : "not running";
+    if (NOT_STARTED.has(reason.toLowerCase()))
+      return t("readings", "shellNotStarted");
+    if (container.lastTerminated) return t("readings", "shellBetweenRestarts");
+    return reason
+      ? t("readings", "shellNotRunningWhy", { reason })
+      : t("readings", "shellNotRunning");
   }
-  return "state unknown, nothing to attach to";
+  return t("readings", "shellStateUnknown");
 }
 
 /**
@@ -302,8 +306,11 @@ export function whyNoShell(container: ContainerInfo): string | null {
  * now, which is why it is `whyNoShell` that decides it and not `phase`.
  */
 export function shellTargets(pod: PodContainerLists): ContainerInfo[] {
+  // The reason is discarded — only its absence decides membership — so this
+  // asks in no language rather than making every caller supply one.
+  const noWords: T = () => "";
   return podContainers(pod)
-    .filter((c) => whyNoShell(c) === null)
+    .filter((c) => whyNoShell(c, noWords) === null)
     .sort(byPhase);
 }
 
@@ -327,7 +334,8 @@ function noteFor(
   container: ContainerInfo,
   mark: StepMark,
   /** The init container the sequence is currently stuck on, if any. */
-  blockedBy: string | null
+  blockedBy: string | null,
+  t: T
 ): string | null {
   const phase = container.phase;
 
@@ -335,11 +343,12 @@ function noteFor(
     const death = container.lastTerminated ?? null;
     const when = death ? terminationWhen(death) : null;
     if (container.restartCount > 0) {
-      return `${container.restartCount} ${
-        container.restartCount === 1 ? "attempt" : "attempts"
-      }${when ? `, last ${when}` : ""} — what the run that failed printed is in Logs.`;
+      return t("readings", "logsAttemptsLast", {
+        attempts: t("count", "attemptsCount", { n: container.restartCount }),
+        when: when ? t("readings", "logsLastWhen", { when }) : "",
+      });
     }
-    return "What it printed before it exited is in Logs.";
+    return t("readings", "logsPrintedBeforeExit");
   }
 
   if (mark === "done" && phase !== "app") {
@@ -354,24 +363,25 @@ function noteFor(
     const when = termination ? terminationWhen(termination) : null;
     // Said out loud because a finished container looks identical to a
     // silent one in a log pane, and Follow does nothing on either.
-    return `Finished${took ? ` in ${took}` : ""}${
-      when ? `, ${when}` : ""
-    } — its log is complete.`;
+    return t("readings", "logsFinishedComplete", {
+      took: took ? t("readings", "logsTook", { took }) : "",
+      when: when ? t("readings", "logsWhen", { when }) : "",
+    });
   }
 
   if (mark === "queued") {
     if (phase === "app") {
       return blockedBy
-        ? "No logs yet — init has not finished."
-        : "No logs yet — it has not started.";
+        ? t("readings", "logsNoneInitUnfinished")
+        : t("readings", "logsNoneNotStarted");
     }
     return blockedBy && blockedBy !== container.name
-      ? `Never ran — the sequence is still on ${blockedBy}.`
-      : "Never ran.";
+      ? t("readings", "logsNeverRanBlocked", { on: blockedBy })
+      : t("readings", "logsNeverRan");
   }
 
   if (mark === "running" && phase === "sidecar") {
-    return "Started during init and does not finish — the sequence went on once it was ready.";
+    return t("readings", "logsSidecarRunning");
   }
 
   return null;
@@ -385,7 +395,8 @@ function noteFor(
  * sorts.
  */
 export function containerSequence(
-  containers: readonly ContainerInfo[]
+  containers: readonly ContainerInfo[],
+  t: T
 ): ContainerGroup[] {
   const { init, sidecars, app } = splitByPhase(containers);
 
@@ -399,7 +410,7 @@ export function containerSequence(
       container,
       mark,
       status: containerStatus(container),
-      note: noteFor(container, mark, blockedBy),
+      note: noteFor(container, mark, blockedBy, t),
     };
   };
 
@@ -408,7 +419,7 @@ export function containerSequence(
     groups.push({
       phase: "init",
       title: GROUP_TITLE.init,
-      caption: "run in order before the pod starts, each waiting on the last",
+      caption: t("readings", "groupInitCaption"),
       steps: init.map(step),
     });
   }
@@ -420,7 +431,7 @@ export function containerSequence(
       // filing them with the init sequence would imply they completed
       // and filing them with the app containers would imply they
       // started at the same time.
-      caption: "started during init and still running",
+      caption: t("readings", "groupSidecarCaption"),
       steps: sidecars.map(step),
     });
   }
@@ -430,8 +441,8 @@ export function containerSequence(
       title: GROUP_TITLE.app,
       caption:
         blockedBy !== null
-          ? "never started — the pod is still in init"
-          : "run together for the life of the pod",
+          ? t("readings", "groupAppBlocked")
+          : t("readings", "groupAppCaption"),
       steps: app.map(step),
     });
   }
@@ -462,7 +473,8 @@ export interface TemplateGroup {
  * be the same class of lie as calling a queued container "never started".
  */
 export function templateSequence(
-  template: TemplateContainerLists
+  template: TemplateContainerLists,
+  t: T
 ): TemplateGroup[] {
   const { init, sidecars, app } = splitByPhase(declaredContainers(template));
 
@@ -471,7 +483,7 @@ export function templateSequence(
     groups.push({
       phase: "init",
       title: GROUP_TITLE.init,
-      caption: "run in order before each pod starts, each waiting on the last",
+      caption: t("readings", "groupInitCaptionEach"),
       containers: init,
     });
   }
@@ -479,7 +491,7 @@ export function templateSequence(
     groups.push({
       phase: "sidecar",
       title: GROUP_TITLE.sidecar,
-      caption: "start during init and run for the life of each pod",
+      caption: t("readings", "groupSidecarCaptionEach"),
       containers: sidecars,
     });
   }
@@ -487,7 +499,7 @@ export function templateSequence(
     groups.push({
       phase: "app",
       title: GROUP_TITLE.app,
-      caption: "run together for the life of each pod",
+      caption: t("readings", "groupAppCaptionEach"),
       containers: app,
     });
   }

@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import { AlignLeft, Braces, Info, Link2, Table2 } from "lucide-react";
 
 import { podContainers } from "@/lib/container-sequence";
@@ -52,13 +53,15 @@ export interface PeekTabDefinition {
   mark?: Extract<DetailTabMark, { shows: "count" }>;
 }
 
-const OVERVIEW: PeekTabDefinition = {
+/** The two ends every kind gets, named at call time like the rest. */
+const overviewTab = (t: T): PeekTabDefinition => ({
   id: "overview",
-  label: "Overview",
+  label: t("nav", "overview"),
   glyph: viewGlyph(Info),
-};
+});
 const YAML: PeekTabDefinition = {
   id: "yaml",
+  // A format, not a word — the same in every language the app speaks.
   label: "YAML",
   glyph: viewGlyph(Braces),
 };
@@ -76,6 +79,7 @@ const CHILDREN_LABEL = {
 
 export function peekTabsFor(
   kind: string,
+  t: T,
   /** What the Overview fetch returned, when it has returned. */
   detail?: unknown,
   /**
@@ -95,8 +99,12 @@ export function peekTabsFor(
 
   if (crd) {
     return [
-      OVERVIEW,
-      { id: "connections", label: "Connections", glyph: viewGlyph(Link2) },
+      overviewTab(t),
+      {
+        id: "connections",
+        label: t("columns", "connections"),
+        glyph: viewGlyph(Link2),
+      },
       YAML,
     ];
   }
@@ -104,10 +112,10 @@ export function peekTabsFor(
   if (resolved === "Pod") {
     const pod = detail as PodInfo | undefined;
     middle.push(
-      { id: "logs", label: "Logs", glyph: viewGlyph(AlignLeft) },
+      { id: "logs", label: t("action", "logs"), glyph: viewGlyph(AlignLeft) },
       {
         id: "containers",
-        label: "Containers",
+        label: t("columns", "containers"),
         // A container has no kind of its own; it is what a Pod is made of,
         // so it arrives under the Pod's cube and the Pod's hue.
         glyph: kindGlyph(ResourceType.Pod),
@@ -118,7 +126,7 @@ export function peekTabsFor(
     const keyed = detail as ConfigMapInfo | SecretInfo | undefined;
     middle.push({
       id: "data",
-      label: "Data",
+      label: t("columns", "data"),
       glyph: viewGlyph(Table2),
       mark: keyed ? countMark(keyed.dataKeys.length) : undefined,
     });
@@ -131,7 +139,7 @@ export function peekTabsFor(
     });
   }
 
-  return [OVERVIEW, ...middle, YAML];
+  return [overviewTab(t), ...middle, YAML];
 }
 
 /**

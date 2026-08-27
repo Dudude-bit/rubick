@@ -9,6 +9,12 @@ import {
   sourceState,
 } from "./model";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const REVISION = "master@sha1:eec06d1ea459af4cb4e10e806f8be7c7bd58b361";
 
 interface Condition {
@@ -119,7 +125,7 @@ describe("suspension is never healthy", () => {
       [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
     );
 
-    const state = reconcilerState(reconcilers[0]);
+    const state = reconcilerState(reconcilers[0], t);
     expect(state.text).toBe("suspended");
     expect(state.tone).not.toBe("ok");
     expect(reconcilers[0].findings.map((finding) => finding.kind)).toContain(
@@ -207,7 +213,7 @@ describe("a source that stopped fetching freezes everything under it", () => {
     );
 
     expect(reconcilers[0].ready).toBe(true);
-    expect(reconcilerState(reconcilers[0]).tone).toBe("err");
+    expect(reconcilerState(reconcilers[0], t).tone).toBe("err");
     const frozen = reconcilers[0].findings.find(
       (finding) => finding.kind === "frozen"
     );
@@ -223,7 +229,7 @@ describe("a source that stopped fetching freezes everything under it", () => {
       "apps",
     ]);
     expect(failing?.kind === "fetchFailing" && failing.everFetched).toBe(true);
-    expect(sourceState(sources[0]).tone).toBe("err");
+    expect(sourceState(sources[0], t).tone).toBe("err");
   });
 
   /** Never fetched is a different sentence: nothing was ever applied. */
@@ -364,7 +370,7 @@ describe("a HelmRelease is a reconciler with a chart for a unit", () => {
     // It keeps no inventory: what it owns is in Helm's own storage, and a
     // number here would be invented.
     expect(reconcilers[0].objects).toBeNull();
-    expect(reconcilerState(reconcilers[0]).tone).toBe("ok");
+    expect(reconcilerState(reconcilers[0], t).tone).toBe("ok");
   });
 });
 
@@ -387,10 +393,10 @@ describe("revisions", () => {
       ref: "master",
       commit: "eec06d1ea459af4cb4e10e806f8be7c7bd58b361",
     });
-    expect(revisionText(readRevision(REVISION))).toBe("master@eec06d1");
-    expect(revisionText(readRevision("master/eec06d1ea459"))).toBe(
+    expect(revisionText(readRevision(REVISION), t)).toBe("master@eec06d1");
+    expect(revisionText(readRevision("master/eec06d1ea459"), t)).toBe(
       "master@eec06d1"
     );
-    expect(revisionText(readRevision("6.5.4"))).toBe("6.5.4");
+    expect(revisionText(readRevision("6.5.4"), t)).toBe("6.5.4");
   });
 });

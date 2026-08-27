@@ -12,6 +12,7 @@
  * the reader has to press it.
  */
 
+import { SaidError } from "@/i18n/say";
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -108,7 +109,11 @@ export async function wake(
 
   const service = await serviceOf(preference);
   if (!service) {
-    throw new Error(
+    throw new SaidError(
+      {
+        key: "forwardServiceGone",
+        values: { where: `${preference.namespace}/${preference.service}` },
+      },
       `${preference.namespace}/${preference.service} is not in this cluster any more, so there is nothing to forward to.`
     );
   }

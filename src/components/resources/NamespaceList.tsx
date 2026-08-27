@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { T } from "@/i18n/T";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
 import { ResourceList } from "./ResourceList";
@@ -55,7 +55,7 @@ export const columns = (
   {
     size: 80,
     id: "pods",
-    header: "Pods",
+    header: () => <T section="columns" k="pods" />,
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">
         {podCounts.get(row.original.name) ?? 0}

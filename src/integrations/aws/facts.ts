@@ -16,7 +16,7 @@
 
 import { commands } from "@/lib/commands";
 
-import { crdObjectPath, crdObjectsPath, plural } from "../kit";
+import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   INGRESS_CLASS_PARAMS_CRD,
@@ -32,12 +32,15 @@ export async function facts(): Promise<VendorFact[]> {
 
   const lines: VendorFact[] = [
     {
-      text: [
-        plural(bindings.length, "TargetGroupBinding"),
-        // Not through `plural`: the kind's own name is already plural, and
-        // "IngressClassParamss" is what adding an s to it produces.
-        `${params.length} IngressClassParams`,
-      ].join(" · "),
+      say: [
+        {
+          key: "kindCount",
+          values: { n: bindings.length, kind: "TargetGroupBinding" },
+        },
+        // Not counted as a kind name: this one is already plural, and
+        // "IngressClassParamss" is what pluralising it produces.
+        { key: "awsIngressClassParams", values: { n: params.length } },
+      ],
     },
   ];
 
@@ -49,17 +52,26 @@ export async function facts(): Promise<VendorFact[]> {
       // The controller's own words where there is one of them, because the
       // sentence is the repair — "couldn't find target group" and "access
       // denied" send the reader to two completely different consoles.
-      text:
+      say:
         failing.length === 1
-          ? (bindingFailure(failing[0]) ?? "not ready")
-          : `${plural(failing.length, "binding")} the controller could not apply`,
+          ? // The controller's own words are not ours to translate.
+            {
+              key: "verbatimLine" as const,
+              values: {
+                said: bindingFailure(failing[0]) ?? "",
+              },
+            }
+          : {
+              key: "awsBindingsUnapplied" as const,
+              values: { n: failing.length },
+            },
       tone: "err",
     });
   }
 
   if (bindings.length > 0) {
     lines.push({
-      text: failing.length === 1 ? "Show it" : "Show them",
+      say: { key: failing.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         failing.length === 1
           ? crdObjectPath(

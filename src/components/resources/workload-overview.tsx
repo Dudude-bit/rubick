@@ -31,6 +31,7 @@
  *   other block repeats it. The header is exempt — it is identity.
  */
 
+import { useT, type T } from "@/i18n/useT";
 import type { ReactNode } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -142,11 +143,12 @@ export function CountBlock({
   children,
   governance,
 }: CountBlockProps) {
-  const { rows, findings, sets, guards } = governanceRows(governance?.data);
+  const t = useT();
+  const { rows, findings, sets, guards } = governanceRows(governance?.data, t);
 
   return (
     <Section>
-      <SectionHeader title={title} count={caption(subject, sets, guards)} />
+      <SectionHeader title={title} count={caption(subject, sets, guards, t)} />
       <div className="grid gap-x-8 md:grid-cols-2">
         <div>{children}</div>
         {rows.length > 0 && (
@@ -167,10 +169,15 @@ export function CountBlock({
  * mistake as an empty `A drain waits` row: it is a heading for something the
  * block does not go on to say.
  */
-function caption(own: ReactNode, sets: boolean, guards: boolean): ReactNode {
+function caption(
+  own: ReactNode,
+  sets: boolean,
+  guards: boolean,
+  t: T
+): ReactNode {
   const earned = [
-    sets ? "who sets it" : null,
-    guards ? "what a drain must respect" : null,
+    sets ? t("readings", "govWhoSetsIt") : null,
+    guards ? t("readings", "govWhatDrainRespects") : null,
   ].filter((clause): clause is string => clause !== null);
 
   if (earned.length === 0) return own;

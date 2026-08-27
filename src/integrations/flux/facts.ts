@@ -9,7 +9,6 @@
  */
 
 import { integrationPagePath } from "../paths";
-import { plural } from "../kit";
 import type { VendorFact } from "../registry";
 import { fetchPicture } from "./data";
 
@@ -17,30 +16,42 @@ export async function facts(): Promise<VendorFact[]> {
   const { reconcilers, sources } = await fetchPicture();
 
   const lines: VendorFact[] = [
-    { text: plural(reconcilers.length, "reconciler") },
+    { say: { key: "factReconcilers", values: { n: reconcilers.length } } },
   ];
 
   const failing = reconcilers.filter(
     (reconciler) => reconciler.worst === "err"
   ).length;
   if (failing > 0) {
-    lines.push({ text: `${failing} not reconciled`, tone: "err" });
+    lines.push({
+      say: { key: "factNotReconciled", values: { n: failing } },
+      tone: "err",
+    });
   }
 
   const suspended = reconcilers.filter(
     (reconciler) => reconciler.suspended
   ).length;
   if (suspended > 0) {
-    lines.push({ text: `${suspended} suspended`, tone: "warn" });
+    lines.push({
+      say: { key: "factSuspendedCount", values: { n: suspended } },
+      tone: "warn",
+    });
   }
 
   const stopped = sources.filter((source) => source.ready === false).length;
   if (stopped > 0) {
-    lines.push({ text: `${stopped} source not fetching`, tone: "err" });
+    lines.push({
+      say: { key: "factSourceNotFetching", values: { n: stopped } },
+      tone: "err",
+    });
   }
 
   if (reconcilers.length > 0) {
-    lines.push({ text: "Show them", to: integrationPagePath("flux") });
+    lines.push({
+      say: { key: "factShowThem" },
+      to: integrationPagePath("flux"),
+    });
   }
 
   return lines;

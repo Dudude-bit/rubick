@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useClusterStore } from "@/stores/clusterStore";
 import { BindingDialog } from "./clusters/BindingDialog";
 import { CloudProfilesPanel } from "./clusters/CloudProfilesPanel";
@@ -59,6 +60,8 @@ export function ClustersSettings() {
     return [...names].sort();
   }, [contexts]);
 
+  const kubeconfig = useKubeconfigPath();
+
   const { data: located } = useQuery({
     queryKey: ["located-binaries", wanted],
     queryFn: () => commands.locateBinaries(wanted),
@@ -73,6 +76,21 @@ export function ClustersSettings() {
     () => new Map((bindings ?? []).map((one) => [one.contextName, one])),
     [bindings]
   );
+
+  /**
+   * Which file each context was read from, where more than one is being
+   * read. Empty for a single file: every context came from it, and saying
+   * so on every row is noise.
+   */
+  const fileOf = React.useMemo(() => {
+    const files = kubeconfig.source?.candidates ?? [];
+    const map = new Map<string, string>();
+    if (files.length < 2) return map;
+    for (const file of files) {
+      for (const context of file.contexts) map.set(context, file.path);
+    }
+    return map;
+  }, [kubeconfig.source]);
 
   // The current context first, then the file's own order. Somebody
   // arriving to check "the one I am on" should not scroll past twenty-nine
@@ -108,6 +126,7 @@ export function ClustersSettings() {
               binaries={binaries}
               connected={isConnected && context.name === currentContext}
               onBind={setBinding}
+              fromFile={fileOf.get(context.name)}
             />
           ))}
         </>
@@ -153,9 +172,8 @@ function ListCaption({ count }: { count: number }) {
 }
 
 function NoContexts() {
-  const visible = useSettingSearchMatch(
-    "no contexts kubeconfig empty clusters"
-  );
+  const t = useT();
+  const visible = useSettingSearchMatch(t("settings", "searchNoContextsWords"));
   return (
     <div className={visible ? "max-w-[64ch] py-8" : "hidden"} hidden={!visible}>
       <h3 className="text-xs font-medium text-fg">

@@ -69,8 +69,26 @@ pub async fn get_resource_connections(
 
 /// The kinds whose neighbourhood spans every namespace there is: the pods a
 /// Node carries, and the claim a `PersistentVolume` is bound to.
+/// The kinds that are not in a namespace.
+///
+/// The authority is the frontend registry — `src/lib/resource-registry.ts`,
+/// where each kind carries its `scope` and every URL is built from it. This
+/// mirrors the five it marks `cluster`, and only those: an unknown kind, a
+/// custom resource above all, is treated as namespaced, which is what the
+/// overwhelming majority of them are.
+///
+/// It listed two until `owner_ref` began asking it about arbitrary owner
+/// kinds rather than the handful this file dispatches on.
 fn cluster_scoped(kind: &str) -> bool {
-    matches!(kind, "Node" | "PersistentVolume")
+    matches!(
+        kind,
+        "Node"
+            | "PersistentVolume"
+            | "Namespace"
+            | "StorageClass"
+            | "CustomResourceDefinition"
+            | "GatewayClass"
+    )
 }
 
 /// The same answer, for callers that already hold a client — the live
@@ -1061,8 +1079,17 @@ fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
 
 // --- ownership ---------------------------------------------------------
 
+/// The owner an object names, addressed the way its own kind is addressed.
+///
+/// The child's namespace is the right answer for a namespaced owner and only
+/// for one: Kubernetes requires a namespaced owner to sit in the dependent's
+/// namespace, but it explicitly allows a namespaced dependent to name a
+/// cluster-scoped owner. Stamping the namespace on regardless broke the
+/// invariant `ObjectRef::namespace` documents — `None` for the cluster-scoped
+/// kinds — and produced a reference to something that is not there.
 fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
-    ObjectRef::unchecked(&owner.kind, &owner.name, Some(ns.to_string()))
+    let namespace = (!cluster_scoped(&owner.kind)).then(|| ns.to_string());
+    ObjectRef::unchecked(&owner.kind, &owner.name, namespace)
 }
 
 /// Walk `metadata.ownerReferences` to the top.
@@ -2419,5 +2446,87 @@ spec:
         // neither a Gateway edge nor a "gateway missing" lie.
         assert!(out.edges.iter().all(|e| e.to.kind != "Gateway"));
         assert!(out.stops.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    /// `cluster_scoped` says the frontend registry is the authority, and a
+    /// comment saying so is not a thing that stays true. This reads the
+    /// registry and holds the two to the same answer, kind by kind — the
+    /// drift it guards against had already happened once, leaving three
+    /// kinds addressed as though they were in a namespace.
+    #[test]
+    fn the_scope_list_matches_the_registry_it_names() {
+        let registry = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/lib/resource-registry.ts"
+        ))
+        .expect("the registry this list mirrors");
+
+        // Each entry reads `kind: "Foo",` and, further down, `scope: "…",`.
+        let mut kind: Option<String> = None;
+        let mut checked = 0usize;
+        for line in registry.lines() {
+            let line = line.trim();
+            if let Some(rest) = line.strip_prefix("kind: \"") {
+                kind = rest.split('"').next().map(ToString::to_string);
+            } else if let Some(rest) = line.strip_prefix("scope: \"") {
+                let Some(name) = kind.take() else { continue };
+                let registry_says_cluster = rest.starts_with("cluster");
+                checked += 1;
+                assert_eq!(
+                    cluster_scoped(&name),
+                    registry_says_cluster,
+                    "the registry and `cluster_scoped` disagree about {name}; \
+                     a kind addressed two ways by one app is a dead link at \
+                     one of them"
+                );
+            }
+        }
+
+        assert!(
+            checked > 15,
+            "read only {checked} registry entries — the format moved and this \
+             test is no longer checking anything"
+        );
+    }
+
+    fn owner(kind: &str) -> OwnerReference {
+        OwnerReference {
+            kind: kind.to_string(),
+            name: "the-owner".to_string(),
+            ..OwnerReference::default()
+        }
+    }
+
+    /// Kubernetes requires a namespaced owner to sit in the dependent's
+    /// namespace, so the child's namespace is the right answer there.
+    #[test]
+    fn a_namespaced_owner_is_addressed_in_the_child_s_namespace() {
+        assert_eq!(
+            owner_ref(&owner("ReplicaSet"), "production")
+                .namespace
+                .as_deref(),
+            Some("production")
+        );
+    }
+
+    /// And a cluster-scoped one is not, however the dependent is scoped —
+    /// naming one is explicitly allowed. `ObjectRef::namespace` documents
+    /// `None` for these and the UI builds the object's URL out of it, so a
+    /// `PersistentVolume` carrying a namespace addressed
+    /// `/persistentvolumes/<ns>/<name>`, which is nothing.
+    #[test]
+    fn a_cluster_scoped_owner_carries_no_namespace() {
+        for kind in ["Node", "PersistentVolume"] {
+            assert_eq!(
+                owner_ref(&owner(kind), "production").namespace,
+                None,
+                "{kind} is not in a namespace"
+            );
+        }
     }
 }

@@ -226,7 +226,7 @@ export function gatewayTopology(
               id: backendId,
               label: backend.name,
               sub: stop
-                ? describeStop(stop).title
+                ? describeStop(stop, t).title
                 : state?.known
                   ? state.service?.type === "ExternalName"
                     ? t("empty", "resolvesElsewhere")

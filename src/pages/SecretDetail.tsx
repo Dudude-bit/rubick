@@ -105,7 +105,7 @@ export function SecretDetail() {
         </>
       ),
     },
-    connectionsTab(connections, deliveryQuery),
+    connectionsTab(connections, t, deliveryQuery),
     {
       id: "metadata",
       label: t("nav", "metadata"),
@@ -128,7 +128,7 @@ export function SecretDetail() {
       ),
     },
     yamlTab({
-      title: "Secret YAML",
+      title: t("action", "kindYaml", { kind: "Secret" }),
       yaml: secretYaml,
       resourceKind: ResourceType.Secret,
       resourceName: name || "",

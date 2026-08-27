@@ -1,4 +1,9 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import type {
   ContainerInfo,
@@ -84,7 +89,7 @@ const stuckInInit = [
  */
 describe("containerSequence on a pod held in init", () => {
   it("marks the step that failed and the step that never got a turn apart", () => {
-    const groups = containerSequence(stuckInInit);
+    const groups = containerSequence(stuckInInit, t);
     const init = groups.find((group) => group.phase === "init")!;
 
     expect(init.steps.map((step) => [step.container.name, step.mark])).toEqual([
@@ -95,7 +100,7 @@ describe("containerSequence on a pod held in init", () => {
   });
 
   it("names what a queued step is waiting on, which is not itself", () => {
-    const groups = containerSequence(stuckInInit);
+    const groups = containerSequence(stuckInInit, t);
     const seed = groups
       .find((group) => group.phase === "init")!
       .steps.find((step) => step.container.name === "seed")!;
@@ -107,7 +112,7 @@ describe("containerSequence on a pod held in init", () => {
   });
 
   it("does not let an app container claim it is starting while init is stuck", () => {
-    const groups = containerSequence(stuckInInit);
+    const groups = containerSequence(stuckInInit, t);
     const app = groups.find((group) => group.phase === "app")!;
 
     expect(app.caption).toContain("never started");
@@ -115,7 +120,7 @@ describe("containerSequence on a pod held in init", () => {
   });
 
   it("keeps the failed step's restart history pointing at the log", () => {
-    const groups = containerSequence(stuckInInit);
+    const groups = containerSequence(stuckInInit, t);
     const migrate = groups
       .find((group) => group.phase === "init")!
       .steps.find((step) => step.container.name === "migrate")!;
@@ -131,14 +136,17 @@ describe("containerSequence on a pod held in init", () => {
  * containers it would read as having started with them.
  */
 describe("containerSequence with a sidecar", () => {
-  const groups = containerSequence([
-    container("prepare", {
-      phase: "init",
-      state: { type: "terminated", termination: termination() },
-    }),
-    container("proxy", { phase: "sidecar", ready: true }),
-    container("app", { ready: true }),
-  ]);
+  const groups = containerSequence(
+    [
+      container("prepare", {
+        phase: "init",
+        state: { type: "terminated", termination: termination() },
+      }),
+      container("proxy", { phase: "sidecar", ready: true }),
+      container("app", { ready: true }),
+    ],
+    t
+  );
 
   it("puts the sidecar in a group of its own, between init and the app", () => {
     expect(groups.map((group) => group.phase)).toEqual([
@@ -212,7 +220,7 @@ const meshedTemplate = {
 describe("templateSequence", () => {
   it("groups a template the way the pod's Containers tab groups a run", () => {
     expect(
-      templateSequence(meshedTemplate).map((group) => [
+      templateSequence(meshedTemplate, t).map((group) => [
         group.phase,
         group.containers.map((c) => c.name),
       ])
@@ -227,7 +235,7 @@ describe("templateSequence", () => {
     // A template is a declaration. "started during init and still
     // running" is a claim about a process, and there is no process — it
     // would be the same lie as calling a queued container failed.
-    const captions = templateSequence(meshedTemplate).map((g) => g.caption);
+    const captions = templateSequence(meshedTemplate, t).map((g) => g.caption);
     expect(captions).toEqual([
       "run in order before each pod starts, each waiting on the last",
       "start during init and run for the life of each pod",
@@ -238,7 +246,9 @@ describe("templateSequence", () => {
   it("leaves an ordinary template as one group, with no sequence to draw", () => {
     // The common case, and it must not grow a rail: spec order between
     // two app containers says nothing, unlike between two init ones.
-    expect(templateSequence({ containers: [declared("app")] })).toHaveLength(1);
+    expect(templateSequence({ containers: [declared("app")] }, t)).toHaveLength(
+      1
+    );
   });
 });
 

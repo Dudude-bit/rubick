@@ -1,8 +1,13 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
   PREFIX,
-  RAW_NOTE,
+  rawNote,
   TABLE_SIZE,
   readAnnotation,
   readAnnotations,
@@ -39,7 +44,7 @@ describe("the table", () => {
    * nobody could tell was on.
    */
   it("says something about every common key on a real Ingress", () => {
-    const readings = readAnnotations(REAL);
+    const readings = readAnnotations(REAL, t);
     const said = readings.filter((reading) => reading.said !== null);
     expect(said).toHaveLength(10);
     expect(TABLE_SIZE).toBeGreaterThanOrEqual(40);
@@ -47,7 +52,7 @@ describe("the table", () => {
 
   /** Would break if a non-nginx annotation started being read as one. */
   it("looks at nginx's keys and nothing else", () => {
-    const readings = readAnnotations(REAL);
+    const readings = readAnnotations(REAL, t);
     expect(readings).toHaveLength(12);
     expect(readings.every((reading) => reading.key.startsWith(PREFIX))).toBe(
       true
@@ -60,7 +65,7 @@ describe("the table", () => {
    */
   it("decodes them into what nginx actually does", () => {
     const by = new Map(
-      readAnnotations(REAL).map((reading) => [reading.key, reading.said])
+      readAnnotations(REAL, t).map((reading) => [reading.key, reading.said])
     );
     expect(by.get(key("ssl-redirect"))).toBe(
       "Plain HTTP is answered with a redirect to HTTPS."
@@ -87,19 +92,20 @@ describe("the table", () => {
   it("never paraphrases a snippet, and says it is raw nginx config", () => {
     const snippet = readAnnotation(
       key("configuration-snippet"),
-      "more_set_headers 'X-Env: staging';"
+      "more_set_headers 'X-Env: staging';",
+      t
     );
     expect(snippet.said).toBeNull();
     expect(snippet.raw).toBe("snippet");
     expect(snippet.value).toBe("more_set_headers 'X-Env: staging';");
-    expect(RAW_NOTE.snippet).toContain("verbatim");
+    expect(rawNote("snippet", t)).toContain("verbatim");
 
     for (const suffix of [
       "server-snippet",
       "modsecurity-snippet",
       "stream-snippet",
     ]) {
-      expect(readAnnotation(key(suffix), "deny all;").raw).toBe("snippet");
+      expect(readAnnotation(key(suffix), "deny all;", t).raw).toBe("snippet");
     }
   });
 
@@ -111,7 +117,8 @@ describe("the table", () => {
   it("shows a key it has no sentence for as written", () => {
     const unknown = readAnnotation(
       key("mirror-target"),
-      "https://mirror.k8s-gui.test/$request_uri"
+      "https://mirror.k8s-gui.test/$request_uri",
+      t
     );
     expect(unknown.said).toBeNull();
     expect(unknown.raw).toBe("notInTheTable");
@@ -124,26 +131,26 @@ describe("the table", () => {
    * some size this app invented.
    */
   it("refuses a value it knows the key of and cannot read", () => {
-    expect(readAnnotation(key("proxy-body-size"), "enormous").raw).toBe(
+    expect(readAnnotation(key("proxy-body-size"), "enormous", t).raw).toBe(
       "unreadableValue"
     );
-    expect(readAnnotation(key("proxy-read-timeout"), "1h").raw).toBe(
+    expect(readAnnotation(key("proxy-read-timeout"), "1h", t).raw).toBe(
       "unreadableValue"
     );
-    expect(readAnnotation(key("ssl-redirect"), "yes").raw).toBe(
+    expect(readAnnotation(key("ssl-redirect"), "yes", t).raw).toBe(
       "unreadableValue"
     );
-    expect(readAnnotation(key("backend-protocol"), "SOMETHING").raw).toBe(
+    expect(readAnnotation(key("backend-protocol"), "SOMETHING", t).raw).toBe(
       "unreadableValue"
     );
-    expect(readAnnotation(key("auth-type"), "oauth").raw).toBe(
+    expect(readAnnotation(key("auth-type"), "oauth", t).raw).toBe(
       "unreadableValue"
     );
   });
 
   /** Would break if the raw key stopped travelling with the sentence. */
   it("keeps the raw key beside every line, decoded or not", () => {
-    for (const reading of readAnnotations(REAL)) {
+    for (const reading of readAnnotations(REAL, t)) {
       expect(reading.key).toMatch(/^nginx\.ingress\.kubernetes\.io\//);
       expect(typeof reading.value).toBe("string");
       expect(reading.said === null).toBe(reading.raw !== null);
@@ -152,7 +159,7 @@ describe("the table", () => {
 
   /** A snippet is the longest line and the one that must be read in full. */
   it("puts the snippets last", () => {
-    const readings = readAnnotations(REAL);
+    const readings = readAnnotations(REAL, t);
     expect(readings[readings.length - 1].raw).toBe("snippet");
   });
 });
@@ -165,7 +172,7 @@ describe("canary", () => {
       [key("canary-weight")]: "20",
     };
     const by = new Map(
-      readAnnotations(canary).map((reading) => [reading.key, reading.said])
+      readAnnotations(canary, t).map((reading) => [reading.key, reading.said])
     );
     expect(by.get(key("canary"))).toContain(
       "a host another Ingress already serves"
@@ -186,7 +193,7 @@ describe("canary", () => {
       [key("canary-weight")]: "20",
       [key("canary-weight-total")]: "1000",
     };
-    const weight = readAnnotations(canary).find(
+    const weight = readAnnotations(canary, t).find(
       (reading) => reading.key === key("canary-weight")
     );
     expect(weight?.said).toBe(
@@ -206,7 +213,7 @@ describe("canary", () => {
       [key("canary-by-header-value")]: "please",
     };
     const by = new Map(
-      readAnnotations(canary).map((reading) => [reading.key, reading.said])
+      readAnnotations(canary, t).map((reading) => [reading.key, reading.said])
     );
     expect(by.get(key("canary-by-header-value"))).toBe(
       "A request whose X-Canary header is exactly please takes this route."
@@ -217,6 +224,6 @@ describe("canary", () => {
   /** Would break if a value key with no header to belong to were invented. */
   it("refuses a by-header-value with no header named", () => {
     const orphan = { [key("canary-by-header-value")]: "please" };
-    expect(readAnnotations(orphan)[0].raw).toBe("unreadableValue");
+    expect(readAnnotations(orphan, t)[0].raw).toBe("unreadableValue");
   });
 });

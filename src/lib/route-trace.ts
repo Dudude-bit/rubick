@@ -719,8 +719,8 @@ function backendSteps(
           name: missing.backend.name,
         }),
         detail: {
-          title: describeStop(missing.state.stop!).title,
-          body: describeStop(missing.state.stop!).note,
+          title: describeStop(missing.state.stop!, t).title,
+          body: describeStop(missing.state.stop!, t).note,
         },
       }
     : wrongPort
@@ -797,7 +797,7 @@ function backendSteps(
     (v) => v.state.stop != null && v.state.stop.reason !== "backendMissing"
   );
   if (down) {
-    const stop = describeStop(down.state.stop!);
+    const stop = describeStop(down.state.stop!, t);
     return [
       backendStep,
       {

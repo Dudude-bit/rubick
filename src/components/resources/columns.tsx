@@ -4,7 +4,7 @@
  * Provides reusable column definitions to reduce duplication across resource lists.
  */
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
@@ -107,7 +107,7 @@ export function createCpuColumn<
   return {
     size: 90,
     id: "cpu",
-    header: "CPU",
+    header: () => <T section="columns" k="cpu" />,
     cell: ({ row }) => {
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests

@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import type {
   ContainerPhase,
   ContainerState,
@@ -118,11 +119,18 @@ export function containerStatus(container: {
 }
 
 /** "653 restarts, last 4m ago" — the count on its own does not date itself. */
-export function describeRestarts(pod: {
-  restartCount: number;
-  lastRestartAt: string | null;
-}): string {
-  const label = `${pod.restartCount} ${pod.restartCount === 1 ? "restart" : "restarts"}`;
-  if (pod.restartCount === 0 || !pod.lastRestartAt) return label;
-  return `${label}, last ${formatAge(pod.lastRestartAt)} ago`;
+export function describeRestarts(
+  pod: {
+    restartCount: number;
+    lastRestartAt: string | null;
+  },
+  t: T
+): string {
+  if (pod.restartCount === 0 || !pod.lastRestartAt) {
+    return t("count", "restartsPlain", { n: pod.restartCount });
+  }
+  return t("count", "restartsWithLast", {
+    n: pod.restartCount,
+    ago: formatAge(pod.lastRestartAt),
+  });
 }

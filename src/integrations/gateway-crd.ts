@@ -21,7 +21,7 @@ function names(value: unknown): string {
 const routeColumns: CrdColumn[] = [
   {
     id: "hostnames",
-    header: "Hostnames",
+    header: "hostnames",
     accessor: (resource) =>
       (getValueByPath(resource, "spec.hostnames") as string[] | undefined) ??
       [],
@@ -29,7 +29,7 @@ const routeColumns: CrdColumn[] = [
   },
   {
     id: "parents",
-    header: "Attaches to",
+    header: "attachesTo",
     accessor: (resource) => {
       const parents = getValueByPath(resource, "spec.parentRefs") as
         Array<{ name?: string; kind?: string }> | undefined;
@@ -43,7 +43,7 @@ const routeColumns: CrdColumn[] = [
   },
   {
     id: "rules",
-    header: "Rules",
+    header: "rules",
     accessor: (resource) =>
       (getValueByPath(resource, "spec.rules") as unknown[] | undefined)
         ?.length ?? 0,
@@ -54,7 +54,7 @@ const routeColumns: CrdColumn[] = [
 const backendTlsPolicyColumns: CrdColumn[] = [
   {
     id: "targets",
-    header: "Targets",
+    header: "targets",
     accessor: (resource) => {
       const targets = getValueByPath(resource, "spec.targetRefs") as
         Array<{ name?: string; kind?: string }> | undefined;
@@ -68,14 +68,14 @@ const backendTlsPolicyColumns: CrdColumn[] = [
   },
   {
     id: "hostname",
-    header: "SNI",
+    header: "sni",
     accessor: (resource) =>
       getValueByPath(resource, "spec.validation.hostname"),
     cell: (value) => String(value ?? "—"),
   },
   {
     id: "trust",
-    header: "Trusts",
+    header: "trusts",
     accessor: (resource) => {
       const wellKnown = getValueByPath(
         resource,
@@ -96,13 +96,13 @@ const backendTlsPolicyColumns: CrdColumn[] = [
 const gatewayColumns: CrdColumn[] = [
   {
     id: "class",
-    header: "Class",
+    header: "class",
     accessor: (resource) => getValueByPath(resource, "spec.gatewayClassName"),
     cell: (value) => String(value ?? "—"),
   },
   {
     id: "listeners",
-    header: "Listeners",
+    header: "listeners",
     accessor: (resource) => {
       const listeners = getValueByPath(resource, "spec.listeners") as
         | Array<{ protocol?: string; port?: number; hostname?: string }>
@@ -118,7 +118,7 @@ const gatewayColumns: CrdColumn[] = [
   },
   {
     id: "addresses",
-    header: "Addresses",
+    header: "addresses",
     accessor: (resource) => {
       const addresses = getValueByPath(resource, "status.addresses") as
         Array<{ value?: string }> | undefined;
@@ -131,7 +131,7 @@ const gatewayColumns: CrdColumn[] = [
 const gatewayClassColumns: CrdColumn[] = [
   {
     id: "controller",
-    header: "Controller",
+    header: "controller",
     accessor: (resource) => getValueByPath(resource, "spec.controllerName"),
     cell: (value) => String(value ?? "—"),
   },
@@ -140,13 +140,13 @@ const gatewayClassColumns: CrdColumn[] = [
 const listenerSetColumns: CrdColumn[] = [
   {
     id: "gateway",
-    header: "Gateway",
+    header: "gateway",
     accessor: (resource) => getValueByPath(resource, "spec.parentRef.name"),
     cell: (value) => String(value ?? "—"),
   },
   {
     id: "listeners",
-    header: "Listeners",
+    header: "listeners",
     accessor: (resource) =>
       (getValueByPath(resource, "spec.listeners") as unknown[] | undefined)
         ?.length ?? 0,
@@ -157,7 +157,7 @@ const listenerSetColumns: CrdColumn[] = [
 const referenceGrantColumns: CrdColumn[] = [
   {
     id: "from",
-    header: "From",
+    header: "grantFrom",
     accessor: (resource) => {
       const from = getValueByPath(resource, "spec.from") as
         Array<{ kind?: string; namespace?: string }> | undefined;
@@ -169,7 +169,7 @@ const referenceGrantColumns: CrdColumn[] = [
   },
   {
     id: "to",
-    header: "To",
+    header: "grantTo",
     accessor: (resource) => {
       const to = getValueByPath(resource, "spec.to") as
         Array<{ kind?: string }> | undefined;

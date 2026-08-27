@@ -13,6 +13,7 @@
  * detection and there is nothing to ask the cluster.
  */
 
+import { joinSayings, sayWords } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
 import { NO_STATUS, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
@@ -32,14 +33,17 @@ const dash = (value: unknown) =>
 const backendConfigColumns: CrdColumn[] = [
   {
     id: "healthCheck",
-    header: "Health check",
-    accessor: (resource) => healthCheckOf(resource),
+    header: "healthCheck",
+    accessor: (resource, t) => {
+      const said = healthCheckOf(resource);
+      return said === null ? null : sayWords(said, t);
+    },
     cell: dash,
   },
   {
     id: "behaviour",
-    header: "Applies",
-    accessor: (resource) => backendConfigSummary(resource),
+    header: "applies",
+    accessor: (resource, t) => joinSayings(backendConfigSummary(resource), t),
     cell: dash,
   },
 ];
@@ -47,8 +51,8 @@ const backendConfigColumns: CrdColumn[] = [
 const frontendConfigColumns: CrdColumn[] = [
   {
     id: "behaviour",
-    header: "Applies",
-    accessor: (resource) => frontendConfigSummary(resource),
+    header: "applies",
+    accessor: (resource, t) => joinSayings(frontendConfigSummary(resource), t),
     cell: dash,
   },
 ];
@@ -56,7 +60,7 @@ const frontendConfigColumns: CrdColumn[] = [
 const managedCertificateColumns: CrdColumn[] = [
   {
     id: "certificateStatus",
-    header: "Status",
+    header: "status",
     accessor: (resource) => certificateStatusOf(resource),
     // Not a badge, and deliberately: an empty status is what the controller
     // writes before it has looked at the certificate *and* what a cluster
@@ -66,13 +70,13 @@ const managedCertificateColumns: CrdColumn[] = [
   },
   {
     id: "domains",
-    header: "Domains",
+    header: "domains",
     accessor: (resource) => certificateDomains(resource).join(", "),
     cell: dash,
   },
   {
     id: "notProvisioned",
-    header: "Not provisioned",
+    header: "notProvisioned",
     // The column the list page exists for. A certificate with four domains
     // and one FailedNotVisible reads as "Provisioning" at the top level for
     // as long as anybody leaves it, and this is the only place that names

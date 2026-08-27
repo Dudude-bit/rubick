@@ -79,7 +79,7 @@ export function StorageClassDetail() {
       glyph: viewGlyph(Info),
       content: (
         <KeyValueSection
-          title="Storage class"
+          title={t("columns", "storageClass")}
           items={facts}
           className="max-w-lg"
         />
@@ -100,7 +100,7 @@ export function StorageClassDetail() {
       ),
     },
     yamlTab({
-      title: "StorageClass YAML",
+      title: t("action", "kindYaml", { kind: "StorageClass" }),
       yaml: scYaml,
       resourceKind: ResourceType.StorageClass,
       resourceName: name || "",

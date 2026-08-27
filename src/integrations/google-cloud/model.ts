@@ -19,6 +19,7 @@
  * the controller's own, not a guess at it.
  */
 
+import type { Saying } from "@/i18n/say";
 import type { CustomResourceInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
 
@@ -201,7 +202,7 @@ const flag = (resource: CustomResourceInfo, path: string): boolean =>
  * written is printed — a path this object does not set is not `/`, it is a
  * path this object does not set.
  */
-export function healthCheckOf(config: CustomResourceInfo): string | null {
+export function healthCheckOf(config: CustomResourceInfo): Saying | null {
   const type = text(config, "spec.healthCheck.type");
   const port = number(config, "spec.healthCheck.port");
   const path = text(config, "spec.healthCheck.requestPath");
@@ -209,7 +210,10 @@ export function healthCheckOf(config: CustomResourceInfo): string | null {
   const where = [port === null ? null : `:${port}`, path]
     .filter(Boolean)
     .join("");
-  return ["health check", type, where].filter(Boolean).join(" ");
+  return {
+    key: "gcpHealthCheck",
+    values: { what: [type, where].filter(Boolean).join(" ") },
+  };
 }
 
 /**
@@ -293,11 +297,13 @@ export function cdnOf(
   };
 }
 
-export function cdnSummary(config: CustomResourceInfo): string | null {
+export function cdnSummary(config: CustomResourceInfo): Saying | null {
   const cdn = cdnOf(config);
   if (!cdn) return null;
   const parts = [cdn.mode, cdn.detail].filter(Boolean);
-  return parts.length > 0 ? `CDN ${parts.join(" · ")}` : "CDN on";
+  return parts.length > 0
+    ? { key: "gcpCdnWith", values: { what: parts.join(" · ") } }
+    : { key: "gcpCdnOn" };
 }
 
 /**
@@ -312,50 +318,57 @@ export function backendConfigSummary(
   // `cdn: false` is for the chain, where the edge cache is its own hop and
   // saying it twice would bury the rest of the line again.
   options: { cdn?: boolean } = {}
-): string {
+): Saying[] {
   const timeout = number(config, "spec.timeoutSec");
   const draining = number(config, "spec.connectionDraining.drainingTimeoutSec");
   const affinity = text(config, "spec.sessionAffinity.affinityType");
   const policy = text(config, "spec.securityPolicy.name");
   const sample = number(config, "spec.logging.sampleRate");
   const headers = customHeaders(config);
-  const parts = [
+  const parts: Array<Saying | null> = [
     healthCheckOf(config),
-    timeout === null ? null : `${timeout}s timeout`,
-    draining === null ? null : `${draining}s draining`,
+    timeout === null ? null : { key: "gcpTimeout", values: { n: timeout } },
+    draining === null ? null : { key: "gcpDraining", values: { n: draining } },
     options.cdn === false ? null : cdnSummary(config),
-    flag(config, "spec.iap.enabled") ? "IAP on" : null,
-    policy === null ? null : `Cloud Armor ${policy}`,
-    affinity === null ? null : `${affinity} affinity`,
+    flag(config, "spec.iap.enabled") ? { key: "gcpIapOn" } : null,
+    policy === null ? null : { key: "gcpCloudArmor", values: { name: policy } },
+    affinity === null
+      ? null
+      : { key: "gcpAffinity", values: { how: affinity } },
     // The rate matters as much as the switch: logging at 1% and at 100% are
     // different products when somebody is looking for one request.
     flag(config, "spec.logging.enable")
       ? sample === null || sample === 1
-        ? "access logs on"
-        : `access logs at ${Math.round(sample * 100)}%`
+        ? { key: "gcpAccessLogsOn" }
+        : {
+            key: "gcpAccessLogsAt",
+            values: { percent: Math.round(sample * 100) },
+          }
       : null,
     headers.request.length === 0
       ? null
-      : `${headers.request.length} request header${headers.request.length === 1 ? "" : "s"}`,
+      : { key: "gcpRequestHeaders", values: { n: headers.request.length } },
     headers.response.length === 0
       ? null
-      : `${headers.response.length} response header${headers.response.length === 1 ? "" : "s"}`,
-  ].filter(Boolean);
+      : { key: "gcpResponseHeaders", values: { n: headers.response.length } },
+  ];
   // A BackendConfig that sets nothing is a real object and a real answer:
   // it exists, it is attached, and it changes nothing about the backend.
-  return parts.length > 0 ? parts.join(" · ") : "sets nothing";
+  const said = parts.filter((part): part is Saying => part !== null);
+  return said.length > 0 ? said : [{ key: "gcpSetsNothing" }];
 }
 
-export function frontendConfigSummary(config: CustomResourceInfo): string {
+export function frontendConfigSummary(config: CustomResourceInfo): Saying[] {
   const policy = text(config, "spec.sslPolicy");
   const code = text(config, "spec.redirectToHttps.responseCodeName");
-  const parts = [
+  const parts: Array<Saying | null> = [
     flag(config, "spec.redirectToHttps.enabled")
-      ? ["redirects HTTP to HTTPS", code].filter(Boolean).join(" · ")
+      ? { key: "gcpRedirectsToHttps", values: { code: code ?? "" } }
       : null,
-    policy === null ? null : `SSL policy ${policy}`,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "sets nothing";
+    policy === null ? null : { key: "gcpSslPolicy", values: { name: policy } },
+  ];
+  const said = parts.filter((part): part is Saying => part !== null);
+  return said.length > 0 ? said : [{ key: "gcpSetsNothing" }];
 }
 
 // --- managed certificates ------------------------------------------------

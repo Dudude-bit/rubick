@@ -14,7 +14,6 @@
  */
 
 import { integrationPagePath } from "../paths";
-import { plural } from "../kit";
 import type { VendorFact } from "../registry";
 import { countHosts, fetchRouteSources } from "./data";
 import { CONTROLLER } from "./model";
@@ -33,27 +32,37 @@ export async function facts(): Promise<VendorFact[]> {
 
   const lines: VendorFact[] = [
     {
-      text: `${plural(hosts, "host")} · ${plural(middlewares.length, "middleware")}`,
+      say: [
+        { key: "factHosts", values: { n: hosts } },
+        { key: "factMiddlewares", values: { n: middlewares.length } },
+      ],
     },
   ];
 
   lines.push(
     served.length > 0
       ? {
-          text: `serves ${served.length === 1 ? "class" : "classes"} ${served
-            .map((ingressClass) => ingressClass.name)
-            .join(", ")}`,
+          say: {
+            key: "factServesClasses",
+            values: {
+              n: served.length,
+              names: served.map((ingressClass) => ingressClass.name).join(", "),
+            },
+          },
         }
       : {
           // Traefik is running and no Ingress can reach it by class. Worth
           // a colour: it is the state that looks like nothing is wrong.
-          text: "claims no IngressClass",
+          say: { key: "factNoIngressClass" },
           tone: "warn",
         }
   );
 
   if (hosts > 0) {
-    lines.push({ text: "Show them", to: integrationPagePath("traefik") });
+    lines.push({
+      say: { key: "factShowThem" },
+      to: integrationPagePath("traefik"),
+    });
   }
 
   return lines;

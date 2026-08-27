@@ -1,3 +1,4 @@
+import type { VendorFact } from "../registry";
 import { ScrollText } from "lucide-react";
 
 import { commands } from "@/lib/commands";
@@ -88,15 +89,25 @@ export default defineVendor({
           draft?.insecureTls ?? null
         );
         if (!answer.ok) {
-          const said = answer.reason ?? "it did not say why";
+          const said = answer.reason ?? null;
           // The transport's own words stay — somebody searching for
           // "Name or service not known" has to find it — and the shape of
           // the address adds the half it cannot know. See `../reachability`.
-          const shape = unreachable(draft?.url ?? "", said);
+          const shape = unreachable(draft?.url ?? "", said ?? "");
           return {
             ok: false,
             at: answer.at,
-            reason: shape ? `${said} — ${explain(shape)}` : said,
+            reason: shape
+              ? {
+                  key: "connReasonAndShape",
+                  values: {
+                    said: said ?? "",
+                    shape: explain(shape),
+                  },
+                }
+              : said === null
+                ? { key: "connDidNotSayWhy" }
+                : { key: "verbatimLine", values: { said } },
           };
         }
         return {
@@ -113,29 +124,57 @@ export default defineVendor({
         return {
           ok: false,
           at: Date.now(),
-          reason: normalizeTauriError(error),
+          reason: {
+            key: "verbatimLine",
+            values: { said: normalizeTauriError(error) },
+          },
         };
       }
     },
-    facts: (saved: SavedConnection, probe: ProbeResult) => {
+    facts: (saved: SavedConnection, probe: ProbeResult): VendorFact[] => {
       if (!probe.ok) {
         return [
           { text: hostOf(saved.url) },
-          { text: `did not answer — ${probe.reason}`, tone: "err" as const },
+          {
+            say: {
+              key: "connDidNotAnswer" as const,
+              values: { reason: probe.reason ?? "" },
+            },
+            tone: "err" as const,
+          },
         ];
       }
       return [
         { text: hostOf(saved.url) },
-        { text: `answered ${agoOf(probe.at)}` },
+        { say: { key: "connAnsweredAgo", values: { age: agoOf(probe.at) } } },
         // Only where Loki itself stated it. A guessed retention is the worst
         // fact this screen could carry: a reader told "3 days" who finds
         // nothing from yesterday blames the app, and a reader told nothing
         // goes and looks at their own config.
-        ...(probe.retention ? [{ text: `keeps ${probe.retention}` }] : []),
-        { text: `ranges ${USAGE_RANGES.join(" · ")}` },
+        ...(probe.retention
+          ? [
+              {
+                say: {
+                  key: "connKeeps" as const,
+                  values: { retention: probe.retention },
+                },
+              },
+            ]
+          : []),
+        {
+          say: {
+            key: "connRanges" as const,
+            values: { ranges: USAGE_RANGES.join(" · ") },
+          },
+        },
         // The ceiling, named here rather than only discovered when a busy
         // range hits it.
-        { text: `up to ${PAGE_LINES.toLocaleString()} lines a page` },
+        {
+          say: {
+            key: "lokiPageLimit" as const,
+            values: { n: PAGE_LINES.toLocaleString() },
+          },
+        },
       ];
     },
   },

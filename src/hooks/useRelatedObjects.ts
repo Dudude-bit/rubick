@@ -57,7 +57,7 @@ function owners(
   resource: CustomResourceDetailInfo | undefined
 ): RelatedObject[] {
   return (resource?.ownerReferences ?? []).map((owner) => ({
-    relation: owner.controller ? "controlled by" : "owned by",
+    relation: owner.controller ? "relControlledBy" : "relOwnedBy",
     kind: owner.kind,
     name: owner.name,
     // An owner reference is always in the same namespace as the object; the

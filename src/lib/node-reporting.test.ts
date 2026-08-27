@@ -4,6 +4,12 @@ import type { ConditionInfo, NodeInfo } from "@/generated/types";
 
 import { silenceNote, silenceOf, silentNodes } from "./node-reporting";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 function condition(
   status: string,
   extra?: Partial<ConditionInfo>
@@ -112,6 +118,7 @@ describe("the sentence on the row", () => {
   it("says how long ago, and that the status is old rather than wrong", () => {
     const note = silenceNote(
       { node: "n1", since: "2026-08-17T10:00:00Z", reason: null },
+      t,
       now
     );
     expect(note).toBe(
@@ -120,7 +127,7 @@ describe("the sentence on the row", () => {
   });
 
   it("still warns when the API did not say when", () => {
-    const note = silenceNote({ node: "n1", since: null, reason: null }, now);
+    const note = silenceNote({ node: "n1", since: null, reason: null }, t, now);
     expect(note).toBe(
       "Node n1 stopped reporting. This status is the last one it sent, not the pod's state now."
     );
@@ -133,6 +140,7 @@ describe("the sentence on the row", () => {
   it("omits a duration it would have to render negative", () => {
     const note = silenceNote(
       { node: "n1", since: "2026-08-17T10:30:00Z", reason: null },
+      t,
       now
     );
     expect(note).not.toContain("-");
@@ -145,12 +153,14 @@ describe("the sentence on the row", () => {
     expect(
       silenceNote(
         { node: "n1", since: "2026-08-17T07:00:00Z", reason: null },
+        t,
         now
       )
     ).toContain("3h ago");
     expect(
       silenceNote(
         { node: "n1", since: "2026-08-14T10:00:00Z", reason: null },
+        t,
         now
       )
     ).toContain("3d ago");

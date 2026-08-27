@@ -15,7 +15,7 @@
 
 import { commands } from "@/lib/commands";
 
-import { crdObjectPath, crdObjectsPath, plural } from "../kit";
+import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   AZURE_IDENTITY_BINDING_CRD,
@@ -34,32 +34,44 @@ export async function facts(): Promise<VendorFact[]> {
 
   const lines: VendorFact[] = [
     {
-      text: [
-        plural(identities.length, "AzureIdentity"),
-        `${bindings.length} ${bindings.length === 1 ? "binding" : "bindings"}`,
-        prohibited.length === 0
-          ? null
-          : `${prohibited.length} prohibited ${prohibited.length === 1 ? "target" : "targets"}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      say: [
+        {
+          key: "kindCount" as const,
+          values: { n: identities.length, kind: "AzureIdentity" },
+        },
+        { key: "azureBindings" as const, values: { n: bindings.length } },
+        ...(prohibited.length === 0
+          ? []
+          : [
+              {
+                key: "azureProhibited" as const,
+                values: { n: prohibited.length },
+              },
+            ]),
+      ],
     },
   ];
 
   const dangling = danglingBindings(bindings, identities);
   if (dangling.length > 0) {
     lines.push({
-      text:
+      say:
         dangling.length === 1
-          ? `no AzureIdentity named ${bindingIdentity(dangling[0])}`
-          : `${plural(dangling.length, "binding")} name an identity that does not exist`,
+          ? {
+              key: "azureNoIdentityNamed" as const,
+              values: { name: bindingIdentity(dangling[0]) ?? "" },
+            }
+          : {
+              key: "azureDanglingBindings" as const,
+              values: { n: dangling.length },
+            },
       tone: "err",
     });
   }
 
   if (bindings.length > 0) {
     lines.push({
-      text: dangling.length === 1 ? "Show it" : "Show them",
+      say: { key: dangling.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         dangling.length === 1
           ? crdObjectPath(

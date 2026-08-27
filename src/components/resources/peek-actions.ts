@@ -22,6 +22,7 @@ import {
   type ScalableKind,
 } from "@/lib/resource-registry";
 import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 
 /**
  * What the peek panel lets you *do* to the object it is showing.
@@ -31,11 +32,14 @@ import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
  * React. It answers here, in one place, testable without a DOM — the panel
  * only has to render the answer and own the dialogs.
  *
- * Nothing here pre-flights access. The app has no SelfSubjectAccessReview
- * anywhere, so an RBAC refusal surfaces the same way it does on every detail
- * page: the call is made, it fails, and the error says so. A second, weaker
- * convention that greys buttons out on a guess would disagree with the first
- * one in exactly the cases that matter.
+ * Nothing here pre-flights access, and that is still true now that the nav
+ * does. A `SelfSubjectAccessReview` decides how a nav row is *drawn* — the
+ * reader has not committed to anything yet, and a wrong mark costs them a
+ * mark the real call then corrects. A button is the commitment: greying it
+ * out on a guess shuts somebody out of an action they could have taken, and
+ * a review that disagrees with the call does so in exactly the cases that
+ * matter. So an RBAC refusal surfaces here the way it does on every detail
+ * page: the call is made, it fails, and the error says so.
  */
 
 export type PeekActionId =
@@ -82,10 +86,11 @@ const SECONDARY = new Set<PeekActionId>(["debug", "restart", "delete"]);
 export function planPeekActions(
   kind: string,
   detail: unknown,
+  t: T,
   context: PeekActionContext = {}
 ): PeekActionPlan {
   const resolved = toKind(kind);
-  const actions = resolved ? actionsFor(resolved, detail, context) : [];
+  const actions = resolved ? actionsFor(resolved, detail, t, context) : [];
 
   if (ALWAYS_SHOWN + actions.length <= INLINE_LIMIT) {
     return { inline: actions, menu: [] };
@@ -99,11 +104,12 @@ export function planPeekActions(
 function actionsFor(
   kind: ResourceKind,
   detail: unknown,
+  t: T,
   context: PeekActionContext
 ): PeekAction[] {
   switch (kind) {
     case "Pod":
-      return podActions(detail as PodInfo | undefined);
+      return podActions(detail as PodInfo | undefined, t);
     case "Deployment":
       return [
         ...scaleAction(kind),
@@ -114,10 +120,10 @@ function actionsFor(
       // The node page offers exactly one thing; cordon and drain exist in the
       // backend but have never had a control, and the peek is not the place
       // to introduce one.
-      return [{ id: "debug", label: "Debug node", icon: Bug }];
+      return [{ id: "debug", label: t("action", "debugNode"), icon: Bug }];
     case "Service":
       return [
-        serviceForwardAction(detail as ServiceInfo | undefined, context),
+        serviceForwardAction(detail as ServiceInfo | undefined, t, context),
         ...deleteAction(kind),
       ];
     default:
@@ -183,7 +189,7 @@ export function reachableContainer(pod: PodInfo | undefined) {
 }
 
 /** "app is waiting · ImagePullBackOff", when the API says that much. */
-function waitingNote(pod: PodInfo): string {
+function waitingNote(pod: PodInfo, t: T): string {
   // Init containers included: a pod held at `Init:ImagePullBackOff` has
   // app containers that all read `PodInitializing`, and the one container
   // that knows what is wrong is in the other list.
@@ -192,11 +198,14 @@ function waitingNote(pod: PodInfo): string {
   );
   if (!waiting || waiting.state.type !== "waiting") return "";
   return waiting.state.reason
-    ? ` · ${waiting.name} ${waiting.state.reason}`
+    ? t("action", "waitingNote", {
+        container: waiting.name,
+        reason: waiting.state.reason,
+      })
     : "";
 }
 
-function podActions(pod: PodInfo | undefined): PeekAction[] {
+function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
   const phase = pod?.status.phase ?? "";
   const lower = phase.toLowerCase();
   const finished = FINISHED_PHASES.has(lower);
@@ -206,40 +215,49 @@ function podActions(pod: PodInfo | undefined): PeekAction[] {
 
   let shellReason: string | undefined;
   if (finished) {
-    shellReason = `This pod has finished — ${phase}. There is no process left to attach a shell to.`;
+    shellReason = t("action", "podFinishedNoShell", { phase });
   } else if (failed) {
-    shellReason =
-      "This pod has stopped. Its containers are gone, so there is nothing to attach to.";
+    shellReason = t("action", "podStoppedNoShell");
   } else if (pod && !live) {
-    shellReason = `No container is running yet — this pod is ${phase}${waitingNote(pod)}.`;
+    shellReason = t("action", "noContainerRunningYet", {
+      phase,
+      note: waitingNote(pod, t),
+    });
   }
 
   const declaresPorts = !!pod && podPorts(pod).length > 0;
   let forwardReason: string | undefined;
   if (pod && !declaresPorts) {
-    forwardReason =
-      "No container in this pod declares a port, so there is nothing to forward to.";
+    forwardReason = t("action", "podDeclaresNoPort");
   } else if (pod && !live) {
-    forwardReason = `Nothing is listening yet — no container is running, this pod is ${phase}${waitingNote(pod)}.`;
+    forwardReason = t("action", "nothingListeningYet", {
+      phase,
+      note: waitingNote(pod, t),
+    });
   }
 
   return [
-    { id: "shell", label: "Shell", icon: Terminal, reason: shellReason },
+    {
+      id: "shell",
+      label: t("action", "shell"),
+      icon: Terminal,
+      reason: shellReason,
+    },
     {
       id: "portForward",
-      label: "Port forward",
+      label: t("action", "portForward"),
       icon: Network,
       reason: forwardReason,
     },
-    { id: "debug", label: "Debug", icon: Bug },
+    { id: "debug", label: t("action", "debug"), icon: Bug },
     // Restarting a pod is deleting it. With a controller above, that is a
     // replacement and reads as a restart; without one the pod simply stops
     // existing, and calling that "Restart" would be a lie told in one word.
     owned || !pod
-      ? { id: "restart", label: "Restart", icon: RefreshCw }
+      ? { id: "restart", label: t("action", "restart"), icon: RefreshCw }
       : {
           id: "restart",
-          label: "Restart (deletes it)",
+          label: t("action", "restartDeletesIt"),
           icon: RefreshCw,
           danger: true,
         },
@@ -251,24 +269,27 @@ function podActions(pod: PodInfo | undefined): PeekAction[] {
 
 function serviceForwardAction(
   service: ServiceInfo | undefined,
+  t: T,
   context: PeekActionContext
 ): PeekAction {
   const action: PeekAction = {
     id: "portForward",
-    label: "Port forward",
+    label: t("action", "portForward"),
     icon: Network,
   };
   if (!service) return action;
   if (service.ports.length === 0) {
     return {
       ...action,
-      reason: "This Service declares no ports, so there is nothing to forward.",
+      reason: t("action", "serviceDeclaresNoPorts"),
     };
   }
   if (context.backendError) {
     return {
       ...action,
-      reason: `Could not read this Service's endpoints: ${context.backendError}`,
+      reason: t("action", "endpointsUnreadable", {
+        error: context.backendError,
+      }),
     };
   }
   // Still looking: the row shows it busy rather than guessing either way.
@@ -276,8 +297,7 @@ function serviceForwardAction(
   if (!context.backend) {
     return {
       ...action,
-      reason:
-        "No ready endpoints — nothing is behind this Service to forward to.",
+      reason: t("action", "noReadyEndpoints"),
     };
   }
   return action;
@@ -341,49 +361,58 @@ export function describeDeletion(
   kind: string,
   name: string,
   namespace: string | null,
-  detail: unknown
+  detail: unknown,
+  t: T
 ): PeekConfirmCopy {
   const resolved = toKind(kind) ?? kind;
+  // The kind stays as Kubernetes spells it — see the kind-names trap in
+  // `src/i18n/`. Only the sentence around it is translated.
   const subject = `${resolved.toLowerCase()} ${qualified(name, namespace)}`;
   return {
-    title: `Delete ${subject}?`,
-    description: `Deleting ${subject} ${deletionEffect(resolved, detail)}`,
+    title: t("action", "deleteSubjectTitle", { subject }),
+    description: t("action", "deleteSubjectBody", {
+      subject,
+      effect: deletionEffect(resolved, detail, t),
+    }),
   };
 }
 
-function deletionEffect(kind: string, detail: unknown): string {
+function deletionEffect(kind: string, detail: unknown, t: T): string {
   switch (kind) {
     case "Pod": {
       const owner = (detail as PodInfo | undefined)?.ownerReferences?.[0];
       return owner
-        ? `removes it now. Its ${owner.kind} ${owner.name} will start a replacement.`
-        : "removes it now. Nothing owns this pod, so nothing will bring it back.";
+        ? t("action", "effectPodOwned", {
+            kind: owner.kind,
+            name: owner.name,
+          })
+        : t("action", "effectPodBare");
     }
     case "Deployment": {
       const desired = (detail as DeploymentInfo | undefined)?.replicas.desired;
       return desired
-        ? `removes it and the ${desired} pod${desired === 1 ? "" : "s"} it runs.`
-        : "removes it and every pod it runs.";
+        ? t("count", "effectDeploymentPods", { n: desired })
+        : t("action", "effectWorkloadPods");
     }
     case "StatefulSet":
-      return "removes it and its pods. The PersistentVolumeClaims it created stay behind and keep costing.";
+      return t("action", "effectStatefulSet");
     case "DaemonSet":
-      return "removes it and its pod on every node it runs on.";
+      return t("action", "effectDaemonSet");
     case "Job":
-      return "removes it and the pods it created, including their logs.";
+      return t("action", "effectJob");
     case "CronJob":
-      return "stops the schedule and removes it. Jobs it has already created stay behind.";
+      return t("action", "effectCronJob");
     case "Service":
-      return "removes its address. Anything resolving this name stops reaching these pods.";
+      return t("action", "effectService");
     case "ConfigMap":
     case "Secret":
-      return "leaves running pods alone, but any pod that mounts it will fail to start until it is recreated.";
+      return t("action", "effectConfigLike");
     case "PersistentVolumeClaim":
-      return "releases the volume. Depending on the storage class's reclaim policy the data may be erased.";
+      return t("action", "effectClaim");
     case "PersistentVolume":
-      return "removes the volume object. Whether the data survives is up to its reclaim policy.";
+      return t("action", "effectVolume");
     default:
-      return "is permanent and cannot be undone.";
+      return t("action", "effectPermanent");
   }
 }
 
@@ -393,12 +422,15 @@ function deletionEffect(kind: string, detail: unknown): string {
  */
 export function describeBareRestart(
   name: string,
-  namespace: string | null
+  namespace: string | null,
+  t: T
 ): PeekConfirmCopy {
-  const subject = `pod ${qualified(name, namespace)}`;
+  const subject = t("action", "podSubject", {
+    name: qualified(name, namespace),
+  });
   return {
-    title: `Restart ${subject}?`,
-    description: `Restarting a pod means deleting it. Nothing owns ${subject}, so nothing will recreate it — this removes the pod for good.`,
+    title: t("action", "restartSubjectTitle", { subject }),
+    description: t("action", "restartBareBody", { subject }),
   };
 }
 

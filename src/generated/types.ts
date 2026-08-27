@@ -68,6 +68,7 @@ export interface KubeconfigCandidate {
   path: string;
   exists: boolean;
   origin: string;
+  contexts: string[];
 }
 
 export interface ClusterInfo {
@@ -1413,6 +1414,7 @@ export interface CustomResourceInfo {
 export interface ClusterPreferences {
   lastContext?: string;
   namespaces: Record<string, string>;
+  scopes: Record<string, string[]>;
 }
 
 export interface UpdaterConfig {

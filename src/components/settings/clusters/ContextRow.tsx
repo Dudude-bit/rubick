@@ -18,21 +18,38 @@ import { useT } from "@/i18n/useT";
  * connecting, and a second cluster switcher hidden in Settings is how two
  * of them drift apart.
  */
+/** The four states a context can be in, in words. */
+const CONTEXT_STATUS = {
+  connected: "contextConnected",
+  ready: "contextReady",
+  "cannot connect": "contextCannotConnect",
+  "cannot tell": "contextCannotTell",
+} as const;
+
 export function ContextRow({
   context,
   binding,
   binaries,
   connected,
   onBind,
+  fromFile,
 }: {
   context: ContextInfo;
   binding: ContextBindingInfo | undefined;
   binaries: Map<string, string | null>;
   connected: boolean;
   onBind: (context: string) => void;
+  /**
+   * Which file named this context, where more than one is being read.
+   *
+   * Absent with a single file — every context came from it, and repeating
+   * the path on every row is noise. With a work file and a home file it is
+   * the one thing the row cannot be worked out from.
+   */
+  fromFile?: string;
 }) {
-  const reading = readContext(context, { binaries, binding, connected });
   const t = useT();
+  const reading = readContext(context, { binaries, binding, connected }, t);
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
   const colour = clusterColor(context.name, mark.hue);
@@ -76,6 +93,11 @@ export function ContextRow({
           {prefix && <span className="text-fg-fnt">{prefix}</span>}
           <span style={{ color: colour }}>{label}</span>
         </div>
+        {fromFile && (
+          <div className="truncate font-mono text-[11px] text-fg-fnt">
+            {fromFile}
+          </div>
+        )}
         {context.server && (
           <div className="truncate font-mono text-[11px] text-fg-fnt">
             {context.server}
@@ -146,7 +168,7 @@ export function ContextRow({
               : "text-fg-fnt"
         )}
       >
-        {reading.status}
+        {t("settings", CONTEXT_STATUS[reading.status])}
       </span>
     </div>
   );

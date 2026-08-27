@@ -153,7 +153,7 @@ export function RelatedResources({
                   and it is only said for a kind the app can scale there. */}
               {isScalable(hops[hops.length - 1].kind) && (
                 <span className="text-[11px] text-fg-fnt">
-                  {REPLICAS_SET_HERE}
+                  {t("nav", REPLICAS_SET_HERE)}
                 </span>
               )}
             </span>

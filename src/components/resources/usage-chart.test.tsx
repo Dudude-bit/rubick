@@ -344,7 +344,7 @@ describe("UsageChart on an object with a capacity rather than limits", () => {
         type="cpu"
         samples={series([40, 45, 48, 52])}
         limit={200}
-        limitNoun="capacity"
+        limitNoun="capacityWord"
         current={52}
       />
     );

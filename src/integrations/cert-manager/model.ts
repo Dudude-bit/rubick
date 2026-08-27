@@ -19,7 +19,8 @@
  * the reader will paste into a search.
  */
 
-import { managedExpiryOf, type Expiry } from "@/lib/certificates";
+import { expiryText, managedExpiryOf, type Expiry } from "@/lib/certificates";
+import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 import { conditionOf, getValueByPath, type VendorCondition } from "../kit";
@@ -289,33 +290,61 @@ function walk(
  * beats a renewal that is failing while the old certificate still serves,
  * which beats one that is merely running out.
  */
-function stateOfCertificate(row: {
-  neverIssued: boolean;
-  ready: boolean;
-  inFlight: boolean;
-  expiry: Expiry | null;
-  failure: string | null;
-}): { text: string; tone: Tone; rank: number } {
+function stateOfCertificate(
+  row: {
+    neverIssued: boolean;
+    ready: boolean;
+    inFlight: boolean;
+    expiry: Expiry | null;
+    failure: string | null;
+  },
+  t: T
+): { text: string; tone: Tone; rank: number } {
   if (row.neverIssued) {
-    return { text: "never issued", tone: "err", rank: 0 };
+    return {
+      text: t("readings", "certNeverIssuedShort"),
+      tone: "err",
+      rank: 0,
+    };
   }
   if (row.expiry?.expired) {
-    return { text: row.expiry.text, tone: "err", rank: 1 };
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "err",
+      rank: 1,
+    };
   }
   // Still serving, and cert-manager cannot replace it. The old certificate
   // has until `notAfter` to be fixed, which is why this is not an outage and
   // is still the loudest thing on a healthy-looking row.
   if (!row.ready || (row.inFlight && row.failure)) {
-    return { text: "renewal failing", tone: "err", rank: 2 };
+    return {
+      text: t("readings", "certRenewalFailing"),
+      tone: "err",
+      rank: 2,
+    };
   }
   if (row.expiry?.tone === "err") {
-    return { text: row.expiry.text, tone: "err", rank: 3 };
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "err",
+      rank: 3,
+    };
   }
   if (row.expiry?.tone === "warn") {
-    return { text: row.expiry.text, tone: "warn", rank: 4 };
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "warn",
+      rank: 4,
+    };
   }
-  if (row.inFlight) return { text: "renewing", tone: "warn", rank: 5 };
-  return { text: row.expiry?.text ?? "issued", tone: "ok", rank: 6 };
+  if (row.inFlight)
+    return { text: t("readings", "certRenewing"), tone: "warn", rank: 5 };
+  return {
+    text: row.expiry ? expiryText(row.expiry, t) : t("readings", "certIssued"),
+    tone: "ok",
+    rank: 6,
+  };
 }
 
 export function certificateRows(
@@ -323,6 +352,9 @@ export function certificateRows(
   requests: CustomResourceInfo[],
   orders: CustomResourceInfo[],
   challenges: CustomResourceInfo[],
+  // Ahead of the optional arguments because it has to be: a required
+  // parameter cannot follow one with a default.
+  t: T,
   /** What mounts the Secrets, for the hosts each certificate serves. */
   ingresses: IngressInfo[] = [],
   /** False where a routing CRD this file cannot read may also mount them. */
@@ -355,7 +387,7 @@ export function certificateRows(
             : null,
         failure,
       };
-      const state = stateOfCertificate(row);
+      const state = stateOfCertificate(row, t);
       const issuerName = text(certificate, "spec.issuerRef.name");
 
       const namespace = certificate.namespace ?? "";
@@ -499,7 +531,10 @@ export function troubled(rows: CertRow[]): CertRow[] {
 export function worstCertificateTone(
   certificates: CustomResourceInfo[]
 ): "warn" | "err" | null {
-  const rows = certificateRows(certificates, [], [], []);
+  // Only the tones are read, and every sentence the rows carry is thrown
+  // away here.
+  const noWords: T = () => "";
+  const rows = certificateRows(certificates, [], [], [], noWords);
   if (rows.some((row) => row.state.tone === "err")) return "err";
   if (rows.some((row) => row.state.tone === "warn")) return "warn";
   return null;

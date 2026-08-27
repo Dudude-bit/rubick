@@ -61,6 +61,7 @@ function Name({ object }: { object: ObjectRef }) {
  * or promise a page for a revision this app cannot show.
  */
 function Outside({ end }: { end: OutsideEnd }) {
+  const t = useT();
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
       <Link
@@ -73,7 +74,7 @@ function Outside({ end }: { end: OutsideEnd }) {
         (end.link ? (
           <button
             type="button"
-            onClick={() => openExternal(end.link!.url, end.link!.site)}
+            onClick={() => openExternal(end.link!.url, end.link!.site, t)}
             className="inline-flex items-baseline gap-0.5 font-mono text-[11px] text-info hover:underline"
           >
             {shortRevision(end.revision)}
@@ -92,8 +93,9 @@ function Outside({ end }: { end: OutsideEnd }) {
 }
 
 function Row({ row }: { row: ConnRow }) {
+  const t = useT();
   const existence = row.object
-    ? describeExistence(row.object, row.verifiable ?? false)
+    ? describeExistence(row.object, t, row.verifiable ?? false)
     : null;
   // One way stays on the name's line, as a name and what it is for. Several
   // become their own lines, because five clauses joined by commas is a
@@ -197,7 +199,7 @@ export function ConnectionsPanel({
     );
   }
 
-  const groups = connectionGroups(data, deliveries);
+  const groups = connectionGroups(data, t, deliveries);
   if (groups.length === 0) return <Nothing subject={data.subject} />;
 
   return (

@@ -33,6 +33,13 @@ import {
 } from "./forwarded";
 import type { ServiceInfo } from "@/generated/types";
 
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const service = (
   name: string,
   namespace: string,
@@ -100,8 +107,8 @@ describe("finding the vendor in the cluster", () => {
     const found = candidates({ names: ["prometheus"], ports: [9090] });
     return found.then((list) => {
       expect(list[0].service.name).toBe("kube-prom-stack");
-      expect(list[0].because).toContain("labelled");
-      expect(list[1].because).toBe("named for it");
+      expect(sayWords(list[0].because, t)).toContain("labelled");
+      expect(sayWords(list[1].because, t)).toBe("named for it");
     });
   });
 
@@ -228,7 +235,7 @@ describe("choosing between the Services one chart installs", () => {
       "loki-gateway",
       "loki-read",
     ]);
-    expect(found[0].because).toBe('its "gateway" component');
+    expect(sayWords(found[0].because, t)).toBe('its "gateway" component');
   });
 
   /** An `index-gateway` is not a gateway, and `avoid` is checked first. */
@@ -246,7 +253,7 @@ describe("choosing between the Services one chart installs", () => {
     ]);
     const [only] = await candidates(LOKI);
     expect(only.service.name).toBe("loki");
-    expect(only.because).toContain("labelled");
+    expect(sayWords(only.because, t)).toContain("labelled");
   });
 
   /**

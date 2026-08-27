@@ -60,6 +60,56 @@ describe("what the window is scoped to", () => {
   });
 });
 
+describe("moving between clusters", () => {
+  /**
+   * Reported from a shop with six clusters and rights to a couple of
+   * namespaces in each: switching cleared the selection every time, so the
+   * same two or three namespaces were picked again on every move.
+   */
+  it("restores what that cluster was last left on", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"], "prod-us": ["api", "jobs"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().switchContext("prod-us");
+
+    expect(state().namespaceScope).toEqual(["api", "jobs"]);
+    // Two namespaces have no single wire value; the selection is the truth.
+    expect(state().currentNamespace).toBe("");
+  });
+
+  it("gives the whole cluster to one it has never been asked about", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().switchContext("staging");
+
+    expect(state().namespaceScope).toEqual([]);
+    expect(state().currentNamespace).toBe("");
+  });
+
+  /** Switching to the cluster already open changes nothing. */
+  it("leaves the scope alone when the context has not moved", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["something", "else"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web", "api"],
+      currentNamespace: "",
+    });
+
+    await state().switchContext("prod-eu");
+
+    expect(state().namespaceScope).toEqual(["web", "api"]);
+  });
+});
+
 describe("what is written to disk", () => {
   /**
    * Would break every screen of a build that does not have this feature.
@@ -70,14 +120,30 @@ describe("what is written to disk", () => {
    */
   it("saves a namespace an older build can still ask for", async () => {
     await state().setNamespaceScope(["web", "api"]);
-    expect(saveClusterPreferences).toHaveBeenCalledWith(null, "prod-eu", "");
+    expect(saveClusterPreferences).toHaveBeenCalledWith(null, "prod-eu", "", [
+      "web",
+      "api",
+    ]);
 
     await state().setNamespaceScope(["web"]);
     expect(saveClusterPreferences).toHaveBeenLastCalledWith(
       null,
       "prod-eu",
-      "web"
+      "web",
+      ["web"]
     );
+  });
+
+  /**
+   * The whole selection rides in its own field, so the wire value stays the
+   * single namespace an older build knows how to ask for while this one
+   * keeps all of it.
+   */
+  it("keeps the whole selection beside the one an older build reads", async () => {
+    await state().setNamespaceScope(["web", "api", "jobs"]);
+    const [, , wire, scope] = saveClusterPreferences.mock.lastCall!;
+    expect(wire).toBe("");
+    expect(scope).toEqual(["web", "api", "jobs"]);
   });
 
   it("writes nothing while no cluster owns the scope", async () => {

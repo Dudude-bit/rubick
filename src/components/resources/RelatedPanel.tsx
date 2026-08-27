@@ -16,6 +16,7 @@
  * a gap in this app into a claim about somebody's cluster.
  */
 
+import { useT } from "@/i18n/useT";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,10 @@ const GROUP_HEADING =
   "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 /** Rows in the order they were produced, grouped by what the relation is. */
-function byRelation(related: RelatedRef[]): Array<[string, RelatedRef[]]> {
-  const groups = new Map<string, RelatedRef[]>();
+function byRelation(
+  related: RelatedRef[]
+): Array<[RelatedRef["relation"], RelatedRef[]]> {
+  const groups = new Map<RelatedRef["relation"], RelatedRef[]>();
   for (const entry of related) {
     const existing = groups.get(entry.relation);
     if (existing) existing.push(entry);
@@ -79,6 +82,7 @@ export function RelatedPanel({
   /** Named in the sentence, so "nothing reads a SealedSecret" is specific. */
   kind: string;
 }) {
+  const t = useT();
   if (query.isPending && query.related.length === 0) {
     return (
       <div className="flex flex-col gap-2 px-3.5 py-3" aria-hidden="true">
@@ -101,7 +105,7 @@ export function RelatedPanel({
 
       {byRelation(query.related).map(([relation, rows]) => (
         <Section key={relation}>
-          <span className={GROUP_HEADING}>{relation}</span>
+          <span className={GROUP_HEADING}>{t("readings", relation)}</span>
           <div className="mt-1 flex flex-col">
             {rows.map((entry) => (
               <Row

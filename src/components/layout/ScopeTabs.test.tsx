@@ -36,6 +36,12 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
   id: "t1",
   context: "k3d-dev",
@@ -190,7 +196,7 @@ describe("watching several namespaces at once", () => {
 
   /** Opens the namespace list on the one tab in the strip. */
   const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(within(tabs()[0]).getByText(scopeLabel(scope())));
+    await user.click(within(tabs()[0]).getByText(scopeLabel(scope(), t)));
     return screen.getByRole("listbox", { name: "Namespaces" });
   };
 

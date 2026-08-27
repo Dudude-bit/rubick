@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { useT } from "@/i18n/useT";
 
 /**
  * Hook for copying text to clipboard with toast notification
@@ -13,9 +14,10 @@ import { useToast } from "@/components/ui/use-toast";
  */
 export function useCopyToClipboard() {
   const { toast } = useToast();
+  const t = useT();
 
   return useCallback(
-    async (text: string, successMessage = "Copied to clipboard") => {
+    async (text: string, successMessage = t("action", "copiedToClipboard")) => {
       try {
         await navigator.clipboard.writeText(text);
         toast({
@@ -30,6 +32,6 @@ export function useCopyToClipboard() {
         });
       }
     },
-    [toast]
+    [toast, t]
   );
 }

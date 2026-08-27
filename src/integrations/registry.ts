@@ -102,6 +102,8 @@
  * an event bus, third-party loading. What has to be right is the boundary.
  */
 
+import type { Saying } from "@/i18n/say";
+
 import type { LucideIcon } from "lucide-react";
 
 import type { en } from "@/i18n/catalogue";
@@ -289,8 +291,11 @@ export interface VolumeFullness {
 export interface EdgeConfig {
   /** The object that states it, and where the reader continues. */
   source: { kind: string; name: string; to: string };
-  /** What it configures, in the object's own terms. */
-  summary: string;
+  /**
+   * What it configures, in the object's own terms — as keys, since this is
+   * composed inside a query. Several, joined on one line.
+   */
+  summary: Saying[];
   /**
    * Stated only where the object itself states it — a status field a
    * controller wrote, or a name that resolves to no object in the cluster.
@@ -298,7 +303,7 @@ export interface EdgeConfig {
    * status at all, and reading its silence as health would invent the most
    * confident wrong claim in the app.
    */
-  problem: { text: string; tone: "warn" | "err" } | null;
+  problem: { text: Saying; tone: "warn" | "err" } | null;
 }
 
 /** What terminates TLS for one host, where `spec.tls` does not. */
@@ -312,9 +317,10 @@ export interface IngressTls {
   terminated: boolean;
   /**
    * What holds it, for the sentence: "an ACM certificate", "shop-cert". Never
-   * branched on — the surface prints it.
+   * branched on — the surface prints it. A key, because this is answered
+   * inside a query; a Secret's own name goes through the verbatim one.
    */
-  by: string;
+  by: Saying;
 }
 
 /**
@@ -335,9 +341,10 @@ export interface RelatedObject {
   /**
    * What this object does with that one, in the operator's own terms:
    * "manages", "issues into", "reads from", "waits for". Printed as the row's
-   * label and never branched on.
+   * label and never branched on — a catalogue key, since these are made
+   * inside a query and the panel groups by them.
    */
-  relation: string;
+  relation: keyof (typeof en)["readings"];
   kind: string;
   name: string;
   namespace: string | null;
@@ -762,7 +769,15 @@ export type ProbeResult =
        */
       retention?: string | null;
     }
-  | { ok: false; at: number; reason: string };
+  | {
+      ok: false;
+      at: number;
+      /**
+       * Why, as a {@link Saying}: a probe runs where the reader's language
+       * is not in scope, and the transport's own words ride inside it.
+       */
+      reason: Saying;
+    };
 
 /**
  * One thing an extension is currently doing for this cluster.
@@ -772,8 +787,7 @@ export type ProbeResult =
  * inventory and `1 renewal failing` is why you came. Borrowing a tone for
  * inventory spends the only signal this row has.
  */
-export interface VendorFact {
-  text: string;
+export type VendorFact = {
   /** Only a problem has one. */
   tone?: "warn" | "err";
   /**
@@ -782,7 +796,30 @@ export interface VendorFact {
    * the app already built for the objects it counted.
    */
   to?: string;
-}
+} & (
+  | {
+      /**
+       * What the line says, as a catalogue key. Facts are composed inside a
+       * query, where the reader's language is not in scope — see
+       * {@link Saying}.
+       *
+       * Several, where one line counts several things: `3 Gateways · 2
+       * VirtualServices`. Each part is counted in its own language and the
+       * page joins them, because a count is not a substring one language can
+       * hand to another.
+       */
+      say: Saying | Saying[];
+      text?: never;
+    }
+  | {
+      /**
+       * A value that is not language: a hostname, a version, an address.
+       * Translating one would be a bug, so it takes this side instead.
+       */
+      text: string;
+      say?: never;
+    }
+);
 
 /**
  * The row a vendor gets in Settings → Integrations.

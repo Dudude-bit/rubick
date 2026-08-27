@@ -1,4 +1,9 @@
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 import type { Delivery, DeliverySource } from "@/integrations";
 import {
@@ -29,7 +34,7 @@ function source(over: Partial<DeliverySource> = {}): DeliverySource {
     sync: "synced",
     lastAppliedAt: null,
     warning: null,
-    note: "Auto-sync is off, so an edit here stands until somebody syncs it.",
+    note: { key: "argoNoAutoSync" },
     ...over,
   };
 }
@@ -68,39 +73,49 @@ describe("the Overview line is earned, never granted", () => {
    * left for a banner to add.
    */
   it("says nothing about a delivered, in-sync object whose edits would stick", () => {
-    expect(deliveryLine([delivered({ drift: "kept", sync: "synced" })])).toBe(
-      null
-    );
+    expect(
+      deliveryLine([delivered({ drift: "kept", sync: "synced" })], t)
+    ).toBe(null);
   });
 
   it("says nothing at all when nothing claims the object", () => {
-    expect(deliveryLine([])).toBe(null);
+    expect(deliveryLine([], t)).toBe(null);
   });
 
   it("warns, in the vendor's own words, when an edit will be put back", () => {
-    const line = deliveryLine([
-      delivered({ drift: "reverted", note: "Argo self-heals this." }),
-    ]);
+    const line = deliveryLine(
+      [delivered({ drift: "reverted", note: { key: "argoSelfHeals" } })],
+      t
+    );
     expect(line?.tone).toBe("info");
-    expect(line?.detail).toContain("Argo self-heals this.");
+    expect(line?.detail).toContain("Argo self-heals this Application");
   });
 
   it("says how long ago it was last applied when live has drifted", () => {
-    const line = deliveryLine([
-      delivered({
-        sync: "drifted",
-        lastAppliedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
-      }),
-    ]);
+    const line = deliveryLine(
+      [
+        delivered({
+          sync: "drifted",
+          lastAppliedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+        }),
+      ],
+      t
+    );
     expect(line?.tone).toBe("warn");
     expect(line?.title).toContain("Live differs from git");
     expect(line?.title).toContain("2d");
   });
 
   it("separates a stopped reconciler from an edit that simply stands", () => {
-    const line = deliveryLine([
-      delivered({ drift: "unmanaged", note: "apps is suspended." }),
-    ]);
+    const line = deliveryLine(
+      [
+        delivered({
+          drift: "unmanaged",
+          note: { key: "fluxKustSuspended", values: { name: "apps" } },
+        }),
+      ],
+      t
+    );
     expect(line?.tone).toBe("warn");
     expect(line?.title).toContain("Nothing is applying this");
   });
@@ -111,10 +126,13 @@ describe("the Overview line is earned, never granted", () => {
    * capability lookup could never have found.
    */
   it("names both when two controllers deliver the same object", () => {
-    const line = deliveryLine([
-      delivered(),
-      delivered({ vendor: "Flux", vendorId: "flux", sync: null }),
-    ]);
+    const line = deliveryLine(
+      [
+        delivered(),
+        delivered({ vendor: "Flux", vendorId: "flux", sync: null }),
+      ],
+      t
+    );
     expect(line?.tone).toBe("warn");
     expect(line?.title).toContain("Argo CD and Flux");
     expect(line?.detail).toContain("undoes");
@@ -131,7 +149,7 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
    * because nothing is enforcing any of them.
    */
   it("says the owner does not list it, rather than asserting delivery", () => {
-    const line = deliveryLine([claimed()]);
+    const line = deliveryLine([claimed()], t);
     expect(line?.tone).toBe("warn");
     expect(line?.title).toBe(
       "Labelled as delivered by shop, which does not list it"
@@ -140,24 +158,24 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
   });
 
   it("says so differently when no such owner exists at all", () => {
-    const line = deliveryLine([claimed({ owner: null })]);
+    const line = deliveryLine([claimed({ owner: null })], t);
     expect(line?.title).toBe(
       "Labelled as delivered by shop, and no Application by that name exists"
     );
   });
 
   it("marks an unconfirmed claim as unconfirmed, not as provenance", () => {
-    const [mark] = deliveryMarks([claimed()]);
+    const [mark] = deliveryMarks([claimed()], t);
     expect(mark.text).toBe("Argo CD · shop · unconfirmed");
     expect(mark.tone).toBe("warn");
   });
 
   it("never offers to warn about an edit an unconfirmed claim cannot undo", () => {
-    expect(deliveryIntercept([claimed()], "Scale")).toBe(null);
+    expect(deliveryIntercept([claimed()], "Scale", t)).toBe(null);
   });
 
   it("keeps it out of the column's quiet case", () => {
-    expect(deliveryCell([claimed()])).toEqual({
+    expect(deliveryCell([claimed()], t)).toEqual({
       text: "labelled, not listed",
       tone: "warn",
     });
@@ -166,15 +184,20 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
 
 describe("the list column is empty for the rule and marks the exception", () => {
   it("draws nothing for a delivered, in-sync row", () => {
-    expect(deliveryCell([delivered()])).toBe(null);
+    expect(deliveryCell([delivered()], t)).toBe(null);
   });
 
   it("draws `not delivered` quietly, because it is not a fault", () => {
-    expect(deliveryCell([])).toEqual({ text: "not delivered", tone: "faint" });
+    expect(deliveryCell([], t)).toEqual({
+      text: "not delivered",
+      tone: "faint",
+    });
   });
 
   it("marks drift, which is a problem and earns one", () => {
-    expect(deliveryCell([delivered({ sync: "drifted" })])?.tone).toBe("warn");
+    expect(deliveryCell([delivered({ sync: "drifted" })], t)?.tone).toBe(
+      "warn"
+    );
   });
 
   /**
@@ -184,9 +207,10 @@ describe("the list column is empty for the rule and marks the exception", () => 
    */
   it("never turns an unreported comparison into a verdict", () => {
     expect(
-      deliveryCell([
-        delivered({ vendor: "Flux", vendorId: "flux", sync: null }),
-      ])
+      deliveryCell(
+        [delivered({ vendor: "Flux", vendorId: "flux", sync: null })],
+        t
+      )
     ).toBe(null);
   });
 
@@ -202,19 +226,20 @@ describe("the list column is empty for the rule and marks the exception", () => 
 
 describe("the interception tells rather than blocks", () => {
   it("speaks only where something really re-applies the object", () => {
-    expect(deliveryIntercept([delivered({ drift: "kept" })], "Scale")).toBe(
+    expect(deliveryIntercept([delivered({ drift: "kept" })], "Scale", t)).toBe(
       null
     );
     expect(
-      deliveryIntercept([delivered({ drift: "unmanaged" })], "Scale")
+      deliveryIntercept([delivered({ drift: "unmanaged" })], "Scale", t)
     ).toBe(null);
-    expect(deliveryIntercept([], "Scale")).toBe(null);
+    expect(deliveryIntercept([], "Scale", t)).toBe(null);
   });
 
   it("keeps the verb, so the button still does what it says", () => {
     const intercept = deliveryIntercept(
       [delivered({ drift: "reverted" })],
-      "Scale"
+      "Scale",
+      t
     );
     expect(intercept?.confirmLabel).toBe("Scale anyway");
     expect(intercept?.title).toContain("Argo CD will undo this");
@@ -230,17 +255,20 @@ describe("applying an edited manifest", () => {
    * unread within a day, and the one save it was written for would go with it.
    */
   it("says nothing about an object nothing delivers", () => {
-    expect(deliveryApplyIntercept([])).toBe(null);
-    expect(deliveryApplyIntercept([delivered({ drift: "kept" })])).toBe(null);
-    expect(deliveryApplyIntercept([delivered({ drift: "unmanaged" })])).toBe(
+    expect(deliveryApplyIntercept([], t)).toBe(null);
+    expect(deliveryApplyIntercept([delivered({ drift: "kept" })], t)).toBe(
+      null
+    );
+    expect(deliveryApplyIntercept([delivered({ drift: "unmanaged" })], t)).toBe(
       null
     );
   });
 
   it("names who will undo it and where the change belongs", () => {
-    const intercept = deliveryApplyIntercept([
-      delivered({ drift: "reverted" }),
-    ]);
+    const intercept = deliveryApplyIntercept(
+      [delivered({ drift: "reverted" })],
+      t
+    );
     expect(intercept?.confirmLabel).toBe("Apply anyway");
     expect(intercept?.title).toContain("Argo CD will undo this");
     expect(intercept?.description).toContain("manifests/shop");
@@ -254,7 +282,7 @@ describe("applying an edited manifest", () => {
    * wrong here.
    */
   it("corrects an unconfirmed label instead of promising a revert", () => {
-    const intercept = deliveryApplyIntercept([claimed()]);
+    const intercept = deliveryApplyIntercept([claimed()], t);
     expect(intercept?.confirmLabel).toBe("Apply");
     expect(intercept?.description).toContain("does not list it");
     expect(intercept?.description).toContain("stands");
@@ -264,16 +292,16 @@ describe("applying an edited manifest", () => {
   });
 
   it("says so differently when nothing answers to the name at all", () => {
-    const intercept = deliveryApplyIntercept([claimed({ owner: null })]);
+    const intercept = deliveryApplyIntercept([claimed({ owner: null })], t);
     expect(intercept?.description).toContain("no Application by that name");
   });
 
   /** A confirmed delivery outranks a second vendor's stale claim. */
   it("prefers the controller that really applies it over a bare claim", () => {
-    const intercept = deliveryApplyIntercept([
-      claimed(),
-      delivered({ drift: "reverted" }),
-    ]);
+    const intercept = deliveryApplyIntercept(
+      [claimed(), delivered({ drift: "reverted" })],
+      t
+    );
     expect(intercept?.confirmLabel).toBe("Apply anyway");
   });
 });

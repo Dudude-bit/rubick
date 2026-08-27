@@ -8,6 +8,8 @@
  * pointed at the one object under the cursor.
  */
 
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import type { KeyValue } from "@/components/resources/key-values";
 import type { CustomResourceDetailInfo } from "@/generated/types";
@@ -46,25 +48,26 @@ interface IngressRouteSpec {
 
 const join = (values: string[]) => values.join(" · ");
 
-function tlsRow(spec: IngressRouteSpec): KeyValue {
+function tlsRow(spec: IngressRouteSpec, t: T): KeyValue {
   if (spec.tls === undefined || spec.tls === null) {
     return {
       label: "TLS",
-      value: "none declared — an entry point may still carry it",
+      value: t("readings", "traefikNoTlsDeclared"),
     };
   }
   if (spec.tls.secretName) {
     return { label: "TLS", value: spec.tls.secretName, mono: true };
   }
   // `tls: {}` is Traefik's "serve this over TLS with whatever you have".
-  return { label: "TLS", value: "the proxy's default certificate" };
+  return { label: "TLS", value: t("readings", "traefikDefaultCertificate") };
 }
 
 function routeGroup(
   route: RouteSpec,
   index: number,
   total: number,
-  namespace: string | null
+  namespace: string | null,
+  t: T
 ) {
   const raw = route.match ?? "";
   const reading = readRule(raw);
@@ -75,23 +78,33 @@ function routeGroup(
   ];
 
   const items: KeyValue[] = [
-    { label: "Match", value: raw || "(empty)", mono: true },
+    {
+      label: t("columns", "match"),
+      value: raw || t("empty", "emptyParens"),
+      mono: true,
+    },
   ];
   if (reading.refused) {
     items.push({
-      label: "Hosts",
-      value: `not read — ${reading.refused}`,
+      label: t("columns", "hosts"),
+      value: t("readings", "traefikNotRead", {
+        why: sayWords(reading.refused, t),
+      }),
       tone: "warn",
     });
   } else if (hosts.length > 0) {
-    items.push({ label: "Hosts", value: join(hosts), mono: true });
+    items.push({
+      label: t("columns", "hosts"),
+      value: join(hosts),
+      mono: true,
+    });
   }
   items.push({
-    label: "Priority",
+    label: t("columns", "priority"),
     value:
       route.priority !== undefined
         ? String(route.priority)
-        : `${raw.length} — the rule's length, Traefik's default`,
+        : t("readings", "traefikPriorityDefault", { n: raw.length }),
     mono: route.priority !== undefined,
   });
   for (const service of route.services ?? []) {
@@ -103,12 +116,12 @@ function routeGroup(
     const detail = [
       service.port === undefined ? null : `:${service.port}`,
       service.kind === "TraefikService" ? "TraefikService" : null,
-      service.scheme === "h2c" ? "h2c — gRPC, not a browser's way in" : null,
+      service.scheme === "h2c" ? t("readings", "traefikH2c") : null,
     ]
       .filter(Boolean)
       .join(" · ");
     items.push({
-      label: "Service",
+      label: t("columns", "service"),
       value: kubernetes ? (
         <>
           <ResourceRef
@@ -131,7 +144,7 @@ function routeGroup(
       : []
   );
   items.push({
-    label: "Middlewares",
+    label: t("columns", "middlewares"),
     value:
       middlewares.length > 0 ? (
         <span className="flex flex-wrap gap-x-1.5">
@@ -149,19 +162,23 @@ function routeGroup(
           ))}
         </span>
       ) : (
-        "none"
+        t("empty", "none")
       ),
     mono: middlewares.length > 0,
   });
 
   return {
-    title: total > 1 ? `Route ${index + 1}` : "Route",
+    title:
+      total > 1
+        ? t("readings", "traefikRouteNumber", { n: index + 1 })
+        : t("readings", "traefikRoute"),
     items,
   };
 }
 
 export function peekIngressRoute(
-  resource: CustomResourceDetailInfo
+  resource: CustomResourceDetailInfo,
+  t: T
 ): VendorPeekBody {
   const spec = (resource.spec ?? {}) as IngressRouteSpec;
   const routes = spec.routes ?? [];
@@ -169,20 +186,20 @@ export function peekIngressRoute(
   return {
     groups: [
       {
-        title: "Routing",
+        title: t("readings", "traefikRouting"),
         items: [
           {
-            label: "Entry points",
+            label: t("nav", "entryPoints"),
             value: spec.entryPoints?.length
               ? join(spec.entryPoints)
-              : "every entry point — none named",
+              : t("readings", "traefikEveryEntryPoint"),
             mono: Boolean(spec.entryPoints?.length),
           },
-          tlsRow(spec),
+          tlsRow(spec, t),
         ],
       },
       ...routes.map((route, index) =>
-        routeGroup(route, index, routes.length, resource.namespace)
+        routeGroup(route, index, routes.length, resource.namespace, t)
       ),
     ],
   };
@@ -190,7 +207,8 @@ export function peekIngressRoute(
 
 /** Scalar settings of the one key a Middleware's spec carries. */
 export function peekMiddleware(
-  resource: CustomResourceDetailInfo
+  resource: CustomResourceDetailInfo,
+  t: T
 ): VendorPeekBody {
   const spec = (resource.spec ?? {}) as Record<string, unknown>;
   const groups = Object.entries(spec).map(([type, config]) => ({
@@ -203,11 +221,17 @@ export function peekMiddleware(
             mono: true,
           }))
         : ([{ label: type, value: String(config), mono: true }] as KeyValue[]),
-    emptyMessage: "Nothing configured",
+    emptyMessage: t("empty", "nothingConfigured"),
   }));
   return {
     groups: groups.length
       ? groups
-      : [{ title: "Middleware", items: [], emptyMessage: "An empty spec" }],
+      : [
+          {
+            title: "Middleware",
+            items: [],
+            emptyMessage: t("empty", "anEmptySpec"),
+          },
+        ],
   };
 }

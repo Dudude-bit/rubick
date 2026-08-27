@@ -169,3 +169,60 @@ describe("calculateUtilization", () => {
     expect(calculateUtilization(-10, 100)).toBe(0);
   });
 });
+
+/**
+ * The two parsers in this file read the same quantities, and one of them used
+ * to know eight suffixes where the other knew thirteen. A PVC declaring `1Pi`
+ * matched none of the eight, fell through to `parseFloat`, and the storage
+ * block reported a petabyte as one byte — a number a reader has no way to
+ * question, because it looks like a measurement.
+ */
+describe("the units the two parsers agree on", () => {
+  it("reads every binary suffix Kubernetes writes", () => {
+    expect(parseMemory("1Ki")).toBe(1024);
+    expect(parseMemory("1Mi")).toBe(1024 ** 2);
+    expect(parseMemory("1Gi")).toBe(1024 ** 3);
+    expect(parseMemory("1Ti")).toBe(1024 ** 4);
+    expect(parseMemory("1Pi")).toBe(1024 ** 5);
+    expect(parseMemory("1Ei")).toBe(1024 ** 6);
+  });
+
+  it("reads every decimal suffix too", () => {
+    expect(parseMemory("1k")).toBe(1e3);
+    expect(parseMemory("1K")).toBe(1e3);
+    expect(parseMemory("1M")).toBe(1e6);
+    expect(parseMemory("1G")).toBe(1e9);
+    expect(parseMemory("1T")).toBe(1e12);
+    expect(parseMemory("1P")).toBe(1e15);
+    expect(parseMemory("1E")).toBe(1e18);
+  });
+
+  /** Whatever one answers, so does the other. */
+  it("never disagrees with parseQuantity", () => {
+    for (const value of [
+      "1Ki",
+      "512Mi",
+      "1.5Gi",
+      "1Ti",
+      "1Pi",
+      "1Ei",
+      "1k",
+      "1K",
+      "1M",
+      "1G",
+      "1T",
+      "1P",
+      "1E",
+      "1024",
+      "0",
+    ]) {
+      expect(parseMemory(value)).toBe(parseQuantity(value) ?? 0);
+    }
+  });
+
+  it("still answers zero for what is not a quantity", () => {
+    expect(parseMemory("nonsense")).toBe(0);
+    expect(parseMemory("")).toBe(0);
+    expect(parseMemory(null)).toBe(0);
+  });
+});

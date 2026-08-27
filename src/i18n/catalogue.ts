@@ -41,16 +41,86 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
-    attachedRoutes: "Attached routes",
-    gatewaysUsingIt: "Gateways using it",
-    fromThisMachine: "From this machine",
-    policies: "Policies",
-    contents: "Contents",
+    selectsLabels: "selects {selector}",
+    allNamespacesLower: "all namespaces",
+    dataTable: "Data table",
+    protectsVerb: "protects",
+    scalesVerb: "scales",
+    actsOn: "acts on",
+    nothingIsTheTop: "nothing — a {kind} is the top",
+    replicaCountSetHere: "the replica count is set here",
+    noServiceSelectsThese:
+      "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
+    serviceResolvesExternal:
+      "This Service has no selector: it resolves to {name} rather than to anything in this cluster.",
+    servesTlsFor: "serves TLS for {hosts}",
+    inVolumeUnmounted: "in volume {volume}, which no container mounts",
+    readOnlySuffix: ", read-only",
+    fromSubPath: " from {subPath}",
+    mountedAt: "mounted at {path}",
+    projectedInto: "projected into {path}",
     // Said on a nav row the authorizer refused, and on the page behind it.
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
     noListAccess: "You do not have permission to list these",
     relatedResources: "Related resources",
+    runsOn: "Runs on",
+    whatRunsHere: "What runs here",
+    needsToRun: "Needs to run",
+    needsToRunNote: "— if one of these is missing the pod does not start",
+    usedBy: "Used by",
+    usedByNote: "— what names this in its pod spec",
+    whatAnswersHere: "What answers here",
+    whatAnswersHereNote: "— what made the pods behind this address",
+    boundTo: "Bound to",
+    governedBy: "Governed by",
+    governedByNote:
+      "— acts on this on its own schedule, and nothing here asked for it",
+    madeByAndMakes: "Made by, and makes",
+    notLookedAt: "Not looked at",
+    notLookedAtNote:
+      "— named, so a group that is absent is never read as a group that is empty",
+    deliveredBy: "Delivered by",
+    disruptionBudget: "Disruption budget",
+    autoscaling: "Autoscaling",
+    tlsCertificate: "TLS certificate",
+    configuration: "Configuration",
+    everyKeyBecomesEnv: "every key becomes an environment variable",
+    usedToPullImages: "used to pull the images",
+    identityItRunsAs: "the identity it runs as",
+    servesTlsForHosts: "serves TLS for every host on this Ingress",
+    noSelector: "no selector",
+    notInThisNamespace: "does not exist in this namespace",
+    notChecked: "not checked",
+    nobodyDoes: "nobody does",
+    overHttps: "over HTTPS",
+    overHttpPlain: "over plain HTTP",
+    resourceBackend: "a resource backend — the app does not follow these",
+    ownerNotController: "an owner, not the controller",
+    replicasSetHere: "the replica count is set here",
+    noNamespaceValue: "no namespace",
+    servicePublishesNoEndpoint: "This Service publishes no endpoint",
+    stopNoSliceNote:
+      "{matched}, and not one of them is in anything this Service publishes. Why is not something these objects state — a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
+    stopUnnamedPortNote:
+      "{matched}, but it asks for {asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.",
+    stopNoServiceNamed: "No Service named {name} in this namespace",
+    stopNoPodCarries: "No pod carries {selector}",
+    stopNoneReadyNote:
+      "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+    targetPortNamed: "targetPort: {name}",
+    listAndLast: "{list}, and {last}",
+    twoAnd: "{a} and {b}",
+    ingressBackendNeverCreated:
+      "The Ingress routes this path to a backend that was never created, so the controller has nothing to send the request to.",
+    connectionRefusedNothingBehind:
+      "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+    endpointsByHandNoneWritten:
+      "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.",
+    ingressStatesNoBackend:
+      "This Ingress states no backend, so it routes nothing.",
+    noServiceSelectsPod:
+      "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.",
     trafficPath: "Traffic path",
     releases: "Releases",
     charts: "Charts",
@@ -106,6 +176,13 @@ export const en = {
     integrations: "Integrations",
     app: "App",
     settings: "Settings",
+    attachedRoutes: "Attached routes",
+    gatewaysUsingIt: "Gateways using it",
+    fromThisMachine: "From this machine",
+    policies: "Policies",
+    contents: "Contents",
+    gwWeightZero: "weight 0 — deliberately receives no traffic",
+    gwSectionNamed: "section {name}",
   },
   /**
    * Table column headers.
@@ -115,43 +192,68 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
-    // The route trace (Gateway API): who vouches for a step, and the two
-    // sides of a mismatch quote.
-    stepClass: "class",
-    stepGateway: "gateway",
-    stepListener: "listener",
-    stepNamespace: "namespace",
-    stepRefs: "refs",
-    stepBackend: "backend",
-    stepEndpoints: "endpoints",
-    stepReachable: "reachable",
-    missingTag: "missing",
-    backends: "Backends",
-    addresses: "Addresses",
-    routesFrom: "Routes from",
-    attached: "Attached",
-    hostnames: "Hostnames",
-    readAt: "Read at",
-    crdBundle: "CRD bundle",
-    controller: "Controller",
-    weight: "Weight",
-    behindIt: "Behind it",
-    kinds: "Kinds",
-    claim: "Claim",
-    hostname: "Hostname",
-    gatewayAddress: "Gateway address",
-    whoInfra: "infra",
-    whoYours: "your side",
-    whoController: "controller",
-    whoMachine: "this machine",
-    gwAsksListener: "the route asks for",
-    gwServesListener: "the listener serves",
-    gwAsksNamespace: "the route lives in",
-    gwServesNamespace: "the listener allows",
-    gwAsksPort: "the ref asks for port",
-    gwServesPorts: "the Service serves",
-    gwAsksGeneric: "asks for",
-    gwServesGeneric: "serves",
+    connections: "Connections",
+    providerId: "Provider ID",
+    resourceVersion: "Resource version",
+    uid: "UID",
+    apiVersion: "API version",
+    aDrainWaits: "A drain waits",
+    setBy: "Set by",
+    cpu: "CPU",
+    pods: "Pods",
+    ip: "IP",
+    routing: "Routing",
+    priority: "Priority",
+    entryPoints: "Entry Points",
+    subsets: "Subsets",
+    action: "Action",
+    applies: "Applies",
+    autoSync: "Auto-sync",
+    binds: "Binds",
+    cipherSuites: "Cipher Suites",
+    controllerSays: "Controller says",
+    destination: "Destination",
+    destinations: "Destinations",
+    details: "Details",
+    dnsNames: "DNS Names",
+    domains: "Domains",
+    endpoints: "Endpoints",
+    expires: "Expires",
+    exportTo: "Export To",
+    gateways: "Gateways",
+    generators: "Generators",
+    healthCheck: "Health check",
+    httpRoutes: "HTTP Routes",
+    interval: "Interval",
+    issuer: "Issuer",
+    leavesAlone: "Leaves alone",
+    location: "Location",
+    maxVersion: "Max Version",
+    middlewares: "Middlewares",
+    minVersion: "Min Version",
+    notProvisioned: "Not provisioned",
+    pod: "Pod",
+    project: "Project",
+    repository: "Repository",
+    requestor: "Requestor",
+    resolution: "Resolution",
+    secret: "Secret",
+    serverDetails: "Server/Details",
+    servers: "Servers",
+    service: "Service",
+    services: "Services",
+    sniStrict: "SNI Strict",
+    sourceRepos: "Source repos",
+    suspended: "Suspended",
+    sync: "Sync",
+    targetGroup: "Target group",
+    targetNS: "Target NS",
+    targets: "Targets",
+    tcpRoutes: "TCP Routes",
+    tls: "TLS",
+    toPodsLabelled: "To pods labelled",
+    trafficPolicy: "Traffic Policy",
+    url: "URL",
     reachableAt: "Reachable at",
     controlledBy: "Controlled by",
     objects: "Objects",
@@ -187,7 +289,6 @@ export const en = {
     health: "Health",
     whatThisRevisionRuns: "what this revision runs",
     selector: "Selector",
-    connections: "Connections",
     object: "Object",
     ownedBy: "Owned by",
     finalizers: "Finalizers",
@@ -259,6 +360,33 @@ export const en = {
     note: "Note",
     notReadyCount: "Not ready",
     clusterIp: "Cluster IP",
+    external: "External",
+    progress: "Progress",
+    reason: "Reason",
+    runtime: "Runtime",
+    scheduling: "Scheduling",
+    provisioning: "Provisioning",
+    provisioner: "Provisioner",
+    machine: "Machine",
+    platform: "Platform",
+    completed: "Completed",
+    succeeded: "Succeeded",
+    spot: "Spot",
+    taints: "Taints",
+    kubelet: "Kubelet",
+    images: "Images",
+    spec: "Spec",
+    volume: "Volume",
+    claim: "Claim",
+    requestsAndLimits: "Requests and limits",
+    backoffLimit: "Backoff limit",
+    timeZone: "Time zone",
+    lastSuccess: "Last success",
+    activeJobs: "Active jobs",
+    externalAddress: "External address",
+    tlsHosts: "TLS hosts",
+    storageClass: "Storage class",
+    upToDateCount: "Up to date",
     externalIps: "External IPs",
     loadBalancer: "Load balancer",
     group: "Group",
@@ -331,31 +459,74 @@ export const en = {
     expansion: "Expansion",
     parameters: "Parameters",
     delivery: "Delivery",
+    // The route trace (Gateway API): who vouches for a step, and the two
+    // sides of a mismatch quote.
+    stepClass: "class",
+    stepGateway: "gateway",
+    stepListener: "listener",
+    stepNamespace: "namespace",
+    stepRefs: "refs",
+    stepBackend: "backend",
+    stepEndpoints: "endpoints",
+    stepReachable: "reachable",
+    missingTag: "missing",
+    backends: "Backends",
+    addresses: "Addresses",
+    routesFrom: "Routes from",
+    attached: "Attached",
+    hostnames: "Hostnames",
+    readAt: "Read at",
+    crdBundle: "CRD bundle",
+    controller: "Controller",
+    weight: "Weight",
+    behindIt: "Behind it",
+    kinds: "Kinds",
+    hostname: "Hostname",
+    gatewayAddress: "Gateway address",
+    whoInfra: "infra",
+    whoYours: "your side",
+    whoController: "controller",
+    whoMachine: "this machine",
+    gwAsksListener: "the route asks for",
+    gwServesListener: "the listener serves",
+    gwAsksNamespace: "the route lives in",
+    gwServesNamespace: "the listener allows",
+    gwAsksPort: "the ref asks for port",
+    gwServesPorts: "the Service serves",
+    gwAsksGeneric: "asks for",
+    gwServesGeneric: "serves",
+    attachesTo: "Attaches to",
+    sni: "SNI",
+    trusts: "Trusts",
+    gateway: "Gateway",
+    grantFrom: "From",
+    grantTo: "To",
   },
   action: {
-    gwFilterPlaceholder: "name, host, gateway…",
-    filterRoutes: "Filter routes",
-    filterByKind: "Filter by kind",
-    allKinds: "All kinds",
-    hideMap: "Hide map",
-    map: "Map",
-    openGateways: "Open Gateways →",
-    liveUnavailableFor: "Live updates unavailable for {kind}s",
-    fallsBackPolling: "{message} — the list falls back to polling.",
-    copyListenerHostname: "Listener hostname {host}",
-    inInline: "in",
-    probe: "Probe",
-    openScopedTo: "Open {plural} scoped to {namespace}",
-    copyKindAddress: "{kind} address",
-    probing: "Probing…",
-    copyManifest: "Copy manifest",
-    grantManifestCopied: "ReferenceGrant manifest copied",
-    copyHost: "Host {host}",
-    copyResolvedIp: "Resolved address {ip}",
-    copyGatewayAddress: "Gateway address {address}",
-    copyPair: "Copy {pair}",
-    toInline: "to",
-    viaGateway: "via Gateway",
+    connectToForward: "Connect to a cluster to start port-forwarding.",
+    siteHasItAt: "{site} has it at {url}",
+    addressOnClipboard:
+      "The {site} address is on your clipboard instead: {url}",
+    couldNotOpenBrowser: "Could not open your browser",
+    kindYaml: "{kind} YAML",
+    debugBusybox: "BusyBox (minimal)",
+    debugAlpine: "Alpine (shell + apk)",
+    debugNetshoot: "Netshoot (network tools)",
+    debugUbuntu: "Ubuntu",
+    debugCustom: "Custom...",
+    findReplacement: "Find replacement",
+    searchingEllipsis: "Searching…",
+    compactView: "Compact view",
+    comfortableView: "Comfortable view",
+    searchEllipsis: "Search...",
+    verbAnyway: "{verb} anyway",
+    portsOutOfRange: "Ports must be between 1 and 65535.",
+    portForwardStartFailed: "Failed to start port-forward",
+    portForwardStopFailed: "Failed to stop port-forward",
+    terminalListenersFailed: "Failed to set up terminal listeners",
+    copiedToClipboard: "Copied to clipboard",
+    unknownBackendError: "Unknown backend error",
+    undo: "Undo",
     openOnSiteShort: "Open on {site}",
     valueNoun: "value",
     readingGroup: "reading {group}",
@@ -404,7 +575,6 @@ export const en = {
     searchFailed: "Search failed",
     chartInstalled: "Chart installed",
     chartInstalledDetail: 'Release "{name}" has been installed successfully.',
-    installationFailed: "Installation failed",
     releaseUpgraded: "Release upgraded",
     releaseUpgradedDetail: 'Release "{name}" has been upgraded successfully.',
     upgradeFailed: "Upgrade failed",
@@ -868,6 +1038,7 @@ export const en = {
     configureInSettings: "Configure in Settings",
     installHelm: "Install Helm",
     search: "Search",
+    filterEventsPlaceholder: "Filter events…",
     hintOpen: "open",
     hintMove: "move",
     hintSearch: "search",
@@ -994,6 +1165,49 @@ export const en = {
     restart: "Restart",
     debug: "Debug",
     portForward: "Port forward",
+    restartDeletesIt: "Restart (deletes it)",
+    podFinishedNoShell:
+      "This pod has finished — {phase}. There is no process left to attach a shell to.",
+    podStoppedNoShell:
+      "This pod has stopped. Its containers are gone, so there is nothing to attach to.",
+    noContainerRunningYet:
+      "No container is running yet — this pod is {phase}{note}.",
+    waitingNote: " · {container} {reason}",
+    podDeclaresNoPort:
+      "No container in this pod declares a port, so there is nothing to forward to.",
+    nothingListeningYet:
+      "Nothing is listening yet — no container is running, this pod is {phase}{note}.",
+    serviceDeclaresNoPorts:
+      "This Service declares no ports, so there is nothing to forward.",
+    endpointsUnreadable: "Could not read this Service's endpoints: {error}",
+    noReadyEndpoints:
+      "No ready endpoints — nothing is behind this Service to forward to.",
+    deleteSubjectTitle: "Delete {subject}?",
+    deleteSubjectBody: "Deleting {subject} {effect}",
+    restartSubjectTitle: "Restart {subject}?",
+    restartBareBody:
+      "Restarting a pod means deleting it. Nothing owns {subject}, so nothing will recreate it — this removes the pod for good.",
+    effectPodOwned:
+      "removes it now. Its {kind} {name} will start a replacement.",
+    effectPodBare:
+      "removes it now. Nothing owns this pod, so nothing will bring it back.",
+    effectWorkloadPods: "removes it and every pod it runs.",
+    effectStatefulSet:
+      "removes it and its pods. The PersistentVolumeClaims it created stay behind and keep costing.",
+    effectDaemonSet: "removes it and its pod on every node it runs on.",
+    effectJob: "removes it and the pods it created, including their logs.",
+    effectCronJob:
+      "stops the schedule and removes it. Jobs it has already created stay behind.",
+    effectService:
+      "removes its address. Anything resolving this name stops reaching these pods.",
+    effectConfigLike:
+      "leaves running pods alone, but any pod that mounts it will fail to start until it is recreated.",
+    effectClaim:
+      "releases the volume. Depending on the storage class's reclaim policy the data may be erased.",
+    effectVolume:
+      "removes the volume object. Whether the data survives is up to its reclaim policy.",
+    effectPermanent: "is permanent and cannot be undone.",
+    podSubject: "pod {name}",
     validate: "Validate",
     apply: "Apply",
     applyAnyway: "Apply anyway",
@@ -1057,6 +1271,29 @@ export const en = {
     copied: "Copied",
     openInBrowser: "Open in Browser",
     back: "Back",
+    gwFilterPlaceholder: "name, host, gateway…",
+    filterRoutes: "Filter routes",
+    filterByKind: "Filter by kind",
+    allKinds: "All kinds",
+    hideMap: "Hide map",
+    map: "Map",
+    openGateways: "Open Gateways →",
+    liveUnavailableFor: "Live updates unavailable for {kind}s",
+    fallsBackPolling: "{message} — the list falls back to polling.",
+    copyListenerHostname: "Listener hostname {host}",
+    inInline: "in",
+    probe: "Probe",
+    openScopedTo: "Open {plural} scoped to {namespace}",
+    copyKindAddress: "{kind} address",
+    probing: "Probing…",
+    copyManifest: "Copy manifest",
+    grantManifestCopied: "ReferenceGrant manifest copied",
+    copyHost: "Host {host}",
+    copyResolvedIp: "Resolved address {ip}",
+    copyGatewayAddress: "Gateway address {address}",
+    copyPair: "Copy {pair}",
+    toInline: "to",
+    viaGateway: "via Gateway",
   },
   activity: {
     forwardStarted: "Port forward started",
@@ -1115,7 +1352,6 @@ export const en = {
     sessions: "Sessions",
     running: "Running",
     panelPortForwards: "Port forwards",
-    panelBackgroundJobs: "Background jobs",
     title: "Activity",
     idle: "activity",
     ports: "Ports",
@@ -1123,7 +1359,6 @@ export const en = {
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
     terminalCount: { one: "{n} terminal", other: "{n} terminals" },
-    jobCount: { one: "{n} job", other: "{n} jobs" },
     active: "{n} active",
   },
   auth: {
@@ -1172,7 +1407,746 @@ export const en = {
       "usage history, volume fullness and traffic on pods and workloads",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
+
+  /**
+   * What an integration says about a vendor's own setting.
+   *
+   * Its own section because `vendor` is one blurb per extension and a test
+   * holds it to exactly that — a key there with no vendor behind it reads as
+   * copy for something the app no longer offers.
+   */
+  readings: {
+    twoWord: "Two",
+    threeWord: "Three",
+    warnUndoThis: "{count} things will undo this.",
+    warnUndoApply: "{count} things will undo this apply.",
+    warnRevertCount: "{count} things will put this number back.",
+    rowsOfTotal: "{shown} of {total} {label}",
+    rowCount: { one: "{n} row", other: "{n} rows" },
+    longListTrim: {
+      one: "{n} row — narrow the scope or search to trim",
+      other: "{n} rows — narrow the scope or search to trim",
+    },
+    limitWord: "limit",
+    capacityWord: "capacity",
+    usageShareOf: "{percent}% of {noun}",
+    usageRestarted: "restarted",
+    usageNothingYet: "{label}: nothing recorded yet.",
+    usageNow: "now {value}",
+    usagePeak: "peak {value}",
+    usageLimitIs: "{noun} {value}",
+    usageNoLimit: "no {noun} set, scaled to {value} used",
+    usageNoneDeclared: "no {noun}s declared",
+    usageAgainstDeclared: "against declared {noun}s",
+    usageReadingsWatched: {
+      one: "{label}: {n} reading watched",
+      other: "{label}: {n} readings watched",
+    },
+    usageReadingsRecorded: {
+      one: "{label}: {n} reading recorded, none since it stopped",
+      other: "{label}: {n} readings recorded, none since it stopped",
+    },
+    usageRestarts: { one: "{n} restart", other: "{n} restarts" },
+    envInline: "inline",
+    envSecret: "secret",
+    envConfigMap: "configmap",
+    envFieldRef: "fieldRef",
+    envResourceRef: "resourceRef",
+    envFromSecret: "secret · envFrom",
+    envFromConfigMap: "configmap · envFrom",
+    envAllSources: "all sources",
+    envFromWord: "envFrom",
+    readyOfNodes: "{ready} of {desired} nodes",
+    helmRelease: "Helm release",
+    crdEstablished: "Established",
+    crdNotEstablished: "Not established",
+    legacyEndpointsNote:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from a dead one, and it stops at 1000.",
+    podReadinessNote:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.",
+    legacyEndpointsShort:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
+    podPhase: "Phase {phase}",
+    nodeStoppedReportingAgo:
+      "Node {node} stopped reporting {age}. This status is the last one it sent, not the pod's state now.",
+    nodeStoppedReporting:
+      "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
+    allContainers: "all containers",
+    traefikAnotherEntryPoint: "another entry point",
+    certSelfSigned: "self-signed — nothing above it vouched for this",
+    certIssuedBy: "issued by {name}",
+    certIssuerNotNamed: "issuer not named",
+    traefikNoController:
+      "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
+    traefikManifestUnreadable:
+      "Its manifest could not be read, so its entry points are unknown — {why}",
+    traefikNoArgs:
+      "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
+    reachClusterDns:
+      "{host} is a name only the cluster can resolve — this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+    reachNoScheme:
+      "{host} has no scheme — write http:// or https:// in front of it.",
+    connReasonAndShape: "{said} — {shape}",
+    lokiHoldsNoneShort: "holds none of it",
+    lokiCouldNotTell: "could not tell",
+    lokiHoldsPart: "holds part of it",
+    lokiHoldsAll: "holding this cluster",
+    connDidNotSayWhy: "it did not say why",
+    connDidNotAnswer: "did not answer — {reason}",
+    connAnsweredAgo: "answered {age}",
+    connKeeps: "keeps {retention}",
+    connRanges: "ranges {ranges}",
+    lokiPageLimit: "up to {n} lines a page",
+    promResolutionOf: "{range} in {resolution}",
+    argoMissing: "missing",
+    argoFailedToApply: "failed to apply",
+    argoDegraded: "degraded",
+    argoProgressing: "progressing",
+    azureNoIdentityNamedPlain: "no identity named",
+    azureUserAssignedMsi: "user-assigned MSI",
+    azureServicePrincipal: "service principal",
+    azureServicePrincipalCert: "service principal (certificate)",
+    azureBinds: "binds {name}",
+    azureToPodsLabelled: "to pods labelled aadpodidbinding={selector}",
+    azureNamesNeither: "names neither an identity nor a selector",
+    azureAnyHostname: "any hostname",
+    argoSynced: "synced",
+    argoNotCompared: "not compared",
+    argoThisCluster: "this cluster",
+    argoNamespaceCount: { one: "{n} namespace", other: "{n} namespaces" },
+    relReadsFrom: "reads from",
+    relWaitsFor: "waits for",
+    relManages: "manages",
+    relGovernedBy: "governed by",
+    relIssuedBy: "issued by",
+    relIssuesInto: "issues into",
+    relServing: "serving",
+    relMountedNotCovering: "mounted but not covering",
+    relControlledBy: "controlled by",
+    relOwnedBy: "owned by",
+    govSeveralAutoscalers: {
+      one: "{n} autoscaler claims this",
+      other: "{n} autoscalers claim this — each undoes the other",
+    },
+    govWhatDrainRespects: "what a drain must respect",
+    govWhoSetsIt: "who sets it",
+    nginxNoController:
+      "Nothing in this cluster carries {selector}, so the controller's own configuration could not be read.",
+    nginxManifestUnreadable:
+      "Its manifest could not be read, so the global ConfigMap it uses is unknown — {why}",
+    nginxNoConfigMapFlag:
+      "This controller was started with no --configmap flag, so it has no global ConfigMap and every setting comes from its own defaults or from an Ingress.",
+    nginxConfigMapUnreadable:
+      "The controller reads {where}, and it could not be read here — {why}",
+    tlsFromVendor: "from {by}",
+    tlsHostFrom: "{host} — from {by}",
+    awsAcmNamed: "ACM {name}",
+    awsAcmCertificate: "an ACM certificate",
+    awsAcmDiscovered: "a certificate discovered in ACM",
+    awsHttpOnly: "an HTTP listener only",
+    azureCertOnGateway: "{name} on the Application Gateway",
+    azureSomeCertOnGateway: "a certificate on the Application Gateway",
+    istioMeshOnly: "mesh only",
+    mapEntryPoint: "Entry point",
+    mapZeroReady: "0 ready",
+    traefikRouting: "Routing",
+    traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
+    traefikPriorityDefault: {
+      one: "{n} — the rule's length, Traefik's default",
+      other: "{n} — the rule's length, Traefik's default",
+    },
+    traefikRoute: "Route",
+    traefikEveryEntryPoint: "every entry point — none named",
+    traefikH2c: "h2c — gRPC, not a browser's way in",
+    traefikNotRead: "not read — {why}",
+    traefikDefaultCertificate: "the proxy's default certificate",
+    traefikNoTlsDeclared: "none declared — an entry point may still carry it",
+    traefikRuleEmpty: "the rule is empty",
+    traefikRuleNotPlain: "it is not a plain list of matchers",
+    traefikRuleNegated:
+      "it is negated, so a matcher in it is not a requirement",
+    traefikRuleUnreadable: "no host or path in it could be read",
+    traefikAnyPath: "any path",
+    traefikPathExact: "{path} (exact)",
+    hpaNoMetricsDetail:
+      "{said} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.",
+    hpaAtCeilingDetail:
+      "{said} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.",
+    hpaStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back to somewhere between {min} and {max} without announcing it.",
+    logFormatJson: "Structured JSON log format with parsed fields",
+    logFormatLogfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
+    logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
+    logFormatLogback: "Java Logback format with timestamp and level",
+    logFormatPlain: "Plain text without structured formatting",
+    noTimestamp: "no timestamp",
+    awsPortNumber: "port {port}",
+    awsNoTargetGroup: "no target group named",
+    gcpEveryPort: "every port",
+    gcpPortNumber: "port {port}",
+    gcpNamedFor: "named for {scope}",
+    gcpNoBackendConfig:
+      "no BackendConfig named {name} in this namespace — nothing is applied.",
+    azureGatewayDefaults: "gateway defaults",
+    agicSpeaks: "speaks {protocol} to the pods",
+    agicRewritesPath: "rewrites the path to {path}",
+    agicSendsHost: "sends Host: {host}",
+    agicProbes: "probes {path}",
+    agicAccepts: "accepts {codes}",
+    agicCookieAffinity: "cookie affinity",
+    agicSslRedirect: "redirects to HTTPS",
+    agicPrivateIp: "on the private IP",
+    agicRewriteSet: "rewrite set {name}",
+    agicWaf: "WAF {name}",
+    agicRequestTimeout: {
+      one: "{n}s request timeout",
+      other: "{n}s request timeout",
+    },
+    agicDraining: { one: "{n}s draining", other: "{n}s draining" },
+    agicOutAfter: {
+      one: "out after {n} failed probe",
+      other: "out after {n} failed probes",
+    },
+    gcpRedirectsToHttps: "redirects HTTP to HTTPS {code}",
+    gcpSslPolicy: "SSL policy {name}",
+    gcpHealthCheck: "health check {what}",
+    gcpCdnWith: "CDN {what}",
+    gcpCdnOn: "CDN on",
+    gcpIapOn: "IAP on",
+    gcpCloudArmor: "Cloud Armor {name}",
+    gcpAffinity: "{how} affinity",
+    gcpAccessLogsOn: "access logs on",
+    gcpAccessLogsAt: "access logs at {percent}%",
+    gcpSetsNothing: "sets nothing",
+    gcpTimeout: "{n}s timeout",
+    gcpDraining: "{n}s draining",
+    gcpRequestHeaders: {
+      one: "{n} request header",
+      other: "{n} request headers",
+    },
+    gcpResponseHeaders: {
+      one: "{n} response header",
+      other: "{n} response headers",
+    },
+    istioAllWorkloads: "All workloads",
+    istioNoRules: "No rules",
+    traefikAuthEnabled: "Auth enabled",
+    traefikCustomHeaders: "Custom headers",
+    istioRuleCount: { one: "{n} rule", other: "{n} rules" },
+    forwardNoFreePort:
+      "Every local port between {from} and {to} is already forwarding something.",
+    forwardNoPod:
+      "No running pod is behind {where}, so there is nothing to forward to.",
+    forwardNoPodAnyMore: "No running pod is behind {where} any more.",
+    forwardServiceGone:
+      "{where} is not in this cluster any more, so there is nothing to forward to.",
+    forwardNoKnownPort: {
+      one: "{name} exposes {n} port and it is not one this app recognises — forward it by hand and give the address instead.",
+      other:
+        "{name} exposes {n} ports and none of them is one this app recognises — forward it by hand and give the address instead.",
+    },
+    forwardByComponent: 'its "{part}" component',
+    forwardByLabel: "labelled {label}",
+    forwardByName: "named for it",
+    weekdaySunday: "Sunday",
+    weekdayMonday: "Monday",
+    weekdayTuesday: "Tuesday",
+    weekdayWednesday: "Wednesday",
+    weekdayThursday: "Thursday",
+    weekdayFriday: "Friday",
+    weekdaySaturday: "Saturday",
+    cronEveryMinute: "every minute",
+    cronHourlyAt: "hourly at :{minute}",
+    cronDailyAt: "daily at {clock}",
+    cronWeeklyAt: "every {day} at {clock}",
+    cronWeekdaysAt: "weekdays at {clock}",
+    cronMonthlyAt: "monthly on day {day} at {clock}",
+    cronEveryMinutes: { one: "every {n} minute", other: "every {n} minutes" },
+    cronEveryHours: {
+      one: "every {n} hour, at :{minute}",
+      other: "every {n} hours, at :{minute}",
+    },
+    verbatimLine: "{said}",
+    gcpStatusOnDomain: "{status} on {domain}",
+    awsIngressClassParams: {
+      one: "{n} IngressClassParams",
+      other: "{n} IngressClassParams",
+    },
+    awsBindingsUnapplied: {
+      one: "{n} binding the controller could not apply",
+      other: "{n} bindings the controller could not apply",
+    },
+    azureBindings: { one: "{n} binding", other: "{n} bindings" },
+    azureProhibited: {
+      one: "{n} prohibited target",
+      other: "{n} prohibited targets",
+    },
+    azureNoIdentityNamed: {
+      one: "no AzureIdentity named {name}",
+      other: "no AzureIdentity named {name}",
+    },
+    azureDanglingBindings: {
+      one: "{n} binding names an identity that does not exist",
+      other: "{n} bindings name an identity that does not exist",
+    },
+    gcpCertificatesFailed: {
+      one: "{n} certificate failed",
+      other: "{n} certificates failed",
+    },
+    gcpNotServingYet: {
+      one: "{n} not serving yet",
+      other: "{n} not serving yet",
+    },
+    factOneExpiring: "1 {what}",
+    factCertificates: { one: "{n} certificate", other: "{n} certificates" },
+    factRenewalsOverdue: {
+      one: "{n} renewal overdue",
+      other: "{n} renewals overdue",
+    },
+    factExpiringSoonest: {
+      one: "{n} expiring, soonest in {span}",
+      other: "{n} expiring, soonest in {span}",
+    },
+    factRenewalsFailing: {
+      one: "{n} renewal failing",
+      other: "{n} renewals failing",
+    },
+    factNeverIssued: {
+      one: "{n} certificate never issued",
+      other: "{n} certificates never issued",
+    },
+    certOverdueBy: "{span} overdue",
+    certNeverIssuedShort: "never issued",
+    certRenewalFailing: "renewal failing",
+    certRenewing: "renewing",
+    certIssued: "issued",
+    certNoExpiryDate: "no readable expiry date",
+    certExpiredToday: "expired today",
+    certExpiresIn: "expires in {span}",
+    certValidFor: "valid for {span}",
+    certRenewsIn: "renews in {span}",
+    certRenewalOverdue: "renewal overdue — expires in {span}",
+    certNotValidYet: {
+      one: "not valid for another {n} day",
+      other: "not valid for another {n} days",
+    },
+    certExpiredAgo: {
+      one: "expired {n} day ago",
+      other: "expired {n} days ago",
+    },
+    spanDays: { one: "{n} day", other: "{n} days" },
+    spanHours: { one: "{n} hour", other: "{n} hours" },
+    spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    factShowThem: "Show them",
+    factShowIt: "Show it",
+    factNoIngressClass: "claims no IngressClass",
+    factNotReady: "not ready",
+    factRenewalOverdue: "1 renewal overdue",
+    kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
+    factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factNotReconciled: {
+      one: "{n} not reconciled",
+      other: "{n} not reconciled",
+    },
+    factSuspendedCount: { one: "{n} suspended", other: "{n} suspended" },
+    factSourceNotFetching: {
+      one: "{n} source not fetching",
+      other: "{n} sources not fetching",
+    },
+    factHosts: { one: "{n} host", other: "{n} hosts" },
+    factMiddlewares: { one: "{n} middleware", other: "{n} middlewares" },
+    factServesClasses: {
+      one: "serves class {names}",
+      other: "serves classes {names}",
+    },
+    factFailingToSync: {
+      one: "{n} failing to sync",
+      other: "{n} failing to sync",
+    },
+    factDriftedUnfixed: {
+      one: "{n} out of sync with nothing fixing it",
+      other: "{n} out of sync with nothing fixing them",
+    },
+    factHostsNoGateway: {
+      one: "{n} host no Gateway serves",
+      other: "{n} hosts no Gateway serves",
+    },
+    factHostsRouted: { one: "{n} host routed", other: "{n} hosts routed" },
+    istioOrJoin: " or ",
+    istioAndMoreBelow: "{said}, and more below",
+    istioAndJoin: ", and ",
+    istioEveryRequest: "every request",
+    istioShownBelow: "shown as written below",
+    istioHeaderTerm: "the {header} header {how} {what}",
+    istioPortTerm: "it arrived on port {port}",
+    istioSchemeTerm: "the scheme {how} {what}",
+    istioMethodTerm: "the method {how} {what}",
+    istioHostTerm: "the Host header {how} {what}",
+    istioPathTerm: "path {how} {what}",
+    istioIgnoreUriCase:
+      "it sets ignoreUriCase, which changes what every path term in it means",
+    istioUnreadableMatch: "it is not a match block this app can read",
+    istioStartsWith: "starts with",
+    istioIsExactly: "is exactly",
+    notReadyEndpoints: {
+      one: "{n} not ready",
+      few: "{n} not ready",
+      many: "{n} not ready",
+      other: "{n} not ready",
+    },
+    drainingCount: {
+      one: "{n} draining",
+      few: "{n} draining",
+      many: "{n} draining",
+      other: "{n} draining",
+    },
+    publishedCount: {
+      one: "{n} published",
+      few: "{n} published",
+      many: "{n} published",
+      other: "{n} published",
+    },
+    stillTakingTraffic: ", still taking traffic",
+    delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
+    delEditWhatApplies: "To change it for good, change what {name} applies.",
+    delEditManifests: "To change it for good, edit the manifests under {path}.",
+    argoOutOfSync: "out of sync",
+    argoNotComparing: "not comparing",
+    argoSyncFailing: "sync failing",
+    argoCannotCompare:
+      "{name} cannot compare against its repository, so nothing is being applied and an edit here stands — until somebody fixes it, at which point it is undone.",
+    argoSelfHeals:
+      "Argo self-heals this Application: an edit made here is put back on its next comparison, within about five minutes.",
+    argoAutoSyncNoHeal:
+      "Auto-sync is on but self-heal is off, so an edit here stands until the next commit touches this object.",
+    argoNoAutoSync:
+      "Auto-sync is off, so an edit here stands until somebody syncs the Application.",
+    fluxSuspendedWord: "suspended",
+    fluxNotReconcilingWord: "not reconciling",
+    fluxKustSuspended:
+      "{name} is suspended, so nothing is being applied and an edit here stands — until somebody resumes it, at which point it is undone.",
+    fluxKustStopped:
+      "{name} is not reconciling, so an edit here stands until it starts again — at which point it is undone.",
+    fluxKustReapplies:
+      "{name} re-applies its manifests every {interval}, so an edit here is undone on the next pass.",
+    fluxRelSuspended:
+      "{name} is suspended, so an edit here stands until somebody resumes it.",
+    fluxRelStopped:
+      "{name} is not upgrading the release, so an edit here stands until it starts again.",
+    fluxRelUpgrades:
+      "{name} upgrades the release on its interval, and a hand edit is replaced by the chart's own value.",
+    promCpuHistory: "CPU over a window longer than this app has been open",
+    promMemoryHistory: "memory history",
+    promVolumeFullness: "how full a volume actually is",
+    promNetworkBytes: "bytes in and out of a workload",
+    promFromCadvisor: "cAdvisor, via the kubelet",
+    promFromKubelet: "the kubelet",
+    promNoNodesListed:
+      "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
+    promNoNodeLabel:
+      "Nothing here carries a node name — neither kube_node_info nor cAdvisor's node label — so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
+    promCouldNotTell: "could not tell",
+    promNoNodesToCompare: "no nodes to compare",
+    promAnotherCluster: "watching another cluster",
+    promPartOfIt: "watching part of it",
+    promMoreThanThis: "watching more than this",
+    promThisCluster: "watching this cluster",
+    epKeptForCompat:
+      "{addresses} {from} This object is kept for compatibility.",
+    epListsOf: "This object lists {listed} of {real} addresses. {from} {why}",
+    epDisagree:
+      "This object lists {listed} addresses and the slices publish {real}. {from} The two disagree, which they do briefly while the controllers catch up with each other.",
+    epReady: "ready",
+    epReadyTerminating: "ready, terminating",
+    epServingTerminating: "serving, terminating",
+    epServingNotReady: "serving, not ready",
+    epTerminating: "terminating",
+    epNotReady: "not ready",
+    epFromLegacy: "from the legacy Endpoints object",
+    epDeducedFromPods: "deduced from pod readiness",
+    epLegacyAnswered:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from an absent one.",
+    epDeduction:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own answer.",
+    epZoneReach: "a client in {zone} reaches {n} of {total}",
+    epHintsOn: "Hints are on, so traffic stays in the client's zone: {reach}.",
+    epInSliceNoPort: "in a slice that carries no port",
+    epInNoSlice: "in no slice at all",
+    epReadyAnd: "Ready, and {where}",
+    epNotReadyNeverPublished:
+      "{state} — a pod that is not Ready is never published",
+    epNotReadyWord: "Not ready",
+    epTargetPort: "targetPort: {name}",
+    epLegacyCompat:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, so a draining address is simply absent from it.",
+    epOverCapacity:
+      "The control plane truncates this object at 1000 and has annotated it endpoints.kubernetes.io/over-capacity.",
+    epCannotExpress:
+      "It cannot express serving or terminating, so an address that is draining is simply absent from it.",
+    delLabelledNotListed:
+      "Labelled as delivered by {claim}, which does not list it",
+    delLabelledNoOwner:
+      "Labelled as delivered by {claim}, and no {kind} by that name exists",
+    delLabelClaimDetail:
+      "The label is a claim anybody can write, and the {kind} it names does not have this object in its inventory.",
+    delNothingApplyingDetail:
+      "Nothing here is applying this object. A {kind} that was deleted without pruning, or a manifest that was removed from git, leaves a label behind.",
+    delTwoDeliver: "{vendors} both deliver this object",
+    delTwoDeliverDetail:
+      "{names} each list it and each re-apply it, so whichever reconciles last wins and the other undoes it on its next pass.",
+    delSince: " — {name} last applied it {ago} ago",
+    delDrifted: "Live differs from git{since}",
+    delDriftedDetail:
+      "{vendor} says this object no longer matches what was applied. {note}",
+    delStopped: "Nothing is applying this object right now",
+    delStoppedDetail: "{name} has stopped reconciling.",
+    delFromGit: "Delivered from git — an edit made here does not stick",
+    delNotDelivered: "not delivered",
+    delLabelledNotListedShort: "labelled, not listed",
+    delTwoControllers: "two controllers",
+    delOutOfSyncAge: "out of sync · {ago}",
+    delOutOfSync: "out of sync",
+    delScaleAnyway: "Scale anyway",
+    delVendorWillUndo: "{verb} — {vendor} will undo this",
+    delVendorWillUndoDetail: "{vendor} will undo this.",
+    delApplyLabelNotHonoured:
+      "Apply — this object's delivery label is not honoured",
+    delApplyLabelDetail:
+      "Nothing is applying this object, whatever its label says.",
+    hpaPinnedAt: "pinned at {n}",
+    hpaRange: "{min} to {max} replicas",
+    hpaCannotReach: "{name} cannot reach what it scales",
+    hpaCannotReachDetail:
+      "The autoscaler names {kind} {target} and cannot read its scale, so it is not scaling anything.",
+    hpaStandingBy: "{name} is standing by while this is scaled to zero",
+    hpaStandingByDetail:
+      "An autoscaler does not scale a workload up from zero. Set a replica count by hand and it takes over from there.",
+    hpaNoMetrics: "{name} is not scaling this — it cannot read its metrics",
+    hpaNoMetricsDefault: "The metric source did not answer.",
+    hpaAtFloor: "{name} is holding this at its floor of {min}",
+    hpaAtFloorDetail:
+      "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
+    hpaAtCeiling:
+      "{name} wants more replicas than {max} — this is at its ceiling",
+    hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
+    hpaRunning: "{n} running",
+    hpaWanted: "{n} wanted",
+    hpaNothingComputed: "nothing computed",
+    hpaLastScaled: "last scaled {ago} ago",
+    pdbAtLeast: "at least {n} available",
+    pdbAtMost: "at most {n} unavailable",
+    pdbNoRule: "no rule stated",
+    pdbNoDisruption: "no disruption allowed",
+    pdbRoom: "{allowed} · {healthy} healthy of {selected} selected",
+    pdbBelowFloor:
+      "{name} is below its own floor — {healthy} healthy, {required} required",
+    pdbBelowFloorDetail:
+      "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering this workload will not finish.",
+    pdbExactlyMet: "{name} allows no disruption right now",
+    pdbExactlyMetDetail:
+      "The budget is exactly met: {healthy} healthy against a floor of {required}. A node drain covering this workload will wait.",
+    hpaSeveralTitle: "{n} autoscalers",
+    hpaSeveralHead: "{n} autoscalers claim this workload.",
+    hpaSeveralDetail:
+      "{names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives.",
+    hpaCannotActNow: "it is not currently able to act",
+    hpaOwnsStuckHead: "{name} owns this replica count, and is stuck.",
+    hpaOwnsStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back.",
+    hpaWillRevertHead: "{name} will put this number back.",
+    hpaWillRevertDetail:
+      "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
+    hpaAutoscalerNamed: "The autoscaler {name}",
+    docNoReplicaCount: "the document has no replica count",
+    cannotTell: "cannot tell",
+    shellFinished: "finished, nothing to attach to",
+    shellExited: "exited {code}, nothing to attach to",
+    shellNotStarted: "has not started",
+    shellBetweenRestarts: "not running between restarts",
+    shellNotRunningWhy: "not running · {reason}",
+    shellNotRunning: "not running",
+    shellStateUnknown: "state unknown, nothing to attach to",
+    logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
+    logsAttemptsLast:
+      "{attempts}{when} — what the run that failed printed is in Logs.",
+    logsFinishedComplete: "Finished{took}{when} — its log is complete.",
+    logsTook: " in {took}",
+    logsWhen: ", {when}",
+    logsLastWhen: ", last {when}",
+    logsNoneInitUnfinished: "No logs yet — init has not finished.",
+    logsNoneNotStarted: "No logs yet — it has not started.",
+    logsNeverRanBlocked: "Never ran — the sequence is still on {on}.",
+    logsNeverRan: "Never ran.",
+    logsSidecarRunning:
+      "Started during init and does not finish — the sequence went on once it was ready.",
+    groupInitCaption:
+      "run in order before the pod starts, each waiting on the last",
+    groupSidecarCaption: "started during init and still running",
+    groupAppBlocked: "never started — the pod is still in init",
+    groupAppCaption: "run together for the life of the pod",
+    groupInitCaptionEach:
+      "run in order before each pod starts, each waiting on the last",
+    groupSidecarCaptionEach:
+      "start during init and run for the life of each pod",
+    groupAppCaptionEach: "run together for the life of each pod",
+    ngxSnippetsAllowed:
+      "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet.",
+    ngxSnippetsIgnored:
+      "configuration-snippet and server-snippet on an Ingress are ignored — an Ingress carrying one is not doing what it says.",
+    ngxRiskCritical:
+      "Every annotation is honoured, including the ones that can execute configuration.",
+    ngxRiskHigh:
+      "Annotations up to the High risk level are honoured; Critical ones — the snippets — are ignored.",
+    ngxRiskMedium:
+      "Only Low and Medium risk annotations are honoured; anything above is ignored.",
+    ngxRiskLow:
+      "Only Low risk annotations are honoured; most of the interesting ones are ignored.",
+    ngxForwardedTrusted:
+      "X-Forwarded-For from the client is trusted and passed through, which is right behind a load balancer and wrong when nginx is exposed directly.",
+    ngxForwardedReplaced:
+      "X-Forwarded-For from the client is replaced with the address nginx actually saw.",
+    ngxForwardedAppended:
+      "The client's address is appended to X-Forwarded-For rather than replacing it.",
+    ngxRealIpFromProxy:
+      "The client's real address is taken from the proxy protocol or the forwarded header rather than from the connection.",
+    ngxTrustedRanges:
+      "Forwarded headers are trusted only from {ranges}; from anywhere else they are ignored.",
+    ngxServerTokensOn:
+      "Responses carry the nginx version in the Server header.",
+    ngxServerTokensOff:
+      "The nginx version is kept out of responses and error pages.",
+    ngxTlsVersions:
+      "Only {versions} are offered to clients; anything older is refused at the handshake.",
+    ngxHstsOn:
+      "Every TLS response tells the browser to refuse plain HTTP to this host in future.",
+    ngxHstsOff:
+      "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.",
+    ngxHstsAge: "The browser is told to remember that for {age} seconds.",
+    ngxHttp2On: "HTTP/2 is offered on the TLS listener.",
+    ngxHttp2Off: "HTTP/2 is switched off; every client falls back to HTTP/1.1.",
+    ngxGzipOn: "Responses are compressed before they leave nginx.",
+    ngxWorkersAuto: "One nginx worker per CPU the container is allowed.",
+    ngxWorkerConnections:
+      "One worker holds at most {count} connections; past that new ones wait.",
+    ngxKeepaliveTimeout:
+      "An idle client connection is held open for {wait} seconds before nginx closes it.",
+    ngxKeepaliveRequests:
+      "A client connection is reused for {count} requests and then closed.",
+    ngxUpstreamKeepalive:
+      "{count} idle connections per backend are kept open for reuse.",
+    ngxAccessLogOff:
+      "Nothing is written to the access log, so this controller's logs will not show a request that reached it.",
+    ngxErrorDebug:
+      "The error log carries everything, including per-request detail.",
+    ngxErrorInfo: "The error log carries informational messages and worse.",
+    ngxErrorNotice: "The error log carries notices and worse.",
+    ngxErrorWarn: "The error log carries warnings and worse.",
+    ngxErrorError: "The error log carries errors only.",
+    ngxModsecOn:
+      "Every request is passed through ModSecurity before it reaches a backend.",
+    ngxModsecOwasp: "ModSecurity runs with the OWASP core rule set loaded.",
+    nginxRewriteTarget:
+      "The path is rewritten to {target} before the backend sees it.",
+    nginxAppRoot: "A request for / is redirected to {root}.",
+    nginxPermanentRedirect:
+      "Every request here is answered with a permanent redirect to {to}; the backend is never reached.",
+    nginxTemporalRedirect:
+      "Every request here is answered with a temporary redirect to {to}.",
+    nginxUpstreamHost:
+      "The backend is sent Host: {host} rather than the hostname the client asked for.",
+    nginxBodyLimit: "A request body larger than {limit} is refused with 413.",
+    nginxHeaderBuffer:
+      "Up to {limit} is set aside for the backend's response headers; a larger set of headers fails with 502.",
+    nginxReadTimeout:
+      "nginx waits up to {wait} between reads from the backend before giving up with 504.",
+    nginxSendTimeout:
+      "nginx waits up to {wait} while sending the request to the backend.",
+    nginxConnectTimeout:
+      "nginx gives up after {wait} if the backend does not accept the connection.",
+    nginxWhitelist:
+      "Only clients in {ranges} are served; every other address is refused with 403.",
+    nginxDenylist:
+      "Clients in {ranges} are refused with 403; everybody else is served.",
+    nginxAuthSecret:
+      "The user names and password hashes are read from the Secret {secret}.",
+    nginxAuthRealm: "The browser's password prompt is labelled “{realm}”.",
+    nginxAuthUrl:
+      "Every request is first sent to {url}; anything but a 2xx from it refuses the request.",
+    nginxAuthSignin:
+      "A request the authentication service refused is redirected to {url} to sign in.",
+    nginxCorsOrigins: "Cross-origin calls are allowed from {origins}.",
+    nginxCanaryWeightPercent:
+      "{weight}% of this host's requests take this route instead of the one it shadows.",
+    nginxCanaryWeightOf:
+      "{weight} of every {total} requests for this host take this route instead of the one it shadows.",
+    nginxCanaryTotal:
+      "The weight above is a share of {total} rather than a percentage.",
+    nginxCanaryHeader:
+      "A request carrying {header}: always takes this route, and one carrying {header}: never never does — which is checked before any weight is.",
+    nginxCanaryHeaderValue:
+      "A request whose {header} header is exactly {wanted} takes this route.",
+    nginxCanaryCookie:
+      "A request carrying the cookie {cookie}=always takes this route, and {cookie}=never never does.",
+    nginxStickyCookieName: "The stickiness cookie is called {name}.",
+    nginxDefaultBackend:
+      "A request this route cannot serve is answered by the Service {service} instead.",
+    nginxCustomErrors:
+      "A {codes} from the backend is replaced by the default backend's own body rather than passed through.",
+    nginxServerAlias: "This route also answers for {aliases}.",
+    nginxSslRedirectOn: "Plain HTTP is answered with a redirect to HTTPS.",
+    nginxSslRedirectOff:
+      "Plain HTTP is served as it arrives; nothing upgrades the connection.",
+    nginxForceSslOn:
+      "Plain HTTP is redirected to HTTPS even though this Ingress declares no certificate of its own.",
+    nginxForceSslOff: "The forced redirect to HTTPS is switched off here.",
+    nginxSslPassthrough:
+      "TLS is handed to the backend untouched — nginx terminates nothing and never sees the path.",
+    nginxBackendHttp: "nginx speaks plain HTTP to the backend.",
+    nginxBackendHttps: "nginx speaks HTTPS to the backend.",
+    nginxBackendGrpc: "nginx speaks gRPC to the backend.",
+    nginxBackendGrpcs: "nginx speaks gRPC over TLS to the backend.",
+    nginxBackendFcgi: "nginx speaks FastCGI to the backend.",
+    nginxBackendAjp: "nginx speaks AJP to the backend.",
+    nginxRegexPaths:
+      "The paths on this Ingress are read as regular expressions rather than as prefixes.",
+    nginxFromWww:
+      "A request for the www form of this host is redirected to the bare one.",
+    nginxBodyUnlimited:
+      "A request body of any size is accepted — there is no limit.",
+    nginxBuffered:
+      "The response is buffered in nginx before any of it reaches the client.",
+    nginxStreamed:
+      "The response is streamed to the client as it arrives, which is what a long poll or an event stream needs.",
+    nginxAuthBasic:
+      "Every request must carry HTTP basic authentication or it is refused with 401.",
+    nginxAuthDigest:
+      "Every request must carry HTTP digest authentication or it is refused with 401.",
+    nginxCorsOn: "A browser on another origin is allowed to call this route.",
+    nginxCanaryOn:
+      "This is a second route for a host another Ingress already serves, and nginx sends it a share of that host's traffic.",
+    nginxCanaryOff:
+      "Canary routing is switched off here, so this route is served like any other.",
+    nginxStickyCookie:
+      "One client keeps reaching the same backend pod, tracked with a cookie nginx sets.",
+    nginxStickyRebalance:
+      "Stickiness is given up when the set of pods changes, so a rollout rebalances.",
+    nginxStickyPersist:
+      "A client stays pinned to its pod across rollouts, so a scale-up takes no share of the existing traffic.",
+    nginxRoundRobin: "Requests go to the backend's pods in turn.",
+    nginxLeastTime:
+      "Each request goes to whichever pod has been answering fastest.",
+    nginxServiceUpstream:
+      "Requests are sent to the Service's cluster IP rather than to its pods, so kube-proxy picks the pod and nginx never sees the endpoints.",
+    nginxRawUnknownKey:
+      "Shown as written — this app has no sentence for this key, and a guessed one would be worse than the key.",
+    nginxRawUnknownValue:
+      "Shown as written — the key is one this app knows and the value is not a shape it can state.",
+    nginxRawSnippet:
+      "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
+  },
   cluster: {
+    nameMissingParens: "{name} (missing)",
+    noClusterSelected: "No cluster selected",
     metricsNotInstalled: "Metrics server not installed",
     metricsNotInstalledBody:
       "Install metrics-server to see CPU and memory usage.",
@@ -1297,6 +2271,65 @@ export const en = {
     problemCount: { one: "{n} problem", other: "{n} problems" },
   },
   settings: {
+    installationFailed: "Installation failed",
+    updateAvailableTitle: "Update available",
+    updateAvailableToast:
+      "Version {version} is available. Go to Settings to download it.",
+    notOnPathPlain: "{label} is not on PATH. Set the path below.",
+    provenanceNothingFound: "nothing was found",
+    provenancePinned: "pinned here, in this app",
+    provenanceEnv: "named by $KUBECONFIG",
+    provenanceDefault:
+      "found by the default lookup, since $KUBECONFIG is unset",
+    notOnPathSearched: {
+      one: "Not on PATH — {n} location searched, including the app's own.",
+      other: "Not on PATH — {n} locations searched, including the app's own.",
+    },
+    provenanceEnvMerged: {
+      one: "named by $KUBECONFIG, merged with {n} more file",
+      other: "named by $KUBECONFIG, merged with {n} more files",
+    },
+    searchVersionWords: "build release",
+    searchRuntimeWords: "runtime webview",
+    searchFrameworkWords: "react typescript",
+    searchUpdateWords: "update upgrade install download",
+    searchAutoUpdateWords: "auto check background",
+    searchLanguageWords: "language locale translation русский",
+    searchThemeWords: "dark light appearance",
+    searchColourWords: "color coloring tint kind",
+    searchRegistryWords:
+      "registry registries image pull credentials docker ecr gcr harbor basic bearer token username password",
+    contextConnected: "connected",
+    contextReady: "ready",
+    contextCannotConnect: "cannot connect",
+    contextCannotTell: "cannot tell",
+    searchMissingWords: "not found missing path",
+    searchContextWords: "context kubeconfig authentication",
+    searchKubeconfigWords:
+      "kubeconfig file source contexts $KUBECONFIG default lookup override",
+    searchToolsWords: "kubectl helm cli tools binary path version",
+    searchCloudWords:
+      "cloud profiles gcp google azure adc az login credentials",
+    searchNoContextsWords: "no contexts kubeconfig empty clusters",
+    searchIntegrationsWords: "integrations extensions",
+    toolsNoProfiles: "— none defined.",
+    toolsNoGcp: "none for GCP",
+    toolsNoAzure: "none for Azure",
+    toolsProfiles: "— {gcp}, {azure}.",
+    toolsGcpCount: "{n} GCP",
+    toolsAzureCount: "{n} Azure",
+    lookingForBinary: "Looking for the binary…",
+    kubeconfigRestored: "Kubeconfig restored",
+    kubeconfigUpdated: "Kubeconfig updated",
+    backToDefaultLookup: "Back to the default lookup.",
+    wasDefaultLookup: "Was the default lookup.",
+    wasPath: "Was {path}.",
+    revertedToDefault: "Reverted to the default lookup.",
+    undoKubeconfigChange: "Undo the kubeconfig change",
+    selectKubeconfigFile: "Select kubeconfig file",
+    restorePreviousFailed: "Failed to restore the previous kubeconfig",
+    setKubeconfigFailed: "Failed to set kubeconfig path",
+    clearKubeconfigFailed: "Failed to clear kubeconfig override",
     pointAtServiceYourself: "Point at a Service yourself",
     pointAtServiceHint:
       "For anything that speaks this API without carrying the vendor's name — a VictoriaMetrics is called vmsingle and answers the same queries.",
@@ -1472,6 +2505,13 @@ export const en = {
     fileNotThere: "this file is not there",
     useDefaultLookup: "Use the default lookup",
     useAnotherFile: "Use another file",
+    kubeconfigFilesTitle: "Kubeconfig files",
+    addKubeconfigFile: "Add a file",
+    removeKubeconfigFile: "Stop reading this file",
+    mergedFirstWins:
+      "merged in this order — the first file to name a context keeps it",
+    everyContextClaimedElsewhere:
+      "every context here is also in a file above, which keeps them",
     manageToolPaths: "manage tool paths",
     helmOnlyForHelmPage:
       "Helm is only needed for the Helm page; nothing here uses it.",
@@ -1546,220 +2586,43 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
-    // The route trace (Gateway API), step by step: what each link says in
-    // each of its states. {said} carries the controller's own reason and
-    // message — the cluster's words, quoted rather than translated.
-    gwClassBlind: "GatewayClass — cannot be read from here",
-    gwClassNoGateway: "GatewayClass — unknown, the Gateway itself is missing",
-    gwClassMissingSay: "Class {name} does not exist",
-    gwClassMissingShort: "class {name} does not exist",
-    gwClassMissingTitle: "No GatewayClass named {name}",
-    gwClassMissingBody:
-      "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
-    gwClassUnclaimedSay: "Nothing claims class {name}",
-    gwClassUnclaimedShort: "nothing claims class {name}",
-    gwClassUnclaimedTitle: "No controller has accepted {name}",
-    gwClassRefusedBody:
-      "{said}. Everything through this gateway is dead until a controller claims the class.",
-    gwClassSilentBody:
-      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.",
-    gwClassClaimedSay: "Class {name} is claimed by {controller}",
-    gwGatewayBlind: "Gateway {name} — cannot be read from here",
-    gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
-    gwGatewayMissingShort: "{name} does not exist",
-    gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
-    gwGatewayMissingBody:
-      "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
-    gwNotProgrammedSay: "Gateway {name} is not programmed",
-    gwNotProgrammedShort: "{name} is not programmed",
-    gwNotProgrammedTitle: "The controller refuses this Gateway",
-    gwNotProgrammedBody:
-      "{said}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.",
-    gwNoAddressSay: "Gateway {name} has no address yet",
-    gwNoAddressShort: "{name} has no address yet",
-    gwNoAddressTitle: "No address to send traffic to",
-    gwNoAddressBody:
-      "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
-    gwProgrammedQuietSay:
-      "Gateway {name} — the controller has not reported Programmed",
-    gwProgrammedSay: "Gateway {name} is programmed",
-    gwListenerNamed: "Listener :{name}",
-    gwListenerAny: "A listener",
-    gwListenerNotFound: "unknown — the listener was not found",
-    gwAllHosts: "all hosts",
-    gwNoControllerForParentSay: "No controller answered for this parent",
-    gwNoControllerShort: "no controller answered",
-    gwNoStatusTitle: "No status was written for this route",
-    gwNoStatusBody:
-      "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
-    gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
-    gwListenerMatches: "{label} matches this route",
-    gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
-    gwNsNotAllowedShort: "namespace {namespace} not allowed",
-    gwNsNotAllowedTitle: "The namespace is outside what the listener allows",
-    gwNsNotAllowedBody:
-      "{said}. The listener's allowedRoutes decide which namespaces may attach — widen them on the Gateway, or move the route.",
-    gwListenerRefusesSay: "{label} does not accept this route",
-    gwHostnamesShort: "hostnames don't intersect",
-    gwHostnamesTitle: "Hostnames don't intersect",
-    gwRefusedWord: "refused",
-    gwRouteRefusedTitle: "The gateway does not accept this route",
-    gwRouteRefusedBody:
-      "{said}. An unaccepted route is never programmed — the YAML is valid, and nothing serves it.",
-    gwListenerAccepts: "{label} accepts this route",
-    gwStaleTitle: "This verdict is about the previous version of the route",
-    gwStaleBody:
-      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up — usually seconds. Nothing here is wrong yet; it is old.",
-    gwNsAllowedListSay:
-      "Namespace {namespace} is allowed by the listener ({list})",
-    gwNsAllowedSay: "Namespace {namespace} is allowed by the listener",
-    gwNsAllowedQuiet: "Namespace allowed by the listener",
-    gwRefNotPermittedSay: "Reference to {target} is not permitted",
-    gwRefNotPermittedAnon: "A reference is not permitted",
-    gwRefNotPermittedShort: "needs a ReferenceGrant in {namespace}",
-    gwRefNotPermittedTitle: "No ReferenceGrant in {namespace} allows it",
-    gwRefNotPermittedBody:
-      "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
-    gwRefUnresolvedSay: "A reference this route makes did not resolve",
-    gwRefUnresolvedShort: "a reference did not resolve",
-    gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
-    gwRefsResolve: "References resolve",
-    gwRedirectsOnly: "This route redirects — no backends, and none needed",
-    gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
-    gwNoBackendRefsShort:
-      "no backendRefs — matched requests have nowhere to go",
-    gwNoBackendRefsTitle: "The route matches traffic and drops it",
-    gwNoBackendRefsBody:
-      "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
-    gwBackendsReading: "Backend Services — still being read",
-    gwEndpointsReading: "Endpoints — still being read",
-    gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
-    gwBackendMissingShort: "Service {name} does not exist",
-    gwWrongPortSay: "Service {name} does not serve port {port}",
-    gwWrongPortTitle: "The Service exists, the port does not",
-    gwWrongPortBody:
-      "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
-    gwNoPortsAtAll: "no ports at all",
-    gwBackendServes: "Backend Service {name} serves",
-    gwBackendExists: "Backend Service {name} exists",
-    gwEndpointsQuiet: "Endpoints published and ready",
-    gwExternalName:
-      "Resolves elsewhere (ExternalName) — no endpoints by design",
-    gwReachableNothing: "Reachable from outside — nothing to probe",
-    gwReachableUnchecked:
-      "Reachable from outside — DNS · TCP · not checked yet",
-    // The trace drawn: the chips, the probe, the policies at the backend hop.
-    gwNotReached: "not reached",
-    gwAboutGeneration: "about generation {observed} — you are on {current}",
-    gwTlsToBackend: "TLS to this backend:",
-    gwTrustsBundle: "trusts the {ca} bundle",
-    gwCaFrom: "CA from {refs}",
-    gwPolicyUnknown: "unknown",
-    gwPolicyTruncated: "accepted — the ancestor list may be truncated",
-    gwPolicyAccepted: "accepted",
-    gwProbeDisclaimer:
-      "checked from your laptop, not from inside the cluster — a VPN or split DNS can disagree",
-    gwNothingToConnect: "nothing to connect to",
-    gwNoHostnameDialDirect:
-      "no hostname on this route — DNS has nothing to check; the gateway's address is dialled directly",
-    gwDnsIdle: "DNS, not checked yet",
-    gwResolving: "resolving…",
-    gwNoResolveFromHere: "does not resolve from here",
-    gwResolvesTo: "resolves to",
-    gwNotTheGateways:
-      "not the gateway's {address}. DNS still points somewhere else; traffic never arrives at this cluster.",
-    gwGatewaysAddress: "the gateway's address",
-    gwUdpNoCheck:
-      "a TCP connect proves nothing about a UDP listener, so this machine does not pretend to check it",
-    gwNotCheckedYet: "not checked yet",
-    gwWaitingDns: "waiting for DNS",
-    gwConnecting: "connecting…",
-    gwAnswersIn: "answers in {ms} ms",
-    gwServing: "Serving",
-    gwNotServing: "Not serving",
-    gwAllHostsListenerServes: "all hosts the listener serves",
-    gwStopsAtStep: "stops at step {n} of {total}",
-    gwNoParentRefsPage:
-      "No parentRefs — this route attaches to nothing and serves no traffic.",
-    gwRowClassMissing:
-      "names class {name}, which does not exist — anything attached to it is dead",
-    gwRowClassUnclaimed:
-      "nothing claims class {name} — anything attached to it is dead",
-    gwRowNotProgrammed: "is not programmed by its controller",
-    gwRowNoAddress: "has no address yet — traffic has nowhere to arrive",
-    gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
-    gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
-    gwRowRedirects: "redirects — no backends, none needed",
-    gwBrokenRefs: "broken refs",
-    gwGatewayMissingWord: "gateway missing",
-    gwDoorGatewayClass: "Gateway · class {name}",
-    gwSpeaksTlsSni: "the gateway speaks TLS to this backend, SNI {sni}",
-    kindDoesNotExist: "{kind} {name} does not exist",
-    metaMissing: "{meta} that does not exist",
-    noneCount: "none",
-    gwStopsAtPhrase: "stops at {at} — {short}",
-    gwStaleChipRow: "verdict about gen {observed}, you are on {current}",
-    gwContestedBy: "host also claimed by {by} — the older route wins",
-    gwGhostTooltip:
-      "{kind} {name} does not exist in {namespace} — this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
-    gwNoCrdsPage:
-      "This cluster does not serve the Gateway API route kinds. Install the CRDs (the standard channel is enough) and this page fills in on its own.",
-    gwAllServing: "all serving",
-    gwPulseLine: "Gateway {name} {say}.",
-    gwNothingToDraw: "Nothing to draw for this filter — no route matches it.",
-    gwCouldNotReadRoutes: "Could not read routes in this scope.",
-    readingRoutes: "Reading routes…",
-    gwNoRoutesInScope: "No routes in the current scope.",
-    nothingMatchesFilter: "Nothing matches the filter.",
-    gwReadingVerdicts:
-      "Reading verdicts — gateways, classes and endpoints are still on their way…",
-    gwMeshGroup: "Mesh",
-    resolvesElsewhere: "resolves elsewhere",
-    gwProgrammedWord: "programmed",
-    gwNotProgrammedWord: "not programmed",
-    gwNothingToForward: "Nothing to forward to",
-    gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
-    gwCouldNotResolve: "Could not resolve {name}",
-    gwForwardThrough: "Forward this port — through a pod behind {name}",
-    gwNoListeners:
-      "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
-    fromListenerSet: "from {name}",
-    brokenWord: "broken",
-    crossNsNeedsGrant: "cross-namespace, needs a ReferenceGrant",
-    sameDefault: "Same (default)",
-    noSuchGatewayClass: "no such GatewayClass",
-    claimedBy: "claimed by {name}",
-    refusedBy: "refused by {name}",
-    noControllerClaimed: "no controller has claimed this class",
-    nonePublished: "none published",
-    mixedCrdBundle:
-      "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
-    gwNoRouteKinds:
-      "The cluster serves no route kinds, so nothing can attach here.",
-    gwRoutesUnreadable:
-      'The routes could not be read — whether anything attaches here is not known, which is not the same as "nothing does".',
-    gwNoRouteNames:
-      "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
-    gwAcceptedWord: "accepted",
-    couldNotReadGateways: "Could not read the gateways: {message}",
-    readingGateways: "Reading gateways…",
-    gwClassUnused:
-      "No Gateway names this class — deleting it breaks nothing today.",
-    noAddressShort: "no address",
-    gwClassNoAnswer:
-      "no controller has answered — everything through this class is dead",
-    nsNoLabelsSelector:
-      "No labels — no namespaceSelector anywhere matches this namespace.",
-    matchesEverythingWord: "everything",
-    matchesEverything: "matches everything",
-    gwNoRules: "No rules — nothing is matched.",
-    gwUninterpretedFilters: "filters this app does not interpret:",
-    gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
-    needsReferenceGrant: "needs a ReferenceGrant",
-    zeroWeight: "0 — receives no traffic",
-    resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
-    gwMeshNotInterpreted:
-      "{list} — mesh routing (GAMMA), not interpreted by this app.",
+    noEventsMatchInWindow:
+      "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+    kindMayBeGone:
+      "The {kind} may have been deleted or recreated under a new name.",
+    kindCouldNotRead: "Could not read this {kind}",
+    kindNotFound: "{kind} not found",
+    pvcListDescription: "Requests for storage by pods in {scope}",
+    expandRepeats: "Expand {count} repeats",
+    anEmptySpec: "An empty spec",
+    nothingConfigured: "Nothing configured",
+    emptyParens: "(empty)",
+    noRevision: "no revision",
+    fluxNotReconciledYet: "not reconciled yet",
+    fluxFrozenSource: "frozen · source failing",
+    fluxWaitingDependency: "waiting on a dependency",
+    fluxFetchStale: "fetch failing · artifact is stale",
+    fluxNeverFetched: "never fetched",
+    fluxNotFetchedYet: "not fetched yet",
+    fluxFetchedUnused: "fetched · unused",
+    fluxFetched: "fetched",
+    fluxSaidNothingMore: "The controller gave no reason.",
+    notBoundYet: "not bound",
+    spotReclaim:
+      "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+    endpointsFor: "Network endpoints for services in {scope}",
+    persistentVolumesAre:
+      "Cluster-wide storage resources provisioned by an administrator",
+    storageClassesAre:
+      "Describes the classes of storage available in the cluster",
+    emptySpec: "An empty spec",
+    hideLineDetail: "Hide line detail",
+    showLineDetail: "Show line detail",
+    collapseRepeats: "Collapse these repeats",
+    watchingFromNow:
+      "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.",
+    noLimitSet:
+      "No limit set — the scale is what it has used, and nothing stops it taking the node's.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
     noContainerToAttach: "No container is running to attach to",
     whichFailedTimes: "which has failed {n} times",
@@ -2187,6 +3050,8 @@ export const en = {
     renewsAutomatically: "renews automatically {when}",
     renewalNotFinished: "Renewal has not finished",
     noEventsInScope: "No events in {scope} yet.",
+    noEventsMatch:
+      "No event in {scope} matches “{query}”. The filter reads the reason, the object, its namespace and the message.",
     drainExplained:
       "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
     readingWhatRefusesToMove: "Reading what would refuse to move…",
@@ -2308,8 +3173,6 @@ export const en = {
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:
       "Declared size, not how full, for the {n} of these the kubelet does not report on.",
-    noBackgroundJobs: "No background jobs",
-    backgroundJobsHint: "Delete, scale and restart operations show up here",
     terminalSessionEnded: "Session ended: {status}",
     importedExcludedNote:
       "Imported resources are excluded from Apply and Validate unless you enable “Include imported”.",
@@ -2341,7 +3204,7 @@ export const en = {
     noSeriesAtAll: "no series at all",
     promNothingCarries: "Nothing in this Prometheus carries",
     promMissingFamiliesTail:
-      ". The surfaces built on them draw the window this app watched itself and dim the longer ranges — they do not report an error, because an empty answer is a valid one.",
+      ". Charts that would have used it fall back to the window this app watched itself, and dim the ranges that reach further back. They report no error, because an empty answer is a valid one.",
     lokiCouldNotAsk: "Could not ask this Loki anything",
     lokiPageDescription:
       "Whether the Loki this cluster is pointed at holds this cluster's logs — which a connection test cannot tell you, because an address that answers LogQL says nothing about whose lines are behind it.",
@@ -2839,6 +3702,18 @@ export const en = {
     noEventsForClaim: "No events for this claim",
     none: "None",
     noLabels: "No labels",
+    noKeys: "No keys",
+    clusterLocal: "cluster local",
+    endpointsByHand: "none — endpoints are managed by hand",
+    notAssignedYet: "not assigned yet",
+    anythingUnmatched: "anything unmatched",
+    noRulesNoBackend: "No rules and no default backend",
+    nothingBackingService: "Nothing is backing this service",
+    notBoundValue: "not bound",
+    notAllowed: "not allowed",
+    nothingReportedYet: "Nothing reported yet",
+    noSpec: "No spec",
+    unlimited: "unlimited",
     noAnnotations: "No annotations",
     noFinalizers: "No finalizers",
     noOwner: "Nothing owns this object — it was created directly.",
@@ -2896,6 +3771,9 @@ export const en = {
     fileNamesNoContexts: "This file names no contexts",
     fileNamesNoContextsBody:
       "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written — point the app at another file to check.",
+    configWillNotParse: "The config file could not be read",
+    configWillNotParseSub:
+      "It is on disk, but it is not valid YAML — the error below names where reading stopped. Nothing can connect until it parses.",
     configHasNoClusters: "The config file has no clusters in it",
     configHasNoClustersSub:
       "It was read, but it lists no context to connect with.",
@@ -2936,31 +3814,296 @@ export const en = {
       "The CRD is installed, but no {kind} has been created in {namespace} yet.",
     nothingManagesSecret:
       "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
+    // The route trace (Gateway API), step by step: what each link says in
+    // each of its states. {said} carries the controller's own reason and
+    // message — the cluster's words, quoted rather than translated.
+    gwClassBlind: "GatewayClass — cannot be read from here",
+    gwClassNoGateway: "GatewayClass — unknown, the Gateway itself is missing",
+    gwClassMissingSay: "Class {name} does not exist",
+    gwClassMissingShort: "class {name} does not exist",
+    gwClassMissingTitle: "No GatewayClass named {name}",
+    gwClassMissingBody:
+      "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
+    gwClassUnclaimedSay: "Nothing claims class {name}",
+    gwClassUnclaimedShort: "nothing claims class {name}",
+    gwClassUnclaimedTitle: "No controller has accepted {name}",
+    gwClassRefusedBody:
+      "{said}. Everything through this gateway is dead until a controller claims the class.",
+    gwClassSilentBody:
+      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.",
+    gwClassClaimedSay: "Class {name} is claimed by {controller}",
+    gwGatewayBlind: "Gateway {name} — cannot be read from here",
+    gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
+    gwGatewayMissingShort: "{name} does not exist",
+    gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
+    gwGatewayMissingBody:
+      "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
+    gwNotProgrammedSay: "Gateway {name} is not programmed",
+    gwNotProgrammedShort: "{name} is not programmed",
+    gwNotProgrammedTitle: "The controller refuses this Gateway",
+    gwNotProgrammedBody:
+      "{said}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.",
+    gwNoAddressSay: "Gateway {name} has no address yet",
+    gwNoAddressShort: "{name} has no address yet",
+    gwNoAddressTitle: "No address to send traffic to",
+    gwNoAddressBody:
+      "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
+    gwProgrammedQuietSay:
+      "Gateway {name} — the controller has not reported Programmed",
+    gwProgrammedSay: "Gateway {name} is programmed",
+    gwListenerNamed: "Listener :{name}",
+    gwListenerAny: "A listener",
+    gwListenerNotFound: "unknown — the listener was not found",
+    gwAllHosts: "all hosts",
+    gwNoControllerForParentSay: "No controller answered for this parent",
+    gwNoControllerShort: "no controller answered",
+    gwNoStatusTitle: "No status was written for this route",
+    gwNoStatusBody:
+      "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
+    gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
+    gwListenerMatches: "{label} matches this route",
+    gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
+    gwNsNotAllowedShort: "namespace {namespace} not allowed",
+    gwNsNotAllowedTitle: "The namespace is outside what the listener allows",
+    gwNsNotAllowedBody:
+      "{said}. The listener's allowedRoutes decide which namespaces may attach — widen them on the Gateway, or move the route.",
+    gwListenerRefusesSay: "{label} does not accept this route",
+    gwHostnamesShort: "hostnames don't intersect",
+    gwHostnamesTitle: "Hostnames don't intersect",
+    gwRefusedWord: "refused",
+    gwRouteRefusedTitle: "The gateway does not accept this route",
+    gwRouteRefusedBody:
+      "{said}. An unaccepted route is never programmed — the YAML is valid, and nothing serves it.",
+    gwListenerAccepts: "{label} accepts this route",
+    gwStaleTitle: "This verdict is about the previous version of the route",
+    gwStaleBody:
+      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up — usually seconds. Nothing here is wrong yet; it is old.",
+    gwNsAllowedListSay:
+      "Namespace {namespace} is allowed by the listener ({list})",
+    gwNsAllowedSay: "Namespace {namespace} is allowed by the listener",
+    gwNsAllowedQuiet: "Namespace allowed by the listener",
+    gwRefNotPermittedSay: "Reference to {target} is not permitted",
+    gwRefNotPermittedAnon: "A reference is not permitted",
+    gwRefNotPermittedShort: "needs a ReferenceGrant in {namespace}",
+    gwRefNotPermittedTitle: "No ReferenceGrant in {namespace} allows it",
+    gwRefNotPermittedBody:
+      "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
+    gwRefUnresolvedSay: "A reference this route makes did not resolve",
+    gwRefUnresolvedShort: "a reference did not resolve",
+    gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
+    gwRefsResolve: "References resolve",
+    gwRedirectsOnly: "This route redirects — no backends, and none needed",
+    gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
+    gwNoBackendRefsShort:
+      "no backendRefs — matched requests have nowhere to go",
+    gwNoBackendRefsTitle: "The route matches traffic and drops it",
+    gwNoBackendRefsBody:
+      "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
+    gwBackendsReading: "Backend Services — still being read",
+    gwEndpointsReading: "Endpoints — still being read",
+    gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
+    gwBackendMissingShort: "Service {name} does not exist",
+    gwWrongPortSay: "Service {name} does not serve port {port}",
+    gwWrongPortTitle: "The Service exists, the port does not",
+    gwWrongPortBody:
+      "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
+    gwNoPortsAtAll: "no ports at all",
+    gwBackendServes: "Backend Service {name} serves",
+    gwBackendExists: "Backend Service {name} exists",
+    gwEndpointsQuiet: "Endpoints published and ready",
+    gwExternalName:
+      "Resolves elsewhere (ExternalName) — no endpoints by design",
+    gwReachableNothing: "Reachable from outside — nothing to probe",
+    gwReachableUnchecked:
+      "Reachable from outside — DNS · TCP · not checked yet",
+    // The trace drawn: the chips, the probe, the policies at the backend hop.
+    gwNotReached: "not reached",
+    gwAboutGeneration: "about generation {observed} — you are on {current}",
+    gwTlsToBackend: "TLS to this backend:",
+    gwTrustsBundle: "trusts the {ca} bundle",
+    gwCaFrom: "CA from {refs}",
+    gwPolicyUnknown: "unknown",
+    gwPolicyTruncated: "accepted — the ancestor list may be truncated",
+    gwPolicyAccepted: "accepted",
+    gwProbeDisclaimer:
+      "checked from your laptop, not from inside the cluster — a VPN or split DNS can disagree",
+    gwNothingToConnect: "nothing to connect to",
+    gwNoHostnameDialDirect:
+      "no hostname on this route — DNS has nothing to check; the gateway's address is dialled directly",
+    gwDnsIdle: "DNS, not checked yet",
+    gwResolving: "resolving…",
+    gwNoResolveFromHere: "does not resolve from here",
+    gwResolvesTo: "resolves to",
+    gwNotTheGateways:
+      "not the gateway's {address}. DNS still points somewhere else; traffic never arrives at this cluster.",
+    gwGatewaysAddress: "the gateway's address",
+    gwUdpNoCheck:
+      "a TCP connect proves nothing about a UDP listener, so this machine does not pretend to check it",
+    gwNotCheckedYet: "not checked yet",
+    gwWaitingDns: "waiting for DNS",
+    gwConnecting: "connecting…",
+    gwAnswersIn: "answers in {ms} ms",
+    gwServing: "Serving",
+    gwNotServing: "Not serving",
+    gwAllHostsListenerServes: "all hosts the listener serves",
+    gwStopsAtStep: "stops at step {n} of {total}",
+    gwNoParentRefsPage:
+      "No parentRefs — this route attaches to nothing and serves no traffic.",
+    gwRowClassMissing:
+      "names class {name}, which does not exist — anything attached to it is dead",
+    gwRowClassUnclaimed:
+      "nothing claims class {name} — anything attached to it is dead",
+    gwRowNotProgrammed: "is not programmed by its controller",
+    gwRowNoAddress: "has no address yet — traffic has nowhere to arrive",
+    gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
+    gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
+    gwRowRedirects: "redirects — no backends, none needed",
+    gwBrokenRefs: "broken refs",
+    gwGatewayMissingWord: "gateway missing",
+    gwDoorGatewayClass: "Gateway · class {name}",
+    gwSpeaksTlsSni: "the gateway speaks TLS to this backend, SNI {sni}",
+    kindDoesNotExist: "{kind} {name} does not exist",
+    metaMissing: "{meta} that does not exist",
+    noneCount: "none",
+    gwStopsAtPhrase: "stops at {at} — {short}",
+    gwStaleChipRow: "verdict about gen {observed}, you are on {current}",
+    gwContestedBy: "host also claimed by {by} — the older route wins",
+    gwGhostTooltip:
+      "{kind} {name} does not exist in {namespace} — this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
+    gwNoCrdsPage:
+      "This cluster does not serve the Gateway API route kinds. Install the CRDs (the standard channel is enough) and this page fills in on its own.",
+    gwAllServing: "all serving",
+    gwPulseLine: "Gateway {name} {say}.",
+    gwNothingToDraw: "Nothing to draw for this filter — no route matches it.",
+    gwCouldNotReadRoutes: "Could not read routes in this scope.",
+    readingRoutes: "Reading routes…",
+    gwNoRoutesInScope: "No routes in the current scope.",
+    nothingMatchesFilter: "Nothing matches the filter.",
+    gwReadingVerdicts:
+      "Reading verdicts — gateways, classes and endpoints are still on their way…",
+    gwMeshGroup: "Mesh",
+    resolvesElsewhere: "resolves elsewhere",
+    gwProgrammedWord: "programmed",
+    gwNotProgrammedWord: "not programmed",
+    gwNothingToForward: "Nothing to forward to",
+    gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
+    gwCouldNotResolve: "Could not resolve {name}",
+    gwForwardThrough: "Forward this port — through a pod behind {name}",
+    gwNoListeners:
+      "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
+    fromListenerSet: "from {name}",
+    brokenWord: "broken",
+    crossNsNeedsGrant: "cross-namespace, needs a ReferenceGrant",
+    sameDefault: "Same (default)",
+    noSuchGatewayClass: "no such GatewayClass",
+    claimedBy: "claimed by {name}",
+    refusedBy: "refused by {name}",
+    noControllerClaimed: "no controller has claimed this class",
+    nonePublished: "none published",
+    mixedCrdBundle:
+      "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
+    gwNoRouteKinds:
+      "The cluster serves no route kinds, so nothing can attach here.",
+    gwRoutesUnreadable:
+      'The routes could not be read — whether anything attaches here is not known, which is not the same as "nothing does".',
+    gwNoRouteNames:
+      "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
+    gwAcceptedWord: "accepted",
+    couldNotReadGateways: "Could not read the gateways: {message}",
+    readingGateways: "Reading gateways…",
+    gwClassUnused:
+      "No Gateway names this class — deleting it breaks nothing today.",
+    noAddressShort: "no address",
+    gwClassNoAnswer:
+      "no controller has answered — everything through this class is dead",
+    nsNoLabelsSelector:
+      "No labels — no namespaceSelector anywhere matches this namespace.",
+    matchesEverythingWord: "everything",
+    matchesEverything: "matches everything",
+    gwNoRules: "No rules — nothing is matched.",
+    gwUninterpretedFilters: "filters this app does not interpret:",
+    gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
+    needsReferenceGrant: "needs a ReferenceGrant",
+    zeroWeight: "0 — receives no traffic",
+    resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
+    gwMeshNotInterpreted:
+      "{list} — mesh routing (GAMMA), not interpreted by this app.",
   },
   count: {
-    nRoutes: { one: "{n} route", other: "{n} routes" },
-    nBarePods: { one: "{n} bare pod", other: "{n} bare pods" },
-    gwNotServingCount: {
-      one: "{n} not serving",
-      other: "{n} not serving",
+    endpointsAcrossSlices: "{endpoints} across {slices}",
+    endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
+    slicesCount: { one: "{n} slice", other: "{n} slices" },
+    addressesCount: { one: "{n} address", other: "{n} addresses" },
+    podsSelectorMatches: {
+      one: "{n} pod the selector matches",
+      other: "{n} pods the selector matches",
     },
-    fromSets: {
-      one: "(+{n} from sets)",
-      other: "(+{n} from sets)",
+    addressesInEndpoints: {
+      one: "{n} address in the Endpoints object",
+      other: "{n} addresses in the Endpoints object",
     },
-    gwBackendsAllExist: "All {n} backend Services exist, ports match",
-    shortOfDesired: {
-      one: "{n} short of desired",
-      other: "{n} short of desired",
+    unroutedMatched: {
+      one: "{n} address the selector matched carries no port",
+      other: "{n} addresses the selector matched carry no port",
     },
-    gwMeshAlsoNames: {
-      one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",
+    portsMatchNothing: {
+      one: "{ports} matches no port this pod's containers declare",
+      other: "{ports} match no port this pod's containers declare",
+    },
+    slicesRead: {
+      one: "The count comes from {n} EndpointSlice, which is what kube-proxy reads.",
       other:
-        "also name this Service as a mesh parent — GAMMA, not through any gateway.",
+        "The count comes from {n} EndpointSlices, which is what kube-proxy reads.",
     },
-    gwEndpointsPublish: {
-      one: "Endpoints publish {n} ready",
-      other: "Endpoints publish {n} ready",
+    addressesAgree: {
+      one: "{n} address, and the slices agree.",
+      other: "{n} addresses, and the slices agree.",
+    },
+    disruptionsAllowed: {
+      one: "{n} disruption allowed",
+      other: "{n} disruptions allowed",
+    },
+    attemptsCount: { one: "{n} attempt", other: "{n} attempts" },
+    ngxWorkers: {
+      one: "{n} nginx worker, whatever the container's CPU allowance is.",
+      other: "{n} nginx workers, whatever the container's CPU allowance is.",
+    },
+    nginxSeconds: { one: "{n} second", other: "{n} seconds" },
+    nginxRatePerSecond: {
+      one: "One client address is allowed {n} request a second; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a second; the rest are refused with 503.",
+    },
+    nginxRatePerMinute: {
+      one: "One client address is allowed {n} request a minute; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a minute; the rest are refused with 503.",
+    },
+    nginxConnections: {
+      one: "One client address may hold {n} connection at a time.",
+      other: "One client address may hold {n} connections at a time.",
+    },
+    readyOfTotal: "{ready} of {total} ready",
+    restartsWithLast: {
+      one: "{n} restart, last {ago} ago",
+      other: "{n} restarts, last {ago} ago",
+    },
+    restartsPlain: { one: "{n} restart", other: "{n} restarts" },
+    podsMatchAllReady: {
+      one: "{n} pod matches its selector and it is Ready",
+      other: "{n} pods match its selector and all of them are Ready",
+    },
+    podsMatchSomeReady: {
+      one: "{n} pod matches its selector and {ready} of them are Ready",
+      other: "{n} pods match its selector and {ready} of them are Ready",
+    },
+    podsCarryNotReady: {
+      one: "{n} pod carries {selector}, and it is not ready",
+      other: "{n} pods carry {selector}, and none of them is ready",
+    },
+    effectDeploymentPods: {
+      one: "removes it and the {n} pod it runs.",
+      other: "removes it and the {n} pods it runs.",
     },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",
@@ -3289,6 +4432,7 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
     queriesRefused: {
@@ -3311,6 +4455,30 @@ export const en = {
     warningNoun: { one: "warning", other: "warnings" },
     inSliceCount: { one: "in {n} slice", other: "in {n} slices" },
     ofTotalReady: "{n} of {total} ready",
+    nRoutes: { one: "{n} route", other: "{n} routes" },
+    nBarePods: { one: "{n} bare pod", other: "{n} bare pods" },
+    gwNotServingCount: {
+      one: "{n} not serving",
+      other: "{n} not serving",
+    },
+    fromSets: {
+      one: "(+{n} from sets)",
+      other: "(+{n} from sets)",
+    },
+    gwBackendsAllExist: "All {n} backend Services exist, ports match",
+    shortOfDesired: {
+      one: "{n} short of desired",
+      other: "{n} short of desired",
+    },
+    gwMeshAlsoNames: {
+      one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",
+      other:
+        "also name this Service as a mesh parent — GAMMA, not through any gateway.",
+    },
+    gwEndpointsPublish: {
+      one: "Endpoints publish {n} ready",
+      other: "Endpoints publish {n} ready",
+    },
   },
 } as const;
 

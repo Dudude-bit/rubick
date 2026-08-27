@@ -11,6 +11,12 @@ import {
   type ArgoResource,
 } from "./model";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const SHA = "eec06d1ea459af4cb4e10e806f8be7c7bd58b361";
 
 function application(
@@ -287,7 +293,7 @@ describe("the list is ordered by trouble", () => {
         }
       )
     );
-    expect(appState(app)).toEqual({ text: "synced · healthy", tone: "ok" });
+    expect(appState(app, t)).toEqual({ text: "synced · healthy", tone: "ok" });
   });
 });
 

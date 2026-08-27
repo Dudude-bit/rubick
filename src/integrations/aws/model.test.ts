@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { CustomResourceInfo } from "@/generated/types";
 import { bindingFailure, bindingSummary, targetGroupLabel } from "./model";
 
+import { translate } from "@/i18n";
+import { joinSayings } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
 const binding = (
   spec: unknown,
   status: unknown = null
@@ -42,17 +49,22 @@ describe("which target group a Service is in", () => {
   });
 
   it("says so when there is no group named at all", () => {
-    expect(bindingSummary(binding({}))).toBe("no target group named");
+    expect(joinSayings(bindingSummary(binding({})), t)).toBe(
+      "no target group named"
+    );
   });
 
   it("puts the group, the target type and the port in one clause", () => {
     expect(
-      bindingSummary(
-        binding({
-          targetGroupARN: ARN,
-          targetType: "ip",
-          serviceRef: { name: "shop-web", port: 80 },
-        })
+      joinSayings(
+        bindingSummary(
+          binding({
+            targetGroupARN: ARN,
+            targetType: "ip",
+            serviceRef: { name: "shop-web", port: 80 },
+          })
+        ),
+        t
       )
     ).toBe("k8s-shop-web-9f8e7d · ip · port 80");
   });

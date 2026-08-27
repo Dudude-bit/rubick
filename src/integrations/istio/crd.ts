@@ -15,7 +15,7 @@ import type { CrdView } from "../registry";
 const virtualServiceColumns: CrdColumn[] = [
   {
     id: "hosts",
-    header: "Hosts",
+    header: "hosts",
     accessor: (resource) => {
       const hosts = getValueByPath(resource, "spec.hosts") as
         string[] | undefined;
@@ -29,7 +29,7 @@ const virtualServiceColumns: CrdColumn[] = [
   },
   {
     id: "gateways",
-    header: "Gateways",
+    header: "gateways",
     accessor: (resource) => {
       const gateways = getValueByPath(resource, "spec.gateways") as
         string[] | undefined;
@@ -42,7 +42,7 @@ const virtualServiceColumns: CrdColumn[] = [
   },
   {
     id: "httpRoutes",
-    header: "HTTP Routes",
+    header: "httpRoutes",
     accessor: (resource) => {
       const http = getValueByPath(resource, "spec.http") as
         unknown[] | undefined;
@@ -53,7 +53,7 @@ const virtualServiceColumns: CrdColumn[] = [
   },
   {
     id: "tcpRoutes",
-    header: "TCP Routes",
+    header: "tcpRoutes",
     accessor: (resource) => {
       const tcp = getValueByPath(resource, "spec.tcp") as unknown[] | undefined;
       return tcp?.length ?? 0;
@@ -63,7 +63,7 @@ const virtualServiceColumns: CrdColumn[] = [
   },
   {
     id: "destinations",
-    header: "Destinations",
+    header: "destinations",
     accessor: (resource) => {
       const http = getValueByPath(resource, "spec.http") as
         | Array<{
@@ -99,13 +99,13 @@ const virtualServiceColumns: CrdColumn[] = [
 const destinationRuleColumns: CrdColumn[] = [
   {
     id: "host",
-    header: "Host",
+    header: "host",
     accessor: (resource) => getValueByPath(resource, "spec.host"),
     cell: (value) => String(value ?? "-"),
   },
   {
     id: "trafficPolicy",
-    header: "Traffic Policy",
+    header: "trafficPolicy",
     accessor: (resource) => {
       const policy = getValueByPath(resource, "spec.trafficPolicy") as
         Record<string, unknown> | undefined;
@@ -123,7 +123,7 @@ const destinationRuleColumns: CrdColumn[] = [
   },
   {
     id: "subsets",
-    header: "Subsets",
+    header: "subsets",
     accessor: (resource) => {
       const subsets = getValueByPath(resource, "spec.subsets") as
         Array<{ name: string }> | undefined;
@@ -136,7 +136,7 @@ const destinationRuleColumns: CrdColumn[] = [
   },
   {
     id: "exportTo",
-    header: "Export To",
+    header: "exportTo",
     accessor: (resource) => {
       const exportTo = getValueByPath(resource, "spec.exportTo") as
         string[] | undefined;
@@ -157,7 +157,7 @@ const destinationRuleColumns: CrdColumn[] = [
 const gatewayColumns: CrdColumn[] = [
   {
     id: "selector",
-    header: "Selector",
+    header: "selector",
     accessor: (resource) => {
       const selector = getValueByPath(resource, "spec.selector") as
         Record<string, string> | undefined;
@@ -174,7 +174,7 @@ const gatewayColumns: CrdColumn[] = [
   },
   {
     id: "servers",
-    header: "Servers",
+    header: "servers",
     accessor: (resource) => {
       const servers = getValueByPath(resource, "spec.servers") as
         | Array<{
@@ -200,7 +200,7 @@ const gatewayColumns: CrdColumn[] = [
   },
   {
     id: "tlsEnabled",
-    header: "TLS",
+    header: "tls",
     accessor: (resource) => {
       const servers = getValueByPath(resource, "spec.servers") as
         | Array<{
@@ -221,7 +221,7 @@ const gatewayColumns: CrdColumn[] = [
 const serviceEntryColumns: CrdColumn[] = [
   {
     id: "hosts",
-    header: "Hosts",
+    header: "hosts",
     accessor: (resource) => {
       const hosts = getValueByPath(resource, "spec.hosts") as
         string[] | undefined;
@@ -235,19 +235,19 @@ const serviceEntryColumns: CrdColumn[] = [
   },
   {
     id: "location",
-    header: "Location",
+    header: "location",
     accessor: (resource) => getValueByPath(resource, "spec.location"),
     cell: (value) => String(value ?? "MESH_EXTERNAL"),
   },
   {
     id: "resolution",
-    header: "Resolution",
+    header: "resolution",
     accessor: (resource) => getValueByPath(resource, "spec.resolution"),
     cell: (value) => String(value ?? "NONE"),
   },
   {
     id: "ports",
-    header: "Ports",
+    header: "ports",
     accessor: (resource) => {
       const ports = getValueByPath(resource, "spec.ports") as
         | Array<{
@@ -266,7 +266,7 @@ const serviceEntryColumns: CrdColumn[] = [
   },
   {
     id: "endpoints",
-    header: "Endpoints",
+    header: "endpoints",
     accessor: (resource) => {
       const endpoints = getValueByPath(resource, "spec.endpoints") as
         unknown[] | undefined;
@@ -283,17 +283,17 @@ const serviceEntryColumns: CrdColumn[] = [
 const authorizationPolicyColumns: CrdColumn[] = [
   {
     id: "action",
-    header: "Action",
+    header: "action",
     accessor: (resource) => getValueByPath(resource, "spec.action"),
     cell: (value) => String(value ?? "ALLOW"),
   },
   {
     id: "selector",
-    header: "Selector",
-    accessor: (resource) => {
+    header: "selector",
+    accessor: (resource, t) => {
       const selector = getValueByPath(resource, "spec.selector.matchLabels") as
         Record<string, string> | undefined;
-      if (!selector) return "All workloads";
+      if (!selector) return t("readings", "istioAllWorkloads");
 
       return Object.entries(selector)
         .map(([k, v]) => `${k}=${v}`)
@@ -303,14 +303,16 @@ const authorizationPolicyColumns: CrdColumn[] = [
   },
   {
     id: "rules",
-    header: "Rules",
+    header: "rules",
     accessor: (resource) => {
       const rules = getValueByPath(resource, "spec.rules") as
         unknown[] | undefined;
       return rules?.length ?? 0;
     },
-    cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value} rules` : "No rules",
+    cell: (value, t) =>
+      typeof value === "number" && value > 0
+        ? t("readings", "istioRuleCount", { n: value })
+        : t("readings", "istioNoRules"),
   },
 ];
 

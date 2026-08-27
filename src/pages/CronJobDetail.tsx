@@ -63,7 +63,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
     [cronJob.schedule, cronJob.timezone, cronJob.suspend]
   );
   const countdown = useRealtimeCountdown(next);
-  const description = describeCron(cronJob.schedule);
+  const description = describeCron(cronJob.schedule, t);
 
   return (
     <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">
@@ -333,7 +333,7 @@ export function CronJobDetail() {
       yamlTab({
         yaml,
         onCopy: copyYaml,
-        title: "CronJob YAML",
+        title: t("action", "kindYaml", { kind: "CronJob" }),
         resourceKind: ResourceType.CronJob,
         resourceName: cronJob?.name || name || "",
         namespace: cronJob?.namespace || namespace,
@@ -400,6 +400,6 @@ function policy(
           t("action", "noStartingDeadline"),
       mono: cronJob?.startingDeadlineSeconds != null,
     },
-    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace),
+    serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace, t),
   ];
 }

@@ -1,3 +1,4 @@
+import type { T } from "@/i18n/useT";
 import { Link2 } from "lucide-react";
 
 import { connectionCount } from "@/lib/connections";
@@ -21,12 +22,13 @@ import { ConnectionsPanel } from "./ConnectionsPanel";
  */
 export function connectionsTab(
   query: ConnectionsQuery,
+  t: T,
   /** The subject, so its off-cluster maker can be one of the edges. */
   delivery?: DeliveryQuery | null
 ): DetailTab {
   return {
     id: "connections",
-    label: "Connections",
+    label: t("columns", "connections"),
     glyph: viewGlyph(Link2),
     // Deliberately not counting the delivery edge: the mark stands for how
     // many objects are behind the tab, and a commit is not one of them.
