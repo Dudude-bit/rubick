@@ -241,4 +241,31 @@ describe("what the join costs", () => {
     expect(sort).not.toHaveBeenCalled();
     sort.mockRestore();
   });
+
+  /**
+   * The filter and the limit are two different ceilings, and a search that
+   * finds nothing must not be worded as an empty scope. Nothing here says
+   * the pod has no events — only that none of the ones actually read match,
+   * and the reading stopped at the limit somebody chose.
+   */
+  it("says the search stopped at the limit rather than that the scope is quiet", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["prod"],
+      currentNamespace: "prod",
+    });
+    // A full window: the apiserver gave back everything the limit allows.
+    listEvents.mockImplementation(async () => feed("prod", 500));
+    mount();
+
+    await screen.findByText(/500 normal/);
+    await userEvent.type(
+      screen.getByPlaceholderText(/Filter events/i),
+      "nothing-matches-this"
+    );
+
+    const said = await screen.findByText(/latest 500 events/i);
+    expect(said).toBeInTheDocument();
+    // The honest half: it says what was searched, not what exists.
+    expect(said.textContent).toMatch(/not read/i);
+  }, 30_000);
 });

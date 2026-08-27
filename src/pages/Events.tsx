@@ -160,9 +160,14 @@ export function Events() {
     );
   }
 
-  // Everything the reader asked for exists, so anything past the limit is
-  // what the limit is hiding — whether the API server cut it or the join
-  // did. Saying so beats an honest-looking feed that silently ends.
+  // Two ceilings, and a filter makes them diverge. `windowFull` is about
+  // the pool the limit bought — cut by the apiserver per namespace and by
+  // the join above — and it is the only one that says whether anything was
+  // left unread. `capped` is about the list on screen. Unfiltered they are
+  // the same number; filtered, `matching` can be three rows out of a pool
+  // that stopped at five hundred, and reporting *that* as uncapped tells
+  // the reader the search was exhaustive when it was not.
+  const windowFull = limit !== null && pool.length >= limit;
   const capped = limit !== null && matching.length >= limit;
   const events = capped ? matching.slice(0, limit) : matching;
   const filtering = query.trim() !== "";
@@ -178,7 +183,7 @@ export function Events() {
           t,
           warningCount,
           normalCount,
-          capped ? eventLimit : null
+          windowFull ? eventLimit : null
         )}
         actions={
           <>
@@ -254,12 +259,23 @@ export function Events() {
               showNamespace={!currentNamespace}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
+              // Three states, not two: the scope is quiet, the query
+              // missed everything that was read, or the query missed
+              // everything that was read *and* the reading stopped at the
+              // limit. The last one must not be worded as the second — the
+              // events being looked for may be one page older.
               emptyMessage={
                 filtering
-                  ? t("empty", "noEventsMatch", {
-                      scope: scope.inWords,
-                      query: query.trim(),
-                    })
+                  ? windowFull
+                    ? t("empty", "noEventsMatchInWindow", {
+                        n: eventLimit,
+                        scope: scope.inWords,
+                        query: query.trim(),
+                      })
+                    : t("empty", "noEventsMatch", {
+                        scope: scope.inWords,
+                        query: query.trim(),
+                      })
                   : t("empty", "noEventsInScope", { scope: scope.inWords })
               }
             />

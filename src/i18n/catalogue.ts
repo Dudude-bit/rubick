@@ -2510,6 +2510,8 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noEventsMatchInWindow:
+      "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",

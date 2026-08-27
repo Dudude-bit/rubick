@@ -2681,6 +2681,8 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noEventsMatchInWindow:
+      "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
     kindMayBeGone:
       "Объект ({kind}) мог быть удалён или пересоздан под новым именем.",
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
