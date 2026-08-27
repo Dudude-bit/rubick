@@ -116,7 +116,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     },
     {
       id: "programmed",
-      header: "Programmed",
+      header: () => <T section="columns" k="programmed" />,
       size: 170,
       cell: ({ row }) => <ProgrammedCell gateway={row.original} />,
     },

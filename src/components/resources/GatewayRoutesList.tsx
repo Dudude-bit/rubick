@@ -40,7 +40,7 @@ import {
 } from "@/hooks/useGatewayRoutes";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { RoutingMap, useBackingLists } from "@/integrations";
+import { ROUTING_STALE, RoutingMap, useBackingLists } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { KIND_TONE } from "@/lib/route-kind-tone";
@@ -51,9 +51,6 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import { verbatim } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
-
-/** Gateways change with a deploy, not by the second — same as the map. */
-const ROUTING_STALE = 60_000;
 
 // Radix refuses an empty string as an item value, so the "no filter"
 // choice needs a name of its own rather than the empty kind it means.
@@ -78,6 +75,8 @@ function stepWord(at: string, t: T): string {
       return t("columns", "stepEndpoints");
     case "reachable":
       return t("columns", "stepReachable");
+    case "route":
+      return t("columns", "stepRoute");
     default:
       return at;
   }
@@ -98,7 +97,19 @@ function matchesQuery(route: RouteInfo, query: string): boolean {
   );
 }
 
-function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
+function Row({
+  row,
+  muted,
+  mesh = false,
+}: {
+  row: RouteRow;
+  muted: boolean;
+  /** Mesh rows are built `serving: true` but have no gateway to serve
+   *  through, so their dot stays quiet. Passed rather than sniffed out of
+   *  `row.tail`, which is a translated sentence — the old check survived
+   *  only because both catalogues happen to keep the word "GAMMA". */
+  mesh?: boolean;
+}) {
   const t = useT();
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -132,11 +143,7 @@ function Row({ row, muted }: { row: RouteRow; muted: boolean }) {
       <span
         className={cn(
           "justify-self-center text-[9px] leading-none",
-          muted || row.tail?.includes("GAMMA")
-            ? "text-fg-fnt"
-            : row.serving
-              ? "text-ok"
-              : "text-err"
+          muted || mesh ? "text-fg-fnt" : row.serving ? "text-ok" : "text-err"
         )}
       >
         ●
@@ -381,7 +388,7 @@ export function GatewayRoutesList() {
   );
 
   if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel="routes" />;
+    return <ConnectClusterEmptyState resourceLabel={t("nav", "routes")} />;
   }
 
   if (detection && !detection.installed) {
@@ -496,7 +503,7 @@ export function GatewayRoutesList() {
 
       {showMap && (
         <div className="mt-3 flex flex-col gap-1">
-          {topology.columns[1].nodes.length === 0 ? (
+          {topology.columns[topology.spine ?? 1].nodes.length === 0 ? (
             <p className="max-w-[64ch] text-xs text-fg-mut">
               {t("empty", "gwNothingToDraw")}
             </p>
@@ -620,6 +627,7 @@ export function GatewayRoutesList() {
                       key={`${row.kind}/${row.namespace}/${row.name}`}
                       row={row}
                       muted={false}
+                      mesh
                     />
                   ))}
                 </div>

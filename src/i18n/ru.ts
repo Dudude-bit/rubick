@@ -429,6 +429,7 @@ export const ru: Catalogue = {
     stepListener: "слушателе",
     stepNamespace: "неймспейсе",
     stepRefs: "ссылках",
+    stepRoute: "маршруте",
     stepBackend: "бэкенде",
     stepEndpoints: "эндпоинтах",
     stepReachable: "достижимости",
@@ -464,6 +465,10 @@ export const ru: Catalogue = {
     gateway: "Gateway",
     grantFrom: "Откуда",
     grantTo: "Куда",
+    serves: "Обслуживает",
+    parents: "Родители",
+    verdicts: "Вердикты",
+    programmed: "Запрограммирован",
   },
   action: {
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
@@ -4225,7 +4230,6 @@ export const ru: Catalogue = {
       "Слушателей нет — этот Gateway не принимает трафик, и ни один маршрут к нему не привяжется.",
     fromListenerSet: "из {name}",
     brokenWord: "сломан",
-    crossNsNeedsGrant: "через неймспейс, нужен ReferenceGrant",
     sameDefault: "Same (по умолчанию)",
     noSuchGatewayClass: "такого GatewayClass нет",
     claimedBy: "заявлен {name}",
@@ -4266,6 +4270,7 @@ export const ru: Catalogue = {
       "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",
     gwCouldNotReadVerdicts:
       "Не удалось прочитать Gateway, поэтому ни один вердикт ниже не вердикт.",
+    gwNoConditionsYet: "Ни один контроллер ещё не записал условия.",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} в {slices}",

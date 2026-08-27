@@ -38,7 +38,10 @@ export interface RouteRow {
   /** How many further hostnames hide behind {@link serves}. */
   more: number;
   /** The break, compressed: which link and why — null on a serving row. */
-  stop: { at: string; short: string } | null;
+  /** Where it stops, as a step id — the word is the renderer's business.
+   *  A table of words here meant one of them ("references") could never be
+   *  matched by the switch that translates them. */
+  stop: { at: TraceStepId | "route"; short: string } | null;
   /** A quiet configuration note on a serving row (redirect-only, mesh). */
   tail: string | null;
   stale: { observed: number; current: number } | null;
@@ -106,18 +109,6 @@ export function gatewaysMark(
   if (gateways.some((gateway) => !gatewayProgrammed(gateway))) return "warn";
   return undefined;
 }
-
-/** The step ids in the reader's words — "refs" is jargon, "references" is not. */
-const STEP_LABEL: Record<TraceStepId, string> = {
-  class: "class",
-  gateway: "gateway",
-  listener: "listener",
-  namespace: "namespace",
-  refs: "references",
-  backend: "backend",
-  endpoints: "endpoints",
-  reachable: "reachable",
-};
 
 function servesOf(
   route: RouteInfo,
@@ -364,7 +355,7 @@ export function routesBoard(
       ...base,
       ...servesOf(route, worst),
       stop: broken
-        ? { at: STEP_LABEL[broken.id], short: broken.short ?? broken.say }
+        ? { at: broken.id, short: broken.short ?? broken.say }
         : null,
       tail: redirectOnly(route) ? t("empty", "gwRowRedirects") : null,
       // The worst trace is the one whose break the row shows — its

@@ -410,6 +410,36 @@ describe("trafficDoors", () => {
     ]);
   });
 
+  /**
+   * The backend fan-out emits one edge per backendRef, so a route with two
+   * rules naming the same Service arrives twice. Counting it twice inflated
+   * "also named by N" and handed React two children on one key.
+   */
+  it("names a multi-rule mesh route once", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "mesh-route"),
+            ref("Service", "app"),
+            ruleRoutes([])
+          ),
+          edge(
+            ref("HTTPRoute", "mesh-route"),
+            ref("Service", "app"),
+            ruleRoutes([])
+          ),
+        ],
+      }),
+      [],
+      t
+    );
+
+    expect(model.mesh).toEqual([
+      { kind: "HTTPRoute", name: "mesh-route", namespace: "gwtest" },
+    ]);
+  });
+
   it("reads Ingress edges as the same shape — an entry with host doors", () => {
     const model = trafficDoors(
       conns({

@@ -113,7 +113,7 @@ function conditionItem(condition: ConditionInfo): KeyValue {
 function gatewayRouteSource(kind: string): PeekSource {
   return source(
     (name, namespace) => commands.getGatewayRoute(kind, name, namespace),
-    (route: RouteInfo) => {
+    (route: RouteInfo, _target, t) => {
       const verdicts = route.parents.flatMap((parent) => parent.conditions);
       const refused = verdicts.some(
         (c) => c.type === "Accepted" && c.status === "False"
@@ -127,10 +127,10 @@ function gatewayRouteSource(kind: string): PeekSource {
         createdAt: route.createdAt,
         groups: [
           {
-            title: "Serves",
+            title: t("columns", "serves"),
             items: [
               {
-                label: "Hostnames",
+                label: t("columns", "hostnames"),
                 value: (
                   <CopyableAddresses
                     values={route.hostnames}
@@ -142,7 +142,7 @@ function gatewayRouteSource(kind: string): PeekSource {
             ],
           },
           {
-            title: "Parents",
+            title: t("columns", "parents"),
             count: route.parentRefs.length || undefined,
             items: route.parentRefs.map((parent) => ({
               label: parent.kind,
@@ -173,7 +173,7 @@ function gatewayRouteSource(kind: string): PeekSource {
               "No parentRefs — this route attaches to nothing and serves no traffic.",
           },
           {
-            title: "Backends",
+            title: t("columns", "backends"),
             items: route.rules.flatMap((rule) =>
               rule.backendRefs.map((backend): KeyValue => {
                 const at = backend.namespace ?? route.namespace;
@@ -209,7 +209,7 @@ function gatewayRouteSource(kind: string): PeekSource {
               : "No backendRefs — a matched request has nowhere to go.",
           },
           {
-            title: "Verdicts",
+            title: t("columns", "verdicts"),
             items: route.parents.flatMap((entry) =>
               entry.conditions.map(conditionItem)
             ),
@@ -380,12 +380,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   // matches against.
   Namespace: source(
     (name) => commands.getNamespace(name),
-    (ns) => ({
+    (ns, _target, t) => ({
       status: ns.status,
       createdAt: ns.createdAt,
       groups: [
         {
-          title: "Labels",
+          title: t("columns", "labels"),
           count: Object.keys(ns.labels).length || undefined,
           items: Object.entries(ns.labels)
             .sort(([a], [b]) => a.localeCompare(b))
@@ -396,7 +396,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
       ],
     })
   ),
-  Gateway: source(commands.getGateway, (gateway) => {
+  Gateway: source(commands.getGateway, (gateway, _target, t) => {
     const programmed = gatewayProgrammed(gateway);
     return {
       status:
@@ -410,7 +410,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             { label: "Class", value: ref("GatewayClass", gateway.className) },
             {
-              label: "Addresses",
+              label: t("columns", "addresses"),
               value: (
                 <CopyableAddresses
                   values={gateway.addresses}
@@ -422,7 +422,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           ],
         },
         {
-          title: "Listeners",
+          title: t("columns", "listeners"),
           count: gateway.listeners.length || undefined,
           items: gateway.listeners.map((listener) => {
             const broken = listener.conditions.find(
@@ -474,16 +474,16 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
         },
         {
-          title: "Conditions",
+          title: t("columns", "conditions"),
           items: gateway.conditions.map(conditionItem),
-          emptyMessage: "No controller has written conditions yet.",
+          emptyMessage: t("empty", "gwNoConditionsYet"),
         },
       ],
     };
   }),
   GatewayClass: source(
     (name) => commands.getGatewayClass(name),
-    (cls) => ({
+    (cls, _target, t) => ({
       status:
         cls.accepted === true
           ? "Claimed"
@@ -497,7 +497,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: [
             { label: "Controller", value: cls.controllerName, mono: true },
             {
-              label: "Claim",
+              label: t("columns", "claim"),
               value:
                 cls.accepted === true
                   ? `claimed by ${cls.controllerName}`

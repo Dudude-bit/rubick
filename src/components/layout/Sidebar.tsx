@@ -20,7 +20,11 @@ import { useListAccess } from "@/hooks/useListAccess";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
-import { useBackingLists, useIntegrationPages } from "@/integrations";
+import {
+  ROUTING_STALE,
+  useBackingLists,
+  useIntegrationPages,
+} from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { detectProvider } from "@/lib/cluster-identity";
@@ -231,8 +235,6 @@ export function Sidebar() {
  * stays first-class past the door: its own detail page, its own address,
  * its own name on every row.
  */
-/** A minute: routing changes with a deploy, not by the second. */
-const ROUTING_STALE = 60_000;
 
 function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   const t = useT();

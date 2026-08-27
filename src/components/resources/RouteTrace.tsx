@@ -19,7 +19,7 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { useBackingLists } from "@/integrations";
+import { ROUTING_STALE, useBackingLists } from "@/integrations";
 import {
   routeTraces,
   type RouteTrace,
@@ -36,9 +36,6 @@ import type {
   RouteInfo,
   TcpProbe,
 } from "@/generated/types";
-
-/** Gateways change with a deploy, not by the second — same as the lists. */
-const ROUTING_STALE = 60_000;
 
 const MARKS: Record<TraceStep["state"], string | null> = {
   ok: "✓",

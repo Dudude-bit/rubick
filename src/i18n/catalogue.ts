@@ -465,7 +465,8 @@ export const en = {
     stepGateway: "gateway",
     stepListener: "listener",
     stepNamespace: "namespace",
-    stepRefs: "refs",
+    stepRefs: "references",
+    stepRoute: "route",
     stepBackend: "backend",
     stepEndpoints: "endpoints",
     stepReachable: "reachable",
@@ -501,6 +502,10 @@ export const en = {
     gateway: "Gateway",
     grantFrom: "From",
     grantTo: "To",
+    serves: "Serves",
+    parents: "Parents",
+    verdicts: "Verdicts",
+    programmed: "Programmed",
   },
   action: {
     connectToForward: "Connect to a cluster to start port-forwarding.",
@@ -3993,7 +3998,6 @@ export const en = {
       "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
     fromListenerSet: "from {name}",
     brokenWord: "broken",
-    crossNsNeedsGrant: "cross-namespace, needs a ReferenceGrant",
     sameDefault: "Same (default)",
     noSuchGatewayClass: "no such GatewayClass",
     claimedBy: "claimed by {name}",
@@ -4034,6 +4038,7 @@ export const en = {
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",
     gwCouldNotReadVerdicts:
       "The gateways could not be read, so no verdict below is a verdict.",
+    gwNoConditionsYet: "No controller has written conditions yet.",
   },
   count: {
     endpointsAcrossSlices: "{endpoints} across {slices}",

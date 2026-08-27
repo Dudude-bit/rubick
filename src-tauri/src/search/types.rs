@@ -291,21 +291,29 @@ macro_rules! searchable {
     };
 }
 
-/// A Gateway API kind, asked for at `v1` — the version every kind serves
-/// on any current bundle. A cluster serving only the older versions
-/// answers this list with a 404, and the search already reports that per
-/// kind instead of inventing "no matches"; a per-cluster served-version
-/// lookup here would buy those clusters a hit list at the price of a
-/// detection call on every keystroke's fan-out.
+/// A Gateway API kind, asked for at the version that kind actually serves.
+///
+/// Not all of them are `v1`: the standard channel graduated `Gateway`,
+/// `GatewayClass`, `HTTPRoute` and `GRPCRoute`, while the route trio stayed
+/// at `v1alpha2`, and `BackendTLSPolicy` and `ListenerSet` are alpha still.
+/// Asking
+/// every kind for `v1` meant five of the nine 404'd on every cluster, not
+/// only on old ones.
+///
+/// Still one version per kind rather than a negotiation: the search already
+/// reports a 404 per kind instead of inventing "no matches", and a
+/// per-cluster served-version lookup would cost a detection call on every
+/// keystroke's fan-out. `resources::gateway::READ_PREFERENCE` is where the
+/// detail pages do negotiate, because they read one object, once.
 macro_rules! searchable_gateway {
-    ($label:literal, $plural:literal, $cluster_scoped:expr) => {
+    ($label:literal, $plural:literal, $version:literal, $cluster_scoped:expr) => {
         SearchableKind {
             label: $label,
             cluster_scoped: $cluster_scoped,
             api_resource: || ApiResource {
                 group: "gateway.networking.k8s.io".to_string(),
-                version: "v1".to_string(),
-                api_version: "gateway.networking.k8s.io/v1".to_string(),
+                version: $version.to_string(),
+                api_version: concat!("gateway.networking.k8s.io/", $version).to_string(),
                 kind: $label.to_string(),
                 plural: $plural.to_string(),
             },
@@ -328,15 +336,15 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable!("CronJob", k8s_openapi::api::batch::v1::CronJob, false),
     searchable!("Service", k8s_openapi::api::core::v1::Service, false),
     searchable!("Ingress", k8s_openapi::api::networking::v1::Ingress, false),
-    searchable_gateway!("Gateway", "gateways", false),
-    searchable_gateway!("GatewayClass", "gatewayclasses", true),
-    searchable_gateway!("HTTPRoute", "httproutes", false),
-    searchable_gateway!("GRPCRoute", "grpcroutes", false),
-    searchable_gateway!("TLSRoute", "tlsroutes", false),
-    searchable_gateway!("TCPRoute", "tcproutes", false),
-    searchable_gateway!("UDPRoute", "udproutes", false),
-    searchable_gateway!("ListenerSet", "listenersets", false),
-    searchable_gateway!("BackendTLSPolicy", "backendtlspolicies", false),
+    searchable_gateway!("Gateway", "gateways", "v1", false),
+    searchable_gateway!("GatewayClass", "gatewayclasses", "v1", true),
+    searchable_gateway!("HTTPRoute", "httproutes", "v1", false),
+    searchable_gateway!("GRPCRoute", "grpcroutes", "v1", false),
+    searchable_gateway!("TLSRoute", "tlsroutes", "v1alpha2", false),
+    searchable_gateway!("TCPRoute", "tcproutes", "v1alpha2", false),
+    searchable_gateway!("UDPRoute", "udproutes", "v1alpha2", false),
+    searchable_gateway!("ListenerSet", "listenersets", "v1alpha1", false),
+    searchable_gateway!("BackendTLSPolicy", "backendtlspolicies", "v1alpha3", false),
     searchable!("ConfigMap", k8s_openapi::api::core::v1::ConfigMap, false),
     searchable!("Secret", k8s_openapi::api::core::v1::Secret, false),
     searchable!(

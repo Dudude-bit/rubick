@@ -290,7 +290,7 @@ describe("routesBoard", () => {
     });
     expect(board.notServing[1].viaGhost).toBeNull();
     expect(board.notServing[1].stop).toEqual({
-      at: "references",
+      at: "refs",
       short: "needs a ReferenceGrant in gwtest-other",
     });
   });

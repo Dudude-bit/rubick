@@ -1023,7 +1023,7 @@ export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 // core Network read a route's backends with the same two facts every vendor
 // routing page reads (see ./ingress), and naming the file from outside
 // would break the seam the lint rule keeps.
-export { backingOf, useBackingLists } from "./ingress";
+export { backingOf, useBackingLists, ROUTING_STALE } from "./ingress";
 export type {
   BackendRef as RouteBackendRef,
   Backing,

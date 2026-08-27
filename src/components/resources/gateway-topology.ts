@@ -379,9 +379,16 @@ export function gatewayTopology(
 
   const columns = [];
   if (ipNodes.size > 0) {
-    columns.push({ label: "IP", nodes: [...ipNodes.values()], width: 150 });
+    columns.push({
+      label: t("columns", "ip"),
+      nodes: [...ipNodes.values()],
+      width: 150,
+    });
   }
-  columns.push({ label: "Gateways", nodes: [...gatewayNodes.values()] });
+  columns.push({
+    label: t("columns", "gateways"),
+    nodes: [...gatewayNodes.values()],
+  });
   if (drawKinds) {
     columns.push({
       label: t("columns", "kinds"),

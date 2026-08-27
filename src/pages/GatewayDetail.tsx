@@ -53,15 +53,13 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import { gatewayProgrammed } from "@/lib/route-trace";
+import { ROUTING_STALE } from "@/integrations";
 import type {
   EventFilters,
   GatewayInfo,
   ListenerInfo,
   RouteInfo,
 } from "@/generated/types";
-
-/** A minute: routing changes with a deploy, not by the second. */
-const ROUTING_STALE = 60_000;
 
 const ROUTE_KINDS = new Set<string>(GATEWAY_ROUTE_KINDS);
 

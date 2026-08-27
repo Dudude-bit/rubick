@@ -121,7 +121,10 @@ export function trafficDoors(
   }
 
   const entries = new Map<string, TrafficEntry>();
-  const mesh: DoorRef[] = [];
+  // One name per route, not one per edge: the backend fan-out emits an
+  // edge per backendRef, so a two-rule GAMMA route naming one Service
+  // arrived twice — an inflated count, and two React children on one key.
+  const mesh = new Map<string, DoorRef>();
 
   const entryFor = (object: ObjectRef, meta: string): TrafficEntry => {
     const at = key(object);
@@ -148,7 +151,7 @@ export function trafficDoors(
       const attachments = gatewaysOf.get(key(edge.from)) ?? [];
       if (attachments.length === 0) {
         // No gateway parent in the graph: a mesh attachment (GAMMA).
-        mesh.push(doorRef(edge.from));
+        mesh.set(key(edge.from), doorRef(edge.from));
         continue;
       }
       for (const { gateway, sectionName } of attachments) {
@@ -242,6 +245,6 @@ export function trafficDoors(
     entries: [...entries.values()].sort(
       (a, b) => Number(a.ghost) - Number(b.ghost)
     ),
-    mesh,
+    mesh: [...mesh.values()],
   };
 }

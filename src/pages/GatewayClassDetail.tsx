@@ -28,9 +28,7 @@ import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayClassInfo } from "@/generated/types";
-
-/** A minute: routing changes with a deploy, not by the second. */
-const ROUTING_STALE = 60_000;
+import { ROUTING_STALE } from "@/integrations";
 
 function GatewayRows({ className }: { className: string }) {
   const t = useT();
