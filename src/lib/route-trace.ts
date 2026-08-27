@@ -375,7 +375,12 @@ function listenerLabel(listeners: ListenerInfo[], t: T): string {
   return t("empty", "gwListenerAny");
 }
 
-function servesOf(listeners: ListenerInfo[], t: T): string {
+/** The hostnames a listener set serves, for the two sides of a mismatch
+ *  quote. Named for the listener, like `listenerLabel` beside it: the routes
+ *  list has a helper of its own by the old name, about a route rather than a
+ *  listener, and one word for two ideas across two files of one feature is a
+ *  trap for whoever reads them in either order. */
+function listenerHosts(listeners: ListenerInfo[], t: T): string {
   if (listeners.length === 0) return t("empty", "gwListenerNotFound");
   return listeners
     .map((l) => l.hostname ?? t("empty", "gwAllHosts"))
@@ -488,7 +493,7 @@ function acceptanceSteps(
           quote: hostnameMiss
             ? {
                 asks: route.hostnames.join(", ") || t("empty", "anyHost"),
-                serves: servesOf(listeners, t),
+                serves: listenerHosts(listeners, t),
               }
             : undefined,
         },
