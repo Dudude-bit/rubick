@@ -7,7 +7,12 @@
  * zooms; this module owns the zoom-out and nothing else.
  */
 
-import type { GatewayInfo, ParentRefInfo, RouteInfo } from "@/generated/types";
+import type {
+  GatewayInfo,
+  ParentRefInfo,
+  RouteInfo,
+  RouteMatchInfo,
+} from "@/generated/types";
 import {
   findGateway,
   gatewayProgrammed,
@@ -196,6 +201,51 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
   return pulse;
 }
 
+/**
+ * Whether two routes can both answer one request on a hostname they share.
+ *
+ * Sharing a hostname is not a conflict: the spec merges HTTPRoutes on one
+ * hostname and resolves precedence per match, which is exactly how a team
+ * splits `shop.example.com` into `/cart` and `/checkout` across two routes.
+ * Calling that a contest put a warn badge on every healthy cluster that does
+ * it, and a standing mark in the sidebar.
+ *
+ * So the question is whether their matches can both apply. A route that
+ * declares no match at all matches everything, and two paths that provably
+ * cannot collide are two routes that never meet.
+ */
+function matchesOverlap(a: RouteMatchInfo, b: RouteMatchInfo): boolean {
+  // Different methods can never be the same request.
+  if (a.method && b.method && a.method !== b.method) return false;
+  if (a.grpcService && b.grpcService && a.grpcService !== b.grpcService) {
+    return false;
+  }
+  if (a.grpcMethod && b.grpcMethod && a.grpcMethod !== b.grpcMethod) {
+    return false;
+  }
+
+  // An absent path is "/" as a prefix: it reaches everything.
+  const reach = (m: RouteMatchInfo) => ({
+    path: m.path ?? "/",
+    exact: m.pathType === "Exact",
+  });
+  const one = reach(a);
+  const two = reach(b);
+  if (one.exact && two.exact) return one.path === two.path;
+  if (one.exact) return one.path.startsWith(two.path);
+  if (two.exact) return two.path.startsWith(one.path);
+  return one.path.startsWith(two.path) || two.path.startsWith(one.path);
+}
+
+function routesMeet(a: RouteInfo, b: RouteInfo): boolean {
+  const of = (route: RouteInfo) => route.rules.flatMap((rule) => rule.matches);
+  const mine = of(a);
+  const theirs = of(b);
+  // No matches means no narrowing: the route takes the whole hostname.
+  if (mine.length === 0 || theirs.length === 0) return true;
+  return mine.some((one) => theirs.some((two) => matchesOverlap(one, two)));
+}
+
 export function routesBoard(
   routes: RouteInfo[],
   sources: TraceSources,
@@ -227,7 +277,12 @@ export function routesBoard(
         ) ?? [];
       if (rivals.length < 2) continue;
       const identity = (r: RouteInfo) => `${r.kind}/${r.namespace}/${r.name}`;
-      const winner = [...rivals].sort(
+      // Only the rivals this route can actually meet on a request.
+      const meeting = rivals.filter(
+        (rival) =>
+          identity(rival) === identity(route) || routesMeet(route, rival)
+      );
+      const winner = [...meeting].sort(
         (a, b) =>
           (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
           identity(a).localeCompare(identity(b))

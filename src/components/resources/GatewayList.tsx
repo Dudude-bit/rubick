@@ -17,13 +17,14 @@ import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
+import { gatewayProgrammed } from "@/lib/route-trace";
 
 /** The controller's reason is quoted raw; only this app's own words are
  *  spoken through the catalogue. */
 // eslint-disable-next-line react-refresh/only-export-components
 function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
-  const condition = gateway.conditions.find((c) => c.type === "Programmed");
+  const condition = gatewayProgrammed(gateway);
   const said = !condition
     ? { text: t("empty", "gwNoControllerShort"), tone: "mute" as const }
     : condition.status === "True"

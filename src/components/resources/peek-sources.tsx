@@ -31,7 +31,7 @@ import { ResourceRef } from "./ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
 import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
-import { redirectOnly } from "@/lib/route-trace";
+import { redirectOnly, gatewayProgrammed } from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue, KeyValueTone } from "./key-values";
@@ -397,9 +397,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     })
   ),
   Gateway: source(commands.getGateway, (gateway) => {
-    const programmed =
-      gateway.conditions.find((c) => c.type === "Programmed") ??
-      gateway.conditions.find((c) => c.type === "Ready");
+    const programmed = gatewayProgrammed(gateway);
     return {
       status:
         programmed?.status === "True"

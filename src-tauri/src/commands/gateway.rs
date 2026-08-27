@@ -325,9 +325,30 @@ pub async fn probe_resolve_host(
         Err(err) => (Vec::new(), Some(err.to_string())),
     };
 
-    let matches_gateway = gateway_address
-        .as_ref()
-        .map(|address| resolved.iter().any(|ip| ip == address));
+    // A Gateway publishes `status.addresses[].value`, which is an IP on some
+    // clusters and a DNS name on most cloud ones — every AWS load balancer
+    // hands out a hostname. Comparing the resolved IPs against that string
+    // made the answer "no" on every healthy cluster in the second case, and
+    // the trace paints that red. Where the published address is a name, ask
+    // what it resolves to and compare the two sets; where that lookup fails,
+    // say nothing rather than "no".
+    let matches_gateway = match gateway_address.as_deref() {
+        None => None,
+        Some(address) if address.parse::<std::net::IpAddr>().is_ok() => {
+            Some(resolved.iter().any(|ip| ip == address))
+        }
+        Some(address) => match validate_probe_target(address) {
+            Err(_) => None,
+            Ok(()) => match tokio::net::lookup_host((address, port)).await {
+                Err(_) => None,
+                Ok(addrs) => {
+                    let theirs: std::collections::HashSet<String> =
+                        addrs.map(|a| a.ip().to_string()).collect();
+                    Some(resolved.iter().any(|ip| theirs.contains(ip)))
+                }
+            },
+        },
+    };
 
     Ok(ResolveProbe {
         resolved,

@@ -52,6 +52,7 @@ import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
+import { gatewayProgrammed } from "@/lib/route-trace";
 import type {
   EventFilters,
   GatewayInfo,
@@ -327,7 +328,7 @@ export function GatewayDetail() {
     return null;
   }
 
-  const programmed = gateway?.conditions.find((c) => c.type === "Programmed");
+  const programmed = gateway ? gatewayProgrammed(gateway) : undefined;
 
   const classFact: KeyValue = (() => {
     // The name is a reference only where the object is there to open —

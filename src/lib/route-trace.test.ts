@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { routeTraces } from "./route-trace";
+import { routeTraces, gatewayProgrammed } from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
@@ -220,6 +220,33 @@ const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({
 
 const ids = (trace: { steps: { id: string }[] }) =>
   trace.steps.map((step) => step.id);
+
+/**
+ * Some controllers still write only the legacy `Ready` condition. The list
+ * column and the detail page used to look for `Programmed` alone and say
+ * "no controller answered" about a gateway the map, the pulse and the peek
+ * all called programmed — one cluster, two answers.
+ */
+describe("gatewayProgrammed", () => {
+  it("reads the legacy Ready condition when Programmed is absent", () => {
+    const legacy = {
+      ...gateway("edge"),
+      conditions: [condition("Ready", "True", "Ready")],
+    };
+    expect(gatewayProgrammed(legacy)?.type).toBe("Ready");
+  });
+
+  it("prefers Programmed where a controller writes both", () => {
+    const both = {
+      ...gateway("edge"),
+      conditions: [
+        condition("Ready", "True", "Ready"),
+        condition("Programmed", "False", "Pending"),
+      ],
+    };
+    expect(gatewayProgrammed(both)?.type).toBe("Programmed");
+  });
+});
 
 describe("routeTraces", () => {
   /**

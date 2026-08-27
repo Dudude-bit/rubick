@@ -434,6 +434,63 @@ describe("routesBoard", () => {
     expect(by("younger")?.contested).toEqual({ by: "older" });
   });
 
+  /**
+   * Splitting one hostname across routes by path is how the Gateway API is
+   * meant to be used — the spec merges HTTPRoutes on a hostname and resolves
+   * precedence per match. Calling it a contest put a warn badge on a healthy
+   * cluster and a standing mark in the sidebar.
+   */
+  const atPath = (name: string, path: string, createdAt?: string) => {
+    const base = route(name, { hostnames: ["shop.example.com"] });
+    return {
+      ...base,
+      ...(createdAt ? { createdAt } : {}),
+      rules: base.rules.map((rule) => ({
+        ...rule,
+        matches: [
+          {
+            path,
+            pathType: "PathPrefix",
+            method: null,
+            grpcService: null,
+            grpcMethod: null,
+            headers: [],
+            queryParams: [],
+          },
+        ],
+      })),
+    };
+  };
+
+  it("does not call a path split across two routes a contested host", () => {
+    const board = routesBoard(
+      [atPath("cart", "/cart"), atPath("checkout", "/checkout")],
+      sources(),
+      t
+    );
+
+    const rows = [...board.serving, ...board.notServing];
+    expect(rows.map((row) => row.name).sort()).toEqual(["cart", "checkout"]);
+    expect(rows.every((row) => row.contested === null)).toBe(true);
+  });
+
+  /** Overlapping paths on one hostname are a contest, and still read as one. */
+  it("still marks two routes whose paths do meet", () => {
+    const board = routesBoard(
+      [
+        atPath("younger", "/cart/items", "2026-08-15T00:00:00Z"),
+        atPath("older", "/cart", "2026-08-01T00:00:00Z"),
+      ],
+      sources(),
+      t
+    );
+
+    const rows = [...board.serving, ...board.notServing];
+    const by = (name: string) => rows.find((row) => row.name === name);
+    expect(by("older")?.contested).toBeNull();
+    expect(by("younger")?.contested).toEqual({ by: "older" });
+  });
+
   it("does not call hosts on different gateways a conflict", () => {
     const onEdge = route("on-edge", { hostnames: ["same.example.com"] });
     const elsewhere = route("elsewhere", {
