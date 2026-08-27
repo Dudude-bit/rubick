@@ -1335,6 +1335,11 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    twoWord: "Две",
+    threeWord: "Три",
+    warnUndoThis: "{count} вещи отменят это.",
+    warnUndoApply: "{count} вещи отменят это применение.",
+    warnRevertCount: "{count} вещи вернут это число обратно.",
     rowsOfTotal: "{shown} из {total} — {label}",
     rowCount: {
       one: "{n} строка",

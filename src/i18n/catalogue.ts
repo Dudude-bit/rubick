@@ -1344,6 +1344,11 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    twoWord: "Two",
+    threeWord: "Three",
+    warnUndoThis: "{count} things will undo this.",
+    warnUndoApply: "{count} things will undo this apply.",
+    warnRevertCount: "{count} things will put this number back.",
     rowsOfTotal: "{shown} of {total} {label}",
     rowCount: { one: "{n} row", other: "{n} rows" },
     limitWord: "limit",

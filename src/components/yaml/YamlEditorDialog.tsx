@@ -440,10 +440,7 @@ export function YamlEditorDialog() {
               of the decision the mark is behind a scrim and unreadable, and
               the only thing safe to leave out is the second naming of the
               owner, which the lead sentence carries anyway. */}
-          <ActionWarnings
-            warnings={warnings}
-            headingFor={(count) => `${count} things will undo this apply.`}
-          />
+          <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
 
           {hasChanges && (
             // The diff is arbitrarily wide and this dialog is a grid, whose

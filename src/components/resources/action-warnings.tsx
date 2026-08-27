@@ -17,26 +17,34 @@
  * undo the point of having one voice.
  */
 
+import type { en } from "@/i18n/catalogue";
+
 import { Link } from "react-router-dom";
 
 import type { ActionWarning } from "@/lib/governance";
 import { useT } from "@/i18n/useT";
 
 /** A small count in a sentence is a word. Past three there is no sentence. */
-const COUNT_WORD: Record<number, string> = { 2: "Two", 3: "Three" };
+/** Spelled out up to three, which is as far as this stack ever goes. */
+const COUNT_WORD: Record<number, "twoWord" | "threeWord"> = {
+  2: "twoWord",
+  3: "threeWord",
+};
 
 export interface ActionWarningsProps {
   warnings: ActionWarning[];
   /**
    * The sentence that heads a stacked pair — "Two things will put this number
-   * back." The stacked shape only exists to stop two paragraphs reading as one
-   * complaint, so the heading has to name what they are about, and only the
-   * caller knows whether that is a replica count or a manifest.
+   * back." A catalogue key, since the stacked shape only exists to stop two
+   * paragraphs reading as one complaint: the heading has to name what they
+   * are about, and only the caller knows whether that is a replica count or
+   * a manifest.
    */
-  headingFor?: (count: string) => string;
+  headingFor?: keyof (typeof en)["readings"];
 }
 
-const DEFAULT_HEADING = (count: string) => `${count} things will undo this.`;
+/** The catalogue key for it, so a caller that supplies none still speaks. */
+const DEFAULT_HEADING = "warnUndoThis" as const;
 
 export function ActionWarnings({
   warnings,
@@ -71,7 +79,11 @@ export function ActionWarnings({
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="text-xs font-medium text-warn">
-        {headingFor(COUNT_WORD[warnings.length] ?? String(warnings.length))}
+        {t("readings", headingFor, {
+          count: COUNT_WORD[warnings.length]
+            ? t("readings", COUNT_WORD[warnings.length])
+            : String(warnings.length),
+        })}
       </p>
       {warnings.map((warning) => (
         <p key={warning.key} className="wrap-break-word text-xs text-fg-mut">
