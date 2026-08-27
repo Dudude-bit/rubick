@@ -378,7 +378,7 @@ export function GatewayDetail() {
   const facts: KeyValue[] = [
     classFact,
     {
-      label: "Programmed",
+      label: t("columns", "programmed"),
       value: programmed
         ? programmed.status === "True"
           ? t("action", "yes")
