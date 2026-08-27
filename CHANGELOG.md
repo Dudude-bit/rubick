@@ -5,6 +5,103 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-08-27
+
+Two kubeconfig files can be open at once, each cluster remembers the
+namespaces you left it on, the events feed takes a filter, and a screen you
+have no rights to says so before you walk into it. The window also speaks
+Russian now — all of it, including the sentences that explain why traffic
+is not arriving.
+
+### Added — several kubeconfig files at once
+
+A work file and a home file, without pasting them into one. Files merge the
+way `kubectl` merges `$KUBECONFIG` — kube's own rule, first to name a
+context keeps it — and Settings → Clusters lists them in that order with
+what each one contributed. Which file a cluster came from is on the
+cluster's own row too, which once two files are in play is the one thing
+the row cannot be worked out from.
+
+`$KUBECONFIG` naming several files goes down the same path as pinning
+several. It always merged them, but through a reader that merges internally
+and then says nothing about where any of it came from, so every row read
+"every context here is also in a file above".
+
+### Added — each cluster keeps the namespaces you left it on
+
+Switching context cleared the scope, so somebody with rights to two or
+three namespaces in each of six clusters reselected them on every move. The
+window remembers per context now and restores on the way back; a cluster it
+has never been asked about still opens on the whole thing. The whole
+selection is kept, not just the first namespace.
+
+### Added — the events feed takes a filter
+
+The feed arrives as one stream and the only knob was Warning/Normal, so
+finding what one group of pods did meant reading past everything else the
+cluster said in the same minute. The filter matches the words the row shows
+— the reason, the object, its namespace and the message — as a plain
+case-insensitive substring, taken literally. It is applied before the
+"latest N" cut rather than after it, so the search reaches the whole pool
+the reader asked for.
+
+### Added — what you may not see is marked before you walk into it
+
+An account without rights over nodes or volumes met the same wall on every
+visit: click, wait, read a paragraph of Kubernetes telling them what they
+are not. The nav asks the cluster's own authorizer — `SelfSubjectAccessReview`,
+not a reading of RBAC this app would have to interpret — and marks the rows
+it refuses. Marked, never disabled: a review that is wrong costs a mark the
+next answer clears, rather than a screen somebody could have used and
+cannot open. Rights differ per namespace, so each selected one is asked and
+any yes is a yes.
+
+A refusal also stops reading as a fault. "Could not read Pods" describes
+something broken and invites a retry that will be refused identically; the
+page now says the account was refused, and by which rule.
+
+### Added — the window speaks Russian
+
+Not only the chrome. The sentences that carry the app's actual work are
+translated too: why a Service publishes no endpoints, what an autoscaler
+will undo, why a certificate never issued, what a proxy could not read
+about itself. Statuses and kind names stay as the cluster writes them,
+because the colour of a badge is chosen by matching that text.
+
+The language is under Settings → Appearance, and the settings search still
+finds a row by its English name — `kubectl` finds the tools row whichever
+language the window is in.
+
+### Fixed — a restart that stopped being news
+
+A restart count is a running total that never falls, and the rule was
+"count >= 5 and Running" with nothing about when. Once a pod crossed the
+threshold it was reported for the rest of its life: a bare-metal cluster
+was rebooted, every pod on it restarted, and two days later the Overview
+badge still said one problem — about a pod that was Running, 7/7 ready and
+had not restarted since. It counts as restarting only if the last restart
+was recent, and the row is dated by the restart rather than by the pod.
+
+### Fixed — a namespace named `all`
+
+`all` is a legal namespace name, and the cache used the word to mean "every
+namespace" — so a namespace actually called `all` and the whole cluster
+shared one entry, and whichever asked first answered for both.
+
+### Fixed — port-forwarding, shells and applying
+
+Stop now reaches the bytes rather than only the bookkeeping, a forward
+started from a saved config has a Stop button, and a shell that exits ends
+its session instead of leaving a dead terminal open. Applying a manifest
+applies every document in it, not the first one.
+
+### Fixed — smaller things that were wrong in the same direction
+
+A quantity of a petabyte read as one byte. A killed command kept running.
+An empty pod list meant two different things and said one. A 403 asked the
+error's shape instead of its code. An owner reference addressed nothing. A
+heading contradicted the error printed beneath it.
+
 ## [4.4.2] - 2026-08-22
 
 Signing in to a cluster that uses an OIDC auth-provider no longer opens a
