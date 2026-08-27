@@ -95,6 +95,16 @@ export interface BackendRef {
   namespace: string;
 }
 
+/**
+ * The stops this helper can produce: the ones anchored on a Service.
+ *
+ * `ChainStop` grew Gateway API variants that stop at a route or a Gateway
+ * instead, and they are not this function's to make — narrowing here keeps
+ * every consumer's `stop.service` access honest instead of asking each of
+ * them to re-prove it.
+ */
+export type ServiceStop = Extract<ChainStop, { service: ObjectRef }>;
+
 export interface Backing {
   service: ServiceInfo | undefined;
   /** Addresses taking traffic — the ready ones and the draining ones. */
@@ -104,7 +114,7 @@ export interface Backing {
   draining: number;
   notReady: number;
   /** Set only where the path stops. */
-  stop: ChainStop | null;
+  stop: ServiceStop | null;
   /** False while the Services and their slices are still being read. */
   known: boolean;
 }
@@ -268,7 +278,7 @@ export const ROUTING_STALE = 60_000;
  * Traefik's page and then at nginx's should not pay for the same two
  * cluster-wide reads twice.
  */
-export function useBackingLists() {
+export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "routing", "backing"],
@@ -280,6 +290,7 @@ export function useBackingLists() {
       return { services, published };
     },
     staleTime: ROUTING_STALE,
+    enabled,
   });
 }
 

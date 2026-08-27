@@ -6,6 +6,7 @@ import type {
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
+  BackendTlsPolicyInfo,
   BatchLogResult,
   BinaryLocation,
   CliAvailability,
@@ -36,6 +37,9 @@ import type {
   EventFilters,
   EventInfo,
   FrontendLogEntry,
+  GatewayApiDetection,
+  GatewayClassInfo,
+  GatewayInfo,
   GcpProfile,
   GcpProfileInfo,
   HelmChartSearchResult,
@@ -80,9 +84,11 @@ import type {
   RegistryImportEntry,
   RegistrySearchRequest,
   ReplicaSetInfo,
+  ResolveProbe,
   ResourceConnections,
   ResourceFilters,
   RolloutStatus,
+  RouteInfo,
   SearchHandle,
   SearchRequest,
   SecretFilters,
@@ -94,6 +100,7 @@ import type {
   StatefulSetInfo,
   StorageClassInfo,
   StreamLogConfig,
+  TcpProbe,
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
@@ -629,12 +636,14 @@ export async function deletePortForwardConfig(id: string): Promise<void> {
 export async function getResourceConnections(
   kind: string,
   name: string,
-  namespace: string | null
+  namespace: string | null,
+  gateway: GatewayApiDetection | null
 ): Promise<ResourceConnections> {
   return invoke<ResourceConnections>("get_resource_connections", {
     kind,
     name,
     namespace,
+    gateway,
   });
 }
 
@@ -753,6 +762,92 @@ export async function getDeploymentReplicasets(
   });
 }
 
+export async function detectGatewayApi(): Promise<GatewayApiDetection> {
+  return invoke<GatewayApiDetection>("detect_gateway_api");
+}
+
+export async function listGatewayClasses(): Promise<GatewayClassInfo[]> {
+  return invoke<GatewayClassInfo[]>("list_gateway_classes");
+}
+
+export async function listBackendTlsPolicies(
+  namespace: string | null
+): Promise<BackendTlsPolicyInfo[]> {
+  return invoke<BackendTlsPolicyInfo[]>("list_backend_tls_policies", {
+    namespace,
+  });
+}
+
+export async function getGatewayClass(name: string): Promise<GatewayClassInfo> {
+  return invoke<GatewayClassInfo>("get_gateway_class", { name });
+}
+
+export async function deleteGatewayClass(name: string): Promise<void> {
+  return invoke<void>("delete_gateway_class", { name });
+}
+
+export async function listGateways(
+  namespace: string | null
+): Promise<GatewayInfo[]> {
+  return invoke<GatewayInfo[]>("list_gateways", { namespace });
+}
+
+export async function getGateway(
+  name: string,
+  namespace: string | null
+): Promise<GatewayInfo> {
+  return invoke<GatewayInfo>("get_gateway", { name, namespace });
+}
+
+export async function deleteGateway(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_gateway", { name, namespace });
+}
+
+export async function listGatewayRoutes(
+  kind: string,
+  namespace: string | null
+): Promise<RouteInfo[]> {
+  return invoke<RouteInfo[]>("list_gateway_routes", { kind, namespace });
+}
+
+export async function getGatewayRoute(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<RouteInfo> {
+  return invoke<RouteInfo>("get_gateway_route", { kind, name, namespace });
+}
+
+export async function deleteGatewayRoute(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_gateway_route", { kind, name, namespace });
+}
+
+export async function probeResolveHost(
+  host: string,
+  gatewayAddress: string | null,
+  port: number
+): Promise<ResolveProbe> {
+  return invoke<ResolveProbe>("probe_resolve_host", {
+    host,
+    gatewayAddress,
+    port,
+  });
+}
+
+export async function probeTcpConnect(
+  address: string,
+  port: number
+): Promise<TcpProbe> {
+  return invoke<TcpProbe>("probe_tcp_connect", { address, port });
+}
+
 export async function getPodsMetrics(
   namespace: string | null
 ): Promise<PodMetricsResponse> {
@@ -823,6 +918,19 @@ export async function unsubscribeResourceWatch(
   return invoke<void>("unsubscribe_resource_watch", { streamId });
 }
 
+export async function subscribeGatewayWatch(
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_gateway_watch", { namespace });
+}
+
+export async function subscribeGatewayRouteWatch(
+  kind: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_gateway_route_watch", { kind, namespace });
+}
+
 export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
   return invoke<RegistryImportEntry[]>("import_docker_config");
 }
@@ -861,6 +969,10 @@ export async function drainNode(
 
 export async function listNamespaces(): Promise<NamespaceInfo[]> {
   return invoke<NamespaceInfo[]>("list_namespaces");
+}
+
+export async function getNamespace(name: string): Promise<NamespaceInfo> {
+  return invoke<NamespaceInfo>("get_namespace", { name });
 }
 
 export async function listPersistentVolumes(

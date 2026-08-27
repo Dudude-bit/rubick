@@ -51,6 +51,8 @@ export interface MapNode {
   id: string;
   /** The name, in mono. Truncated with the full string on hover. */
   label: string;
+  /** A hue of the label's own — a route kind's — winning over the tone. */
+  labelClassName?: string;
   /** One quieter line under it: an address, a namespace and port, a count. */
   sub?: string;
   tone: MapTone;
@@ -66,8 +68,10 @@ export interface MapNode {
   object?: { kind: string; name: string; namespace?: string | null };
   /** Where clicking it goes, inside this app. Absent draws plain text. */
   to?: string;
-  /** A word at the top right of the node — `TLS`, `0 ready`. */
-  tag?: { text: string; tone: MapTone };
+  /** A word at the top right of the node — `TLS`, `0 ready`. The
+   *  className carries a hue of its own — a route kind's — and wins
+   *  over the tone's. */
+  tag?: { text: string; tone: MapTone; className?: string };
 }
 
 export interface MapEdge {
@@ -85,6 +89,10 @@ export interface MapColumn {
 
 export interface RoutingMapData {
   columns: MapColumn[];
+  /** Which column is the sort anchor. Defaults to the second — right for
+   *  a three-column map; a map with layers left of its tallest column
+   *  says so instead of anchoring on a thin funnel. */
+  spine?: number;
   edges: MapEdge[];
 }
 
@@ -137,7 +145,7 @@ interface Placed {
  * hosts it actually serves instead of at the top of a list of four.
  */
 function place(data: RoutingMapData): { placed: Placed[]; height: number } {
-  const spine = Math.min(1, data.columns.length - 1);
+  const spine = data.spine ?? Math.min(1, data.columns.length - 1);
   const xOf = (column: number) =>
     data.columns
       .slice(0, column)
@@ -163,9 +171,16 @@ function place(data: RoutingMapData): { placed: Placed[]; height: number } {
       : null;
   };
 
+  // Outward from the spine, so a column is always placed against
+  // neighbours that already have positions — an entry column two layers
+  // out would otherwise be averaged against nothing.
+  const outward = data.columns
+    .map((_, index) => index)
+    .filter((index) => index !== spine)
+    .sort((a, b) => Math.abs(a - spine) - Math.abs(b - spine));
+
   const placeOuterColumns = () => {
-    for (let column = 0; column < data.columns.length; column++) {
-      if (column === spine) continue;
+    for (const column of outward) {
       const wanted = data.columns[column].nodes.map((node) => ({
         node,
         at: meanOfLinked(node) ?? 0,
@@ -433,7 +448,7 @@ function Node({
         <span
           className={cn(
             "min-w-0 flex-1 truncate font-mono text-[11.5px]",
-            TONE_TEXT[node.tone]
+            node.labelClassName ?? TONE_TEXT[node.tone]
           )}
         >
           {node.label}
@@ -442,7 +457,7 @@ function Node({
           <span
             className={cn(
               "flex-none text-[9.5px] uppercase tracking-wider",
-              TONE_TEXT[node.tag.tone]
+              node.tag.className ?? TONE_TEXT[node.tag.tone]
             )}
           >
             {node.tag.text}

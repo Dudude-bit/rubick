@@ -79,6 +79,7 @@ import loki from "./loki";
 import minikube from "./minikube";
 import prometheus from "./prometheus";
 import traefik from "./traefik";
+import { gatewayCrd } from "./gateway-crd";
 import { normalizeTauriError } from "@/lib/error-utils";
 import type {
   CapabilityKey,
@@ -1004,6 +1005,9 @@ export function useCrdView(group: string, kind: string): CrdView | null {
 }
 
 function crdViewFor(group: string, kind: string): CrdView | null {
+  // Gateway API first: an official group, not a vendor's, so it cannot live
+  // in the vendor list — and no vendor may claim it out from under core.
+  if (gatewayCrd.matches(group, kind)) return gatewayCrd;
   return (
     VENDORS.find((vendor) => vendor.crd?.matches(group, kind))?.crd ?? null
   );
@@ -1014,6 +1018,20 @@ function crdViewFor(group: string, kind: string): CrdView | null {
 // to the generic flatten for the thousands of kinds nobody here claims.
 export { vendorPeek } from "./peek";
 export type { VendorPeekBody, VendorPeekGroup } from "./peek";
+
+// The shared routing mechanics, through the door: the Gateway API pages in
+// core Network read a route's backends with the same two facts every vendor
+// routing page reads (see ./ingress), and naming the file from outside
+// would break the seam the lint rule keeps.
+export { backingOf, useBackingLists, ROUTING_STALE } from "./ingress";
+export type {
+  BackendRef as RouteBackendRef,
+  Backing,
+  BackingSources,
+  ServiceStop,
+} from "./ingress";
+export { RoutingMap } from "./routing-map";
+export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 
 /**
  * Every label a vendor uses to name the pool a node was made by, in

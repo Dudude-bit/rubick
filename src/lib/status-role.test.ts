@@ -111,4 +111,16 @@ describe("role marks", () => {
       expect(ROLE_DOT[role]).toMatch(/^bg-/);
     }
   });
+  /**
+   * A status the table does not know falls to `neutral`, and the badge draws
+   * the same grey glyph for "the controller accepted this" as for "the
+   * controller refused it". The Gateway API surfaces added five of these.
+   */
+  it("colours the Gateway API verdicts", () => {
+    expect(statusRole("Accepted")).toBe("ok");
+    expect(statusRole("Programmed")).toBe("ok");
+    expect(statusRole("Claimed")).toBe("ok");
+    expect(statusRole("Refused")).toBe("err");
+    expect(statusRole("Unclaimed")).toBe("neutral");
+  });
 });

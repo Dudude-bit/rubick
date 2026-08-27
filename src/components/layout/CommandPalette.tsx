@@ -549,18 +549,20 @@ export function CommandPalette() {
         // The search can list kinds the router serves no detail page for, and
         // `getResourceDetailUrl` builds a URL for any of them: an unrouted
         // path inside the layout route matches no branch and blanks the shell.
-        // A Namespace is not a page in this app — it is the scope a page is
-        // read under — so that is what its row offers. Anything else with no
-        // detail route is not offered at all.
+        // A Namespace has a page now, but here it still offers the stronger
+        // action: it is the scope a window is read under, and pointing the
+        // window at it is why anybody types one into a palette. Anything
+        // else with no detail route is not offered at all.
         const routable = isRoutableKind(hit.kind, hit.namespace);
         if (!routable && !isNamespaceHit(hit)) continue;
         out.push({
           id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
           kind: "hit",
           hit,
-          path: routable
-            ? getResourceDetailUrl(hit.kind, hit.name, hit.namespace)
-            : null,
+          path:
+            routable && !isNamespaceHit(hit)
+              ? getResourceDetailUrl(hit.kind, hit.name, hit.namespace)
+              : null,
         });
       }
       if (found.length > cap) {

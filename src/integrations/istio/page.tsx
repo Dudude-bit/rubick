@@ -16,6 +16,7 @@
  */
 
 import { useMemo, useState } from "react";
+import type { ServiceStop } from "../ingress";
 import { useSearchParams } from "react-router-dom";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
@@ -32,7 +33,7 @@ import {
 import { describeStop } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
-import type { ChainStop, CustomResourceInfo } from "@/generated/types";
+import type { CustomResourceInfo } from "@/generated/types";
 import {
   Chain,
   Cell,
@@ -655,7 +656,7 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
 
 // --- findings -----------------------------------------------------------
 
-const STOP_UNDER: Record<ChainStop["reason"], keyof typeof en.empty> = {
+const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
   backendMissing: "stopNoServiceToSendTo",
   selectsNothing: "stopSelectorMatchesNothing",
   noneReady: "stopRunningNoneReady",

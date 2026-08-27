@@ -71,6 +71,10 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     // The revision a Deployment is on, against the "superseded" ones below.
     "current",
     "true",
+    // Gateway API: a controller took the object and it is working.
+    "accepted",
+    "programmed",
+    "claimed",
   ],
   pending: [
     "pending",
@@ -99,6 +103,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "schedulererror",
     "unavailable",
     "false",
+    // Gateway API: a controller looked and said no.
+    "refused",
   ],
   neutral: [
     "completed",
@@ -107,6 +113,9 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "uninstalled",
     "unknown",
     "idle",
+    // Gateway API: no controller has claimed the class — not a fault, and
+    // not health either.
+    "unclaimed",
   ],
 };
 

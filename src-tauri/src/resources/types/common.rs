@@ -181,6 +181,14 @@ pub struct ConditionInfo {
     pub reason: Option<String>,
     pub message: Option<String>,
     pub last_transition_time: Option<DateTime<Utc>>,
+    /// The spec generation this condition describes (`metav1.Condition`).
+    ///
+    /// The trap it exists to catch: a verdict written about generation 3
+    /// read as if it were about generation 4 — the status is not wrong,
+    /// it is *old*, and nothing in a kubectl workflow says so. `None` on
+    /// the condition types that never carry it (Pod, Node, workloads).
+    #[serde(default)]
+    pub observed_generation: Option<i64>,
 }
 
 impl From<&PodCondition> for ConditionInfo {
@@ -191,6 +199,7 @@ impl From<&PodCondition> for ConditionInfo {
             reason: cond.reason.clone(),
             message: cond.message.clone(),
             last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            observed_generation: None,
         }
     }
 }
@@ -203,6 +212,7 @@ impl From<&NodeCondition> for ConditionInfo {
             reason: cond.reason.clone(),
             message: cond.message.clone(),
             last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            observed_generation: None,
         }
     }
 }

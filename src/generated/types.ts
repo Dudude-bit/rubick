@@ -346,6 +346,7 @@ export interface ConditionInfo {
   reason: string | null;
   message: string | null;
   lastTransitionTime: string | null;
+  observedGeneration?: number;
 }
 
 export interface AutoscalerMetric {
@@ -719,6 +720,153 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface TcpProbe {
+  ms: number | null;
+  error: string | null;
+  reason: TcpProbeReason | null;
+}
+
+export interface ResolveProbe {
+  resolved: string[];
+  error: string | null;
+  matchesGateway: boolean | null;
+}
+
+export interface RouteInfo {
+  kind: string;
+  apiVersion: string;
+  name: string;
+  namespace: string;
+  hostnames: string[];
+  parentRefs: ParentRefInfo[];
+  rules: RouteRuleInfo[];
+  parents: RouteParentStatusInfo[];
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface RouteParentStatusInfo {
+  parent: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface RouteRuleInfo {
+  matches: RouteMatchInfo[];
+  backendRefs: BackendRefInfo[];
+  hasRedirect: boolean;
+  extensionRefs: ExtensionRefInfo[];
+}
+
+export interface ExtensionRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+}
+
+export interface BackendRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  port: number | null;
+  weight: number | null;
+}
+
+export interface RouteMatchInfo {
+  path: string | null;
+  pathType: string | null;
+  method: string | null;
+  grpcService: string | null;
+  grpcMethod: string | null;
+  headers: string[];
+  queryParams: string[];
+}
+
+export interface ParentRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  sectionName: string | null;
+  port: number | null;
+}
+
+export interface GatewayInfo {
+  name: string;
+  namespace: string;
+  apiVersion: string;
+  className: string;
+  listeners: ListenerInfo[];
+  addresses: string[];
+  conditions: ConditionInfo[];
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface ListenerInfo {
+  name: string;
+  port: number;
+  protocol: string;
+  hostname: string | null;
+  tlsMode: string | null;
+  certificateRefs: CertificateRefInfo[];
+  allowedNamespaces: string | null;
+  attachedRoutes: number | null;
+  conditions: ConditionInfo[];
+  fromListenerSet: string | null;
+}
+
+export interface CertificateRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface BackendTlsPolicyInfo {
+  name: string;
+  namespace: string;
+  targetRefs: PolicyTargetRef[];
+  hostname: string;
+  wellKnownCa: string | null;
+  caCertRefs: string[];
+  ancestors: PolicyAncestorInfo[];
+  ancestorsMaybeTruncated: boolean;
+  generation: number | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyAncestorInfo {
+  ancestor: ParentRefInfo;
+  controllerName: string;
+  conditions: ConditionInfo[];
+}
+
+export interface PolicyTargetRef {
+  group: string | null;
+  kind: string | null;
+  name: string;
+  sectionName: string | null;
+}
+
+export interface GatewayClassInfo {
+  name: string;
+  controllerName: string;
+  description: string | null;
+  accepted: boolean | null;
+  conditions: ConditionInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+}
+
 export interface PodInfo {
   name: string;
   namespace: string;
@@ -886,6 +1034,21 @@ export interface ConnectionEdge {
   from: ObjectRef;
   to: ObjectRef;
   relation: Relation;
+}
+
+export interface GatewayApiDetection {
+  installed: boolean;
+  bundleVersion: string | null;
+  channel: string | null;
+  mixedBundle: boolean;
+  kinds: ServedGatewayKind[];
+}
+
+export interface ServedGatewayKind {
+  kind: string;
+  plural: string;
+  versions: string[];
+  readVersion: string;
 }
 
 export interface PortForwardConfigPayload {
@@ -1509,6 +1672,7 @@ export type ObjectFacts =
       ports: ServicePortInfo[];
     }
   | { kind: "ingress"; className: string | null }
+  | { kind: "gateway"; className: string }
   | { kind: "pod"; phase: string; display: string; ready: boolean }
   | {
       kind: "workload";
@@ -1567,6 +1731,8 @@ export type SearchContextStatus =
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
 
+export type TcpProbeReason = "refused" | "timedOut";
+
 export type ContainerState =
   | { type: "running" }
   | { type: "waiting"; reason: string | null }
@@ -1575,6 +1741,20 @@ export type ContainerState =
 
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | {
+      reason: "routeNotAccepted";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "routeRefsUnresolved";
+      route: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
   | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
   | {
@@ -1598,6 +1778,13 @@ export type Relation =
       port: string | null;
       tls: boolean;
     }
+  | {
+      verb: "ruleRoutes";
+      hostnames: string[];
+      port: string | null;
+      weight: number | null;
+    }
+  | { verb: "attachesTo"; sectionName: string | null }
   | { verb: "runsOn" }
   | { verb: "binds" }
   | { verb: "governs"; selector: string | null };

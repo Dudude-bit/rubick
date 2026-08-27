@@ -191,23 +191,33 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
       return join(facts.capacity, facts.storageClass, facts.phase);
     case "pod":
       return facts.display;
-    case "workload":
-      return facts.revision === null
-        ? `${facts.readyReplicas}/${facts.replicas} ready`
-        : join(
-            `revision ${facts.revision}${facts.current ? ", current" : ""}`,
-            `${facts.replicas} ${facts.replicas === 1 ? "pod" : "pods"}`
-          );
+    case "workload": {
+      if (facts.revision === null) {
+        return t("count", "readyOfTotal", {
+          ready: facts.readyReplicas,
+          total: facts.replicas,
+        });
+      }
+      const revision = t("columns", "revisionInline", { n: facts.revision });
+      return join(
+        facts.current
+          ? t("readings", "revisionCurrent", { said: revision })
+          : revision,
+        t("cluster", "podCount", { n: facts.replicas })
+      );
+    }
     case "service":
       return serviceVia(facts, t);
     case "ingress":
+      return facts.className;
+    case "gateway":
       return facts.className;
     case "autoscaler":
       return join(autoscalerRange(facts, t), autoscalerReplicas(facts, t));
     case "budget":
       return join(budgetRule(facts, t), budgetRoom(facts, t));
     case "node":
-      return nodeCapacity(facts);
+      return nodeCapacity(facts, t);
   }
 }
 
@@ -219,11 +229,14 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
  * against the second. Cordoned is last because it is the one that changes what
  * the rest of the line means — the room is there and nothing may take it.
  */
-function nodeCapacity(facts: Extract<ObjectFacts, { kind: "node" }>): string {
+function nodeCapacity(
+  facts: Extract<ObjectFacts, { kind: "node" }>,
+  t: T
+): string {
   return join(
     facts.cpu && `${facts.cpu} CPU`,
     facts.memory && formatKubernetesBytes(facts.memory),
-    !facts.schedulable && "cordoned"
+    !facts.schedulable && t("readings", "nodeCordonedWord")
   );
 }
 
@@ -315,7 +328,9 @@ export function describeStop(
     case "backendMissing":
       return {
         title: t("nav", "stopNoServiceNamed", { name: stop.service.name }),
-        note: t("nav", "ingressBackendNeverCreated"),
+        // The kind that names the backend, not a hardcoded "Ingress": a
+        // Gateway API route reaches this same branch.
+        note: t("nav", "backendNeverCreated", { kind: stop.ingress.kind }),
       };
     case "selectsNothing":
       return {
@@ -329,6 +344,32 @@ export function describeStop(
           selector: stop.selector,
         }),
         note: t("nav", "stopNoneReadyNote"),
+      };
+    case "routeNotAccepted":
+      return {
+        title: `${stop.gateway.name} does not accept this route`,
+        note:
+          `The controller answered Accepted: False` +
+          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+          (stop.message ? `: ${stop.message}` : ".") +
+          " The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
+      };
+    case "routeRefsUnresolved":
+      return {
+        title:
+          stop.conditionReason === "RefNotPermitted"
+            ? "A reference this route makes is not permitted — no ReferenceGrant allows it"
+            : "A reference this route makes did not resolve",
+        note:
+          `The controller answered ResolvedRefs: False` +
+          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+          (stop.message ? `: ${stop.message}` : ".") +
+          " The spec obliges the implementation to fail the affected traffic rather than route around it.",
+      };
+    case "gatewayMissing":
+      return {
+        title: `Names a Gateway that does not exist`,
+        note: `${stop.route.name} attaches to ${stop.gateway.namespace ? `${stop.gateway.namespace}/` : ""}${stop.gateway.name}, which the API server does not have. No controller will ever write status for that parent — this is the one refusal the cluster cannot say itself.`,
       };
   }
 }
@@ -461,6 +502,33 @@ const verb = <V extends Relation["verb"]>(
   which: V
 ): (ConnectionEdge & { relation: Extract<Relation, { verb: V }> })[] =>
   edges.filter((edge) => edge.relation.verb === which) as never;
+
+/**
+ * A Gateway API route's hop: hostnames rather than one host, and no URL —
+ * whether a hostname is served over TLS is the listener's fact, not the
+ * route's, and a scheme guessed here would be the chain inventing one.
+ */
+function gatewayRouteHop(
+  edges: (ConnectionEdge & {
+    relation: Extract<Relation, { verb: "ruleRoutes" }>;
+  })[],
+  object: ObjectRef,
+  t: T
+): ChainHopObject {
+  const hostnames = [
+    ...new Set(edges.flatMap((edge) => edge.relation.hostnames)),
+  ];
+  const drained = edges.every((edge) => edge.relation.weight === 0);
+  return {
+    at: "object",
+    object,
+    self: false,
+    detail: hostnames.join(", ") || null,
+    via: drained ? t("nav", "gwWeightZero") : describeFacts(object.facts, t),
+    urls: [],
+    publishedAt: null,
+  };
+}
 
 function routeHop(
   edges: ConnectionEdge[],
@@ -620,6 +688,8 @@ export function trafficChains(
 ): ChainPath[] {
   const subject = conns.subject;
   const routes = verb(conns.edges, "routes");
+  const ruleRoutes = verb(conns.edges, "ruleRoutes");
+  const attaches = verb(conns.edges, "attachesTo");
   const selects = verb(conns.edges, "selects");
   const tls = tlsSecrets(conns);
 
@@ -639,8 +709,10 @@ export function trafficChains(
 
   return fronting
     .map((service): ChainPath => {
-      const stop = conns.stops.find((entry) =>
-        sameObject(entry.service, service)
+      // Only the Service-anchored stops belong to this hop; the Gateway API
+      // ones stop at a route or a Gateway and are drawn on their own hops.
+      const stop = conns.stops.find(
+        (entry) => "service" in entry && sameObject(entry.service, service)
       );
       const published = publishedFor(conns, service);
 
@@ -708,6 +780,40 @@ export function trafficChains(
           }
           hops.push(routeHop([edge], edge.from, t, known));
         }
+        // One Gateway API route at a time, its Gateway above it, and its own
+        // stops right where they happen — a refusal written by the
+        // controller belongs on the route, not at the far end of the path.
+        const byRoute = new Map<string, (typeof ruleRoutes)[number][]>();
+        for (const edge of ruleRoutes.filter((entry) =>
+          sameObject(entry.to, service)
+        )) {
+          const key = refKey(edge.from);
+          byRoute.set(key, [...(byRoute.get(key) ?? []), edge]);
+        }
+        for (const mine of byRoute.values()) {
+          const route = mine[0].from;
+          for (const up of attaches.filter((entry) =>
+            sameObject(entry.from, route)
+          )) {
+            hops.push({
+              at: "object",
+              object: up.to,
+              self: false,
+              detail: up.relation.sectionName
+                ? t("nav", "gwSectionNamed", { name: up.relation.sectionName })
+                : null,
+              via: describeFacts(up.to.facts, t),
+              urls: [],
+              publishedAt: null,
+            });
+          }
+          hops.push(gatewayRouteHop(mine, route, t));
+          for (const entry of conns.stops) {
+            if ("route" in entry && sameObject(entry.route, route)) {
+              hops.push({ at: "stop", ...describeStop(entry, t) });
+            }
+          }
+        }
         hops.push(serviceHop(service, subject.kind === "Service", t));
       }
 
@@ -738,6 +844,10 @@ export function trafficChains(
         });
       }
 
+      // A route-level refusal breaks the path even where the Service behind
+      // it is perfectly healthy — an unaccepted route serves nothing.
+      const routeBroken = hops.some((hop) => hop.at === "stop");
+
       if (stop) hops.push({ at: "stop", ...describeStop(stop, t) });
       else if (
         subject.kind !== "Pod" &&
@@ -746,7 +856,7 @@ export function trafficChains(
       )
         hops.push(publishedHop(published, t));
 
-      return { key: refKey(service), hops, broken: !!stop };
+      return { key: refKey(service), hops, broken: !!stop || routeBroken };
     })
     .filter((path) => path.hops.length > 1);
 }
@@ -1152,7 +1262,7 @@ function runsHere(
   return {
     key: "placed",
     title: t("nav", "whatRunsHere"),
-    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts) : null)}`,
+    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts, t) : null)}`,
     rows: labelled(
       pods.map((pod) =>
         rowFor(pod.namespace ?? t("nav", "noNamespaceValue"), pod, t)

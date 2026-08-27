@@ -291,6 +291,36 @@ macro_rules! searchable {
     };
 }
 
+/// A Gateway API kind, asked for at the version that kind actually serves.
+///
+/// Not all of them are `v1`: the standard channel graduated `Gateway`,
+/// `GatewayClass`, `HTTPRoute` and `GRPCRoute`, while the route trio stayed
+/// at `v1alpha2`, and `BackendTLSPolicy` and `ListenerSet` are alpha still.
+/// Asking
+/// every kind for `v1` meant five of the nine 404'd on every cluster, not
+/// only on old ones.
+///
+/// Still one version per kind rather than a negotiation: the search already
+/// reports a 404 per kind instead of inventing "no matches", and a
+/// per-cluster served-version lookup would cost a detection call on every
+/// keystroke's fan-out. `resources::gateway::READ_PREFERENCE` is where the
+/// detail pages do negotiate, because they read one object, once.
+macro_rules! searchable_gateway {
+    ($label:literal, $plural:literal, $version:literal, $cluster_scoped:expr) => {
+        SearchableKind {
+            label: $label,
+            cluster_scoped: $cluster_scoped,
+            api_resource: || ApiResource {
+                group: "gateway.networking.k8s.io".to_string(),
+                version: $version.to_string(),
+                api_version: concat!("gateway.networking.k8s.io/", $version).to_string(),
+                kind: $label.to_string(),
+                plural: $plural.to_string(),
+            },
+        }
+    };
+}
+
 /// Everything the search can look at. The `DEFAULT_KINDS` subset is
 /// what an unqualified query hits.
 pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
@@ -306,6 +336,15 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable!("CronJob", k8s_openapi::api::batch::v1::CronJob, false),
     searchable!("Service", k8s_openapi::api::core::v1::Service, false),
     searchable!("Ingress", k8s_openapi::api::networking::v1::Ingress, false),
+    searchable_gateway!("Gateway", "gateways", "v1", false),
+    searchable_gateway!("GatewayClass", "gatewayclasses", "v1", true),
+    searchable_gateway!("HTTPRoute", "httproutes", "v1", false),
+    searchable_gateway!("GRPCRoute", "grpcroutes", "v1", false),
+    searchable_gateway!("TLSRoute", "tlsroutes", "v1alpha2", false),
+    searchable_gateway!("TCPRoute", "tcproutes", "v1alpha2", false),
+    searchable_gateway!("UDPRoute", "udproutes", "v1alpha2", false),
+    searchable_gateway!("ListenerSet", "listenersets", "v1alpha1", false),
+    searchable_gateway!("BackendTLSPolicy", "backendtlspolicies", "v1alpha3", false),
     searchable!("ConfigMap", k8s_openapi::api::core::v1::ConfigMap, false),
     searchable!("Secret", k8s_openapi::api::core::v1::Secret, false),
     searchable!(

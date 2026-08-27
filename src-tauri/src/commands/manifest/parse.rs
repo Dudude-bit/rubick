@@ -156,10 +156,17 @@ pub(super) fn pluralize(kind: &str) -> String {
         "runtimeclass" => "runtimeclasses".to_string(),
         "priorityclass" => "priorityclasses".to_string(),
         _ => {
-            // Standard pluralization rules
+            // Standard pluralization rules. `-y` becomes `-ies` only after
+            // a consonant: policy → policies, but gateway → gateways — the
+            // "gatewaies" this once produced 404'd every Gateway YAML tab.
+            let consonant_y = lower.ends_with('y')
+                && !matches!(
+                    lower.as_bytes().get(lower.len().wrapping_sub(2)),
+                    Some(b'a' | b'e' | b'i' | b'o' | b'u')
+                );
             if lower.ends_with('s') || lower.ends_with('x') || lower.ends_with("ch") {
                 format!("{lower}es")
-            } else if lower.ends_with('y') {
+            } else if consonant_y {
                 format!("{}ies", &lower[..lower.len() - 1])
             } else {
                 format!("{lower}s")
@@ -202,6 +209,7 @@ pub(super) fn is_cluster_scoped(kind: &str) -> bool {
             | "StorageClass"
             | "PriorityClass"
             | "IngressClass"
+            | "GatewayClass"
             | "RuntimeClass"
             | "CustomResourceDefinition"
             | "APIService"
@@ -215,6 +223,15 @@ pub(super) fn is_cluster_scoped(kind: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gateway_class_is_cluster_scoped() {
+        // getManifest built a namespaced path for it and got the
+        // apiserver mux's raw 404 - the detail page could not read
+        // the YAML of a perfectly real GatewayClass.
+        assert!(is_cluster_scoped("GatewayClass"));
+        assert!(!is_cluster_scoped("Gateway"));
+    }
 
     #[test]
     fn test_pluralize() {
@@ -320,5 +337,15 @@ metadata:
         assert_eq!(parsed.api_resource.kind, "Deployment");
         assert_eq!(parsed.api_resource.group, "apps");
         assert_eq!(parsed.api_resource.version, "v1");
+    }
+
+    #[test]
+    fn pluralize_keeps_a_vowel_before_the_final_y() {
+        // "-ay" is not "-cy": a Gateway lists at /gateways, and the rule
+        // that turned it into "gatewaies" 404d every Gateway YAML tab.
+        assert_eq!(pluralize("Gateway"), "gateways");
+        assert_eq!(pluralize("NetworkPolicy"), "networkpolicies");
+        assert_eq!(pluralize("HTTPRoute"), "httproutes");
+        assert_eq!(pluralize("TLSRoute"), "tlsroutes");
     }
 }

@@ -57,4 +57,70 @@ describe("what a peek shows of a spec it has no schema for", () => {
     );
     expect(rows).toHaveLength(12);
   });
+
+  /**
+   * A conditions array is the one shape the whole API machinery shares, so
+   * it is read as conditions: one row per verdict, coloured with the same
+   * polarity every condition row in the app uses — not six grey fragments
+   * per entry.
+   */
+  it("reads a conditions array as verdicts, one toned row each", () => {
+    const rows = flatten(
+      {
+        conditions: [
+          {
+            type: "Accepted",
+            status: "True",
+            reason: "Accepted",
+            message: "",
+            lastTransitionTime: "2026-08-19T20:00:00Z",
+          },
+          {
+            type: "Programmed",
+            status: "False",
+            reason: "Invalid",
+            message: "listener not found",
+          },
+        ],
+      },
+      12
+    );
+
+    expect(rows).toContainEqual({
+      label: "conditions.Accepted",
+      value: "True",
+      mono: true,
+      tone: "ok",
+    });
+    expect(rows).toContainEqual({
+      label: "conditions.Programmed",
+      value: "False — Invalid: listener not found",
+      mono: true,
+      tone: "err",
+    });
+  });
+
+  /** Negative-polarity conditions keep their meaning: pressure off is green. */
+  it("does not paint a healthy negative condition red", () => {
+    const rows = flatten(
+      { conditions: [{ type: "MemoryPressure", status: "False" }] },
+      12
+    );
+    expect(rows).toContainEqual({
+      label: "conditions.MemoryPressure",
+      value: "False",
+      mono: true,
+      tone: "ok",
+    });
+  });
+
+  /** An array under the name that is not condition-shaped stays generic. */
+  it("leaves a non-condition 'conditions' array to the generic walk", () => {
+    const rows = flatten({ conditions: [{ match: "x" }] }, 12);
+    expect(rows).toContainEqual({
+      label: "conditions.0.match",
+      value: "x",
+      mono: true,
+    });
+  });
 });

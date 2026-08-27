@@ -116,6 +116,7 @@ fn main() {
             commands::diagnostics::collect_diagnostics,
             // Namespace management
             commands::namespace::list_namespaces,
+            commands::namespace::get_namespace,
             // Cross-cluster search
             commands::search::start_resource_search,
             commands::search::resource_search_subscribed,
@@ -223,6 +224,8 @@ fn main() {
             commands::watch::subscribe_service_watch,
             commands::watch::subscribe_endpoints_watch,
             commands::watch::subscribe_ingress_watch,
+            commands::watch::subscribe_gateway_watch,
+            commands::watch::subscribe_gateway_route_watch,
             commands::watch::subscribe_pvc_watch,
             commands::watch::subscribe_pod_watch,
             commands::watch::subscribe_deployment_watch,
@@ -327,6 +330,20 @@ fn main() {
             commands::network::list_service_endpoints,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
+            // Gateway API commands
+            commands::gateway::detect_gateway_api,
+            commands::gateway::list_gateway_classes,
+            commands::gateway::get_gateway_class,
+            commands::gateway::delete_gateway_class,
+            commands::gateway::list_gateways,
+            commands::gateway::get_gateway,
+            commands::gateway::delete_gateway,
+            commands::gateway::list_gateway_routes,
+            commands::gateway::get_gateway_route,
+            commands::gateway::delete_gateway_route,
+            commands::gateway::list_backend_tls_policies,
+            commands::gateway::probe_resolve_host,
+            commands::gateway::probe_tcp_connect,
             // Stats commands
             commands::overview::get_cluster_overview,
             // Metrics API

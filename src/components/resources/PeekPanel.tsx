@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
@@ -25,23 +25,34 @@ import {
   getCustomResourceUrl,
   getResourceDetailUrl,
 } from "@/lib/navigation-utils";
-import type { ObjectRef } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
+import { trafficDoors } from "@/lib/traffic-doors";
+import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
+import type { KeyValue } from "./key-values";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
 import { DeliveryMarks } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
-import { toKind } from "@/lib/resource-registry";
+import {
+  getResourceDefinition,
+  toKind,
+  type ResourceKind,
+} from "@/lib/resource-registry";
+import { kindHue } from "@/lib/resource-identity";
+import { useClusterStore } from "@/stores/clusterStore";
 import { resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 /**
  * The right-hand drawer a reference opens.
@@ -73,9 +84,12 @@ export function PeekPanel() {
       modal={false}
       onOpenChange={(next) => !next && close()}
     >
+      {/* No key on the panel itself: a reference clicked INSIDE the peek
+          swaps the target, and remounting the sheet replayed its slide-in
+          for what is a content change. The body below carries the key, so
+          scroll and per-object tab state still reset. */}
       {shown && (
         <PeekContent
-          key={`${shown.kind}/${shown.namespace ?? ""}/${shown.name}`}
           target={shown}
           requestedTab={requestedTab}
           onTabChange={setRequestedTab}
@@ -235,6 +249,10 @@ function PeekContent({
       </header>
 
       <Tabs
+        // The object's identity keys the body, not the panel: a new target
+        // resets scroll and any per-object state (a log stream, a probe)
+        // without the sheet replaying its open animation.
+        key={`${target.kind}/${namespace ?? ""}/${target.name}`}
         value={activeTab}
         onValueChange={(value) => onTabChange(value as PeekTabId)}
         className="flex min-h-0 flex-1 flex-col"
@@ -396,7 +414,220 @@ function PeekOverview({
         ))
       )}
       {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
+      {target.kind === "Service" && target.namespace && (
+        <BackendPolicies
+          service={{ name: target.name, namespace: target.namespace }}
+        />
+      )}
+      {target.kind === "Namespace" && (
+        <NamespaceContents namespace={target.name} />
+      )}
       <PeekEvents target={target} />
+    </div>
+  );
+}
+
+/**
+ * The GEP-713 reverse lookup, at the Service: which BackendTLSPolicies
+ * name this backend, what they demand, and whether any controller accepted
+ * them. Rendered only where the cluster serves the kind.
+ */
+function BackendPolicies({
+  service,
+}: {
+  service: { name: string; namespace: string };
+}) {
+  const detection = useGatewayApi().data;
+  const served =
+    detection?.kinds.some((kind) => kind.kind === "BackendTLSPolicy") ?? false;
+  const { crdFor } = useCrdIndex();
+  const t = useT();
+  const policiesQuery = useLiveQuery({
+    queryKey: ["backend-tls-policies", service.namespace],
+    queryFn: () => commands.listBackendTlsPolicies(service.namespace),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    enabled: served,
+    retry: false,
+  });
+  const attached = policiesOnService(policiesQuery.data ?? [], service);
+  if (attached.length === 0) return null;
+  const crd =
+    crdFor("gateway.networking.k8s.io", "BackendTLSPolicy") ?? undefined;
+
+  return (
+    <div>
+      <PeekHeading title={t("nav", "policies")} count={attached.length} />
+      <div className="flex flex-col gap-1">
+        {attached.map((policy) => {
+          const verdict = policyVerdict(policy, t);
+          return (
+            <p
+              key={policy.name}
+              className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+            >
+              <ResourceRef
+                kind="BackendTLSPolicy"
+                name={policy.name}
+                namespace={policy.namespace}
+                crd={crd}
+                showKind={false}
+              />
+              <span>
+                —{" "}
+                {parts(t("empty", "gwSpeaksTlsSni", {}), {
+                  sni: (
+                    <CopyableValue
+                      value={policy.hostname}
+                      label={`SNI ${policy.hostname}`}
+                      quietMark
+                    />
+                  ),
+                })}
+              </span>
+              <span
+                className={
+                  verdict.tone === "ok"
+                    ? "text-ok"
+                    : verdict.tone === "err"
+                      ? "text-err"
+                      : "text-warn"
+                }
+              >
+                · {verdict.word}
+              </span>
+            </p>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What actually lives in a namespace — the question its peek exists for.
+ * Three cheap namespace-scoped lists; a count alone would hide the part
+ * worth peeking for, so the pods row splits out what is not ready.
+ */
+function NamespaceContents({ namespace }: { namespace: string }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const switchNamespace = useClusterStore((s) => s.switchNamespace);
+  const { close } = usePeek();
+
+  /** The kind's own icon and hue in the resource shell, as a door: click
+   *  scopes the window to this namespace and opens the kind's list. */
+  const kindDoor = (kind: ResourceKind) => {
+    const definition = getResourceDefinition(kind);
+    const Icon = definition.icon;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void switchNamespace(namespace);
+          close();
+          navigate(`/${definition.category}/${definition.plural}`);
+        }}
+        title={t("action", "openScopedTo", {
+          plural: definition.displayPlural,
+          namespace,
+        })}
+        className={cn(
+          RESOURCE_NAME_SHELL,
+          "hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        )}
+      >
+        <Icon
+          className="h-2.5 w-2.5 flex-none self-center"
+          style={{
+            color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))`,
+          }}
+          aria-hidden="true"
+        />
+        <span className="truncate">{definition.displayPlural}</span>
+      </button>
+    );
+  };
+
+  const filters = {
+    namespace,
+    labelSelector: null,
+    fieldSelector: null,
+    limit: null,
+  };
+  const pods = useLiveQuery({
+    queryKey: ["peek-ns-pods", namespace],
+    queryFn: () =>
+      commands.listPods({
+        ...filters,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      }),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: "resourceDetail",
+    retry: false,
+  });
+  const deployments = useLiveQuery({
+    queryKey: ["peek-ns-deployments", namespace],
+    queryFn: () => commands.listDeployments(filters),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    retry: false,
+  });
+  const services = useLiveQuery({
+    queryKey: ["peek-ns-services", namespace],
+    queryFn: () => commands.listServices({ ...filters, serviceType: null }),
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: false,
+    retry: false,
+  });
+
+  const notReady = pods.data?.filter((pod) => !pod.status.ready).length ?? 0;
+  const starving = deployments.data?.filter(
+    (deployment) => deployment.replicas.ready < deployment.replicas.desired
+  );
+
+  const count = (
+    data: unknown[] | undefined,
+    kind: ResourceKind,
+    trouble?: string
+  ): KeyValue => ({
+    label: kindDoor(kind),
+    value:
+      data === undefined ? (
+        t("action", "readingInline")
+      ) : data.length === 0 ? (
+        t("empty", "noneCount")
+      ) : (
+        <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
+          {data.length}
+          {trouble && <span className="text-err">— {trouble}</span>}
+        </span>
+      ),
+    tone: trouble ? ("err" as const) : undefined,
+  });
+
+  return (
+    <div>
+      <PeekHeading title={t("nav", "contents")} />
+      <KeyValueList
+        items={[
+          count(
+            pods.data,
+            "Pod",
+            notReady > 0 ? t("count", "nNotReady", { n: notReady }) : undefined
+          ),
+          count(
+            deployments.data,
+            "Deployment",
+            starving && starving.length > 0
+              ? t("count", "shortOfDesired", { n: starving.length })
+              : undefined
+          ),
+          count(services.data, "Service"),
+        ]}
+      />
     </div>
   );
 }
@@ -444,19 +675,27 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];
-  // An Ingress hop keeps the hosts its rules name, so the hop says which
-  // door it is rather than only that a door exists.
-  const ingresses = new Map<string, { object: ObjectRef; hosts: string[] }>();
-  for (const edge of edges) {
-    if (edge.relation.verb !== "routes" || edge.from.kind !== "Ingress")
-      continue;
-    const key = `${edge.from.namespace}/${edge.from.name}`;
-    const entry = ingresses.get(key) ?? { object: edge.from, hosts: [] };
-    if (edge.relation.host && !entry.hosts.includes(edge.relation.host)) {
-      entry.hosts.push(edge.relation.host);
-    }
-    ingresses.set(key, entry);
-  }
+  // The Gateways behind the doors carry their addresses on their own list —
+  // the same cache the routes list and the trace already share.
+  const hasGatewayDoors = edges.some(
+    (edge) => edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway"
+  );
+  const gatewaysQuery = useLiveQuery({
+    queryKey: ["gateway-map-gateways"],
+    queryFn: () => commands.listGateways(null),
+    staleTime: STALE_TIMES.resourceDetail,
+    enabled: hasGatewayDoors,
+    refresh: false,
+  });
+  // The doors under their entries: Gateway API and Ingress ways in, each
+  // door wearing its verdict — see `lib/traffic-doors`.
+  const doors = useMemo(
+    () =>
+      conns.data
+        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t)
+        : { entries: [], mesh: [] },
+    [conns.data, gatewaysQuery.data, t]
+  );
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.
   const services = isServiceish
@@ -500,25 +739,6 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   // stack; the arrows run between levels only.
   const shownRoutes = vendorRoutes.slice(0, 6);
   const waysIn: ReactNode[] = [
-    ...[...ingresses.values()].map(({ object, hosts }) => (
-      <p
-        key={`ingress/${object.namespace}/${object.name}`}
-        className="text-[11px] text-fg-fnt"
-      >
-        <ResourceRef
-          kind="Ingress"
-          name={object.name}
-          namespace={object.namespace}
-          showKind={false}
-        />{" "}
-        {hosts.length > 0 && (
-          <span className="font-mono text-xs text-fg-mid">
-            {hosts.join(", ")}{" "}
-          </span>
-        )}
-        — Ingress
-      </p>
-    )),
     // Object first and the address under it, the order every other entry
     // reads in — this line is the router, not its hostname.
     ...shownRoutes.map((route) => (
@@ -547,6 +767,110 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
   ];
 
   const levels: { key: string; entries: ReactNode[] }[] = [];
+  // Each entry — a Gateway with its address, an Ingress — is a level of its
+  // own, its doors stacked under it, each door wearing its verdict.
+  for (const entry of doors.entries) {
+    levels.push({
+      key: `entry/${entry.object.kind}/${entry.object.namespace ?? ""}/${entry.object.name}`,
+      entries: [
+        <div key="entry">
+          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt">
+            <ResourceRef
+              kind={entry.object.kind}
+              name={entry.object.name}
+              namespace={entry.object.namespace}
+              showKind={false}
+            />
+            {entry.ghost && (
+              <span
+                aria-label={t("empty", "kindDoesNotExist", {
+                  kind: entry.object.kind,
+                  name: entry.object.name,
+                })}
+                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
+              >
+                ?
+              </span>
+            )}
+            {entry.address && (
+              <CopyableAddress
+                value={entry.address}
+                label={t("action", "copyKindAddress", {
+                  kind: entry.object.kind,
+                })}
+              />
+            )}
+            <span className={entry.ghost ? "text-err" : undefined}>
+              —{" "}
+              {entry.ghost
+                ? t("empty", "metaMissing", { meta: entry.meta })
+                : entry.meta}
+            </span>
+          </p>
+          <div className="mt-1 flex flex-col gap-0.5">
+            {entry.doors.map((door) => (
+              <div
+                key={`${door.host}/${door.route?.kind ?? ""}/${door.route?.name ?? ""}`}
+                className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-baseline gap-x-1.5 text-xs"
+              >
+                <span
+                  className={cn(
+                    "text-[8px] leading-relaxed",
+                    door.broken ? "text-err" : "text-ok"
+                  )}
+                >
+                  ●
+                </span>
+                <span
+                  className={cn(
+                    "truncate font-mono",
+                    door.broken && "text-fg-mut line-through decoration-err/50"
+                  )}
+                >
+                  {door.copy ? (
+                    // What lands on the clipboard may be more than the
+                    // label: a hostless door copies the dialable
+                    // address:port while showing the listener's :port.
+                    <CopyableValue
+                      value={door.copy}
+                      label={t("action", "copyPair", { pair: door.copy })}
+                      quietMark
+                    >
+                      {door.host}
+                    </CopyableValue>
+                  ) : (
+                    door.host
+                  )}
+                </span>
+                <span className="whitespace-nowrap text-[11px] text-fg-fnt">
+                  {door.broken ? (
+                    <span className="text-err">{door.broken}</span>
+                  ) : (
+                    <>
+                      {door.route && (
+                        <ResourceRef
+                          kind={door.route.kind}
+                          name={door.route.name}
+                          namespace={door.route.namespace}
+                          showKind={false}
+                        />
+                      )}
+                      {door.note && <span> {door.note}</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            ))}
+            {entry.moreDoors > 0 && (
+              <p className="pl-[16px] text-[11px] text-fg-fnt">
+                {t("empty", "andMore", { n: entry.moreDoors })}…
+              </p>
+            )}
+          </div>
+        </div>,
+      ],
+    });
+  }
   if (waysIn.length > 0) levels.push({ key: "ways-in", entries: waysIn });
   if (services.length > 0) {
     levels.push({
@@ -649,7 +973,6 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
               <Rail
                 tone="on"
                 into={last ? null : "on"}
-                entering={index > 0}
                 here={level.key === "self"}
               />
               <div
@@ -661,6 +984,22 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           );
         })}
       </div>
+      {doors.mesh.length > 0 && (
+        <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
+          {doors.mesh.map((route, index) => (
+            <span key={`${route.kind}/${route.name}`}>
+              {index > 0 && ", "}
+              <ResourceRef
+                kind={route.kind}
+                name={route.name}
+                namespace={route.namespace}
+                showKind={false}
+              />
+            </span>
+          ))}{" "}
+          {t("count", "gwMeshAlsoNames", { n: doors.mesh.length })}
+        </p>
+      )}
     </div>
   );
 }

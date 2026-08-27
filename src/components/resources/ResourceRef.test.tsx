@@ -147,21 +147,26 @@ describe("ResourceRef", () => {
       expect(screen.queryByRole("link")).toBeNull();
     });
 
-    // The registry lists these; App.tsx serves them a list route only. Trusting
+    // The registry lists Event; App.tsx serves it a list route only. Trusting
     // the registry alone is exactly how a dead link ships.
-    it.each(["Namespace", "Event"])(
-      "renders text for %s, which the router only lists",
-      (kind) => {
-        wrap(<ResourceRef kind={kind} name="kube-system" />);
-        expect(screen.queryByRole("link")).toBeNull();
-      }
-    );
+    it("renders text for Event, which the router only lists", () => {
+      wrap(<ResourceRef kind="Event" name="kube-system" />);
+      expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    it("links a Namespace to its own page", () => {
+      wrap(<ResourceRef kind="Namespace" name="kube-system" />);
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/namespaces/kube-system"
+      );
+    });
 
     it("agrees with isRoutableKind", () => {
       expect(isRoutableKind("Pod", "ns")).toBe(true);
       expect(isRoutableKind("Pod")).toBe(false);
       expect(isRoutableKind("Node")).toBe(true);
-      expect(isRoutableKind("Namespace")).toBe(false);
+      expect(isRoutableKind("Namespace")).toBe(true);
       expect(isRoutableKind("Event", "ns")).toBe(false);
       expect(isRoutableKind("HelmRelease", "ns")).toBe(false);
     });

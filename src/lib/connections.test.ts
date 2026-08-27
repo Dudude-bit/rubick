@@ -215,6 +215,178 @@ describe("the traffic chain", () => {
     expect(hop.urls).toEqual(["http://log-demo.local/"]);
   });
 
+  it("puts a Gateway above the route, and the route above the Service", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const gateway = ref("Gateway", "edge", {
+      kind: "gateway",
+      className: "envoy",
+    });
+    const path = trafficChains(
+      connections(deployment, [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=promo" },
+        },
+        {
+          from: route,
+          to: svc,
+          relation: {
+            verb: "ruleRoutes",
+            hostnames: ["promo.example.com"],
+            port: "8080",
+            weight: null,
+          },
+        },
+        {
+          from: route,
+          to: gateway,
+          relation: { verb: "attachesTo", sectionName: "https" },
+        },
+      ]),
+      t
+    )[0];
+
+    const [gatewayHop, routeHopDrawn] = path.hops;
+    if (gatewayHop.at !== "object") throw new Error("expected the Gateway hop");
+    expect(gatewayHop.object.kind).toBe("Gateway");
+    expect(gatewayHop.detail).toBe("section https");
+    expect(gatewayHop.via).toBe("envoy");
+
+    if (routeHopDrawn.at !== "object")
+      throw new Error("expected the route hop");
+    expect(routeHopDrawn.object.kind).toBe("HTTPRoute");
+    expect(routeHopDrawn.detail).toBe("promo.example.com");
+    // No URL: whether that hostname is served over TLS is the listener's
+    // fact, and the chain does not invent a scheme.
+    expect(routeHopDrawn.urls).toEqual([]);
+    expect(path.broken).toBe(false);
+  });
+
+  it("breaks the path on the route where its controller refused it", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const path = trafficChains(
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=promo" },
+          },
+          {
+            from: route,
+            to: svc,
+            relation: {
+              verb: "ruleRoutes",
+              hostnames: ["promo.example.com"],
+              port: "8080",
+              weight: null,
+            },
+          },
+        ],
+        [
+          {
+            reason: "routeNotAccepted",
+            route,
+            gateway: ref("Gateway", "edge"),
+            conditionReason: "NoMatchingListenerHostname",
+            message: "no listener hostname matches",
+          },
+        ]
+      ),
+      t
+    )[0];
+
+    const stop = path.hops.find((hop) => hop.at === "stop");
+    if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
+    expect(stop.title).toBe("edge does not accept this route");
+    expect(stop.note).toContain("NoMatchingListenerHostname");
+    expect(path.broken).toBe(true);
+  });
+
+  it("draws a missing Gateway as the missing thing, not as a healthy hop", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const ghost = ref("Gateway", "ghost", null, "missing");
+    const path = trafficChains(
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=promo" },
+          },
+          {
+            from: route,
+            to: svc,
+            relation: {
+              verb: "ruleRoutes",
+              hostnames: [],
+              port: null,
+              weight: null,
+            },
+          },
+          {
+            from: route,
+            to: ghost,
+            relation: { verb: "attachesTo", sectionName: null },
+          },
+        ],
+        [{ reason: "gatewayMissing", route, gateway: ghost }]
+      ),
+      t
+    )[0];
+
+    const gatewayHop = path.hops[0];
+    if (gatewayHop.at !== "object") throw new Error("expected the Gateway hop");
+    expect(gatewayHop.object.existence).toBe("missing");
+    const stop = path.hops.find((hop) => hop.at === "stop");
+    if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
+    expect(stop.title).toBe("Names a Gateway that does not exist");
+    expect(path.broken).toBe(true);
+  });
+
+  it("says a drained weight-0 backend is configuration, not an outage", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const path = trafficChains(
+      connections(deployment, [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=promo" },
+        },
+        {
+          from: route,
+          to: svc,
+          relation: {
+            verb: "ruleRoutes",
+            hostnames: ["promo.example.com"],
+            port: "8080",
+            weight: 0,
+          },
+        },
+      ]),
+      t
+    )[0];
+
+    const routeHopDrawn = path.hops[0];
+    if (routeHopDrawn.at !== "object")
+      throw new Error("expected the route hop");
+    expect(routeHopDrawn.via).toBe(
+      "weight 0 — deliberately receives no traffic"
+    );
+    expect(path.broken).toBe(false);
+  });
+
   it("says what serves the host and under which certificate", () => {
     /** A workload page could always name the hostname that reached it and
      *  never what answers on it or whether it is encrypted — the half people

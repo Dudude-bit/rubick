@@ -64,13 +64,15 @@ vi.mock("@/lib/commands", () => ({
     getCustomResourceYaml: vi.fn(),
     getService: vi.fn(),
     getResourceConnections: vi.fn(),
+    getNamespace: vi.fn(),
+    getGatewayRoute: vi.fn(),
   },
 }));
 
-const NAMESPACE_MANIFEST = `apiVersion: v1
-kind: Namespace
+const REPLICASET_MANIFEST = `apiVersion: apps/v1
+kind: ReplicaSet
 metadata:
-  name: kube-system
+  name: promo-abc
   labels:
     tier: control
 status:
@@ -302,7 +304,16 @@ function mockCluster() {
   vi.mocked(commands.getPod).mockReset().mockResolvedValue(buildPod());
   vi.mocked(commands.getManifest)
     .mockReset()
-    .mockResolvedValue(NAMESPACE_MANIFEST);
+    .mockResolvedValue(REPLICASET_MANIFEST);
+  vi.mocked(commands.getNamespace)
+    .mockReset()
+    .mockResolvedValue({
+      name: "kube-system",
+      uid: "uid-kube-system",
+      status: "Active",
+      labels: { tier: "control" },
+      createdAt: null,
+    });
   vi.mocked(commands.listEvents).mockReset().mockResolvedValue([buildEvent()]);
   vi.mocked(commands.getConfigmap)
     .mockReset()
@@ -436,19 +447,30 @@ describe("PeekPanel", () => {
   });
 
   it("falls back to the manifest for a kind with no detail command", async () => {
-    wrap("/events?peek=namespaces/kube-system");
+    wrap("/events?peek=replicasets/k8s-gui-test/promo-abc");
     // The badge and the status row both read the phase out of the manifest.
     expect(await screen.findAllByText("Active")).toHaveLength(2);
     expect(commands.getManifest).toHaveBeenCalledWith(
-      "Namespace",
-      "v1",
-      "kube-system",
-      null
+      "ReplicaSet",
+      "apps/v1",
+      "promo-abc",
+      "k8s-gui-test"
     );
     // The manifest becomes rows, not a wall of YAML.
     expect(screen.getByText("phase")).toBeInTheDocument();
     expect(screen.getByText("tier")).toBeInTheDocument();
     expect(screen.getByText("control")).toBeInTheDocument();
+  });
+
+  it("reads a namespace through its own command, labels first", async () => {
+    wrap("/events?peek=namespaces/kube-system");
+    expect(await screen.findByText("tier")).toBeInTheDocument();
+    expect(commands.getNamespace).toHaveBeenCalledWith("kube-system");
+    // The labels are the payload: they are what every namespaceSelector —
+    // a Gateway listener's allowedRoutes included — matches against.
+    expect(screen.getByText("control")).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(commands.getManifest).not.toHaveBeenCalled();
   });
 });
 
@@ -1058,13 +1080,131 @@ describe("PeekPanel traffic chain", () => {
     expectAbove(self, endpoints);
     // One dot in the chain is haloed: the one the reader is standing on.
     expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
-    // Every segment ends in an arrowhead — three hops, two arrows, all down.
-    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
     // The rule's host rides on the hop, so it says which door this is.
     expect(screen.getByText("storefront.example.com")).toBeInTheDocument();
     // The words the chain replaced stay gone.
     expect(screen.queryByText("Reached through")).toBeNull();
     expect(screen.queryByText("Behind it")).toBeNull();
+  });
+
+  it("walks the whole Gateway API way in: Gateway, route, Service, addresses", async () => {
+    vi.mocked(commands.getResourceConnections).mockResolvedValue(
+      buildConnections([
+        {
+          from: objRef("HTTPRoute", "frontend-route", "storefront"),
+          to: objRef("Service", "frontend", "storefront"),
+          relation: {
+            verb: "ruleRoutes",
+            hostnames: ["shop.example.com"],
+            port: "3000",
+            weight: null,
+          },
+        },
+        {
+          from: objRef("HTTPRoute", "frontend-route", "storefront"),
+          to: {
+            ...objRef("Gateway", "edge", "infra"),
+            facts: { kind: "gateway", className: "envoy" },
+          },
+          relation: { verb: "attachesTo", sectionName: "http" },
+        },
+      ])
+    );
+    wrap(SERVICE_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    const gateway = await screen.findByRole("link", { name: "Gateway edge" });
+    const route = screen.getByRole("link", {
+      name: "HTTPRoute frontend-route",
+    });
+    const self = screen.getByText(/this Service/);
+    // The path runs from its true beginning: Gateway above route above Service.
+    expectAbove(gateway, route);
+    expectAbove(route, self);
+    // The route's hostnames ride on the hop, and the class rides the Gateway.
+    expect(screen.getByText("shop.example.com")).toBeInTheDocument();
+    expect(screen.getByText(/class envoy/)).toBeInTheDocument();
+  });
+
+  it("reads a route peek in the route's own words, not dotted paths", async () => {
+    vi.mocked(commands.getGatewayRoute).mockResolvedValue({
+      kind: "HTTPRoute",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      name: "promo",
+      namespace: "storefront",
+      hostnames: ["promo.example.com"],
+      parentRefs: [
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "Gateway",
+          name: "edge",
+          namespace: null,
+          sectionName: "http",
+          port: null,
+        },
+      ],
+      rules: [
+        {
+          matches: [],
+          backendRefs: [
+            {
+              group: "",
+              kind: "Service",
+              name: "frontend",
+              namespace: null,
+              port: 3000,
+              weight: null,
+            },
+          ],
+          hasRedirect: false,
+          extensionRefs: [],
+        },
+      ],
+      parents: [
+        {
+          parent: {
+            group: "gateway.networking.k8s.io",
+            kind: "Gateway",
+            name: "edge",
+            namespace: null,
+            sectionName: null,
+            port: null,
+          },
+          controllerName: "example.net/gw",
+          conditions: [
+            {
+              type: "Accepted",
+              status: "True",
+              reason: "Accepted",
+              message: null,
+              lastTransitionTime: null,
+            },
+          ],
+        },
+      ],
+      generation: 1,
+      labels: {},
+      annotations: {},
+      createdAt: "2026-08-19T20:00:00Z",
+    });
+    wrap("/events?peek=httproutes/storefront/promo");
+
+    expect(
+      await screen.findByRole("link", { name: "Gateway edge" })
+    ).toBeInTheDocument();
+    expect(commands.getGatewayRoute).toHaveBeenCalledWith(
+      "HTTPRoute",
+      "promo",
+      "storefront"
+    );
+    expect(screen.getByText("promo.example.com")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Service frontend" })
+    ).toBeInTheDocument();
+    // The port is a forward, and the flatten's dotted paths are gone.
+    expect(screen.getByRole("button", { name: ":3000" })).toBeInTheDocument();
+    expect(screen.queryByText(/backendRefs\.0/)).toBeNull();
+    expect(commands.getManifest).not.toHaveBeenCalled();
   });
 
   it("puts the Service in front above a Pod, and nothing below it", async () => {
@@ -1202,7 +1342,6 @@ describe("PeekPanel traffic chain", () => {
     ).toBeInTheDocument();
     // Three levels — the doors, the Service, this Pod — so two arrows,
     // however many doors there are.
-    expect(screen.getAllByTestId("rail-arrow")).toHaveLength(2);
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {

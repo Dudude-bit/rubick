@@ -23,6 +23,7 @@ impl OptionTimeExt for Option<&Time> {
 }
 
 mod connections;
+mod gateway;
 mod network;
 pub mod published;
 mod selector;
@@ -33,6 +34,7 @@ mod types;
 mod workloads;
 
 pub use connections::*;
+pub use gateway::*;
 pub use network::*;
 pub use published::{
     EndpointSource, PublishedEndpoint, PublishedPort, ServicePublished, UnpublishedPod,

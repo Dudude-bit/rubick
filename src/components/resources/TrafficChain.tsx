@@ -75,56 +75,38 @@ function HopName({ object }: { object: ObjectRef }) {
 
 type HopTone = "on" | "warn" | "bad";
 
+// A quiet ring for the ordinary hop: the rail's job is to carry the eye,
+// not to compete with the verdicts riding on it. Trouble keeps its hue.
 const NODE_TONE: Record<HopTone, string> = {
-  on: "border-fg bg-fg",
+  on: "border-fg-mut",
   warn: "border-warn",
   bad: "border-err",
 };
 
 /**
  * The dot and the run of line under it — the chain's spine. Shared with the
- * peek's chain, so a hop reads the same wherever it is drawn.
+ * peek's chain, so a hop reads the same wherever it is drawn. No arrowheads:
+ * the chain only ever runs downward, and the line already says so.
  */
 export function Rail({
   tone,
   into,
-  entering = false,
   here = false,
 }: {
   tone: HopTone;
   into: HopTone | null;
-  /**
-   * A hop stands above this one, so the rail arrives here — drawn as an
-   * arrowhead flush over the dot, where the incoming line ends. At the
-   * bottom of the segment it floated between two dots and read as clutter;
-   * against the dot it reads as one connector: line, tip, stop.
-   */
-  entering?: boolean;
-  /** The chain's own subject — a halo says "you are standing here". */
+  /** The chain's own subject — filled, with a halo: "you are standing here". */
   here?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center">
-      {entering && (
-        <span
-          aria-hidden="true"
-          data-testid="rail-arrow"
-          className={cn(
-            "mb-[1px] h-0 w-0 flex-none border-x-[3px] border-t-[4px] border-x-transparent",
-            tone === "bad" ? "border-t-err" : "border-t-info"
-          )}
-        />
-      )}
       <span
         aria-hidden="true"
         data-testid={here ? "rail-here" : undefined}
         className={cn(
-          "h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
-          // The arrow spends the same 5px the first dot spends on margin,
-          // so every dot sits on its line of text regardless.
-          entering || "mt-[5px]",
+          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
           NODE_TONE[tone],
-          here && "ring-[3px] ring-fg/20"
+          here && "border-fg bg-fg ring-[3px] ring-fg/20"
         )}
       />
       {into && (
@@ -361,14 +343,12 @@ export function RouteLine({ route }: { route: ServiceRoute }) {
 function Hop({
   hop,
   next,
-  first,
   issuance,
   edge,
   routed,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
-  first: boolean;
   issuance: Issuance | undefined;
   edge: ServiceEdges | undefined;
   routed: ServicesRoutes | undefined;
@@ -382,7 +362,6 @@ function Hop({
       <Rail
         tone={toneOf(hop)}
         into={next ? toneOf(next) : null}
-        entering={!first}
         here={hop.at === "object" && hop.self}
       />
       <div className={cn("min-w-0", last ? "" : "pb-3")}>
@@ -619,7 +598,6 @@ export function TrafficChain({
                 key={index}
                 hop={hop}
                 next={path.hops[index + 1]}
-                first={index === 0}
                 issuance={issuance ?? routed.issuance}
                 edge={edge}
                 routed={routed2}

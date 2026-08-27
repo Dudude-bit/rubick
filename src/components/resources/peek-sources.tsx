@@ -5,7 +5,9 @@ import { load as parseYaml } from "js-yaml";
 import {
   CopyableAddress,
   CopyableAddresses,
+  CopyableValue,
 } from "@/components/ui/copyable-value";
+import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
 import {
   declaredContainers,
@@ -28,12 +30,17 @@ import { ImageRef } from "./ImageRef";
 import { ResourceRef } from "./ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
 import { ClaimRef } from "./storage-refs";
+import { conditionRole } from "@/lib/condition-health";
+import { redirectOnly, gatewayProgrammed } from "@/lib/route-trace";
+import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue } from "./key-values";
+import type { KeyValue, KeyValueTone } from "./key-values";
 import type {
+  ConditionInfo,
   ContainerPhase,
   CustomResourceDetailInfo,
   NodeInfo,
+  RouteInfo,
 } from "@/generated/types";
 
 /**
@@ -73,6 +80,146 @@ function source<T>(
     fetch,
     summarise: (data, target, t) => summarise(data as T, target, t),
   };
+}
+
+/** A condition, in the reason-first wording every condition row speaks. */
+function conditionItem(condition: ConditionInfo): KeyValue {
+  const role = conditionRole(condition);
+  const spoken = [
+    condition.status,
+    condition.reason && condition.reason !== condition.type
+      ? condition.reason
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+  return {
+    label: condition.type,
+    value:
+      role !== "ok" && condition.message
+        ? `${spoken}: ${condition.message}`
+        : spoken,
+    mono: true,
+    tone: ROLE_TONE[role],
+  };
+}
+
+/**
+ * One reading for the five route kinds — the object is one shape, and a
+ * peek that flattened it to dotted paths said nothing a person could act
+ * on. Parents up, backends down, the controllers' verdicts in their own
+ * polarity-aware tones, every name a peek and every port a forward.
+ */
+function gatewayRouteSource(kind: string): PeekSource {
+  return source(
+    (name, namespace) => commands.getGatewayRoute(kind, name, namespace),
+    (route: RouteInfo, _target, t) => {
+      const verdicts = route.parents.flatMap((parent) => parent.conditions);
+      const refused = verdicts.some(
+        (c) => c.type === "Accepted" && c.status === "False"
+      );
+      const accepted = verdicts.some(
+        (c) => c.type === "Accepted" && c.status === "True"
+      );
+      const redirects = redirectOnly(route);
+      return {
+        status: refused ? "Refused" : accepted ? "Accepted" : undefined,
+        createdAt: route.createdAt,
+        groups: [
+          {
+            title: t("columns", "serves"),
+            items: [
+              {
+                label: t("columns", "hostnames"),
+                value: (
+                  <CopyableAddresses
+                    values={route.hostnames}
+                    label="Hostname"
+                    empty="all hosts the listener serves"
+                  />
+                ),
+              },
+            ],
+          },
+          {
+            title: t("columns", "parents"),
+            count: route.parentRefs.length || undefined,
+            items: route.parentRefs.map((parent) => ({
+              label: parent.kind,
+              value:
+                parent.kind === "Gateway" ? (
+                  <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                    {ref(
+                      "Gateway",
+                      parent.name,
+                      parent.namespace ?? route.namespace
+                    )}
+                    {parent.sectionName && (
+                      <span className="text-fg-fnt">:{parent.sectionName}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                    {ref(
+                      parent.kind,
+                      parent.name,
+                      parent.namespace ?? route.namespace
+                    )}
+                    <span className="text-fg-fnt">— mesh (GAMMA)</span>
+                  </span>
+                ),
+            })),
+            emptyMessage:
+              "No parentRefs — this route attaches to nothing and serves no traffic.",
+          },
+          {
+            title: t("columns", "backends"),
+            items: route.rules.flatMap((rule) =>
+              rule.backendRefs.map((backend): KeyValue => {
+                const at = backend.namespace ?? route.namespace;
+                return {
+                  label: backend.kind,
+                  value:
+                    backend.kind === "Service" ? (
+                      <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                        {ref("Service", backend.name, at)}
+                        {backend.port != null && (
+                          <ClickableServicePort
+                            prefix=":"
+                            port={backend.port}
+                            serviceName={backend.name}
+                            namespace={at}
+                            className="text-xs"
+                          />
+                        )}
+                        {backend.weight != null && (
+                          <span className="text-fg-fnt">
+                            · weight {backend.weight}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      `${backend.kind} ${backend.name}`
+                    ),
+                };
+              })
+            ),
+            emptyMessage: redirects
+              ? "Redirects — no backends, and none needed."
+              : "No backendRefs — a matched request has nowhere to go.",
+          },
+          {
+            title: t("columns", "verdicts"),
+            items: route.parents.flatMap((entry) =>
+              entry.conditions.map(conditionItem)
+            ),
+            emptyMessage:
+              "No controller wrote status — nothing serves this route.",
+          },
+        ],
+      };
+    }
+  );
 }
 
 const ref = (kind: string, name: string, namespace?: string | null) => (
@@ -228,6 +375,154 @@ function placement(node: NodeInfo, t: Translate): PeekGroup[] {
 }
 
 const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
+  // What other objects ask of a namespace: whether it is Active, and the
+  // labels every namespaceSelector — a listener's allowedRoutes included —
+  // matches against.
+  Namespace: source(
+    (name) => commands.getNamespace(name),
+    (ns, _target, t) => ({
+      status: ns.status,
+      createdAt: ns.createdAt,
+      groups: [
+        {
+          title: t("columns", "labels"),
+          count: Object.keys(ns.labels).length || undefined,
+          items: Object.entries(ns.labels)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([label, value]) => ({ label, value, mono: true })),
+          emptyMessage:
+            "No labels — no namespaceSelector anywhere matches this namespace.",
+        },
+      ],
+    })
+  ),
+  Gateway: source(commands.getGateway, (gateway, _target, t) => {
+    const programmed = gatewayProgrammed(gateway);
+    return {
+      status:
+        programmed?.status === "True"
+          ? "Programmed"
+          : (programmed?.reason ?? undefined),
+      createdAt: gateway.createdAt,
+      groups: [
+        {
+          title: "Gateway",
+          items: [
+            { label: "Class", value: ref("GatewayClass", gateway.className) },
+            {
+              label: t("columns", "addresses"),
+              value: (
+                <CopyableAddresses
+                  values={gateway.addresses}
+                  label="Gateway address"
+                  empty="none published"
+                />
+              ),
+            },
+          ],
+        },
+        {
+          title: t("columns", "listeners"),
+          count: gateway.listeners.length || undefined,
+          items: gateway.listeners.map((listener) => {
+            const broken = listener.conditions.find(
+              (c) => c.status === "False"
+            );
+            const address = gateway.addresses[0];
+            return {
+              label: listener.name,
+              value: (
+                <span className="inline-flex flex-wrap items-baseline gap-x-1 font-mono">
+                  {address ? (
+                    // The dialable pair rides the click; the label stays
+                    // the listener's own :port.
+                    <CopyableValue
+                      value={`${address}:${listener.port}`}
+                      label={`Copy ${address}:${listener.port}`}
+                      quietMark
+                    >
+                      :{listener.port}
+                    </CopyableValue>
+                  ) : (
+                    <>:{listener.port}</>
+                  )}{" "}
+                  {listener.protocol}
+                  {listener.hostname && (
+                    <CopyableValue
+                      value={listener.hostname}
+                      label={`Listener hostname ${listener.hostname}`}
+                      quietMark
+                    />
+                  )}
+                  {listener.attachedRoutes != null && (
+                    <span className="font-sans text-fg-fnt">
+                      · {t("count", "nRoutes", { n: listener.attachedRoutes })}
+                    </span>
+                  )}
+                  {broken && (
+                    <span className="text-err">
+                      — {broken.reason ?? t("empty", "brokenWord")}
+                    </span>
+                  )}
+                </span>
+              ),
+              tone: broken ? ("err" as const) : undefined,
+            };
+          }),
+          emptyMessage:
+            "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
+        },
+        {
+          title: t("columns", "conditions"),
+          items: gateway.conditions.map(conditionItem),
+          emptyMessage: t("empty", "gwNoConditionsYet"),
+        },
+      ],
+    };
+  }),
+  GatewayClass: source(
+    (name) => commands.getGatewayClass(name),
+    (cls, _target, t) => ({
+      status:
+        cls.accepted === true
+          ? "Claimed"
+          : cls.accepted === false
+            ? "Refused"
+            : "Unclaimed",
+      createdAt: cls.createdAt,
+      groups: [
+        {
+          title: "GatewayClass",
+          items: [
+            { label: "Controller", value: cls.controllerName, mono: true },
+            {
+              label: t("columns", "claim"),
+              value:
+                cls.accepted === true
+                  ? `claimed by ${cls.controllerName}`
+                  : cls.accepted === false
+                    ? `refused by ${cls.controllerName}`
+                    : "no controller has answered — everything through this class is dead",
+              tone:
+                cls.accepted === true
+                  ? undefined
+                  : cls.accepted === false
+                    ? ("err" as const)
+                    : ("warn" as const),
+            },
+            ...(cls.description
+              ? [{ label: "Description", value: cls.description }]
+              : []),
+          ],
+        },
+      ],
+    })
+  ),
+  HTTPRoute: gatewayRouteSource("HTTPRoute"),
+  GRPCRoute: gatewayRouteSource("GRPCRoute"),
+  TLSRoute: gatewayRouteSource("TLSRoute"),
+  TCPRoute: gatewayRouteSource("TCPRoute"),
+  UDPRoute: gatewayRouteSource("UDPRoute"),
   Pod: source(commands.getPod, (pod, _target, t) => {
     const readiness = podReadiness(pod);
     return {
@@ -551,12 +846,26 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           },
           {
             label: t("columns", "ports"),
-            value: list(
-              service.ports.map(
-                (port) => `${port.port}→${port.targetPort}/${port.protocol}`
-              )
-            ),
-            mono: true,
+            // Every port forwards, like everywhere else — the service-side
+            // number is the click, the target and protocol stay prose.
+            value:
+              service.ports.length === 0 ? (
+                "none"
+              ) : (
+                <span className="inline-flex flex-wrap items-baseline gap-x-2 font-mono">
+                  {service.ports.map((port, index) => (
+                    <span key={`${port.port}-${index}`}>
+                      <ClickableServicePort
+                        port={port.port}
+                        serviceName={service.name}
+                        namespace={service.namespace}
+                        className="text-xs"
+                      />
+                      →{port.targetPort}/{port.protocol}
+                    </span>
+                  ))}
+                </span>
+              ),
           },
           {
             label: t("columns", "external"),
@@ -1113,6 +1422,33 @@ export function flatten(value: unknown, limit: number): KeyValue[] {
   return rows;
 }
 
+/** The one shape the whole API machinery shares — enough to read as one. */
+function isConditionList(
+  path: string,
+  value: unknown[]
+): value is Array<Record<string, unknown>> {
+  return (
+    /(^|\.)conditions$/i.test(path) &&
+    value.length > 0 &&
+    value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as Record<string, unknown>).type === "string" &&
+        typeof (entry as Record<string, unknown>).status === "string"
+    )
+  );
+}
+
+/** The five roles, folded to the tones a key-value row can carry —
+ *  `neutral` deliberately stays uncoloured, and `pending` reads as info. */
+const ROLE_TONE: Partial<Record<StatusRole, KeyValueTone>> = {
+  ok: "ok",
+  warn: "warn",
+  err: "err",
+  pending: "info",
+};
+
 function walk(
   value: unknown,
   path: string,
@@ -1124,6 +1460,27 @@ function walk(
     const scalars = value.filter((entry) => typeof entry !== "object");
     if (scalars.length === value.length) {
       rows.push({ label: path, value: scalars.join(" · "), mono: true });
+      return;
+    }
+    // A conditions array is verdicts, not data: one row per condition, in
+    // the reason-first wording and polarity-aware tone every condition row
+    // in the app already carries — instead of six grey fragments per entry.
+    if (isConditionList(path, value)) {
+      for (const entry of value.slice(0, limit - rows.length)) {
+        const condition: ConditionInfo = {
+          type: String(entry.type),
+          status: String(entry.status),
+          reason: typeof entry.reason === "string" ? entry.reason : null,
+          message: typeof entry.message === "string" ? entry.message : null,
+          lastTransitionTime: null,
+        };
+        // The same wording every condition row speaks — one implementation,
+        // relabelled with the dotted path.
+        rows.push({
+          ...conditionItem(condition),
+          label: `${path}.${condition.type}`,
+        });
+      }
       return;
     }
     // An array of objects is where a custom resource keeps the part anybody

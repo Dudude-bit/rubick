@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { forceParsing } from "@codemirror/language";
 import { yaml as yamlLanguage } from "@codemirror/lang-yaml";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -119,6 +120,12 @@ describe("a constant against the scalar colour on the same text", () => {
       }),
       parent,
     });
+    // The grammar parses in time slices, and `yamlConstants` only marks what
+    // the tree already holds. Alone this document parses before the next line
+    // runs; under a loaded suite it does not, and the assertion then reads a
+    // half-parsed document as a missing decoration. Waiting for the parse is
+    // what makes this test about nesting rather than about scheduling.
+    forceParsing(view, view.state.doc.length);
     const constant = view.contentDOM.querySelector(".cm-yaml-constant");
     expect(constant?.textContent).toBe("true");
     expect(constant?.firstElementChild).toBeNull();

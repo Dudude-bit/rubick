@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -6,6 +7,7 @@ import {
   Lock,
   Package,
   Plug,
+  Route,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -15,7 +17,14 @@ import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useListAccess } from "@/hooks/useListAccess";
-import { useIntegrationPages } from "@/integrations";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
+import {
+  ROUTING_STALE,
+  useBackingLists,
+  useIntegrationPages,
+} from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { detectProvider } from "@/lib/cluster-identity";
@@ -29,6 +38,8 @@ import {
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
+import { commands } from "@/lib/commands";
+import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
@@ -193,6 +204,7 @@ export function Sidebar() {
                 denied={item.kind ? access[item.kind] === false : false}
               />
             ))}
+            {group.caption === "network" && <GatewayRows overview={overview} />}
           </div>
         ))}
         <IntegrationsGroup />
@@ -206,6 +218,131 @@ export function Sidebar() {
         ))}
       </div>
     </aside>
+  );
+}
+
+/**
+ * The Gateway API rows, drawn only where the cluster serves the kinds.
+ *
+ * Not static entries in `GROUPS`, on purpose: the kinds are CRDs a cluster
+ * may not have, and rows of empty lists on every Ingress-only cluster
+ * would be the rail claiming a routing layer that is not there. The scan is
+ * the same one-per-cluster answer every gateway surface reads.
+ *
+ * Two rows, not seven. The five route kinds share one list page — the
+ * reader's question is "what routes into this cluster", and five rows
+ * mostly holding zero each answered a question nobody asked. Each kind
+ * stays first-class past the door: its own detail page, its own address,
+ * its own name on every row.
+ */
+
+function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
+  const t = useT();
+  const detection = useGatewayApi().data;
+  const installed = detection?.installed ?? false;
+  const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
+  // Constructed exactly the way GatewayDetail constructs it, so the two
+  // share one cache entry rather than fetching the same lists twice.
+  const routeKinds = (detection?.kinds ?? [])
+    .map((kind) => kind.kind)
+    .filter((kind) =>
+      (GATEWAY_ROUTE_KINDS as readonly string[]).includes(kind)
+    );
+
+  // The authorizer's word on our rows, same as every row above them.
+  const access = useListAccess([
+    ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
+    ...(routeKinds as ResourceKind[]),
+  ]);
+  const gatewaysDenied = access[ResourceType.Gateway] === false;
+  const routesDenied =
+    routeKinds.length > 0 &&
+    routeKinds.every((kind) => access[kind as ResourceKind] === false);
+
+  // Same keys as the routes list and the trace — the rail's numbers and
+  // the pages they open can never disagree.
+  const gateways = useLiveQuery({
+    queryKey: ["gateway-map-gateways"],
+    queryFn: () => commands.listGateways(null),
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled: installed && served.has("Gateway") && !gatewaysDenied,
+  });
+  const classes = useLiveQuery({
+    queryKey: ["gateway-classes"],
+    queryFn: commands.listGatewayClasses,
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled: installed && served.has("GatewayClass"),
+  });
+  const routes = useLiveQuery({
+    queryKey: ["gateway-attached-routes", ...routeKinds],
+    queryFn: async () => {
+      const lists = await Promise.all(
+        routeKinds.map((kind) => commands.listGatewayRoutes(kind, null))
+      );
+      return lists.flat();
+    },
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled: installed && routeKinds.length > 0 && !routesDenied,
+  });
+  const backing = useBackingLists(
+    installed && routeKinds.length > 0 && !routesDenied
+  );
+
+  const classesSettled =
+    classes.data !== undefined || !served.has("GatewayClass");
+  const board = useMemo(
+    () =>
+      routesBoard(
+        routes.data ?? [],
+        {
+          gateways: gateways.data ?? [],
+          classes: classes.data ?? [],
+          // Classes count as read only once their list answered (or the
+          // kind is not served at all) — a gateway judged against an
+          // empty class list reads "class does not exist", which would
+          // put a red dot on a healthy cluster for one render.
+          topologyKnown: gateways.data !== undefined && classesSettled,
+          backing: {
+            services: backing.data?.services ?? [],
+            published: backing.data?.published ?? [],
+            backingKnown: backing.data !== undefined,
+          },
+        },
+        t
+      ),
+    [routes.data, gateways.data, classes.data, backing.data, classesSettled, t]
+  );
+
+  if (!installed) return null;
+
+  return (
+    <>
+      {served.has("Gateway") && (
+        <NavRow
+          item={resource(ResourceType.Gateway)}
+          overview={overview}
+          value={gateways.data?.length ?? null}
+          mark={gatewaysMark(
+            gateways.data ?? [],
+            board.pulse,
+            gateways.data !== undefined && classesSettled
+          )}
+          denied={gatewaysDenied}
+        />
+      )}
+      {routeKinds.length > 0 && (
+        <NavRow
+          item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
+          overview={overview}
+          value={routes.data?.length ?? null}
+          mark={boardMark(board)}
+          denied={routesDenied}
+        />
+      )}
+    </>
   );
 }
 

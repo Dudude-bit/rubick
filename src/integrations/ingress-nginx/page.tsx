@@ -18,6 +18,7 @@
 
 import { sayWords } from "@/i18n/say";
 import { useCallback, useMemo, useState } from "react";
+import type { ServiceStop } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import {
@@ -44,7 +45,6 @@ import { describeStop } from "@/lib/connections";
 import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
-import type { ChainStop } from "@/generated/types";
 import {
   Chain,
   Cell,
@@ -939,7 +939,7 @@ function Findings({
   );
 }
 
-const STOP_UNDER: Record<ChainStop["reason"], keyof typeof en.empty> = {
+const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
   backendMissing: "stopNoServiceToSendTo",
   selectsNothing: "stopSelectorMatchesNothing",
   noneReady: "stopRunningNoneReady",

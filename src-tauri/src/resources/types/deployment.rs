@@ -155,6 +155,7 @@ impl From<&Deployment> for DeploymentInfo {
                         reason: c.reason.clone(),
                         message: c.message.clone(),
                         last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        observed_generation: None,
                     })
                     .collect()
             })

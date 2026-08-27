@@ -80,6 +80,24 @@ const NodeDetail = lazy(() =>
 const IngressDetail = lazy(() =>
   import("@/pages/IngressDetail").then((m) => ({ default: m.IngressDetail }))
 );
+const GatewayDetail = lazy(() =>
+  import("@/pages/GatewayDetail").then((m) => ({ default: m.GatewayDetail }))
+);
+const GatewayClassDetail = lazy(() =>
+  import("@/pages/GatewayClassDetail").then((m) => ({
+    default: m.GatewayClassDetail,
+  }))
+);
+const NamespaceDetail = lazy(() =>
+  import("@/pages/NamespaceDetail").then((m) => ({
+    default: m.NamespaceDetail,
+  }))
+);
+const GatewayRouteDetail = lazy(() =>
+  import("@/pages/GatewayRouteDetail").then((m) => ({
+    default: m.GatewayRouteDetail,
+  }))
+);
 const PersistentVolumeDetail = lazy(() =>
   import("@/pages/PersistentVolumeDetail").then((m) => ({
     default: m.PersistentVolumeDetail,
@@ -278,6 +296,31 @@ export default function App() {
               path={`${toPlural(ResourceType.Ingress)}/:namespace/:name`}
               element={<IngressDetail />}
             />
+            <Route
+              path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}
+              element={<GatewayDetail />}
+            />
+            <Route
+              path={`${toPlural(ResourceType.GatewayClass)}/:name`}
+              element={<GatewayClassDetail />}
+            />
+            <Route
+              path={`${toPlural(ResourceType.Namespace)}/:name`}
+              element={<NamespaceDetail />}
+            />
+            {[
+              ResourceType.HTTPRoute,
+              ResourceType.GRPCRoute,
+              ResourceType.TLSRoute,
+              ResourceType.TCPRoute,
+              ResourceType.UDPRoute,
+            ].map((kind) => (
+              <Route
+                key={kind}
+                path={`${toPlural(kind)}/:namespace/:name`}
+                element={<GatewayRouteDetail kind={kind} />}
+              />
+            ))}
             <Route
               path={`${toPlural(ResourceType.PersistentVolume)}/:name`}
               element={<PersistentVolumeDetail />}

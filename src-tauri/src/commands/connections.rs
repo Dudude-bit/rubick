@@ -50,6 +50,7 @@ pub async fn get_resource_connections(
     kind: String,
     name: String,
     namespace: Option<String>,
+    gateway: Option<crate::resources::GatewayApiDetection>,
     state: State<'_, AppState>,
 ) -> Result<ResourceConnections> {
     crate::validation::validate_dns_subdomain(&name)?;
@@ -63,7 +64,7 @@ pub async fn get_resource_connections(
     } else {
         ResourceContext::for_command(&state, namespace)?
     };
-    Box::pin(connections_of(&ctx, &kind, &name)).await
+    Box::pin(connections_of(&ctx, &kind, &name, gateway.as_ref())).await
 }
 
 /// The kinds whose neighbourhood spans every namespace there is: the pods a
@@ -81,7 +82,12 @@ pub async fn get_resource_connections(
 fn cluster_scoped(kind: &str) -> bool {
     matches!(
         kind,
-        "Node" | "PersistentVolume" | "Namespace" | "StorageClass" | "CustomResourceDefinition"
+        "Node"
+            | "PersistentVolume"
+            | "Namespace"
+            | "StorageClass"
+            | "CustomResourceDefinition"
+            | "GatewayClass"
     )
 }
 
@@ -91,6 +97,7 @@ pub async fn connections_of(
     ctx: &ResourceContext,
     kind: &str,
     name: &str,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
 ) -> Result<ResourceConnections> {
     let canonical = normalized(kind);
     // Read once, for the namespaced arms only. The two cluster-scoped ones
@@ -102,11 +109,14 @@ pub async fn connections_of(
 
     let mut out = Neighbourhood::new();
     match canonical {
-        "Pod" => pod_connections(ctx, &ns, name, &mut out).await?,
+        "Pod" => pod_connections(ctx, &ns, name, gateway, &mut out).await?,
         "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" | "Job" | "CronJob" => {
-            Box::pin(workload_connections(ctx, &ns, canonical, name, &mut out)).await?;
+            Box::pin(workload_connections(
+                ctx, &ns, canonical, name, gateway, &mut out,
+            ))
+            .await?;
         }
-        "Service" => service_connections(ctx, &ns, name, &mut out).await?,
+        "Service" => service_connections(ctx, &ns, name, gateway, &mut out).await?,
         "Ingress" => ingress_connections(ctx, &ns, name, &mut out).await?,
         "PersistentVolumeClaim" => claim_connections(ctx, &ns, name, &mut out).await?,
         "ConfigMap" | "Secret" => {
@@ -259,6 +269,161 @@ fn traffic_into(
         );
         note_reach(svc, &svc_ref, snapshot, out, false);
         routes_into(ns, &svc_ref, snapshot, out);
+        gateway_traffic_into(
+            ns,
+            &svc_ref,
+            &snapshot.gateway_routes,
+            snapshot.gateways.as_deref(),
+            out,
+        );
+    }
+}
+
+/// The Gateway API routes whose `backendRefs` name this Service, with the
+/// Gateway above each and every stop its status names.
+///
+/// Stops come from what the controller wrote — `Accepted: False`,
+/// `ResolvedRefs: False`, per parent — plus the one thing no condition will
+/// ever say: a parentRef naming a Gateway the API server does not have,
+/// for which no controller will ever write status at all. A parentRef of
+/// any other kind — `Service` is GAMMA/mesh — is recognized and left
+/// alone: not a Gateway, so never "a missing Gateway".
+fn gateway_traffic_into(
+    ns: &str,
+    svc_ref: &ObjectRef,
+    routes: &[crate::resources::RouteInfo],
+    gateways: Option<&[crate::resources::GatewayInfo]>,
+    out: &mut Neighbourhood,
+) {
+    use crate::resources::GATEWAY_API_GROUP;
+
+    for route in routes {
+        let backends: Vec<_> = route
+            .rules
+            .iter()
+            .flat_map(|rule| &rule.backend_refs)
+            .filter(|b| {
+                b.kind == "Service"
+                    && b.group.is_empty()
+                    && b.name == svc_ref.name
+                    && b.namespace.as_deref().unwrap_or(&route.namespace) == ns
+            })
+            .collect();
+        if backends.is_empty() {
+            continue;
+        }
+
+        let route_ref = ObjectRef::new(
+            &route.kind,
+            &route.name,
+            Some(route.namespace.clone()),
+            Existence::Present,
+        );
+
+        for backend in backends {
+            out.edge(
+                route_ref.clone(),
+                svc_ref.clone(),
+                Relation::RuleRoutes {
+                    hostnames: route.hostnames.clone(),
+                    port: backend.port.map(|p| p.to_string()),
+                    weight: backend.weight,
+                },
+            );
+        }
+
+        for parent in &route.parent_refs {
+            if parent.kind != "Gateway" || parent.group != GATEWAY_API_GROUP {
+                continue;
+            }
+            let gw_ns = parent
+                .namespace
+                .clone()
+                .unwrap_or_else(|| route.namespace.clone());
+            // Absent list means nobody asked, which is a different answer
+            // from "asked, and it is not there" — and only the second one
+            // may be drawn as a break in the chain.
+            let found = gateways
+                .and_then(|list| {
+                    list.iter()
+                        .find(|g| g.name == parent.name && g.namespace == gw_ns)
+                })
+                .map(Some);
+            let gw_ref = match found {
+                Some(Some(g)) => ObjectRef::new(
+                    "Gateway",
+                    &g.name,
+                    Some(g.namespace.clone()),
+                    Existence::Present,
+                )
+                .with_facts(ObjectFacts::Gateway {
+                    class_name: g.class_name.clone(),
+                }),
+                _ => ObjectRef::new(
+                    "Gateway",
+                    &parent.name,
+                    Some(gw_ns.clone()),
+                    if gateways.is_some() {
+                        Existence::Missing
+                    } else {
+                        Existence::NotChecked
+                    },
+                ),
+            };
+            if found.is_none() && gateways.is_some() {
+                out.stops.push(ChainStop::GatewayMissing {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                });
+            }
+            out.edge(
+                route_ref.clone(),
+                gw_ref.clone(),
+                Relation::AttachesTo {
+                    section_name: parent.section_name.clone(),
+                },
+            );
+
+            // A status parentRef echoes the spec's, sectionName included —
+            // a route attached to one gateway through two listeners has two
+            // verdicts, and each attachment must read its own. Loose match
+            // stays as the fallback for controllers that drop the section.
+            let named = |p: &&crate::resources::RouteParentStatusInfo| {
+                p.parent.name == parent.name
+                    && p.parent
+                        .namespace
+                        .clone()
+                        .unwrap_or_else(|| route.namespace.clone())
+                        == gw_ns
+            };
+            let status = route
+                .parents
+                .iter()
+                .find(|p| named(p) && p.parent.section_name == parent.section_name)
+                .or_else(|| route.parents.iter().find(named));
+            let Some(status) = status else {
+                continue;
+            };
+            for condition in &status.conditions {
+                if condition.status != "False" {
+                    continue;
+                }
+                match condition.type_.as_str() {
+                    "Accepted" => out.stops.push(ChainStop::RouteNotAccepted {
+                        route: route_ref.clone(),
+                        gateway: gw_ref.clone(),
+                        condition_reason: condition.reason.clone(),
+                        message: condition.message.clone(),
+                    }),
+                    "ResolvedRefs" => out.stops.push(ChainStop::RouteRefsUnresolved {
+                        route: route_ref.clone(),
+                        condition_reason: condition.reason.clone(),
+                        message: condition.message.clone(),
+                    }),
+                    _ => {}
+                }
+            }
+        }
     }
 }
 
@@ -649,6 +814,7 @@ fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
                         reason: c.reason.clone(),
                         message: c.message.clone(),
                         last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        observed_generation: None,
                     })
                     .collect()
             })
@@ -801,6 +967,7 @@ fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
                         reason: Some(c.reason.clone()).filter(|r| !r.is_empty()),
                         message: Some(c.message.clone()).filter(|m| !m.is_empty()),
                         last_transition_time: Some(c.last_transition_time.0),
+                        observed_generation: None,
                     })
                     .collect()
             })
@@ -1035,6 +1202,14 @@ struct Snapshot {
     /// serves no `discovery.k8s.io/v1` at all, and a confident empty there
     /// would be the app inventing an outage out of its own API version.
     legacy: Read<Endpoints>,
+    /// The namespace's Gateway API routes, all five kinds in one list —
+    /// empty where the caller brought no detection, or the cluster serves
+    /// none of them.
+    gateway_routes: Vec<crate::resources::RouteInfo>,
+    /// Every Gateway in the cluster, unscoped: a route in this namespace
+    /// ordinarily attaches to a Gateway in another one, and a
+    /// namespace-scoped list would call every such parent missing.
+    gateways: Option<Vec<crate::resources::GatewayInfo>>,
 }
 
 /// A list whose failure is part of the answer rather than the end of it, and
@@ -1053,7 +1228,10 @@ impl Snapshot {
     /// fact about every pod it selects, and a selector-scoped list would only
     /// ever show the subject's own — which is how a Service that looks empty
     /// from one workload turns out to be served by another.
-    async fn of(ctx: &ResourceContext) -> Result<Self> {
+    async fn of(
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+    ) -> Result<Self> {
         let params = ListParams::default();
         let pods_api = ctx.namespaced_api::<Pod>();
         let services_api = ctx.namespaced_api::<Service>();
@@ -1080,6 +1258,7 @@ impl Snapshot {
             Ok(_) => Err("the slices answered".to_string()),
             Err(_) => read(ctx.namespaced_api::<Endpoints>().list(&params).await),
         };
+        let (gateway_routes, gateways) = gateway_lists(ctx, gateway).await;
         Ok(Self {
             pods: pods?.items,
             services: services?.items,
@@ -1089,6 +1268,8 @@ impl Snapshot {
             budgets: read(budgets),
             slices,
             legacy,
+            gateway_routes,
+            gateways,
         })
     }
 
@@ -1119,15 +1300,77 @@ impl Snapshot {
     }
 }
 
+/// The Gateway API halves of a snapshot, where the caller brought the
+/// cluster's detection along.
+///
+/// The detection is the frontend's cached one-scan-per-cluster answer —
+/// passed in rather than re-derived here, so a workload page costs no CRD
+/// list. A route kind whose list fails is read as absent for this call; the
+/// page draws the chain it has rather than failing the whole neighbourhood.
+///
+/// The gateways come back as `None` when that list was never read — no
+/// detection, the kind not served, or the list refused. "The API server does
+/// not have this Gateway" is a claim only a list that answered can make, and
+/// a namespace-scoped reader gets a 403 on this cluster-wide one.
+async fn gateway_lists(
+    ctx: &ResourceContext,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
+) -> (
+    Vec<crate::resources::RouteInfo>,
+    Option<Vec<crate::resources::GatewayInfo>>,
+) {
+    use crate::resources::{GatewayInfo, RouteInfo};
+
+    let Some(detection) = gateway.filter(|d| d.installed) else {
+        return (Vec::new(), None);
+    };
+
+    let params = ListParams::default();
+    // Cluster-wide on purpose, twice over: a route in another namespace may
+    // cross-namespace-target this Service through a ReferenceGrant, and its
+    // gateway may live in a third namespace still. Scoping either list to
+    // the subject's namespace silently hid both. Kinds list concurrently —
+    // six serial round trips were pure latency.
+    let fetches = detection.kinds.iter().map(|served| {
+        let api_resource = served.api_resource();
+        let kind = served.kind.clone();
+        let api = ctx.dynamic_api_for_resource(&api_resource, true);
+        let params = params.clone();
+        async move { (kind, api_resource, api.list(&params).await) }
+    });
+    let mut routes = Vec::new();
+    let mut gateways: Option<Vec<crate::resources::GatewayInfo>> = None;
+    for (kind, api_resource, list) in futures::future::join_all(fetches).await {
+        let Ok(list) = list else { continue };
+        match kind.as_str() {
+            "HTTPRoute" | "GRPCRoute" | "TLSRoute" | "TCPRoute" | "UDPRoute" => {
+                routes.extend(list.items.into_iter().map(|obj| {
+                    RouteInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
+                }));
+            }
+            "Gateway" => {
+                gateways
+                    .get_or_insert_with(Vec::new)
+                    .extend(list.items.into_iter().map(|obj| {
+                        GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
+                    }));
+            }
+            _ => {}
+        }
+    }
+    (routes, gateways)
+}
+
 // --- per-kind answers --------------------------------------------------
 
 async fn pod_connections(
     ctx: &ResourceContext,
     ns: &str,
     name: &str,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx).await?;
+    let snapshot = Snapshot::of(ctx, gateway).await?;
     let pod = snapshot
         .pods
         .iter()
@@ -1319,10 +1562,11 @@ async fn workload_connections(
     ns: &str,
     kind: &str,
     name: &str,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let (snapshot, template) =
-        tokio::try_join!(Snapshot::of(ctx), fetch_template(ctx, kind, name))?;
+        tokio::try_join!(Snapshot::of(ctx, gateway), fetch_template(ctx, kind, name))?;
     let (template, uid) = template;
 
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present).with_facts(
@@ -1478,9 +1722,10 @@ async fn service_connections(
     ctx: &ResourceContext,
     ns: &str,
     name: &str,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx).await?;
+    let snapshot = Snapshot::of(ctx, gateway).await?;
     let svc = snapshot
         .services
         .iter()
@@ -1496,6 +1741,13 @@ async fn service_connections(
 
     note_reach(svc, &subject, &snapshot, out, true);
     routes_into(ns, &subject, &snapshot, out);
+    gateway_traffic_into(
+        ns,
+        &subject,
+        &snapshot.gateway_routes,
+        snapshot.gateways.as_deref(),
+        out,
+    );
     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
 
     Ok(())
@@ -1531,7 +1783,7 @@ async fn ingress_connections(
     name: &str,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx).await?;
+    let snapshot = Snapshot::of(ctx, None).await?;
     let ing = snapshot
         .ingresses
         .iter()
@@ -1928,6 +2180,315 @@ mod ingress_backend_tests {
             }
             other => panic!("expected Routes, got {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod gateway_traffic_tests {
+    use super::*;
+    use crate::resources::{GatewayInfo, RouteInfo};
+
+    fn route(yaml: &str) -> RouteInfo {
+        RouteInfo::read(&serde_yaml::from_str(yaml).expect("route fixture parses"))
+    }
+
+    fn gateway(yaml: &str) -> GatewayInfo {
+        GatewayInfo::read(&serde_yaml::from_str(yaml).expect("gateway fixture parses"))
+    }
+
+    fn service(ns: &str, name: &str) -> ObjectRef {
+        ObjectRef::new("Service", name, Some(ns.to_string()), Existence::Present)
+    }
+
+    const EDGE_GATEWAY: &str = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: edge, namespace: shop }
+spec: { gatewayClassName: envoy }
+";
+
+    const HEALTHY_ROUTE: &str = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge, sectionName: https }
+  hostnames: [promo.example.com]
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge, sectionName: https }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "True", reason: ResolvedRefs, message: ok }
+"#;
+
+    #[test]
+    fn backend_ref_becomes_an_edge_and_the_gateway_sits_above() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        assert!(out.stops.is_empty());
+
+        let to_service = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Service")
+            .expect("route -> service edge");
+        assert_eq!(to_service.from.kind, "HTTPRoute");
+        assert_eq!(to_service.from.name, "promo");
+        match &to_service.relation {
+            Relation::RuleRoutes {
+                hostnames,
+                port,
+                weight,
+            } => {
+                assert_eq!(hostnames, &vec!["promo.example.com".to_string()]);
+                assert_eq!(port.as_deref(), Some("8080"));
+                assert_eq!(*weight, None);
+            }
+            other => panic!("expected RuleRoutes, got {other:?}"),
+        }
+
+        let to_gateway = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("route -> gateway edge");
+        assert_eq!(to_gateway.to.name, "edge");
+        assert!(matches!(to_gateway.to.existence, Existence::Present));
+        assert!(matches!(
+            &to_gateway.relation,
+            Relation::AttachesTo { section_name } if section_name.as_deref() == Some("https")
+        ));
+        assert!(matches!(
+            &to_gateway.to.facts,
+            Some(ObjectFacts::Gateway { class_name }) if class_name == "envoy"
+        ));
+    }
+
+    #[test]
+    fn a_route_naming_another_service_draws_nothing() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "checkout"),
+            &[route(HEALTHY_ROUTE)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+        assert!(out.edges.is_empty());
+        assert!(out.stops.is_empty());
+    }
+
+    #[test]
+    fn cross_namespace_backend_ref_does_not_match_by_name_alone() {
+        // The route names `promo` in the `audit` namespace; the subject is
+        // `promo` in `shop`. Same name, different Service.
+        let cross = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  rules:
+  - backendRefs:
+    - { name: promo, namespace: audit, port: 8080 }
+";
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(cross)],
+            Some(&[]),
+            &mut out,
+        );
+        assert!(out.edges.is_empty());
+    }
+
+    #[test]
+    fn accepted_false_is_a_stop_in_the_controllers_words() {
+        let refused = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  hostnames: [promo.example.com]
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "False", reason: NoMatchingListenerHostname, message: no listener matches }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(refused)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        let stop = out.stops.first().expect("a stop");
+        match stop {
+            ChainStop::RouteNotAccepted {
+                route,
+                gateway,
+                condition_reason,
+                ..
+            } => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "edge");
+                assert_eq!(
+                    condition_reason.as_deref(),
+                    Some("NoMatchingListenerHostname")
+                );
+            }
+            other => panic!("expected RouteNotAccepted, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolved_refs_false_is_a_stop() {
+        let unresolved = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  rules:
+  - backendRefs:
+    - { name: promo, namespace: shop, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "False", reason: RefNotPermitted, message: no ReferenceGrant allows it }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(unresolved)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteRefsUnresolved { condition_reason, .. }
+                if condition_reason.as_deref() == Some("RefNotPermitted")
+        )));
+    }
+
+    #[test]
+    fn a_parent_gateway_the_server_does_not_have_is_named_missing() {
+        let orphan = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: ghost }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+";
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(orphan)],
+            Some(&[]),
+            &mut out,
+        );
+
+        let stop = out.stops.first().expect("a stop");
+        match stop {
+            ChainStop::GatewayMissing { route, gateway } => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "ghost");
+            }
+            other => panic!("expected GatewayMissing, got {other:?}"),
+        }
+        let to_gateway = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("the edge is still drawn, to a missing ref");
+        assert!(matches!(to_gateway.to.existence, Existence::Missing));
+    }
+
+    /// The list that was read and did not hold it says "missing". A list
+    /// nobody read says nothing — a namespace-scoped reader is refused this
+    /// cluster-wide one, and every route they open would otherwise draw a
+    /// break in a chain that is fine.
+    #[test]
+    fn an_unread_gateway_list_is_not_a_missing_gateway() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            None,
+            &mut out,
+        );
+
+        assert!(
+            out.stops.is_empty(),
+            "an unread list must not produce a GatewayMissing stop"
+        );
+        let gw = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("the route still names its parent");
+        assert_eq!(gw.to.existence, Existence::NotChecked);
+    }
+
+    #[test]
+    fn a_mesh_parent_ref_is_not_a_missing_gateway() {
+        let mesh = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: split, namespace: shop }
+spec:
+  parentRefs:
+  - { group: "", kind: Service, name: promo }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(mesh)],
+            Some(&[]),
+            &mut out,
+        );
+        // The backend edge is real; the Service parentRef must produce
+        // neither a Gateway edge nor a "gateway missing" lie.
+        assert!(out.edges.iter().all(|e| e.to.kind != "Gateway"));
+        assert!(out.stops.is_empty());
     }
 }
 

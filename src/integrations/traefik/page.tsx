@@ -56,6 +56,7 @@
 
 import { sayWords } from "@/i18n/say";
 import { Fragment, useCallback, useMemo, type ReactNode } from "react";
+import type { ServiceStop } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
@@ -74,7 +75,6 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import type { ChainStop } from "@/generated/types";
 import { crdObjectPath } from "../kit";
 import {
   Chain,
@@ -1059,7 +1059,7 @@ function FindingLine({
 }
 
 /** What a stopped path says in the column, in four words or fewer. */
-const STOP_UNDER: Record<ChainStop["reason"], keyof typeof en.empty> = {
+const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
   backendMissing: "stopNoServiceToSendTo",
   selectsNothing: "stopSelectorMatchesNothing",
   noneReady: "stopRunningNoneReady",

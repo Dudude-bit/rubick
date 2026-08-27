@@ -95,7 +95,17 @@ pub async fn get_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let api_resource = api_resource_for(&kind, &api_version);
+    // Gateway API kinds are pinned to /v1 by the frontend registry, but a
+    // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
+    // negotiation every gateway command does, so the YAML tab matches the
+    // Overview it sits beside instead of 404ing.
+    let api_resource = if api_version.starts_with("gateway.networking.k8s.io/") {
+        crate::commands::gateway::served_api_resource(&kind, &state)
+            .await
+            .unwrap_or_else(|_| api_resource_for(&kind, &api_version))
+    } else {
+        api_resource_for(&kind, &api_version)
+    };
 
     let ns = namespace.unwrap_or_else(|| "default".to_string());
     let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
