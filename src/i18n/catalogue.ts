@@ -2148,6 +2148,8 @@ export const en = {
       "Shown as written — the key is one this app knows and the value is not a shape it can state.",
     nginxRawSnippet:
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
+    revisionCurrent: "{said}, current",
+    nodeCordonedWord: "cordoned",
   },
   cluster: {
     nameMissingParens: "{name} (missing)",

@@ -456,13 +456,12 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
                   )}
                   {listener.attachedRoutes != null && (
                     <span className="font-sans text-fg-fnt">
-                      · {listener.attachedRoutes} route
-                      {listener.attachedRoutes === 1 ? "" : "s"}
+                      · {t("count", "nRoutes", { n: listener.attachedRoutes })}
                     </span>
                   )}
                   {broken && (
                     <span className="text-err">
-                      — {broken.reason ?? "broken"}
+                      — {broken.reason ?? t("empty", "brokenWord")}
                     </span>
                   )}
                 </span>

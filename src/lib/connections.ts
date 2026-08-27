@@ -191,13 +191,21 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
       return join(facts.capacity, facts.storageClass, facts.phase);
     case "pod":
       return facts.display;
-    case "workload":
-      return facts.revision === null
-        ? `${facts.readyReplicas}/${facts.replicas} ready`
-        : join(
-            `revision ${facts.revision}${facts.current ? ", current" : ""}`,
-            `${facts.replicas} ${facts.replicas === 1 ? "pod" : "pods"}`
-          );
+    case "workload": {
+      if (facts.revision === null) {
+        return t("count", "readyOfTotal", {
+          ready: facts.readyReplicas,
+          total: facts.replicas,
+        });
+      }
+      const revision = t("columns", "revisionInline", { n: facts.revision });
+      return join(
+        facts.current
+          ? t("readings", "revisionCurrent", { said: revision })
+          : revision,
+        t("cluster", "podCount", { n: facts.replicas })
+      );
+    }
     case "service":
       return serviceVia(facts, t);
     case "ingress":
@@ -209,7 +217,7 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
     case "budget":
       return join(budgetRule(facts, t), budgetRoom(facts, t));
     case "node":
-      return nodeCapacity(facts);
+      return nodeCapacity(facts, t);
   }
 }
 
@@ -221,11 +229,14 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
  * against the second. Cordoned is last because it is the one that changes what
  * the rest of the line means — the room is there and nothing may take it.
  */
-function nodeCapacity(facts: Extract<ObjectFacts, { kind: "node" }>): string {
+function nodeCapacity(
+  facts: Extract<ObjectFacts, { kind: "node" }>,
+  t: T
+): string {
   return join(
     facts.cpu && `${facts.cpu} CPU`,
     facts.memory && formatKubernetesBytes(facts.memory),
-    !facts.schedulable && "cordoned"
+    !facts.schedulable && t("readings", "nodeCordonedWord")
   );
 }
 
@@ -1251,7 +1262,7 @@ function runsHere(
   return {
     key: "placed",
     title: t("nav", "whatRunsHere"),
-    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts) : null)}`,
+    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts, t) : null)}`,
     rows: labelled(
       pods.map((pod) =>
         rowFor(pod.namespace ?? t("nav", "noNamespaceValue"), pod, t)
