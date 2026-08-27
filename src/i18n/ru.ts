@@ -2328,33 +2328,36 @@ export const ru: Catalogue = {
       many: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
       other: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
     },
-    searchVersionWords: "сборка релиз версия build release",
-    searchRuntimeWords: "среда выполнения webview runtime",
+    searchVersionWords: "build release сборка релиз версия",
+    searchRuntimeWords: "runtime webview среда выполнения",
     searchFrameworkWords: "react typescript фреймворк",
     searchUpdateWords:
-      "обновление обновить установить загрузить update upgrade install download",
+      "update upgrade install download обновление обновить установить загрузить",
     searchAutoUpdateWords:
-      "автоматически проверять фоном auto check background",
+      "auto check background автоматически проверять фоном",
     searchLanguageWords:
-      "язык локаль перевод русский language locale translation",
-    searchThemeWords: "тёмная светлая тема оформление dark light appearance",
+      "language locale translation русский язык локаль перевод",
+    searchThemeWords: "dark light appearance тёмная светлая тема оформление",
     searchColourWords:
-      "цвет раскраска оттенок вид colour color coloring tint kind",
+      "color coloring tint kind colour цвет раскраска оттенок вид",
     searchRegistryWords:
-      "реестр реестры образ учётные данные registry registries image pull credentials docker ecr gcr harbor basic bearer token username password",
+      "registry registries image pull credentials docker ecr gcr harbor basic bearer token username password реестр реестры образ учётные данные",
     contextConnected: "подключён",
     contextReady: "готов",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
-    searchMissingWords: "не найден отсутствует путь",
-    searchContextWords: "контекст kubeconfig аутентификация",
+    searchMissingWords: "not found missing path не найден отсутствует путь",
+    searchContextWords:
+      "context kubeconfig authentication контекст аутентификация",
     searchKubeconfigWords:
-      "kubeconfig файл источник контексты $KUBECONFIG по умолчанию поиск переопределение",
-    searchToolsWords: "kubectl helm cli инструменты бинарник путь версия",
+      "kubeconfig file source contexts $KUBECONFIG default lookup override файл источник контексты по умолчанию поиск переопределение",
+    searchToolsWords:
+      "kubectl helm cli tools binary path version инструменты бинарник путь версия",
     searchCloudWords:
-      "облако профили gcp google azure adc az вход учётные данные",
-    searchNoContextsWords: "нет контекстов kubeconfig пусто кластеры",
-    searchIntegrationsWords: "интеграции расширения",
+      "cloud profiles gcp google azure adc az login credentials облако профили вход учётные данные",
+    searchNoContextsWords:
+      "no contexts kubeconfig empty clusters нет контекстов пусто кластеры",
+    searchIntegrationsWords: "integrations extensions интеграции расширения",
     toolsNoProfiles: "— не заданы.",
     toolsNoGcp: "для GCP нет",
     toolsNoAzure: "для Azure нет",

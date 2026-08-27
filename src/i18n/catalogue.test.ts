@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
 import { en } from "./catalogue";
+import { ru } from "./ru";
 
 /**
  * The one rule about catalogue content that a type cannot state.
@@ -38,5 +39,36 @@ describe("what may not be put in the nav catalogue", () => {
       kinds.has(text.toLowerCase())
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The settings search matches on a row's label, its hint, and a string of
+ * synonyms nobody sees. Those synonyms are the only catalogue entries whose
+ * translation must *keep* the English: somebody looking for the theme row
+ * types "тема", and somebody looking for the tools row types `kubectl` —
+ * the same person, on the same day. A translation that replaced the
+ * technical words would take the second search away without anybody
+ * noticing, because nothing on screen would change.
+ */
+describe("the words the settings search matches on", () => {
+  const keys = Object.keys(en.settings).filter(
+    (key) => key.startsWith("search") && key.endsWith("Words")
+  ) as Array<keyof typeof en.settings>;
+
+  it("has some", () => {
+    expect(keys.length).toBeGreaterThan(5);
+  });
+
+  it.each(keys)("keeps every English term in ru.%s", (key) => {
+    const english = String(en.settings[key]).split(/\s+/);
+    const russian = String(ru.settings[key]);
+    for (const word of english) {
+      expect(russian).toContain(word);
+    }
+  });
+
+  it.each(keys)("adds Russian to ru.%s", (key) => {
+    expect(String(ru.settings[key])).toMatch(/[а-яё]/i);
   });
 });

@@ -5,6 +5,12 @@ import type { Diagnostics } from "@/generated/types";
  *
  * Findings first, for the same reason the panel puts them first: whoever
  * reads the paste should meet the conclusion before the evidence.
+ *
+ * **English, deliberately, and the only screen text in the app that is.**
+ * This is written to be pasted into an issue, where the maintainers read
+ * it; a bug report in a language they do not read helps nobody, and the
+ * reader who copies it is not the reader who has to act on it. The panel
+ * around it — every heading, every button — is translated as usual.
  */
 export function asMarkdown(d: Diagnostics): string {
   return [
