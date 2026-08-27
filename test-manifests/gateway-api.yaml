@@ -332,7 +332,7 @@ spec:
         - name: gwtest-app
           port: 8080
 ---
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TLSRoute
 metadata:
   name: gwtest-tls
@@ -348,7 +348,7 @@ spec:
         - name: gwtest-app
           port: 8080
 ---
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TCPRoute
 metadata:
   name: gwtest-tcp
@@ -362,7 +362,7 @@ spec:
         - name: gwtest-app
           port: 8080
 ---
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: UDPRoute
 metadata:
   name: gwtest-udp
@@ -379,7 +379,7 @@ spec:
 # Listeners defined apart from the Gateway they attach to; the app merges
 # them into gwtest-edge's listener list, marked by origin. Requires a
 # bundle >= 1.5 (the kind is simply absent before that — no error).
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha1
 kind: ListenerSet
 metadata:
   name: gwtest-tenant
@@ -642,7 +642,7 @@ spec:
 # | HTTPRoute gwtest-dup          | claims healthy.gwtest.example.com — the OLDER  |
 # |                               | gwtest-healthy wins; this row says so          |
 # ============================================================================
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha3
 kind: BackendTLSPolicy
 metadata:
   name: app-tls
@@ -656,7 +656,7 @@ spec:
     hostname: healthy.gwtest.example.com
     wellKnownCACertificates: System
 ---
-apiVersion: gateway.networking.k8s.io/v1
+apiVersion: gateway.networking.k8s.io/v1alpha3
 kind: BackendTLSPolicy
 metadata:
   name: app-tls-late
