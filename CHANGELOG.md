@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-08-27
+
+### Fixed — a filtered feed that found nothing said the scope was empty
+
+The events limit buys a pool of the latest N, and the filter narrows what
+survives it — two different ceilings. The "latest 500" note was worked out
+from the survivors, so three matches out of a pool that stopped at five
+hundred reported as uncapped, and the note vanished in exactly the case
+where it mattered. The empty message then asserted absence: "there are no
+events matching X in prod", about a search that had read the newest five
+hundred.
+
+It now says which of the three happened — the scope is quiet, the query
+missed everything that was read, or it missed everything that was read and
+the reading stopped at the limit. The last one names the limit and says to
+raise it.
+
 ## [4.5.0] - 2026-08-27
 
 Two kubeconfig files can be open at once, each cluster remembers the
