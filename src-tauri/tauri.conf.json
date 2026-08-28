@@ -35,7 +35,7 @@
     "publisher": "Rubick Team",
     "homepage": "https://github.com/Dudude-bit/rubick",
     "createUpdaterArtifacts": true,
-    "targets": ["deb", "rpm", "appimage", "app", "dmg", "nsis", "msi"],
+    "targets": ["deb", "rpm", "app", "dmg", "nsis", "msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
