@@ -139,14 +139,24 @@ fn apply_exec_credentials(
     auth_info: &mut AuthInfo,
     status: ExecCredentialStatus,
 ) -> Option<chrono::DateTime<chrono::Utc>> {
+    use base64::Engine;
+
     if let Some(token) = status.token {
         auth_info.token = Some(SecretString::from(token));
     }
+    // A plugin hands back PEM, but the fields it lands in are kubeconfig
+    // fields, and kube reads those through a base64 decode. Storing the PEM
+    // as-is leaves the decode to fail, and the failure is swallowed — the
+    // client is then built with no certificate at all, and the server
+    // answers the anonymous request with a denial that names no cause.
     if let Some(cert) = status.client_certificate_data {
-        auth_info.client_certificate_data = Some(cert);
+        auth_info.client_certificate_data =
+            Some(base64::engine::general_purpose::STANDARD.encode(cert));
     }
     if let Some(key) = status.client_key_data {
-        auth_info.client_key_data = Some(SecretString::from(key));
+        auth_info.client_key_data = Some(SecretString::from(
+            base64::engine::general_purpose::STANDARD.encode(key),
+        ));
     }
     // A plugin that names no expiry, or names one this cannot parse, leaves
     // the deadline unknown — which is a different thing from "does not
