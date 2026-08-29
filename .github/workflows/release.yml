@@ -128,6 +128,10 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f  # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # linuxdeploy, which bundles the AppImage, is an AppImage itself and
+          # mounts itself to run — needing FUSE 2 and /dev/fuse, neither of
+          # which ubuntu-24.04 has. Extracting instead needs neither.
+          APPIMAGE_EXTRACT_AND_RUN: 1
           # Updater signing (minisign). Unrelated to Apple code signing —
           # this is what proves an update payload came from us; Gatekeeper
           # never sees it.
