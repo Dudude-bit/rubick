@@ -96,13 +96,13 @@ pub async fn uncordon_node(name: String, state: State<'_, AppState>) -> Result<(
 
 /// Start draining a node, and return at once.
 ///
-/// The cordon happens here rather than in the loop, so a node that cannot be
-/// closed to scheduling fails the click instead of failing quietly inside a
-/// drain the reader is already watching.
+/// Thin on purpose. The cordon, the surveying and the waiting all belong to
+/// the drain itself — see [`crate::drain`], which owns them so that starting
+/// one cannot leave a step out. What is left here is the name check and a
+/// client.
 ///
-/// Everything after that arrives as `drain-progress` / `drain-finished`
-/// events. See [`crate::drain`] for why a drain has to be able to wait, and
-/// for the rule it exists to keep: eviction only, never `DELETE`.
+/// Everything after this arrives as `drain-progress` / `drain-finished`
+/// events, including a cordon that was refused.
 #[tauri::command]
 pub async fn start_node_drain(
     name: String,
@@ -110,8 +110,6 @@ pub async fn start_node_drain(
     state: State<'_, AppState>,
 ) -> Result<DrainHandle> {
     crate::validation::validate_dns_subdomain(&name)?;
-    cordon_node(name.clone(), state.clone()).await?;
-
     let client = ResourceContext::for_list(&state, None)?.client;
     Ok(state.drain_manager.start(client, name, options))
 }
