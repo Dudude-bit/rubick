@@ -75,6 +75,36 @@ kubectl delete pv k8s-gui-test-pv
 | Ingress   | `api-ingress`       | -                    | No TLS, with a path rewrite                      |
 | Endpoints | `external-db`       | -                    | Written by hand rather than by the control plane |
 
+## Draining a node
+
+`drain-scene.yaml` and `drain-kind.yaml` are separate, because draining wants a
+node it is allowed to empty and a second one to be the control plane.
+
+```bash
+kind create cluster --config test-manifests/drain-kind.yaml
+kubectl apply -f test-manifests/drain-scene.yaml
+K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain \
+  cargo test --test live_drain -- --ignored --nocapture
+```
+
+Every specimen is there for a rule that is otherwise unobservable:
+
+|                        | why it is in the scene                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `held` ×2 + `held-pdb` | a budget with nothing spare — eviction is refused 429 forever                                                                                |
+| `movable`              | no budget, so it has to actually leave                                                                                                       |
+| `scratchy`             | an `emptyDir`, out of the set unless asked for                                                                                               |
+| `lonely`               | no controller, out of the set unless asked for                                                                                               |
+| `stubborn`             | tolerates the cordon, so its replacement lands back on the node — without it, "the drain does not chase its own replacements" cannot be seen |
+| `slowpoke`             | ignores SIGTERM, so "accepted" and "gone" are 25s apart and a premature "drained" is measurable                                              |
+
+`drained_means_the_pods_are_gone` drains the node completely, which `held-pdb`
+would forbid forever — delete the budget first:
+
+```bash
+kubectl delete pdb held-pdb -n draintest
+```
+
 ## What there is to check
 
 ### Lists

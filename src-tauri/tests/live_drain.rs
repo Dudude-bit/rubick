@@ -37,7 +37,12 @@
 //! kubectl delete pdb held-pdb -n draintest
 //! ```
 //!
-//! Set up with `kind create cluster` and the manifest in the session notes.
+//! Set up:
+//!
+//! ```text
+//! kind create cluster --config test-manifests/drain-kind.yaml
+//! kubectl apply -f test-manifests/drain-scene.yaml
+//! ```
 
 use std::collections::BTreeMap;
 use std::time::Duration;
