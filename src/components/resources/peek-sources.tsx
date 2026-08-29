@@ -31,7 +31,11 @@ import { ResourceRef } from "./ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
 import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
-import { redirectOnly, gatewayProgrammed } from "@/lib/route-trace";
+import {
+  redirectOnly,
+  selfAnswered,
+  gatewayProgrammed,
+} from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue, KeyValueTone } from "./key-values";
@@ -169,8 +173,7 @@ function gatewayRouteSource(kind: string): PeekSource {
                   </span>
                 ),
             })),
-            emptyMessage:
-              "No parentRefs — this route attaches to nothing and serves no traffic.",
+            emptyMessage: t("empty", "gwNoParentRefsPage"),
           },
           {
             title: t("columns", "backends"),
@@ -205,16 +208,17 @@ function gatewayRouteSource(kind: string): PeekSource {
               })
             ),
             emptyMessage: redirects
-              ? "Redirects — no backends, and none needed."
-              : "No backendRefs — a matched request has nowhere to go.",
+              ? t("empty", "gwRedirectsNoBackends")
+              : selfAnswered(route)
+                ? t("empty", "gwFilterNoBackends")
+                : `${t("empty", "gwNoBackendRefsSay")}.`,
           },
           {
             title: t("columns", "verdicts"),
             items: route.parents.flatMap((entry) =>
               entry.conditions.map(conditionItem)
             ),
-            emptyMessage:
-              "No controller wrote status — nothing serves this route.",
+            emptyMessage: t("empty", "gwNoStatusPeek"),
           },
         ],
       };
@@ -390,8 +394,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           items: Object.entries(ns.labels)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([label, value]) => ({ label, value, mono: true })),
-          emptyMessage:
-            "No labels — no namespaceSelector anywhere matches this namespace.",
+          emptyMessage: t("empty", "nsNoLabelsSelector"),
         },
       ],
     })
@@ -469,8 +472,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               tone: broken ? ("err" as const) : undefined,
             };
           }),
-          emptyMessage:
-            "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
+          emptyMessage: t("empty", "gwNoListeners"),
         },
         {
           title: t("columns", "conditions"),

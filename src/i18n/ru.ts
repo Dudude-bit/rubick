@@ -4120,6 +4120,8 @@ export const ru: Catalogue = {
       "Ни один контроллер не ответил за этого родителя",
     gwNoControllerShort: "ни один контроллер не ответил",
     gwNoStatusTitle: "Статус для этого маршрута никто не написал",
+    gwNoStatusPeek:
+      "Ни один контроллер не записал статус — этот маршрут ничего не обслуживает.",
     gwNoStatusBody:
       "Ни один контроллер не вынес вердикт по этому родителю. Либо класс этого Gateway никем не заявлен, либо контроллер не запущен — в обоих случаях data plane этот маршрут не видит.",
     gwNoAcceptedYet: "Контроллер написал статус, но вердикта Accepted ещё нет",
@@ -4156,11 +4158,13 @@ export const ru: Catalogue = {
     gwRefsResolve: "Ссылки разрешаются",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
+    gwFilterNamed:
+      "Назван фильтр-расширение, а бэкенд не назван — что делает фильтр, приложение не читает",
     gwNoBackendRefsSay: "Нет backendRefs — совпавшему запросу некуда идти",
     gwNoBackendRefsShort: "нет backendRefs — совпавшим запросам некуда идти",
     gwNoBackendRefsTitle: "Маршрут ловит трафик и роняет его",
     gwNoBackendRefsBody:
-      "Во всех правилах нет backendRefs (и нет редиректа). Совпавший запрос сразу получает ошибку от шлюза.",
+      "Во всех правилах нет backendRefs (и нет ни редиректа, ни фильтра-расширения). Совпавший запрос сразу получает ошибку от шлюза.",
     gwBackendsReading: "Бэкенд-Service — ещё читаются",
     gwEndpointsReading: "Эндпоинты — ещё читаются",
     gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
@@ -4219,6 +4223,7 @@ export const ru: Catalogue = {
       "нет parentRefs — ни к чему не привязан и не обслуживает трафик",
     gwRowMesh: "привязан к {parent} — GAMMA, здесь не судится",
     gwRowRedirects: "перенаправляет — бэкендов нет, они не нужны",
+    gwRowFilterNamed: "фильтр-расширение, и ни одного бэкенда",
     gwBrokenRefs: "битые ссылки",
     gwGatewayMissingWord: "шлюза нет",
     gwDoorGatewayClass: "Gateway · класс {name}",
@@ -4284,6 +4289,8 @@ export const ru: Catalogue = {
     gwNoRules: "Правил нет — ничего не матчится.",
     gwUninterpretedFilters: "фильтры, которые это приложение не трактует:",
     gwRedirectsNoBackends: "Перенаправляет — бэкендов нет, и они не нужны.",
+    gwFilterNoBackends:
+      "У этого правила нет бэкенда. Отвечает ли фильтр выше сам — дело фильтра: приложение его не читает и поэтому не берётся судить.",
     needsReferenceGrant: "нужен ReferenceGrant",
     zeroWeight: "0 — трафик не получает",
     resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",

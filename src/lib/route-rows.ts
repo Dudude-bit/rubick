@@ -19,6 +19,7 @@ import {
   HOSTLESS_PROTO,
   redirectOnly,
   routeTraces,
+  selfAnswered,
   type RouteTrace,
   type TraceSources,
   type TraceStep,
@@ -357,7 +358,11 @@ export function routesBoard(
       stop: broken
         ? { at: broken.id, short: broken.short ?? broken.say }
         : null,
-      tail: redirectOnly(route) ? t("empty", "gwRowRedirects") : null,
+      tail: redirectOnly(route)
+        ? t("empty", "gwRowRedirects")
+        : selfAnswered(route)
+          ? t("empty", "gwRowFilterNamed")
+          : null,
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),

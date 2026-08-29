@@ -3888,6 +3888,7 @@ export const en = {
     gwNoControllerForParentSay: "No controller answered for this parent",
     gwNoControllerShort: "no controller answered",
     gwNoStatusTitle: "No status was written for this route",
+    gwNoStatusPeek: "No controller wrote status — nothing serves this route.",
     gwNoStatusBody:
       "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
     gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
@@ -3923,12 +3924,14 @@ export const en = {
     gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
     gwRefsResolve: "References resolve",
     gwRedirectsOnly: "This route redirects — no backends, and none needed",
+    gwFilterNamed:
+      "An extension filter is named and no backend is — what the filter does, this app does not read",
     gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
     gwNoBackendRefsShort:
       "no backendRefs — matched requests have nowhere to go",
     gwNoBackendRefsTitle: "The route matches traffic and drops it",
     gwNoBackendRefsBody:
-      "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
+      "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
     gwBackendsReading: "Backend Services — still being read",
     gwEndpointsReading: "Endpoints — still being read",
     gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
@@ -3988,6 +3991,7 @@ export const en = {
     gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
     gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
     gwRowRedirects: "redirects — no backends, none needed",
+    gwRowFilterNamed: "an extension filter, and no backend",
     gwBrokenRefs: "broken refs",
     gwGatewayMissingWord: "gateway missing",
     gwDoorGatewayClass: "Gateway · class {name}",
@@ -4052,6 +4056,8 @@ export const en = {
     gwNoRules: "No rules — nothing is matched.",
     gwUninterpretedFilters: "filters this app does not interpret:",
     gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
+    gwFilterNoBackends:
+      "No backend on this rule. Whether the filter above answers by itself is the filter's business — this app does not read it, so it does not say.",
     needsReferenceGrant: "needs a ReferenceGrant",
     zeroWeight: "0 — receives no traffic",
     resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",

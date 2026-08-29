@@ -143,15 +143,47 @@ export const HOSTLESS_PROTO: Record<string, string> = {
   TLSRoute: "TLS",
 };
 
+const namesNoService = (route: RouteInfo): boolean =>
+  !route.rules.some((rule) =>
+    rule.backendRefs.some((backend) => backend.kind === "Service")
+  );
+
 /** Redirect-only means every rule redirects and none names a Service —
  *  configuration, not breakage, in the same words on every surface. */
 export function redirectOnly(route: RouteInfo): boolean {
   return (
     route.rules.length > 0 &&
     route.rules.every((rule) => rule.hasRedirect) &&
-    !route.rules.some((rule) =>
-      rule.backendRefs.some((backend) => backend.kind === "Service")
-    )
+    namesNoService(route)
+  );
+}
+
+const namesNoBackend = (route: RouteInfo): boolean =>
+  !route.rules.some((rule) => rule.backendRefs.length > 0);
+
+/**
+ * Every rule either redirects or hands off to an ExtensionRef filter, and
+ * the route names no backend at all.
+ *
+ * **This is not a claim that the filter answers.** What a vendor filter does
+ * is its vendor's business and this app does not read it: `KongPlugin` and
+ * Traefik's `Middleware` are ExtensionRefs that decorate a request and still
+ * need somewhere to send it, and even Envoy Gateway's own `HTTPRouteFilter`
+ * has variants that do. All this says is that there is nothing here for the
+ * backend steps to look at — which is why they go `blind` rather than `ok`,
+ * and why the copy names the filter instead of vouching for it.
+ *
+ * `namesNoBackend`, not `namesNoService`: a route with a non-Service
+ * backendRef does name somewhere to go, and saying "no backends" about it
+ * would be false.
+ */
+export function selfAnswered(route: RouteInfo): boolean {
+  return (
+    route.rules.length > 0 &&
+    route.rules.every(
+      (rule) => rule.hasRedirect || rule.extensionRefs.length > 0
+    ) &&
+    namesNoBackend(route)
   );
 }
 
@@ -656,11 +688,26 @@ function backendSteps(
   const serviceRefs = route.rules.flatMap((rule) =>
     rule.backendRefs.filter((backend) => backend.kind === "Service")
   );
+  // A redirect is terminal by the spec's own words, so this app can say it
+  // needs no backend and mean it.
   if (serviceRefs.length === 0 && redirectOnly(route)) {
     const say = t("empty", "gwRedirectsOnly");
     return [
       { id: "backend", state: "ok", say, who: "yours" },
       { id: "endpoints", state: "ok", say, who: "yours" },
+    ];
+  }
+  // A filter is named and nothing else is. Blind, not ok: the difference
+  // between "we looked and it is fine" and "there is nothing here we can
+  // read". It is also what keeps `servingKnown` false, so a route nobody
+  // verified does not come back reading verified — which is what this
+  // branch did when it answered `ok`, and how a Kong plugin with a
+  // forgotten backendRef would have read as serving.
+  if (serviceRefs.length === 0 && selfAnswered(route)) {
+    const say = t("empty", "gwFilterNamed");
+    return [
+      { id: "backend", state: "blind", say, who: "yours" },
+      { id: "endpoints", state: "blind", say, who: "yours" },
     ];
   }
   if (serviceRefs.length === 0) {

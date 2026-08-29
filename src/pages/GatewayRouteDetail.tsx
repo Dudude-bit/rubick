@@ -116,6 +116,11 @@ function RuleRows({ route }: { route: RouteInfo }) {
                 <p className="pt-1 text-xs text-fg-mut">
                   {t("empty", "gwRedirectsNoBackends")}
                 </p>
+              ) : rule.extensionRefs.length > 0 &&
+                rule.backendRefs.length === 0 ? (
+                <p className="pt-1 text-xs text-fg-mut">
+                  {t("empty", "gwFilterNoBackends")}
+                </p>
               ) : rule.backendRefs.length === 0 ? (
                 <p className="pt-1 text-xs text-warn">
                   {t("empty", "gwNoBackendRefsSay")}.
