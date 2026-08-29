@@ -34,15 +34,16 @@ Free and GPLv3. No account, no telemetry.
 
 ## What you get
 
-| Area                 | What Rubick shows                                                                                                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workloads**        | Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs — with init containers as an ordered sequence, sidecars told apart from them, and CPU/memory over time         |
-| **Logs**             | Virtualised, multi-container, server-side filtering, repeat collapsing — and they open **where the answer is**: on a pod stuck in init, that means the failing container's previous run |
-| **Shell**            | A real tab per pod whose session survives you looking elsewhere                                                                                                                         |
-| **Network**          | Services, Ingresses, Endpoints and EndpointSlices, with the traffic chain above                                                                                                         |
-| **Storage & config** | PVs, PVCs, StorageClasses, ConfigMaps, Secrets — binary values shown as binary, private keys never revealed                                                                             |
-| **Custom resources** | Every CRD, with YAML editing and validation                                                                                                                                             |
-| **Helm**             | Releases, revisions, rollback, uninstall                                                                                                                                                |
+| Area                 | What Rubick shows                                                                                                                                                                                                                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workloads**        | Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs — with init containers as an ordered sequence, sidecars told apart from them, and CPU/memory over time                                                                                                                     |
+| **Logs**             | Virtualised, multi-container, server-side filtering, repeat collapsing — and they open **where the answer is**: on a pod stuck in init, that means the failing container's previous run                                                                                                             |
+| **Shell**            | A real tab per pod whose session survives you looking elsewhere                                                                                                                                                                                                                                     |
+| **Network**          | Services, Ingresses, Endpoints and EndpointSlices, with the traffic chain above                                                                                                                                                                                                                     |
+| **Gateway API**      | Gateways, all five route kinds, classes and policies. A route says whether it is serving, and where it is not, which of the eight links between a listener and a pod broke — with the controller's own words. A map draws the whole road; a probe from your machine answers what the cluster cannot |
+| **Storage & config** | PVs, PVCs, StorageClasses, ConfigMaps, Secrets — binary values shown as binary, private keys never revealed                                                                                                                                                                                         |
+| **Custom resources** | Every CRD, with YAML editing and validation                                                                                                                                                                                                                                                         |
+| **Helm**             | Releases, revisions, rollback, uninstall                                                                                                                                                                                                                                                            |
 
 ![Logs open on the container that failed](docs/images/logs-failing-init-container.png)
 
@@ -117,7 +118,11 @@ Every name you can go to is a link, with the gestures you expect: click to peek,
 
 ## Install
 
-Grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). There is no Homebrew or winget package yet. On Arch there is [`rubick-kubernetes-bin`](https://aur.archlinux.org/packages/rubick-kubernetes-bin) in the AUR — packaged and updated by someone outside this project, from the same `.deb` published here.
+```sh
+brew install --cask Dudude-bit/tap/rubick   # macOS
+```
+
+Or grab the build for your platform from [Releases](https://github.com/Dudude-bit/rubick/releases/latest). On Arch there is [`rubick-kubernetes-bin`](https://aur.archlinux.org/packages/rubick-kubernetes-bin) in the AUR — packaged and updated by someone outside this project, from the same `.deb` published here. There is no winget package: the Windows installers are unsigned, and winget installs are meant to run without a dialog in the way.
 
 - **macOS** — signed with a Developer ID certificate and notarised by Apple, so it opens on a double-click.
 - **Windows** — not signed, so SmartScreen will warn on the first launch. **More info → Run anyway**.
