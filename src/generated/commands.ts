@@ -33,6 +33,7 @@ import type {
   DeploymentInfo,
   DetectedExtension,
   Diagnostics,
+  DrainReport,
   EndpointsInfo,
   EventFilters,
   EventInfo,
@@ -962,9 +963,15 @@ export async function uncordonNode(name: string): Promise<void> {
 export async function drainNode(
   name: string,
   ignoreDaemonsets: boolean | null,
-  force: boolean | null
-): Promise<void> {
-  return invoke<void>("drain_node", { name, ignoreDaemonsets, force });
+  evictUnmanagedPods: boolean | null,
+  evictPodsWithEmptydir: boolean | null
+): Promise<DrainReport> {
+  return invoke<DrainReport>("drain_node", {
+    name,
+    ignoreDaemonsets,
+    evictUnmanagedPods,
+    evictPodsWithEmptydir,
+  });
 }
 
 export async function listNamespaces(): Promise<NamespaceInfo[]> {

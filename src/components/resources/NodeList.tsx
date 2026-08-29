@@ -21,12 +21,13 @@ import { createNameColumn } from "@/components/resources/columns";
 import { SpotMark } from "@/components/resources/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
-import type { NodeInfo, NodeMetrics } from "@/generated/types";
+import type { DrainReport, NodeInfo, NodeMetrics } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
+import type { DrainChoices } from "@/components/resources/drain-dialog";
 import { DrainDialog } from "@/components/resources/drain-dialog";
 import { useT } from "@/i18n/useT";
 
@@ -254,15 +255,29 @@ export function NodeList() {
   });
 
   const drainMutation = useMutation({
-    mutationFn: (nodeName: string) => commands.drainNode(nodeName, true, true),
-    onSuccess: (_, nodeName) => {
+    mutationFn: ({ node, choices }: { node: string; choices: DrainChoices }) =>
+      commands.drainNode(
+        node,
+        true,
+        choices.evictUnmanagedPods,
+        choices.evictPodsWithLocalData
+      ),
+    onSuccess: (report, { node }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
-      toast({
-        title: t("action", "nodeDrained"),
-        description: t("action", "nodeDrainedDetail", { name: nodeName }),
-      });
+      // An empty node is the whole story, and a toast tells it without
+      // keeping a dialog open over a list. Anything left behind is not a
+      // story a toast can hold: it is a list of pods and a reason each.
+      if (report.refused.length === 0) {
+        setDraining(null);
+        toast({
+          title: t("action", "nodeDrained"),
+          description: t("action", "nodeDrainedDetail", { name: node }),
+        });
+        return;
+      }
+      setDrainReport(report);
     },
     onError: (error) => {
       toast({
@@ -274,6 +289,7 @@ export function NodeList() {
   });
 
   const [draining, setDraining] = useState<string | null>(null);
+  const [drainReport, setDrainReport] = useState<DrainReport | null>(null);
 
   const nodeColumns = useMemo(
     () => columns(nodeMetricsByName),
@@ -335,12 +351,15 @@ export function NodeList() {
       />
       <DrainDialog
         node={draining}
-        onOpenChange={(open) => !open && setDraining(null)}
-        busy={drainMutation.isPending}
-        onConfirm={(node) => {
-          setDraining(null);
-          drainMutation.mutate(node);
+        report={drainReport}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDraining(null);
+            setDrainReport(null);
+          }
         }}
+        busy={drainMutation.isPending}
+        onConfirm={(node, choices) => drainMutation.mutate({ node, choices })}
       />
     </>
   );

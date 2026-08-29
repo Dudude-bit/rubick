@@ -591,6 +591,20 @@ export interface NamespaceInfo {
   createdAt: string | null;
 }
 
+export interface DrainReport {
+  evicted: number;
+  alreadyGone: number;
+  daemonsetPodsLeft: number;
+  refused: RefusedPod[];
+}
+
+export interface RefusedPod {
+  namespace: string;
+  name: string;
+  refusal: DrainRefusal;
+  message: string | null;
+}
+
 export interface NodeInfo {
   name: string;
   uid: string;
@@ -1727,6 +1741,9 @@ export type SearchFailureKind =
 
 export type SearchContextStatus =
   "connecting" | "searching" | "done" | "failed" | "skipped";
+
+export type DrainRefusal =
+  "notNow" | "nothingWouldReplaceIt" | "holdsLocalData" | "other";
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";

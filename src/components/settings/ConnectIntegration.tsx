@@ -277,7 +277,7 @@ function ConnectForm({
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
             <p className="text-[11px] leading-snug text-fg-fnt">
-              {t("settings", "tokenStorageNote")}
+              {t("settings", "credentialStorageNote")}
             </p>
           </div>
         )}

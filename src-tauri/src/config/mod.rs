@@ -20,6 +20,7 @@ mod cloud;
 mod connection;
 mod editor;
 mod integrations;
+pub mod private_file;
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -103,6 +104,10 @@ impl AppConfig {
         let config_path = Self::config_path()?;
 
         if config_path.exists() {
+            // A config written by an older version is world-readable and holds
+            // credentials. Reading it is the moment we know it exists.
+            private_file::harden(&config_path);
+
             let content = std::fs::read_to_string(&config_path)
                 .map_err(|e| Error::Config(format!("Failed to read config: {e}")))?;
 

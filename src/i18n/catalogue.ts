@@ -629,6 +629,8 @@ export const en = {
     latestN: "Latest {n}",
     drainNamed: "Drain {name}",
     drainAnyway: "Drain anyway",
+    evictUnmanagedPods: "Also move pods nothing would replace",
+    evictPodsWithLocalData: "Also move pods holding local data",
     openTheNodeFirst: "Open the node first",
     loadOlder: "Load older",
     hideHistory: "Hide history",
@@ -2152,6 +2154,10 @@ export const en = {
     nodeCordonedWord: "cordoned",
   },
   cluster: {
+    refusalNotNow: "Refused for now",
+    refusalNothingWouldReplaceIt: "Nothing would replace it",
+    refusalHoldsLocalData: "Holds local data",
+    refusalOther: "Refused",
     nameMissingParens: "{name} (missing)",
     noClusterSelected: "No cluster selected",
     metricsNotInstalled: "Metrics server not installed",
@@ -2366,8 +2372,8 @@ export const en = {
       "Forwarding {target} to {local}. Left off, the row stays in the sidebar and pressing it opens the tunnel — kept per cluster, on this machine only.",
     tokenUnchangedPlaceholder: "unchanged — type to replace it",
     tokenNewPlaceholder: "pasted here, kept out of this window afterwards",
-    tokenStorageNote:
-      "Stored in this app’s config file in plain text, beside the registry passwords it already keeps there, and sent only from the backend — it is never handed back to this window.",
+    credentialStorageNote:
+      "Stored in plain text in this app’s config file, which only your account can read. It is sent only from the backend and never handed back to this window.",
     lookingEllipsis: "Looking…",
     findVendorInCluster: "Find {vendor} in this cluster",
     probeAnswered: "Answered in {ms}ms",
@@ -3062,8 +3068,16 @@ export const en = {
     drainExplained:
       "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
     readingWhatRefusesToMove: "Reading what would refuse to move…",
-    drainWillWait:
-      "The drain will not fail on these — it will wait, and keep waiting until another replica is ready somewhere else.",
+    drainStopsAtRefusals:
+      "The drain moves what it can and stops at the rest. Nothing is deleted to get past a budget, and the node stays closed to scheduling either way.",
+    evictUnmanagedPodsExplained:
+      "Nothing would bring these back, so moving them ends them.",
+    evictPodsWithLocalDataExplained:
+      "Whatever their emptyDir holds does not survive the move.",
+    podsStayedExplained:
+      "Run the drain again once a replacement is ready — these move as soon as the cluster allows it.",
+    notNowExplained:
+      "Kubernetes refuses these for a time rather than for good: usually a disruption budget with nothing spare, sometimes the API pacing itself.",
     budgetRuleHealthyCovering:
       "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
     couldNotReadClusterState: "Could not read cluster state",
@@ -4209,6 +4223,22 @@ export const en = {
     warningEvents: { one: "{n} warning", other: "{n} warning" },
     normalEvents: { one: "{n} normal", other: "{n} normal" },
     latestKept: "latest {n}",
+    podsStayedOnTheNode: {
+      one: "One pod stayed on the node.",
+      other: "{n} pods stayed on the node.",
+    },
+    daemonsetPodsStay: {
+      one: "One DaemonSet pod stays, as it always does.",
+      other: "{n} DaemonSet pods stay, as they always do.",
+    },
+    podsHadAlreadyLeft: {
+      one: "One pod had already gone on its own.",
+      other: "{n} pods had already gone on their own.",
+    },
+    podsMovedOff: {
+      one: "One pod moved off.",
+      other: "{n} pods moved off.",
+    },
     budgetsAllowNoEviction: {
       one: "One disruption budget on this node allows nothing to be evicted.",
       other: "{n} disruption budgets on this node allow nothing to be evicted.",

@@ -652,6 +652,14 @@ export function RegistrySettings() {
               onChange={(event) => setEditToken(event.target.value)}
             />
           )}
+          {/* The same truth the integration form tells. A registry password
+           *  lands in the same file by the same path, and the reader pasting
+           *  one here was the only one not being told. */}
+          {selectedRegistry.authType !== "none" && (
+            <p className="text-[11px] leading-snug text-fg-fnt">
+              {t("settings", "credentialStorageNote")}
+            </p>
+          )}
           {selectedRegistry.authType !== "none" &&
             (selectedRegistry.username ||
               selectedRegistry.authType === "bearer") && (
