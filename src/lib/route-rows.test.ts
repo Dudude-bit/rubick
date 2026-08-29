@@ -360,6 +360,28 @@ describe("routesBoard", () => {
     expect(board.serving[0].tail).toContain("redirect");
   });
 
+  it("reads an ExtensionRef-only route as serving, with the filter note as its tail", () => {
+    const direct = route("direct", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "direct-response",
+            },
+          ],
+        },
+      ],
+    });
+    const board = routesBoard([direct], sources(), t);
+
+    expect(board.serving[0].tail).toContain("filter");
+  });
+
   it("carries the stale-generation tag onto the row", () => {
     const edited = route("edited", {
       generation: 4,

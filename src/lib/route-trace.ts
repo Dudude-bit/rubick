@@ -143,15 +143,32 @@ export const HOSTLESS_PROTO: Record<string, string> = {
   TLSRoute: "TLS",
 };
 
+const namesNoService = (route: RouteInfo): boolean =>
+  !route.rules.some((rule) =>
+    rule.backendRefs.some((backend) => backend.kind === "Service")
+  );
+
 /** Redirect-only means every rule redirects and none names a Service —
  *  configuration, not breakage, in the same words on every surface. */
 export function redirectOnly(route: RouteInfo): boolean {
   return (
     route.rules.length > 0 &&
     route.rules.every((rule) => rule.hasRedirect) &&
-    !route.rules.some((rule) =>
-      rule.backendRefs.some((backend) => backend.kind === "Service")
-    )
+    namesNoService(route)
+  );
+}
+
+/** The wider no-backends configuration: every rule redirects or hands the
+ *  request to an ExtensionRef filter — Envoy Gateway's direct-response, for
+ *  one. What a vendor filter does is its vendor's business; that such a
+ *  rule needs no backend is the route's own word. */
+export function selfAnswered(route: RouteInfo): boolean {
+  return (
+    route.rules.length > 0 &&
+    route.rules.every(
+      (rule) => rule.hasRedirect || rule.extensionRefs.length > 0
+    ) &&
+    namesNoService(route)
   );
 }
 
@@ -656,8 +673,10 @@ function backendSteps(
   const serviceRefs = route.rules.flatMap((rule) =>
     rule.backendRefs.filter((backend) => backend.kind === "Service")
   );
-  if (serviceRefs.length === 0 && redirectOnly(route)) {
-    const say = t("empty", "gwRedirectsOnly");
+  if (serviceRefs.length === 0 && selfAnswered(route)) {
+    const say = redirectOnly(route)
+      ? t("empty", "gwRedirectsOnly")
+      : t("empty", "gwFilterAnswers");
     return [
       { id: "backend", state: "ok", say, who: "yours" },
       { id: "endpoints", state: "ok", say, who: "yours" },

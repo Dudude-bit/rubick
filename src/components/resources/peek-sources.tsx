@@ -31,7 +31,11 @@ import { ResourceRef } from "./ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
 import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
-import { redirectOnly, gatewayProgrammed } from "@/lib/route-trace";
+import {
+  redirectOnly,
+  selfAnswered,
+  gatewayProgrammed,
+} from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue, KeyValueTone } from "./key-values";
@@ -206,7 +210,9 @@ function gatewayRouteSource(kind: string): PeekSource {
             ),
             emptyMessage: redirects
               ? "Redirects — no backends, and none needed."
-              : "No backendRefs — a matched request has nowhere to go.",
+              : selfAnswered(route)
+                ? "An extension filter answers — no backends, and none needed."
+                : "No backendRefs — a matched request has nowhere to go.",
           },
           {
             title: t("columns", "verdicts"),

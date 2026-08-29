@@ -3900,12 +3900,14 @@ export const en = {
     gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
     gwRefsResolve: "References resolve",
     gwRedirectsOnly: "This route redirects — no backends, and none needed",
+    gwFilterAnswers:
+      "An extension filter answers — no backends, and none needed",
     gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
     gwNoBackendRefsShort:
       "no backendRefs — matched requests have nowhere to go",
     gwNoBackendRefsTitle: "The route matches traffic and drops it",
     gwNoBackendRefsBody:
-      "Every rule is missing backendRefs (and does not redirect). A matched request gets an immediate error from the gateway.",
+      "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
     gwBackendsReading: "Backend Services — still being read",
     gwEndpointsReading: "Endpoints — still being read",
     gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
@@ -3965,6 +3967,8 @@ export const en = {
     gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
     gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
     gwRowRedirects: "redirects — no backends, none needed",
+    gwRowFilterAnswers:
+      "an extension filter answers — no backends, none needed",
     gwBrokenRefs: "broken refs",
     gwGatewayMissingWord: "gateway missing",
     gwDoorGatewayClass: "Gateway · class {name}",
@@ -4029,6 +4033,8 @@ export const en = {
     gwNoRules: "No rules — nothing is matched.",
     gwUninterpretedFilters: "filters this app does not interpret:",
     gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
+    gwFilterNoBackends:
+      "The extension filter answers — no backends, and none needed.",
     needsReferenceGrant: "needs a ReferenceGrant",
     zeroWeight: "0 — receives no traffic",
     resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",

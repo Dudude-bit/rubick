@@ -600,6 +600,54 @@ describe("routeTraces", () => {
     expect(trace.steps[5].say).toContain("redirect");
   });
 
+  it("reads an ExtensionRef-filtered rule with no backends as configuration, not breakage", () => {
+    const direct = route("direct", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "direct-response",
+            },
+          ],
+        },
+      ],
+    });
+    const [trace] = routeTraces(direct, sources(), t);
+
+    expect(trace.serving).toBe(true);
+    expect(trace.steps[5].state).toBe("ok");
+    expect(trace.steps[5].say).toContain("filter");
+  });
+
+  it("reads a mix of redirect and ExtensionRef rules as configuration too", () => {
+    const mixed = route("mixed", {
+      rules: [
+        { matches: [], backendRefs: [], hasRedirect: true, extensionRefs: [] },
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "direct-response",
+            },
+          ],
+        },
+      ],
+    });
+    const [trace] = routeTraces(mixed, sources(), t);
+
+    expect(trace.serving).toBe(true);
+    expect(trace.steps[5].state).toBe("ok");
+  });
+
   it("keeps the backend steps dashed while backing is still being read", () => {
     const [trace] = routeTraces(
       route("healthy"),

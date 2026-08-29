@@ -4133,11 +4133,13 @@ export const ru: Catalogue = {
     gwRefsResolve: "Ссылки разрешаются",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
+    gwFilterAnswers:
+      "Отвечает фильтр-расширение — бэкендов нет, и они не нужны",
     gwNoBackendRefsSay: "Нет backendRefs — совпавшему запросу некуда идти",
     gwNoBackendRefsShort: "нет backendRefs — совпавшим запросам некуда идти",
     gwNoBackendRefsTitle: "Маршрут ловит трафик и роняет его",
     gwNoBackendRefsBody:
-      "Во всех правилах нет backendRefs (и нет редиректа). Совпавший запрос сразу получает ошибку от шлюза.",
+      "Во всех правилах нет backendRefs (и нет ни редиректа, ни фильтра-расширения). Совпавший запрос сразу получает ошибку от шлюза.",
     gwBackendsReading: "Бэкенд-Service — ещё читаются",
     gwEndpointsReading: "Эндпоинты — ещё читаются",
     gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
@@ -4196,6 +4198,8 @@ export const ru: Catalogue = {
       "нет parentRefs — ни к чему не привязан и не обслуживает трафик",
     gwRowMesh: "привязан к {parent} — GAMMA, здесь не судится",
     gwRowRedirects: "перенаправляет — бэкендов нет, они не нужны",
+    gwRowFilterAnswers:
+      "отвечает фильтр-расширение — бэкендов нет, они не нужны",
     gwBrokenRefs: "битые ссылки",
     gwGatewayMissingWord: "шлюза нет",
     gwDoorGatewayClass: "Gateway · класс {name}",
@@ -4261,6 +4265,8 @@ export const ru: Catalogue = {
     gwNoRules: "Правил нет — ничего не матчится.",
     gwUninterpretedFilters: "фильтры, которые это приложение не трактует:",
     gwRedirectsNoBackends: "Перенаправляет — бэкендов нет, и они не нужны.",
+    gwFilterNoBackends:
+      "Отвечает фильтр-расширение — бэкендов нет, и они не нужны.",
     needsReferenceGrant: "нужен ReferenceGrant",
     zeroWeight: "0 — трафик не получает",
     resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",
