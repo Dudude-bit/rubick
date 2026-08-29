@@ -3865,6 +3865,7 @@ export const en = {
     gwNoControllerForParentSay: "No controller answered for this parent",
     gwNoControllerShort: "no controller answered",
     gwNoStatusTitle: "No status was written for this route",
+    gwNoStatusPeek: "No controller wrote status — nothing serves this route.",
     gwNoStatusBody:
       "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
     gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
