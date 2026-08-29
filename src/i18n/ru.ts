@@ -4104,6 +4104,11 @@ export const ru: Catalogue = {
     gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",
     gwNotProgrammedBody:
       "{said}. Ничего за ним не обслуживается, пока не починен сам Gateway — это выше всех привязанных к нему маршрутов.",
+    gwNoAddressPublishedSay: "Gateway {name} не публикует адрес",
+    gwNoAddressPublishedShort: "{name} не публикует адрес",
+    gwNoAddressPublishedTitle: "Адреса не прочитать",
+    gwNoAddressPublishedBody:
+      "Контроллер сообщает, что Gateway запрограммирован, а поле status.addresses необязательное — реализации в приватной или оверлейной сети публиковать там нечего. Значит приложение не может сказать, куда приходит трафик, а это не то же самое, что сказать, что он не приходит.",
     gwNoAddressSay: "У Gateway {name} ещё нет адреса",
     gwNoAddressShort: "у {name} ещё нет адреса",
     gwNoAddressTitle: "Некуда отправлять трафик",
