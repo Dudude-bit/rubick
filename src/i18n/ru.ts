@@ -595,6 +595,8 @@ export const ru: Catalogue = {
     latestN: "Последние {n}",
     drainNamed: "Освободить узел {name}",
     drainAnyway: "Всё равно освободить",
+    evictUnmanagedPods: "Двигать и поды, которые никто не пересоздаст",
+    evictPodsWithLocalData: "Двигать и поды с локальными данными",
     openTheNodeFirst: "Сначала открыть узел",
     loadOlder: "Загрузить более ранние",
     hideHistory: "Скрыть историю",
@@ -2296,6 +2298,10 @@ export const ru: Catalogue = {
     nodeCordonedWord: "закрыт для планирования",
   },
   cluster: {
+    refusalNotNow: "Пока отказано",
+    refusalNothingWouldReplaceIt: "Некому пересоздать",
+    refusalHoldsLocalData: "Держит локальные данные",
+    refusalOther: "Отказано",
     nameMissingParens: "{name} (отсутствует)",
     noClusterSelected: "Кластер не выбран",
     metricsNotInstalled: "metrics-server не установлен",
@@ -2528,8 +2534,8 @@ export const ru: Catalogue = {
       "Проброс {target} на {local}. Если выключено, строка остаётся в боковой панели и открывает туннель по нажатию — хранится для каждого кластера и только на этой машине.",
     tokenUnchangedPlaceholder: "без изменений — введите, чтобы заменить",
     tokenNewPlaceholder: "вставьте сюда, дальше в это окно он не возвращается",
-    tokenStorageNote:
-      "Хранится в конфиге приложения открытым текстом, рядом с паролями реестров, которые уже лежат там, и отправляется только из бэкенда — обратно в это окно он не попадает.",
+    credentialStorageNote:
+      "Хранится открытым текстом в конфиге приложения, который может прочитать только ваша учётная запись. Отправляется только из бэкенда, обратно в это окно не попадает.",
     lookingEllipsis: "Ищем…",
     findVendorInCluster: "Найти {vendor} в этом кластере",
     probeAnswered: "Ответил за {ms} мс",
@@ -3275,8 +3281,16 @@ export const ru: Catalogue = {
     drainExplained:
       "Узел закрывается для планирования, и каждый под на нём, который контроллер может пересоздать, вытесняется. Поды DaemonSet остаются.",
     readingWhatRefusesToMove: "Читаем, что откажется переезжать…",
-    drainWillWait:
-      "Из-за них освобождение не завершится ошибкой — оно будет ждать, пока другая реплика не поднимется где-то ещё.",
+    drainStopsAtRefusals:
+      "Освобождение перевезёт что сможет и остановится на остальном. Ничего не удаляется ради обхода бюджета, и узел в любом случае остаётся закрыт для планирования.",
+    evictUnmanagedPodsExplained:
+      "Их некому вернуть, поэтому переезд для них — конец.",
+    evictPodsWithLocalDataExplained:
+      "То, что лежит в их emptyDir, переезда не переживёт.",
+    podsStayedExplained:
+      "Повторите освобождение, когда поднимется замена, — они уедут, как только кластер позволит.",
+    notNowExplained:
+      "Kubernetes отказывает им на время, а не насовсем: обычно это бюджет прерываний без запаса, иногда — сам API, придерживающий поток.",
     budgetRuleHealthyCovering:
       "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
@@ -4554,6 +4568,30 @@ export const ru: Catalogue = {
       other: "{n} обычных",
     },
     latestKept: "последние {n}",
+    podsStayedOnTheNode: {
+      one: "На узле остался {n} под.",
+      few: "На узле осталось {n} пода.",
+      many: "На узле осталось {n} подов.",
+      other: "На узле осталось {n} пода.",
+    },
+    daemonsetPodsStay: {
+      one: "{n} под DaemonSet остаётся, как и всегда.",
+      few: "{n} пода DaemonSet остаются, как и всегда.",
+      many: "{n} подов DaemonSet остаются, как и всегда.",
+      other: "{n} пода DaemonSet остаются, как и всегда.",
+    },
+    podsHadAlreadyLeft: {
+      one: "{n} под ушёл сам ещё раньше.",
+      few: "{n} пода ушли сами ещё раньше.",
+      many: "{n} подов ушли сами ещё раньше.",
+      other: "{n} пода ушли сами ещё раньше.",
+    },
+    podsMovedOff: {
+      one: "Уехал {n} под.",
+      few: "Уехало {n} пода.",
+      many: "Уехало {n} подов.",
+      other: "Уехало {n} пода.",
+    },
     budgetsAllowNoEviction: {
       one: "{n} бюджет прерываний на этом узле не разрешает вытеснить ничего.",
       few: "{n} бюджета прерываний на этом узле не разрешают вытеснить ничего.",
