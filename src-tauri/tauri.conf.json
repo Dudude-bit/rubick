@@ -32,6 +32,8 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Rubick Team",
+    "homepage": "https://github.com/Dudude-bit/rubick",
     "createUpdaterArtifacts": true,
     "targets": ["deb", "rpm", "app", "dmg", "nsis", "msi"],
     "icon": [
@@ -43,7 +45,7 @@
     ],
     "resources": [],
     "externalBin": [],
-    "copyright": "\u00a9 2026 Kirill Inyakin, Ruslan Kusherbayev",
+    "copyright": "© 2026 Kirill Inyakin, Ruslan Kusherbayev",
     "category": "DeveloperTool",
     "shortDescription": "Kubernetes GUI Client",
     "longDescription": "A modern, cross-platform Kubernetes GUI client built with Tauri and Rust",
