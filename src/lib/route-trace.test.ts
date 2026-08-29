@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { routeTraces, gatewayProgrammed } from "./route-trace";
+import { routeTraces, gatewayProgrammed, selfAnswered } from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
@@ -619,9 +619,107 @@ describe("routeTraces", () => {
     });
     const [trace] = routeTraces(direct, sources(), t);
 
+    // Not breakage — that is the whole point of the change.
     expect(trace.serving).toBe(true);
-    expect(trace.steps[5].state).toBe("ok");
-    expect(trace.steps[5].say).toContain("filter");
+    expect(trace.stopStep).toBe(null);
+    // And not a clean bill of health either. This app does not read the
+    // filter, so it cannot say the route is fine; `blind` and an unknown
+    // verdict are how it says so. Asserting the state alone would pass with
+    // "ok", and asserting the copy contains "filter" passes with a sentence
+    // saying the opposite — both were true of this test before.
+    expect(trace.steps[5].state).toBe("blind");
+    expect(trace.steps[6].state).toBe("blind");
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.steps[5].say).toContain("does not read");
+  });
+
+  /**
+   * The case the wording used to get wrong. Most ExtensionRef filters are not
+   * direct responses: a Kong plugin rate-limits and still needs somewhere to
+   * send the request, and this repo's own parser test uses a Traefik
+   * `Middleware` that rewrites a path. A route like this one is dead — every
+   * matched request gets an immediate gateway error — and the app must not
+   * claim otherwise in either direction.
+   */
+  it("does not vouch for a filter it cannot read", () => {
+    const plugin = route("plugin", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "configuration.konghq.com",
+              kind: "KongPlugin",
+              name: "rate-limit",
+            },
+          ],
+        },
+      ],
+    });
+    const [trace] = routeTraces(plugin, sources(), t);
+
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.steps[5].state).toBe("blind");
+    expect(trace.steps[5].say).not.toContain("none needed");
+  });
+
+  /** A rule that names a filter AND a backend is an ordinary backed route:
+   *  the filter decorates it. The guard has to be "names no backend", not
+   *  "names no Service" — a non-Service backendRef is still somewhere to go. */
+  it("is not self-answered when the route names a backend as well", () => {
+    const decorated = route("decorated", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "Backend",
+              name: "s3-bucket",
+              namespace: null,
+              port: null,
+              weight: null,
+            },
+          ],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "direct-response",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(selfAnswered(decorated)).toBe(false);
+  });
+
+  /** Every rule, not some: one rule that neither redirects nor names a filter
+   *  and has no backend is a hole, and the route is not configuration. */
+  it("is not self-answered when one rule answers nothing at all", () => {
+    const half = route("half", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "direct-response",
+            },
+          ],
+        },
+        { matches: [], backendRefs: [], hasRedirect: false, extensionRefs: [] },
+      ],
+    });
+
+    expect(selfAnswered(half)).toBe(false);
   });
 
   it("reads a mix of redirect and ExtensionRef rules as configuration too", () => {
@@ -645,7 +743,23 @@ describe("routeTraces", () => {
     const [trace] = routeTraces(mixed, sources(), t);
 
     expect(trace.serving).toBe(true);
+    // The filter half is the unreadable half, so the whole route is unread.
+    expect(trace.steps[5].state).toBe("blind");
+    expect(trace.servingKnown).toBe(false);
+  });
+
+  /** Redirects stay confident: the spec says a redirect is terminal, so
+   *  "no backend needed" is this app's to say. */
+  it("still vouches for a redirect-only route", () => {
+    const redirect = route("redirect", {
+      rules: [
+        { matches: [], backendRefs: [], hasRedirect: true, extensionRefs: [] },
+      ],
+    });
+    const [trace] = routeTraces(redirect, sources(), t);
+
     expect(trace.steps[5].state).toBe("ok");
+    expect(trace.servingKnown).toBe(true);
   });
 
   it("keeps the backend steps dashed while backing is still being read", () => {

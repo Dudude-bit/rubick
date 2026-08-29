@@ -3901,8 +3901,8 @@ export const en = {
     gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
     gwRefsResolve: "References resolve",
     gwRedirectsOnly: "This route redirects — no backends, and none needed",
-    gwFilterAnswers:
-      "An extension filter answers — no backends, and none needed",
+    gwFilterNamed:
+      "An extension filter is named and no backend is — what the filter does, this app does not read",
     gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
     gwNoBackendRefsShort:
       "no backendRefs — matched requests have nowhere to go",
@@ -3968,8 +3968,7 @@ export const en = {
     gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
     gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
     gwRowRedirects: "redirects — no backends, none needed",
-    gwRowFilterAnswers:
-      "an extension filter answers — no backends, none needed",
+    gwRowFilterNamed: "an extension filter, and no backend",
     gwBrokenRefs: "broken refs",
     gwGatewayMissingWord: "gateway missing",
     gwDoorGatewayClass: "Gateway · class {name}",
@@ -4035,7 +4034,7 @@ export const en = {
     gwUninterpretedFilters: "filters this app does not interpret:",
     gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
     gwFilterNoBackends:
-      "The extension filter answers — no backends, and none needed.",
+      "No backend on this rule. Whether the filter above answers by itself is the filter's business — this app does not read it, so it does not say.",
     needsReferenceGrant: "needs a ReferenceGrant",
     zeroWeight: "0 — receives no traffic",
     resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",

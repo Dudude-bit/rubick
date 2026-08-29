@@ -4135,8 +4135,8 @@ export const ru: Catalogue = {
     gwRefsResolve: "Ссылки разрешаются",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
-    gwFilterAnswers:
-      "Отвечает фильтр-расширение — бэкендов нет, и они не нужны",
+    gwFilterNamed:
+      "Назван фильтр-расширение, а бэкенд не назван — что делает фильтр, приложение не читает",
     gwNoBackendRefsSay: "Нет backendRefs — совпавшему запросу некуда идти",
     gwNoBackendRefsShort: "нет backendRefs — совпавшим запросам некуда идти",
     gwNoBackendRefsTitle: "Маршрут ловит трафик и роняет его",
@@ -4200,8 +4200,7 @@ export const ru: Catalogue = {
       "нет parentRefs — ни к чему не привязан и не обслуживает трафик",
     gwRowMesh: "привязан к {parent} — GAMMA, здесь не судится",
     gwRowRedirects: "перенаправляет — бэкендов нет, они не нужны",
-    gwRowFilterAnswers:
-      "отвечает фильтр-расширение — бэкендов нет, они не нужны",
+    gwRowFilterNamed: "фильтр-расширение, и ни одного бэкенда",
     gwBrokenRefs: "битые ссылки",
     gwGatewayMissingWord: "шлюза нет",
     gwDoorGatewayClass: "Gateway · класс {name}",
@@ -4268,7 +4267,7 @@ export const ru: Catalogue = {
     gwUninterpretedFilters: "фильтры, которые это приложение не трактует:",
     gwRedirectsNoBackends: "Перенаправляет — бэкендов нет, и они не нужны.",
     gwFilterNoBackends:
-      "Отвечает фильтр-расширение — бэкендов нет, и они не нужны.",
+      "У этого правила нет бэкенда. Отвечает ли фильтр выше сам — дело фильтра: приложение его не читает и поэтому не берётся судить.",
     needsReferenceGrant: "нужен ReferenceGrant",
     zeroWeight: "0 — трафик не получает",
     resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",

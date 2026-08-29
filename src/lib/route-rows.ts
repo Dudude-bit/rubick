@@ -361,7 +361,7 @@ export function routesBoard(
       tail: redirectOnly(route)
         ? t("empty", "gwRowRedirects")
         : selfAnswered(route)
-          ? t("empty", "gwRowFilterAnswers")
+          ? t("empty", "gwRowFilterNamed")
           : null,
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
