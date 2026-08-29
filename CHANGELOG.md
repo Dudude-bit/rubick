@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-08-30
+
+Draining a node no longer goes around a PodDisruptionBudget, and it waits the
+way `kubectl` does. Two of the problems fixed here were reported privately by
+a reader who went looking through the source rather than waiting to be bitten
+by it.
+
+### Fixed — a drain that keeps the budget it shows you
+
+Draining a node used to answer a refused eviction with a direct delete. The
+eviction API is the thing that consults a PodDisruptionBudget; a delete simply
+goes around it. So a budget that refused to let a pod go had that pod taken
+anyway, a moment later — while the dialog on screen was saying the drain would
+wait for it.
+
+It evicts, and only evicts. There is no setting that brings the old behaviour
+back.
+
+### Added — the waiting the dialog was promising
+
+A drain now keeps asking, as `kubectl drain` does: what can move, moves, and
+what a budget is holding is asked about again until it lets go. The dialog
+stays open and says which attempt it is on, what has left and who is still
+being waited for, and you can stop it at any point. Closing the window does
+not stop it — the pods are already moving.
+
+"Drained" now means the pods are gone rather than that the API accepted the
+request. An eviction is a graceful delete, and a pod with a slow shutdown is
+still on the node minutes after its eviction was agreed to.
+
+Which pods a drain touches is two separate choices now, both off until you
+make them: pods no controller would replace, and pods holding an emptyDir.
+Each says what it ends. Static pods are left where they are — they belong to
+the node, and the kubelet would put them straight back.
+
+### Fixed — credentials on disk
+
+`config.toml` holds the Prometheus and Loki tokens and the registry password,
+and was written readable by anyone else with an account on the machine. It is
+now owner-only and written atomically, and a file from an older version is
+tightened the first time it is read. The registry form says where the password
+lands, which until now only the integration form did.
+
+### Fixed — two Gateway API false alarms
+
+A rule that hands off to an extension filter and names no backend is
+configuration rather than breakage: Envoy Gateway's direct responses are built
+this way. Rubick no longer reports it as broken. It does not report it as fine
+either — what a vendor filter does is that vendor's business, so the row reads
+unverified instead of either.
+
+A gateway that publishes no address is no longer read as a gateway with
+nowhere for traffic to arrive. That field is optional, and an implementation on
+a private network has nothing to put in it. A gateway genuinely waiting for an
+address says so, and still reads as broken.
+
+### Added — an AppImage, and Homebrew
+
+Linux builds carry an `.AppImage` beside the `.deb` and `.rpm`: one file, with
+nothing to install. On macOS,
+`brew install --cask Dudude-bit/tap/rubick`.
+
 ## [4.6.0] - 2026-08-27
 
 Gateway API, end to end. Routes, gateways, classes and policies are pages of
