@@ -4248,6 +4248,10 @@ export const en = {
       one: "One DaemonSet pod stays, as it always does.",
       other: "{n} DaemonSet pods stay, as they always do.",
     },
+    staticPodsStay: {
+      one: "One static pod stays — it belongs to the node, not the cluster.",
+      other: "{n} static pods stay — they belong to the node, not the cluster.",
+    },
     podsHadAlreadyLeft: {
       one: "One pod had already gone on its own.",
       other: "{n} pods had already gone on their own.",

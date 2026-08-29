@@ -187,6 +187,80 @@ async fn drained_means_the_pods_are_gone() {
     );
 }
 
+/// The control-plane node, whose pods the API server does not own.
+///
+/// `etcd`, `kube-apiserver` and the rest are static: the kubelet reads them
+/// from a file and the API server holds only a mirror. Their owner reference
+/// points at the Node, so every membership rule but the mirror check calls
+/// them managed and puts them in the set — and since the drain now waits for
+/// departures, a mirror the kubelet recreates at once would hang it for good.
+///
+/// Destructive to the control plane's schedulability; run it on a throwaway
+/// cluster and `kubectl uncordon` afterwards.
+#[tokio::test]
+#[ignore = "needs a real cluster; cordons the control plane"]
+async fn a_control_plane_drain_leaves_the_static_pods_alone() {
+    let (state, client) = connected().await;
+    let node = std::env::var("K8S_GUI_DRAIN_CONTROL_PLANE")
+        .unwrap_or_else(|_| "rubick-drain-control-plane".to_string());
+
+    let mut events = state.subscribe();
+    let handle = state.drain_manager.start(
+        client.clone(),
+        node.clone(),
+        DrainOptions {
+            ignore_daemonsets: true,
+            evict_unmanaged_pods: false,
+            evict_pods_with_emptydir: false,
+        },
+    );
+    state
+        .drain_manager
+        .mark_subscribed(&handle.drain_id)
+        .expect("the drain is there");
+
+    let (outcome, report) = tokio::time::timeout(Duration::from_secs(120), async {
+        loop {
+            match events.recv().await.expect("the channel stays open") {
+                AppEvent::DrainFinished {
+                    drain_id,
+                    outcome,
+                    report,
+                    ..
+                } if drain_id == handle.drain_id => return (outcome, report),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("a control-plane drain has to finish, not hang on a mirror");
+
+    println!(
+        "  ended {outcome:?}: moved {}, daemonset {}, static {}",
+        report.evicted, report.daemonset_pods_left, report.static_pods_left
+    );
+    assert!(
+        report.static_pods_left >= 4,
+        "etcd, the apiserver, the scheduler and the controller-manager are all \
+         static here; got {}",
+        report.static_pods_left
+    );
+    // Named as staying, never as refused: nothing was asked of them.
+    for pod in &report.refused {
+        assert!(
+            !pod.name.starts_with("etcd-") && !pod.name.starts_with("kube-apiserver-"),
+            "{}/{} is static and must not appear as a refusal",
+            pod.namespace,
+            pod.name
+        );
+    }
+
+    let still: kube::Api<k8s_openapi::api::core::v1::Pod> =
+        kube::Api::namespaced(client.clone(), "kube-system");
+    let etcd = still.get(&format!("etcd-{node}")).await;
+    assert!(etcd.is_ok(), "etcd must still be there: {etcd:?}");
+}
+
 /// The whole thing, once, against a budget that never lets go.
 ///
 /// Runs the drain for long enough to see it ask more than once, then cancels

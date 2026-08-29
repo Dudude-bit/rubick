@@ -54,6 +54,8 @@ export interface DrainReport {
   /** Accepted, not yet gone. An eviction is a graceful delete. */
   leaving: number;
   daemonsetPodsLeft: number;
+  /** Static pods. The node's own, and no option moves them. */
+  staticPodsLeft: number;
   refused: RefusedPod[];
 }
 
@@ -94,6 +96,7 @@ const EMPTY: DrainReport = {
   alreadyGone: 0,
   leaving: 0,
   daemonsetPodsLeft: 0,
+  staticPodsLeft: 0,
   refused: [],
 };
 

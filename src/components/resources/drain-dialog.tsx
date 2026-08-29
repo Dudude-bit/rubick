@@ -398,6 +398,11 @@ function Counts({ report, t }: { report: DrainReport; t: T }) {
           {t("count", "daemonsetPodsStay", { n: report.daemonsetPodsLeft })}
         </p>
       )}
+      {report.staticPodsLeft > 0 && (
+        <p className="text-[11px] text-fg-fnt">
+          {t("count", "staticPodsStay", { n: report.staticPodsLeft })}
+        </p>
+      )}
       {report.alreadyGone > 0 && (
         <p className="text-[11px] text-fg-fnt">
           {t("count", "podsHadAlreadyLeft", { n: report.alreadyGone })}

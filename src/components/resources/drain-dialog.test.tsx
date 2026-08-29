@@ -32,6 +32,7 @@ const report = (over: Partial<DrainReport> = {}): DrainReport => ({
   alreadyGone: 0,
   leaving: 0,
   daemonsetPodsLeft: 0,
+  staticPodsLeft: 0,
   refused: [refused()],
   ...over,
 });

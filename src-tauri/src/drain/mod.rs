@@ -38,6 +38,9 @@ use crate::error::{Error, Result};
 use crate::state::AppEvent;
 use crate::utils::generate_id;
 
+/// What the kubelet stamps on the API server's copy of a static pod.
+const MIRROR_POD_ANNOTATION: &str = "kubernetes.io/config.mirror";
+
 /// How long to wait before asking again, by attempt.
 ///
 /// It climbs because a budget waiting on a slow rollout should not be asked
@@ -175,6 +178,10 @@ pub struct DrainReport {
     /// `DaemonSet` pods on the node at the last look, which is the whole of
     /// what `ignore_daemonsets` does.
     pub daemonset_pods_left: u32,
+    /// Static pods left in place. Kept apart from the `DaemonSet` count
+    /// because they stay for a different reason and no option moves them:
+    /// they are the node's own, not the cluster's.
+    pub static_pods_left: u32,
     /// Everything still on the node at the last look.
     pub refused: Vec<RefusedPod>,
 }
@@ -206,6 +213,12 @@ enum PodPlan {
     /// A `DaemonSet` pod under `ignore_daemonsets`. It stays, and that is
     /// not a refusal — nothing was ever asked of it.
     LeaveDaemonSet,
+    /// A static pod: the kubelet reads it from a file on the node and the
+    /// API server holds only a mirror of it. Evicting the mirror deletes a
+    /// copy, and the kubelet recreates it at once — so a drain that asked
+    /// would wait for a departure that never happens. `kubectl drain` skips
+    /// these too, and there is no flag to make it stop.
+    LeaveStatic,
     /// In the set.
     Evict,
     /// Out of the set, for a reason the report can name.
@@ -218,6 +231,18 @@ enum PodPlan {
 /// cluster: which pods a drain touches is the half of this that decides
 /// whether anything is lost by running it.
 fn plan_for(pod: &Pod, options: DrainOptions) -> PodPlan {
+    // Before anything else, and with no opt-in: a mirror is not a pod anyone
+    // can move. Its owner reference points at the Node, so every other rule
+    // here would happily call it managed and try.
+    if pod
+        .metadata
+        .annotations
+        .as_ref()
+        .is_some_and(|a| a.contains_key(MIRROR_POD_ANNOTATION))
+    {
+        return PodPlan::LeaveStatic;
+    }
+
     let owners = pod.metadata.owner_references.as_deref().unwrap_or_default();
 
     if options.ignore_daemonsets && owners.iter().any(|r| r.kind == "DaemonSet") {
@@ -338,14 +363,6 @@ impl DrainManager {
         }
     }
 
-    /// Stop every drain in flight.
-    pub fn cancel_all(&self) {
-        let ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
-        for id in ids {
-            self.cancel(&id);
-        }
-    }
-
     /// Start draining, and return at once.
     ///
     /// Unlike a search, a new drain does **not** cancel the previous one:
@@ -379,7 +396,28 @@ impl DrainManager {
 
             tokio::select! {
                 _ = subscribe_rx => {}
-                () = cancelled(&mut cancel_rx) => return,
+                // Not a bare `return`. Every drain owes exactly one terminal
+                // event: a caller that pressed Stop while the gate was still
+                // held would otherwise wait on an answer that never comes,
+                // and its dialog would sit on "starting" for good.
+                () = cancelled(&mut cancel_rx) => {
+                    finish(
+                        &event_tx,
+                        &id,
+                        &node,
+                        DrainOutcome::Cancelled,
+                        &DrainReport {
+                            evicted: 0,
+                            already_gone: 0,
+                            leaving: 0,
+                            daemonset_pods_left: 0,
+                            static_pods_left: 0,
+                            refused: Vec::new(),
+                        },
+                        None,
+                    );
+                    return;
+                }
                 () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
                     tracing::warn!("Drain {id} subscribe gate timed out; going ahead anyway");
                 }
@@ -426,6 +464,7 @@ struct Survey {
     /// Refusals that no amount of waiting changes.
     terminal: Vec<RefusedPod>,
     daemonset_pods_left: u32,
+    static_pods_left: u32,
     /// Uids on the node at the first look, so the first attempt does not
     /// list it twice.
     present: HashSet<String>,
@@ -453,6 +492,7 @@ async fn survey(client: &Client, node: &str, options: DrainOptions) -> Result<Su
     let mut targets = Vec::new();
     let mut terminal = Vec::new();
     let mut daemonset_pods_left = 0;
+    let mut static_pods_left = 0;
     let mut present = HashSet::new();
 
     for pod in pods {
@@ -467,6 +507,7 @@ async fn survey(client: &Client, node: &str, options: DrainOptions) -> Result<Su
 
         match plan_for(&pod, options) {
             PodPlan::LeaveDaemonSet => daemonset_pods_left += 1,
+            PodPlan::LeaveStatic => static_pods_left += 1,
             PodPlan::Leave(refusal) => terminal.push(RefusedPod::new(namespace, name, refusal)),
             PodPlan::Evict => targets.push(Target {
                 namespace,
@@ -480,6 +521,7 @@ async fn survey(client: &Client, node: &str, options: DrainOptions) -> Result<Su
         targets,
         terminal,
         daemonset_pods_left,
+        static_pods_left,
         present,
     })
 }
@@ -516,6 +558,7 @@ async fn run(
         already_gone: 0,
         leaving: 0,
         daemonset_pods_left: 0,
+        static_pods_left: 0,
         refused: Vec::new(),
     };
 
@@ -548,6 +591,7 @@ async fn run(
         targets,
         mut terminal,
         daemonset_pods_left,
+        static_pods_left,
         mut present,
     } = match surveyed {
         Ok(survey) => survey,
@@ -572,7 +616,7 @@ async fn run(
             let seen = tokio::select! {
                 result = present_on(client, node) => result,
                 () = cancelled(cancel_rx) => {
-                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Cancelled, &report, None);
                 }
             };
@@ -580,7 +624,8 @@ async fn run(
                 Ok(seen) => present = seen,
                 Err(err) => {
                     let message = crate::state::readable_cause(&err);
-                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    let report =
+                        assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Failed, &report, Some(message));
                 }
             }
@@ -599,7 +644,7 @@ async fn run(
                 result = evict(client, &target) => result,
                 () = cancelled(cancel_rx) => {
                     progress.waiting = still_waiting;
-                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Cancelled, &report, None);
                 }
             };
@@ -624,7 +669,7 @@ async fn run(
         }
         progress.waiting = still_waiting;
 
-        let report = assemble(&progress, daemonset_pods_left, &terminal);
+        let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
         let _ = event_tx.send(AppEvent::DrainProgress {
             drain_id: drain_id.to_string(),
             node: node.to_string(),
@@ -680,7 +725,12 @@ async fn evict(client: &Client, target: &Target) -> Evicted {
 /// `refused` puts the ones not going anywhere before the ones still being
 /// waited on: the first list is what the reader has to act on, and it does
 /// not move between attempts.
-fn assemble(progress: &Progress, daemonset_pods_left: u32, terminal: &[RefusedPod]) -> DrainReport {
+fn assemble(
+    progress: &Progress,
+    daemonset_pods_left: u32,
+    static_pods_left: u32,
+    terminal: &[RefusedPod],
+) -> DrainReport {
     let mut refused: Vec<RefusedPod> = terminal.to_vec();
     refused.extend(progress.waiting.iter().map(|target| {
         RefusedPod::new(
@@ -694,6 +744,7 @@ fn assemble(progress: &Progress, daemonset_pods_left: u32, terminal: &[RefusedPo
         already_gone: progress.already_gone,
         leaving: u32::try_from(progress.leaving.len()).unwrap_or(u32::MAX),
         daemonset_pods_left,
+        static_pods_left,
         refused,
     }
 }
@@ -790,6 +841,18 @@ mod tests {
             }),
             ..Default::default()
         }
+    }
+
+    /// What the kubelet stamps on the API server's copy of a static pod. Its
+    /// owner reference points at the Node, which is why every other rule here
+    /// would call it managed.
+    fn static_pod() -> Pod {
+        let mut pod = pod(vec![owner("Node")], vec![]);
+        pod.metadata.annotations = Some(std::collections::BTreeMap::from([(
+            "kubernetes.io/config.mirror".to_string(),
+            "abc123".to_string(),
+        )]));
+        pod
     }
 
     fn scratch() -> Volume {
@@ -912,6 +975,23 @@ mod tests {
         );
     }
 
+    /// A mirror is not a pod anyone can move: the kubelet reads it from a
+    /// file and recreates it the instant the mirror is deleted. Asking would
+    /// mean waiting for a departure that never comes — which the drain does
+    /// now, so this stopped being cosmetic and became a hang.
+    #[test]
+    fn a_static_pod_is_never_asked_to_leave() {
+        assert_eq!(plan_for(&static_pod(), safe()), PodPlan::LeaveStatic);
+
+        // No option reaches it, because none of them could help.
+        let everything = DrainOptions {
+            ignore_daemonsets: false,
+            evict_unmanaged_pods: true,
+            evict_pods_with_emptydir: true,
+        };
+        assert_eq!(plan_for(&static_pod(), everything), PodPlan::LeaveStatic);
+    }
+
     // --- what a failed eviction means ---------------------------------------
 
     /// The reported bug, as a test. A 429 is the eviction API saying "not
@@ -1011,7 +1091,8 @@ mod tests {
         assert!(manager.mark_subscribed(&first.drain_id).is_ok());
         assert!(manager.mark_subscribed(&second.drain_id).is_ok());
 
-        manager.cancel_all();
+        manager.cancel(&first.drain_id);
+        manager.cancel(&second.drain_id);
     }
 
     #[tokio::test]
@@ -1088,6 +1169,7 @@ mod tests {
             already_gone: 2,
             leaving: 4,
             daemonset_pods_left: 3,
+            static_pods_left: 5,
             refused: vec![RefusedPod::new(
                 "n".to_string(),
                 "p".to_string(),
@@ -1110,7 +1192,8 @@ mod tests {
                 "daemonsetPodsLeft",
                 "evicted",
                 "leaving",
-                "refused"
+                "refused",
+                "staticPodsLeft"
             ],
             "DrainReport's fields moved; update src/hooks/useNodeDrain.ts"
         );
