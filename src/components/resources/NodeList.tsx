@@ -21,14 +21,14 @@ import { createNameColumn } from "@/components/resources/columns";
 import { SpotMark } from "@/components/resources/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
-import type { DrainReport, NodeInfo, NodeMetrics } from "@/generated/types";
+import type { NodeInfo, NodeMetrics } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
-import type { DrainChoices } from "@/components/resources/drain-dialog";
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -254,42 +254,36 @@ export function NodeList() {
     },
   });
 
-  const drainMutation = useMutation({
-    mutationFn: ({ node, choices }: { node: string; choices: DrainChoices }) =>
-      commands.drainNode(
-        node,
-        true,
-        choices.evictUnmanagedPods,
-        choices.evictPodsWithLocalData
-      ),
-    onSuccess: (report, { node }) => {
+  const [draining, setDraining] = useState<string | null>(null);
+
+  // A drain is not a mutation: it outlives its own command call and reports
+  // as it goes. The hook owns that; the list only owns which node is open.
+  const drain = useNodeDrain({
+    onFinished: (result) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.resources(ResourceType.Node, null),
       });
-      // An empty node is the whole story, and a toast tells it without
-      // keeping a dialog open over a list. Anything left behind is not a
-      // story a toast can hold: it is a list of pods and a reason each.
-      if (report.refused.length === 0) {
+      // A node that emptied has nothing left to read, so it says so in a
+      // toast and gets out of the way. Every other ending left a list of
+      // pods and a reason each, which is not a story a toast can hold — so
+      // it stays in the dialog, unless nobody is looking at the dialog.
+      if (result.outcome === "drained") {
         setDraining(null);
+        drain.reset();
         toast({
           title: t("action", "nodeDrained"),
-          description: t("action", "nodeDrainedDetail", { name: node }),
+          description: t("action", "nodeDrainedDetail", { name: result.node }),
         });
         return;
       }
-      setDrainReport(report);
-    },
-    onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: t("action", "drainFailed", { error: String(error) }),
-        variant: "destructive",
-      });
+      if (draining === null) {
+        toast({
+          title: t("action", "drainEnded", { name: result.node }),
+          description: t("action", "reopenTheNodeToRead"),
+        });
+      }
     },
   });
-
-  const [draining, setDraining] = useState<string | null>(null);
-  const [drainReport, setDrainReport] = useState<DrainReport | null>(null);
 
   const nodeColumns = useMemo(
     () => columns(nodeMetricsByName),
@@ -320,11 +314,17 @@ export function NodeList() {
         // Straight to the dialog rather than to the mutation: a drain is the
         // one action here that can be refused by something the reader cannot
         // see from this row.
-        onClick: (item) => setDraining(item.name),
+        // Reopening the node a drain is running on shows that drain. Any
+        // other node starts clean, so one node's report never appears over
+        // another's name.
+        onClick: (item) => {
+          if (drainingNode(drain.state) !== item.name) drain.reset();
+          setDraining(item.name);
+        },
         variant: "destructive",
       },
     ],
-    [t, navigate, cordonMutation, uncordonMutation]
+    [t, navigate, cordonMutation, uncordonMutation, setDraining, drain]
   );
 
   return (
@@ -351,15 +351,21 @@ export function NodeList() {
       />
       <DrainDialog
         node={draining}
-        report={drainReport}
+        state={drain.state}
         onOpenChange={(open) => {
-          if (!open) {
-            setDraining(null);
-            setDrainReport(null);
+          if (open) return;
+          setDraining(null);
+          // A running drain keeps running when its window is closed — the
+          // panel says so. Only a finished one is cleared, so that reopening
+          // the row does not reread an old report.
+          if (drain.state.phase === "done" || drain.state.phase === "failed") {
+            drain.reset();
           }
         }}
-        busy={drainMutation.isPending}
-        onConfirm={(node, choices) => drainMutation.mutate({ node, choices })}
+        onConfirm={(node, choices) => {
+          void drain.start(node, { ignoreDaemonsets: true, ...choices });
+        }}
+        onCancelDrain={drain.cancel}
       />
     </>
   );

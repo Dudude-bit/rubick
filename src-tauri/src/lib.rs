@@ -35,6 +35,7 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod diagnostics;
+pub mod drain;
 pub mod error;
 pub mod integrations;
 pub mod logs;

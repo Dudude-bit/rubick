@@ -33,7 +33,8 @@ import type {
   DeploymentInfo,
   DetectedExtension,
   Diagnostics,
-  DrainReport,
+  DrainHandle,
+  DrainOptions,
   EndpointsInfo,
   EventFilters,
   EventInfo,
@@ -960,18 +961,19 @@ export async function uncordonNode(name: string): Promise<void> {
   return invoke<void>("uncordon_node", { name });
 }
 
-export async function drainNode(
+export async function startNodeDrain(
   name: string,
-  ignoreDaemonsets: boolean | null,
-  evictUnmanagedPods: boolean | null,
-  evictPodsWithEmptydir: boolean | null
-): Promise<DrainReport> {
-  return invoke<DrainReport>("drain_node", {
-    name,
-    ignoreDaemonsets,
-    evictUnmanagedPods,
-    evictPodsWithEmptydir,
-  });
+  options: DrainOptions
+): Promise<DrainHandle> {
+  return invoke<DrainHandle>("start_node_drain", { name, options });
+}
+
+export async function nodeDrainSubscribed(drainId: string): Promise<void> {
+  return invoke<void>("node_drain_subscribed", { drainId });
+}
+
+export async function cancelNodeDrain(drainId: string): Promise<void> {
+  return invoke<void>("cancel_node_drain", { drainId });
 }
 
 export async function listNamespaces(): Promise<NamespaceInfo[]> {

@@ -204,7 +204,9 @@ fn main() {
             commands::nodes::get_node,
             commands::nodes::cordon_node,
             commands::nodes::uncordon_node,
-            commands::nodes::drain_node,
+            commands::nodes::start_node_drain,
+            commands::nodes::node_drain_subscribed,
+            commands::nodes::cancel_node_drain,
             // Event commands
             commands::events::list_events,
             // Log commands
