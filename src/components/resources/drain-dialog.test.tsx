@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { DrainDialog } from "./drain-dialog";
-import type { DrainReport, RefusedPod } from "@/generated/types";
+import type { DrainReport, DrainState, RefusedPod } from "@/hooks/useNodeDrain";
 
 const wrap = (ui: ReactNode) =>
   render(
@@ -35,6 +35,20 @@ const report = (over: Partial<DrainReport> = {}): DrainReport => ({
   ...over,
 });
 
+const dialog = (
+  state: DrainState,
+  over: Partial<Parameters<typeof DrainDialog>[0]> = {}
+) => (
+  <DrainDialog
+    node="node-7"
+    state={state}
+    onOpenChange={() => {}}
+    onConfirm={() => {}}
+    onCancelDrain={() => {}}
+    {...over}
+  />
+);
+
 describe("confirming a drain", () => {
   /**
    * The whole of the security report, as a test of the click. The old list
@@ -44,35 +58,19 @@ describe("confirming a drain", () => {
    */
   it("asks for nothing destructive unless it is ticked", async () => {
     const onConfirm = vi.fn();
-    wrap(
-      <DrainDialog
-        node="node-7"
-        report={null}
-        onOpenChange={() => {}}
-        onConfirm={onConfirm}
-        busy={false}
-      />
-    );
+    wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(screen.getByRole("button", { name: /drain/i }));
 
     expect(onConfirm).toHaveBeenCalledWith("node-7", {
       evictUnmanagedPods: false,
-      evictPodsWithLocalData: false,
+      evictPodsWithEmptydir: false,
     });
   });
 
   it("carries a ticked opt-in through to the caller", async () => {
     const onConfirm = vi.fn();
-    wrap(
-      <DrainDialog
-        node="node-7"
-        report={null}
-        onOpenChange={() => {}}
-        onConfirm={onConfirm}
-        busy={false}
-      />
-    );
+    wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(
       screen.getByRole("checkbox", { name: /nothing would replace/i })
@@ -81,7 +79,7 @@ describe("confirming a drain", () => {
 
     expect(onConfirm).toHaveBeenCalledWith("node-7", {
       evictUnmanagedPods: true,
-      evictPodsWithLocalData: false,
+      evictPodsWithEmptydir: false,
     });
   });
 
@@ -92,15 +90,7 @@ describe("confirming a drain", () => {
    */
   it("starts the next node from a clean pair of opt-ins", async () => {
     const onConfirm = vi.fn();
-    const view = wrap(
-      <DrainDialog
-        node="node-7"
-        report={null}
-        onOpenChange={() => {}}
-        onConfirm={onConfirm}
-        busy={false}
-      />
-    );
+    const view = wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(
       screen.getByRole("checkbox", { name: /nothing would replace/i })
@@ -115,10 +105,10 @@ describe("confirming a drain", () => {
         <MemoryRouter>
           <DrainDialog
             node="node-8"
-            report={null}
+            state={{ phase: "idle" }}
             onOpenChange={() => {}}
             onConfirm={onConfirm}
-            busy={false}
+            onCancelDrain={() => {}}
           />
         </MemoryRouter>
       </QueryClientProvider>
@@ -128,35 +118,84 @@ describe("confirming a drain", () => {
 
     expect(onConfirm).toHaveBeenCalledWith("node-8", {
       evictUnmanagedPods: false,
-      evictPodsWithLocalData: false,
+      evictPodsWithEmptydir: false,
     });
   });
 
-  /** It says what will happen, and what will not. */
-  it("does not promise to wait", () => {
-    wrap(
-      <DrainDialog
-        node="node-7"
-        report={null}
-        onOpenChange={() => {}}
-        onConfirm={() => {}}
-        busy={false}
-      />
-    );
+  /** It says what will happen, and the promise is now one the backend keeps. */
+  it("says it will keep asking, which is what the backend does", () => {
+    wrap(dialog({ phase: "idle" }));
 
     expect(
-      screen.getByText(/moves what it can and stops at the rest/i)
+      screen.getByText(/keeps asking about the rest/i)
     ).toBeInTheDocument();
-    expect(screen.queryByText(/keep waiting/i)).not.toBeInTheDocument();
   });
 });
 
-describe("reading what a drain left behind", () => {
+describe("watching a drain run", () => {
+  const running = (
+    over: Partial<DrainReport> = {},
+    attempt = 3
+  ): DrainState => ({
+    phase: "running",
+    node: "node-7",
+    attempt,
+    report: report(over),
+  });
+
+  /**
+   * The reason this is a dialog and not a spinner: "still waiting" and
+   * "stuck" look identical without a count of tries.
+   */
+  it("says which try it is on, so waiting is legible", () => {
+    wrap(dialog(running()));
+
+    expect(screen.getByText(/try 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/waiting on one pod/i)).toBeInTheDocument();
+  });
+
+  it("offers a way to stop, and stopping calls back", async () => {
+    const onCancelDrain = vi.fn();
+    wrap(dialog(running(), { onCancelDrain }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /stop draining/i })
+    );
+
+    expect(onCancelDrain).toHaveBeenCalledOnce();
+  });
+
+  /** Leaving is allowed; it just does not stop the cluster doing the work. */
+  it("says that closing the window does not stop it", () => {
+    wrap(dialog(running()));
+
+    expect(screen.getByText(/does not stop the drain/i)).toBeInTheDocument();
+  });
+
+  /** The first attempt is not worth announcing as a retry. */
+  it("does not call the first look a retry", () => {
+    wrap(dialog(running({}, 1)));
+
+    expect(screen.queryByText(/try 1/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("reading how a drain ended", () => {
+  const ended = (
+    outcome: "drained" | "stopped" | "cancelled",
+    over: Partial<DrainReport> = {}
+  ): DrainState => ({
+    phase: "done",
+    node: "node-7",
+    outcome,
+    report: report(over),
+    message: null,
+  });
+
   it("names every pod that stayed and why", () => {
     wrap(
-      <DrainDialog
-        node="node-7"
-        report={report({
+      dialog(
+        ended("stopped", {
           refused: [
             refused(),
             refused({
@@ -165,11 +204,8 @@ describe("reading what a drain left behind", () => {
               refusal: "nothingWouldReplaceIt",
             }),
           ],
-        })}
-        onOpenChange={() => {}}
-        onConfirm={() => {}}
-        busy={false}
-      />
+        })
+      )
     );
 
     expect(screen.getByText("prod/api-7f9")).toBeInTheDocument();
@@ -184,38 +220,44 @@ describe("reading what a drain left behind", () => {
    * the line hedges, on purpose.
    */
   it("does not claim the budget was the reason", () => {
-    wrap(
-      <DrainDialog
-        node="node-7"
-        report={report()}
-        onOpenChange={() => {}}
-        onConfirm={() => {}}
-        busy={false}
-      />
-    );
+    wrap(dialog(ended("cancelled")));
 
     expect(
       screen.getByText(/usually a disruption budget/i)
     ).toBeInTheDocument();
   });
 
+  /** The two lists mean different things and get different advice. */
+  it("tells apart what is waiting from what will never move", () => {
+    wrap(
+      dialog(
+        ended("stopped", {
+          refused: [refused({ refusal: "holdsLocalData" })],
+        })
+      )
+    );
+
+    expect(
+      screen.getByText(/needs an answer only you can give/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/usually a disruption budget/i)
+    ).not.toBeInTheDocument();
+  });
+
   /** When the app has no name for a failure, the server's own words run. */
   it("quotes the server for a failure it cannot name", () => {
     wrap(
-      <DrainDialog
-        node="node-7"
-        report={report({
+      dialog(
+        ended("stopped", {
           refused: [
             refused({
               refusal: "other",
               message: 'pods "api-7f9" is forbidden',
             }),
           ],
-        })}
-        onOpenChange={() => {}}
-        onConfirm={() => {}}
-        busy={false}
-      />
+        })
+      )
     );
 
     expect(screen.getByText(/is forbidden/)).toBeInTheDocument();
@@ -223,19 +265,55 @@ describe("reading what a drain left behind", () => {
 
   /** The counts have to add up to what was on the node. */
   it("accounts for the pods it neither moved nor was refused", () => {
-    wrap(
-      <DrainDialog
-        node="node-7"
-        report={report({ alreadyGone: 2, daemonsetPodsLeft: 3 })}
-        onOpenChange={() => {}}
-        onConfirm={() => {}}
-        busy={false}
-      />
-    );
+    wrap(dialog(ended("stopped", { alreadyGone: 2, daemonsetPodsLeft: 3 })));
 
     expect(screen.getByText(/3 DaemonSet pods stay/i)).toBeInTheDocument();
     expect(
       screen.getByText(/2 pods had already gone on their own/i)
     ).toBeInTheDocument();
+  });
+
+  it("says who stopped it when it was the operator", () => {
+    wrap(dialog(ended("cancelled")));
+
+    expect(screen.getByText(/you stopped the drain/i)).toBeInTheDocument();
+  });
+
+  /**
+   * Two different failures wear the same word. This one broke while running,
+   * so it still knows what it had already moved; the `failed` phase below is
+   * the command being refused before any drain existed, and knows nothing.
+   */
+  it("keeps the count when a running drain breaks", () => {
+    wrap(
+      dialog({
+        phase: "done",
+        node: "node-7",
+        outcome: "failed",
+        report: report({ evicted: 9, refused: [] }),
+        message: "the connection was reset",
+      })
+    );
+
+    expect(screen.getByText(/the drain broke/i)).toBeInTheDocument();
+    expect(screen.getByText(/9 pods moved off/i)).toBeInTheDocument();
+    expect(screen.getByText(/connection was reset/i)).toBeInTheDocument();
+  });
+
+  /** A drain that never started is its own state, not an empty report. */
+  it("shows what broke when the drain could not start", () => {
+    wrap(
+      dialog({
+        phase: "failed",
+        node: "node-7",
+        message: 'nodes "node-7" is forbidden',
+      })
+    );
+
+    expect(screen.getByText(/is forbidden/)).toBeInTheDocument();
+    // Nothing is running, so there is nothing to stop.
+    expect(
+      screen.queryByRole("button", { name: /stop draining/i })
+    ).not.toBeInTheDocument();
   });
 });

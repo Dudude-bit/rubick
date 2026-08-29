@@ -629,6 +629,12 @@ export const en = {
     latestN: "Latest {n}",
     drainNamed: "Drain {name}",
     drainAnyway: "Drain anyway",
+    stopDraining: "Stop draining",
+    drainingAttempt: "Asking again — try {n}",
+    nodeIsDrained: "The node is drained.",
+    drainStopped: "The drain stopped.",
+    drainCancelled: "You stopped the drain.",
+    drainFailed: "The drain broke.",
     evictUnmanagedPods: "Also move pods nothing would replace",
     evictPodsWithLocalData: "Also move pods holding local data",
     openTheNodeFirst: "Open the node first",
@@ -714,7 +720,6 @@ export const en = {
     nodeDrainedDetail: "Node {name} has been drained.",
     cordonFailed: "Failed to cordon node: {error}",
     uncordonFailed: "Failed to uncordon node: {error}",
-    drainFailed: "Failed to drain node: {error}",
     viewLogs: "View Logs",
     shell: "Shell",
     unbound: "unbound",
@@ -3068,14 +3073,16 @@ export const en = {
     drainExplained:
       "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
     readingWhatRefusesToMove: "Reading what would refuse to move…",
-    drainStopsAtRefusals:
-      "The drain moves what it can and stops at the rest. Nothing is deleted to get past a budget, and the node stays closed to scheduling either way.",
+    drainKeepsAsking:
+      "The drain moves what it can and keeps asking about the rest, the way kubectl does. Nothing is deleted to get past a budget, and you can stop it at any point.",
     evictUnmanagedPodsExplained:
       "Nothing would bring these back, so moving them ends them.",
     evictPodsWithLocalDataExplained:
       "Whatever their emptyDir holds does not survive the move.",
-    podsStayedExplained:
-      "Run the drain again once a replacement is ready — these move as soon as the cluster allows it.",
+    waitingOnTheseExplained:
+      "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
+    stoppedExplained:
+      "Nothing here changes by waiting. Each one needs an answer only you can give.",
     notNowExplained:
       "Kubernetes refuses these for a time rather than for good: usually a disruption budget with nothing spare, sometimes the API pacing itself.",
     budgetRuleHealthyCovering:
@@ -4226,6 +4233,10 @@ export const en = {
     podsStayedOnTheNode: {
       one: "One pod stayed on the node.",
       other: "{n} pods stayed on the node.",
+    },
+    waitingOnPods: {
+      one: "Waiting on one pod.",
+      other: "Waiting on {n} pods.",
     },
     daemonsetPodsStay: {
       one: "One DaemonSet pod stays, as it always does.",
