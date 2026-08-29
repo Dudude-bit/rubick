@@ -1,0 +1,120 @@
+# Specimens for `src-tauri/tests/live_drain.rs`, which is ignored by default.
+#
+#   kind create cluster --config test-manifests/drain-kind.yaml
+#   kubectl apply -f test-manifests/drain-scene.yaml
+#   K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain \
+#     cargo test --test live_drain -- --ignored --nocapture
+#
+# Everything is pinned to the worker. Each one is here for a rule that is
+# otherwise unobservable — see the test's module docs for which.
+apiVersion: v1
+kind: Namespace
+metadata: { name: draintest }
+---
+# Two replicas with a budget that allows no disruption at all.
+# Its eviction must be refused (429) on every attempt, forever.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: held, namespace: draintest }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: held } }
+  template:
+    metadata: { labels: { app: held } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: held-pdb, namespace: draintest }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: held } }
+---
+# No budget: this one must actually leave.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: movable, namespace: draintest }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: movable } }
+  template:
+    metadata: { labels: { app: movable } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+---
+# Owned, but holding an emptyDir: out of the set unless asked for.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: scratchy, namespace: draintest }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: scratchy } }
+  template:
+    metadata: { labels: { app: scratchy } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+      terminationGracePeriodSeconds: 1
+      volumes:
+        - name: scratch
+          emptyDir: {}
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          volumeMounts: [{ name: scratch, mountPath: /scratch }]
+---
+# No controller at all: nothing would bring it back.
+apiVersion: v1
+kind: Pod
+metadata: { name: lonely, namespace: draintest, labels: { app: lonely } }
+spec:
+  nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.9
+---
+# Tolerates everything, so it lands on the node even after the cordon.
+# This is what makes a re-listing drain chase its own replacements.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: stubborn, namespace: draintest }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: stubborn } }
+  template:
+    metadata: { labels: { app: stubborn } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+      tolerations: [{ operator: Exists }]
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+---
+# Ignores SIGTERM, so the kubelet waits out the whole grace period before
+# killing it. "Accepted" and "gone" end up 25 seconds apart, which is far
+# enough to measure.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: slowpoke, namespace: draintest }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: slowpoke } }
+  template:
+    metadata: { labels: { app: slowpoke } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rubick-drain-worker }
+      terminationGracePeriodSeconds: 25
+      containers:
+        - name: stubbornly-alive
+          image: busybox:1.36
+          command: ["sh", "-c", "trap '' TERM; sleep 3600"]
