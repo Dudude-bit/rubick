@@ -62,6 +62,12 @@ jobs:
       - name: Build (cargo tauri)
         # Skip updater-artifact signing in PR validation — release.yml has the secrets.
         # Frontend is built automatically by `cargo tauri build` via beforeBuildCommand.
+        env:
+          # linuxdeploy, which bundles the AppImage, is an AppImage itself and
+          # mounts itself to run — needing FUSE 2 and /dev/fuse, neither of
+          # which ubuntu-24.04 has. Extracting instead needs neither. Harmless
+          # on macOS and Windows, which never read it.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: cargo tauri build --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       - name: Collect artifacts
