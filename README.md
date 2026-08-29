@@ -126,7 +126,7 @@ Or grab the build for your platform from [Releases](https://github.com/Dudude-bi
 
 - **macOS** — signed with a Developer ID certificate and notarised by Apple, so it opens on a double-click.
 - **Windows** — not signed, so SmartScreen will warn on the first launch. **More info → Run anyway**.
-- **Linux** — `.deb` and `.rpm`.
+- **Linux** — `.deb`, `.rpm` and an `.AppImage` that needs nothing installed.
 
 **What it talks to.** Your clusters, and GitHub for update checks. Nothing else: there is no analytics, no account and no crash reporting, and any integration you connect is an address you typed yourself.
 
