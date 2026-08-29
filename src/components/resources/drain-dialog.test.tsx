@@ -30,6 +30,7 @@ const refused = (over: Partial<RefusedPod> = {}): RefusedPod => ({
 const report = (over: Partial<DrainReport> = {}): DrainReport => ({
   evicted: 12,
   alreadyGone: 0,
+  leaving: 0,
   daemonsetPodsLeft: 0,
   refused: [refused()],
   ...over,
@@ -170,6 +171,41 @@ describe("watching a drain run", () => {
     wrap(dialog(running()));
 
     expect(screen.getByText(/does not stop the drain/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The panel said leaving was fine while the dialog refused to close — the
+   * same shape of lie the whole change exists to remove.
+   */
+  it("lets you leave, having said that leaving is fine", async () => {
+    const onOpenChange = vi.fn();
+    wrap(dialog(running(), { onOpenChange }));
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  /** An eviction is a graceful delete: accepted is not gone. */
+  it("counts what has been accepted but has not left yet", () => {
+    wrap(dialog(running({ leaving: 4 })));
+
+    expect(screen.getByText(/4 are on their way out/i)).toBeInTheDocument();
+  });
+
+  /**
+   * `startNodeDrain` is a round trip and the dialog is up for all of it. A
+   * Stop button that does nothing is worse than no button.
+   */
+  it("can be stopped before the drain has a handle", async () => {
+    const onCancelDrain = vi.fn();
+    wrap(dialog({ phase: "starting", node: "node-7" }, { onCancelDrain }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /stop draining/i })
+    );
+
+    expect(onCancelDrain).toHaveBeenCalledOnce();
   });
 
   /** The first attempt is not worth announcing as a retry. */

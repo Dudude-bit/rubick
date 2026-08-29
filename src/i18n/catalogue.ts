@@ -630,6 +630,8 @@ export const en = {
     drainNamed: "Drain {name}",
     drainAnyway: "Drain anyway",
     stopDraining: "Stop draining",
+    drainEnded: "The drain of {name} ended",
+    reopenTheNodeToRead: "Open the node again to read what stayed.",
     drainingAttempt: "Asking again — try {n}",
     nodeIsDrained: "The node is drained.",
     drainStopped: "The drain stopped.",
@@ -4237,6 +4239,10 @@ export const en = {
     waitingOnPods: {
       one: "Waiting on one pod.",
       other: "Waiting on {n} pods.",
+    },
+    podsStillLeaving: {
+      one: "One is on its way out.",
+      other: "{n} are on their way out.",
     },
     daemonsetPodsStay: {
       one: "One DaemonSet pod stays, as it always does.",

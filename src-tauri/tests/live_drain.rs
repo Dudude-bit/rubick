@@ -25,6 +25,18 @@
 //!     for.
 //!   * kindnet / kube-proxy — DaemonSets, which stay and are not refusals.
 //!
+//!   * `slowpoke` — ignores SIGTERM, so the kubelet waits out its 25-second
+//!     grace period. What makes "accepted" and "gone" far enough apart to
+//!     measure.
+//!
+//! `a_spent_budget_keeps_its_pods` wants the budget in place.
+//! `drained_means_the_pods_are_gone` wants it gone — it drains the node
+//! completely, which `held-pdb` would forbid forever:
+//!
+//! ```text
+//! kubectl delete pdb held-pdb -n draintest
+//! ```
+//!
 //! Set up with `kind create cluster` and the manifest in the session notes.
 
 use std::collections::BTreeMap;
@@ -79,6 +91,100 @@ async fn pods_on_node(client: &kube::Client, node: &str) -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+/// A node with nothing holding it must be reported drained only once the
+/// pods have actually gone.
+///
+/// An eviction is a *graceful* delete: the API answers as soon as it accepts
+/// one, and the pod stays put for its grace period. This drain used to call
+/// that "drained" — telling the operator it was safe to power off a node
+/// whose pods were all still running, which is the exact accident a drain
+/// exists to prevent. `slowpoke` takes 20 seconds to stop, so a premature
+/// `Drained` is measurable rather than arguable.
+#[tokio::test]
+#[ignore = "needs a real cluster with the specimens; run explicitly with --ignored"]
+async fn drained_means_the_pods_are_gone() {
+    let (state, client) = connected().await;
+    let node = node();
+
+    let before: Vec<String> = pods_on_node(&client, &node)
+        .await
+        .into_iter()
+        .filter(|p| p.starts_with("draintest/"))
+        .collect();
+    assert!(!before.is_empty(), "the specimens have to be there");
+
+    let mut events = state.subscribe();
+    let handle = state.drain_manager.start(
+        client.clone(),
+        node.clone(),
+        DrainOptions {
+            ignore_daemonsets: true,
+            evict_unmanaged_pods: true,
+            evict_pods_with_emptydir: true,
+        },
+    );
+    state
+        .drain_manager
+        .mark_subscribed(&handle.drain_id)
+        .expect("the drain is there");
+
+    let started = std::time::Instant::now();
+    let (outcome, report) = tokio::time::timeout(Duration::from_secs(180), async {
+        loop {
+            match events.recv().await.expect("the channel stays open") {
+                AppEvent::DrainProgress {
+                    drain_id,
+                    attempt,
+                    report,
+                    ..
+                } if drain_id == handle.drain_id => {
+                    println!(
+                        "  attempt {attempt}: moved {}, leaving {}, still here {}",
+                        report.evicted,
+                        report.leaving,
+                        report.refused.len()
+                    );
+                }
+                AppEvent::DrainFinished {
+                    drain_id,
+                    outcome,
+                    report,
+                    ..
+                } if drain_id == handle.drain_id => return (outcome, report),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("the drain has to finish");
+    let took = started.elapsed();
+
+    println!("  ended {outcome:?} after {}s", took.as_secs());
+    assert_eq!(outcome, DrainOutcome::Drained);
+    assert_eq!(report.leaving, 0, "nothing is still on its way out");
+
+    // The check the finding was about. `slowpoke` stops in 20s, so a drain
+    // that reported success on acceptance would be back in about a second.
+    assert!(
+        took >= Duration::from_secs(15),
+        "reported drained after {}s, which is faster than the pods can stop: \
+         it is reporting accepted evictions, not departures",
+        took.as_secs()
+    );
+
+    // Only the pods this drain took on. `stubborn` tolerates the cordon, so
+    // its *replacement* lands back here while the drain runs — a pod created
+    // after the drain started is not the drain's to move, and calling that a
+    // failure would be asking it to fight the controller forever.
+    let after = pods_on_node(&client, &node).await;
+    let left: Vec<_> = before.iter().filter(|p| after.contains(p)).collect();
+    assert!(
+        left.is_empty(),
+        "the node was called drained while these, which it took on, were \
+         still there: {left:?}"
+    );
 }
 
 /// The whole thing, once, against a budget that never lets go.

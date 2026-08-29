@@ -51,6 +51,8 @@ export interface RefusedPod {
 export interface DrainReport {
   evicted: number;
   alreadyGone: number;
+  /** Accepted, not yet gone. An eviction is a graceful delete. */
+  leaving: number;
   daemonsetPodsLeft: number;
   refused: RefusedPod[];
 }
@@ -90,6 +92,7 @@ export type DrainState =
 const EMPTY: DrainReport = {
   evicted: 0,
   alreadyGone: 0,
+  leaving: 0,
   daemonsetPodsLeft: 0,
   refused: [],
 };
@@ -100,6 +103,11 @@ export interface DrainFinished {
   outcome: DrainOutcome;
   report: DrainReport;
   message: string | null;
+}
+
+/** The node a drain state is about, or `null` when there is no drain. */
+export function drainingNode(state: DrainState): string | null {
+  return state.phase === "idle" ? null : state.node;
 }
 
 export function useNodeDrain({
@@ -130,6 +138,14 @@ export function useNodeDrain({
   const drainId = useRef<string | null>(null);
   const unlisteners = useRef<Array<() => void>>([]);
   const disposed = useRef(false);
+  /**
+   * Stop was pressed before there was anything to stop.
+   *
+   * `startNodeDrain` is a round trip, and the dialog is on screen for all of
+   * it — with a Stop button that did nothing, which is worse than no button.
+   * The wish is remembered and spent the moment the handle arrives.
+   */
+  const wantsStop = useRef(false);
 
   const detach = useCallback(() => {
     while (unlisteners.current.length > 0) unlisteners.current.pop()?.();
@@ -150,13 +166,17 @@ export function useNodeDrain({
     async (node: string, options: DrainOptions) => {
       detach();
       drainId.current = null;
+      wantsStop.current = false;
       setState({ phase: "starting", node });
 
       try {
         const handle = await commands.startNodeDrain(node, options);
-        if (disposed.current) {
+        if (disposed.current || wantsStop.current) {
           await commands.cancelNodeDrain(handle.drainId).catch(() => {});
-          return;
+          // Still subscribe below when it was only a stop: the backend
+          // answers a cancel with `drain-finished`, and that is the event
+          // that gets the dialog out of "starting".
+          if (disposed.current) return;
         }
         drainId.current = handle.drainId;
         setState({ phase: "running", node, attempt: 0, report: EMPTY });
@@ -204,7 +224,11 @@ export function useNodeDrain({
   /** Stop asking. What has already been evicted stays evicted. */
   const cancel = useCallback(() => {
     const id = drainId.current;
-    if (!id) return;
+    if (!id) {
+      // Nothing to cancel yet; `start` will spend this the moment there is.
+      wantsStop.current = true;
+      return;
+    }
     commands.cancelNodeDrain(id).catch(() => {});
   }, []);
 

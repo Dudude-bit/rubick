@@ -23,6 +23,7 @@
 //! map, same gate that holds the first event until the frontend is
 //! listening.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -166,6 +167,11 @@ pub struct DrainReport {
     /// this drain nor refused by anything — kept apart from both so that
     /// neither count claims them.
     pub already_gone: u32,
+    /// Evictions accepted whose pods have not left yet.
+    ///
+    /// Its own number because "asked to go" and "gone" are not the same
+    /// state, and this drain used to report the node empty at the first.
+    pub leaving: u32,
     /// `DaemonSet` pods on the node at the last look, which is the whole of
     /// what `ignore_daemonsets` does.
     pub daemonset_pods_left: u32,
@@ -391,6 +397,14 @@ impl DrainManager {
 struct Target {
     namespace: String,
     name: String,
+    /// The identity a name does not give.
+    ///
+    /// Needed to tell "this pod left" from "a pod with this name is here":
+    /// a `StatefulSet` recreates `web-0` as `web-0`, so on a node something
+    /// tolerates the cordon on, matching by name would report a pod as
+    /// still terminating forever — or as gone when its replacement had
+    /// simply not arrived yet.
+    uid: String,
 }
 
 /// The node as it was when the drain started.
@@ -401,38 +415,64 @@ struct Survey {
     /// Decided once and never revisited. Evicting a Deployment's pod makes
     /// its controller create a new one, and on a node something tolerates the
     /// cordon on, that replacement lands right back here; a drain that
-    /// re-listed each pass would chase its own replacements and never finish.
-    /// Watched it do exactly that against a live cluster — the moved count
-    /// climbing one per attempt — before this was a fixed set.
+    /// re-listed for *work* each pass would chase its own replacements and
+    /// never finish. Watched it do exactly that against a live cluster — the
+    /// moved count climbing one per attempt — before this was a fixed set.
     /// `kubectl drain` fixes its set for the same reason.
+    ///
+    /// Later listings are for *departures* only, matched by uid, and can
+    /// never add to this.
     targets: Vec<Target>,
     /// Refusals that no amount of waiting changes.
     terminal: Vec<RefusedPod>,
     daemonset_pods_left: u32,
+    /// Uids on the node at the first look, so the first attempt does not
+    /// list it twice.
+    present: HashSet<String>,
+}
+
+/// The uids of every pod currently on the node.
+async fn present_on(client: &Client, node: &str) -> Result<HashSet<String>> {
+    Ok(pods_on(client, node)
+        .await?
+        .into_iter()
+        .filter_map(|pod| pod.metadata.uid)
+        .collect())
+}
+
+async fn pods_on(client: &Client, node: &str) -> Result<Vec<Pod>> {
+    let api: Api<Pod> = Api::all(client.clone());
+    let params = ListParams::default().fields(&format!("spec.nodeName={node}"));
+    Ok(api.list(&params).await?.items)
 }
 
 /// Look once, and decide the whole job from that look.
 async fn survey(client: &Client, node: &str, options: DrainOptions) -> Result<Survey> {
-    let api: Api<Pod> = Api::all(client.clone());
-    let params = ListParams::default().fields(&format!("spec.nodeName={node}"));
-    let pods = api.list(&params).await?;
+    let pods = pods_on(client, node).await?;
 
     let mut targets = Vec::new();
     let mut terminal = Vec::new();
     let mut daemonset_pods_left = 0;
+    let mut present = HashSet::new();
 
-    for pod in pods.items {
+    for pod in pods {
         let name = pod.metadata.name.clone().unwrap_or_default();
         let namespace = pod
             .metadata
             .namespace
             .clone()
             .unwrap_or_else(|| "default".to_string());
+        let uid = pod.metadata.uid.clone().unwrap_or_default();
+        present.insert(uid.clone());
 
         match plan_for(&pod, options) {
             PodPlan::LeaveDaemonSet => daemonset_pods_left += 1,
             PodPlan::Leave(refusal) => terminal.push(RefusedPod::new(namespace, name, refusal)),
-            PodPlan::Evict => targets.push(Target { namespace, name }),
+            PodPlan::Evict => targets.push(Target {
+                namespace,
+                name,
+                uid,
+            }),
         }
     }
 
@@ -440,10 +480,29 @@ async fn survey(client: &Client, node: &str, options: DrainOptions) -> Result<Su
         targets,
         terminal,
         daemonset_pods_left,
+        present,
     })
 }
 
-/// Cordon, survey, then ask until nothing is left worth asking about.
+/// Everything the loop carries between attempts.
+struct Progress {
+    /// Refused for now, and asked again next time.
+    waiting: Vec<Target>,
+    /// Eviction accepted, still on the node.
+    ///
+    /// An eviction is a *graceful* delete: the API answers as soon as it is
+    /// accepted and the pod stays put for its grace period — thirty seconds
+    /// by default, minutes with a `preStop` hook. Reporting a node drained at
+    /// acceptance told the operator it was safe to power off a node whose
+    /// pods were all still running. So the drain waits for these to go, which
+    /// is what `kubectl drain` does and what this app's own text already
+    /// claimed it did.
+    leaving: Vec<Target>,
+    evicted: u32,
+    already_gone: u32,
+}
+
+/// Cordon, survey, then ask until the node is actually empty of the set.
 async fn run(
     event_tx: &broadcast::Sender<AppEvent>,
     drain_id: &str,
@@ -455,9 +514,17 @@ async fn run(
     let empty = DrainReport {
         evicted: 0,
         already_gone: 0,
+        leaving: 0,
         daemonset_pods_left: 0,
         refused: Vec::new(),
     };
+
+    macro_rules! bail {
+        ($outcome:expr, $report:expr, $message:expr) => {{
+            finish(event_tx, drain_id, node, $outcome, $report, $message);
+            return;
+        }};
+    }
 
     // Cordoning belongs to the drain, not to whoever starts one. It used to
     // sit in the Tauri command, and the first caller that was not that command
@@ -465,78 +532,87 @@ async fn run(
     // them, forever. An operation that needs a step to make sense owns it.
     let cordoned = tokio::select! {
         result = cordon(client, node) => result,
-        () = cancelled(cancel_rx) => {
-            finish(event_tx, drain_id, node, DrainOutcome::Cancelled, &empty, None);
-            return;
-        }
+        () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     if let Err(err) = cordoned {
         let message = crate::state::readable_cause(&err);
         tracing::warn!("Drain {drain_id} could not cordon {node}: {message}");
-        finish(
-            event_tx,
-            drain_id,
-            node,
-            DrainOutcome::Failed,
-            &empty,
-            Some(message),
-        );
-        return;
+        bail!(DrainOutcome::Failed, &empty, Some(message));
     }
 
     let surveyed = tokio::select! {
         result = survey(client, node, options) => result,
-        () = cancelled(cancel_rx) => {
-            finish(event_tx, drain_id, node, DrainOutcome::Cancelled, &empty, None);
-            return;
-        }
+        () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     let Survey {
         targets,
         mut terminal,
         daemonset_pods_left,
+        mut present,
     } = match surveyed {
         Ok(survey) => survey,
         Err(err) => {
             let message = crate::state::readable_cause(&err);
             tracing::warn!("Drain {drain_id} could not read {node}: {message}");
-            finish(
-                event_tx,
-                drain_id,
-                node,
-                DrainOutcome::Failed,
-                &empty,
-                Some(message),
-            );
-            return;
+            bail!(DrainOutcome::Failed, &empty, Some(message));
         }
     };
 
-    let mut waiting = targets;
-    let mut evicted = 0u32;
-    let mut already_gone = 0u32;
+    let mut progress = Progress {
+        waiting: targets,
+        leaving: Vec::new(),
+        evicted: 0,
+        already_gone: 0,
+    };
 
     for attempt in 1u32.. {
-        let mut still_waiting = Vec::new();
+        // The survey already listed for attempt 1. Later attempts look again
+        // — for departures only, never for new work.
+        if attempt > 1 {
+            let seen = tokio::select! {
+                result = present_on(client, node) => result,
+                () = cancelled(cancel_rx) => {
+                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    bail!(DrainOutcome::Cancelled, &report, None);
+                }
+            };
+            match seen {
+                Ok(seen) => present = seen,
+                Err(err) => {
+                    let message = crate::state::readable_cause(&err);
+                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    bail!(DrainOutcome::Failed, &report, Some(message));
+                }
+            }
+        }
 
-        for target in waiting {
+        progress.leaving.retain(|t| present.contains(&t.uid));
+
+        let mut still_waiting = Vec::new();
+        for target in std::mem::take(&mut progress.waiting) {
+            if !present.contains(&target.uid) {
+                progress.already_gone += 1;
+                continue;
+            }
+
             let outcome = tokio::select! {
                 result = evict(client, &target) => result,
                 () = cancelled(cancel_rx) => {
-                    let report = assemble(evicted, already_gone, daemonset_pods_left, &terminal, &still_waiting);
-                    finish(event_tx, drain_id, node, DrainOutcome::Cancelled, &report, None);
-                    return;
+                    progress.waiting = still_waiting;
+                    let report = assemble(&progress, daemonset_pods_left, &terminal);
+                    bail!(DrainOutcome::Cancelled, &report, None);
                 }
             };
 
             match outcome {
                 Evicted::Yes => {
                     tracing::info!("Evicted pod {}/{}", target.namespace, target.name);
-                    evicted += 1;
+                    progress.evicted += 1;
+                    progress.leaving.push(target);
                 }
-                Evicted::AlreadyGone => already_gone += 1,
-                // The only refusal worth another pass, so it is the only one
-                // that stays in the set.
+                Evicted::AlreadyGone => progress.already_gone += 1,
+                // The only refusal worth another pass, so the only one that
+                // stays in the set.
                 Evicted::No(DrainRefusal::NotNow, _) => still_waiting.push(target),
                 Evicted::No(refusal, message) => terminal.push(RefusedPod {
                     namespace: target.namespace,
@@ -546,15 +622,9 @@ async fn run(
                 }),
             }
         }
+        progress.waiting = still_waiting;
 
-        waiting = still_waiting;
-        let report = assemble(
-            evicted,
-            already_gone,
-            daemonset_pods_left,
-            &terminal,
-            &waiting,
-        );
+        let report = assemble(&progress, daemonset_pods_left, &terminal);
         let _ = event_tx.send(AppEvent::DrainProgress {
             drain_id: drain_id.to_string(),
             node: node.to_string(),
@@ -562,22 +632,20 @@ async fn run(
             report: report.clone(),
         });
 
-        if waiting.is_empty() {
+        // Empty of the set means both: nobody still refusing, and nobody
+        // still on their way out.
+        if progress.waiting.is_empty() && progress.leaving.is_empty() {
             let outcome = if terminal.is_empty() {
                 DrainOutcome::Drained
             } else {
                 DrainOutcome::Stopped
             };
-            finish(event_tx, drain_id, node, outcome, &report, None);
-            return;
+            bail!(outcome, &report, None);
         }
 
         tokio::select! {
             () = tokio::time::sleep(backoff_for(attempt)) => {}
-            () = cancelled(cancel_rx) => {
-                finish(event_tx, drain_id, node, DrainOutcome::Cancelled, &report, None);
-                return;
-            }
+            () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &report, None),
         }
     }
 }
@@ -609,18 +677,12 @@ async fn evict(client: &Client, target: &Target) -> Evicted {
 
 /// The report, from the running totals and the two lists.
 ///
-/// `refused` puts the ones still being waited on after the ones that are not
-/// going anywhere, because the second list is the one the reader has to act
-/// on and it does not move between attempts.
-fn assemble(
-    evicted: u32,
-    already_gone: u32,
-    daemonset_pods_left: u32,
-    terminal: &[RefusedPod],
-    waiting: &[Target],
-) -> DrainReport {
+/// `refused` puts the ones not going anywhere before the ones still being
+/// waited on: the first list is what the reader has to act on, and it does
+/// not move between attempts.
+fn assemble(progress: &Progress, daemonset_pods_left: u32, terminal: &[RefusedPod]) -> DrainReport {
     let mut refused: Vec<RefusedPod> = terminal.to_vec();
-    refused.extend(waiting.iter().map(|target| {
+    refused.extend(progress.waiting.iter().map(|target| {
         RefusedPod::new(
             target.namespace.clone(),
             target.name.clone(),
@@ -628,8 +690,9 @@ fn assemble(
         )
     }));
     DrainReport {
-        evicted,
-        already_gone,
+        evicted: progress.evicted,
+        already_gone: progress.already_gone,
+        leaving: u32::try_from(progress.leaving.len()).unwrap_or(u32::MAX),
         daemonset_pods_left,
         refused,
     }
@@ -1023,6 +1086,7 @@ mod tests {
         let report = DrainReport {
             evicted: 1,
             already_gone: 2,
+            leaving: 4,
             daemonset_pods_left: 3,
             refused: vec![RefusedPod::new(
                 "n".to_string(),
@@ -1041,7 +1105,13 @@ mod tests {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["alreadyGone", "daemonsetPodsLeft", "evicted", "refused"],
+            [
+                "alreadyGone",
+                "daemonsetPodsLeft",
+                "evicted",
+                "leaving",
+                "refused"
+            ],
             "DrainReport's fields moved; update src/hooks/useNodeDrain.ts"
         );
 

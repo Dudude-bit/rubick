@@ -100,23 +100,14 @@ export function DrainDialog({
   onCancelDrain: () => void;
 }) {
   const t = useT();
-  const busy = state.phase === "starting" || state.phase === "running";
 
+  // Closable at every moment, including mid-drain. The panel says leaving the
+  // window does not stop the drain, and for a while it also refused to let
+  // you leave — the same shape of lie this whole change exists to remove. The
+  // node's row reopens this, running drain and all.
   return (
-    <Dialog
-      open={!!node}
-      onOpenChange={(open) => {
-        // A running drain is not dismissed by a stray click. It is a cluster
-        // operation with a Stop button; closing it by accident would leave
-        // the reader with no way back to what they started.
-        if (busy && !open) return;
-        onOpenChange(open);
-      }}
-    >
-      <DialogContent
-        onInteractOutside={(event) => busy && event.preventDefault()}
-        onEscapeKeyDown={(event) => busy && event.preventDefault()}
-      >
+    <Dialog open={!!node} onOpenChange={onOpenChange}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {t("action", "drainNamed", { name: node ?? "" })}
@@ -315,6 +306,11 @@ function DrainLive({
               {held.length > 0 &&
                 t("count", "waitingOnPods", { n: held.length })}
             </p>
+            {report.leaving > 0 && (
+              <p className="text-[11px] text-fg-fnt">
+                {t("count", "podsStillLeaving", { n: report.leaving })}
+              </p>
+            )}
             {state.attempt > 1 && (
               <p className="text-[11px] text-fg-fnt">
                 {t("action", "drainingAttempt", { n: state.attempt })}

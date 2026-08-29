@@ -596,6 +596,8 @@ export const ru: Catalogue = {
     drainNamed: "Освободить узел {name}",
     drainAnyway: "Всё равно освободить",
     stopDraining: "Остановить",
+    drainEnded: "Освобождение {name} закончилось",
+    reopenTheNodeToRead: "Откройте узел снова, чтобы прочитать, что осталось.",
     drainingAttempt: "Спрашиваем снова — попытка {n}",
     nodeIsDrained: "Узел освобождён.",
     drainStopped: "Освобождение остановилось.",
@@ -4586,6 +4588,12 @@ export const ru: Catalogue = {
       few: "Ждём {n} пода.",
       many: "Ждём {n} подов.",
       other: "Ждём {n} пода.",
+    },
+    podsStillLeaving: {
+      one: "{n} ещё уезжает.",
+      few: "{n} ещё уезжают.",
+      many: "{n} ещё уезжают.",
+      other: "{n} ещё уезжают.",
     },
     daemonsetPodsStay: {
       one: "{n} под DaemonSet остаётся, как и всегда.",

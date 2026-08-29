@@ -28,7 +28,7 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
-import { useNodeDrain } from "@/hooks/useNodeDrain";
+import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -265,13 +265,23 @@ export function NodeList() {
       });
       // A node that emptied has nothing left to read, so it says so in a
       // toast and gets out of the way. Every other ending left a list of
-      // pods and a reason each, which is not a story a toast can hold.
-      if (result.outcome !== "drained") return;
-      setDraining(null);
-      toast({
-        title: t("action", "nodeDrained"),
-        description: t("action", "nodeDrainedDetail", { name: result.node }),
-      });
+      // pods and a reason each, which is not a story a toast can hold — so
+      // it stays in the dialog, unless nobody is looking at the dialog.
+      if (result.outcome === "drained") {
+        setDraining(null);
+        drain.reset();
+        toast({
+          title: t("action", "nodeDrained"),
+          description: t("action", "nodeDrainedDetail", { name: result.node }),
+        });
+        return;
+      }
+      if (draining === null) {
+        toast({
+          title: t("action", "drainEnded", { name: result.node }),
+          description: t("action", "reopenTheNodeToRead"),
+        });
+      }
     },
   });
 
@@ -304,10 +314,11 @@ export function NodeList() {
         // Straight to the dialog rather than to the mutation: a drain is the
         // one action here that can be refused by something the reader cannot
         // see from this row.
-        // Reset first: reopening the dialog must not show the last node's
-        // report while this one has not started.
+        // Reopening the node a drain is running on shows that drain. Any
+        // other node starts clean, so one node's report never appears over
+        // another's name.
         onClick: (item) => {
-          drain.reset();
+          if (drainingNode(drain.state) !== item.name) drain.reset();
           setDraining(item.name);
         },
         variant: "destructive",
@@ -342,8 +353,12 @@ export function NodeList() {
         node={draining}
         state={drain.state}
         onOpenChange={(open) => {
-          if (!open) {
-            setDraining(null);
+          if (open) return;
+          setDraining(null);
+          // A running drain keeps running when its window is closed — the
+          // panel says so. Only a finished one is cleared, so that reopening
+          // the row does not reread an old report.
+          if (drain.state.phase === "done" || drain.state.phase === "failed") {
             drain.reset();
           }
         }}
