@@ -511,15 +511,24 @@ describe("routeTraces", () => {
     expect(trace.steps[2].detail?.body).toContain("No controller");
   });
 
-  it("stops at the gateway while its address is still pending", () => {
+  /**
+   * Was "stops at the gateway while its address is still pending", asserting
+   * an error on the assumption that no address means an address is coming.
+   * A Gateway actually waiting for one says so — `Programmed: False`, reason
+   * `AddressNotAssigned` — and still stops at the test below. What is left
+   * here is an implementation that publishes no address because it has none
+   * to publish, and calling that broken was simply wrong.
+   */
+  it("goes dashed at a programmed gateway with no address to read", () => {
     const [trace] = routeTraces(
-      route("pending"),
+      route("healthy"),
       sources({ gateways: [gateway("edge", { addresses: [] })] }),
       t
     );
 
-    expect(trace.stopStep).toBe(2);
+    expect(trace.steps[1].state).toBe("blind");
     expect(trace.steps[1].detail?.body).toContain("address");
+    expect(trace.stopStep).toBe(null);
   });
 
   it("goes dashed, not red, where the gateway list cannot be read", () => {
@@ -874,5 +883,70 @@ describe("routeTraces", () => {
       address: "203.0.113.10",
       port: 80,
     });
+  });
+});
+
+describe("a gateway that publishes no address", () => {
+  /**
+   * Reported against 4.6.0 by a reader whose Netbird gateway worked
+   * perfectly while five routes under it read "traffic has nowhere to
+   * arrive". `status.addresses` is optional in the spec, and an overlay
+   * implementation has nothing to publish there — so an empty list, next to
+   * a controller saying Programmed, is this app not seeing where traffic
+   * arrives. Which is not what it said.
+   */
+  it("does not call a programmed gateway broken for keeping its address private", () => {
+    const trace = routeTraces(
+      route("healthy"),
+      sources({
+        gateways: [
+          gateway("edge", {
+            addresses: [],
+            conditions: [condition("Programmed", "True", "Programmed")],
+          }),
+        ],
+      }),
+      t
+    )[0];
+
+    const step = trace.steps.find((s) => s.id === "gateway");
+    expect(step?.state).toBe("blind");
+    expect(trace.serving).toBe(true);
+    // And it says so: a verdict nobody checked must not read as checked.
+    expect(trace.servingKnown).toBe(false);
+  });
+
+  /** Nothing vouched for it and there is no address: both halves unknown,
+   *  and the old reading is the right one. */
+  it("still reports an unvouched gateway with no address as broken", () => {
+    const trace = routeTraces(
+      route("healthy"),
+      sources({
+        gateways: [gateway("edge", { addresses: [], conditions: [] })],
+      }),
+      t
+    )[0];
+
+    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(trace.serving).toBe(false);
+  });
+
+  /** A controller that said no is an answer, not a silence. */
+  it("keeps reporting a gateway the controller refused", () => {
+    const trace = routeTraces(
+      route("healthy"),
+      sources({
+        gateways: [
+          gateway("edge", {
+            addresses: [],
+            conditions: [condition("Programmed", "False", "Pending")],
+          }),
+        ],
+      }),
+      t
+    )[0];
+
+    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(trace.servingKnown).toBe(true);
   });
 });

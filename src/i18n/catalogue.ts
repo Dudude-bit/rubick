@@ -3873,6 +3873,11 @@ export const en = {
     gwNotProgrammedTitle: "The controller refuses this Gateway",
     gwNotProgrammedBody:
       "{said}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.",
+    gwNoAddressPublishedSay: "Gateway {name} publishes no address",
+    gwNoAddressPublishedShort: "{name} publishes no address",
+    gwNoAddressPublishedTitle: "No address to read",
+    gwNoAddressPublishedBody:
+      "The controller reports this Gateway as Programmed, and status.addresses is optional — an implementation on a private or overlay network has nothing to publish there. So this app cannot say where traffic arrives, which is not the same as saying it does not.",
     gwNoAddressSay: "Gateway {name} has no address yet",
     gwNoAddressShort: "{name} has no address yet",
     gwNoAddressTitle: "No address to send traffic to",

@@ -368,6 +368,31 @@ function gatewayStep(
     };
   }
   if (gateway.addresses.length === 0) {
+    // `status.addresses` is optional in the spec, and an implementation on a
+    // private or overlay network has nothing to publish there. So when the
+    // controller has already said Programmed, an empty list is this app
+    // failing to see where traffic arrives — not the traffic having nowhere
+    // to arrive. Blind rather than err, which is what keeps `servingKnown`
+    // honest instead of confidently wrong.
+    //
+    // Reported against 4.6.0: a Netbird gateway, programmed and working,
+    // with five routes under it all reading "traffic has nowhere to arrive".
+    if (programmed?.status === "True") {
+      return {
+        id: "gateway",
+        state: "blind",
+        say: t("empty", "gwNoAddressPublishedSay", { name: gateway.name }),
+        who: "infra",
+        short: t("empty", "gwNoAddressPublishedShort", { name: gateway.name }),
+        subject,
+        detail: {
+          title: t("empty", "gwNoAddressPublishedTitle"),
+          body: t("empty", "gwNoAddressPublishedBody"),
+        },
+      };
+    }
+    // Nothing has vouched for it and there is no address: the old reading
+    // stands, because now neither half is known good.
     return {
       id: "gateway",
       state: "err",
