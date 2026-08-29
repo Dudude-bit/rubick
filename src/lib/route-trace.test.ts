@@ -513,9 +513,11 @@ describe("routeTraces", () => {
 
   /**
    * Was "stops at the gateway while its address is still pending", asserting
-   * an error. It cannot: a cloud LoadBalancer mid-provision and an overlay
-   * that never publishes an address look identical from here, and calling
-   * both broken was wrong about the second. Dashed, and it says why.
+   * an error on the assumption that no address means an address is coming.
+   * A Gateway actually waiting for one says so — `Programmed: False`, reason
+   * `AddressNotAssigned` — and still stops at the test below. What is left
+   * here is an implementation that publishes no address because it has none
+   * to publish, and calling that broken was simply wrong.
    */
   it("goes dashed at a programmed gateway with no address to read", () => {
     const [trace] = routeTraces(
