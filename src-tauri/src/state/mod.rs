@@ -54,6 +54,10 @@ pub struct AppState {
     /// its cancellation, the same way `watch_manager` owns watches.
     pub search_manager: Arc<crate::search::SearchManager>,
 
+    /// Node drains in flight. Owns the retry loop and its cancellation,
+    /// the same way `search_manager` owns a fan-out.
+    pub drain_manager: Arc<crate::drain::DrainManager>,
+
     /// Active port-forward sessions
     pub port_forward_sessions: Arc<DashMap<String, PortForwardSession>>,
 
@@ -89,6 +93,8 @@ impl AppState {
 
         let client_manager = Arc::new(K8sClientManager::new());
 
+        let drain_manager = Arc::new(crate::drain::DrainManager::new(event_tx.clone()));
+
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
             client_manager.clone(),
@@ -98,6 +104,7 @@ impl AppState {
             config: Arc::new(RwLock::new(config)),
             client_manager,
             search_manager,
+            drain_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
             terminal_manager: Arc::new(TerminalManager::new(event_tx.clone())),

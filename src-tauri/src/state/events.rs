@@ -291,6 +291,30 @@ pub enum AppEvent {
         context: String,
         command: String,
     },
+    /// Where a drain stands after one look at the node.
+    ///
+    /// One per attempt, so a drain waiting on a budget is visibly alive
+    /// rather than a spinner the reader has to guess about.
+    DrainProgress {
+        drain_id: String,
+        node: String,
+        /// 1 for the first look. The reader is told which try this is
+        /// because "still waiting" and "stuck" look identical otherwise.
+        attempt: u32,
+        report: crate::drain::DrainReport,
+    },
+    /// A drain stopped, for one of the four reasons in `DrainOutcome`.
+    ///
+    /// Always exactly one per drain, so the frontend never has to decide
+    /// whether silence means finished or lost.
+    DrainFinished {
+        drain_id: String,
+        node: String,
+        outcome: crate::drain::DrainOutcome,
+        report: crate::drain::DrainReport,
+        /// Only for `Failed`, and quoted from whatever broke.
+        message: Option<String>,
+    },
     /// Error occurred
     Error { code: String, message: String },
 }
@@ -313,6 +337,8 @@ impl AppEvent {
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
+            AppEvent::DrainProgress { .. } => "drain-progress",
+            AppEvent::DrainFinished { .. } => "drain-finished",
             AppEvent::Error { .. } => "app-error",
         }
     }
@@ -450,6 +476,30 @@ impl AppEvent {
                 "terminal_session_id": terminal_session_id,
                 "context": context,
                 "command": command,
+            }),
+            AppEvent::DrainProgress {
+                drain_id,
+                node,
+                attempt,
+                report,
+            } => serde_json::json!({
+                "drain_id": drain_id,
+                "node": node,
+                "attempt": attempt,
+                "report": report,
+            }),
+            AppEvent::DrainFinished {
+                drain_id,
+                node,
+                outcome,
+                report,
+                message,
+            } => serde_json::json!({
+                "drain_id": drain_id,
+                "node": node,
+                "outcome": outcome,
+                "report": report,
+                "message": message,
             }),
             AppEvent::Error { code, message } => serde_json::json!({
                 "code": code,
