@@ -24,7 +24,8 @@
 use k8s_gui_lib::commands::connections::connections_of;
 use k8s_gui_lib::commands::helpers::ResourceContext;
 use k8s_gui_lib::resources::{
-    ChainStop, ConnectionEdge, Existence, ObjectFacts, Relation, ResourceConnections, Usage,
+    ChainStop, ConnectionEdge, Existence, GatewayApiDetection, ObjectFacts, Relation,
+    ResourceConnections, Usage,
 };
 use k8s_gui_lib::state::AppState;
 
@@ -720,5 +721,70 @@ async fn a_pod_names_the_service_that_fronts_it() {
             .iter()
             .any(|e| e.to.kind == "Node" && matches!(e.relation, Relation::RunsOn)),
         "and the node it was placed on"
+    );
+}
+
+/// A route that attaches through a `ListenerSet` must resolve to that set's
+/// Gateway, not be reported as naming one that does not exist.
+///
+/// This path fetches its own Gateways, and it fetched them without merging the
+/// sets in — so `listener_sets` was empty while `listener_sets_known` said the
+/// answer was solid, and the graph called the Gateway missing. Nothing in the
+/// unit suite can catch that: the defect is in what the fetch returns.
+///
+/// ```text
+/// kind create cluster --name rubick-ls
+/// kubectl apply --server-side -f .../v1.6.1/experimental-install.yaml
+/// kubectl apply -f test-manifests/listenerset-routes.yaml   # twice, ns first
+/// ./test-manifests/listenerset-routes-play-controller.sh
+/// kubectl create service clusterip app -n apps --tcp=80:8080
+/// K8S_GUI_INIT_CONTEXT=kind-rubick-ls K8S_GUI_INIT_NAMESPACE=apps \
+///   cargo test --test live_connections listenerset -- --ignored --nocapture
+/// ```
+#[tokio::test]
+#[ignore = "needs the listenerset-routes scene"]
+async fn a_route_through_a_listenerset_finds_its_gateway() {
+    let ctx = context("apps").await;
+    // Without a detection the gateway half of the snapshot returns early and
+    // the very path under test never runs.
+    let crds: kube::Api<
+        k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
+    > = ctx.cluster_api();
+    let crds = crds
+        .list(&kube::api::ListParams::default())
+        .await
+        .expect("crds");
+    let detection = GatewayApiDetection::from_crds(&crds.items);
+    assert!(detection.installed, "the scene needs Gateway API installed");
+    assert!(
+        detection.kinds.iter().any(|k| k.kind == "ListenerSet"),
+        "the scene needs the ListenerSet CRD: {:?}",
+        detection.kinds.iter().map(|k| &k.kind).collect::<Vec<_>>()
+    );
+
+    let answer = connections_of(&ctx, "Service", "app", Some(&detection))
+        .await
+        .expect("connections");
+    describe("Service apps/app", &answer);
+
+    let missing: Vec<_> = answer
+        .stops
+        .iter()
+        .filter(|stop| matches!(stop, ChainStop::GatewayMissing { .. }))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "the route names ListenerSet apps/app-tls, whose parentRef is Gateway \
+         edge/shared — the Gateway exists: {missing:?}"
+    );
+
+    let named_gateway = answer.edges.iter().any(|edge| {
+        edge.to.kind == "Gateway" && edge.to.name == "shared"
+            || edge.from.kind == "Gateway" && edge.from.name == "shared"
+    });
+    assert!(
+        named_gateway,
+        "the set resolved to no Gateway at all: {:?}",
+        answer.edges
     );
 }

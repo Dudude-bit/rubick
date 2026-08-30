@@ -89,6 +89,11 @@ Claims here are settled by running things, not by reasoning about them.
   and is white in a dark window.
 - Outside `src/integrations/`, ask for a facet (`useCapability`, `useCrdView`,
   `flavourOf`) and never name a vendor.
+- **A watch replaces a row wholesale.** Whatever the watch closure builds is
+  the whole row from the next tick on, so anything the closure cannot compute
+  from the object alone has to be merged at render — never written into the
+  watched cache entry, and never assumed to survive. This is how a Gateway
+  correct on first read went wrong a second later.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
 
@@ -120,6 +125,26 @@ Claims here are settled by running things, not by reasoning about them.
   keys; command return types are camelCase via serde. The two halves of the IPC
   boundary use opposite casing on purpose.
 
+## Connections and traces
+
+The graph and the route trace are where the thesis is actually enforced, and
+each has a contract nothing checks for you.
+
+- A new kind arm in `connections_of` must fill `not_looked_at` for every kind
+  it did not read. The default is an empty vec, and the wire contract reads
+  that as "every kind was read".
+- `object.related` returns `null` for a kind a vendor does not own and `[]` for
+  one it owns and found nothing in. Collapsing the two makes another vendor's
+  answer disappear.
+- `TraceStep.who` is load-bearing, not a label: `servingKnown` ignores blind
+  steps whose `who` is `"machine"`. Reuse it only for the unprobed last mile —
+  a cluster-read step tagged that way silently claims a verdict is knowable.
+- A `ConnRow` whose group claims anything that depends on the object existing
+  must set `verifiable: true`; the render site hides `notChecked` otherwise.
+- Implementations of `delivery.source` and `ingress.tls` answer **positionally**
+  — same length as the input, a hole rather than a dropped element. The caller
+  indexes the answer by row.
+
 ## Words the reader sees
 
 - **Never translate** kind names, status values, condition types and reasons,
@@ -139,8 +164,31 @@ Claims here are settled by running things, not by reasoning about them.
 - Singulars come from `toSingularNoun()`, not `replace(/s$/, "")` — that
   printed "1 ingresse".
 - Pass a value for every `{placeholder}`: an unsupplied one renders literally.
+- The translator is `t(section, key, values?)` — two positional arguments, not
+  a dotted path.
 - **Nothing checks that copy was translated.** No lint rule, no test. The only
   check is opening the screen.
+
+## Tests
+
+- A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/`.
+  A `__tests__/` folder or any other suffix is collected by nothing and reports
+  nothing.
+- Rust unit tests go in an inline `#[cfg(test)] mod tests` in the file they
+  cover. `src-tauri/tests/` is reserved for the `#[ignore]`d live harnesses.
+- Name a test as a sentence stating the behaviour, with a doc comment above
+  saying what would break. No `should`, no bare function names — nothing in
+  1918 test names here starts with "should".
+- **No snapshots.** Assert the behaviour, not the markup. A snapshot
+  re-recorded on failure asserts whatever the code now does.
+- `src/lib/__fixtures__/*.json` are recordings of what a real controller wrote.
+  Never hand-edit them; regenerate with the ignored Rust dumper against the
+  specimen cluster.
+- The table guards — `resource-registry.test.ts`, `catalogue.test.ts`,
+  `vendor-copy.test.ts`, `release-assets.test.ts` — each encode a contract
+  nothing else states. When one fails, the code is wrong, not the table.
+- Touch a log query term and both evaluators must agree: add the cases to
+  `shared/log-query-conformance.json` and run the Rust and the TypeScript side.
 
 ## Tooling
 
@@ -163,6 +211,22 @@ Claims here are settled by running things, not by reasoning about them.
 bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies
   of one package do not error; they make one copy's objects silently invisible
   to the other.
+
+## Adding a resource kind
+
+Half-done is invisible: each of these fails by the kind simply not appearing.
+
+`RESOURCE_REGISTRY` entry · a route file under the right section · the item in
+the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+optionally a `subscribe_*_watch` command, which must also be registered in
+`generate_handler!`.
+
+Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
+has it — but two things it does not say: a **detected** vendor needs its id in
+the Rust markers table with the exact same string, or it is permanently
+not-installed; and a **configured** vendor's capabilities are read through
+`useCapabilityState`, never `useCapability`, which only knows the detection
+scan.
 
 ## Releasing
 
