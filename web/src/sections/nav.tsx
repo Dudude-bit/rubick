@@ -6,7 +6,11 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-neutral-800/60 bg-neutral-950/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-        <a href="/" className="font-display text-lg font-bold tracking-tight">
+        <a
+          href="/"
+          className="flex items-center gap-2.5 font-display text-lg font-bold tracking-tight"
+        >
+          <img src="/logo.svg" alt="" className="size-6 rounded-md" />
           {SITE.name}
         </a>
         <nav className="flex items-center gap-6">

@@ -32,6 +32,7 @@ export const JSON_LD = JSON.stringify({
   name: SITE.name,
   description: SITE.description,
   url: SITE.url,
+  image: `${SITE.url}/logo.svg`,
   applicationCategory: "DeveloperApplication",
   operatingSystem: "macOS, Windows, Linux",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
