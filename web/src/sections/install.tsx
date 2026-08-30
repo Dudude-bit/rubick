@@ -253,7 +253,17 @@ export function Install() {
           )}
         </div>
       </div>
-      <p className="mt-10 font-mono text-sm text-neutral-500">
+      <p className="mt-6 font-mono text-sm text-neutral-500">
+        Every version, with signatures, lives on{" "}
+        <a
+          href={LINKS.releases}
+          className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+        >
+          GitHub Releases
+        </a>
+        .
+      </p>
+      <p className="mt-3 font-mono text-sm text-neutral-500">
         It talks to your clusters, and to GitHub to check for updates. Nothing
         else. There is nothing else to talk to.
       </p>

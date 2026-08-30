@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { LINKS } from "../lib/site";
 import { ButtonLink } from "./button-link";
 
 type OS = "mac" | "windows" | "linux";
@@ -29,11 +28,9 @@ export function DownloadButtons() {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {first ? (
-        <ButtonLink href={LINKS.releases}>{first.label}</ButtonLink>
-      ) : null}
+      {first ? <ButtonLink href="#install">{first.label}</ButtonLink> : null}
       {rest.map((d) => (
-        <ButtonLink key={d.os} href={LINKS.releases} variant="ghost">
+        <ButtonLink key={d.os} href="#install" variant="ghost">
           {d.label.replace("Download for ", "")}
         </ButtonLink>
       ))}
