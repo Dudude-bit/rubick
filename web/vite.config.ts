@@ -6,7 +6,10 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    tanstackStart({ prerender: { enabled: true, crawlLinks: true } }),
+    tanstackStart({
+      prerender: { enabled: true, crawlLinks: true },
+      pages: [{ path: "/404", sitemap: { exclude: true } }],
+    }),
     viteReact(),
   ],
 });

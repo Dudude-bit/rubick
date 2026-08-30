@@ -4,6 +4,7 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
+import { NotFound } from "../components/not-found";
 import { JSON_LD, OG_IMAGE, SITE } from "../lib/site";
 import appCss from "../styles.css?url";
 
@@ -44,6 +45,7 @@ export const Route = createRootRoute({
     scripts: [{ type: "application/ld+json", children: JSON_LD }],
   }),
   component: RootComponent,
+  notFoundComponent: NotFound,
 });
 
 function RootComponent() {
