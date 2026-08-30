@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.3] - 2026-08-31
+
+### Fixed — the Connections tab called an existing ListenerSet missing
+
+4.7.2 taught the Routes page and the Gateway's own tab that a route attaching
+to a `ListenerSet` belongs to that set's Gateway. The Connections tab fetches
+its Gateways down a different path, and that path never merged the sets in.
+
+So a Gateway arrived carrying no ListenerSets and a flag saying the answer was
+solid. A route naming a set then resolved to nothing, and the graph reported
+the set itself as **Missing** — an object plainly there in `kubectl` — with a
+stop reading that the route's Gateway does not exist.
+
+The flag was the deeper half of it. `listener_sets_known` defaulted to _true_,
+so every reader that forgot to merge inherited a confident wrong answer rather
+than an honest gap. It defaults to false now, and only an actual read sets it:
+forgetting degrades to "not looked at", which is a state this app already knows
+how to draw. The Connections path reads the sets alongside everything else it
+already asks for, so nothing costs an extra round trip.
+
+Proved against a live cluster rather than asserted — the harness and the scene
+that reproduce it are in the repository, because the defect was in what the
+fetch returned and no unit test could have seen it.
+
 ## [4.7.2] - 2026-08-30
 
 Two things a reader saw on screen and the app could not, both found by opening
