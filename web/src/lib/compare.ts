@@ -167,11 +167,11 @@ export const COMPETITORS: Competitor[] = [
       },
       {
         label: "Team sharing",
-        rubick: "no, it is a local client",
+        rubick: "not yet; today it is a local client",
         them: "yes, that is the point",
       },
     ],
     honestNote:
-      "Headlamp solves team access; Rubick does not even try. If you need a shared URL, that is Headlamp and this page will not talk you out of it.",
+      "Headlamp solves team access; Rubick does not, for now. Opening it from a browser is on the wishlist, not in the app, and a wishlist is not a feature. If you need a shared URL today, that is Headlamp and this page will not talk you out of it.",
   },
 ];
