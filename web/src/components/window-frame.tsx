@@ -1,10 +1,12 @@
+import type { Shot } from "../lib/site";
+
 export function WindowFrame({
-  src,
+  img,
   alt,
   caption,
   eager = false,
 }: {
-  src: string;
+  img: Shot;
   alt: string;
   caption?: string;
   eager?: boolean;
@@ -18,10 +20,12 @@ export function WindowFrame({
           <span className="size-3 rounded-full bg-neutral-700" />
         </div>
         <img
-          src={src}
+          src={img.src}
+          width={img.width}
+          height={img.height}
           alt={alt}
           loading={eager ? "eager" : "lazy"}
-          className="block w-full"
+          className="block h-auto w-full"
         />
       </div>
       {caption ? (

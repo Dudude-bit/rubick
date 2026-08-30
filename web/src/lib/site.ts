@@ -20,9 +20,9 @@ export const LINKS = {
 };
 
 export const OG_IMAGE = {
-  url: `${SITE.url}/images/hero-workload-detail.png`,
-  width: "1400",
-  height: "900",
+  url: `${SITE.url}/og.png`,
+  width: "1200",
+  height: "630",
   alt: "Rubick showing a workload page with live status, usage history and the traffic chain",
 };
 
@@ -43,10 +43,20 @@ export const JSON_LD = JSON.stringify({
   sameAs: [GH],
 });
 
+export type Shot = { src: string; width: number; height: number };
+
 export const IMG = {
-  hero: "/images/hero-workload-detail.png",
-  logs: "/images/logs-failing-init-container.png",
-  connections: "/images/connections-tab.png",
-  chain: "/images/traffic-chain-stops.png",
-  scale: "/images/scale-interception.png",
-};
+  hero: { src: "/images/hero-workload-detail.webp", width: 1400, height: 900 },
+  logs: {
+    src: "/images/logs-failing-init-container.webp",
+    width: 1190,
+    height: 350,
+  },
+  connections: {
+    src: "/images/connections-tab.webp",
+    width: 1190,
+    height: 380,
+  },
+  chain: { src: "/images/traffic-chain-stops.webp", width: 1190, height: 255 },
+  scale: { src: "/images/scale-interception.webp", width: 512, height: 220 },
+} satisfies Record<string, Shot>;

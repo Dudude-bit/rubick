@@ -21,7 +21,7 @@ export function Warns() {
       </div>
       <div className="mx-auto mt-12 max-w-3xl">
         <WindowFrame
-          src={IMG.scale}
+          img={IMG.scale}
           alt="Scaling a deployment an autoscaler owns, with the warning naming who will undo it"
         />
       </div>

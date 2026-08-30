@@ -1,0 +1,18 @@
+# Rubick
+
+> A free desktop Kubernetes client (macOS, Windows, Linux) that tries not to lie to you: it derives pod status the way kubectl does instead of trusting .status.phase, reads the endpoints the cluster actually publishes, and draws the Ingress-to-pod traffic chain naming the exact link that broke. GPL-3.0-or-later, no account, no telemetry. Built with Tauri and Rust.
+
+Key facts: reads your kubeconfig like Lens, k9s or Headlamp; warns who will undo a change (HPA, Argo CD, Flux) before obeying; integrates with Traefik, ingress-nginx, Istio, cert-manager, Argo CD, Flux, Prometheus, Loki, GKE, EKS and AKS; requires Kubernetes 1.21+.
+
+## Pages
+
+- [Home](https://rubick.tech/): what Rubick shows that dashboards miss, and downloads for every platform
+- [Rubick vs Lens](https://rubick.tech/vs/lens): an honest comparison with Lens by Mirantis
+- [Rubick vs k9s](https://rubick.tech/vs/k9s): an honest comparison with the k9s terminal UI
+- [Rubick vs Headlamp](https://rubick.tech/vs/headlamp): an honest comparison with the Headlamp web UI
+
+## Source and downloads
+
+- [GitHub repository](https://github.com/Dudude-bit/rubick): GPL-3.0-or-later source code
+- [Releases](https://github.com/Dudude-bit/rubick/releases/latest): dmg, exe, deb, rpm and AppImage downloads
+- [Contributing](https://github.com/Dudude-bit/rubick/blob/main/CONTRIBUTING.md): adding an integration costs a folder and a line

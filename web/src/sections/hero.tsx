@@ -24,7 +24,7 @@ export function Hero() {
       </p>
       <div className="mt-16">
         <WindowFrame
-          src={IMG.hero}
+          img={IMG.hero}
           alt="Rubick showing a workload page with live status, usage history and the traffic chain"
           eager
         />

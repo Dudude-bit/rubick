@@ -4,4 +4,16 @@
     <loc>https://rubick.tech/</loc>
     <changefreq>monthly</changefreq>
   </url>
+  <url>
+    <loc>https://rubick.tech/vs/lens</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/vs/k9s</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/vs/headlamp</loc>
+    <changefreq>monthly</changefreq>
+  </url>
 </urlset>
