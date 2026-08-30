@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.2] - 2026-08-30
+
+Two things a reader saw on screen and the app could not, both found by opening
+it rather than by searching it.
+
+### Fixed — a route that named a ListenerSet belonged nowhere
+
+Gateway API 1.5 graduated ListenerSet, and keeping the Gateway bare while every
+hostname and certificate lives on a per-app ListenerSet is a normal way to run
+it. Rubick matched a route's `parentRefs` against Gateways only, so those routes
+fell out of the Gateway's Routes tab — while the listener's own `attachedRoutes`
+still counted them. Two numbers on one screen disagreed, and the controller's
+was the right one.
+
+A route that names a ListenerSet now resolves to that set's Gateway. It appears
+on the tab, it is judged on the Routes page instead of being filed under mesh,
+and where two ListenerSets sit on one Gateway the row says which one. Reported
+in #69.
+
+### Fixed — the interface spoke English to Russian readers
+
+A cordoned node read "Marked unschedulable — no new pods will land here" in an
+otherwise Russian interface, on the first screen the app opens. That sentence is
+composed in the Rust half of the app, and every check of the translation so far
+had read the frontend, where the words are not.
+
+Six fields carried two unlike things in one string: usually the object's own
+status message, which is the cluster's wording and must stay as written, and
+sometimes a sentence this app composes. One type for both meant the second kind
+could never reach the reader's language, and the field's own documentation
+claimed only the first existed. Each now names its case, the words are chosen
+where the reader's language is known, and the cluster's own words are carried
+through untouched inside them.
+
+Three more of the same kind, none of which a search for a sentence could have
+found: an age with no timestamp said "Unknown" in every language, "4m ago" was
+built by joining two English words rather than being a phrase, and a namespace
+holding a single Ingress read "1 ingresse" — the singular was made by deleting
+the last letter.
+
 ## [4.7.1] - 2026-08-30
 
 ### Fixed — a route nobody wrote a verdict about
