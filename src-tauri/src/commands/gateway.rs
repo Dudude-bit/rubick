@@ -165,17 +165,21 @@ pub async fn delete_gateway_class(name: String, state: State<'_, AppState>) -> R
 /// installed. Absence is ordinary — the kind graduated in Gateway API 1.5
 /// and most bundles in the wild predate it — so "cannot list" reads as
 /// "none", not as an error a Gateway page fails on.
-async fn listener_sets(state: &State<'_, AppState>) -> Vec<ListenerSetInfo> {
-    let Ok((api, api_resource)) = gateway_api("ListenerSet", None, true, state).await else {
-        return Vec::new();
-    };
-    let Ok(list) = api.list(&build_list_params(None, None, None)).await else {
-        return Vec::new();
-    };
-    list.items
-        .into_iter()
-        .map(|obj| ListenerSetInfo::read(&with_types(obj, &api_resource)))
-        .collect()
+async fn listener_sets(state: &State<'_, AppState>) -> Option<Vec<ListenerSetInfo>> {
+    // `None` where the kind is absent *or* the list was refused, `Some` for a
+    // real answer including an empty one. The two used to be the same value,
+    // which cost nothing while the only consumer was the listener fold — a
+    // few rows missing from a table. It stopped being free the moment a route
+    // could resolve its parent through this list: an unread list then reads
+    // as "no set by that name", and the route's Gateway as missing.
+    let (api, api_resource) = gateway_api("ListenerSet", None, true, state).await.ok()?;
+    let list = api.list(&build_list_params(None, None, None)).await.ok()?;
+    Some(
+        list.items
+            .into_iter()
+            .map(|obj| ListenerSetInfo::read(&with_types(obj, &api_resource)))
+            .collect(),
+    )
 }
 
 #[tauri::command]
@@ -194,7 +198,7 @@ pub async fn list_gateways(
         .into_iter()
         .map(|obj| {
             let mut gateway = GatewayInfo::read(&with_types(obj, &api_resource));
-            gateway.merge_listener_sets(&sets);
+            gateway.merge_listener_sets(sets.as_deref());
             gateway
         })
         .collect())
@@ -210,7 +214,7 @@ pub async fn get_gateway(
     let (api, api_resource) = gateway_api("Gateway", namespace, false, &state).await?;
     let obj = api.get(&name).await?;
     let mut gateway = GatewayInfo::read(&with_types(obj, &api_resource));
-    gateway.merge_listener_sets(&listener_sets(&state).await);
+    gateway.merge_listener_sets(listener_sets(&state).await.as_deref());
     Ok(gateway)
 }
 

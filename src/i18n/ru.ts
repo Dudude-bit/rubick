@@ -4094,6 +4094,10 @@ export const ru: Catalogue = {
       "Класс называет контроллер {controller}, и никто за него не ответил. Обычно контроллер не установлен или не запущен — всё через этот шлюз мертво, пока он не ответит.",
     gwClassClaimedSay: "Класс {name} заявлен контроллером {controller}",
     gwGatewayBlind: "Gateway {name} — отсюда не прочитать",
+    gwSetsUnreadSay: "Не удалось понять, какой Gateway несёт {name}",
+    gwSetsUnreadTitle: "ListenerSet'ы не прочитались",
+    gwSetsUnreadBody:
+      "Этот маршрут привязан к ListenerSet, а к какому Gateway относится набор — записано на нём самом. Получить их список не вышло: отказ в правах либо вид не установлен. Значит назвать Gateway отсюда нельзя, а это не то же самое, что его нет.",
     gwGatewayMissingSay: "Gateway {name} не существует в {namespace}",
     gwGatewayMissingShort: "{name} не существует",
     gwGatewayMissingTitle: "parentRef называет Gateway, которого нет",

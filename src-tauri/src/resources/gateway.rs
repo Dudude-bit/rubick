@@ -179,7 +179,18 @@ pub struct ListenerInfo {
     pub conditions: Vec<ConditionInfo>,
     /// The `ListenerSet` this listener came from — `None` for the Gateway's
     /// own.
-    pub from_listener_set: Option<String>,
+    /// Name *and* namespace: a Gateway that accepts sets from anywhere can
+    /// hold two called `app-tls` from two teams, and a route through one of
+    /// them must not be checked against the other's listeners.
+    pub from_listener_set: Option<ObjectName>,
+}
+
+/// A name and namespace, for pointing at an object without carrying it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectName {
+    pub name: String,
+    pub namespace: String,
 }
 
 /// A Gateway, read as routing.
@@ -193,6 +204,15 @@ pub struct GatewayInfo {
     /// is, resolved the same way `IngressClass` claiming is.
     pub class_name: String,
     pub listeners: Vec<ListenerInfo>,
+    /// The `ListenerSet`s that attach to this Gateway, by their own
+    /// `spec.parentRef`. Routes parented to one of these belong here.
+    #[serde(default)]
+    pub listener_sets: Vec<ObjectName>,
+    /// Whether the list above is an answer. False where the sets could not be
+    /// listed at all — a missing CRD, a refusal, a timeout — so that an empty
+    /// list is never read as "this Gateway has none".
+    #[serde(default)]
+    pub listener_sets_known: bool,
     /// `status.addresses`, values only.
     pub addresses: Vec<String>,
     pub conditions: Vec<ConditionInfo>,
@@ -289,7 +309,7 @@ pub struct GatewayApiDetection {
 fn listener_info(
     listener: schema::Listener,
     statuses: &[schema::ListenerStatus],
-    from_listener_set: Option<&str>,
+    from_listener_set: Option<&ObjectName>,
 ) -> ListenerInfo {
     let status = statuses.iter().find(|s| s.name == listener.name);
     ListenerInfo {
@@ -312,7 +332,7 @@ fn listener_info(
             .and_then(|n| n.from),
         attached_routes: status.and_then(|s| s.attached_routes),
         conditions: status.map(|s| s.conditions.clone()).unwrap_or_default(),
-        from_listener_set: from_listener_set.map(String::from),
+        from_listener_set: from_listener_set.cloned(),
         name: listener.name,
         port: listener.port,
         protocol: listener.protocol,
@@ -335,6 +355,8 @@ impl GatewayInfo {
             namespace: obj.namespace().unwrap_or_default(),
             api_version: types.api_version,
             class_name: spec.gateway_class_name,
+            listener_sets: Vec::new(),
+            listener_sets_known: true,
             listeners: spec
                 .listeners
                 .into_iter()
@@ -353,10 +375,27 @@ impl GatewayInfo {
     ///
     /// Only sets whose resolved parentRef names this Gateway are taken;
     /// the rest are some other Gateway's business.
-    pub fn merge_listener_sets(&mut self, sets: &[ListenerSetInfo]) {
+    /// `None` means the sets could not be read, which is not the same as
+    /// there being none: a route that names a set would otherwise resolve to
+    /// nothing and its Gateway be reported missing.
+    pub fn merge_listener_sets(&mut self, sets: Option<&[ListenerSetInfo]>) {
+        let Some(sets) = sets else {
+            self.listener_sets_known = false;
+            return;
+        };
         for set in sets {
             if set.gateway_name == self.name && set.gateway_namespace == self.namespace {
                 self.listeners.extend(set.listeners.iter().cloned());
+                // Kept as well as folded. A route attaches to the *set*, not
+                // to this Gateway, so without the names here the route reads
+                // as parented to nothing a gateway page knows about — and
+                // lands among the mesh routes, unjudged. The names come from
+                // each set's `spec.parentRef`, which is written whether or
+                // not a controller has got round to programming anything.
+                self.listener_sets.push(ObjectName {
+                    name: set.name.clone(),
+                    namespace: set.namespace.clone(),
+                });
             }
         }
     }
@@ -372,6 +411,10 @@ impl ListenerSetInfo {
         let name = obj.name_any();
         let namespace = obj.namespace().unwrap_or_default();
 
+        let self_ref = ObjectName {
+            name: name.clone(),
+            namespace: namespace.clone(),
+        };
         Self {
             gateway_name: spec.parent_ref.name,
             // An absent parentRef namespace means the set's own.
@@ -382,7 +425,7 @@ impl ListenerSetInfo {
             listeners: spec
                 .listeners
                 .into_iter()
-                .map(|l| listener_info(l, &status.listeners, Some(&name)))
+                .map(|l| listener_info(l, &status.listeners, Some(&self_ref)))
                 .collect(),
             conditions: status.conditions,
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
@@ -1350,12 +1393,17 @@ status:
 
         let mut gw = GatewayInfo::read(&parse(GATEWAY_V1));
         let own = gw.listeners.len();
-        gw.merge_listener_sets(&[set, foreign]);
+        gw.merge_listener_sets(Some(&[set, foreign]));
 
         assert_eq!(gw.listeners.len(), own + 1);
         let merged = gw.listeners.last().expect("merged listener");
         assert_eq!(merged.name, "tenant-a-https");
-        assert_eq!(merged.from_listener_set.as_deref(), Some("tenant-a"));
+        let from = merged.from_listener_set.as_ref().expect("from a set");
+        assert_eq!(from.name, "tenant-a");
+        // The namespace matters: one Gateway can hold two sets of the same
+        // name from two teams, and a route through one must not be checked
+        // against the other's listeners.
+        assert_eq!(from.namespace, "infra");
     }
 
     #[test]

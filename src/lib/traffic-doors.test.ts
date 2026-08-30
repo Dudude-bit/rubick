@@ -65,6 +65,8 @@ const gateway = (
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
+  listenerSets: [],
+  listenerSetsKnown: true,
   listeners: listeners.map((listener) => ({
     ...listener,
     hostname: null,

@@ -1,0 +1,235 @@
+{
+  "classes": [
+    {
+      "accepted": true,
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"GatewayClass\",\"metadata\":{\"annotations\":{},\"name\":\"envoy\"},\"spec\":{\"controllerName\":\"gateway.envoyproxy.io/gatewayclass-controller\"}}\n"
+      },
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
+          "message": "ok",
+          "observedGeneration": 1,
+          "reason": "Accepted",
+          "status": "True",
+          "type": "Accepted"
+        }
+      ],
+      "controllerName": "gateway.envoyproxy.io/gatewayclass-controller",
+      "createdAt": "2026-08-30T14:21:52+00:00",
+      "description": null,
+      "labels": {},
+      "name": "envoy"
+    }
+  ],
+  "gateways": [
+    {
+      "addresses": [
+        "203.0.113.9"
+      ],
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"Gateway\",\"metadata\":{\"annotations\":{},\"name\":\"shared\",\"namespace\":\"edge\"},\"spec\":{\"allowedListeners\":{\"namespaces\":{\"from\":\"All\"}},\"gatewayClassName\":\"envoy\",\"listeners\":[{\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"}},\"name\":\"http\",\"port\":80,\"protocol\":\"HTTP\"}]}}\n"
+      },
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "className": "envoy",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
+          "message": "ok",
+          "observedGeneration": 1,
+          "reason": "Accepted",
+          "status": "True",
+          "type": "Accepted"
+        },
+        {
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
+          "message": "ok",
+          "observedGeneration": 1,
+          "reason": "Programmed",
+          "status": "True",
+          "type": "Programmed"
+        }
+      ],
+      "createdAt": "2026-08-30T14:21:52+00:00",
+      "generation": 1,
+      "labels": {},
+      "listenerSets": [
+        {
+          "name": "app-tls",
+          "namespace": "apps"
+        }
+      ],
+      "listenerSetsKnown": true,
+      "listeners": [
+        {
+          "allowedNamespaces": "All",
+          "attachedRoutes": 0,
+          "certificateRefs": [],
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "Accepted",
+              "status": "True",
+              "type": "Accepted"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "Programmed",
+              "status": "True",
+              "type": "Programmed"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "ResolvedRefs",
+              "status": "True",
+              "type": "ResolvedRefs"
+            }
+          ],
+          "fromListenerSet": null,
+          "hostname": null,
+          "name": "http",
+          "port": 80,
+          "protocol": "HTTP",
+          "tlsMode": null
+        },
+        {
+          "allowedNamespaces": "Same",
+          "attachedRoutes": 1,
+          "certificateRefs": [
+            {
+              "group": "",
+              "kind": "Secret",
+              "name": "app-cert",
+              "namespace": null
+            }
+          ],
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "Accepted",
+              "status": "True",
+              "type": "Accepted"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "Programmed",
+              "status": "True",
+              "type": "Programmed"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "ResolvedRefs",
+              "status": "True",
+              "type": "ResolvedRefs"
+            }
+          ],
+          "fromListenerSet": "app-tls",
+          "hostname": "app.example.com",
+          "name": "https",
+          "port": 443,
+          "protocol": "HTTPS",
+          "tlsMode": "Terminate"
+        }
+      ],
+      "name": "shared",
+      "namespace": "edge"
+    }
+  ],
+  "routes": [
+    {
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"HTTPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"app\",\"namespace\":\"apps\"},\"spec\":{\"hostnames\":[\"app.example.com\"],\"parentRefs\":[{\"group\":\"gateway.networking.k8s.io\",\"kind\":\"ListenerSet\",\"name\":\"app-tls\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"app\",\"port\":8080}]}]}}\n"
+      },
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "createdAt": "2026-08-30T14:21:52+00:00",
+      "generation": 1,
+      "hostnames": [
+        "app.example.com"
+      ],
+      "kind": "HTTPRoute",
+      "labels": {},
+      "name": "app",
+      "namespace": "apps",
+      "parentRefs": [
+        {
+          "group": "gateway.networking.k8s.io",
+          "kind": "ListenerSet",
+          "name": "app-tls",
+          "namespace": null,
+          "port": null,
+          "sectionName": null
+        }
+      ],
+      "parents": [
+        {
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "Accepted",
+              "status": "True",
+              "type": "Accepted"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
+              "message": "ok",
+              "observedGeneration": 1,
+              "reason": "ResolvedRefs",
+              "status": "True",
+              "type": "ResolvedRefs"
+            }
+          ],
+          "controllerName": "gateway.envoyproxy.io/gatewayclass-controller",
+          "parent": {
+            "group": "gateway.networking.k8s.io",
+            "kind": "ListenerSet",
+            "name": "app-tls",
+            "namespace": null,
+            "port": null,
+            "sectionName": null
+          }
+        }
+      ],
+      "rules": [
+        {
+          "backendRefs": [
+            {
+              "group": "",
+              "kind": "Service",
+              "name": "app",
+              "namespace": null,
+              "port": 8080,
+              "weight": 1
+            }
+          ],
+          "extensionRefs": [],
+          "hasRedirect": false,
+          "matches": [
+            {
+              "grpcMethod": null,
+              "grpcService": null,
+              "headers": [],
+              "method": null,
+              "path": "/",
+              "pathType": "PathPrefix",
+              "queryParams": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

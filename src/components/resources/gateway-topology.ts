@@ -29,7 +29,11 @@ import { describeStop } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
 import type { GatewayInfo, PodInfo, RouteInfo } from "@/generated/types";
-import { gatewayProgrammed } from "@/lib/route-trace";
+import {
+  gatewayOfParent,
+  gatewayProgrammed,
+  parentCarriesTraffic,
+} from "@/lib/route-trace";
 
 /** What the last column is built from — handed over only once both lists
  *  have answered, because a workload column guessed from half the pods
@@ -166,11 +170,15 @@ export function gatewayTopology(
     });
 
     for (const parent of route.parentRefs) {
-      // GAMMA/mesh and any other non-Gateway parent: no entry point on this
-      // map, and above all no "missing Gateway" invented for it.
-      if (parent.kind !== "Gateway") continue;
-      const ns = parent.namespace ?? route.namespace;
-      const gatewayId = `gw/${ns}/${parent.name}`;
+      // GAMMA/mesh and any other parent that is no way into a gateway: no
+      // entry point on this map, and above all no "missing Gateway" invented
+      // for it. A ListenerSet *is* a way in — the set names its Gateway on
+      // itself — so it draws an edge to that Gateway, not to a node named
+      // after the set.
+      if (!parentCarriesTraffic(parent)) continue;
+      const resolved = gatewayOfParent(drawn, parent, route.namespace);
+      const ns = resolved?.namespace ?? parent.namespace ?? route.namespace;
+      const gatewayId = `gw/${ns}/${resolved?.name ?? parent.name}`;
       if (!gatewayNodes.has(gatewayId)) {
         // Only a list that was read can say the gateway is not in it. Unread,
         // the node still gets drawn — the route does name it — but muted and

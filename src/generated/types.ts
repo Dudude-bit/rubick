@@ -810,12 +810,19 @@ export interface GatewayInfo {
   apiVersion: string;
   className: string;
   listeners: ListenerInfo[];
+  listenerSets: ObjectName[];
+  listenerSetsKnown: boolean;
   addresses: string[];
   conditions: ConditionInfo[];
   generation: number | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
+}
+
+export interface ObjectName {
+  name: string;
+  namespace: string;
 }
 
 export interface ListenerInfo {
@@ -828,7 +835,7 @@ export interface ListenerInfo {
   allowedNamespaces: string | null;
   attachedRoutes: number | null;
   conditions: ConditionInfo[];
-  fromListenerSet: string | null;
+  fromListenerSet: ObjectName | null;
 }
 
 export interface CertificateRefInfo {

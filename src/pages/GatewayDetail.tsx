@@ -52,7 +52,7 @@ import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
-import { gatewayProgrammed } from "@/lib/route-trace";
+import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
 import type {
   EventFilters,
@@ -64,16 +64,18 @@ import type {
 const ROUTE_KINDS = new Set<string>(GATEWAY_ROUTE_KINDS);
 
 /**
- * Whether this route names that Gateway as a parent — namespace resolved
- * the way the API resolves it: an absent parentRef namespace means the
- * route's own.
+ * Whether this route reaches that Gateway — named directly, or through one
+ * of its `ListenerSet`s.
+ *
+ * Namespace is resolved the way the API resolves it: an absent parentRef
+ * namespace means the route's own. The ListenerSet half matters more than it
+ * looks: a maintainer who keeps his Gateway bare and puts every listener in a
+ * set per app had this tab come up empty while the Overview counted his
+ * routes, because they all name the set.
  */
 function attachesTo(route: RouteInfo, gateway: GatewayInfo): boolean {
-  return route.parentRefs.some(
-    (parent) =>
-      parent.kind === "Gateway" &&
-      parent.name === gateway.name &&
-      (parent.namespace ?? route.namespace) === gateway.namespace
+  return route.parentRefs.some((parent) =>
+    parentIsGateway(parent, route.namespace, gateway)
   );
 }
 
@@ -84,10 +86,10 @@ function acceptedBy(
   t: T
 ): { text: string; tone: "ok" | "err" | "mute" } {
   const verdicts = route.parents
-    .filter(
-      (parent) =>
-        parent.parent.name === gateway.name &&
-        (parent.parent.namespace ?? route.namespace) === gateway.namespace
+    .filter((parent) =>
+      // By the same resolution as `attachesTo`: a route through a set has
+      // its verdict written against the set, not against this Gateway.
+      parentIsGateway(parent.parent, route.namespace, gateway)
     )
     .flatMap((parent) =>
       parent.conditions.filter((c) => c.type === "Accepted")
@@ -148,7 +150,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
           <TableBody>
             {gateway.listeners.map((listener) => (
               <TableRow
-                key={`${listener.fromListenerSet ?? ""}/${listener.name}`}
+                key={`${listener.fromListenerSet ? `${listener.fromListenerSet.namespace}/${listener.fromListenerSet.name}` : ""}/${listener.name}`}
                 data-quiet
               >
                 <TableCell className="text-fg-mut">
@@ -157,7 +159,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                     <span className="text-fg-fnt">
                       {" · "}
                       {t("empty", "fromListenerSet", {
-                        name: listener.fromListenerSet,
+                        name: listener.fromListenerSet.name,
                       })}
                     </span>
                   )}

@@ -86,6 +86,15 @@ export interface RouteTrace {
   /** The parent this trace runs through — named even when missing. The
    *  sectionName keeps two attachments to one gateway distinct. */
   gateway: { name: string; namespace: string; sectionName: string | null };
+  /**
+   * The `ListenerSet` the route named, where it named one rather than the
+   * Gateway. Null for a direct attachment.
+   *
+   * `gateway` resolves to the Gateway on purpose — that is the road, and the
+   * row groups by it — but two sets on one Gateway would then share a trace's
+   * whole identity, colliding on keys and hiding which set a verdict is about.
+   */
+  via: { name: string; namespace: string } | null;
   serving: boolean;
   /**
    * False when a step could not read its source.
@@ -125,6 +134,34 @@ export function gatewayProgrammed(
   );
 }
 
+/**
+ * Whether this parentRef points at that Gateway, directly or through one of
+ * its `ListenerSet`s.
+ *
+ * A route may name a `ListenerSet` instead of the Gateway: the set carries the
+ * listeners, and its own `spec.parentRef` says which Gateway they belong to.
+ * The route is still that Gateway's — it just took the long way. Reported by a
+ * maintainer whose whole setup works this way: a bare Gateway, and all TLS and
+ * hostname configuration in a ListenerSet per app. Every one of his routes read
+ * as attached to nothing.
+ */
+export function parentIsGateway(
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string,
+  gateway: GatewayInfo
+): boolean {
+  const at = parent.namespace ?? routeNamespace;
+  if (parent.kind === "Gateway") {
+    return parent.name === gateway.name && at === gateway.namespace;
+  }
+  if (parent.kind === "ListenerSet") {
+    return gateway.listenerSets.some(
+      (set) => set.name === parent.name && set.namespace === at
+    );
+  }
+  return false;
+}
+
 /** One lookup for "this name+namespace, in the fetched list". */
 export function findGateway(
   gateways: GatewayInfo[],
@@ -134,6 +171,45 @@ export function findGateway(
   return gateways.find(
     (candidate) => candidate.name === name && candidate.namespace === namespace
   );
+}
+
+/** The Gateway a parentRef leads to, directly or through a `ListenerSet`. */
+export function gatewayOfParent(
+  gateways: GatewayInfo[],
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string
+): GatewayInfo | undefined {
+  return gateways.find((candidate) =>
+    parentIsGateway(parent, routeNamespace, candidate)
+  );
+}
+
+/**
+ * Whether a failure to resolve this parent is an answer or a gap.
+ *
+ * A `ListenerSet` parent resolves through `GatewayInfo.listenerSets`, and that
+ * list is empty both when a Gateway has no sets and when the sets could not be
+ * listed at all — a missing CRD, a refused list, a timeout. Reporting the
+ * second as "Gateway X does not exist" would be this app inventing a verdict
+ * out of its own blind spot, which is the whole thing it is not supposed to do.
+ */
+export function parentResolutionKnown(
+  gateways: GatewayInfo[],
+  parent: { kind: string }
+): boolean {
+  if (parent.kind !== "ListenerSet") return true;
+  return gateways.every((gateway) => gateway.listenerSetsKnown);
+}
+
+/** Whether a parentRef could name a Gateway at all — directly or via a set. */
+export function parentCarriesTraffic(parent: { kind: string }): boolean {
+  // Only `ListenerSet`. The kind graduated into
+  // `gateway.networking.k8s.io/v1` in Gateway API 1.5, and the backend reads
+  // it under that name alone, so the older `XListenerSet` in the x-k8s.io
+  // group never reaches `GatewayInfo.listenerSets` and a branch for it here
+  // could not fire. Confirmed against a live cluster: kind `ListenerSet`,
+  // group `gateway.networking.k8s.io`, version v1.
+  return parent.kind === "Gateway" || parent.kind === "ListenerSet";
 }
 
 /** The protocol label a hostless route kind wears wherever it is drawn. */
@@ -227,18 +303,31 @@ function statusesFor(
 }
 
 /** The listeners this parentRef points at — one by section, or all. */
-function candidateListeners(
+export function candidateListeners(
   gateway: GatewayInfo | undefined,
-  parent: ParentRefInfo
+  parent: ParentRefInfo,
+  routeNamespace: string
 ): ListenerInfo[] {
   if (!gateway) return [];
+  // A route that named a ListenerSet reaches only that set's listeners. The
+  // Gateway's own and every other set's are merged into the same array, so
+  // without this a route through one team's set is checked against another
+  // team's — and a sectionName that means nothing to it can match.
+  const mine =
+    parent.kind === "ListenerSet"
+      ? gateway.listeners.filter(
+          (l) =>
+            l.fromListenerSet?.name === parent.name &&
+            l.fromListenerSet.namespace === (parent.namespace ?? routeNamespace)
+        )
+      : gateway.listeners;
   if (parent.sectionName) {
-    return gateway.listeners.filter((l) => l.name === parent.sectionName);
+    return mine.filter((l) => l.name === parent.sectionName);
   }
   if (parent.port != null) {
-    return gateway.listeners.filter((l) => l.port === parent.port);
+    return mine.filter((l) => l.port === parent.port);
   }
-  return gateway.listeners;
+  return mine;
 }
 
 function classStep(
@@ -320,6 +409,7 @@ function gatewayStep(
   parent: ParentRefInfo,
   routeNamespace: string,
   topologyKnown: boolean,
+  resolutionKnown: boolean,
   t: T
 ): TraceStep {
   const at = parent.namespace ?? routeNamespace;
@@ -329,6 +419,20 @@ function gatewayStep(
       state: "blind",
       say: t("empty", "gwGatewayBlind", { name: parent.name }),
       who: "infra",
+    };
+  }
+  if (!gateway && !resolutionKnown) {
+    // The parent names a ListenerSet and the sets could not be listed, so
+    // "no Gateway claims it" is not something this app read anywhere.
+    return {
+      id: "gateway",
+      state: "blind",
+      say: t("empty", "gwSetsUnreadSay", { name: parent.name }),
+      who: "infra",
+      detail: {
+        title: t("empty", "gwSetsUnreadTitle"),
+        body: t("empty", "gwSetsUnreadBody"),
+      },
     };
   }
   if (!gateway) {
@@ -453,7 +557,7 @@ function acceptanceSteps(
   entries: RouteParentStatusInfo[],
   t: T
 ): [TraceStep, TraceStep] {
-  const listeners = candidateListeners(gateway, parent);
+  const listeners = candidateListeners(gateway, parent, route.namespace);
   const label = listenerLabel(listeners, t);
 
   if (entries.length === 0) {
@@ -941,7 +1045,7 @@ function probeOf(
 ): RouteTrace["probe"] {
   // A wildcard never resolves; probe the first concrete name.
   const host = route.hostnames.find((name) => !name.startsWith("*")) ?? null;
-  const listeners = candidateListeners(gateway, parent);
+  const listeners = candidateListeners(gateway, parent, route.namespace);
   return {
     host,
     address: gateway?.addresses[0] ?? null,
@@ -973,7 +1077,9 @@ function traceFor(
   t: T
 ): RouteTrace {
   const namespace = parent.namespace ?? route.namespace;
-  const gateway = findGateway(sources.gateways, parent.name, namespace);
+  // Resolved rather than looked up by name: the parentRef may name a
+  // `ListenerSet`, whose own parentRef says which Gateway carries it.
+  const gateway = gatewayOfParent(sources.gateways, parent, route.namespace);
   const entries = statusesFor(route, parent);
   const [listener, allowed] = acceptanceSteps(
     route,
@@ -987,7 +1093,14 @@ function traceFor(
 
   const steps: TraceStep[] = [
     classStep(gateway, sources.classes, sources.topologyKnown, t),
-    gatewayStep(gateway, parent, route.namespace, sources.topologyKnown, t),
+    gatewayStep(
+      gateway,
+      parent,
+      route.namespace,
+      sources.topologyKnown,
+      parentResolutionKnown(sources.gateways, parent),
+      t
+    ),
     listener,
     allowed,
     refsStep(route, entries, t),
@@ -1015,11 +1128,15 @@ function traceFor(
   }
 
   return {
+    // The Gateway, not the ListenerSet that pointed at it: this names what
+    // the row's "via" shows, and two sets on one Gateway are one road.
     gateway: {
-      name: parent.name,
-      namespace,
+      name: gateway?.name ?? parent.name,
+      namespace: gateway?.namespace ?? namespace,
       sectionName: parent.sectionName,
     },
+    via:
+      parent.kind === "ListenerSet" ? { name: parent.name, namespace } : null,
     serving: firstBroken < 0,
     servingKnown: firstBroken >= 0 || !unread,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,
@@ -1039,6 +1156,6 @@ export function routeTraces(
   t: T
 ): RouteTrace[] {
   return route.parentRefs
-    .filter((parent) => parent.kind === "Gateway")
+    .filter(parentCarriesTraffic)
     .map((parent) => traceFor(route, parent, sources, t));
 }

@@ -24,6 +24,7 @@ import {
   routeTraces,
   type RouteTrace,
   type TraceStep,
+  parentCarriesTraffic,
 } from "@/lib/route-trace";
 import { Spinner } from "@/components/ui/spinner";
 import { useT, type T } from "@/i18n/useT";
@@ -761,7 +762,11 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
     [route, gateways.data, classes.data, backing.data, served, t]
   );
 
-  const mesh = route.parentRefs.filter((parent) => parent.kind !== "Gateway");
+  // A ListenerSet parent is a gateway attachment that went the long way;
+  // listing it as mesh contradicted the trace card drawn directly above it.
+  const mesh = route.parentRefs.filter(
+    (parent) => !parentCarriesTraffic(parent)
+  );
 
   return (
     <div className="mt-4">
@@ -771,7 +776,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
       <div className="space-y-6">
         {traces.map((trace) => (
           <TraceCard
-            key={`${trace.gateway.namespace}/${trace.gateway.name}/${trace.gateway.sectionName ?? ""}`}
+            key={`${trace.gateway.namespace}/${trace.gateway.name}/${trace.gateway.sectionName ?? ""}/${trace.via ? `${trace.via.namespace}/${trace.via.name}` : ""}`}
             trace={trace}
             route={route}
             named={traces.length > 1}

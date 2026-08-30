@@ -3863,6 +3863,10 @@ export const en = {
       "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.",
     gwClassClaimedSay: "Class {name} is claimed by {controller}",
     gwGatewayBlind: "Gateway {name} — cannot be read from here",
+    gwSetsUnreadSay: "Cannot tell which Gateway carries {name}",
+    gwSetsUnreadTitle: "The ListenerSets could not be read",
+    gwSetsUnreadBody:
+      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here — which is not the same as there being none.",
     gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
     gwGatewayMissingShort: "{name} does not exist",
     gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",

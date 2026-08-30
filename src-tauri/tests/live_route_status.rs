@@ -125,3 +125,79 @@ async fn dump_what_the_app_reads() {
         "the whole point: the controller wrote no status for it"
     );
 }
+
+#[tokio::test]
+#[ignore = "needs the ListenerSet specimen cluster"]
+async fn dump_listenerset_scene() {
+    let client = client().await;
+    let g = "gateway.networking.k8s.io";
+
+    let classes: Vec<GatewayClassInfo> = all(&client, &resource(g, "v1", "GatewayClass"))
+        .await
+        .iter()
+        .map(GatewayClassInfo::read)
+        .collect();
+    let sets = all(&client, &resource(g, "v1", "ListenerSet")).await;
+    let sets: Vec<k8s_gui_lib::resources::ListenerSetInfo> = sets
+        .iter()
+        .map(k8s_gui_lib::resources::ListenerSetInfo::read)
+        .collect();
+    let mut gateways: Vec<GatewayInfo> = all(&client, &resource(g, "v1", "Gateway"))
+        .await
+        .iter()
+        .map(GatewayInfo::read)
+        .collect();
+    for gw in &mut gateways {
+        gw.merge_listener_sets(Some(&sets));
+    }
+    let routes: Vec<RouteInfo> = all(&client, &resource(g, "v1", "HTTPRoute"))
+        .await
+        .iter()
+        .map(RouteInfo::read)
+        .collect();
+
+    println!("=== what the app reads ===");
+    for s in &sets {
+        println!(
+            "  set {}/{} -> gateway {}/{}",
+            s.namespace, s.name, s.gateway_namespace, s.gateway_name
+        );
+    }
+    for gw in &gateways {
+        println!(
+            "  gateway {}/{}  listenerSets={:?}  listeners={}",
+            gw.namespace,
+            gw.name,
+            gw.listener_sets
+                .iter()
+                .map(|o| format!("{}/{}", o.namespace, o.name))
+                .collect::<Vec<_>>(),
+            gw.listeners.len()
+        );
+    }
+    for r in &routes {
+        println!(
+            "  route {}/{}  parentRefs={:?}  parents={}",
+            r.namespace,
+            r.name,
+            r.parent_refs
+                .iter()
+                .map(|p| format!("{}:{}", p.kind, p.name))
+                .collect::<Vec<_>>(),
+            r.parents.len()
+        );
+    }
+
+    let dump = serde_json::json!({"classes": classes, "gateways": gateways, "routes": routes});
+    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../src/lib/__fixtures__/live-listenerset.json");
+    std::fs::write(&out, serde_json::to_string_pretty(&dump).unwrap()).expect("write");
+
+    assert_eq!(gateways.len(), 1);
+    assert_eq!(
+        gateways[0].listener_sets.len(),
+        1,
+        "the set must be recorded on the gateway"
+    );
+    assert_eq!(routes[0].parent_refs[0].kind, "ListenerSet");
+}

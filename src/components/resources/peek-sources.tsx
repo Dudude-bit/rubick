@@ -33,6 +33,7 @@ import { ClaimRef } from "./storage-refs";
 import { conditionRole } from "@/lib/condition-health";
 import {
   redirectOnly,
+  parentCarriesTraffic,
   selfAnswered,
   gatewayProgrammed,
 } from "@/lib/route-trace";
@@ -151,10 +152,14 @@ function gatewayRouteSource(kind: string): PeekSource {
             items: route.parentRefs.map((parent) => ({
               label: parent.kind,
               value:
-                parent.kind === "Gateway" ? (
+                // A ListenerSet parent links like a Gateway parent, because
+                // it is one: the set names the Gateway on itself. Labelling it
+                // mesh here while the routes list traced it to a Gateway was
+                // one object with two answers on two screens.
+                parentCarriesTraffic(parent) ? (
                   <span className="inline-flex flex-wrap items-baseline gap-x-1">
                     {ref(
-                      "Gateway",
+                      parent.kind,
                       parent.name,
                       parent.namespace ?? route.namespace
                     )}

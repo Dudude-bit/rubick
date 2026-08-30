@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { routeTraces, gatewayProgrammed, selfAnswered } from "./route-trace";
+import {
+  routeTraces,
+  gatewayProgrammed,
+  selfAnswered,
+  candidateListeners,
+} from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
@@ -41,6 +46,8 @@ const gateway = (
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
+  listenerSets: [],
+  listenerSetsKnown: true,
   listeners: [
     {
       name: "http",
@@ -1014,5 +1021,147 @@ describe("a route whose controller writes no status", () => {
 
     expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
+  });
+});
+
+describe("a route attached through a ListenerSet", () => {
+  /**
+   * Reported by a maintainer who keeps his Gateway bare and puts every
+   * listener in a ListenerSet per app. Every one of his routes names the
+   * *set*, so the app saw no Gateway parent, filed them among the mesh
+   * routes, and drew no trace at all.
+   */
+  const withSet = () =>
+    gateway("edge", {
+      listenerSets: [{ name: "app-tls", namespace: "gwtest" }],
+    });
+
+  const viaSet = () =>
+    route("healthy", {
+      parentRefs: [
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "ListenerSet",
+          name: "app-tls",
+          namespace: null,
+          sectionName: null,
+          port: null,
+        },
+      ],
+      parents: [],
+    });
+
+  it("traces it against the Gateway the set belongs to", () => {
+    const traces = routeTraces(viaSet(), sources({ gateways: [withSet()] }), t);
+
+    expect(traces).toHaveLength(1);
+    expect(traces[0].gateway.name).toBe("edge");
+    expect(traces[0].steps[0].state).toBe("ok");
+  });
+
+  /**
+   * The set has to actually belong to that Gateway — and the Gateway has to
+   * have been able to say so. This asserted `err` against a Gateway with an
+   * empty `listenerSets`, which is byte-identical to what a refused list
+   * produces, so it enshrined the bug below rather than catching it.
+   */
+  it("does not attach it to a Gateway that says it never claimed the set", () => {
+    const traces = routeTraces(
+      viaSet(),
+      sources({ gateways: [gateway("edge", { listenerSetsKnown: true })] }),
+      t
+    );
+
+    expect(traces).toHaveLength(1);
+    expect(traces[0].steps[1].state).toBe("err");
+  });
+
+  /**
+   * One Gateway can hold two sets called the same thing from two teams. A
+   * route through one must see only that one's listeners, or a sectionName
+   * that means nothing to it matches the other team's.
+   *
+   * Tested on the function itself: routed through `routeTraces` the listener
+   * step is blind whenever the controller wrote no route status, so it cannot
+   * tell the two apart.
+   */
+  it("shows a route only the listeners of its own set", () => {
+    const listener = (
+      name: string,
+      set: { name: string; namespace: string } | null
+    ) => ({
+      name,
+      port: 443,
+      protocol: "HTTPS",
+      hostname: null,
+      tlsMode: null,
+      certificateRefs: [],
+      allowedNamespaces: "All",
+      attachedRoutes: null,
+      conditions: [],
+      fromListenerSet: set,
+    });
+    const shared = gateway("edge", {
+      listenerSets: [
+        { name: "app-tls", namespace: "team-a" },
+        { name: "app-tls", namespace: "team-b" },
+      ],
+      listeners: [
+        listener("plain", null),
+        listener("mine", { name: "app-tls", namespace: "team-a" }),
+        listener("theirs", { name: "app-tls", namespace: "team-b" }),
+      ],
+    });
+    const via = (sectionName: string | null) => ({
+      group: "gateway.networking.k8s.io",
+      kind: "ListenerSet",
+      name: "app-tls",
+      namespace: null,
+      sectionName,
+      port: null,
+    });
+
+    // Team A's route, unqualified: its own set's listener, and nothing else.
+    expect(
+      candidateListeners(shared, via(null), "team-a").map((l) => l.name)
+    ).toEqual(["mine"]);
+
+    // A sectionName naming the other team's listener finds nothing.
+    expect(candidateListeners(shared, via("theirs"), "team-a")).toEqual([]);
+
+    // A route straight to the Gateway still sees everything it merged.
+    expect(
+      candidateListeners(
+        shared,
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "Gateway",
+          name: "edge",
+          namespace: null,
+          sectionName: null,
+          port: null,
+        },
+        "team-a"
+      )
+    ).toHaveLength(3);
+  });
+
+  /**
+   * The defect this branch introduced and an adversarial review caught.
+   * `listener_sets()` answered every failure with an empty list, so a refused
+   * or absent ListenerSet list made the route's Gateway look missing — named
+   * after the set, in red, with `servingKnown` true. Before this branch those
+   * routes sat harmlessly unjudged; after it they were confidently wrong.
+   */
+  it("says it cannot tell when the sets could not be listed", () => {
+    const traces = routeTraces(
+      viaSet(),
+      sources({ gateways: [gateway("edge", { listenerSetsKnown: false })] }),
+      t
+    );
+
+    expect(traces[0].steps[1].state).toBe("blind");
+    expect(traces[0].servingKnown).toBe(false);
+    expect(traces[0].steps[1].say).toContain("Cannot tell");
   });
 });
