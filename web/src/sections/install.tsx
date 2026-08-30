@@ -248,8 +248,14 @@ export function Install() {
                 >
                   rubick-kubernetes-bin
                 </a>{" "}
-                is on the AUR, packaged by someone who is not us, from the same
-                .deb we publish.
+                is on the AUR, maintained by{" "}
+                <a
+                  href="https://github.com/Prototik"
+                  className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+                >
+                  @Prototik
+                </a>{" "}
+                from the same .deb we publish. Thanks to him for it.
               </Comment>
             </div>
           )}
