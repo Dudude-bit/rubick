@@ -3,8 +3,7 @@ export const SITE = {
   title: "Rubick, a desktop Kubernetes client that tries not to lie to you",
   description:
     "A crashlooping pod says Running. A dead Service draws green. Rubick reads what the cluster actually does and tells you that instead. Free, GPLv3, no account, no telemetry.",
-  // PLACEHOLDER, replace when the domain exists
-  url: "https://rubick.example",
+  url: "https://rubick.tech",
 };
 
 const GH = "https://github.com/Dudude-bit/rubick";
