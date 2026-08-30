@@ -811,6 +811,7 @@ export interface GatewayInfo {
   className: string;
   listeners: ListenerInfo[];
   listenerSets: ObjectName[];
+  listenerSetsKnown: boolean;
   addresses: string[];
   conditions: ConditionInfo[];
   generation: number | null;

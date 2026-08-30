@@ -205,6 +205,11 @@ pub struct GatewayInfo {
     /// `spec.parentRef`. Routes parented to one of these belong here.
     #[serde(default)]
     pub listener_sets: Vec<ObjectName>,
+    /// Whether the list above is an answer. False where the sets could not be
+    /// listed at all — a missing CRD, a refusal, a timeout — so that an empty
+    /// list is never read as "this Gateway has none".
+    #[serde(default)]
+    pub listener_sets_known: bool,
     /// `status.addresses`, values only.
     pub addresses: Vec<String>,
     pub conditions: Vec<ConditionInfo>,
@@ -348,6 +353,7 @@ impl GatewayInfo {
             api_version: types.api_version,
             class_name: spec.gateway_class_name,
             listener_sets: Vec::new(),
+            listener_sets_known: true,
             listeners: spec
                 .listeners
                 .into_iter()
@@ -366,7 +372,14 @@ impl GatewayInfo {
     ///
     /// Only sets whose resolved parentRef names this Gateway are taken;
     /// the rest are some other Gateway's business.
-    pub fn merge_listener_sets(&mut self, sets: &[ListenerSetInfo]) {
+    /// `None` means the sets could not be read, which is not the same as
+    /// there being none: a route that names a set would otherwise resolve to
+    /// nothing and its Gateway be reported missing.
+    pub fn merge_listener_sets(&mut self, sets: Option<&[ListenerSetInfo]>) {
+        let Some(sets) = sets else {
+            self.listener_sets_known = false;
+            return;
+        };
         for set in sets {
             if set.gateway_name == self.name && set.gateway_namespace == self.namespace {
                 self.listeners.extend(set.listeners.iter().cloned());
@@ -1373,7 +1386,7 @@ status:
 
         let mut gw = GatewayInfo::read(&parse(GATEWAY_V1));
         let own = gw.listeners.len();
-        gw.merge_listener_sets(&[set, foreign]);
+        gw.merge_listener_sets(Some(&[set, foreign]));
 
         assert_eq!(gw.listeners.len(), own + 1);
         let merged = gw.listeners.last().expect("merged listener");

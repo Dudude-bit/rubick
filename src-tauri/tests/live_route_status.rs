@@ -148,7 +148,7 @@ async fn dump_listenerset_scene() {
         .map(GatewayInfo::read)
         .collect();
     for gw in &mut gateways {
-        gw.merge_listener_sets(&sets);
+        gw.merge_listener_sets(Some(&sets));
     }
     let routes: Vec<RouteInfo> = all(&client, &resource(g, "v1", "HTTPRoute"))
         .await

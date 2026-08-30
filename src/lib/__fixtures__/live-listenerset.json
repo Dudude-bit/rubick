@@ -59,6 +59,7 @@
           "namespace": "apps"
         }
       ],
+      "listenerSetsKnown": true,
       "listeners": [
         {
           "allowedNamespaces": "All",

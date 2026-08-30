@@ -42,6 +42,7 @@ const gateway = (
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
   listenerSets: [],
+  listenerSetsKnown: true,
   listeners: [
     {
       name: "http",
@@ -1053,16 +1054,39 @@ describe("a route attached through a ListenerSet", () => {
     expect(traces[0].steps[0].state).toBe("ok");
   });
 
-  /** The set has to actually belong to that Gateway. */
-  it("does not attach it to a Gateway that never claimed the set", () => {
+  /**
+   * The set has to actually belong to that Gateway — and the Gateway has to
+   * have been able to say so. This asserted `err` against a Gateway with an
+   * empty `listenerSets`, which is byte-identical to what a refused list
+   * produces, so it enshrined the bug below rather than catching it.
+   */
+  it("does not attach it to a Gateway that says it never claimed the set", () => {
     const traces = routeTraces(
       viaSet(),
-      sources({ gateways: [gateway("edge")] }),
+      sources({ gateways: [gateway("edge", { listenerSetsKnown: true })] }),
       t
     );
 
     expect(traces).toHaveLength(1);
-    // The parent resolves to nothing, which is the gateway step's business.
     expect(traces[0].steps[1].state).toBe("err");
+  });
+
+  /**
+   * The defect this branch introduced and an adversarial review caught.
+   * `listener_sets()` answered every failure with an empty list, so a refused
+   * or absent ListenerSet list made the route's Gateway look missing — named
+   * after the set, in red, with `servingKnown` true. Before this branch those
+   * routes sat harmlessly unjudged; after it they were confidently wrong.
+   */
+  it("says it cannot tell when the sets could not be listed", () => {
+    const traces = routeTraces(
+      viaSet(),
+      sources({ gateways: [gateway("edge", { listenerSetsKnown: false })] }),
+      t
+    );
+
+    expect(traces[0].steps[1].state).toBe("blind");
+    expect(traces[0].servingKnown).toBe(false);
+    expect(traces[0].steps[1].say).toContain("Cannot tell");
   });
 });

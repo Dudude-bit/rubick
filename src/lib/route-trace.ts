@@ -86,6 +86,15 @@ export interface RouteTrace {
   /** The parent this trace runs through — named even when missing. The
    *  sectionName keeps two attachments to one gateway distinct. */
   gateway: { name: string; namespace: string; sectionName: string | null };
+  /**
+   * The `ListenerSet` the route named, where it named one rather than the
+   * Gateway. Null for a direct attachment.
+   *
+   * `gateway` resolves to the Gateway on purpose — that is the road, and the
+   * row groups by it — but two sets on one Gateway would then share a trace's
+   * whole identity, colliding on keys and hiding which set a verdict is about.
+   */
+  via: { name: string; namespace: string } | null;
   serving: boolean;
   /**
    * False when a step could not read its source.
@@ -173,6 +182,23 @@ export function gatewayOfParent(
   return gateways.find((candidate) =>
     parentIsGateway(parent, routeNamespace, candidate)
   );
+}
+
+/**
+ * Whether a failure to resolve this parent is an answer or a gap.
+ *
+ * A `ListenerSet` parent resolves through `GatewayInfo.listenerSets`, and that
+ * list is empty both when a Gateway has no sets and when the sets could not be
+ * listed at all — a missing CRD, a refused list, a timeout. Reporting the
+ * second as "Gateway X does not exist" would be this app inventing a verdict
+ * out of its own blind spot, which is the whole thing it is not supposed to do.
+ */
+export function parentResolutionKnown(
+  gateways: GatewayInfo[],
+  parent: { kind: string }
+): boolean {
+  if (parent.kind !== "ListenerSet") return true;
+  return gateways.every((gateway) => gateway.listenerSetsKnown);
 }
 
 /** Whether a parentRef could name a Gateway at all — directly or via a set. */
@@ -370,6 +396,7 @@ function gatewayStep(
   parent: ParentRefInfo,
   routeNamespace: string,
   topologyKnown: boolean,
+  resolutionKnown: boolean,
   t: T
 ): TraceStep {
   const at = parent.namespace ?? routeNamespace;
@@ -379,6 +406,20 @@ function gatewayStep(
       state: "blind",
       say: t("empty", "gwGatewayBlind", { name: parent.name }),
       who: "infra",
+    };
+  }
+  if (!gateway && !resolutionKnown) {
+    // The parent names a ListenerSet and the sets could not be listed, so
+    // "no Gateway claims it" is not something this app read anywhere.
+    return {
+      id: "gateway",
+      state: "blind",
+      say: t("empty", "gwSetsUnreadSay", { name: parent.name }),
+      who: "infra",
+      detail: {
+        title: t("empty", "gwSetsUnreadTitle"),
+        body: t("empty", "gwSetsUnreadBody"),
+      },
     };
   }
   if (!gateway) {
@@ -1039,7 +1080,14 @@ function traceFor(
 
   const steps: TraceStep[] = [
     classStep(gateway, sources.classes, sources.topologyKnown, t),
-    gatewayStep(gateway, parent, route.namespace, sources.topologyKnown, t),
+    gatewayStep(
+      gateway,
+      parent,
+      route.namespace,
+      sources.topologyKnown,
+      parentResolutionKnown(sources.gateways, parent),
+      t
+    ),
     listener,
     allowed,
     refsStep(route, entries, t),
@@ -1074,6 +1122,8 @@ function traceFor(
       namespace: gateway?.namespace ?? namespace,
       sectionName: parent.sectionName,
     },
+    via:
+      parent.kind === "ListenerSet" ? { name: parent.name, namespace } : null,
     serving: firstBroken < 0,
     servingKnown: firstBroken >= 0 || !unread,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,

@@ -43,6 +43,7 @@ const gateway = (
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
   listenerSets: [],
+  listenerSetsKnown: true,
   listeners: [
     {
       name: "http",
