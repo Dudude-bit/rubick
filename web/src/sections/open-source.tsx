@@ -9,9 +9,9 @@ export function OpenSource() {
         Steal our code. Legally.
       </h2>
       <p className="mt-6 max-w-2xl text-neutral-400">
-        GPL-3.0-or-later. Fork it, change it, sell it if you like, ship the
-        source with it. Running it at home or across your whole company is not
-        distribution and obliges you to nothing.
+        GPL-3.0-or-later. Fork it, change it, ship the source with it. Running
+        it at home or across your whole company is not distribution and obliges
+        you to nothing.
       </p>
       <p className="mt-4 max-w-2xl font-mono text-sm text-neutral-500">
         Built with Tauri, Rust and kube-rs. React on top. No Electron anywhere
