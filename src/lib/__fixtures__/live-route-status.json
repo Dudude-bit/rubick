@@ -7,7 +7,7 @@
       },
       "conditions": [
         {
-          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
           "message": "claimed",
           "observedGeneration": 1,
           "reason": "Accepted",
@@ -32,7 +32,7 @@
       "className": "netbird-private",
       "conditions": [
         {
-          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
           "message": "ok",
           "observedGeneration": 1,
           "reason": "Accepted",
@@ -40,7 +40,7 @@
           "type": "Accepted"
         },
         {
-          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "lastTransitionTime": "2026-08-30T00:00:00Z",
           "message": "programmed",
           "observedGeneration": 1,
           "reason": "Programmed",
@@ -58,7 +58,7 @@
           "certificateRefs": [],
           "conditions": [
             {
-              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
               "message": "ok",
               "observedGeneration": null,
               "reason": "Accepted",
@@ -66,7 +66,7 @@
               "type": "Accepted"
             },
             {
-              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
               "message": "ok",
               "observedGeneration": null,
               "reason": "Programmed",
@@ -74,7 +74,7 @@
               "type": "Programmed"
             },
             {
-              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "lastTransitionTime": "2026-08-30T00:00:00Z",
               "message": "ok",
               "observedGeneration": null,
               "reason": "ResolvedRefs",
