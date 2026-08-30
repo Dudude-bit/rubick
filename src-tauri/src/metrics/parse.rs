@@ -36,10 +36,10 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
             },
             _ => MetricsStatus {
                 status: MetricsStatusKind::Error,
-                message: Some(format!(
-                    "Metrics API error {}: {}",
-                    api_err.code, api_err.message
-                )),
+                // The banner's title already says this is a metrics error,
+                // in the reader's language. What is left to add is the
+                // server's own code and words.
+                message: Some(format!("{}: {}", api_err.code, api_err.message)),
             },
         },
         _ => MetricsStatus {

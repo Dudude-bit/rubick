@@ -347,6 +347,18 @@ export function toPlural(resourceKind: ResourceKind): string {
   );
 }
 
+/**
+ * One of whatever the plural names, spelled the way the cluster spells it.
+ *
+ * Read out of the registry rather than made by trimming a letter: the API's
+ * plurals are not all `noun + "s"`, and `"ingresses".replace(/s$/, "")` —
+ * which is what a group caption used to print — says "1 ingresse".
+ */
+export function toSingularNoun(plural: string): string {
+  const lower = plural.toLowerCase();
+  return RESOURCE_BY_PLURAL.get(lower)?.kind.toLowerCase() ?? lower;
+}
+
 export function toKind(resourceType: string): ResourceKind | null {
   if (RESOURCE_BY_KIND.has(resourceType as ResourceKind)) {
     return resourceType as ResourceKind;

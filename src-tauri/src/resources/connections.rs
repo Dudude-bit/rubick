@@ -436,14 +436,32 @@ pub struct ResourceConnections {
 #[serde(rename_all = "camelCase")]
 pub struct UnexploredKind {
     pub kind: String,
-    pub why: String,
+    pub why: Unread,
+}
+
+/// Why a kind went unread, named rather than written.
+///
+/// The sentence belongs to the reader's language and this runs before the
+/// backend knows what that is. `Unanswered` carries the API server's own
+/// refusal inside it — that half stays exactly as the cluster wrote it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Unread {
+    /// The app asked for this version and got no usable answer.
+    Unanswered { version: String, said: String },
+    /// The claims held by the pods on a node — one list per namespace, not
+    /// made here.
+    NodeClaimsNotRead,
+    /// What mounts a volume's claim — one list in the claim's namespace,
+    /// which is the claim's own page.
+    VolumeMountsNotRead,
 }
 
 impl UnexploredKind {
-    fn new(kind: &str, why: &str) -> Self {
+    fn new(kind: &str, why: Unread) -> Self {
         Self {
             kind: kind.to_string(),
-            why: why.to_string(),
+            why,
         }
     }
 
@@ -457,9 +475,10 @@ impl UnexploredKind {
     pub fn unanswered(kind: &str, version: &str, why: &str) -> Self {
         Self::new(
             kind,
-            &format!(
-                "the app asked for {version} and the cluster did not answer ({why}), so it cannot say whether one applies here"
-            ),
+            Unread::Unanswered {
+                version: version.to_string(),
+                said: why.to_string(),
+            },
         )
     }
 
@@ -496,7 +515,7 @@ impl UnexploredKind {
         let mut unread = Self::governance(None, budgets);
         unread.push(Self::new(
             "PersistentVolumeClaim",
-            "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
+            Unread::NodeClaimsNotRead,
         ));
         unread
     }
@@ -510,10 +529,7 @@ impl UnexploredKind {
     /// a read made here on every open.
     #[must_use]
     pub fn on_a_volume() -> Vec<Self> {
-        vec![Self::new(
-            "Pod",
-            "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
-        )]
+        vec![Self::new("Pod", Unread::VolumeMountsNotRead)]
     }
 }
 
@@ -780,8 +796,13 @@ mod tests {
         let unread = UnexploredKind::governance(Some("404 Not Found"), None);
         assert_eq!(unread.len(), 1);
         assert_eq!(unread[0].kind, "HorizontalPodAutoscaler");
-        assert!(unread[0].why.contains("autoscaling/v2"));
-        assert!(unread[0].why.contains("404 Not Found"));
+        assert_eq!(
+            unread[0].why,
+            Unread::Unanswered {
+                version: "autoscaling/v2".to_string(),
+                said: "404 Not Found".to_string(),
+            }
+        );
     }
 
     #[test]

@@ -34,6 +34,19 @@ import { useT } from "@/i18n/useT";
 type PodRow = WithNodeSilence<PodWithMetrics>;
 
 /**
+ * How long ago the last restart was.
+ *
+ * A component rather than an expression in the column literal: the age now
+ * needs the translator, and a hook is only legal inside one.
+ */
+function RestartAge({ at }: { at: string }) {
+  const t = useT();
+  return (
+    <T section="action" k="agoSuffix" values={{ age: formatAge(at, t) }} />
+  );
+}
+
+/**
  * A pod on a node that stopped reporting keeps whatever the kubelet last
  * wrote. The label stays kubectl's — this is what the cluster holds — but
  * the colour drops to neutral, because confident green about a machine
@@ -124,12 +137,7 @@ export const columns: ColumnDef<PodRow>[] = [
           <span className="text-fg-fnt">
             {" "}
             (
-            <T
-              section="action"
-              k="agoSuffix"
-              values={{ age: formatAge(row.original.lastRestartAt) }}
-            />
-            )
+            <RestartAge at={row.original.lastRestartAt} />)
           </span>
         )}
       </span>

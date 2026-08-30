@@ -238,7 +238,7 @@ export interface ClusterProblem {
   name: string;
   namespace: string | null;
   reason: string;
-  detail: string | null;
+  detail: ProblemDetail | null;
   since: string | null;
   restarts: number | null;
 }
@@ -1044,7 +1044,7 @@ export interface ResourceConnections {
 
 export interface UnexploredKind {
   kind: string;
-  why: string;
+  why: Unread;
 }
 
 export interface ConnectionEdge {
@@ -1547,7 +1547,7 @@ export interface ListQuery {
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
-  problem: string | null;
+  problem: CertificateProblem | null;
 }
 
 export interface CertificateFacts {
@@ -1576,6 +1576,7 @@ export interface PrometheusProbe {
   at: number;
   latencyMs: number;
   reason?: string;
+  noAddress: boolean;
   version?: string;
 }
 
@@ -1601,7 +1602,7 @@ export interface IssuanceStory {
   renewalTime: string | null;
   inFlight: boolean;
   failure: string | null;
-  stalled: string | null;
+  stalled: Stalled | null;
   since: string | null;
   attempts: number | null;
   steps: IssuanceStep[];
@@ -1611,7 +1612,7 @@ export interface IssuanceStep {
   kind: string;
   name: string;
   state: string;
-  note: string | null;
+  note: StepNote | null;
   failed: boolean;
 }
 
@@ -1632,6 +1633,7 @@ export interface LokiProbe {
   at: number;
   latencyMs: number;
   reason?: string;
+  noAddress: boolean;
   version?: string;
   retention?: string;
   labels: string[];
@@ -1674,6 +1676,12 @@ export type ContextAuth =
   | { kind: "basic"; username: string | null }
   | { kind: "authProvider"; name: string }
   | { kind: "unrecognised" };
+
+export type ProblemDetail =
+  | { says: "said"; text: string }
+  | { says: "restarts"; n: number }
+  | { says: "replicasReady"; ready: number; desired: number }
+  | { says: "unschedulable" };
 
 export type ProblemSeverity = "critical" | "warning";
 
@@ -1756,6 +1764,11 @@ export type ContainerState =
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
 
+export type Unread =
+  | { says: "unanswered"; version: string; said: string }
+  | { says: "nodeClaimsNotRead" }
+  | { says: "volumeMountsNotRead" };
+
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
   | {
@@ -1824,3 +1837,21 @@ export type Usage =
   | { how: "ingressTls"; hosts: string[] };
 
 export type Severity = "blocking" | "misconfigured" | "optional";
+
+export type CertificateProblem =
+  | { says: "noSecret" }
+  | { says: "secretUnreadable"; said: string }
+  | { says: "noTlsCrt" }
+  | { says: "noPemCertificate" }
+  | { says: "unparseable"; said: string };
+
+export type StepNote =
+  | { says: "said"; text: string }
+  | { says: "attempt"; revision: number }
+  | { says: "challengeOn"; kind: string; domain: string };
+
+export type Stalled =
+  | { says: "notRequested" }
+  | { says: "requestNotIssued" }
+  | { says: "challengePending"; kind: string; domain: string }
+  | { says: "orderNotCompleted" };

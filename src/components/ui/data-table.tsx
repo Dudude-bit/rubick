@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toSingularNoun } from "@/lib/resource-registry";
 import { useNavigate } from "react-router-dom";
 import {
   flexRender,
@@ -889,7 +890,7 @@ export function DataTable<TData extends RowData>({
               ? t("readings", "rowCount", { n: filteredRows })
               : filteredRows === totalRows
                 ? `${totalRows} ${
-                    totalRows === 1 ? rowLabel.replace(/s$/, "") : rowLabel
+                    totalRows === 1 ? toSingularNoun(rowLabel) : rowLabel
                   }`
                 : t("readings", "rowsOfTotal", {
                     shown: filteredRows,

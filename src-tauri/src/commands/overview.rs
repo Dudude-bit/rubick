@@ -99,6 +99,33 @@ pub enum ProblemSeverity {
     Warning,
 }
 
+/// What the detail line on a problem row says.
+///
+/// Two unlike things arrived in this one field and only one of them may be
+/// translated: most rows quote the object's own status message, which is the
+/// cluster's wording and stays as written, while three are sentences this app
+/// composes. Naming the variant is what lets the reader see the second kind
+/// in their own language without the app rewriting the first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum ProblemDetail {
+    /// The object's own words, quoted.
+    Said { text: String },
+    /// A pod restarting more than the screen tolerates.
+    Restarts { n: i32 },
+    /// A Deployment short of replicas whose own condition said nothing.
+    ReplicasReady { ready: i32, desired: i32 },
+    /// A node marked unschedulable.
+    Unschedulable,
+}
+
+impl ProblemDetail {
+    /// The cluster's own message, where it wrote one.
+    fn said(message: Option<String>) -> Option<Self> {
+        message.map(|text| Self::Said { text })
+    }
+}
+
 /// One actionable row in the problems list. `kind` + `namespace` + `name`
 /// is enough for the frontend to build a deep link to the detail page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,9 +137,8 @@ pub struct ClusterProblem {
     pub namespace: Option<String>,
     /// Short machine-ish label: `CrashLoopBackOff`, `Pending`, `NotReady`.
     pub reason: String,
-    /// Human sentence explaining the reason, taken from the object's own
-    /// status message where one exists.
-    pub detail: Option<String>,
+    /// Why, named rather than written — see [`ProblemDetail`].
+    pub detail: Option<ProblemDetail>,
     /// RFC3339 timestamp the condition started, for "N minutes ago".
     pub since: Option<String>,
     pub restarts: Option<i32>,
@@ -385,7 +411,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason,
-            detail: message,
+            detail: ProblemDetail::said(message),
             since: created,
             restarts: Some(restarts),
         });
@@ -404,7 +430,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .reason
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
-            detail: status.message.clone(),
+            detail: ProblemDetail::said(status.message.clone()),
             since: created,
             restarts: (restarts > 0).then_some(restarts),
         });
@@ -434,9 +460,11 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Pending".to_string(),
-            detail: scheduled
-                .and_then(|c| c.message.clone())
-                .or_else(|| status.message.clone()),
+            detail: ProblemDetail::said(
+                scheduled
+                    .and_then(|c| c.message.clone())
+                    .or_else(|| status.message.clone()),
+            ),
             since: pending_since.map(|t| t.to_rfc3339()),
             restarts: None,
         });
@@ -454,7 +482,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Restarting".to_string(),
-            detail: Some(format!("{restarts} restarts since creation")),
+            detail: Some(ProblemDetail::Restarts { n: restarts }),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
@@ -499,10 +527,8 @@ fn deployment_problems(deployments: &[Deployment]) -> Vec<ClusterProblem> {
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
                 reason: "NotAvailable".to_string(),
-                detail: condition
-                    .as_ref()
-                    .and_then(|c| c.message.clone())
-                    .or_else(|| Some(format!("{ready}/{desired} replicas ready"))),
+                detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone()))
+                    .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
                 since: condition
                     .as_ref()
                     .and_then(|c| c.last_transition_time.as_ref())
@@ -532,7 +558,7 @@ fn node_problems(nodes: &[Node]) -> Vec<ClusterProblem> {
                     name,
                     namespace: None,
                     reason: "NotReady".to_string(),
-                    detail: condition.as_ref().and_then(|c| c.message.clone()),
+                    detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone())),
                     since: condition
                         .as_ref()
                         .and_then(|c| c.last_transition_time.as_ref())
@@ -553,7 +579,7 @@ fn node_problems(nodes: &[Node]) -> Vec<ClusterProblem> {
                     name,
                     namespace: None,
                     reason: "Cordoned".to_string(),
-                    detail: Some("Marked unschedulable — no new pods will land here".to_string()),
+                    detail: Some(ProblemDetail::Unschedulable),
                     since: None,
                     restarts: None,
                 });
@@ -1098,8 +1124,8 @@ mod tests {
     use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
     use k8s_openapi::api::core::v1::{
         Container, ContainerState, ContainerStateRunning, ContainerStateTerminated,
-        ContainerStateWaiting, ContainerStatus, NodeStatus, PodCondition, PodSpec, PodStatus,
-        ResourceRequirements,
+        ContainerStateWaiting, ContainerStatus, NodeCondition, NodeSpec, NodeStatus, PodCondition,
+        PodSpec, PodStatus, ResourceRequirements,
     };
     use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
@@ -1455,8 +1481,10 @@ mod tests {
         assert_eq!(problems[0].severity, ProblemSeverity::Critical);
         assert_eq!(problems[0].reason, "Evicted");
         assert_eq!(
-            problems[0].detail.as_deref(),
-            Some("The node was low on resource: memory")
+            problems[0].detail,
+            Some(ProblemDetail::Said {
+                text: "The node was low on resource: memory".to_string()
+            })
         );
     }
 
@@ -1532,6 +1560,61 @@ mod tests {
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].reason, "Restarting");
         assert_eq!(problems[0].restarts, Some(7));
+    }
+
+    /// The distinction the field exists for. A row that quotes the cluster
+    /// has to keep the cluster's wording; a row this app composes has to
+    /// arrive as a name, or the reader's language never reaches it. Both
+    /// were `Option<String>` once, which is exactly how three English
+    /// sentences ended up on the first screen of a Russian interface.
+    #[test]
+    fn our_sentences_are_named_and_the_cluster_is_quoted() {
+        let now = Utc::now();
+
+        let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
+        assert_eq!(ours[0].detail, Some(ProblemDetail::Restarts { n: 7 }));
+
+        let cordoned = node_problems(&[unschedulable_node("worker-1")]);
+        assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));
+
+        let quoted = pod_problems(
+            &[pod(
+                "migrate",
+                PodStatus {
+                    phase: Some("Failed".to_string()),
+                    message: Some("The node was low on resource: memory".to_string()),
+                    ..Default::default()
+                },
+            )],
+            now,
+        );
+        assert_eq!(
+            quoted[0].detail,
+            Some(ProblemDetail::Said {
+                text: "The node was low on resource: memory".to_string()
+            })
+        );
+    }
+
+    fn unschedulable_node(name: &str) -> Node {
+        Node {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            spec: Some(NodeSpec {
+                unschedulable: Some(true),
+                ..Default::default()
+            }),
+            status: Some(NodeStatus {
+                conditions: Some(vec![NodeCondition {
+                    type_: "Ready".to_string(),
+                    status: "True".to_string(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        }
     }
 
     /// The row shows the age of `since`. Dating it by the pod put "12d" on

@@ -28,9 +28,14 @@ export function describeTermination(termination: TerminationInfo): string {
 }
 
 /** "4m ago", or nothing when the API did not stamp the termination. */
-export function terminationWhen(termination: TerminationInfo): string | null {
+export function terminationWhen(
+  termination: TerminationInfo,
+  t: T
+): string | null {
   if (!termination.finishedAt) return null;
-  return `${formatAge(termination.finishedAt)} ago`;
+  return t("action", "agoSuffix", {
+    age: formatAge(termination.finishedAt, t),
+  });
 }
 
 /** The wall-clock stamp, for a `title` beside the relative age. */
@@ -131,6 +136,6 @@ export function describeRestarts(
   }
   return t("count", "restartsWithLast", {
     n: pod.restartCount,
-    ago: formatAge(pod.lastRestartAt),
+    ago: formatAge(pod.lastRestartAt, t),
   });
 }

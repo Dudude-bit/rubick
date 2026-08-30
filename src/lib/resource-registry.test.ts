@@ -4,6 +4,7 @@ import {
   RESOURCE_REGISTRY,
   listQueryFor,
   toPlural,
+  toSingularNoun,
   type ResourceKind,
 } from "./resource-registry";
 
@@ -58,5 +59,23 @@ describe("the question that asks whether a kind may be listed", () => {
         query.group !== ""
       );
     }
+  });
+});
+
+describe("toSingularNoun", () => {
+  /** Trimming a letter was the old way, and it printed "1 ingresse" for a
+   *  namespace with one Ingress in it. The API's plurals are not all
+   *  noun + "s", and the registry already holds the singular. */
+  it("reads the singular off the registry rather than trimming a letter", () => {
+    expect(toSingularNoun("ingresses")).toBe("ingress");
+    expect(toSingularNoun("storageclasses")).toBe("storageclass");
+    expect(toSingularNoun("pods")).toBe("pod");
+    expect(toSingularNoun("services")).toBe("service");
+  });
+
+  /** A kind the registry does not carry keeps whatever it was given —
+   *  a wrong singular is worse than a plural that reads as one. */
+  it("leaves a plural it does not know alone", () => {
+    expect(toSingularNoun("widgets")).toBe("widgets");
   });
 });

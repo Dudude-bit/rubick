@@ -7,11 +7,13 @@ import {
   type Expiry,
   managedExpiryOf,
   overdueBy,
+  problemWords,
   uncoveredHosts,
 } from "./certificates";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import type { CertificateProblem } from "@/generated/types";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -327,5 +329,39 @@ describe("covers", () => {
     expect(
       uncoveredHosts(cert, ["shop.example.com", "api.example.com"])
     ).toEqual(["api.example.com"]);
+  });
+});
+
+describe("problemWords", () => {
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+  const every: CertificateProblem[] = [
+    { says: "noSecret" },
+    { says: "secretUnreadable", said: "connection refused" },
+    { says: "noTlsCrt" },
+    { says: "noPemCertificate" },
+    { says: "unparseable", said: "InvalidLength" },
+  ];
+
+  /** These five were English sentences composed in Rust until 2026-08-30,
+   *  which no scan of `src/` could ever have found: the words were not in
+   *  this half of the app. */
+  it("says every reason in the reader's language", () => {
+    for (const problem of every) {
+      const words = problemWords(problem, ru);
+      expect(words).toMatch(/[а-яё]/i);
+      expect(words).not.toBe(problemWords(problem, t));
+    }
+  });
+
+  /** The API server's own words ride inside our sentence and stay as it
+   *  wrote them — translating a cluster's error would be the app putting
+   *  words in its mouth. */
+  it("carries the cluster's words through untouched", () => {
+    expect(
+      problemWords({ says: "secretUnreadable", said: "connection refused" }, ru)
+    ).toContain("connection refused");
+    expect(
+      problemWords({ says: "unparseable", said: "InvalidLength" }, t)
+    ).toContain("InvalidLength");
   });
 });

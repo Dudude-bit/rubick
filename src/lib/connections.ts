@@ -42,6 +42,7 @@ import type {
   ResourceConnections,
   ServicePublished,
   TlsCertificate,
+  Unread,
   Usage,
 } from "@/generated/types";
 
@@ -1031,6 +1032,26 @@ const UNASKED_LABEL: Record<string, "autoscaling" | "disruptionBudget"> = {
   PodDisruptionBudget: "disruptionBudget",
 };
 
+/**
+ * Why a kind went unread, in the reader's language.
+ *
+ * The backend names the reason: it decides this inside a query, where no
+ * language is in scope. The cluster's own refusal rides through untouched.
+ */
+function unreadWhy(why: Unread, t: T): string {
+  switch (why.says) {
+    case "unanswered":
+      return t("readings", "unreadUnanswered", {
+        version: why.version,
+        said: why.said,
+      });
+    case "nodeClaimsNotRead":
+      return t("readings", "unreadNodeClaims");
+    case "volumeMountsNotRead":
+      return t("readings", "unreadVolumeMounts");
+  }
+}
+
 /** The same, for the group that names what was never read. */
 function unaskedLabel(kind: string, t: T): string {
   const key = UNASKED_LABEL[kind];
@@ -1429,7 +1450,7 @@ export function connectionGroups(
         key: entry.kind,
         label: unaskedLabel(entry.kind, t),
         object: null,
-        detail: entry.why,
+        detail: unreadWhy(entry.why, t),
         ways: [],
         unasked: true,
       })),

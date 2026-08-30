@@ -334,7 +334,7 @@ function ReconcilerRow({
                   })
                 : reconciler.lastReconciledAt
                   ? t("action", "agoSuffix", {
-                      age: formatAge(reconciler.lastReconciledAt),
+                      age: formatAge(reconciler.lastReconciledAt, t),
                     })
                   : t("empty", "neverApplied")
             }
@@ -479,7 +479,9 @@ function describe(
     case "suspended":
       return {
         title: finding.at
-          ? t("empty", "fluxSuspendedTitleAgo", { age: formatAge(finding.at) })
+          ? t("empty", "fluxSuspendedTitleAgo", {
+              age: formatAge(finding.at, t),
+            })
           : t("empty", "fluxSuspendedTitle"),
         note: finding.wasReady
           ? t("empty", "fluxSuspendedWasReady", {
@@ -669,7 +671,7 @@ function SourceRow({
         </span>
         <span className="min-w-0 truncate">
           {source.artifact
-            ? `${revisionText(source.artifact.revision, t)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at) })}` : ""}`
+            ? `${revisionText(source.artifact.revision, t)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at, t) })}` : ""}`
             : t("action", "never")}
         </span>
         <span className="font-mono text-fg-mid">
@@ -737,7 +739,7 @@ function SourceFinding({
                 revision: revisionText(source.artifact?.revision ?? null, t),
                 fetched: source.artifact?.at
                   ? t("empty", "fluxFetchedAgo", {
-                      age: formatAge(source.artifact.at),
+                      age: formatAge(source.artifact.at, t),
                     })
                   : "",
               })

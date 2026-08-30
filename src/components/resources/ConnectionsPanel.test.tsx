@@ -69,11 +69,15 @@ describe("ConnectionsPanel", () => {
             notLookedAt: [
               {
                 kind: "HorizontalPodAutoscaler",
-                why: "the app does not read HorizontalPodAutoscalers, so it cannot say whether one scales this",
+                why: {
+                  says: "unanswered",
+                  version: "autoscaling/v2",
+                  said: "404",
+                },
               },
               {
                 kind: "PodDisruptionBudget",
-                why: "the app does not read PodDisruptionBudgets, so it cannot say what protects this during a drain",
+                why: { says: "unanswered", version: "policy/v1", said: "403" },
               },
             ],
           }),
@@ -85,7 +89,9 @@ describe("ConnectionsPanel", () => {
     expect(screen.getByText("Autoscaling")).toBeInTheDocument();
     expect(screen.getByText("Disruption budget")).toBeInTheDocument();
     expect(
-      screen.getByText(/does not read HorizontalPodAutoscalers/)
+      screen.getByText(
+        /asked for autoscaling\/v2 and the cluster did not answer/
+      )
     ).toBeInTheDocument();
   });
 

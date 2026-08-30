@@ -15,6 +15,7 @@ import {
   expiryOf,
   expiryText,
   issuedBy,
+  problemWords,
   uncoveredHosts,
 } from "@/lib/certificates";
 import { TONE_CLASS } from "./key-values";
@@ -51,7 +52,11 @@ export function CertificateLine({
     );
   }
   if (!read.certificate) {
-    return <span className="text-[11px] text-warn">{read.problem}</span>;
+    return (
+      <span className="block text-[11px] text-warn">
+        {read.problem && problemWords(read.problem, t)}
+      </span>
+    );
   }
 
   const cert = read.certificate;
@@ -102,7 +107,9 @@ export function CertificateSection({
     return (
       <Section>
         <SectionHeader title={t("columns", "certificate")} />
-        <p className="text-xs text-warn">{read.problem}</p>
+        <p className="text-xs text-warn">
+          {read.problem && problemWords(read.problem, t)}
+        </p>
       </Section>
     );
   }

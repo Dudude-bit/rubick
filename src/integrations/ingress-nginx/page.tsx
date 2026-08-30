@@ -75,6 +75,7 @@ import {
   type NginxRoute,
   type NginxSources,
 } from "./model";
+import { problemWords } from "@/lib/certificates";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -989,7 +990,9 @@ function describeFinding(
           title: t("empty", "secretNotACertificate", {
             name: finding.secretName,
           }),
-          note: finding.read?.problem ?? t("empty", "secretNotParsable"),
+          note: finding.read?.problem
+            ? problemWords(finding.read.problem, t)
+            : t("empty", "secretNotParsable"),
         };
       }
       return {

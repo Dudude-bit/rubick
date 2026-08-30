@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
+import type { T } from "@/i18n/useT";
 import { twMerge } from "tailwind-merge";
 
 /**
@@ -12,16 +13,22 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format age from a timestamp string
+ * How long ago, in the compact notation the cluster's own tooling uses.
+ *
+ * The units stay `d`/`h`/`m`/`s` in every language on purpose — that is
+ * `kubectl`'s notation and the reader matches it against a terminal. The one
+ * word here is the absence, and a word has to be said in the reader's
+ * language, so the translator comes in as an argument: this is called from
+ * modules where a hook is not legal.
  *
  * @param createdAt - ISO timestamp string or null
- * @returns Formatted age string (e.g., "5d", "2h", "30m", "10s") or "Unknown"
+ * @returns "5d", "2h", "30m", "10s", or what the reader calls unknown
  */
-export function formatAge(createdAt: string | null): string {
-  if (!createdAt) return "Unknown";
+export function formatAge(createdAt: string | null, t: T): string {
+  if (!createdAt) return t("cluster", "unknownAge");
 
   const created = new Date(createdAt);
-  if (Number.isNaN(created.getTime())) return "Unknown";
+  if (Number.isNaN(created.getTime())) return t("cluster", "unknownAge");
   const now = new Date();
   const diffMs = now.getTime() - created.getTime();
   const diffSecs = Math.max(0, Math.floor(diffMs / 1000));

@@ -1726,6 +1726,40 @@ export const ru: Catalogue = {
       many: "каждые {n} часов, в :{minute}",
       other: "каждые {n} часа, в :{minute}",
     },
+    problemRestarts: {
+      one: "{n} перезапуск с момента создания",
+      few: "{n} перезапуска с момента создания",
+      many: "{n} перезапусков с момента создания",
+      other: "{n} перезапуска с момента создания",
+    },
+    problemReplicasReady: "готовы {ready} из {desired} реплик",
+    problemUnschedulable: "помечен неназначаемым — новые поды сюда не поедут",
+    certNoSecret: "в этом пространстве имён нет Secret с таким именем",
+    certSecretUnreadable: "Secret не удалось прочитать — {said}",
+    certNoTlsCrt: "в этом Secret нет tls.crt, а значит нет и сертификата",
+    certNoPem: "в tls.crt нет PEM-сертификата",
+    certUnparseable:
+      "tls.crt — не сертификат, который приложение умеет читать — {said}",
+    certCrossNamespace: "из другого пространства имён, нужен ReferenceGrant",
+    unreadUnanswered:
+      "приложение спросило {version}, а кластер не ответил ({said}) — значит, сказать, есть ли он здесь, нельзя",
+    unreadNodeClaims:
+      "приложение не читает заявки подов этого узла, поэтому не может сказать, какие тома придётся отцепить, прежде чем эти поды поедут в другое место",
+    unreadVolumeMounts:
+      "приложение не читает, кто монтирует заявку этого тома, поэтому не может сказать, пишет ли в него ещё кто-нибудь",
+    connNoAddress: "адрес не задан",
+    stepAttempt: "попытка {revision}",
+    stepChallengeOn: "{kind} для {domain}",
+    stalledNotRequested: "сертификат ещё никто не запросил",
+    stalledRequestNotIssued: "по запросу сертификат так и не выпущен",
+    stalledChallengePending: "проверка {kind} для {domain} не завершилась",
+    stalledOrderNotCompleted: "заказ ACME не завершился",
+    authTimedOut: "ожидание браузера вышло",
+    authNoTokenInCredential: "помощник вернул ответ без токена",
+    authStateMismatch:
+      "ответ не совпал с запросом, который отправило приложение",
+    authSuperseded: "эту попытку сменила новая",
+    authSwitchedAway: "вы ушли на другой кластер, пока это ждало",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

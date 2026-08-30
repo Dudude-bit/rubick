@@ -348,7 +348,7 @@ export function deliveryLine(
     const since = source.lastAppliedAt
       ? t("readings", "delSince", {
           name: source.owner.name,
-          ago: formatAge(source.lastAppliedAt),
+          ago: formatAge(source.lastAppliedAt, t),
         })
       : "";
     return {
@@ -422,7 +422,7 @@ export function deliveryCell(
     return {
       text: source.lastAppliedAt
         ? t("readings", "delOutOfSyncAge", {
-            ago: formatAge(source.lastAppliedAt),
+            ago: formatAge(source.lastAppliedAt, t),
           })
         : t("readings", "delOutOfSync"),
       tone: "warn",

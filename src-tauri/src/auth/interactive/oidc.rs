@@ -7,7 +7,7 @@ use crate::auth::kubeconfig_tokens::{
 };
 use crate::auth::{AuthProvider as _, AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
-use crate::state::{AppEvent, AppState};
+use crate::state::{AppEvent, AppState, AuthOutcome};
 use base64::Engine as _;
 use kube::config::AuthProviderConfig;
 use std::collections::HashMap;
@@ -228,7 +228,7 @@ pub(super) async fn run_oidc_auth(
             state.emit(AppEvent::AuthFlowCancelled {
                 session_id,
                 context: context.to_string(),
-                message: Some("Authentication cancelled.".to_string()),
+                why: None,
             });
             return Err(Error::Auth(AuthError::Oidc("Authentication cancelled".to_string())));
         }
@@ -247,7 +247,7 @@ pub(super) async fn run_oidc_auth(
                 session_id,
                 context: context.to_string(),
                 success: false,
-                message: Some(message.clone()),
+                why: Some(AuthOutcome::Said { text: message.clone() }),
             });
             return Err(Error::Timeout(message));
         }
@@ -261,7 +261,9 @@ pub(super) async fn run_oidc_auth(
                 session_id,
                 context: context.to_string(),
                 success: false,
-                message: Some(err.to_string()),
+                why: Some(AuthOutcome::Said {
+                    text: err.to_string(),
+                }),
             });
             return Err(err);
         }
@@ -273,7 +275,7 @@ pub(super) async fn run_oidc_auth(
             session_id,
             context: context.to_string(),
             success: false,
-            message: Some("OIDC state mismatch.".to_string()),
+            why: Some(AuthOutcome::StateMismatch),
         });
         return Err(Error::Auth(AuthError::Oidc(
             "OIDC state mismatch".to_string(),
@@ -289,7 +291,7 @@ pub(super) async fn run_oidc_auth(
         session_id,
         context: context.to_string(),
         success: true,
-        message: None,
+        why: None,
     });
 
     Ok(auth_result)

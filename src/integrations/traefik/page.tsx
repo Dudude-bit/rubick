@@ -114,6 +114,7 @@ import {
   UNNAMED_TARGET,
 } from "./model";
 import { describePath, fullyRead } from "./rule";
+import { problemWords } from "@/lib/certificates";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -1169,7 +1170,9 @@ function describeFinding(
           title: t("empty", "secretNotACertificate", {
             name: finding.secretName,
           }),
-          note: finding.read?.problem ?? t("empty", "secretNotParsable"),
+          note: finding.read?.problem
+            ? problemWords(finding.read.problem, t)
+            : t("empty", "secretNotParsable"),
         };
       }
       return {

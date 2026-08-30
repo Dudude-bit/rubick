@@ -164,6 +164,29 @@ pub fn readable_cause(error: &crate::error::Error) -> String {
     }
 }
 
+/// Why an interactive sign-in ended without a credential.
+///
+/// `Said` is the provider's or the helper's own words and is quoted; the
+/// rest are the app's own observation, named so the reader sees them in
+/// their own language. A plain cancellation carries nothing: the toast
+/// already says the flow was cancelled, in the reader's language.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum AuthOutcome {
+    /// The provider's or the credential helper's own words.
+    Said { text: String },
+    /// The wait for the browser ran out.
+    TimedOut,
+    /// The exec plugin answered without a token in it.
+    NoTokenInCredential,
+    /// The callback's `state` did not match the one sent.
+    StateMismatch,
+    /// A newer attempt on the same context took over.
+    Superseded,
+    /// The reader moved to another cluster while this was waiting.
+    SwitchedAway,
+}
+
 /// Events that can be broadcast to frontend
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
@@ -276,13 +299,13 @@ pub enum AppEvent {
         session_id: String,
         context: String,
         success: bool,
-        message: Option<String>,
+        why: Option<AuthOutcome>,
     },
     /// Auth flow cancelled
     AuthFlowCancelled {
         session_id: String,
         context: String,
-        message: Option<String>,
+        why: Option<AuthOutcome>,
     },
     /// Auth terminal session created (for interactive exec auth)
     AuthTerminalSessionCreated {
@@ -450,21 +473,21 @@ impl AppEvent {
                 session_id,
                 context,
                 success,
-                message,
+                why,
             } => serde_json::json!({
                 "session_id": session_id,
                 "context": context,
                 "success": success,
-                "message": message,
+                "why": why,
             }),
             AppEvent::AuthFlowCancelled {
                 session_id,
                 context,
-                message,
+                why,
             } => serde_json::json!({
                 "session_id": session_id,
                 "context": context,
-                "message": message,
+                "why": why,
             }),
             AppEvent::AuthTerminalSessionCreated {
                 auth_session_id,
@@ -542,7 +565,7 @@ mod tests {
                 session_id: "auth-1".into(),
                 context: "infra-eu1".into(),
                 success: true,
-                message: None,
+                why: None,
             },
             AppEvent::Error {
                 code: "X".into(),

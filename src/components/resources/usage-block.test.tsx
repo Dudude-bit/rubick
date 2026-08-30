@@ -66,6 +66,7 @@ const ANSWERED: PrometheusProbe = {
   ok: true,
   at: 1_700_000_000_000,
   latencyMs: 4,
+  noAddress: false,
   version: "2.55.1",
 };
 
@@ -487,6 +488,7 @@ describe("UsageBlock and a history supplier", () => {
       ok: false,
       at: 1_700_000_000_000,
       latencyMs: 12,
+      noAddress: false,
       reason: "no route to host",
     });
 

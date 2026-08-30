@@ -18,12 +18,37 @@ import type {
   ClusterOverview,
   ClusterProblem,
   NodeSummary,
+  ProblemDetail,
   PodComposition,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+
+/**
+ * The detail line, for the rows this app writes itself.
+ *
+ * The `said` variant is deliberately not here: it carries the cluster's own
+ * message, which {@link ResourceMessage} draws with the object names in it
+ * turned into links. Only the sentences the app composes are looked up.
+ */
+function composedDetail(
+  detail: Exclude<ProblemDetail, { says: "said" }>,
+  t: T
+): string {
+  switch (detail.says) {
+    case "restarts":
+      return t("readings", "problemRestarts", { n: detail.n });
+    case "replicasReady":
+      return t("readings", "problemReplicasReady", {
+        ready: detail.ready,
+        desired: detail.desired,
+      });
+    case "unschedulable":
+      return t("readings", "problemUnschedulable");
+  }
+}
 
 /** Reserved share past which the scheduler is the binding constraint. */
 const PRESSURE_WARN = 0.85;
@@ -161,14 +186,18 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         {problem.detail && (
           <span className="text-fg-fnt">
             {" — "}
-            <ResourceMessage
-              message={problem.detail}
-              subject={{
-                kind: problem.kind,
-                name: problem.name,
-                namespace: problem.namespace,
-              }}
-            />
+            {problem.detail.says === "said" ? (
+              <ResourceMessage
+                message={problem.detail.text}
+                subject={{
+                  kind: problem.kind,
+                  name: problem.name,
+                  namespace: problem.namespace,
+                }}
+              />
+            ) : (
+              composedDetail(problem.detail, t)
+            )}
           </span>
         )}
       </span>
@@ -187,7 +216,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(problem.since)}
+        {formatAge(problem.since, t)}
       </span>
     </>
   );
@@ -602,6 +631,7 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
 }
 
 function WarningRow({ warning }: { warning: WarningGroup }) {
+  const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
   // family mark contributes only shape — the feed's rule, applied to the one
   // event surface that was still rendering a reason as a bare word.
@@ -653,7 +683,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(warning.lastSeen)}
+        {formatAge(warning.lastSeen, t)}
       </span>
     </div>
   );

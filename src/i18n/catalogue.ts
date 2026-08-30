@@ -1680,6 +1680,38 @@ export const en = {
       one: "every {n} hour, at :{minute}",
       other: "every {n} hours, at :{minute}",
     },
+    problemRestarts: {
+      one: "{n} restart since creation",
+      other: "{n} restarts since creation",
+    },
+    problemReplicasReady: "{ready}/{desired} replicas ready",
+    problemUnschedulable: "marked unschedulable — no new pods will land here",
+    certNoSecret: "no Secret of that name in this namespace",
+    certSecretUnreadable: "the Secret could not be read — {said}",
+    certNoTlsCrt:
+      "this Secret holds no tls.crt, so there is no certificate in it",
+    certNoPem: "tls.crt holds no PEM certificate",
+    certUnparseable: "tls.crt is not a certificate the app can read — {said}",
+    certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
+    unreadUnanswered:
+      "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
+    unreadNodeClaims:
+      "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
+    unreadVolumeMounts:
+      "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+    connNoAddress: "no address is configured",
+    stepAttempt: "attempt {revision}",
+    stepChallengeOn: "{kind} on {domain}",
+    stalledNotRequested: "no certificate has been requested yet",
+    stalledRequestNotIssued: "the certificate request has not been issued",
+    stalledChallengePending:
+      "the {kind} challenge on {domain} has not completed",
+    stalledOrderNotCompleted: "the ACME order has not completed",
+    authTimedOut: "the wait for the browser ran out",
+    authNoTokenInCredential: "the credential helper answered without a token",
+    authStateMismatch: "the callback did not match the request this app sent",
+    authSuperseded: "a newer attempt on this context took over",
+    authSwitchedAway: "you moved to another cluster while this was waiting",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {

@@ -275,7 +275,7 @@ export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
   ];
   if (facts.lastScaleTime)
     parts.push(
-      t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime) })
+      t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime, t) })
     );
   return parts.join(" · ");
 }
@@ -289,7 +289,7 @@ export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
  */
 export function lastScaled(facts: AutoscalerFacts, t: T): string | null {
   return facts.lastScaleTime
-    ? t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime) })
+    ? t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime, t) })
     : null;
 }
 

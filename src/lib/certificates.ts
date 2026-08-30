@@ -30,7 +30,12 @@
 
 import { sayWords, spanWords, type Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import type { CertificateFacts } from "@/generated/types";
+import type {
+  CertificateFacts,
+  CertificateProblem,
+  Stalled,
+  StepNote,
+} from "@/generated/types";
 
 /** The last point a normal change still fits, or a third of the lifetime. */
 const ACT_SOON_DAYS = 14;
@@ -280,4 +285,63 @@ export function uncoveredHosts(
   return hosts.filter(
     (host) => host && host !== "*" && !covers(facts.dnsNames, host)
   );
+}
+
+/**
+ * Why there is nothing to describe, in the reader's language.
+ *
+ * The backend names the reason instead of writing it: it runs before anyone
+ * knows who is reading, and two of the five carry the API server's own words
+ * inside a sentence that is ours.
+ */
+export function problemWords(problem: CertificateProblem, t: T): string {
+  switch (problem.says) {
+    case "noSecret":
+      return t("readings", "certNoSecret");
+    case "secretUnreadable":
+      return t("readings", "certSecretUnreadable", { said: problem.said });
+    case "noTlsCrt":
+      return t("readings", "certNoTlsCrt");
+    case "noPemCertificate":
+      return t("readings", "certNoPem");
+    case "unparseable":
+      return t("readings", "certUnparseable", { said: problem.said });
+  }
+}
+
+/**
+ * What makes a step in the issuance chain that step.
+ *
+ * `said` is the controller's own message and is quoted; the other two are
+ * the app's own clause, with the cluster's words as values inside it.
+ */
+export function stepNoteWords(note: StepNote, t: T): string {
+  switch (note.says) {
+    case "said":
+      return note.text;
+    case "attempt":
+      return t("readings", "stepAttempt", { revision: note.revision });
+    case "challengeOn":
+      return t("readings", "stepChallengeOn", {
+        kind: note.kind,
+        domain: note.domain,
+      });
+  }
+}
+
+/** Which object in the issuance chain has not finished. */
+export function stalledWords(stalled: Stalled, t: T): string {
+  switch (stalled.says) {
+    case "notRequested":
+      return t("readings", "stalledNotRequested");
+    case "requestNotIssued":
+      return t("readings", "stalledRequestNotIssued");
+    case "challengePending":
+      return t("readings", "stalledChallengePending", {
+        kind: stalled.kind,
+        domain: stalled.domain,
+      });
+    case "orderNotCompleted":
+      return t("readings", "stalledOrderNotCompleted");
+  }
 }
