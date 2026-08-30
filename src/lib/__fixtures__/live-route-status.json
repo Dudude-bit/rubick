@@ -1,0 +1,140 @@
+{
+  "classes": [
+    {
+      "accepted": true,
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"GatewayClass\",\"metadata\":{\"annotations\":{},\"name\":\"netbird-private\"},\"spec\":{\"controllerName\":\"gateway.netbird.io/controller\"}}\n"
+      },
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "message": "claimed",
+          "observedGeneration": 1,
+          "reason": "Accepted",
+          "status": "True",
+          "type": "Accepted"
+        }
+      ],
+      "controllerName": "gateway.netbird.io/controller",
+      "createdAt": "2026-08-30T07:48:04+00:00",
+      "description": null,
+      "labels": {},
+      "name": "netbird-private"
+    }
+  ],
+  "gateways": [
+    {
+      "addresses": [],
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"Gateway\",\"metadata\":{\"annotations\":{},\"name\":\"private\",\"namespace\":\"netbird\"},\"spec\":{\"gatewayClassName\":\"netbird-private\",\"listeners\":[{\"allowedRoutes\":{\"kinds\":[{\"kind\":\"TCPRoute\"}],\"namespaces\":{\"from\":\"All\"}},\"name\":\"tcp\",\"port\":443,\"protocol\":\"TCP\"}]}}\n"
+      },
+      "apiVersion": "gateway.networking.k8s.io/v1",
+      "className": "netbird-private",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "message": "ok",
+          "observedGeneration": 1,
+          "reason": "Accepted",
+          "status": "True",
+          "type": "Accepted"
+        },
+        {
+          "lastTransitionTime": "2026-08-30T07:48:36Z",
+          "message": "programmed",
+          "observedGeneration": 1,
+          "reason": "Programmed",
+          "status": "True",
+          "type": "Programmed"
+        }
+      ],
+      "createdAt": "2026-08-30T07:48:04+00:00",
+      "generation": 1,
+      "labels": {},
+      "listeners": [
+        {
+          "allowedNamespaces": "All",
+          "attachedRoutes": 1,
+          "certificateRefs": [],
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "message": "ok",
+              "observedGeneration": null,
+              "reason": "Accepted",
+              "status": "True",
+              "type": "Accepted"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "message": "ok",
+              "observedGeneration": null,
+              "reason": "Programmed",
+              "status": "True",
+              "type": "Programmed"
+            },
+            {
+              "lastTransitionTime": "2026-08-30T07:48:36Z",
+              "message": "ok",
+              "observedGeneration": null,
+              "reason": "ResolvedRefs",
+              "status": "True",
+              "type": "ResolvedRefs"
+            }
+          ],
+          "fromListenerSet": null,
+          "hostname": null,
+          "name": "tcp",
+          "port": 443,
+          "protocol": "TCP",
+          "tlsMode": null
+        }
+      ],
+      "name": "private",
+      "namespace": "netbird"
+    }
+  ],
+  "routes": [
+    {
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1alpha2\",\"kind\":\"TCPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"kubernetes\",\"namespace\":\"default\"},\"spec\":{\"parentRefs\":[{\"name\":\"private\",\"namespace\":\"netbird\",\"sectionName\":\"tcp\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"kubernetes\",\"port\":443}]}]}}\n"
+      },
+      "apiVersion": "gateway.networking.k8s.io/v1alpha2",
+      "createdAt": "2026-08-30T07:48:04+00:00",
+      "generation": 1,
+      "hostnames": [],
+      "kind": "TCPRoute",
+      "labels": {},
+      "name": "kubernetes",
+      "namespace": "default",
+      "parentRefs": [
+        {
+          "group": "gateway.networking.k8s.io",
+          "kind": "Gateway",
+          "name": "private",
+          "namespace": "netbird",
+          "port": null,
+          "sectionName": "tcp"
+        }
+      ],
+      "parents": [],
+      "rules": [
+        {
+          "backendRefs": [
+            {
+              "group": "",
+              "kind": "Service",
+              "name": "kubernetes",
+              "namespace": null,
+              "port": 443,
+              "weight": 1
+            }
+          ],
+          "extensionRefs": [],
+          "hasRedirect": false,
+          "matches": []
+        }
+      ]
+    }
+  ]
+}
