@@ -10,7 +10,7 @@ export function Install() {
         Get it.
       </h2>
       <div className="mt-12 grid gap-4 lg:grid-cols-3">
-        <div className="flex flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
+        <div className="flex min-w-0 flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
           <h3 className="font-mono text-sm font-medium">macOS</h3>
           <div className="mt-4">
             <CopyCommand command={LINKS.brew} />
@@ -20,7 +20,7 @@ export function Install() {
             on a double-click, like software should.
           </p>
         </div>
-        <div className="flex flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
+        <div className="flex min-w-0 flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
           <h3 className="font-mono text-sm font-medium">Windows</h3>
           <p className="mt-4 flex-1 text-sm text-neutral-400">
             Not signed, so SmartScreen will warn you on first launch. More info,
@@ -33,7 +33,7 @@ export function Install() {
             </ButtonLink>
           </div>
         </div>
-        <div className="flex flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
+        <div className="flex min-w-0 flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
           <h3 className="font-mono text-sm font-medium">Linux</h3>
           <p className="mt-4 flex-1 text-sm text-neutral-400">
             A .deb, an .rpm, and an AppImage that needs nothing installed. Arch
