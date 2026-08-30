@@ -266,12 +266,22 @@ export function routesBoard(
   // Who claims which host on which gateway. The spec resolves the tie —
   // oldest creationTimestamp wins, then alphabetical — so the loser's row
   // can name the exact route that is actually serving its hostname.
+  // Keyed by the Gateway, not by what the route named. Two routes claiming one
+  // hostname on one Gateway contest it whether they arrived straight or
+  // through a ListenerSet; keying on the parentRef name filed them separately
+  // and the contest went unseen.
+  const roadOf = (parent: ParentRefInfo, route: RouteInfo): string => {
+    const via = gatewayOfParent(sources.gateways, parent, route.namespace);
+    return via
+      ? `${via.namespace}/${via.name}`
+      : `${parent.namespace ?? route.namespace}/${parent.name}`;
+  };
   const claims = new Map<string, RouteInfo[]>();
   for (const route of routes) {
     const first = route.parentRefs.find(parentCarriesTraffic);
     if (!first) continue;
     for (const host of route.hostnames) {
-      const at = `${first.namespace ?? route.namespace}/${first.name}/${host}`;
+      const at = `${roadOf(first, route)}/${host}`;
       claims.set(at, [...(claims.get(at) ?? []), route]);
     }
   }
@@ -279,10 +289,7 @@ export function routesBoard(
     const first = route.parentRefs.find(parentCarriesTraffic);
     if (!first) return null;
     for (const host of route.hostnames) {
-      const rivals =
-        claims.get(
-          `${first.namespace ?? route.namespace}/${first.name}/${host}`
-        ) ?? [];
+      const rivals = claims.get(`${roadOf(first, route)}/${host}`) ?? [];
       if (rivals.length < 2) continue;
       const identity = (r: RouteInfo) => `${r.kind}/${r.namespace}/${r.name}`;
       // Only the rivals this route can actually meet on a request.

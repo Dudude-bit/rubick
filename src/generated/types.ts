@@ -835,7 +835,7 @@ export interface ListenerInfo {
   allowedNamespaces: string | null;
   attachedRoutes: number | null;
   conditions: ConditionInfo[];
-  fromListenerSet: string | null;
+  fromListenerSet: ObjectName | null;
 }
 
 export interface CertificateRefInfo {

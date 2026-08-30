@@ -179,7 +179,10 @@ pub struct ListenerInfo {
     pub conditions: Vec<ConditionInfo>,
     /// The `ListenerSet` this listener came from — `None` for the Gateway's
     /// own.
-    pub from_listener_set: Option<String>,
+    /// Name *and* namespace: a Gateway that accepts sets from anywhere can
+    /// hold two called `app-tls` from two teams, and a route through one of
+    /// them must not be checked against the other's listeners.
+    pub from_listener_set: Option<ObjectName>,
 }
 
 /// A name and namespace, for pointing at an object without carrying it.
@@ -306,7 +309,7 @@ pub struct GatewayApiDetection {
 fn listener_info(
     listener: schema::Listener,
     statuses: &[schema::ListenerStatus],
-    from_listener_set: Option<&str>,
+    from_listener_set: Option<&ObjectName>,
 ) -> ListenerInfo {
     let status = statuses.iter().find(|s| s.name == listener.name);
     ListenerInfo {
@@ -329,7 +332,7 @@ fn listener_info(
             .and_then(|n| n.from),
         attached_routes: status.and_then(|s| s.attached_routes),
         conditions: status.map(|s| s.conditions.clone()).unwrap_or_default(),
-        from_listener_set: from_listener_set.map(String::from),
+        from_listener_set: from_listener_set.cloned(),
         name: listener.name,
         port: listener.port,
         protocol: listener.protocol,
@@ -408,6 +411,10 @@ impl ListenerSetInfo {
         let name = obj.name_any();
         let namespace = obj.namespace().unwrap_or_default();
 
+        let self_ref = ObjectName {
+            name: name.clone(),
+            namespace: namespace.clone(),
+        };
         Self {
             gateway_name: spec.parent_ref.name,
             // An absent parentRef namespace means the set's own.
@@ -418,7 +425,7 @@ impl ListenerSetInfo {
             listeners: spec
                 .listeners
                 .into_iter()
-                .map(|l| listener_info(l, &status.listeners, Some(&name)))
+                .map(|l| listener_info(l, &status.listeners, Some(&self_ref)))
                 .collect(),
             conditions: status.conditions,
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
@@ -1391,7 +1398,12 @@ status:
         assert_eq!(gw.listeners.len(), own + 1);
         let merged = gw.listeners.last().expect("merged listener");
         assert_eq!(merged.name, "tenant-a-https");
-        assert_eq!(merged.from_listener_set.as_deref(), Some("tenant-a"));
+        let from = merged.from_listener_set.as_ref().expect("from a set");
+        assert_eq!(from.name, "tenant-a");
+        // The namespace matters: one Gateway can hold two sets of the same
+        // name from two teams, and a route through one must not be checked
+        // against the other's listeners.
+        assert_eq!(from.namespace, "infra");
     }
 
     #[test]

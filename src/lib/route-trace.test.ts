@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { routeTraces, gatewayProgrammed, selfAnswered } from "./route-trace";
+import {
+  routeTraces,
+  gatewayProgrammed,
+  selfAnswered,
+  candidateListeners,
+} from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
@@ -1069,6 +1074,76 @@ describe("a route attached through a ListenerSet", () => {
 
     expect(traces).toHaveLength(1);
     expect(traces[0].steps[1].state).toBe("err");
+  });
+
+  /**
+   * One Gateway can hold two sets called the same thing from two teams. A
+   * route through one must see only that one's listeners, or a sectionName
+   * that means nothing to it matches the other team's.
+   *
+   * Tested on the function itself: routed through `routeTraces` the listener
+   * step is blind whenever the controller wrote no route status, so it cannot
+   * tell the two apart.
+   */
+  it("shows a route only the listeners of its own set", () => {
+    const listener = (
+      name: string,
+      set: { name: string; namespace: string } | null
+    ) => ({
+      name,
+      port: 443,
+      protocol: "HTTPS",
+      hostname: null,
+      tlsMode: null,
+      certificateRefs: [],
+      allowedNamespaces: "All",
+      attachedRoutes: null,
+      conditions: [],
+      fromListenerSet: set,
+    });
+    const shared = gateway("edge", {
+      listenerSets: [
+        { name: "app-tls", namespace: "team-a" },
+        { name: "app-tls", namespace: "team-b" },
+      ],
+      listeners: [
+        listener("plain", null),
+        listener("mine", { name: "app-tls", namespace: "team-a" }),
+        listener("theirs", { name: "app-tls", namespace: "team-b" }),
+      ],
+    });
+    const via = (sectionName: string | null) => ({
+      group: "gateway.networking.k8s.io",
+      kind: "ListenerSet",
+      name: "app-tls",
+      namespace: null,
+      sectionName,
+      port: null,
+    });
+
+    // Team A's route, unqualified: its own set's listener, and nothing else.
+    expect(
+      candidateListeners(shared, via(null), "team-a").map((l) => l.name)
+    ).toEqual(["mine"]);
+
+    // A sectionName naming the other team's listener finds nothing.
+    expect(candidateListeners(shared, via("theirs"), "team-a")).toEqual([]);
+
+    // A route straight to the Gateway still sees everything it merged.
+    expect(
+      candidateListeners(
+        shared,
+        {
+          group: "gateway.networking.k8s.io",
+          kind: "Gateway",
+          name: "edge",
+          namespace: null,
+          sectionName: null,
+          port: null,
+        },
+        "team-a"
+      )
+    ).toHaveLength(3);
   });
 
   /**

@@ -642,3 +642,45 @@ describe("routes that reach a gateway through a ListenerSet", () => {
     expect([...board.serving, ...board.notServing][0].via).toContain("edge");
   });
 });
+
+describe("two routes claiming one hostname on one Gateway", () => {
+  const set = { name: "app-tls", namespace: "gwtest" };
+  const viaSet = {
+    group: "gateway.networking.k8s.io",
+    kind: "ListenerSet",
+    name: "app-tls",
+    namespace: null,
+    sectionName: null,
+    port: null,
+  };
+
+  /**
+   * The contest was keyed on whatever the route named, so one route arriving
+   * through a set and another straight at the Gateway landed in different
+   * buckets and neither was told it had a rival — while in the cluster they
+   * are fighting over the same hostname on the same road.
+   */
+  it("contest each other even when one arrives through a ListenerSet", () => {
+    const board = routesBoard(
+      [
+        route("healthy", { hostnames: ["shop.example.com"] }),
+        route("healthy", {
+          name: "other",
+          hostnames: ["shop.example.com"],
+          parentRefs: [viaSet],
+          parents: [],
+        }),
+      ],
+      sources({ gateways: [gateway("edge", { listenerSets: [set] })] }),
+      t
+    );
+
+    const rows = [...board.serving, ...board.notServing];
+    expect(rows).toHaveLength(2);
+    // Only the loser is marked, and it names the one that beat it — so
+    // exactly one of the pair carries the mark, and it points at the other.
+    const marked = rows.filter((row) => row.contested != null);
+    expect(marked).toHaveLength(1);
+    expect(marked[0].contested?.by).not.toBe(marked[0].name);
+  });
+});

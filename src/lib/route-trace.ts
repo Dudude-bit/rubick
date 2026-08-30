@@ -303,18 +303,31 @@ function statusesFor(
 }
 
 /** The listeners this parentRef points at — one by section, or all. */
-function candidateListeners(
+export function candidateListeners(
   gateway: GatewayInfo | undefined,
-  parent: ParentRefInfo
+  parent: ParentRefInfo,
+  routeNamespace: string
 ): ListenerInfo[] {
   if (!gateway) return [];
+  // A route that named a ListenerSet reaches only that set's listeners. The
+  // Gateway's own and every other set's are merged into the same array, so
+  // without this a route through one team's set is checked against another
+  // team's — and a sectionName that means nothing to it can match.
+  const mine =
+    parent.kind === "ListenerSet"
+      ? gateway.listeners.filter(
+          (l) =>
+            l.fromListenerSet?.name === parent.name &&
+            l.fromListenerSet.namespace === (parent.namespace ?? routeNamespace)
+        )
+      : gateway.listeners;
   if (parent.sectionName) {
-    return gateway.listeners.filter((l) => l.name === parent.sectionName);
+    return mine.filter((l) => l.name === parent.sectionName);
   }
   if (parent.port != null) {
-    return gateway.listeners.filter((l) => l.port === parent.port);
+    return mine.filter((l) => l.port === parent.port);
   }
-  return gateway.listeners;
+  return mine;
 }
 
 function classStep(
@@ -544,7 +557,7 @@ function acceptanceSteps(
   entries: RouteParentStatusInfo[],
   t: T
 ): [TraceStep, TraceStep] {
-  const listeners = candidateListeners(gateway, parent);
+  const listeners = candidateListeners(gateway, parent, route.namespace);
   const label = listenerLabel(listeners, t);
 
   if (entries.length === 0) {
@@ -1032,7 +1045,7 @@ function probeOf(
 ): RouteTrace["probe"] {
   // A wildcard never resolves; probe the first concrete name.
   const host = route.hostnames.find((name) => !name.startsWith("*")) ?? null;
-  const listeners = candidateListeners(gateway, parent);
+  const listeners = candidateListeners(gateway, parent, route.namespace);
   return {
     host,
     address: gateway?.addresses[0] ?? null,

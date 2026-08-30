@@ -86,11 +86,10 @@ function acceptedBy(
   t: T
 ): { text: string; tone: "ok" | "err" | "mute" } {
   const verdicts = route.parents
-    .filter(
-      (parent) =>
-        // By the same resolution as `attachesTo`: a route through a set has
-        // its verdict written against the set, not against this Gateway.
-        parentIsGateway(parent.parent, route.namespace, gateway)
+    .filter((parent) =>
+      // By the same resolution as `attachesTo`: a route through a set has
+      // its verdict written against the set, not against this Gateway.
+      parentIsGateway(parent.parent, route.namespace, gateway)
     )
     .flatMap((parent) =>
       parent.conditions.filter((c) => c.type === "Accepted")
@@ -151,7 +150,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
           <TableBody>
             {gateway.listeners.map((listener) => (
               <TableRow
-                key={`${listener.fromListenerSet ?? ""}/${listener.name}`}
+                key={`${listener.fromListenerSet ? `${listener.fromListenerSet.namespace}/${listener.fromListenerSet.name}` : ""}/${listener.name}`}
                 data-quiet
               >
                 <TableCell className="text-fg-mut">
@@ -160,7 +159,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                     <span className="text-fg-fnt">
                       {" · "}
                       {t("empty", "fromListenerSet", {
-                        name: listener.fromListenerSet,
+                        name: listener.fromListenerSet.name,
                       })}
                     </span>
                   )}
