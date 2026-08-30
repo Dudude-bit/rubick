@@ -182,6 +182,14 @@ pub struct ListenerInfo {
     pub from_listener_set: Option<String>,
 }
 
+/// A name and namespace, for pointing at an object without carrying it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectName {
+    pub name: String,
+    pub namespace: String,
+}
+
 /// A Gateway, read as routing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -193,6 +201,10 @@ pub struct GatewayInfo {
     /// is, resolved the same way `IngressClass` claiming is.
     pub class_name: String,
     pub listeners: Vec<ListenerInfo>,
+    /// The `ListenerSet`s that attach to this Gateway, by their own
+    /// `spec.parentRef`. Routes parented to one of these belong here.
+    #[serde(default)]
+    pub listener_sets: Vec<ObjectName>,
     /// `status.addresses`, values only.
     pub addresses: Vec<String>,
     pub conditions: Vec<ConditionInfo>,
@@ -335,6 +347,7 @@ impl GatewayInfo {
             namespace: obj.namespace().unwrap_or_default(),
             api_version: types.api_version,
             class_name: spec.gateway_class_name,
+            listener_sets: Vec::new(),
             listeners: spec
                 .listeners
                 .into_iter()
@@ -357,6 +370,16 @@ impl GatewayInfo {
         for set in sets {
             if set.gateway_name == self.name && set.gateway_namespace == self.namespace {
                 self.listeners.extend(set.listeners.iter().cloned());
+                // Kept as well as folded. A route attaches to the *set*, not
+                // to this Gateway, so without the names here the route reads
+                // as parented to nothing a gateway page knows about — and
+                // lands among the mesh routes, unjudged. The names come from
+                // each set's `spec.parentRef`, which is written whether or
+                // not a controller has got round to programming anything.
+                self.listener_sets.push(ObjectName {
+                    name: set.name.clone(),
+                    namespace: set.namespace.clone(),
+                });
             }
         }
     }

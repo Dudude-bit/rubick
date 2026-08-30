@@ -35,6 +35,7 @@ const gateway = (
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
+  listenerSets: [],
   listeners: [],
   addresses: ["203.0.113.9"],
   conditions,

@@ -810,12 +810,18 @@ export interface GatewayInfo {
   apiVersion: string;
   className: string;
   listeners: ListenerInfo[];
+  listenerSets: ObjectName[];
   addresses: string[];
   conditions: ConditionInfo[];
   generation: number | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
+}
+
+export interface ObjectName {
+  name: string;
+  namespace: string;
 }
 
 export interface ListenerInfo {

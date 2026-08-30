@@ -14,9 +14,10 @@ import type {
   RouteMatchInfo,
 } from "@/generated/types";
 import {
-  findGateway,
+  gatewayOfParent,
   gatewayProgrammed,
   HOSTLESS_PROTO,
+  parentCarriesTraffic,
   redirectOnly,
   routeTraces,
   selfAnswered,
@@ -133,12 +134,27 @@ function servesOf(
   return { serves: route.name, servesCopy: null };
 }
 
-function viaOf(parents: ParentRefInfo[]): string {
+/**
+ * The road, named by its Gateway.
+ *
+ * A parentRef may name a `ListenerSet` instead, and the set is the more
+ * precise answer — but it is not the one this column is for. Two sets on one
+ * Gateway are one road, and a reader scanning the list wants their routes
+ * grouped by where traffic enters, not by which set carries which listener.
+ * The set stays visible on the Gateway's own listener table.
+ */
+function viaOf(
+  parents: ParentRefInfo[],
+  routeNamespace: string,
+  gateways: GatewayInfo[]
+): string {
   if (parents.length === 0) return "—";
   const first = parents[0];
+  const named =
+    gatewayOfParent(gateways, first, routeNamespace)?.name ?? first.name;
   const section = first.sectionName ? ` :${first.sectionName}` : "";
   const rest = parents.length > 1 ? ` +${parents.length - 1}` : "";
-  return `${first.name}${section}${rest}`;
+  return `${named}${section}${rest}`;
 }
 
 function firstBroken(trace: RouteTrace): TraceStep | undefined {
@@ -252,7 +268,7 @@ export function routesBoard(
   // can name the exact route that is actually serving its hostname.
   const claims = new Map<string, RouteInfo[]>();
   for (const route of routes) {
-    const first = route.parentRefs.find((parent) => parent.kind === "Gateway");
+    const first = route.parentRefs.find(parentCarriesTraffic);
     if (!first) continue;
     for (const host of route.hostnames) {
       const at = `${first.namespace ?? route.namespace}/${first.name}/${host}`;
@@ -260,7 +276,7 @@ export function routesBoard(
     }
   }
   const contestedBy = (route: RouteInfo): { by: string } | null => {
-    const first = route.parentRefs.find((parent) => parent.kind === "Gateway");
+    const first = route.parentRefs.find(parentCarriesTraffic);
     if (!first) return null;
     for (const host of route.hostnames) {
       const rivals =
@@ -285,9 +301,9 @@ export function routesBoard(
   };
 
   for (const route of routes) {
-    const gatewayParents = route.parentRefs.filter(
-      (parent) => parent.kind === "Gateway"
-    );
+    // A ListenerSet parent is a Gateway parent that took the long way; a
+    // route through one is not a mesh route and must not be filed as one.
+    const gatewayParents = route.parentRefs.filter(parentCarriesTraffic);
     const base = {
       kind: route.kind,
       name: route.name,
@@ -366,15 +382,20 @@ export function routesBoard(
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),
-      via: viaOf(gatewayParents),
+      via: viaOf(gatewayParents, route.namespace, sources.gateways),
       ...(() => {
         const first = gatewayParents[0];
         const at = first.namespace ?? route.namespace;
-        const ref = { kind: "Gateway", name: first.name, namespace: at };
-        const exists = findGateway(sources.gateways, first.name, at) != null;
+        // The link goes to the Gateway, resolving a ListenerSet parent to the
+        // one that carries it — a link named after the set would point at a
+        // Gateway that does not exist and read as a ghost.
+        const found = gatewayOfParent(sources.gateways, first, route.namespace);
+        const ref = found
+          ? { kind: "Gateway", name: found.name, namespace: found.namespace }
+          : { kind: "Gateway", name: first.name, namespace: at };
         return {
-          viaRef: exists ? ref : null,
-          viaGhost: sources.topologyKnown && !exists ? ref : null,
+          viaRef: found ? ref : null,
+          viaGhost: sources.topologyKnown && !found ? ref : null,
         };
       })(),
       contested: contestedBy(route),

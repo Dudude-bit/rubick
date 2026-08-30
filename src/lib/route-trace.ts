@@ -125,6 +125,34 @@ export function gatewayProgrammed(
   );
 }
 
+/**
+ * Whether this parentRef points at that Gateway, directly or through one of
+ * its `ListenerSet`s.
+ *
+ * A route may name a `ListenerSet` instead of the Gateway: the set carries the
+ * listeners, and its own `spec.parentRef` says which Gateway they belong to.
+ * The route is still that Gateway's — it just took the long way. Reported by a
+ * maintainer whose whole setup works this way: a bare Gateway, and all TLS and
+ * hostname configuration in a ListenerSet per app. Every one of his routes read
+ * as attached to nothing.
+ */
+export function parentIsGateway(
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string,
+  gateway: GatewayInfo
+): boolean {
+  const at = parent.namespace ?? routeNamespace;
+  if (parent.kind === "Gateway") {
+    return parent.name === gateway.name && at === gateway.namespace;
+  }
+  if (parent.kind === "ListenerSet" || parent.kind === "XListenerSet") {
+    return gateway.listenerSets.some(
+      (set) => set.name === parent.name && set.namespace === at
+    );
+  }
+  return false;
+}
+
 /** One lookup for "this name+namespace, in the fetched list". */
 export function findGateway(
   gateways: GatewayInfo[],
@@ -133,6 +161,26 @@ export function findGateway(
 ): GatewayInfo | undefined {
   return gateways.find(
     (candidate) => candidate.name === name && candidate.namespace === namespace
+  );
+}
+
+/** The Gateway a parentRef leads to, directly or through a `ListenerSet`. */
+export function gatewayOfParent(
+  gateways: GatewayInfo[],
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string
+): GatewayInfo | undefined {
+  return gateways.find((candidate) =>
+    parentIsGateway(parent, routeNamespace, candidate)
+  );
+}
+
+/** Whether a parentRef could name a Gateway at all — directly or via a set. */
+export function parentCarriesTraffic(parent: { kind: string }): boolean {
+  return (
+    parent.kind === "Gateway" ||
+    parent.kind === "ListenerSet" ||
+    parent.kind === "XListenerSet"
   );
 }
 
@@ -973,7 +1021,9 @@ function traceFor(
   t: T
 ): RouteTrace {
   const namespace = parent.namespace ?? route.namespace;
-  const gateway = findGateway(sources.gateways, parent.name, namespace);
+  // Resolved rather than looked up by name: the parentRef may name a
+  // `ListenerSet`, whose own parentRef says which Gateway carries it.
+  const gateway = gatewayOfParent(sources.gateways, parent, route.namespace);
   const entries = statusesFor(route, parent);
   const [listener, allowed] = acceptanceSteps(
     route,
@@ -1015,9 +1065,11 @@ function traceFor(
   }
 
   return {
+    // The Gateway, not the ListenerSet that pointed at it: this names what
+    // the row's "via" shows, and two sets on one Gateway are one road.
     gateway: {
-      name: parent.name,
-      namespace,
+      name: gateway?.name ?? parent.name,
+      namespace: gateway?.namespace ?? namespace,
       sectionName: parent.sectionName,
     },
     serving: firstBroken < 0,
@@ -1039,6 +1091,6 @@ export function routeTraces(
   t: T
 ): RouteTrace[] {
   return route.parentRefs
-    .filter((parent) => parent.kind === "Gateway")
+    .filter(parentCarriesTraffic)
     .map((parent) => traceFor(route, parent, sources, t));
 }

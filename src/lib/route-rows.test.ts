@@ -42,6 +42,7 @@ const gateway = (
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
+  listenerSets: [],
   listeners: [
     {
       name: "http",
@@ -599,5 +600,44 @@ describe("the sidebar marks", () => {
     expect(gatewaysMark([silent], [], true)).toBe("warn");
     expect(gatewaysMark([silent], [], false)).toBeUndefined();
     expect(gatewaysMark([gateway("edge")], [], true)).toBeUndefined();
+  });
+});
+
+describe("routes that reach a gateway through a ListenerSet", () => {
+  /**
+   * They used to land in `mesh`, the group for routes attached to a Service
+   * — "nothing about a gateway applies to them". Everything about a gateway
+   * applies to these; they just name the set that carries its listeners.
+   */
+  it("are judged, not filed as mesh", () => {
+    const board = routesBoard(
+      [
+        route("healthy", {
+          parentRefs: [
+            {
+              group: "gateway.networking.x-k8s.io",
+              kind: "XListenerSet",
+              name: "app-tls",
+              namespace: null,
+              sectionName: null,
+              port: null,
+            },
+          ],
+          parents: [],
+        }),
+      ],
+      sources({
+        gateways: [
+          gateway("edge", {
+            listenerSets: [{ name: "app-tls", namespace: "gwtest" }],
+          }),
+        ],
+      }),
+      t
+    );
+
+    expect(board.mesh).toHaveLength(0);
+    expect(board.serving.length + board.notServing.length).toBe(1);
+    expect([...board.serving, ...board.notServing][0].via).toContain("edge");
   });
 });

@@ -41,6 +41,7 @@ const gateway = (
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
   className: "envoy",
+  listenerSets: [],
   listeners: [
     {
       name: "http",
@@ -1014,5 +1015,54 @@ describe("a route whose controller writes no status", () => {
 
     expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
+  });
+});
+
+describe("a route attached through a ListenerSet", () => {
+  /**
+   * Reported by a maintainer who keeps his Gateway bare and puts every
+   * listener in a ListenerSet per app. Every one of his routes names the
+   * *set*, so the app saw no Gateway parent, filed them among the mesh
+   * routes, and drew no trace at all.
+   */
+  const withSet = () =>
+    gateway("edge", {
+      listenerSets: [{ name: "app-tls", namespace: "gwtest" }],
+    });
+
+  const viaSet = () =>
+    route("healthy", {
+      parentRefs: [
+        {
+          group: "gateway.networking.x-k8s.io",
+          kind: "XListenerSet",
+          name: "app-tls",
+          namespace: null,
+          sectionName: null,
+          port: null,
+        },
+      ],
+      parents: [],
+    });
+
+  it("traces it against the Gateway the set belongs to", () => {
+    const traces = routeTraces(viaSet(), sources({ gateways: [withSet()] }), t);
+
+    expect(traces).toHaveLength(1);
+    expect(traces[0].gateway.name).toBe("edge");
+    expect(traces[0].steps[0].state).toBe("ok");
+  });
+
+  /** The set has to actually belong to that Gateway. */
+  it("does not attach it to a Gateway that never claimed the set", () => {
+    const traces = routeTraces(
+      viaSet(),
+      sources({ gateways: [gateway("edge")] }),
+      t
+    );
+
+    expect(traces).toHaveLength(1);
+    // The parent resolves to nothing, which is the gateway step's business.
+    expect(traces[0].steps[1].state).toBe("err");
   });
 });
