@@ -3890,12 +3890,13 @@ export const en = {
     gwListenerAny: "A listener",
     gwListenerNotFound: "unknown — the listener was not found",
     gwAllHosts: "all hosts",
-    gwNoControllerForParentSay: "No controller answered for this parent",
     gwNoControllerShort: "no controller answered",
-    gwNoStatusTitle: "No status was written for this route",
+    gwNoRouteStatusSay: "The controller wrote no verdict for this route",
+    gwNoRouteStatusShort: "no route status",
+    gwNoRouteStatusTitle: "Nothing written about this route",
+    gwNoRouteStatusBody:
+      "A controller claims this Gateway's class and has not refused the Gateway itself, so one is running — it simply wrote no status for this route. Several implementations still write none for the alpha route kinds. Whether the route is carrying traffic cannot be read from here, which is not the same as saying it is not.",
     gwNoStatusPeek: "No controller wrote status — nothing serves this route.",
-    gwNoStatusBody:
-      "No controller wrote a verdict for this parent. Either nothing claims the Gateway's class, or the controller is not running — the route is invisible to the data plane either way.",
     gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
     gwListenerMatches: "{label} matches this route",
     gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
