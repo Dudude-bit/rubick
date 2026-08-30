@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.1] - 2026-08-30
+
+### Fixed — a route nobody wrote a verdict about
+
+4.7.0 stopped reading an unpublished gateway address as breakage. A reader on
+a private overlay network confirmed that landed, and that their routes were
+still red — one step further along.
+
+A route whose controller wrote no status at all was read as "invisible to the
+data plane", and the reason offered was that either nothing claims the
+gateway's class or the controller is not running. On the same screen, two
+lines above, the app had already said the class was claimed and the gateway
+programmed. The controller was there; it simply writes no status for routes,
+which several implementations still do not for the alpha kinds — TCPRoute
+among them.
+
+That step now reads as unread rather than broken, and the five checks below it
+run instead of being skipped, so what the backend and endpoints say is
+visible.
+
 ## [4.7.0] - 2026-08-30
 
 Draining a node no longer goes around a PodDisruptionBudget, and it waits the
