@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { SITE } from "../lib/site";
 import { AntiFeatures } from "../sections/anti-features";
 import { Features } from "../sections/features";
 import { Footer } from "../sections/footer";
@@ -12,6 +13,7 @@ import { Testimonials } from "../sections/testimonials";
 import { Warns } from "../sections/warns";
 
 export const Route = createFileRoute("/")({
+  head: () => ({ links: [{ rel: "canonical", href: SITE.url }] }),
   component: Landing,
 });
 

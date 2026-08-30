@@ -1,3 +1,4 @@
+import { COMPETITORS } from "../lib/compare";
 import { LINKS } from "../lib/site";
 
 const FOOTER_LINKS = [
@@ -23,6 +24,20 @@ export function Footer() {
             </a>
           ))}
         </nav>
+        <p className="font-mono text-sm text-neutral-500">
+          Honest comparisons:{" "}
+          {COMPETITORS.map((c, i) => (
+            <span key={c.slug}>
+              {i > 0 ? " / " : ""}
+              <a
+                href={`/vs/${c.slug}`}
+                className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+              >
+                vs {c.name}
+              </a>
+            </span>
+          ))}
+        </p>
         <p className="font-mono text-xs text-neutral-600">
           No analytics on this page either. View source, it is just HTML.
         </p>
