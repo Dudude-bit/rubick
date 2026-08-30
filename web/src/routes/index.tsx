@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Hero } from "../sections/hero";
+import { Nav } from "../sections/nav";
 
 export const Route = createFileRoute("/")({
   component: Landing,
 });
 
 function Landing() {
-  return <main>Your cluster is lying to you.</main>;
+  return (
+    <>
+      <Nav />
+      <main>
+        <Hero />
+      </main>
+    </>
+  );
 }
