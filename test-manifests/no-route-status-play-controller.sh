@@ -5,7 +5,11 @@
 set -euo pipefail
 
 CTX="${K8S_GUI_SHAPE_CONTEXT:-kind-rubick-gw}"
-NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Fixed, not `date`. The fixture this scene produces is committed, and a
+# wall-clock stamp made every regeneration a diff — which would bury a real
+# change in noise the one time it mattered. Kubernetes does not care what the
+# value is, only that it parses.
+NOW="2026-08-30T00:00:00Z"
 
 kubectl --context "$CTX" patch gatewayclass netbird-private --subresource=status --type=merge -p \
   "{\"status\":{\"conditions\":[{\"type\":\"Accepted\",\"status\":\"True\",\"reason\":\"Accepted\",\"lastTransitionTime\":\"$NOW\",\"observedGeneration\":1,\"message\":\"claimed\"}]}}"
