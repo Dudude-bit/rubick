@@ -162,7 +162,7 @@ Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minut
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
 
-Fork it, change it, sell it if you like; ship the source with it. Running the
+Fork it, change it; ship the source with it. Running the
 app is not distribution, so using it — at home or across a company — carries
 no obligation at all. Releases up to 3.1.0 were MIT and stay MIT:
 [LICENSE-HISTORY.md](LICENSE-HISTORY.md) has the details.
