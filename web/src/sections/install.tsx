@@ -2,8 +2,22 @@ import { ButtonLink } from "../components/button-link";
 import { CopyCommand } from "../components/copy-command";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
+import { useLatestRelease } from "../lib/use-latest-release";
+
+function AssetLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a
+      href={href}
+      className="font-mono text-sm text-neutral-200 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+    >
+      {children}
+    </a>
+  );
+}
 
 export function Install() {
+  const assets = useLatestRelease();
+
   return (
     <Section id="install" eyebrow="Install">
       <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
@@ -15,9 +29,19 @@ export function Install() {
           <div className="mt-4">
             <CopyCommand command={LINKS.brew} />
           </div>
-          <p className="mt-4 text-sm text-neutral-400">
+          <p className="mt-4 flex-1 text-sm text-neutral-400">
             Signed with a Developer ID certificate and notarised by Apple. Opens
             on a double-click, like software should.
+          </p>
+          <p className="mt-5 text-sm text-neutral-400">
+            Or the .dmg directly:{" "}
+            <AssetLink href={assets.dmgArm ?? LINKS.releases}>
+              Apple silicon
+            </AssetLink>
+            {" / "}
+            <AssetLink href={assets.dmgIntel ?? LINKS.releases}>
+              Intel
+            </AssetLink>
           </p>
         </div>
         <div className="flex min-w-0 flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
@@ -28,7 +52,7 @@ export function Install() {
             dialog surprise you.
           </p>
           <div className="mt-5">
-            <ButtonLink href={LINKS.releases} variant="ghost">
+            <ButtonLink href={assets.exe ?? LINKS.releases} variant="ghost">
               Download the installer
             </ButtonLink>
           </div>
@@ -36,8 +60,7 @@ export function Install() {
         <div className="flex min-w-0 flex-col rounded-xl border border-neutral-800 bg-neutral-900/60 p-6">
           <h3 className="font-mono text-sm font-medium">Linux</h3>
           <p className="mt-4 flex-1 text-sm text-neutral-400">
-            A .deb, an .rpm, and an AppImage that needs nothing installed. Arch
-            users:{" "}
+            An AppImage needs nothing installed. Arch users:{" "}
             <a
               href={LINKS.aur}
               className="text-neutral-200 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
@@ -47,11 +70,16 @@ export function Install() {
             is on the AUR, packaged by someone who is not us, from the same .deb
             we publish.
           </p>
-          <div className="mt-5">
-            <ButtonLink href={LINKS.releases} variant="ghost">
-              Pick your format
-            </ButtonLink>
-          </div>
+          <p className="mt-5 text-sm text-neutral-400">
+            Pick your format:{" "}
+            <AssetLink href={assets.deb ?? LINKS.releases}>.deb</AssetLink>
+            {" / "}
+            <AssetLink href={assets.rpm ?? LINKS.releases}>.rpm</AssetLink>
+            {" / "}
+            <AssetLink href={assets.appimage ?? LINKS.releases}>
+              .AppImage
+            </AssetLink>
+          </p>
         </div>
       </div>
       <p className="mt-10 font-mono text-sm text-neutral-500">
