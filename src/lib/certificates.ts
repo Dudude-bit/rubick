@@ -30,7 +30,7 @@
 
 import { sayWords, spanWords, type Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import type { CertificateFacts } from "@/generated/types";
+import type { CertificateFacts, CertificateProblem } from "@/generated/types";
 
 /** The last point a normal change still fits, or a third of the lifetime. */
 const ACT_SOON_DAYS = 14;
@@ -280,4 +280,26 @@ export function uncoveredHosts(
   return hosts.filter(
     (host) => host && host !== "*" && !covers(facts.dnsNames, host)
   );
+}
+
+/**
+ * Why there is nothing to describe, in the reader's language.
+ *
+ * The backend names the reason instead of writing it: it runs before anyone
+ * knows who is reading, and two of the five carry the API server's own words
+ * inside a sentence that is ours.
+ */
+export function problemWords(problem: CertificateProblem, t: T): string {
+  switch (problem.says) {
+    case "noSecret":
+      return t("readings", "certNoSecret");
+    case "secretUnreadable":
+      return t("readings", "certSecretUnreadable", { said: problem.said });
+    case "noTlsCrt":
+      return t("readings", "certNoTlsCrt");
+    case "noPemCertificate":
+      return t("readings", "certNoPem");
+    case "unparseable":
+      return t("readings", "certUnparseable", { said: problem.said });
+  }
 }

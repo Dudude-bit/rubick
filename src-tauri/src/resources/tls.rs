@@ -43,7 +43,27 @@ pub struct CertificateFacts {
 /// Stated rather than left blank: "this Ingress has no readable certificate"
 /// and "the app did not look" are different claims, and only one of them
 /// belongs to the app.
-pub type CertificateProblem = String;
+///
+/// Named rather than written, because the reader's language is not in scope
+/// here and never can be — this runs in the backend, before anything knows
+/// who is reading. The two variants that quote the API server carry its
+/// words untouched; the rest are the app's own sentence and it is the
+/// frontend that chooses it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum CertificateProblem {
+    /// The namespace has no Secret of that name.
+    NoSecret,
+    /// The Secret exists and the API server refused or failed the read.
+    SecretUnreadable { said: String },
+    /// A Secret with no `tls.crt` key in it.
+    NoTlsCrt,
+    /// A `tls.crt` with no PEM certificate anywhere in it — a key on its
+    /// own, most often.
+    NoPemCertificate,
+    /// PEM that is not a certificate this app can parse.
+    Unparseable { said: String },
+}
 
 /// Read the leaf certificate out of a PEM bundle.
 ///
@@ -64,11 +84,14 @@ pub fn read_certificate(pem_bytes: &[u8]) -> Result<CertificateFacts, Certificat
     }
 
     let Some(leaf) = blocks.first() else {
-        return Err("tls.crt holds no PEM certificate".to_string());
+        return Err(CertificateProblem::NoPemCertificate);
     };
 
-    let (_, cert) = X509Certificate::from_der(&leaf.contents)
-        .map_err(|err| format!("tls.crt is not a certificate the app can read: {err}"))?;
+    let (_, cert) = X509Certificate::from_der(&leaf.contents).map_err(|err| {
+        CertificateProblem::Unparseable {
+            said: err.to_string(),
+        }
+    })?;
 
     let subject = first_common_name(cert.subject());
     let issuer = issuer_name(cert.issuer());

@@ -1686,6 +1686,13 @@ export const en = {
     },
     problemReplicasReady: "{ready}/{desired} replicas ready",
     problemUnschedulable: "marked unschedulable — no new pods will land here",
+    certNoSecret: "no Secret of that name in this namespace",
+    certSecretUnreadable: "the Secret could not be read — {said}",
+    certNoTlsCrt:
+      "this Secret holds no tls.crt, so there is no certificate in it",
+    certNoPem: "tls.crt holds no PEM certificate",
+    certUnparseable: "tls.crt is not a certificate the app can read — {said}",
+    certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {

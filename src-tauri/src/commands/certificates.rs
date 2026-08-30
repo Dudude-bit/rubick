@@ -14,7 +14,7 @@ use tauri::State;
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
-use crate::resources::{read_certificate, CertificateFacts};
+use crate::resources::{read_certificate, CertificateFacts, CertificateProblem};
 use crate::state::AppState;
 
 /// One Secret's certificate, or the stated reason there is none to read.
@@ -26,9 +26,8 @@ use crate::state::AppState;
 pub struct TlsCertificate {
     pub secret_name: String,
     pub certificate: Option<CertificateFacts>,
-    /// Why there is nothing to describe: no such Secret, no `tls.crt` in it,
-    /// or bytes that are not a certificate.
-    pub problem: Option<String>,
+    /// Why there is nothing to describe, named — see [`CertificateProblem`].
+    pub problem: Option<CertificateProblem>,
 }
 
 /// Read the certificate out of each named Secret in one namespace.
@@ -52,12 +51,14 @@ pub async fn get_tls_certificates(
             Err(kube::Error::Api(err)) if err.code == 404 => TlsCertificate {
                 secret_name: name,
                 certificate: None,
-                problem: Some("no Secret of that name in this namespace".to_string()),
+                problem: Some(CertificateProblem::NoSecret),
             },
             Err(err) => TlsCertificate {
                 secret_name: name,
                 certificate: None,
-                problem: Some(format!("the Secret could not be read: {err}")),
+                problem: Some(CertificateProblem::SecretUnreadable {
+                    said: err.to_string(),
+                }),
             },
         });
     }
@@ -76,10 +77,7 @@ fn read_tls_certificate(name: &str, secret: &Secret) -> TlsCertificate {
             Ok(facts) => (Some(facts), None),
             Err(why) => (None, Some(why)),
         },
-        None => (
-            None,
-            Some("this Secret holds no tls.crt, so there is no certificate in it".to_string()),
-        ),
+        None => (None, Some(CertificateProblem::NoTlsCrt)),
     };
 
     TlsCertificate {
@@ -111,11 +109,11 @@ mod tests {
     fn a_secret_without_a_certificate_says_which_way_it_is_empty() {
         let read = read_tls_certificate("app-config", &secret_with("password", b"hunter2"));
         assert!(read.certificate.is_none());
-        assert!(read.problem.unwrap().contains("no tls.crt"));
+        assert_eq!(read.problem, Some(CertificateProblem::NoTlsCrt));
 
         let read = read_tls_certificate("shop-tls", &secret_with("tls.crt", b"garbage"));
         assert!(read.certificate.is_none());
-        assert!(read.problem.unwrap().contains("no PEM certificate"));
+        assert_eq!(read.problem, Some(CertificateProblem::NoPemCertificate));
     }
 
     /// Would break if the private key next to the certificate were ever
@@ -125,6 +123,6 @@ mod tests {
         let key = include_str!("../../tests/fixtures/leaf.key.pem");
         let read = read_tls_certificate("shop-tls", &secret_with("tls.key", key.as_bytes()));
         assert!(read.certificate.is_none());
-        assert!(read.problem.unwrap().contains("no tls.crt"));
+        assert_eq!(read.problem, Some(CertificateProblem::NoTlsCrt));
     }
 }

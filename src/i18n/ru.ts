@@ -1734,6 +1734,13 @@ export const ru: Catalogue = {
     },
     problemReplicasReady: "готовы {ready} из {desired} реплик",
     problemUnschedulable: "помечен неназначаемым — новые поды сюда не поедут",
+    certNoSecret: "в этом пространстве имён нет Secret с таким именем",
+    certSecretUnreadable: "Secret не удалось прочитать — {said}",
+    certNoTlsCrt: "в этом Secret нет tls.crt, а значит нет и сертификата",
+    certNoPem: "в tls.crt нет PEM-сертификата",
+    certUnparseable:
+      "tls.crt — не сертификат, который приложение умеет читать — {said}",
+    certCrossNamespace: "из другого пространства имён, нужен ReferenceGrant",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

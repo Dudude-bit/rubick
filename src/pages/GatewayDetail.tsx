@@ -217,8 +217,9 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                               namespace={ref.namespace}
                               showKind={false}
                               showNamespace
-                            />{" "}
-                            — cross-namespace, needs a ReferenceGrant
+                            />
+                            {" — "}
+                            {t("readings", "certCrossNamespace")}
                           </span>
                         )
                       )}

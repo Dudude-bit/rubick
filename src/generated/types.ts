@@ -1547,7 +1547,7 @@ export interface ListQuery {
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
-  problem: string | null;
+  problem: CertificateProblem | null;
 }
 
 export interface CertificateFacts {
@@ -1830,3 +1830,10 @@ export type Usage =
   | { how: "ingressTls"; hosts: string[] };
 
 export type Severity = "blocking" | "misconfigured" | "optional";
+
+export type CertificateProblem =
+  | { says: "noSecret" }
+  | { says: "secretUnreadable"; said: string }
+  | { says: "noTlsCrt" }
+  | { says: "noPemCertificate" }
+  | { says: "unparseable"; said: string };
