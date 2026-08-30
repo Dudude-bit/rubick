@@ -1,0 +1,73 @@
+# A route that attaches through a ListenerSet rather than to the Gateway.
+#
+# The shape a maintainer reported: a bare Gateway, every listener in a
+# ListenerSet per app, and routes that name the set. Deliberately across a
+# namespace boundary, with the route's parentRef namespace absent — that
+# resolves to the ROUTE's namespace, which is the part a hand-written fixture
+# gets wrong.
+#
+#   kind create cluster --name rubick-ls
+#   kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/experimental-install.yaml
+#   kubectl apply -f test-manifests/listenerset-routes.yaml    # twice: the ns comes first
+#   ./test-manifests/listenerset-routes-play-controller.sh
+#   K8S_GUI_SHAPE_CONTEXT=kind-rubick-ls \
+#     cargo test --test live_route_status dump_listenerset -- --ignored --nocapture
+#
+apiVersion: v1
+kind: Namespace
+metadata: { name: edge }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: { name: envoy }
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+# Bare Gateway: no TLS, no hostnames. Everything lives in the sets.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: shared, namespace: edge }
+spec:
+  gatewayClassName: envoy
+  allowedListeners:
+    namespaces: { from: All }
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces: { from: All }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata: { name: app-tls, namespace: apps }
+spec:
+  parentRef:
+    kind: Gateway
+    group: gateway.networking.k8s.io
+    name: shared
+    namespace: edge
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: app.example.com
+      tls:
+        mode: Terminate
+        certificateRefs: [{ kind: Secret, name: app-cert }]
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: apps }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: app, namespace: apps }
+spec:
+  parentRefs:
+    - kind: ListenerSet
+      group: gateway.networking.k8s.io
+      name: app-tls
+  hostnames: ["app.example.com"]
+  rules:
+    - backendRefs: [{ name: app, port: 8080 }]

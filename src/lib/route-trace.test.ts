@@ -1034,8 +1034,8 @@ describe("a route attached through a ListenerSet", () => {
     route("healthy", {
       parentRefs: [
         {
-          group: "gateway.networking.x-k8s.io",
-          kind: "XListenerSet",
+          group: "gateway.networking.k8s.io",
+          kind: "ListenerSet",
           name: "app-tls",
           namespace: null,
           sectionName: null,

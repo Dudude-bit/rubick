@@ -145,7 +145,7 @@ export function parentIsGateway(
   if (parent.kind === "Gateway") {
     return parent.name === gateway.name && at === gateway.namespace;
   }
-  if (parent.kind === "ListenerSet" || parent.kind === "XListenerSet") {
+  if (parent.kind === "ListenerSet") {
     return gateway.listenerSets.some(
       (set) => set.name === parent.name && set.namespace === at
     );
@@ -177,11 +177,13 @@ export function gatewayOfParent(
 
 /** Whether a parentRef could name a Gateway at all — directly or via a set. */
 export function parentCarriesTraffic(parent: { kind: string }): boolean {
-  return (
-    parent.kind === "Gateway" ||
-    parent.kind === "ListenerSet" ||
-    parent.kind === "XListenerSet"
-  );
+  // Only `ListenerSet`. The kind graduated into
+  // `gateway.networking.k8s.io/v1` in Gateway API 1.5, and the backend reads
+  // it under that name alone, so the older `XListenerSet` in the x-k8s.io
+  // group never reaches `GatewayInfo.listenerSets` and a branch for it here
+  // could not fire. Confirmed against a live cluster: kind `ListenerSet`,
+  // group `gateway.networking.k8s.io`, version v1.
+  return parent.kind === "Gateway" || parent.kind === "ListenerSet";
 }
 
 /** The protocol label a hostless route kind wears wherever it is drawn. */
