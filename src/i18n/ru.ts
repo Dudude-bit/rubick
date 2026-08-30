@@ -1726,6 +1726,14 @@ export const ru: Catalogue = {
       many: "каждые {n} часов, в :{minute}",
       other: "каждые {n} часа, в :{minute}",
     },
+    problemRestarts: {
+      one: "{n} перезапуск с момента создания",
+      few: "{n} перезапуска с момента создания",
+      many: "{n} перезапусков с момента создания",
+      other: "{n} перезапуска с момента создания",
+    },
+    problemReplicasReady: "готовы {ready} из {desired} реплик",
+    problemUnschedulable: "помечен неназначаемым — новые поды сюда не поедут",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

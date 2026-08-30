@@ -1680,6 +1680,12 @@ export const en = {
       one: "every {n} hour, at :{minute}",
       other: "every {n} hours, at :{minute}",
     },
+    problemRestarts: {
+      one: "{n} restart since creation",
+      other: "{n} restarts since creation",
+    },
+    problemReplicasReady: "{ready}/{desired} replicas ready",
+    problemUnschedulable: "marked unschedulable — no new pods will land here",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {

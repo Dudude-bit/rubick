@@ -238,7 +238,7 @@ export interface ClusterProblem {
   name: string;
   namespace: string | null;
   reason: string;
-  detail: string | null;
+  detail: ProblemDetail | null;
   since: string | null;
   restarts: number | null;
 }
@@ -1674,6 +1674,12 @@ export type ContextAuth =
   | { kind: "basic"; username: string | null }
   | { kind: "authProvider"; name: string }
   | { kind: "unrecognised" };
+
+export type ProblemDetail =
+  | { says: "said"; text: string }
+  | { says: "restarts"; n: number }
+  | { says: "replicasReady"; ready: number; desired: number }
+  | { says: "unschedulable" };
 
 export type ProblemSeverity = "critical" | "warning";
 
