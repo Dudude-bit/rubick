@@ -14,10 +14,17 @@ const PATTERNS: Record<AssetKey, RegExp> = {
   appimage: /amd64\.AppImage$/,
 };
 
-export type Assets = Partial<Record<AssetKey, string>>;
+export type Asset = { url: string; name: string; size: number };
 
-export function useLatestRelease(): Assets {
-  const [assets, setAssets] = useState<Assets>({});
+export type Release = {
+  version: string | null;
+  assets: Partial<Record<AssetKey, Asset>>;
+};
+
+const EMPTY: Release = { version: null, assets: {} };
+
+export function useLatestRelease(): Release {
+  const [release, setRelease] = useState<Release>(EMPTY);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,16 +33,28 @@ export function useLatestRelease(): Assets {
         r.ok ? r.json() : Promise.reject(new Error(String(r.status)))
       )
       .then(
-        (rel: { assets: { name: string; browser_download_url: string }[] }) => {
+        (rel: {
+          tag_name?: string;
+          assets: {
+            name: string;
+            browser_download_url: string;
+            size: number;
+          }[];
+        }) => {
           if (cancelled) return;
-          const found: Assets = {};
+          const assets: Release["assets"] = {};
           for (const a of rel.assets) {
             for (const key of Object.keys(PATTERNS) as AssetKey[]) {
-              if (PATTERNS[key].test(a.name))
-                found[key] = a.browser_download_url;
+              if (PATTERNS[key].test(a.name)) {
+                assets[key] = {
+                  url: a.browser_download_url,
+                  name: a.name,
+                  size: a.size,
+                };
+              }
             }
           }
-          setAssets(found);
+          setRelease({ version: rel.tag_name ?? null, assets });
         }
       )
       .catch(() => {
@@ -46,5 +65,9 @@ export function useLatestRelease(): Assets {
     };
   }, []);
 
-  return assets;
+  return release;
+}
+
+export function formatSize(bytes: number): string {
+  return `${(bytes / 1048576).toFixed(1)} MB`;
 }
