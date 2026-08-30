@@ -18,6 +18,7 @@
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
+import { stalledWords, stepNoteWords } from "@/lib/certificates";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import type { IssuanceStep, IssuanceStory } from "@/generated/types";
 import { T } from "@/i18n/T";
@@ -43,6 +44,7 @@ function issuerLine(story: IssuanceStory): string {
 }
 
 function Step({ step, last }: { step: IssuanceStep; last: boolean }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5">
       <div className="flex flex-col items-center">
@@ -67,7 +69,11 @@ function Step({ step, last }: { step: IssuanceStep; last: boolean }) {
             {step.kind} · {step.state}
           </span>
         </span>
-        {step.note && <p className="text-[11px] text-fg-mut">{step.note}</p>}
+        {step.note && (
+          <p className="text-[11px] text-fg-mut">
+            {stepNoteWords(step.note, t)}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -231,7 +237,7 @@ export function RenewalNote({
       {story.since
         ? `, ${t("empty", "startedWhen", { when: relative(t, story.since) })}`
         : ""}
-      {story.stalled ? ` — ${story.stalled}` : ""}
+      {story.stalled ? ` — ${stalledWords(story.stalled, t)}` : ""}
     </p>
   );
 }

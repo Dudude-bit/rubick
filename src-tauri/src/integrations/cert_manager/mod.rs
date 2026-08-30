@@ -47,6 +47,37 @@ pub fn detect(crds: &[CustomResourceDefinition]) -> DetectedExtension {
 
 // --- the story --------------------------------------------------------
 
+/// What makes a step this step: the domain being proved, the revision
+/// being requested.
+///
+/// Named rather than written — the words belong to the reader's language,
+/// and the parts that are the cluster's (a challenge type, a domain) ride
+/// through as values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum StepNote {
+    /// The controller's own message, quoted.
+    Said { text: String },
+    /// Which attempt at the certificate this request is.
+    Attempt { revision: i64 },
+    /// The challenge type and the domain it proves.
+    ChallengeOn { kind: String, domain: String },
+}
+
+/// Which object in the chain has not finished, in one short clause.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Stalled {
+    /// Nothing has asked for the certificate yet.
+    NotRequested,
+    /// A request exists and no Order came of it.
+    RequestNotIssued,
+    /// A challenge is outstanding.
+    ChallengePending { kind: String, domain: String },
+    /// The Order itself has not finished.
+    OrderNotCompleted,
+}
+
 /// One object on the way from "I want a certificate" to a certificate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,9 +88,8 @@ pub struct IssuanceStep {
     /// `errored`. Passed through rather than translated — a paraphrase of a
     /// controller's own state is a guess the reader cannot check.
     pub state: String,
-    /// What makes this step this step: the domain being proved, the
-    /// revision being requested.
-    pub note: Option<String>,
+    /// What makes this step this step, named — see [`StepNote`].
+    pub note: Option<StepNote>,
     /// Whether the walk stops here.
     pub failed: bool,
 }
@@ -84,10 +114,10 @@ pub struct IssuanceStory {
     /// Verbatim — a paraphrase of a controller's own words is a guess the
     /// reader cannot check.
     pub failure: Option<String>,
-    /// Which object has not finished, in one short clause. The verbatim
-    /// reason above runs to three wrapped lines of ACME URLs, which is
-    /// right on a page and wrong on a chain hop.
-    pub stalled: Option<String>,
+    /// Which object has not finished, in one short clause — see
+    /// [`Stalled`]. The verbatim reason above runs to three wrapped lines
+    /// of ACME URLs, which is right on a page and wrong on a chain hop.
+    pub stalled: Option<Stalled>,
     /// When the attempt now in flight started.
     pub since: Option<String>,
     /// `status.failedIssuanceAttempts` — how many times this has gone round.
@@ -169,7 +199,10 @@ pub async fn get_certificate_issuance(
         state: issuing
             .as_ref()
             .map_or_else(|| "pending".to_string(), |c| c.reason.clone()),
-        note: issuing.as_ref().and_then(|c| c.message.clone()),
+        note: issuing
+            .as_ref()
+            .and_then(|c| c.message.clone())
+            .map(|text| StepNote::Said { text }),
         failed: false,
     });
     let mut deepest = ready.as_ref().and_then(|c| c.message.clone());
@@ -188,7 +221,7 @@ pub async fn get_certificate_issuance(
 
     let Some(request) = request else {
         story.failure = deepest;
-        story.stalled = Some("no certificate has been requested yet".to_string());
+        story.stalled = Some(Stalled::NotRequested);
         return Ok(Some(story));
     };
     let request_ready = condition(&request.data, "Ready");
@@ -204,7 +237,7 @@ pub async fn get_certificate_issuance(
         state: request_ready
             .as_ref()
             .map_or_else(|| "pending".to_string(), |c| c.reason.to_lowercase()),
-        note: revision_of(&request).map(|revision| format!("attempt {revision}")),
+        note: revision_of(&request).map(|revision| StepNote::Attempt { revision }),
         failed: request_failed,
     });
 
@@ -225,7 +258,7 @@ pub async fn get_certificate_issuance(
 
     let Some(order) = order else {
         story.failure = deepest;
-        story.stalled = Some("the certificate request has not been issued".to_string());
+        story.stalled = Some(Stalled::RequestNotIssued);
         return Ok(Some(story));
     };
     let order_state = string_at(&order.data, &["status", "state"]).unwrap_or_default();
@@ -255,21 +288,20 @@ pub async fn get_certificate_issuance(
         }
         let kind = string_at(&challenge.data, &["spec", "type"]).unwrap_or_default();
         let domain = string_at(&challenge.data, &["spec", "dnsName"]).unwrap_or_default();
-        story.stalled = Some(format!(
-            "the {kind} challenge on {domain} has not completed"
-        ));
+        story.stalled = Some(Stalled::ChallengePending {
+            kind: kind.clone(),
+            domain: domain.clone(),
+        });
         story.steps.push(IssuanceStep {
             kind: "Challenge".to_string(),
             name: challenge.name_any(),
             state: state.clone(),
-            note: Some(format!("{kind} on {domain}")),
+            note: Some(StepNote::ChallengeOn { kind, domain }),
             failed: matches!(state.as_str(), "invalid" | "errored" | "expired"),
         });
     }
 
-    story.stalled = story
-        .stalled
-        .or_else(|| Some("the ACME order has not completed".to_string()));
+    story.stalled = story.stalled.or(Some(Stalled::OrderNotCompleted));
     story.failure = deepest;
     Ok(Some(story))
 }

@@ -99,17 +99,19 @@ export default defineVendor({
           return {
             ok: false,
             at: answer.at,
-            reason: shape
-              ? {
-                  key: "connReasonAndShape",
-                  values: {
-                    said: said ?? "",
-                    shape: explain(shape),
-                  },
-                }
-              : said === null
-                ? { key: "connDidNotSayWhy" }
-                : { key: "verbatimLine", values: { said } },
+            reason: answer.noAddress
+              ? { key: "connNoAddress" }
+              : shape
+                ? {
+                    key: "connReasonAndShape",
+                    values: {
+                      said: said ?? "",
+                      shape: explain(shape),
+                    },
+                  }
+                : said === null
+                  ? { key: "connDidNotSayWhy" }
+                  : { key: "verbatimLine", values: { said } },
           };
         }
         return {

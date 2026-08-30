@@ -161,6 +161,14 @@ fn first_common_name(name: &X509Name) -> Option<String> {
         .filter(|cn| !cn.is_empty())
 }
 
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    bytes.iter().fold(String::new(), |mut out, byte| {
+        let _ = write!(out, "{byte:02x}");
+        out
+    })
+}
+
 fn format_ip(bytes: &[u8]) -> String {
     match bytes.len() {
         4 => bytes
@@ -175,7 +183,10 @@ fn format_ip(bytes: &[u8]) -> String {
                 .collect();
             groups.join(":")
         }
-        _ => "an address the app cannot render".to_string(),
+        // Neither 4 nor 16 bytes is not a length any address has, and the
+        // bytes themselves say more than a sentence about them would — and
+        // say it in every language.
+        _ => format!("0x{}", hex(bytes)),
     }
 }
 

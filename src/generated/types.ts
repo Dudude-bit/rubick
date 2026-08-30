@@ -1576,6 +1576,7 @@ export interface PrometheusProbe {
   at: number;
   latencyMs: number;
   reason?: string;
+  noAddress: boolean;
   version?: string;
 }
 
@@ -1601,7 +1602,7 @@ export interface IssuanceStory {
   renewalTime: string | null;
   inFlight: boolean;
   failure: string | null;
-  stalled: string | null;
+  stalled: Stalled | null;
   since: string | null;
   attempts: number | null;
   steps: IssuanceStep[];
@@ -1611,7 +1612,7 @@ export interface IssuanceStep {
   kind: string;
   name: string;
   state: string;
-  note: string | null;
+  note: StepNote | null;
   failed: boolean;
 }
 
@@ -1632,6 +1633,7 @@ export interface LokiProbe {
   at: number;
   latencyMs: number;
   reason?: string;
+  noAddress: boolean;
   version?: string;
   retention?: string;
   labels: string[];
@@ -1842,3 +1844,14 @@ export type CertificateProblem =
   | { says: "noTlsCrt" }
   | { says: "noPemCertificate" }
   | { says: "unparseable"; said: string };
+
+export type StepNote =
+  | { says: "said"; text: string }
+  | { says: "attempt"; revision: number }
+  | { says: "challengeOn"; kind: string; domain: string };
+
+export type Stalled =
+  | { says: "notRequested" }
+  | { says: "requestNotIssued" }
+  | { says: "challengePending"; kind: string; domain: string }
+  | { says: "orderNotCompleted" };

@@ -1747,6 +1747,13 @@ export const ru: Catalogue = {
       "приложение не читает заявки подов этого узла, поэтому не может сказать, какие тома придётся отцепить, прежде чем эти поды поедут в другое место",
     unreadVolumeMounts:
       "приложение не читает, кто монтирует заявку этого тома, поэтому не может сказать, пишет ли в него ещё кто-нибудь",
+    connNoAddress: "адрес не задан",
+    stepAttempt: "попытка {revision}",
+    stepChallengeOn: "{kind} для {domain}",
+    stalledNotRequested: "сертификат ещё никто не запросил",
+    stalledRequestNotIssued: "по запросу сертификат так и не выпущен",
+    stalledChallengePending: "проверка {kind} для {domain} не завершилась",
+    stalledOrderNotCompleted: "заказ ACME не завершился",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

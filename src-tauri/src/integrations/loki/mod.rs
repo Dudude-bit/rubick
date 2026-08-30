@@ -86,6 +86,12 @@ pub struct LokiProbe {
     /// Present only on failure, in the server's own words.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Nothing was configured to probe. Separate from `reason`, which is
+    /// the server's own words and has to survive untranslated: this is the
+    /// app's own observation, so the frontend says it in the reader's
+    /// language rather than receiving an English sentence here.
+    #[serde(default)]
+    pub no_address: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     /// How far back this Loki says it keeps lines — **only where it said
@@ -257,7 +263,8 @@ pub async fn probe_loki(
                     ok: false,
                     at: now_ms(),
                     latency_ms: 0,
-                    reason: Some("no address configured".into()),
+                    reason: None,
+                    no_address: true,
                     version: None,
                     retention: None,
                     labels: Vec::new(),
@@ -296,6 +303,7 @@ pub async fn probe_loki(
                 at: now_ms(),
                 latency_ms,
                 reason: None,
+                no_address: false,
                 version,
                 retention,
                 labels,
@@ -306,6 +314,7 @@ pub async fn probe_loki(
             at: now_ms(),
             latency_ms,
             reason: Some(reason),
+            no_address: false,
             version: None,
             retention: None,
             labels: Vec::new(),

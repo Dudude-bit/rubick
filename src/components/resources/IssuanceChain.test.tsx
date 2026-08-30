@@ -109,7 +109,11 @@ describe("IssuanceSection", () => {
                     kind: "Challenge",
                     name: "shop-tls-1-1948-394",
                     state: "invalid",
-                    note: "http-01 on shop.k8s-gui.test",
+                    note: {
+                      says: "challengeOn",
+                      kind: "http-01",
+                      domain: "shop.k8s-gui.test",
+                    },
                     failed: true,
                   },
                 ],

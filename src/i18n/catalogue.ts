@@ -1699,6 +1699,14 @@ export const en = {
       "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
     unreadVolumeMounts:
       "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+    connNoAddress: "no address is configured",
+    stepAttempt: "attempt {revision}",
+    stepChallengeOn: "{kind} on {domain}",
+    stalledNotRequested: "no certificate has been requested yet",
+    stalledRequestNotIssued: "the certificate request has not been issued",
+    stalledChallengePending:
+      "the {kind} challenge on {domain} has not completed",
+    stalledOrderNotCompleted: "the ACME order has not completed",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {
