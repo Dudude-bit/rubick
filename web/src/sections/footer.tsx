@@ -1,0 +1,32 @@
+import { LINKS } from "../lib/site";
+
+const FOOTER_LINKS = [
+  { label: "GitHub", href: LINKS.github },
+  { label: "Releases", href: LINKS.releases },
+  { label: "Contributing", href: LINKS.contributing },
+  { label: "Security", href: LINKS.security },
+  { label: "GPL-3.0-or-later", href: LINKS.license },
+];
+
+export function Footer() {
+  return (
+    <footer className="border-t border-neutral-800/70">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12">
+        <nav className="flex flex-wrap gap-x-8 gap-y-3">
+          {FOOTER_LINKS.map((l) => (
+            <a
+              key={l.label}
+              href={l.href}
+              className="text-sm text-neutral-400 transition-colors hover:text-white"
+            >
+              {l.label}
+            </a>
+          ))}
+        </nav>
+        <p className="font-mono text-xs text-neutral-600">
+          No analytics on this page either. View source, it is just HTML.
+        </p>
+      </div>
+    </footer>
+  );
+}
