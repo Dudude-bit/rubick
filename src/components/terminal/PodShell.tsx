@@ -132,7 +132,7 @@ function noShell(pod: PodInfo, t: T): NoShell {
   if (dead.length === all.length && all.length > 0) {
     const last = dead[dead.length - 1];
     const death = lastTermination(last);
-    const when = death ? terminationWhen(death) : null;
+    const when = death ? terminationWhen(death, t) : null;
     return {
       headline,
       hint: null,

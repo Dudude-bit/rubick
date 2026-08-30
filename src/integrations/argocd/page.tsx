@@ -447,7 +447,7 @@ function AppRow({
             under={
               app.lastSyncAt
                 ? t("empty", "lastSyncedAgo", {
-                    age: formatAge(app.lastSyncAt),
+                    age: formatAge(app.lastSyncAt, t),
                   })
                 : t("empty", "neverSynced")
             }
@@ -492,7 +492,7 @@ function SourceLine({ app }: { app: ArgoApp }) {
             <span className="text-fg-fnt">
               {app.lastSyncAt
                 ? `— ${t("empty", "syncedAgo", {
-                    age: formatAge(app.lastSyncAt),
+                    age: formatAge(app.lastSyncAt, t),
                   })}`
                 : `— ${t("empty", "neverSynced")}`}
             </span>
@@ -811,7 +811,7 @@ function describeFinding(
     case "syncFailing":
       return {
         title: finding.since
-          ? t("empty", "syncFailingFor", { age: formatAge(finding.since) })
+          ? t("empty", "syncFailingFor", { age: formatAge(finding.since, t) })
           : t("empty", "syncFailing"),
         verbatim: finding.message,
         note:
@@ -823,7 +823,9 @@ function describeFinding(
     case "syncFailedOnce":
       return {
         title: finding.since
-          ? t("empty", "lastSyncFailedAgo", { age: formatAge(finding.since) })
+          ? t("empty", "lastSyncFailedAgo", {
+              age: formatAge(finding.since, t),
+            })
           : t("empty", "lastSyncFailed"),
         verbatim: finding.message,
         note: t("empty", "nothingRetryingSync"),
@@ -833,7 +835,7 @@ function describeFinding(
       return {
         title: finding.since
           ? t("empty", "outOfSyncLastSynced", {
-              age: formatAge(finding.since),
+              age: formatAge(finding.since, t),
             })
           : t("empty", "outOfSyncNeverSynced"),
         note: t("empty", "driftedNote"),

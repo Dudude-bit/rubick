@@ -10,6 +10,7 @@
 import { useSyncExternalStore, useCallback } from "react";
 import { tickStore, type TickChannel } from "@/stores/tickStore";
 import { formatAge } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 /**
  * Determine which tick channel to use based on age in seconds
@@ -48,6 +49,7 @@ function getAgeSeconds(timestamp: string | null): number {
  * ```
  */
 export function useRealtimeAge(timestamp: string | null): string {
+  const t = useT();
   // Calculate initial age and channel
   const ageSeconds = getAgeSeconds(timestamp);
   const channel = getChannelForAge(ageSeconds);
@@ -72,7 +74,7 @@ export function useRealtimeAge(timestamp: string | null): string {
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   // Recalculate age on each render (triggered by tick)
-  return formatAge(timestamp);
+  return formatAge(timestamp, t);
 }
 
 /**

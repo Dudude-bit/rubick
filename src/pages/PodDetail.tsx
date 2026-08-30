@@ -133,7 +133,7 @@ function describeWaiting(
         ? t("empty", "crashRestartsWithLastRun", {
             n: container.restartCount,
             how: `${describeTermination(last)}${
-              terminationWhen(last) ? `, ${terminationWhen(last)}` : ""
+              terminationWhen(last, t) ? `, ${terminationWhen(last, t)}` : ""
             }`,
           })
         : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),

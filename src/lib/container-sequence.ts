@@ -341,7 +341,7 @@ function noteFor(
 
   if (mark === "failed") {
     const death = container.lastTerminated ?? null;
-    const when = death ? terminationWhen(death) : null;
+    const when = death ? terminationWhen(death, t) : null;
     if (container.restartCount > 0) {
       return t("readings", "logsAttemptsLast", {
         attempts: t("count", "attemptsCount", { n: container.restartCount }),
@@ -360,7 +360,7 @@ function noteFor(
     const took = termination
       ? runDuration(termination.startedAt, termination.finishedAt)
       : null;
-    const when = termination ? terminationWhen(termination) : null;
+    const when = termination ? terminationWhen(termination, t) : null;
     // Said out loud because a finished container looks identical to a
     // silent one in a log pane, and Follow does nothing on either.
     return t("readings", "logsFinishedComplete", {

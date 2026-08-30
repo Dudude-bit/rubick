@@ -216,7 +216,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(problem.since)}
+        {formatAge(problem.since, t)}
       </span>
     </>
   );
@@ -631,6 +631,7 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
 }
 
 function WarningRow({ warning }: { warning: WarningGroup }) {
+  const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
   // family mark contributes only shape — the feed's rule, applied to the one
   // event surface that was still rendering a reason as a bare word.
@@ -682,7 +683,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(warning.lastSeen)}
+        {formatAge(warning.lastSeen, t)}
       </span>
     </div>
   );

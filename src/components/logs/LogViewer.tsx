@@ -132,7 +132,7 @@ function StreamFailureNotice({
   // the container is no longer running, and the exit code, the reason
   // and the time are sitting in the pod's own status the whole while.
   const termination = info ? lastTermination(info) : null;
-  const when = termination ? terminationWhen(termination) : null;
+  const when = termination ? terminationWhen(termination, t) : null;
 
   return (
     <div
@@ -443,7 +443,7 @@ function FocusNotice({
 function FinishedNotice({ container }: { container: ContainerInfo }) {
   const t = useT();
   const termination = lastTermination(container);
-  const when = termination ? terminationWhen(termination) : null;
+  const when = termination ? terminationWhen(termination, t) : null;
   const kind =
     container.phase === "sidecar"
       ? t("empty", "aSidecar")

@@ -282,7 +282,7 @@ function ContainerBlock({
     // says when it finished, is the same fact three times.
     const death = step?.mark === "done" ? null : lastTermination(container);
     if (death) {
-      const when = terminationWhen(death);
+      const when = terminationWhen(death, t);
       items.push({
         label: t("columns", "lastExit"),
         value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
