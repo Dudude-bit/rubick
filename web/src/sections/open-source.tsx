@@ -1,3 +1,4 @@
+import { FaGithub } from "react-icons/fa6";
 import { ButtonLink } from "../components/button-link";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
@@ -18,7 +19,10 @@ export function OpenSource() {
         in the building.
       </p>
       <div className="mt-8">
-        <ButtonLink href={LINKS.github}>Read the source</ButtonLink>
+        <ButtonLink href={LINKS.github}>
+          <FaGithub aria-hidden className="size-4" />
+          Read the source
+        </ButtonLink>
       </div>
     </Section>
   );

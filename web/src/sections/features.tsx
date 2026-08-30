@@ -1,28 +1,42 @@
+import {
+  LuKeyRound,
+  LuPuzzle,
+  LuRoute,
+  LuScrollText,
+  LuShipWheel,
+  LuTerminal,
+} from "react-icons/lu";
 import { Section } from "../components/section";
 
 const FEATURES = [
   {
     title: "Logs",
+    Icon: LuScrollText,
     body: "Virtualised, multi-container, filtered server-side, repeats collapsed. They open where the answer is.",
   },
   {
     title: "Shell",
+    Icon: LuTerminal,
     body: "A real terminal tab per pod. The session survives you looking elsewhere.",
   },
   {
     title: "Gateway API",
+    Icon: LuRoute,
     body: "Gateways, all five route kinds, classes, policies. A route that is not serving says which of the eight links between listener and pod broke.",
   },
   {
     title: "Secrets",
+    Icon: LuKeyRound,
     body: "Binary values shown as binary. Private keys never revealed. Boring on purpose.",
   },
   {
     title: "Custom resources",
+    Icon: LuPuzzle,
     body: "Every CRD in the cluster, with YAML editing and validation. Yours included.",
   },
   {
     title: "Helm",
+    Icon: LuShipWheel,
     body: "Releases, revisions, rollback, uninstall. No opinions about how you got here.",
   },
 ];
@@ -39,7 +53,8 @@ export function Features() {
             key={f.title}
             className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-6"
           >
-            <h3 className="font-mono text-sm font-medium text-neutral-100">
+            <f.Icon aria-hidden className="size-5 text-neutral-400" />
+            <h3 className="mt-4 font-mono text-sm font-medium text-neutral-100">
               {f.title}
             </h3>
             <p className="mt-3 text-sm text-neutral-400">{f.body}</p>

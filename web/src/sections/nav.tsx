@@ -1,3 +1,4 @@
+import { FaGithub } from "react-icons/fa6";
 import { LINKS, SITE } from "../lib/site";
 import { ButtonLink } from "../components/button-link";
 
@@ -11,8 +12,9 @@ export function Nav() {
         <nav className="flex items-center gap-6">
           <a
             href={LINKS.github}
-            className="text-sm text-neutral-400 transition-colors hover:text-white"
+            className="flex min-h-11 items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white"
           >
+            <FaGithub aria-hidden className="size-4" />
             GitHub
           </a>
           <ButtonLink href="#install">Download</ButtonLink>

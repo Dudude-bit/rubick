@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
+import { FaApple, FaLinux, FaWindows } from "react-icons/fa6";
 import { ButtonLink } from "./button-link";
 
 type OS = "mac" | "windows" | "linux";
 
-const ALL: { os: OS; label: string }[] = [
-  { os: "mac", label: "Download for macOS" },
-  { os: "windows", label: "Download for Windows" },
-  { os: "linux", label: "Download for Linux" },
+const ALL: { os: OS; label: string; Icon: typeof FaApple }[] = [
+  { os: "mac", label: "Download for macOS", Icon: FaApple },
+  { os: "windows", label: "Download for Windows", Icon: FaWindows },
+  { os: "linux", label: "Download for Linux", Icon: FaLinux },
 ];
 
 function detect(): OS | null {
@@ -28,9 +29,15 @@ export function DownloadButtons() {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {first ? <ButtonLink href="#install">{first.label}</ButtonLink> : null}
+      {first ? (
+        <ButtonLink href="#install">
+          <first.Icon aria-hidden className="size-4" />
+          {first.label}
+        </ButtonLink>
+      ) : null}
       {rest.map((d) => (
         <ButtonLink key={d.os} href="#install" variant="ghost">
+          <d.Icon aria-hidden className="size-4" />
           {d.label.replace("Download for ", "")}
         </ButtonLink>
       ))}

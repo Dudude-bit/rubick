@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FaApple, FaLinux, FaWindows } from "react-icons/fa6";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
 import {
@@ -9,10 +10,10 @@ import {
 
 type OS = "macos" | "windows" | "linux";
 
-const TABS: { os: OS; label: string }[] = [
-  { os: "macos", label: "macOS" },
-  { os: "windows", label: "Windows" },
-  { os: "linux", label: "Linux" },
+const TABS: { os: OS; label: string; Icon: typeof FaApple }[] = [
+  { os: "macos", label: "macOS", Icon: FaApple },
+  { os: "windows", label: "Windows", Icon: FaWindows },
+  { os: "linux", label: "Linux", Icon: FaLinux },
 ];
 
 function detect(): OS | null {
@@ -146,12 +147,13 @@ export function Install() {
                 aria-controls={`install-${t.os}`}
                 tabIndex={active === t.os ? 0 : -1}
                 onClick={() => setActive(t.os)}
-                className={`-mb-px min-h-11 border-b-2 px-3 font-mono text-sm transition-colors sm:px-4 ${
+                className={`-mb-px flex min-h-11 items-center gap-2 border-b-2 px-3 font-mono text-sm transition-colors sm:px-4 ${
                   active === t.os
                     ? "border-accent text-white"
                     : "border-transparent text-neutral-500 hover:text-neutral-300"
                 }`}
               >
+                <t.Icon aria-hidden className="hidden size-4 sm:block" />
                 {t.label}
               </button>
             ))}
