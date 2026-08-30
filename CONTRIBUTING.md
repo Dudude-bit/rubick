@@ -33,8 +33,8 @@ before pushing something you want to land green.
 - **Rust:** `cargo fmt` must pass; `cargo clippy` is advisory.
 - **TypeScript:** ESLint + Prettier (configs are in the repo).
 
-Three lint rules exist to stop the codebase drifting back to habits it has
-already left. Each fails the commit, and each has a reason:
+A block of lint rules exists to stop the codebase drifting back to habits it
+has already left. Each fails the commit, and each has a reason:
 
 - **Role tokens only.** Raw Tailwind colours, `dark:` variants and the legacy
   shadcn tokens are banned across `src/`. The app draws in roles — `--fg-mut`,
@@ -47,27 +47,42 @@ already left. Each fails the commit, and each has a reason:
   which takes a rate _name_ and derives the interval from whether anything is
   visible, focused and changing. Written by hand, it was costing the cluster
   ~895 API requests a minute per idle window.
+- **A `StatusBadge`'s `status` stays untranslated.** Its colour is a table
+  lookup on the Kubernetes code, and a miss returns neutral — so a translated
+  status turns every badge grey with every test still green. The words go in
+  `children`.
+- **No native `<select>` outside `components/ui`.** The OS paints it, so it is
+  white in a dark window whatever the app's theme says.
+
+They all live in one `no-restricted-syntax` block in `eslint.config.js`, and
+they have to: a second config object naming that rule replaces the selector
+list rather than extending it, which would switch the others off silently.
 
 Before committing:
 
 ```bash
 cargo fmt --all
-bun run lint          # required — zero warnings
-cargo clippy --workspace --all-targets   # advisory, see below
+bun run lint                                              # zero warnings
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Clippy is **advisory**, not a gate. The crate turns on `clippy::pedantic`
-(`src-tauri/src/lib.rs`), which currently reports several hundred warnings;
-CI runs it at warn level so a new pedantic lint cannot break every open PR.
-Read what it says about the code you touched, and don't add to the pile.
-`cargo fmt` and `bun run lint` are the two that actually fail CI.
+All three fail CI. Clippy became a gate in 4.4.0 — `ci.yml` runs it exactly as
+written above — and the backlog it once had is at zero, so anything it reports
+is yours. The crate turns on `clippy::pedantic` in `src-tauri/src/lib.rs`.
+
+There is no pre-push hook, so run the tests yourself before pushing. Prettier
+runs in the pre-commit hook and in no CI job at all: bypass the hook and
+unformatted code lands on a green main.
 
 ## Tests
 
 ```bash
 bun run test                                          # frontend
-cargo test --workspace                                # Rust
+cargo test --workspace                                # Rust — not --lib
 ```
+
+`--workspace`, never `--lib`: the latter does not build the binary, which is
+how v2.1.0 shipped with ninety `__cmd__X not found` errors after a green run.
 
 Tests here assert _behaviour_, not markup, and the house style is a doc comment
 saying what would break followed by the assertion — so a failing test explains

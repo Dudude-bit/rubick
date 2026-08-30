@@ -51,8 +51,8 @@ minor release.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 4.3.x   | :white_check_mark: |
-| < 4.3   | :x:                |
+| 4.7.x   | :white_check_mark: |
+| < 4.7   | :x:                |
 
 ## Disclosure
 

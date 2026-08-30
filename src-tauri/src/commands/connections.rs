@@ -1347,7 +1347,7 @@ async fn gateway_lists(
     Vec<crate::resources::RouteInfo>,
     Option<Vec<crate::resources::GatewayInfo>>,
 ) {
-    use crate::resources::{GatewayInfo, RouteInfo};
+    use crate::resources::{GatewayInfo, ListenerSetInfo, RouteInfo};
 
     let Some(detection) = gateway.filter(|d| d.installed) else {
         return (Vec::new(), None);
@@ -1368,6 +1368,10 @@ async fn gateway_lists(
     });
     let mut routes = Vec::new();
     let mut gateways: Option<Vec<crate::resources::GatewayInfo>> = None;
+    // `None` until the kind answers: not having read the sets and having
+    // found none are different facts, and the graph reports a route's
+    // Gateway missing on the strength of the second.
+    let mut sets: Option<Vec<ListenerSetInfo>> = None;
     for (kind, api_resource, list) in futures::future::join_all(fetches).await {
         let Ok(list) = list else { continue };
         match kind.as_str() {
@@ -1383,7 +1387,24 @@ async fn gateway_lists(
                         GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
                     }));
             }
+            "ListenerSet" => {
+                sets.get_or_insert_with(Vec::new)
+                    .extend(list.items.into_iter().map(|obj| {
+                        ListenerSetInfo::read(&crate::commands::gateway::with_types(
+                            obj,
+                            &api_resource,
+                        ))
+                    }));
+            }
             _ => {}
+        }
+    }
+    // Without this every Gateway here carries an empty set list that nothing
+    // marked unread, and a route naming a ListenerSet resolves to no Gateway
+    // at all — which the graph then reports as a Gateway that does not exist.
+    if let Some(gateways) = gateways.as_mut() {
+        for gateway in gateways.iter_mut() {
+            gateway.merge_listener_sets(sets.as_deref());
         }
     }
     (routes, gateways)

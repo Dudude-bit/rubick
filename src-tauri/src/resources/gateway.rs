@@ -356,7 +356,12 @@ impl GatewayInfo {
             api_version: types.api_version,
             class_name: spec.gateway_class_name,
             listener_sets: Vec::new(),
-            listener_sets_known: true,
+            // False until something actually reads the sets. A read of a
+            // Gateway on its own has not looked, and the default that said
+            // otherwise turned every caller that forgot `merge_listener_sets`
+            // into one claiming this Gateway has no sets — which is the
+            // confident wrong answer this app exists to avoid.
+            listener_sets_known: false,
             listeners: spec
                 .listeners
                 .into_iter()
@@ -378,11 +383,15 @@ impl GatewayInfo {
     /// `None` means the sets could not be read, which is not the same as
     /// there being none: a route that names a set would otherwise resolve to
     /// nothing and its Gateway be reported missing.
+    ///
+    /// Calling this is what makes the answer knowable at all — a Gateway
+    /// nobody merged into stays `listener_sets_known: false`.
     pub fn merge_listener_sets(&mut self, sets: Option<&[ListenerSetInfo]>) {
         let Some(sets) = sets else {
             self.listener_sets_known = false;
             return;
         };
+        self.listener_sets_known = true;
         for set in sets {
             if set.gateway_name == self.name && set.gateway_namespace == self.namespace {
                 self.listeners.extend(set.listeners.iter().cloned());
@@ -1404,6 +1413,28 @@ status:
         // name from two teams, and a route through one must not be checked
         // against the other's listeners.
         assert_eq!(from.namespace, "infra");
+    }
+
+    /// A Gateway nobody merged sets into has not looked for them, and must
+    /// say so. The field defaulted to `true` until 2026-08-30, which made
+    /// every caller that forgot `merge_listener_sets` — the watch payload and
+    /// the connections graph among them — claim this Gateway has no
+    /// `ListenerSet`s at all. A route attached to one was then reported as
+    /// naming a Gateway that does not exist, in red.
+    #[test]
+    fn a_gateway_nobody_read_the_sets_for_does_not_claim_it_has_none() {
+        let unread = GatewayInfo::read(&parse(GATEWAY_V1));
+        assert!(!unread.listener_sets_known);
+
+        let mut refused = GatewayInfo::read(&parse(GATEWAY_V1));
+        refused.merge_listener_sets(None);
+        assert!(!refused.listener_sets_known);
+
+        // Read and genuinely empty is the third answer, and it is knowable.
+        let mut none_exist = GatewayInfo::read(&parse(GATEWAY_V1));
+        none_exist.merge_listener_sets(Some(&[]));
+        assert!(none_exist.listener_sets_known);
+        assert!(none_exist.listener_sets.is_empty());
     }
 
     #[test]
