@@ -504,11 +504,21 @@ describe("routeTraces", () => {
     expect(trace.steps[1].say).toContain("ghost-gw");
   });
 
-  it("stops at the listener when the controller stays silent about an existing gateway", () => {
-    const [trace] = routeTraces(route("silent", { parents: [] }), sources(), t);
+  /**
+   * Was "stops at the listener when the controller stays silent". It stops
+   * only when the silence means nobody is there — with a claimed class and a
+   * gateway its controller has not refused, see the block at the end of this
+   * file. Here nothing claims the class, so the silence is real.
+   */
+  it("stops at the listener when nothing could have answered", () => {
+    const [trace] = routeTraces(
+      route("healthy", { parents: [] }),
+      sources({ classes: [gatewayClass("envoy", null)] }),
+      t
+    );
 
-    expect(trace.stopStep).toBe(3);
-    expect(trace.steps[2].detail?.body).toContain("No controller");
+    expect(trace.stopStep).toBe(1);
+    expect(trace.steps[0].state).toBe("err");
   });
 
   /**
@@ -947,6 +957,62 @@ describe("a gateway that publishes no address", () => {
     )[0];
 
     expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(trace.servingKnown).toBe(true);
+  });
+});
+
+describe("a route whose controller writes no status", () => {
+  /**
+   * Reported from a live Netbird cluster: the class is claimed, the gateway
+   * is programmed, the TCPRoutes carry traffic — and every one of them read
+   * "No controller answered for this parent … the route is invisible to the
+   * data plane either way". Both halves of that sentence were contradicted by
+   * the two steps directly above it on the same screen.
+   */
+  it("does not call a route dead when the controller is demonstrably there", () => {
+    const [trace] = routeTraces(
+      route("healthy", { parents: [] }),
+      sources(),
+      t
+    );
+
+    expect(trace.steps[2].state).toBe("blind");
+    expect(trace.serving).toBe(true);
+    // Blind, so the verdict does not claim to be checked.
+    expect(trace.servingKnown).toBe(false);
+    // And the steps below it still run, instead of reading NOT REACHED.
+    expect(trace.steps[3].state).toBe("ok");
+  });
+
+  /** Nothing claims the class: now the silence really is nobody there. */
+  it("still reports a route no controller could have answered", () => {
+    const [trace] = routeTraces(
+      route("healthy", { parents: [] }),
+      sources({
+        classes: [gatewayClass("envoy", false)],
+      }),
+      t
+    );
+
+    expect(trace.steps[0].state).toBe("err");
+    expect(trace.serving).toBe(false);
+  });
+
+  /** The controller refused the gateway itself: also an answer, not silence. */
+  it("still reports a route whose gateway the controller refused", () => {
+    const [trace] = routeTraces(
+      route("healthy", { parents: [] }),
+      sources({
+        gateways: [
+          gateway("edge", {
+            conditions: [condition("Programmed", "False", "Pending")],
+          }),
+        ],
+      }),
+      t
+    );
+
+    expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
   });
 });

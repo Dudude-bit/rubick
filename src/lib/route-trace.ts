@@ -457,19 +457,31 @@ function acceptanceSteps(
   const label = listenerLabel(listeners, t);
 
   if (entries.length === 0) {
+    // No parent status written at all — and by the time this runs, that can
+    // only mean the controller stayed quiet about *this route*. The two cases
+    // where nobody is there to have written one are caught above: an
+    // unclaimed class stops at step 1, a missing or refused gateway at step 2,
+    // and both force everything below them off.
+    //
+    // So what is left is a controller that exists and did not write route
+    // status, which several implementations still do not for the alpha kinds.
+    // This used to say "the route is invisible to the data plane either way",
+    // which contradicted the two green steps directly above it and was wrong
+    // for a reader whose TCPRoutes were carrying traffic the whole time.
+    // Blind, and the steps below still get to run.
     return [
       {
         id: "listener",
-        state: "err",
-        say: t("empty", "gwNoControllerForParentSay"),
+        state: "blind",
+        say: t("empty", "gwNoRouteStatusSay"),
         who: "controller",
-        short: t("empty", "gwNoControllerShort"),
+        short: t("empty", "gwNoRouteStatusShort"),
         detail: {
-          title: t("empty", "gwNoStatusTitle"),
-          body: t("empty", "gwNoStatusBody"),
+          title: t("empty", "gwNoRouteStatusTitle"),
+          body: t("empty", "gwNoRouteStatusBody"),
         },
       },
-      namespaceQuiet(route, listeners, "off", t),
+      namespaceQuiet(route, listeners, "ok", t),
     ];
   }
 
