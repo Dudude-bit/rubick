@@ -1044,7 +1044,7 @@ export interface ResourceConnections {
 
 export interface UnexploredKind {
   kind: string;
-  why: string;
+  why: Unread;
 }
 
 export interface ConnectionEdge {
@@ -1761,6 +1761,11 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
+
+export type Unread =
+  | { says: "unanswered"; version: string; said: string }
+  | { says: "nodeClaimsNotRead" }
+  | { says: "volumeMountsNotRead" };
 
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }

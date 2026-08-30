@@ -140,7 +140,7 @@ describe("reading the two governing kinds", () => {
       conns([], workload, [
         {
           kind: "HorizontalPodAutoscaler",
-          why: "the app asked for autoscaling/v2 and the cluster did not answer",
+          why: { says: "unanswered", version: "autoscaling/v2", said: "404" },
         },
       ]),
       t

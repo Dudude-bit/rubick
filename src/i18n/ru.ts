@@ -1741,6 +1741,12 @@ export const ru: Catalogue = {
     certUnparseable:
       "tls.crt — не сертификат, который приложение умеет читать — {said}",
     certCrossNamespace: "из другого пространства имён, нужен ReferenceGrant",
+    unreadUnanswered:
+      "приложение спросило {version}, а кластер не ответил ({said}) — значит, сказать, есть ли он здесь, нельзя",
+    unreadNodeClaims:
+      "приложение не читает заявки подов этого узла, поэтому не может сказать, какие тома придётся отцепить, прежде чем эти поды поедут в другое место",
+    unreadVolumeMounts:
+      "приложение не читает, кто монтирует заявку этого тома, поэтому не может сказать, пишет ли в него ещё кто-нибудь",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

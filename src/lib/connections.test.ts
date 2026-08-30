@@ -868,7 +868,7 @@ describe("the groups", () => {
         [
           {
             kind: "HorizontalPodAutoscaler",
-            why: "the app does not read HorizontalPodAutoscalers, so it cannot say whether one scales this",
+            why: { says: "unanswered", version: "autoscaling/v2", said: "404" },
           },
         ]
       ),
@@ -1147,7 +1147,7 @@ describe("what the Service publishes", () => {
         [
           {
             kind: "EndpointSlice",
-            why: "readiness here is each pod's own Ready condition",
+            why: { says: "volumeMountsNotRead" },
           },
         ]
       ),

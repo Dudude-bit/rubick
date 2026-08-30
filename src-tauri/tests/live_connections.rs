@@ -67,7 +67,7 @@ fn describe(what: &str, answer: &ResourceConnections) {
         println!("  STOP {stop:?}");
     }
     for gap in &answer.not_looked_at {
-        println!("  not looked at: {} — {}", gap.kind, gap.why);
+        println!("  not looked at: {} — {:?}", gap.kind, gap.why);
     }
 }
 

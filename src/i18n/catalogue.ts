@@ -1693,6 +1693,12 @@ export const en = {
     certNoPem: "tls.crt holds no PEM certificate",
     certUnparseable: "tls.crt is not a certificate the app can read — {said}",
     certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
+    unreadUnanswered:
+      "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
+    unreadNodeClaims:
+      "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
+    unreadVolumeMounts:
+      "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {
