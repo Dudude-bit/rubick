@@ -1707,6 +1707,11 @@ export const en = {
     stalledChallengePending:
       "the {kind} challenge on {domain} has not completed",
     stalledOrderNotCompleted: "the ACME order has not completed",
+    authTimedOut: "the wait for the browser ran out",
+    authNoTokenInCredential: "the credential helper answered without a token",
+    authStateMismatch: "the callback did not match the request this app sent",
+    authSuperseded: "a newer attempt on this context took over",
+    authSwitchedAway: "you moved to another cluster while this was waiting",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} on {domain}",
     awsIngressClassParams: {

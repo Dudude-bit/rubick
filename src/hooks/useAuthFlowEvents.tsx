@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-shell";
 import { useToast } from "@/components/ui/use-toast";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { ToastAction } from "@/components/ui/toast";
 import { commands } from "@/lib/commands";
 
@@ -18,17 +18,50 @@ interface AuthUrlRequestedPayload {
   redirect_uri?: string | null;
 }
 
+/**
+ * Why a sign-in ended without a credential.
+ *
+ * Hand-mirrored, like every event payload here: the generator only emits
+ * types a command signature reaches, and these arrive on an event. `said`
+ * is the provider's own words and is quoted; the rest are named so the
+ * reader sees them in their own language.
+ */
+type AuthOutcome =
+  | { says: "said"; text: string }
+  | { says: "timedOut" }
+  | { says: "noTokenInCredential" }
+  | { says: "stateMismatch" }
+  | { says: "superseded" }
+  | { says: "switchedAway" };
+
+function outcomeWords(why: AuthOutcome, t: T): string {
+  switch (why.says) {
+    case "said":
+      return why.text;
+    case "timedOut":
+      return t("readings", "authTimedOut");
+    case "noTokenInCredential":
+      return t("readings", "authNoTokenInCredential");
+    case "stateMismatch":
+      return t("readings", "authStateMismatch");
+    case "superseded":
+      return t("readings", "authSuperseded");
+    case "switchedAway":
+      return t("readings", "authSwitchedAway");
+  }
+}
+
 interface AuthFlowCompletedPayload {
   session_id: string;
   context: string;
   success: boolean;
-  message?: string | null;
+  why?: AuthOutcome | null;
 }
 
 interface AuthFlowCancelledPayload {
   session_id: string;
   context: string;
-  message?: string | null;
+  why?: AuthOutcome | null;
 }
 
 interface AuthTerminalSessionCreatedPayload {
@@ -293,7 +326,7 @@ export function useAuthFlowEvents() {
             toastRef.current({
               title: tRef.current("auth", "failed"),
               description:
-                payload.message ||
+                (payload.why && outcomeWords(payload.why, tRef.current)) ||
                 tRef.current("auth", "failedFor", { context: payload.context }),
               variant: "destructive",
             });
@@ -319,7 +352,7 @@ export function useAuthFlowEvents() {
           toastRef.current({
             title: tRef.current("auth", "cancelled"),
             description:
-              payload.message ||
+              (payload.why && outcomeWords(payload.why, tRef.current)) ||
               tRef.current("auth", "cancelledFor", {
                 context: payload.context,
               }),

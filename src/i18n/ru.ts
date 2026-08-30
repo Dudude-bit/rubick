@@ -1754,6 +1754,12 @@ export const ru: Catalogue = {
     stalledRequestNotIssued: "по запросу сертификат так и не выпущен",
     stalledChallengePending: "проверка {kind} для {domain} не завершилась",
     stalledOrderNotCompleted: "заказ ACME не завершился",
+    authTimedOut: "ожидание браузера вышло",
+    authNoTokenInCredential: "помощник вернул ответ без токена",
+    authStateMismatch:
+      "ответ не совпал с запросом, который отправило приложение",
+    authSuperseded: "эту попытку сменила новая",
+    authSwitchedAway: "вы ушли на другой кластер, пока это ждало",
     verbatimLine: "{said}",
     gcpStatusOnDomain: "{status} на {domain}",
     awsIngressClassParams: {

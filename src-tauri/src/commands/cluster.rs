@@ -115,7 +115,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
         state.emit(crate::state::AppEvent::AuthFlowCancelled {
             session_id,
             context: context.clone(),
-            message: Some("Authentication superseded by a new attempt.".to_string()),
+            why: Some(crate::state::AuthOutcome::Superseded),
         });
     }
 
@@ -200,7 +200,7 @@ pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result
         state.emit(crate::state::AppEvent::AuthFlowCancelled {
             session_id,
             context: context.clone(),
-            message: Some("Authentication cancelled — switched away.".to_string()),
+            why: Some(crate::state::AuthOutcome::SwitchedAway),
         });
     }
 

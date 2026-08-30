@@ -12,7 +12,7 @@ pub fn cancel_auth_session(session_id: String, state: State<'_, AppState>) -> Re
         state.emit(crate::state::AppEvent::AuthFlowCancelled {
             session_id,
             context: session.context,
-            message: Some("Authentication cancelled.".to_string()),
+            why: None,
         });
     }
     Ok(())

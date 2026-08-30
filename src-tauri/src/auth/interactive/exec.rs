@@ -8,7 +8,7 @@
 
 use crate::commands::kubectl::kubectl_manager;
 use crate::error::{AuthError, Error, Result};
-use crate::state::{AppEvent, AppState};
+use crate::state::{AppEvent, AppState, AuthOutcome};
 use kube::config::{ExecAuthCluster, ExecConfig, ExecInteractiveMode};
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -122,7 +122,7 @@ pub(super) async fn run_exec_auth(
             state.emit(AppEvent::AuthFlowCancelled {
                 session_id: session_id.clone(),
                 context: context.to_string(),
-                message: Some("Authentication cancelled.".to_string()),
+                why: None,
             });
             return Err(Error::Auth(AuthError::Kubeconfig(
                 "Authentication cancelled".to_string(),
@@ -244,7 +244,7 @@ pub(super) async fn run_exec_auth(
                 state.emit(AppEvent::AuthFlowCancelled {
                     session_id,
                     context: context.to_string(),
-                    message: Some("Authentication cancelled.".to_string()),
+                    why: None,
                 });
                 return Err(Error::Auth(AuthError::Kubeconfig("Authentication cancelled".to_string())));
             }
@@ -257,7 +257,7 @@ pub(super) async fn run_exec_auth(
                 session_id,
                 context: context.to_string(),
                 success: false,
-                message: Some("Authentication timed out.".to_string()),
+                why: Some(AuthOutcome::TimedOut),
             });
             return Err(Error::Timeout("Authentication timed out".to_string()));
         }
@@ -286,7 +286,7 @@ pub(super) async fn run_exec_auth(
             session_id,
             context: context.to_string(),
             success: false,
-            message: Some(msg.clone()),
+            why: Some(AuthOutcome::Said { text: msg.clone() }),
         });
         return Err(Error::Auth(AuthError::Kubeconfig(msg)));
     }
@@ -326,7 +326,7 @@ pub(super) async fn run_exec_auth(
             session_id,
             context: context.to_string(),
             success: false,
-            message: Some("Exec credentials missing token.".to_string()),
+            why: Some(AuthOutcome::NoTokenInCredential),
         });
         return Err(Error::Auth(AuthError::Kubeconfig(
             "Exec credentials missing token".to_string(),
@@ -337,7 +337,7 @@ pub(super) async fn run_exec_auth(
         session_id,
         context: context.to_string(),
         success: true,
-        message: None,
+        why: None,
     });
 
     Ok(status)
