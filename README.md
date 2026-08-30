@@ -9,6 +9,8 @@ Unlike them, it treats "I don't know" as an answer worth giving.
 
 [![Download](https://img.shields.io/badge/Download-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2563eb?style=for-the-badge)](https://github.com/Dudude-bit/rubick/releases/latest)
 
+**[rubick.tech](https://rubick.tech)** — the website, with honest comparisons to [Lens](https://rubick.tech/vs/lens), [k9s](https://rubick.tech/vs/k9s) and [Headlamp](https://rubick.tech/vs/headlamp).
+
 [![CI](https://img.shields.io/github/actions/workflow/status/Dudude-bit/rubick/ci.yml?branch=main&label=CI)](https://github.com/Dudude-bit/rubick/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Dudude-bit/rubick)](https://github.com/Dudude-bit/rubick/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Dudude-bit/rubick/total)](https://github.com/Dudude-bit/rubick/releases)
@@ -160,7 +162,7 @@ Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minut
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
 
-Fork it, change it, sell it if you like; ship the source with it. Running the
+Fork it, change it; ship the source with it. Running the
 app is not distribution, so using it — at home or across a company — carries
 no obligation at all. Releases up to 3.1.0 were MIT and stay MIT:
 [LICENSE-HISTORY.md](LICENSE-HISTORY.md) has the details.

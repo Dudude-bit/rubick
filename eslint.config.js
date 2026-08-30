@@ -13,6 +13,7 @@ export default [
       "src-tauri/**",
       "target/**",
       "artifacts/**",
+      "web/**",
       "**/*.config.{js,ts,cjs,mjs}",
     ],
   },

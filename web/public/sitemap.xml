@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://rubick.tech/</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/vs/lens</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/vs/k9s</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/vs/headlamp</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+</urlset>
