@@ -3989,6 +3989,10 @@ export const en = {
     gwExternalName:
       "Resolves elsewhere (ExternalName) — no endpoints by design",
     gwReachableNothing: "Reachable from outside — nothing to probe",
+    gwReachableProbing: "Reachable from outside — checking from this machine",
+    gwReachableAnswered: "Reachable from outside — answered from this machine",
+    gwReachableSilent:
+      "Reachable from outside — nothing answered from this machine",
     gwReachableUnchecked:
       "Reachable from outside — DNS · TCP · not checked yet",
     // The trace drawn: the chips, the probe, the policies at the backend hop.

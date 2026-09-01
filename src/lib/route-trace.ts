@@ -21,8 +21,10 @@ import type {
   GatewayInfo,
   ListenerInfo,
   ParentRefInfo,
+  ResolveProbe,
   RouteInfo,
   RouteParentStatusInfo,
+  TcpProbe,
 } from "@/generated/types";
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop } from "@/lib/connections";
@@ -1158,4 +1160,54 @@ export function routeTraces(
   return route.parentRefs
     .filter(parentCarriesTraffic)
     .map((parent) => traceFor(route, parent, sources, t));
+}
+
+/** A probe's life: never run, waiting on DNS, in flight, answered. */
+export type ProbeStep<T> =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "loading" }
+  | { status: "finished"; result: T }
+  | { status: "error"; message: string };
+
+/**
+ * The `reachable` step, told what the probe below it found.
+ *
+ * The step and the panel under it are two renderings of one fact, and the
+ * step is the static one: it is composed from the trace's own data and says
+ * "not checked yet" forever, including after a reader presses Probe and
+ * watches the panel answer. Reported against 4.7.1.
+ *
+ * The trace's own data is deliberately not touched. A probe from this
+ * machine is not what the cluster says — that is why the step is
+ * `who: "machine"` and why `servingKnown` ignores it — so the verdict above
+ * must not move when this does. Only the words and the mark do.
+ *
+ * A failed probe is a `warn`, never an `err`: this laptop being unable to
+ * reach the address says as much about this laptop, its VPN and its
+ * firewall as it does about the gateway.
+ */
+export function probedReachable(
+  step: TraceStep,
+  dns: ProbeStep<ResolveProbe>,
+  tcp: ProbeStep<TcpProbe>,
+  t: T
+): TraceStep {
+  if (dns.status === "loading" || tcp.status === "loading") {
+    return { ...step, say: t("empty", "gwReachableProbing") };
+  }
+  if (tcp.status === "finished") {
+    const answered = tcp.result.error == null && tcp.result.reason == null;
+    return {
+      ...step,
+      state: answered ? "ok" : "warn",
+      say: t("empty", answered ? "gwReachableAnswered" : "gwReachableSilent"),
+    };
+  }
+  if (tcp.status === "error" || dns.status === "error") {
+    return { ...step, state: "warn", say: t("empty", "gwReachableSilent") };
+  }
+  // A resolve that answered while the connect has not run yet — the panel
+  // shows both rows; the step waits for the half that decides.
+  return step;
 }

@@ -414,6 +414,43 @@ describe("routesBoard", () => {
     expect(board.pulse[0].say).toContain("nobody");
   });
 
+  /** `status.addresses` is optional, and a gateway on a private or overlay
+   *  network publishes none. The trace stopped calling that a break in
+   *  4.7.0; this reader of the same field did not, so the sidebar kept the
+   *  gateway in red while its own page said it was fine. Reported against
+   *  4.7.1 by a reader running Cloudflare. */
+  it("does not call a programmed gateway broken for publishing no address", () => {
+    const overlay = gateway("overlay", { addresses: [] });
+    const board = routesBoard(
+      [route("healthy")],
+      sources({ gateways: [overlay] }),
+      t
+    );
+
+    expect(board.pulse).toHaveLength(0);
+    expect(gatewaysMark([overlay], board.pulse, true)).toBeUndefined();
+  });
+
+  /** The other half of the same branch: nothing has vouched for this one, so
+   *  an absent address is still the old reading. */
+  it("still calls an unprogrammed gateway with no address broken", () => {
+    const board = routesBoard(
+      [route("healthy")],
+      sources({
+        gateways: [
+          gateway("pending", {
+            addresses: [],
+            conditions: [condition("Programmed", "False", "Pending")],
+          }),
+        ],
+      }),
+      t
+    );
+
+    expect(board.pulse).toHaveLength(1);
+    expect(board.pulse[0].gateway).toBe("pending");
+  });
+
   it("stays quiet on the pulse when every gateway is claimed and addressed", () => {
     const board = routesBoard([route("healthy")], sources(), t);
     expect(board.pulse).toHaveLength(0);

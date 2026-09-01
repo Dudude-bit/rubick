@@ -199,7 +199,16 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
       pulse.push({ ...at, say: t("empty", "gwRowNotProgrammed") });
       continue;
     }
-    if (gateway.addresses.length === 0) {
+    // Same rule the trace's gateway step follows, and for the same reason:
+    // `status.addresses` is optional, and an implementation on a private or
+    // overlay network has nothing to publish there. A controller that has
+    // said Programmed has answered; an empty list after that is this app
+    // failing to see the address, not the traffic having nowhere to arrive.
+    //
+    // Reported against 4.7.1 — the trace stopped calling it a break in 4.7.0
+    // and this reader of the same field was left behind, so the sidebar kept
+    // the gateway in red while its own page said it was fine.
+    if (gateway.addresses.length === 0 && programmed?.status !== "True") {
       pulse.push({
         ...at,
         say: t("empty", "gwRowNoAddress"),

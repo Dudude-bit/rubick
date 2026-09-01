@@ -4223,6 +4223,9 @@ export const ru: Catalogue = {
     gwExternalName:
       "Разрешается в другое место (ExternalName) — эндпоинтов нет по замыслу",
     gwReachableNothing: "Достижим снаружи — проверять нечего",
+    gwReachableProbing: "Достижим снаружи — проверяем с этой машины",
+    gwReachableAnswered: "Достижим снаружи — ответил на запрос с этой машины",
+    gwReachableSilent: "Достижим снаружи — с этой машины никто не ответил",
     gwReachableUnchecked: "Достижим снаружи — DNS · TCP · ещё не проверено",
     gwNotReached: "не дошло",
     gwAboutGeneration: "о generation {observed} — вы на {current}",

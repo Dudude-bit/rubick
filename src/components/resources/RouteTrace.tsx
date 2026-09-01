@@ -22,6 +22,8 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { ROUTING_STALE, useBackingLists } from "@/integrations";
 import {
   routeTraces,
+  probedReachable,
+  type ProbeStep,
   type RouteTrace,
   type TraceStep,
   parentCarriesTraffic,
@@ -319,12 +321,6 @@ function BackendPolicyNote({
 }
 
 /** One probe step's lifecycle, drawn line by line as it actually runs. */
-type ProbeStep<T> =
-  | { status: "idle" }
-  | { status: "pending" }
-  | { status: "loading" }
-  | { status: "finished"; result: T }
-  | { status: "error"; message: string };
 
 /** The mark a step wears: dim dot, spinner, verdict dot. */
 function StepMark({
@@ -360,10 +356,22 @@ function StepMark({
  * its own life — waiting, spinning, answered — because the two are two
  * real commands, not one call wearing a spinner.
  */
-function ProbePanel({ trace, kind }: { trace: RouteTrace; kind: string }) {
+function ProbePanel({
+  trace,
+  kind,
+  dns,
+  setDns,
+  tcp,
+  setTcp,
+}: {
+  trace: RouteTrace;
+  kind: string;
+  dns: ProbeStep<ResolveProbe>;
+  setDns: (step: ProbeStep<ResolveProbe>) => void;
+  tcp: ProbeStep<TcpProbe>;
+  setTcp: (step: ProbeStep<TcpProbe>) => void;
+}) {
   const t = useT();
-  const [dns, setDns] = useState<ProbeStep<ResolveProbe>>({ status: "idle" });
-  const [tcp, setTcp] = useState<ProbeStep<TcpProbe>>({ status: "idle" });
 
   const { host, address, port } = trace.probe;
   if (host == null && address == null) return null;
@@ -625,6 +633,10 @@ function TraceCard({
   policies: BackendTlsPolicyInfo[];
 }) {
   const t = useT();
+  // Held here rather than inside the panel: the `reachable` step is drawn in
+  // the list above it, and the two say the same thing about the same check.
+  const [dns, setDns] = useState<ProbeStep<ResolveProbe>>({ status: "idle" });
+  const [tcp, setTcp] = useState<ProbeStep<TcpProbe>>({ status: "idle" });
   return (
     <div>
       <div className="mb-3 mt-1 flex flex-wrap items-center gap-2 text-sm">
@@ -681,7 +693,11 @@ function TraceCard({
         {trace.steps.map((step, index) => (
           <StepRow
             key={step.id}
-            step={step}
+            step={
+              step.id === "reachable" && step.state === "blind"
+                ? probedReachable(step, dns, tcp, t)
+                : step
+            }
             index={index}
             note={
               step.id === "backend" &&
@@ -700,7 +716,14 @@ function TraceCard({
         ))}
       </ol>
       {trace.steps.at(-1)?.state === "blind" && (
-        <ProbePanel trace={trace} kind={route.kind} />
+        <ProbePanel
+          trace={trace}
+          kind={route.kind}
+          dns={dns}
+          setDns={setDns}
+          tcp={tcp}
+          setTcp={setTcp}
+        />
       )}
     </div>
   );
