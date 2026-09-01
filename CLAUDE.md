@@ -40,6 +40,30 @@ more `*Known` flags; `Existence::NotChecked`; `TraceStepState`'s `blind`;
 - Every new `blind` / `NotChecked` / `*Known` branch needs a test that fails
   when the branch is deleted.
 
+## One fact, many readers
+
+The other defect that keeps happening here, and the one no test has ever
+caught. A fact from the cluster is read in several places; someone fixes the
+reading in one of them; the rest keep the old answer. Nothing fails — two
+screens simply disagree, and a user reports it.
+
+Four in one day: an empty `status.addresses` fixed in the trace and not in the
+sidebar's `pulseOf`; `listener_sets_known` merged on the route pages and not in
+the connections graph or the watch payload; a `reachable` step saying "not
+checked yet" beside a probe panel that had already answered; a `detail` field
+carrying both the cluster's words and ours.
+
+- **After fixing how a fact is read, grep the field name and fix every
+  reader.** `grep -rn "addresses.length === 0"` finds the second one; memory
+  does not. There is almost never only one.
+- **The dangerous pairs are page ↔ sidebar badge, page ↔ peek panel, and
+  list ↔ detail** — the same object drawn by different code.
+- **A static line beside a live control is a lie waiting for a click.** If
+  something nearby can learn the answer, the line has to learn it too.
+- **The same kind is fetched by more than one path** — a list command, a get
+  command, a watch closure, the connections graph. Enrichment applied in one
+  is missing from the others unless you put it there.
+
 ## Verifying
 
 Claims here are settled by running things, not by reasoning about them.
