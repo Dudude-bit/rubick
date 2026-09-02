@@ -121,7 +121,7 @@ pub(super) fn extract_exec_credential(buffer: &[u8]) -> Result<ExecCredential, S
 /// A pty on Unix hands back the bytes the child wrote. ConPTY does not: it
 /// is a screen buffer, so a read gives back the *rendered* screen — hard
 /// line breaks at the console width included. Our auth pty is 80 columns
-/// wide and an id_token runs to a kilobyte or two, so the break lands inside
+/// wide and an `id_token` runs to a kilobyte or two, so the break lands inside
 /// the quoted JWT, and a raw newline inside a JSON string is not JSON.
 ///
 /// The rule is exact rather than heuristic: a control byte inside a JSON
@@ -226,7 +226,7 @@ mod tests {
     /// the terminal's own business at draw time. ConPTY is not that: it is a
     /// screen buffer, and what you read back is the rendered screen, hard
     /// line breaks and all, at whatever width the console was opened with.
-    /// Ours is opened at 80 columns and an id_token is one to two kilobytes,
+    /// Ours is opened at 80 columns and an `id_token` is one to two kilobytes,
     /// so the break lands inside the quoted JWT — and a raw newline inside a
     /// JSON string is not JSON.
     ///
