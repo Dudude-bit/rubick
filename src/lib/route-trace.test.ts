@@ -288,6 +288,29 @@ describe("routeTraces", () => {
     }
   });
 
+  /** `Programmed: Unknown` is the API's third answer — the controller has
+   *  taken the Gateway and not decided. There was no branch for it, so it
+   *  fell through to the green one and the step read "is programmed" for a
+   *  Gateway nobody had finished programming. The Gateways list column had
+   *  this right all along, which is how one object wore a confident tick on
+   *  one screen and a grey "unknown" on another. */
+  it("does not call a gateway programmed while the controller is still deciding", () => {
+    const pending = {
+      ...gateway("edge"),
+      conditions: [condition("Programmed", "Unknown", "Pending")],
+    };
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({ gateways: [pending] }),
+      t
+    );
+    const step = trace.steps.find((s) => s.id === "gateway");
+
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toContain("is programmed");
+    expect(trace.serving).toBe(true);
+  });
+
   it("walks a healthy route green, leaving only the last mile unchecked", () => {
     const [trace] = routeTraces(route("healthy"), sources(), t);
 

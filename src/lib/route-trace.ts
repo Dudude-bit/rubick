@@ -521,6 +521,20 @@ function gatewayStep(
       subject,
     };
   }
+  // `Unknown` is the API's third answer and it was falling through to the
+  // green one below: a controller that has taken the Gateway and not decided
+  // yet (`Pending`) read as "is programmed". The Gateways list already got
+  // this right — its column says "unknown" — so one object wore a confident
+  // tick here and a grey word there.
+  if (programmed.status !== "True") {
+    return {
+      id: "gateway",
+      state: "warn",
+      say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
+      who: "infra",
+      subject,
+    };
+  }
   return {
     id: "gateway",
     state: "ok",

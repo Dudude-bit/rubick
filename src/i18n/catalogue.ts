@@ -3921,6 +3921,8 @@ export const en = {
       "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
     gwProgrammedQuietSay:
       "Gateway {name} — the controller has not reported Programmed",
+    gwProgrammedPendingSay:
+      "Gateway {name} — the controller has taken it and not finished",
     gwProgrammedSay: "Gateway {name} is programmed",
     gwListenerNamed: "Listener :{name}",
     gwListenerAny: "A listener",

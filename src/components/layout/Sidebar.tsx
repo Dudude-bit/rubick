@@ -238,6 +238,7 @@ export function Sidebar() {
 
 function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   const t = useT();
+  const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const detection = useGatewayApi().data;
   const installed = detection?.installed ?? false;
   const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
@@ -293,10 +294,32 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
 
   const classesSettled =
     classes.data !== undefined || !served.has("GatewayClass");
+  // The subject list is scoped; the sources are not. A route in this
+  // namespace can attach to a Gateway in another one, and a verdict computed
+  // without that Gateway would be wrong — so the rail narrows what it counts,
+  // never what it judges against.
+  //
+  // Every other row in the rail follows the selected namespace (the backend
+  // says so in `ResourceCounts`) and these two did not, so picking a
+  // namespace left "Routes 40" in red above a page listing three green ones.
+  const scopedRoutes = useMemo(
+    () =>
+      currentNamespace == null
+        ? (routes.data ?? [])
+        : (routes.data ?? []).filter((r) => r.namespace === currentNamespace),
+    [routes.data, currentNamespace]
+  );
+  const scopedGateways = useMemo(
+    () =>
+      currentNamespace == null
+        ? (gateways.data ?? [])
+        : (gateways.data ?? []).filter((g) => g.namespace === currentNamespace),
+    [gateways.data, currentNamespace]
+  );
   const board = useMemo(
     () =>
       routesBoard(
-        routes.data ?? [],
+        scopedRoutes,
         {
           gateways: gateways.data ?? [],
           classes: classes.data ?? [],
@@ -313,8 +336,13 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         },
         t
       ),
-    [routes.data, gateways.data, classes.data, backing.data, classesSettled, t]
+    [scopedRoutes, gateways.data, classes.data, backing.data, classesSettled, t]
   );
+
+  const scopedPulse =
+    currentNamespace == null
+      ? board.pulse
+      : board.pulse.filter((p) => p.namespace === currentNamespace);
 
   if (!installed) return null;
 
@@ -324,10 +352,10 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={resource(ResourceType.Gateway)}
           overview={overview}
-          value={gateways.data?.length ?? null}
+          value={gateways.data ? scopedGateways.length : null}
           mark={gatewaysMark(
-            gateways.data ?? [],
-            board.pulse,
+            scopedGateways,
+            scopedPulse,
             gateways.data !== undefined && classesSettled
           )}
           denied={gatewaysDenied}
@@ -337,7 +365,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
           overview={overview}
-          value={routes.data?.length ?? null}
+          value={routes.data ? scopedRoutes.length : null}
           mark={boardMark(board)}
           denied={routesDenied}
         />

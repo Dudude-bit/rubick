@@ -4154,6 +4154,8 @@ export const ru: Catalogue = {
       "Контроллер принял Gateway, но адрес так и не назначен — на облачных LoadBalancer это ещё идущий provisioning, упор в квоту или отказ реализации выделить адрес. Пока адреса нет, трафику некуда приходить.",
     gwProgrammedQuietSay:
       "Gateway {name} — контроллер не отчитался о Programmed",
+    gwProgrammedPendingSay:
+      "Шлюз {name} — контроллер взял его и ещё не закончил",
     gwProgrammedSay: "Gateway {name} запрограммирован",
     gwListenerNamed: "Слушатель :{name}",
     gwListenerAny: "Слушатель",
