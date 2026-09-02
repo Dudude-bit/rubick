@@ -243,7 +243,14 @@ export function backingOf(
   }
   return {
     ...state,
-    stop: { reason: "selectsNothing", service: at, selector },
+    // Not `selectsNothing`: this function holds the endpoints and no pod
+    // list, so it cannot tell a selector matching nothing from pods that are
+    // Pending or still creating — they carry the selector and have no
+    // address, so the controller writes no endpoint for them. Rust, which
+    // does list the pods, says "N pods carry this, none ready" about the very
+    // same Service; saying "no pod carries it" here sent the reader to check
+    // their labels for a problem that was in the scheduler.
+    stop: { reason: "publishesNothingYet", service: at, selector },
   };
 }
 

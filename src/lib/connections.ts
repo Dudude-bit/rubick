@@ -338,6 +338,14 @@ export function describeStop(
         title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
         note: t("nav", "connectionRefusedNothingBehind"),
       };
+    // Said by a reader holding the endpoints and no pod list: it knows
+    // nothing arrives and cannot say whether that is a selector matching
+    // nothing or pods that have no address yet.
+    case "publishesNothingYet":
+      return {
+        title: t("nav", "stopPublishesNothingYet", { selector: stop.selector }),
+        note: t("nav", "connectionRefusedNothingBehind"),
+      };
     case "noneReady":
       return {
         title: t("count", "podsCarryNotReady", {
@@ -1038,7 +1046,7 @@ const UNASKED_LABEL: Record<string, "autoscaling" | "disruptionBudget"> = {
  * The backend names the reason: it decides this inside a query, where no
  * language is in scope. The cluster's own refusal rides through untouched.
  */
-function unreadWhy(why: Unread, t: T): string {
+export function unreadWhy(why: Unread, t: T): string {
   switch (why.says) {
     case "unanswered":
       return t("readings", "unreadUnanswered", {

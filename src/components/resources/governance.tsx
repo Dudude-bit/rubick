@@ -35,6 +35,7 @@ import {
   type AutoscalerFacts,
   type Finding,
 } from "@/lib/governance";
+import { unreadWhy } from "@/lib/connections";
 import type { KeyValue } from "./key-values";
 import type { ResourceConnections } from "@/generated/types";
 
@@ -81,6 +82,9 @@ function nowValue(facts: AutoscalerFacts, t: T) {
   );
 }
 
+/** The two kinds this block speaks for. */
+const GOVERNING = ["HorizontalPodAutoscaler", "PodDisruptionBudget"];
+
 export interface Governance {
   /** `Set by`, `Now`, `A drain waits` — only the ones with a subject. */
   rows: KeyValue[];
@@ -111,6 +115,23 @@ export function governanceRows(
 
   const scaling = autoscalers(conns);
   const protecting = budgets(conns);
+
+  // A kind the app asked for and did not get is not a kind with nothing in
+  // it. The backend records the failure here for exactly this reason — its
+  // own comment says an unread autoscaler list "must not come back as
+  // 'nothing scales this'" — and this block was drawing the absence as an
+  // answer: no "Set by" row, no caption, nothing to tell the reader that a
+  // Scale dialog was about to ignore an autoscaler nobody could see.
+  const unread = conns.notLookedAt.filter((entry) =>
+    GOVERNING.includes(entry.kind)
+  );
+  for (const entry of unread) {
+    findings.push({
+      tone: "neutral",
+      title: t("readings", "govNotRead", { kind: entry.kind }),
+      detail: unreadWhy(entry.why, t),
+    });
+  }
 
   // Two autoscalers on one workload used to be said in the block's caption,
   // and the caption is now the composition's fixed subject line. It is not a

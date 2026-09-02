@@ -375,7 +375,23 @@ pub enum ChainStop {
         gateway: ObjectRef,
     },
     /// A Service's selector matches no pod in its namespace.
+    ///
+    /// Only a reader that listed the pods may say this. A reader holding the
+    /// endpoints alone must say [`ChainStop::PublishesNothingYet`] instead:
+    /// a pod that is Pending, unscheduled or still creating carries the
+    /// selector and has no address, so it writes no endpoint — and "no pod
+    /// carries this selector" sends the reader to check their labels for a
+    /// problem that is in the scheduler.
     SelectsNothing {
+        service: ObjectRef,
+        selector: String,
+    },
+    /// The Service publishes no endpoint, and this reader cannot say why.
+    ///
+    /// The honest stop for a surface built from the endpoints alone. It knows
+    /// nothing arrives; it does not know whether that is a selector matching
+    /// nothing or pods that have not got an address yet.
+    PublishesNothingYet {
         service: ObjectRef,
         selector: String,
     },

@@ -17,6 +17,7 @@ import {
   scaleWarnings,
 } from "./governance";
 import { connectionGroups } from "./connections";
+import { governanceRows } from "@/components/resources/governance";
 import type { DeliveryIntercept } from "./delivery";
 import type {
   ConditionInfo,
@@ -112,6 +113,34 @@ const conns = (
   stops: [],
   published: [],
   notLookedAt,
+});
+
+describe("a governing kind the app could not read", () => {
+  /** The backend records the failure on purpose — its own comment says an
+   *  unread autoscaler list "must not come back as 'nothing scales this'" —
+   *  and the block drew the absence as an answer: no "Set by" row, no
+   *  caption, and a Scale dialog about to ignore an autoscaler nobody could
+   *  see. */
+  it("says so rather than showing a workload nothing governs", () => {
+    const answer = conns([], workload, [
+      {
+        kind: "HorizontalPodAutoscaler",
+        why: { says: "unanswered", version: "autoscaling/v2", said: "403" },
+      },
+    ]);
+    const block = governanceRows(answer, t);
+
+    expect(block.findings).toHaveLength(1);
+    expect(block.findings[0].tone).toBe("neutral");
+    expect(block.findings[0].title).toContain("HorizontalPodAutoscaler");
+    expect(block.findings[0].detail).toContain("autoscaling/v2");
+  });
+
+  /** And a neighbourhood that genuinely holds neither says nothing at all —
+   *  the absence of a finding is what "we looked, there is none" reads as. */
+  it("stays quiet when the lists answered and held nothing", () => {
+    expect(governanceRows(conns([]), t).findings).toHaveLength(0);
+  });
 });
 
 describe("reading the two governing kinds", () => {

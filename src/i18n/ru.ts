@@ -77,6 +77,7 @@ export const ru: Catalogue = {
     stopUnnamedPortNote:
       "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер — контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите Service номер.",
     stopNoServiceNamed: "В этом неймспейсе нет Service по имени {name}",
+    stopPublishesNothingYet: "За {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни один под не несёт {selector}",
     stopNoneReadyNote:
       "Service не публикует эндпоинт для пода, который не проходит проверку готовности, поэтому трафик отклоняется, пока поды спокойно работают — из-за этого все списки в приложении рисуют их здоровыми. Срезы говорят то же самое: все адреса за этим Service в них есть, и ни один не обслуживает.",
@@ -1548,6 +1549,7 @@ export const ru: Catalogue = {
     relMountedNotCovering: "смонтирован, но не покрывает",
     relControlledBy: "управляется",
     relOwnedBy: "принадлежит",
+    govNotRead: "{kind} — не прочитано",
     govSeveralAutoscalers: {
       one: "{n} автомасштабатор претендует на это",
       few: "{n} автомасштабатора претендуют на это — и отменяют друг друга",
@@ -3202,6 +3204,7 @@ export const ru: Catalogue = {
     noTls: "без TLS",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
+    stopNothingPublishedYet: "пока ничего не опубликовано",
     stopRunningNoneReady: "работают, но ни один не готов",
     stopNoPortToSendTo: "нет порта, куда отправлять",
     everyRequest503:

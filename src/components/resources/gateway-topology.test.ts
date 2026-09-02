@@ -269,7 +269,10 @@ describe("the gateway topology map", () => {
     const backend = data.columns.at(-1)!.nodes[0];
     // A selector and nothing published: the Service's own stop, in its words.
     expect(backend.tone).toBe("err");
-    expect(backend.sub).toContain("No pod carries");
+    // Not "no pod carries this": that reader holds the endpoints and no
+    // pod list, and a Pending pod carries the selector while publishing
+    // nothing.
+    expect(backend.sub).toContain("Nothing is published");
   });
 
   it("funnels routes through per-gateway kind nodes once kinds differ", () => {

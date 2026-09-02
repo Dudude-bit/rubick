@@ -943,6 +943,7 @@ function Findings({
 const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
   backendMissing: "stopNoServiceToSendTo",
   selectsNothing: "stopSelectorMatchesNothing",
+  publishesNothingYet: "stopNothingPublishedYet",
   noneReady: "stopRunningNoneReady",
   publishesNothing: "stopNoPortToSendTo",
 };

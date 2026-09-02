@@ -1787,6 +1787,7 @@ export type ChainStop =
     }
   | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
+  | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
   | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
   | {
       reason: "publishesNothing";

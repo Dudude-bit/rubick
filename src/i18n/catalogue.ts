@@ -105,6 +105,7 @@ export const en = {
     stopUnnamedPortNote:
       "{matched}, but it asks for {asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.",
     stopNoServiceNamed: "No Service named {name} in this namespace",
+    stopPublishesNothingYet: "Nothing is published behind {selector} yet",
     stopNoPodCarries: "No pod carries {selector}",
     stopNoneReadyNote:
       "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
@@ -1538,6 +1539,7 @@ export const en = {
     relMountedNotCovering: "mounted but not covering",
     relControlledBy: "controlled by",
     relOwnedBy: "owned by",
+    govNotRead: "{kind} — not read",
     govSeveralAutoscalers: {
       one: "{n} autoscaler claims this",
       other: "{n} autoscalers claim this — each undoes the other",
@@ -2995,6 +2997,7 @@ export const en = {
     noTls: "no TLS",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
+    stopNothingPublishedYet: "nothing published yet",
     stopRunningNoneReady: "running, none ready",
     stopNoPortToSendTo: "no port to send to",
     everyRequest503:
