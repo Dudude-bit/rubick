@@ -314,10 +314,22 @@ pub(super) async fn run_exec_auth(
                 "Invalid exec credentials ({exit_str}): {msg}. Stdout preview: {preview}"
             )))
         })?;
+    // The extractor only ever returns a status-less credential when nothing
+    // in the whole buffer had one — so this is not "the plugin forgot a
+    // field", it is "we could not find the credential and settled for a
+    // fragment". Say what was actually there, or the next report is another
+    // bare "missing status" with nothing to work from (#106).
     let status = creds.status.ok_or_else(|| {
-        Error::Auth(AuthError::Kubeconfig(
-            "Exec credentials missing status".to_string(),
-        ))
+        let exit_str = match *last_exit_status.lock() {
+            Some(code) => format!("exit code {code}"),
+            None => "exit code unknown".to_string(),
+        };
+        let preview = preview_bytes(&stdout_data, 200);
+        Error::Auth(AuthError::Kubeconfig(format!(
+            "Exec credentials missing status ({exit_str}, {} bytes of stdout). \
+             Stdout preview: {preview}",
+            stdout_data.len()
+        )))
     })?;
     if status.token.is_none()
         && (status.client_certificate_data.is_none() || status.client_key_data.is_none())
