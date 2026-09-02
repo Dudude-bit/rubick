@@ -832,7 +832,15 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
                 <span
                   className={cn(
                     "text-[8px] leading-relaxed",
-                    door.broken ? "text-err" : "text-ok"
+                    // Three readings, not two. A door nobody judged is not
+                    // a door that is fine: an Ingress way in is built without
+                    // asking who serves its class, and it wore this dot green
+                    // while the Ingress's own page said nothing serves it.
+                    door.broken
+                      ? "text-err"
+                      : door.checked
+                        ? "text-ok"
+                        : "text-fg-fnt"
                   )}
                 >
                   ●

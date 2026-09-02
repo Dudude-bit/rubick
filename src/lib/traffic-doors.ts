@@ -30,8 +30,18 @@ export interface TrafficDoor {
   /** What a click puts on the clipboard: the hostname, or the dialable
    *  `address:port` for a hostless door. Null where nothing honest exists. */
   copy: string | null;
-  /** One-word verdict where the door is broken — null is healthy. */
+  /** One-word verdict where the door is broken. */
   broken: string | null;
+  /**
+   * Whether anyone judged this door at all.
+   *
+   * `broken: null` used to mean healthy, and the render site painted every
+   * such door green. An Ingress door is built without ever asking whether
+   * anything serves its class — so an Ingress naming a class nobody installs
+   * wore a green dot here while its own page said, in red, that nothing
+   * serves it. Null and "checked and fine" are different facts.
+   */
+  checked: boolean;
   /** The route to peek at, quiet on the right. */
   route: DoorRef | null;
   /** A short trailing note: the protocol, a path, a count. */
@@ -200,6 +210,7 @@ export function trafficDoors(
               host,
               copy: host,
               broken,
+              checked: true,
               route: doorRef(edge.from),
               note: null,
             });
@@ -228,6 +239,7 @@ export function trafficDoors(
             // alone dials nothing.
             copy: listener && address ? `${address}:${listener.port}` : null,
             broken,
+            checked: true,
             route: doorRef(edge.from),
             note: null,
           });
@@ -240,7 +252,10 @@ export function trafficDoors(
       entry.doors.push({
         host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,
+        // Nobody asked who serves this Ingress's class here — the detail
+        // page does, and says so in red when the answer is nobody.
         broken: null,
+        checked: false,
         route: null,
         note:
           [edge.relation.path || null, edge.relation.tls ? "TLS" : null]

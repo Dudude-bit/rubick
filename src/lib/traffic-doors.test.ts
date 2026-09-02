@@ -86,6 +86,33 @@ const gateway = (
 });
 
 describe("trafficDoors", () => {
+  /** `broken: null` meant two things — "judged and fine" and "nobody
+   *  asked" — and the render site painted both green. An Ingress door is
+   *  built without ever asking who serves its class, so an Ingress naming a
+   *  class nobody installs wore a green dot in the peek while its own page
+   *  said, in red, that nothing serves it. */
+  it("marks a gateway door judged and an Ingress door unjudged", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "web"),
+            ref("Service", "app"),
+            ruleRoutes(["web.example.com"])
+          ),
+          edge(ref("HTTPRoute", "web"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            sectionName: "http",
+          }),
+        ],
+      }),
+      [gateway("edge", ["203.0.113.10"])],
+      t
+    );
+
+    expect(model.entries[0].doors[0].checked).toBe(true);
+  });
+
   /** A route whose parentRef names a ListenerSet the app could not read
    *  arrives with `to.kind === "ListenerSet"`. Reading that as "no gateway
    *  parent" filed it under mesh, and the peek printed "GAMMA, not through
@@ -168,6 +195,7 @@ describe("trafficDoors", () => {
         host: "healthy.example.com",
         copy: "healthy.example.com",
         broken: null,
+        checked: true,
         route: {
           kind: "HTTPRoute",
           name: "healthy-route",
@@ -515,10 +543,13 @@ describe("trafficDoors", () => {
     const entry = model.entries[0];
     expect(entry.object.kind).toBe("Ingress");
     expect(entry.meta).toBe("Ingress");
+    // Nobody asked who serves this Ingress's class here, so the door is
+    // unjudged rather than fine — it used to render a confident green dot.
     expect(entry.doors[0]).toEqual({
       host: "shop.example.com",
       copy: "shop.example.com",
       broken: null,
+      checked: false,
       route: null,
       note: "/ · TLS",
     });

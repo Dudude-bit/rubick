@@ -63,6 +63,19 @@ export interface PeekGroup {
   emptyMessage?: string;
 }
 
+/** A LoadBalancer the cloud has not answered for yet. */
+function pendingBalancer(service: {
+  type: string;
+  externalIps: string[];
+  loadBalancerIps: string[];
+}): boolean {
+  return (
+    service.type === "LoadBalancer" &&
+    service.loadBalancerIps.length === 0 &&
+    service.externalIps.length === 0
+  );
+}
+
 export interface PeekSummary {
   /** Drives the header badge; leave unset where the API reports no state. */
   status?: string | null;
@@ -885,12 +898,19 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
           },
           {
             label: t("columns", "external"),
-            value: (
+            // A LoadBalancer with no address yet is the single most common
+            // reason a Service does not work, and folding it in here made it
+            // look like a ClusterIP's ordinary blank — same em dash, same
+            // grey. The page has always named the state; so does this.
+            value: pendingBalancer(service) ? (
+              t("empty", "pendingInline")
+            ) : (
               <CopyableAddresses
                 values={[...service.externalIps, ...service.loadBalancerIps]}
                 label={t("columns", "externalAddress")}
               />
             ),
+            tone: pendingBalancer(service) ? ("warn" as const) : undefined,
           },
           {
             label: t("nav", "selector"),
