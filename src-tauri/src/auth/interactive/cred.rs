@@ -118,7 +118,7 @@ pub(super) fn extract_exec_credential(buffer: &[u8]) -> Result<ExecCredential, S
 
 /// Drop what a console put inside a JSON string, and nothing else.
 ///
-/// A pty on Unix hands back the bytes the child wrote. ConPTY does not: it
+/// A pty on Unix hands back the bytes the child wrote. `ConPTY` does not: it
 /// is a screen buffer, so a read gives back the *rendered* screen — hard
 /// line breaks at the console width included. Our auth pty is 80 columns
 /// wide and an `id_token` runs to a kilobyte or two, so the break lands inside
@@ -223,7 +223,7 @@ mod tests {
     ///
     /// The plugin runs under a PTY so it behaves interactively. On Unix a
     /// pty master hands back exactly the bytes the child wrote — wrapping is
-    /// the terminal's own business at draw time. ConPTY is not that: it is a
+    /// the terminal's own business at draw time. `ConPTY` is not that: it is a
     /// screen buffer, and what you read back is the rendered screen, hard
     /// line breaks and all, at whatever width the console was opened with.
     /// Ours is opened at 80 columns and an `id_token` is one to two kilobytes,
