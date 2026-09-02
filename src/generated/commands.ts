@@ -568,6 +568,14 @@ export async function getCronjob(
   return invoke<CronJobDetailInfo>("get_cronjob", { name, namespace });
 }
 
+export async function triggerCronjob(
+  name: string,
+  jobName: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("trigger_cronjob", { name, jobName, namespace });
+}
+
 export async function deleteCronjob(
   name: string,
   namespace: string | null

@@ -135,6 +135,90 @@ pub async fn get_cronjob(
     get_resource_info::<CronJob, CronJobDetailInfo>(name, namespace, state).await
 }
 
+/// Run a `CronJob` now, the way `kubectl create job --from` does.
+///
+/// A `CronJob` has no "run" verb: the controller creates Jobs on a schedule
+/// and nothing asks it to create one early. What `kubectl create job --from`
+/// actually does is copy the `CronJob`'s `jobTemplate` into a new `Job` and let
+/// the normal controller take it from there — so that is what this does.
+///
+/// The name is the reader's, not generated. `kubectl` appends a timestamp
+/// when you omit one, and a name a person chose is one they can find again
+/// in a list of forty; the dialog offers the timestamped name as the default
+/// and lets them change it.
+///
+/// The `ownerReference` is deliberate. Without it the `Job` outlives its
+/// `CronJob` and survives `successfulJobsHistoryLimit`, so a cluster where somebody
+/// pressed this weekly accumulates `Job`s nothing will ever collect —
+/// `kubectl` sets it for the same reason.
+#[tauri::command]
+pub async fn trigger_cronjob(
+    name: String,
+    job_name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    use kube::api::PostParams;
+    use kube::ResourceExt;
+
+    crate::validation::validate_dns_label(&name)?;
+    crate::validation::validate_dns_label(&job_name)?;
+
+    let ctx = crate::commands::helpers::ResourceContext::for_command(&state, namespace)?;
+    let cronjobs: kube::Api<CronJob> = ctx.namespaced_api();
+    let cronjob = cronjobs.get(&name).await?;
+
+    let job = job_from_cronjob(&cronjob, &job_name)?;
+    let jobs: kube::Api<Job> = ctx.namespaced_api();
+    let created = jobs.create(&PostParams::default(), &job).await?;
+    Ok(created.name_any())
+}
+
+/// The `Job` a `CronJob` would have made, named by the reader.
+///
+/// Split from the command so the decision can be checked without a cluster:
+/// what the controller does with the object is Kubernetes' business, but
+/// what we hand it is ours.
+fn job_from_cronjob(cronjob: &CronJob, job_name: &str) -> Result<Job> {
+    use kube::api::ObjectMeta;
+    use kube::ResourceExt;
+
+    let name = cronjob.name_any();
+    let template = cronjob
+        .spec
+        .as_ref()
+        .map(|spec| spec.job_template.clone())
+        .ok_or_else(|| {
+            crate::error::Error::InvalidInput(format!("CronJob {name} has no jobTemplate"))
+        })?;
+
+    let job_spec = template.spec.ok_or_else(|| {
+        crate::error::Error::InvalidInput(format!("CronJob {name}'s jobTemplate has no spec"))
+    })?;
+
+    // The template's own labels and annotations come along — a Job created by
+    // hand that a team's selectors cannot see is a `Job` nobody will find.
+    let mut meta = template.metadata.unwrap_or_default();
+    meta.name = Some(job_name.to_string());
+    meta.namespace = cronjob.namespace();
+    meta.owner_references = Some(vec![
+        k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference {
+            api_version: "batch/v1".to_string(),
+            kind: "CronJob".to_string(),
+            name,
+            uid: cronjob.uid().unwrap_or_default(),
+            block_owner_deletion: Some(true),
+            controller: Some(true),
+        },
+    ]);
+
+    Ok(Job {
+        metadata: ObjectMeta { ..meta },
+        spec: Some(job_spec),
+        status: None,
+    })
+}
+
 #[tauri::command]
 pub async fn delete_cronjob(
     name: String,
@@ -143,4 +227,96 @@ pub async fn delete_cronjob(
 ) -> Result<()> {
     crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<CronJob>(name, namespace, state, None).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::batch::v1::{CronJobSpec, JobSpec, JobTemplateSpec};
+    use kube::api::ObjectMeta;
+    use std::collections::BTreeMap;
+
+    fn cronjob(template_meta: Option<ObjectMeta>) -> CronJob {
+        CronJob {
+            metadata: ObjectMeta {
+                name: Some("nightly".to_string()),
+                namespace: Some("batch".to_string()),
+                uid: Some("cj-uid-1".to_string()),
+                ..Default::default()
+            },
+            spec: Some(CronJobSpec {
+                schedule: "0 3 * * *".to_string(),
+                job_template: JobTemplateSpec {
+                    metadata: template_meta,
+                    spec: Some(JobSpec::default()),
+                },
+                ..Default::default()
+            }),
+            status: None,
+        }
+    }
+
+    /// A `Job` created by hand that a team's selectors cannot see is a `Job`
+    /// nobody will find, so the template's own labels come along — the
+    /// scheduled runs carry them and a manual one that did not would sort
+    /// differently in every dashboard the team has.
+    #[test]
+    fn the_run_carries_the_labels_the_schedule_would_have_given_it() {
+        let mut labels = BTreeMap::new();
+        labels.insert("team".to_string(), "billing".to_string());
+        let job = job_from_cronjob(
+            &cronjob(Some(ObjectMeta {
+                labels: Some(labels),
+                ..Default::default()
+            })),
+            "nightly-1756000000",
+        )
+        .expect("builds");
+
+        assert_eq!(job.metadata.name.as_deref(), Some("nightly-1756000000"));
+        assert_eq!(job.metadata.namespace.as_deref(), Some("batch"));
+        assert_eq!(
+            job.metadata
+                .labels
+                .as_ref()
+                .and_then(|l| l.get("team"))
+                .map(String::as_str),
+            Some("billing")
+        );
+    }
+
+    /// Without the ownerReference the `Job` outlives its `CronJob` and is never
+    /// counted against `successfulJobsHistoryLimit`, so a cluster where
+    /// somebody presses this weekly accumulates `Job`s nothing will collect.
+    /// `kubectl create job --from` sets it for the same reason.
+    #[test]
+    fn the_run_is_owned_by_the_cronjob_that_made_it() {
+        let job = job_from_cronjob(&cronjob(None), "nightly-1").expect("builds");
+        let owner = job
+            .metadata
+            .owner_references
+            .as_ref()
+            .and_then(|refs| refs.first())
+            .expect("an owner");
+
+        assert_eq!(owner.kind, "CronJob");
+        assert_eq!(owner.name, "nightly");
+        assert_eq!(owner.uid, "cj-uid-1");
+        assert_eq!(owner.controller, Some(true));
+        assert_eq!(owner.block_owner_deletion, Some(true));
+    }
+
+    /// A `CronJob` with no template is not a `CronJob` this can run, and saying
+    /// which one is missing beats a 422 from the API server.
+    #[test]
+    fn a_cronjob_with_no_template_spec_says_so_before_the_api_does() {
+        let mut empty = cronjob(None);
+        empty.spec.as_mut().expect("spec").job_template.spec = None;
+
+        let err = job_from_cronjob(&empty, "nightly-1").expect_err("no spec");
+        assert!(
+            err.to_string().contains("jobTemplate"),
+            "the message must name what is missing: {err}"
+        );
+    }
 }

@@ -497,6 +497,20 @@ function gatewayStep(
         },
       };
     }
+    // A controller that has taken this and not decided has not failed to
+    // give it an address — it has not got there yet. Saying "traffic has
+    // nowhere to arrive" in red about a Gateway mid-provisioning is the same
+    // over-claim as calling it programmed, three branches down, and this
+    // branch runs first so it was the one the reader actually saw.
+    if (programmed?.status === "Unknown") {
+      return {
+        id: "gateway",
+        state: "warn",
+        say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
+        who: "infra",
+        subject,
+      };
+    }
     // Nothing has vouched for it and there is no address: the old reading
     // stands, because now neither half is known good.
     return {

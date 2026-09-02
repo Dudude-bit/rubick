@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,14 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
   confirmDisabled?: boolean;
+  /**
+   * What the reader has to fill in before confirming — a name, a count.
+   *
+   * Sits between the description and the buttons. Most confirmations need
+   * none; the ones that do were otherwise a second dialog component with the
+   * same two buttons drawn again slightly differently.
+   */
+  children?: ReactNode;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }
@@ -31,6 +40,7 @@ export function ConfirmDialog({
   cancelLabel,
   confirmVariant = "default",
   confirmDisabled = false,
+  children,
   onOpenChange,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -44,6 +54,7 @@ export function ConfirmDialog({
             <AlertDialogDescription>{description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel>
             {cancelLabel ?? t("action", "cancel")}

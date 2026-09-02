@@ -1,10 +1,17 @@
-import { useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import {
+  keepPreviousData,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Info, Layers2, Trash2 } from "lucide-react";
+import { Info, Layers2, Play, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -142,6 +149,36 @@ export function CronJobDetail() {
     fetchResource: (name, ns) => commands.getCronjob(name, ns),
     deleteResource: (name, ns) => commands.deleteCronjob(name, ns),
     defaultTab: "overview",
+  });
+
+  // Run now. A CronJob has no "run" verb — what `kubectl create job --from`
+  // does is copy the jobTemplate into a new Job, which is what the backend
+  // does here. The name is offered rather than imposed: a person who presses
+  // this weekly wants to find their run again in a list of forty.
+  const [runOpen, setRunOpen] = useState(false);
+  const [runName, setRunName] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const runMutation = useMutation({
+    mutationFn: () =>
+      commands.triggerCronjob(name || "", runName, namespace || null),
+    onSuccess: (created) => {
+      toast({
+        title: t("action", "cronRunStarted"),
+        description: t("action", "cronRunStartedName", { name: created }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["cronjob-jobs", namespace, name],
+      });
+      setRunOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("action", "cronRunFailed"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const { data: jobs = [] } = useLiveQuery({
@@ -347,36 +384,69 @@ export function CronJobDetail() {
   }
 
   return (
-    <ResourceDetailLayout
-      freshness={freshness}
-      resource={cronJob}
-      delivery={deliveryQuery}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.CronJob}
-      title={cronJob?.name || name || ""}
-      namespace={cronJob?.namespace || namespace}
-      createdAt={cronJob?.createdAt}
-      statusBadge={
-        cronJob && (
-          <StatusBadge status={cronJob.suspend ? "Suspended" : "Active"} />
-        )
-      }
-      onBack={goBack}
-      actions={
-        <InterceptedAction
-          intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+    <>
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={cronJob}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.CronJob}
+        title={cronJob?.name || name || ""}
+        namespace={cronJob?.namespace || namespace}
+        createdAt={cronJob?.createdAt}
+        statusBadge={
+          cronJob && (
+            <StatusBadge status={cronJob.suspend ? "Suspended" : "Active"} />
+          )
+        }
+        onBack={goBack}
+        actions={
+          <>
+            <InterceptedAction
+              intercept={intercept("Run")}
+              label={t("action", "runNow")}
+              icon={Play}
+              onClick={() => {
+                // Offered, not imposed — and unique, because two runs in one
+                // minute are a normal thing to want.
+                setRunName(`${name}-${Math.floor(Date.now() / 1000)}`);
+                setRunOpen(true);
+              }}
+              busy={runMutation.isPending}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label={t("action", "delete")}
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
+        }
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      <ConfirmDialog
+        open={runOpen}
+        onOpenChange={setRunOpen}
+        title={t("action", "runNowTitle")}
+        description={t("action", "runNowBody", { name: name ?? "" })}
+        confirmLabel={t("action", "runNow")}
+        confirmDisabled={runName.trim() === "" || runMutation.isPending}
+        onConfirm={() => runMutation.mutate()}
+      >
+        <Input
+          value={runName}
+          onChange={(event) => setRunName(event.target.value)}
+          aria-label={t("action", "runNowName")}
+          className="font-mono"
         />
-      }
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    />
+      </ConfirmDialog>
+    </>
   );
 }
 

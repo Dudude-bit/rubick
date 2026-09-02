@@ -365,6 +365,7 @@ fn main() {
             commands::workloads::list_cronjobs,
             commands::workloads::get_cronjob,
             commands::workloads::delete_cronjob,
+            commands::workloads::trigger_cronjob,
             // Manifest commands
             commands::manifest::validate_manifest,
             commands::manifest::apply_manifest,

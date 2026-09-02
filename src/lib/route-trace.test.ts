@@ -288,6 +288,42 @@ describe("routeTraces", () => {
     }
   });
 
+  /** The two branches have to agree with each other. The addresses check
+   *  runs before the Programmed one, so a Gateway the controller had taken
+   *  and not finished — no address yet, because it has not got there —
+   *  came out red saying "traffic has nowhere to arrive", while three
+   *  branches later the same function called the same condition a warn.
+   *  One function, two answers about one Gateway. */
+  it("does not call a gateway mid-provisioning a dead end", () => {
+    const pending = {
+      ...gateway("edge"),
+      addresses: [],
+      conditions: [condition("Programmed", "Unknown", "Pending")],
+    };
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({ gateways: [pending] }),
+      t
+    );
+    const step = trace.steps.find((s) => s.id === "gateway");
+
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toContain("nowhere");
+  });
+
+  /** And a Gateway nothing has vouched for, with no address, still is one —
+   *  deleting the whole branch would pass the test above. */
+  it("still calls an unvouched gateway with no address a dead end", () => {
+    const silent = { ...gateway("edge"), addresses: [], conditions: [] };
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({ gateways: [silent] }),
+      t
+    );
+
+    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+  });
+
   /** The same third answer, one object down: a controller that has taken the
    *  parent and written `Accepted: Unknown` had it read as "the listener
    *  accepts". Everything else on screen keeps that neutral, so the trace was

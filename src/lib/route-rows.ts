@@ -208,7 +208,15 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
     // Reported against 4.7.1 — the trace stopped calling it a break in 4.7.0
     // and this reader of the same field was left behind, so the sidebar kept
     // the gateway in red while its own page said it was fine.
-    if (gateway.addresses.length === 0 && programmed?.status !== "True") {
+    // `Unknown` too: the controller has taken this and not finished, so no
+    // address yet is what that looks like — the rail's red dot claimed
+    // everything through the gateway was dead while the trace called the
+    // same object a work in progress.
+    if (
+      gateway.addresses.length === 0 &&
+      programmed?.status !== "True" &&
+      programmed?.status !== "Unknown"
+    ) {
       pulse.push({
         ...at,
         say: t("empty", "gwRowNoAddress"),
