@@ -703,9 +703,31 @@ export function useConnectionEditor(vendorId: string): {
     saved,
     save: (draft) => saving.mutateAsync(draft).then(() => undefined),
     forget: () => saving.mutateAsync(null).then(() => undefined),
-    test: (draft) =>
+    test: async (draft) =>
       vendor
-        ? vendor.connect.probe(draft)
+        ? vendor.connect.probe(draft).then((result) => {
+            // The dialog held this answer in local state and the badge on
+            // the row behind it kept whatever the cached probe last said —
+            // so pressing Test and watching it succeed left "no answer" in
+            // red two centimetres away.
+            //
+            // Only when the tested draft *is* the saved connection: a test
+            // against an edited address is about a different address, and
+            // seeding the shared answer with it would be the same lie in
+            // the other direction.
+            if (
+              saved &&
+              saved.url === draft.url &&
+              saved.authType === draft.authType &&
+              saved.insecureTls === draft.insecureTls
+            ) {
+              client.setQueryData(
+                ["integration-probe", vendorId, context],
+                result
+              );
+            }
+            return result;
+          })
         : Promise.resolve({
             ok: false as const,
             at: Date.now(),
