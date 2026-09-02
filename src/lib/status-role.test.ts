@@ -11,6 +11,17 @@ import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 const ROLES: StatusRole[] = ["ok", "pending", "warn", "err", "neutral"];
 
 describe("statusRole", () => {
+  /** `kubectl get nodes` prints exactly this for a cordoned node, and the
+   *  badge's colour is a table lookup on that string — a miss renders grey
+   *  and says nothing. Amber, not red: a cordon is somebody's decision. The
+   *  Nodes list could not say it at all until `unschedulable` reached the
+   *  frontend, while the overview had been calling the same node "Cordoned"
+   *  all along. */
+  it("knows the word kubectl prints for a cordoned node", () => {
+    expect(statusRole("Ready,SchedulingDisabled")).toBe("warn");
+    expect(statusRole("Ready")).toBe("ok");
+  });
+
   it("maps healthy states", () => {
     for (const s of [
       "Running",

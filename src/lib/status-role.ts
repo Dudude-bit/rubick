@@ -90,7 +90,17 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "pendingrollback",
     "uninstalling",
   ],
-  warn: ["warning", "degraded", "suspended", "notready", "unhealthy"],
+  warn: [
+    "warning",
+    "degraded",
+    "suspended",
+    "notready",
+    "unhealthy",
+    // `kubectl get nodes` spells a cordoned node exactly this way, and a
+    // reader matches the word against their terminal. Amber, not red: a
+    // cordon is somebody's decision, not a fault.
+    "ready,schedulingdisabled",
+  ],
   err: [
     "error",
     "failed",

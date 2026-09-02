@@ -66,6 +66,7 @@ vi.mock("@/lib/commands", () => ({
     getResourceConnections: vi.fn(),
     getNamespace: vi.fn(),
     getGatewayRoute: vi.fn(),
+    listNodes: vi.fn(),
   },
 }));
 
@@ -369,6 +370,38 @@ describe("PeekPanel", () => {
       "crash-demo-56588f6b8c-8bj9v"
     );
     expect(screen.getByTestId("peek-skeleton")).toBeInTheDocument();
+  });
+
+  /** The badge says what the kubelet last wrote. Once that kubelet stops
+   *  answering, the word is a memory: the pods list and the pod page both
+   *  drop the colour for it, and this panel drew the same pod confident
+   *  green beside them. */
+  it("does not paint a pod green when its node stopped reporting", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([
+      {
+        name: "k3d-agent-0",
+        status: {
+          conditions: [
+            {
+              type: "Ready",
+              status: "Unknown",
+              reason: "NodeStatusUnknown",
+              message: "Kubelet stopped posting node status.",
+              lastTransitionTime: "2026-08-31T00:00:00Z",
+            },
+          ],
+        },
+      },
+    ] as unknown as Awaited<ReturnType<typeof commands.listNodes>>);
+
+    wrap(POD_PEEK);
+    const badge = await screen.findByText("CrashLoopBackOff");
+
+    // The node list arrives after the pod, so the badge starts confident and
+    // has to give the colour up once the silence is known.
+    await waitFor(() =>
+      expect(badge.className).not.toMatch(/text-err|text-ok/)
+    );
   });
 
   it("shows the summary and this object's events once they arrive", async () => {

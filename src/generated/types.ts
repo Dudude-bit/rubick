@@ -612,6 +612,7 @@ export interface NodeInfo {
   containerRuntime: string;
   labels: Record<string, string>;
   taints: TaintInfo[];
+  unschedulable: boolean;
   capacity: ResourceQuantities;
   allocatable: ResourceQuantities;
   providerId: string | null;

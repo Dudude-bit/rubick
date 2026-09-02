@@ -80,7 +80,16 @@ export const columns = (
     header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
       const ready = row.original.status.ready;
-      return <StatusBadge status={ready ? "Ready" : "NotReady"} />;
+      // A cordoned node keeps `Ready: True`, so judging it by conditions
+      // alone called it healthy full stop — the overview said "Cordoned"
+      // about the same node. `kubectl` spells this one word and the reader
+      // matches it against their terminal.
+      const word = !ready
+        ? "NotReady"
+        : row.original.unschedulable
+          ? "Ready,SchedulingDisabled"
+          : "Ready";
+      return <StatusBadge status={word} />;
     },
   },
   {

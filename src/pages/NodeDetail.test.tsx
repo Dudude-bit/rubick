@@ -68,6 +68,7 @@ function buildNode(overrides: Partial<NodeInfo> = {}): NodeInfo {
     containerRuntime: "containerd://1.7.0",
     labels: { "kubernetes.io/hostname": "node1" },
     taints: [],
+    unschedulable: false,
     capacity: {
       cpu: "4",
       memory: "16Gi",

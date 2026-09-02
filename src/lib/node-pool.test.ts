@@ -26,6 +26,7 @@ function node(
     containerRuntime: "",
     labels,
     taints: [],
+    unschedulable: false,
     capacity: { cpu: null, memory: null, pods: null, ephemeralStorage: null },
     allocatable: {
       cpu: null,

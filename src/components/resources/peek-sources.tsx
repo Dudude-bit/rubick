@@ -66,6 +66,17 @@ export interface PeekGroup {
 export interface PeekSummary {
   /** Drives the header badge; leave unset where the API reports no state. */
   status?: string | null;
+  /**
+   * The node whose kubelet wrote that status, where one did.
+   *
+   * The panel looks up whether that node is still reporting and drops the
+   * badge to neutral when it is not — the same thing the list and the detail
+   * page have always done. Carried as a name rather than as a verdict
+   * because the lookup needs a hook, and this function has none: without it
+   * the peek was the one surface painting a pod on an unreachable node
+   * confident green.
+   */
+  statusFrom?: string | null;
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   age?: string | null;
@@ -534,6 +545,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     const readiness = podReadiness(pod);
     return {
       status: pod.status.display,
+      statusFrom: pod.nodeName,
       createdAt: pod.createdAt,
       groups: [
         {

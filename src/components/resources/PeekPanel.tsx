@@ -12,6 +12,8 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useSilentNodes } from "@/hooks/useSilentNodes";
+import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
@@ -143,6 +145,14 @@ function PeekContent({
   );
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
+  // The badge says what the kubelet last wrote. When that kubelet stopped
+  // answering, the word is a memory rather than a reading — the pods list and
+  // the pod page have always dropped the colour for it, and this panel drew
+  // the same pod confident green beside them.
+  const silence = silenceOf(
+    summary?.statusFrom,
+    useSilentNodes(Boolean(summary?.statusFrom))
+  );
   // "Where do I change this" is the same question in a preview as on the page,
   // and the answer is the same size — one small element beside the status.
   const { deliveries } = useDelivery(
@@ -220,7 +230,13 @@ function PeekContent({
           />
         </SheetTitle>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
-          {summary?.status && <StatusBadge status={summary.status} />}
+          {summary?.status && (
+            <StatusBadge
+              status={summary.status}
+              roleOverride={silence ? "neutral" : undefined}
+              title={silence ? silenceNote(silence, t) : undefined}
+            />
+          )}
           <span>{target.kind}</span>
           {namespace && (
             <>

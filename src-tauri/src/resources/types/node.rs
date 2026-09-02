@@ -23,6 +23,13 @@ pub struct NodeInfo {
     pub container_runtime: String,
     pub labels: BTreeMap<String, String>,
     pub taints: Vec<TaintInfo>,
+    /// `spec.unschedulable` — cordoned, so nothing new lands here.
+    ///
+    /// A cordoned node keeps `Ready: True`, so every reader that judges a
+    /// node by its conditions calls it healthy full stop. The overview reads
+    /// the raw Node and says "Cordoned"; the Nodes list and the Node page
+    /// could not, because the fact never left the backend.
+    pub unschedulable: bool,
     pub capacity: ResourceQuantities,
     pub allocatable: ResourceQuantities,
     /// The cloud's own name for this machine, e.g. `gce://project/zone/name`.
@@ -101,6 +108,8 @@ impl From<&Node> for NodeInfo {
             })
             .unwrap_or_default();
 
+        let unschedulable = spec.and_then(|s| s.unschedulable).unwrap_or(false);
+
         let roles: Vec<String> = node
             .labels()
             .keys()
@@ -154,6 +163,7 @@ impl From<&Node> for NodeInfo {
                 conditions,
                 addresses,
             },
+            unschedulable,
             roles,
             version: node_info
                 .map(|ni| ni.kubelet_version.clone())
