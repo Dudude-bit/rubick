@@ -18,7 +18,6 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
-import type { RowData } from "@/components/ui/table-features";
 
 /** What TanStack hands a header renderer, narrowed to what this needs. */
 interface SortableColumn {
@@ -26,15 +25,13 @@ interface SortableColumn {
   toggleSorting: (desc?: boolean) => void;
 }
 
-export function SortableHeader<TData extends RowData>({
+export function SortableHeader({
   column,
   children,
 }: {
   column: SortableColumn;
   /** The label — usually a `<T>`, so the words stay translated. */
   children: ReactNode;
-  /** Unused; present so the generic is inferred from the column's table. */
-  _row?: TData;
 }) {
   const t = useT();
   const sorted = column.getIsSorted();
