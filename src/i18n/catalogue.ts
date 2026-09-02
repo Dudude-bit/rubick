@@ -1306,6 +1306,7 @@ export const en = {
     copyHost: "Host {host}",
     copyResolvedIp: "Resolved address {ip}",
     copyGatewayAddress: "Gateway address {address}",
+    sortByColumn: "Sort by this column",
     copyPair: "Copy {pair}",
     toInline: "to",
     viaGateway: "via Gateway",

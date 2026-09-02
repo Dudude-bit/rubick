@@ -1285,6 +1285,7 @@ export const ru: Catalogue = {
     copyHost: "Хост {host}",
     copyResolvedIp: "Разрешённый адрес {ip}",
     copyGatewayAddress: "Адрес шлюза {address}",
+    sortByColumn: "Сортировать по этой колонке",
     copyPair: "Скопировать {pair}",
     toInline: "к",
     viaGateway: "через Gateway",

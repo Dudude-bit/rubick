@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
 import { useMemo } from "react";
@@ -92,7 +93,16 @@ export const columns: ColumnDef<PodRow>[] = [
     // is the one nobody should have to guess at from a truncation.
     size: 150,
     id: "status",
-    header: () => <T section="columns" k="status" />,
+    // Sorted by the word the reader sees, not by the phase behind it: they
+    // asked for this to group the crashing pods together, and `Running` is
+    // the phase of a pod that has crashed six hundred times.
+    accessorFn: (pod) => pod.status.display,
+    enableSorting: true,
+    header: ({ column }) => (
+      <SortableHeader column={column}>
+        <T section="columns" k="status" />
+      </SortableHeader>
+    ),
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
@@ -103,7 +113,18 @@ export const columns: ColumnDef<PodRow>[] = [
   {
     size: 110,
     id: "ready",
-    header: () => <T section="columns" k="ready" />,
+    // By what is missing, so the ones short of a replica sort together —
+    // 0/3 before 2/3 before 1/1.
+    accessorFn: (pod) => {
+      const { ready, total } = podReadiness(pod);
+      return total - ready;
+    },
+    enableSorting: true,
+    header: ({ column }) => (
+      <SortableHeader column={column}>
+        <T section="columns" k="ready" />
+      </SortableHeader>
+    ),
     // The number people compare against `kubectl get pod` in the next
     // window, so it is kubectl's number: sidecars in both halves,
     // finished init containers in neither.
@@ -120,7 +141,13 @@ export const columns: ColumnDef<PodRow>[] = [
     // The count and the age of the last one: "653 (2h ago)".
     size: 130,
     id: "restarts",
-    header: () => <T section="columns" k="restarts" />,
+    accessorFn: (pod) => pod.restartCount,
+    enableSorting: true,
+    header: ({ column }) => (
+      <SortableHeader column={column}>
+        <T section="columns" k="restarts" />
+      </SortableHeader>
+    ),
     // kubectl prints the count with the age of the last one, and it is
     // the half that carries the news: 653 an hour ago and 653 last
     // week are the same number and not the same pod.
