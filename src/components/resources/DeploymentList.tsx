@@ -44,8 +44,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "status",
     header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
-      const { available, desired } = row.original.replicas;
-      return <StatusBadge status={workloadStatus(available || 0, desired)} />;
+      return <StatusBadge status={workloadStatus(row.original.replicas)} />;
     },
   },
   createAgeColumn<DeploymentInfoWithMetrics>(),

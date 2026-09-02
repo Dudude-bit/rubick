@@ -20,7 +20,26 @@
  */
 export type WorkloadStatus = "Ready" | "Progressing" | "Idle";
 
-export function workloadStatus(ready: number, desired: number): WorkloadStatus {
-  if (desired <= 0) return "Idle";
-  return ready >= desired ? "Ready" : "Progressing";
+/**
+ * `available` is taken over `ready` where a workload reports both.
+ *
+ * They are different numbers and the gap is real: `minReadySeconds` holds a
+ * pod out of `available` after it is `ready`, and the Deployment controller
+ * counts availability, not readiness, when it decides it is done. Reading
+ * `ready` there is the optimistic answer.
+ *
+ * It also has to be one choice rather than a caller's. The Deployments list
+ * passed `available` and the peek passed `ready` into a parameter named
+ * `ready`, so the same Deployment mid-rollout read `Progressing` in the list
+ * and `Ready` in the panel opened from it — the disagreement this module was
+ * written to end, reappearing inside its own callers.
+ */
+export function workloadStatus(counts: {
+  desired: number;
+  ready: number;
+  available?: number;
+}): WorkloadStatus {
+  if (counts.desired <= 0) return "Idle";
+  const serving = counts.available ?? counts.ready;
+  return serving >= counts.desired ? "Ready" : "Progressing";
 }

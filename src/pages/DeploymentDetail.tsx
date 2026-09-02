@@ -13,6 +13,11 @@ import {
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+// The one place that turns replica counts into a word. This page kept a
+// fourth, hand-rolled comparison with no zero case, so a Deployment
+// scaled to nothing wore a green "Available" here and a grey "Idle" in
+// the list and the peek beside it.
+import { workloadStatus } from "@/lib/workload-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -312,7 +317,6 @@ export function DeploymentDetail() {
   })();
 
   const replicas = deployment?.replicas;
-  const shortReplicas = !!replicas && replicas.ready < replicas.desired;
   const desired = replicas?.desired ?? 0;
   const ready = replicas?.ready ?? 0;
 
@@ -550,7 +554,7 @@ export function DeploymentDetail() {
         createdAt={deployment?.createdAt}
         statusBadge={
           replicas && (
-            <StatusBadge status={shortReplicas ? "Degraded" : "Available"}>
+            <StatusBadge status={workloadStatus(replicas)}>
               {t("count", "slashReady", {
                 n: replicas.ready,
                 total: replicas.desired,

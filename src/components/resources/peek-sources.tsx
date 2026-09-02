@@ -626,10 +626,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   }),
 
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
-    status: workloadStatus(
-      deployment.replicas.ready,
-      deployment.replicas.desired
-    ),
+    status: workloadStatus(deployment.replicas),
     createdAt: deployment.createdAt,
     groups: [
       {
@@ -668,7 +665,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   })),
 
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
-    status: workloadStatus(set.replicas.ready, set.replicas.desired),
+    status: workloadStatus(set.replicas),
     createdAt: set.createdAt,
     groups: [
       {
@@ -702,7 +699,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   })),
 
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
-    status: workloadStatus(set.ready, set.desired),
+    status: workloadStatus(set),
     createdAt: set.createdAt,
     groups: [
       {
