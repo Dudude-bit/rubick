@@ -3935,6 +3935,8 @@ export const en = {
     gwNoRouteStatusBody:
       "A controller claims this Gateway's class and has not refused the Gateway itself, so one is running — it simply wrote no status for this route. Several implementations still write none for the alpha route kinds. Whether the route is carrying traffic cannot be read from here, which is not the same as saying it is not.",
     gwNoStatusPeek: "No controller wrote status — nothing serves this route.",
+    gwAcceptedPending:
+      "The controller has taken this parent and not decided yet",
     gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
     gwListenerMatches: "{label} matches this route",
     gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
@@ -4591,6 +4593,11 @@ export const en = {
     shortOfDesired: {
       one: "{n} short of desired",
       other: "{n} short of desired",
+    },
+    gwParentUnresolved: {
+      one: "names a gateway parent this app could not resolve — the ListenerSets were not read.",
+      other:
+        "name a gateway parent this app could not resolve — the ListenerSets were not read.",
     },
     gwMeshAlsoNames: {
       one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",

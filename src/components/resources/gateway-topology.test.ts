@@ -107,6 +107,36 @@ const route = (
 });
 
 describe("the gateway topology map", () => {
+  /** `Unknown` is the API's third answer and it was painting the node red —
+   *  the opposite lie to the green one the trace told about the same
+   *  condition. `routeTone` in the same file has always drawn the
+   *  distinction; `gatewayTone` did not. */
+  it("does not paint a gateway red while its controller is still deciding", () => {
+    const data = gatewayTopology(
+      [gateway("edge", [condition("Programmed", "Unknown", "Pending")])],
+      [],
+      undefined,
+      t
+    );
+    const gateways = data.columns.find((c) => c.label === "Gateways");
+
+    expect(gateways?.nodes[0].tone).toBe("mute");
+  });
+
+  /** And a controller that said False still gets red — deleting the whole
+   *  branch would pass the test above. */
+  it("still paints a gateway red when its controller refused it", () => {
+    const data = gatewayTopology(
+      [gateway("edge", [condition("Programmed", "False", "Invalid")])],
+      [],
+      undefined,
+      t
+    );
+    const gateways = data.columns.find((c) => c.label === "Gateways");
+
+    expect(gateways?.nodes[0].tone).toBe("err");
+  });
+
   it("draws gateway, route and backend as three linked columns", () => {
     const data = gatewayTopology(
       [gateway("edge", [condition("Programmed", "True", "Programmed")])],

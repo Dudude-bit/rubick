@@ -693,7 +693,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     () =>
       conns.data
         ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t)
-        : { entries: [], mesh: [] },
+        : { entries: [], mesh: [], unresolved: [] },
     [conns.data, gatewaysQuery.data, t]
   );
   // For a Pod or a workload, the level above is whichever Services stand in
@@ -984,6 +984,22 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
           );
         })}
       </div>
+      {doors.unresolved.length > 0 && (
+        <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
+          {doors.unresolved.map((route, index) => (
+            <span key={`${route.kind}/${route.name}`}>
+              {index > 0 && ", "}
+              <ResourceRef
+                kind={route.kind}
+                name={route.name}
+                namespace={route.namespace}
+                showKind={false}
+              />
+            </span>
+          ))}{" "}
+          {t("count", "gwParentUnresolved", { n: doors.unresolved.length })}
+        </p>
+      )}
       {doors.mesh.length > 0 && (
         <p className="mt-1 border-t border-hair pt-2 text-[11px] text-fg-fnt">
           {doors.mesh.map((route, index) => (

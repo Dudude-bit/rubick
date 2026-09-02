@@ -55,6 +55,17 @@ export interface TrafficDoors {
   entries: TrafficEntry[];
   /** Mesh parents naming this service — real, and not judged here. */
   mesh: DoorRef[];
+  /**
+   * Routes that name a gateway parent this app could not resolve to a
+   * Gateway — a `ListenerSet` whose own list was refused or never read, or
+   * one that is genuinely gone.
+   *
+   * Third bucket on purpose. These are not mesh: they do attach to a
+   * gateway, and filing them under "GAMMA, not through any gateway" is the
+   * confident wrong answer. They are not entries either, because nobody
+   * knows which door they are behind.
+   */
+  unresolved: DoorRef[];
 }
 
 /** Six doors read; a seventh starts a wall the count says better. */
@@ -110,7 +121,15 @@ export function trafficDoors(
     string,
     Array<{ gateway: ObjectRef; sectionName: string | null }>
   >();
+  // Every attachesTo target, not only the resolved ones: a route whose
+  // parentRef names a ListenerSet arrives with `to.kind === "ListenerSet"`
+  // when the sets could not be read, and reading that as "no gateway parent"
+  // is how it ended up filed as mesh.
+  const unresolvedAt = new Set<string>();
   for (const edge of conns.edges) {
+    if (edge.relation.verb === "attachesTo" && edge.to.kind !== "Gateway") {
+      unresolvedAt.add(key(edge.from));
+    }
     if (edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway") {
       const at = key(edge.from);
       gatewaysOf.set(at, [
@@ -125,6 +144,7 @@ export function trafficDoors(
   // edge per backendRef, so a two-rule GAMMA route naming one Service
   // arrived twice — an inflated count, and two React children on one key.
   const mesh = new Map<string, DoorRef>();
+  const unresolved = new Map<string, DoorRef>();
 
   const entryFor = (object: ObjectRef, meta: string): TrafficEntry => {
     const at = key(object);
@@ -150,7 +170,12 @@ export function trafficDoors(
     if (edge.relation.verb === "ruleRoutes") {
       const attachments = gatewaysOf.get(key(edge.from)) ?? [];
       if (attachments.length === 0) {
-        // No gateway parent in the graph: a mesh attachment (GAMMA).
+        // A gateway parent that did not resolve is not the absence of one.
+        if (unresolvedAt.has(key(edge.from))) {
+          unresolved.set(key(edge.from), doorRef(edge.from));
+          continue;
+        }
+        // No gateway parent in the graph at all: a mesh attachment (GAMMA).
         mesh.set(key(edge.from), doorRef(edge.from));
         continue;
       }
@@ -246,5 +271,6 @@ export function trafficDoors(
       (a, b) => Number(a.ghost) - Number(b.ghost)
     ),
     mesh: [...mesh.values()],
+    unresolved: [...unresolved.values()],
   };
 }

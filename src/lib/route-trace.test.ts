@@ -288,6 +288,24 @@ describe("routeTraces", () => {
     }
   });
 
+  /** The same third answer, one object down: a controller that has taken the
+   *  parent and written `Accepted: Unknown` had it read as "the listener
+   *  accepts". Everything else on screen keeps that neutral, so the trace was
+   *  the one place claiming a verdict nobody wrote — and because the step was
+   *  `ok`, the route came out `serving: true, servingKnown: true`. */
+  it("does not call a parent accepted while the controller is still deciding", () => {
+    const pending = route("healthy", {
+      parents: [
+        parentStatus("edge", [condition("Accepted", "Unknown", "Pending")]),
+      ],
+    });
+    const [trace] = routeTraces(pending, sources(), t);
+    const step = trace.steps.find((s) => s.id === "listener");
+
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toContain("accepts");
+  });
+
   /** `Programmed: Unknown` is the API's third answer — the controller has
    *  taken the Gateway and not decided. There was no branch for it, so it
    *  fell through to the green one and the step read "is programmed" for a

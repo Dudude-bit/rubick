@@ -71,6 +71,12 @@ function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
   if (!programmed) return { tone: "mute", sub: sub || undefined };
   if (programmed.status === "True")
     return { tone: "ok", sub: sub || undefined };
+  // Only `False` is a break. `Unknown` — the controller has taken this and
+  // not decided — was painting the node red, which is the opposite lie to
+  // the green one the trace used to tell about the same condition.
+  // `routeTone` below has always drawn this distinction; this one did not.
+  if (programmed.status !== "False")
+    return { tone: "mute", sub: programmed.reason ?? (sub || undefined) };
   return { tone: "err", sub: programmed.reason ?? (sub || undefined) };
 }
 

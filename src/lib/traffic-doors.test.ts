@@ -86,6 +86,58 @@ const gateway = (
 });
 
 describe("trafficDoors", () => {
+  /** A route whose parentRef names a ListenerSet the app could not read
+   *  arrives with `to.kind === "ListenerSet"`. Reading that as "no gateway
+   *  parent" filed it under mesh, and the peek printed "GAMMA, not through
+   *  any gateway" — a confident claim about a route that does attach to one.
+   *  Every other reader of that parentRef was taught this in #97; this one
+   *  was not. */
+  it("does not call a route mesh because its ListenerSet went unread", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "set-route"),
+            ref("Service", "app"),
+            ruleRoutes(["app.example.com"])
+          ),
+          edge(
+            ref("HTTPRoute", "set-route"),
+            ref("ListenerSet", "app-tls", "gwtest", "notChecked"),
+            { verb: "attachesTo", sectionName: null }
+          ),
+        ],
+      }),
+      [],
+      t
+    );
+
+    expect(model.mesh).toHaveLength(0);
+    expect(model.unresolved).toHaveLength(1);
+    expect(model.unresolved[0].name).toBe("set-route");
+  });
+
+  /** The other side: a route with no gateway parent at all is still mesh,
+   *  and saying so is the whole point of that bucket. */
+  it("still calls a route with no gateway parent mesh", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("HTTPRoute", "gamma"),
+            ref("Service", "app"),
+            ruleRoutes(["app.example.com"])
+          ),
+        ],
+      }),
+      [],
+      t
+    );
+
+    expect(model.unresolved).toHaveLength(0);
+    expect(model.mesh).toHaveLength(1);
+  });
+
   it("stacks a gateway's doors under it, address and class on the entry", () => {
     const model = trafficDoors(
       conns({

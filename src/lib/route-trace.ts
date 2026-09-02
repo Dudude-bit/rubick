@@ -691,6 +691,23 @@ function acceptanceSteps(
     ];
   }
 
+  // `Unknown` is the third answer, and it was falling through to the green
+  // one below: a controller that has taken this parent and not decided read
+  // as "the listener accepts". The peek and the routes list both keep it
+  // neutral — this reader was the one claiming a verdict nobody wrote.
+  if (accepted.status !== "True") {
+    return [
+      {
+        id: "listener",
+        state: "warn",
+        say: t("empty", "gwAcceptedPending"),
+        who: "controller",
+        freshness,
+      },
+      namespaceQuiet(route, listeners, "ok", t),
+    ];
+  }
+
   return [
     {
       id: "listener",
