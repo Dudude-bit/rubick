@@ -1,4 +1,4 @@
-//! `ConfigMap` commands — list / get / get-data / delete.
+//! `ConfigMap` commands — list / get / get-data / set-key / delete.
 
 use super::data::ConfigData;
 use crate::commands::filters::ResourceFilters;
@@ -57,6 +57,41 @@ pub async fn get_configmap_data(
         out.take("", key, &value.0);
     }
     Ok(out)
+}
+
+/// Write one key of a `ConfigMap`, leaving the rest alone.
+///
+/// A merge patch on that one field rather than a replace of the object.
+/// Editing the whole `ConfigMap` as YAML is already possible and is what a
+/// reader asked to stop doing (#107): a value that is itself JSON turns into
+/// an indentation puzzle, and one mis-typed space rewrites a key nobody
+/// touched. Patching the field they edited cannot do that, and it will not
+/// clobber a change somebody else made to a different key in the meantime.
+///
+/// `binaryData` is deliberately out of scope. A key held there is bytes, and
+/// a text box is not the way to edit bytes — the YAML editor still is.
+#[tauri::command]
+pub async fn set_configmap_key(
+    name: String,
+    key: String,
+    value: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    use kube::api::{Patch, PatchParams};
+
+    crate::validation::validate_dns_subdomain(&name)?;
+    crate::validation::validate_config_key(&key)?;
+
+    let ctx = crate::commands::helpers::ResourceContext::for_command(&state, namespace)?;
+    let api: kube::Api<ConfigMap> = ctx.namespaced_api();
+
+    // Named apart from the key so a reader of the patch can see which half is
+    // ours and which is theirs.
+    let patch = serde_json::json!({ "data": { key: value } });
+    api.patch(&name, &PatchParams::default(), &Patch::Merge(&patch))
+        .await?;
+    Ok(())
 }
 
 /// Delete `ConfigMap`

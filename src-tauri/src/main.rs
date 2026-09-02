@@ -174,6 +174,7 @@ fn main() {
             commands::config_resources::get_configmap,
             commands::config_resources::get_configmap_data,
             commands::config_resources::delete_configmap,
+            commands::config_resources::set_configmap_key,
             // Secret commands
             commands::config_resources::list_secrets,
             commands::config_resources::get_secret,

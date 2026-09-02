@@ -145,3 +145,24 @@ export function scopeIn(scope: readonly string[], t: T): string {
   if (scope.length === 1) return scope[0];
   return t("readings", "argoNamespaceCount", { n: scope.length });
 }
+
+/**
+ * The items of the selected namespace, or all of them.
+ *
+ * `""` is this app's word for "the whole cluster" — the store types
+ * `currentNamespace` as a `string` and every consumer writes
+ * `currentNamespace || null` to get a nullable out of it. A `== null` test
+ * against the raw value compiles, is never true, and filters every row away:
+ * the sidebar's Gateways and Routes rows read 0 above pages listing forty
+ * (shipped in 4.7.3+, caught by review before release).
+ *
+ * Named here so the rule has one home and a test, rather than being three
+ * inline ternaries in a component nothing exercises.
+ */
+export function inNamespace<T extends { namespace: string }>(
+  items: T[],
+  scope: string | null
+): T[] {
+  if (!scope) return items;
+  return items.filter((item) => item.namespace === scope);
+}

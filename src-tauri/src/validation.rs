@@ -51,6 +51,33 @@ pub fn validate_dns_subdomain(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validate a key of a `ConfigMap` or `Secret`.
+///
+/// Kubernetes accepts `[-._a-zA-Z0-9]+` here — a different, looser alphabet
+/// than a resource name, and one that deliberately excludes `/`. Checked
+/// rather than trusted because the key becomes a JSON Pointer segment in the
+/// merge patch that writes it, and a `/` there would address a different
+/// field entirely.
+pub fn validate_config_key(key: &str) -> Result<()> {
+    if key.is_empty() {
+        return Err(Error::InvalidInput("Key cannot be empty".to_string()));
+    }
+    if key.len() > 253 {
+        return Err(Error::InvalidInput(format!(
+            "Key '{key}' exceeds maximum length of 253 characters"
+        )));
+    }
+    if !key
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err(Error::InvalidInput(format!(
+            "Key '{key}' is not a valid ConfigMap key. Must be alphanumeric characters, '-', '_' or '.'"
+        )));
+    }
+    Ok(())
+}
+
 /// Validate a Kubernetes namespace name (DNS-1123 label)
 pub fn validate_namespace(name: &str) -> Result<()> {
     if name.is_empty() {

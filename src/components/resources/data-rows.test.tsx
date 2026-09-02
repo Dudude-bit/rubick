@@ -171,3 +171,70 @@ describe("DataSection", () => {
     });
   });
 });
+
+describe("editing one key", () => {
+  /** Asked for in #107. The YAML editor could already change these, and that
+   *  is exactly what the reader was doing when a JSON value inside a YAML
+   *  string turned into an indentation puzzle. The value on its own has no
+   *  indentation to get wrong. */
+  it("writes back only the key that was edited", async () => {
+    const onEditKey = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DataSection
+        data={{ "app.json": '{"a":1}', "log.level": "debug" }}
+        onEditKey={onEditKey}
+      />
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Value of app.json" })
+    );
+    const box = screen.getByRole("textbox", { name: "Value of app.json" });
+    await userEvent.clear(box);
+    await userEvent.type(box, '{{"a":2}');
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onEditKey).toHaveBeenCalledTimes(1);
+    expect(onEditKey.mock.calls[0][0]).toBe("app.json");
+  });
+
+  /** A page that does not pass the handler must not offer the control — a
+   *  Secret's values are not edited here, and an Edit button that did
+   *  nothing would be worse than none. */
+  it("offers nothing to edit when the page did not allow it", () => {
+    render(<DataSection data={{ "log.level": "debug" }} />);
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+
+  /** Bytes are not text, and a textarea is not the way to edit bytes.
+   *
+   *  The backend puts a key in exactly one of values/binary/withheld, so this
+   *  overlap cannot come from there — it is the component defending its own
+   *  contract against a caller. Written to actually reach the guard: passing
+   *  only `binary` leaves `value` undefined and the earlier check does all
+   *  the work, so that version of this test passed against the guard
+   *  deleted. */
+  it("does not offer to edit a key that is also binary", () => {
+    render(
+      <DataSection
+        data={{ "keystore.jks": "not really text" }}
+        binary={{ "keystore.jks": { bytes: 2048, base64: "AAAA" } }}
+        onEditKey={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+
+  /** Same again for a value the backend refused to hand over: it is not ours
+   *  to write back. */
+  it("does not offer to edit a withheld key", () => {
+    render(
+      <DataSection
+        data={{ "tls.key": "" }}
+        withheld={{ "tls.key": "a private key never leaves the backend" }}
+        onEditKey={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+});

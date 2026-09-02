@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Copy, Eye, EyeOff } from "lucide-react";
+import { Copy, Eye, EyeOff, Pencil } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Textarea } from "@/components/ui/textarea";
 import { useCopyToClipboard } from "@/hooks";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,19 @@ export interface DataSectionProps {
   binary?: Record<string, BinaryValue>;
   isLoading?: boolean;
   emptyMessage?: string;
+  /**
+   * Write one key back, where the surface allows it.
+   *
+   * Optional, and opt-in per page rather than per row: a `ConfigMap` passes
+   * it, a `Secret` does not. Asked for in #107 — the YAML editor can already
+   * change these, but a value that is itself JSON becomes an indentation
+   * puzzle inside a YAML string, and one mis-typed space rewrites a key
+   * nobody touched.
+   *
+   * Only text values are offered. A binary key is bytes and a textarea is
+   * not the way to edit bytes; a withheld one is not ours to write.
+   */
+  onEditKey?: (key: string, value: string) => Promise<void>;
 }
 
 export function DataSection({
@@ -57,9 +72,13 @@ export function DataSection({
   binary = {},
   isLoading = false,
   emptyMessage,
+  onEditKey,
 }: DataSectionProps) {
   const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const copyToClipboard = useCopyToClipboard();
 
   const entries = useMemo(() => {
@@ -210,6 +229,20 @@ export function DataSection({
                         onClick={() => toggle(key)}
                       />
                     )}
+                    {onEditKey && value !== undefined && !blob && !refusal && (
+                      <DetailAction
+                        label={t("action", "edit")}
+                        // Named by its key, or a list of ten offers ten
+                        // identical "Edit" buttons and nothing but position
+                        // says which is which.
+                        aria-label={t("action", "editKeyLabel", { key })}
+                        icon={Pencil}
+                        onClick={() => {
+                          setEditing(key);
+                          setDraft(value);
+                        }}
+                      />
+                    )}
                     {/* Named, because a Copy that silently hands over base64
                         where every other row hands over the value is a
                         surprise the reader finds out about in a shell. */}
@@ -234,15 +267,57 @@ export function DataSection({
                   </div>
                 )}
               </div>
-              {value !== undefined && (
-                <pre
-                  className={cn(
-                    "mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-xs",
-                    isRevealed ? "text-fg-mid" : "text-fg-fnt"
-                  )}
-                >
-                  {isRevealed ? value : "•".repeat(Math.min(value.length, 32))}
-                </pre>
+              {editing === key && onEditKey ? (
+                // The value on its own, without the YAML around it — which is
+                // the whole request: a JSON blob inside a YAML string is an
+                // indentation puzzle, and the puzzle is not the point.
+                <div className="mt-1 border-l border-hair pl-3">
+                  <Textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    rows={Math.min(20, draft.split("\n").length + 1)}
+                    className="font-mono text-xs"
+                    aria-label={t("action", "editKeyLabel", { key })}
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={saving || draft === value}
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          await onEditKey(key, draft);
+                          setEditing(null);
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                    >
+                      {t("action", "save")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={saving}
+                      onClick={() => setEditing(null)}
+                    >
+                      {t("action", "cancel")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                value !== undefined && (
+                  <pre
+                    className={cn(
+                      "mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-xs",
+                      isRevealed ? "text-fg-mid" : "text-fg-fnt"
+                    )}
+                  >
+                    {isRevealed
+                      ? value
+                      : "•".repeat(Math.min(value.length, 32))}
+                  </pre>
+                )
               )}
             </div>
           );

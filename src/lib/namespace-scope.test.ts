@@ -8,6 +8,7 @@ import {
   sameScope,
   scopeIn,
   scopeLabel,
+  inNamespace,
   wireNamespace,
 } from "./namespace-scope";
 
@@ -115,5 +116,32 @@ describe("what the scope is called", () => {
     expect(scopeLabel(["a", "b", "c"], t)).toBe("3 namespaces");
     expect(scopeIn([], t)).toBe("any namespace");
     expect(scopeIn(["prod", "staging"], t)).toBe("2 namespaces");
+  });
+});
+
+describe("the items a scoped rail counts", () => {
+  const rows = [
+    { namespace: "apps", name: "a" },
+    { namespace: "edge", name: "b" },
+  ];
+
+  /** The defect this exists for. `""` is the app's word for "the whole
+   *  cluster" — the store types it `string`, never `null` — so a `== null`
+   *  test against the raw value compiles, is never true, and filters every
+   *  row away. The sidebar read "Routes 0" above a page listing forty, and
+   *  the red dot for a broken route went out with them. */
+  it("counts everything when no namespace is picked", () => {
+    expect(inNamespace(rows, "")).toHaveLength(2);
+    expect(inNamespace(rows, null)).toHaveLength(2);
+  });
+
+  it("counts one namespace when one is picked", () => {
+    expect(inNamespace(rows, "apps").map((r) => r.name)).toEqual(["a"]);
+  });
+
+  /** A namespace that holds none of them is an answer, not a reason to
+   *  fall back to all of them. */
+  it("counts none when the picked namespace holds none", () => {
+    expect(inNamespace(rows, "kube-system")).toHaveLength(0);
   });
 });

@@ -1286,6 +1286,9 @@ export const ru: Catalogue = {
     copyResolvedIp: "Разрешённый адрес {ip}",
     copyGatewayAddress: "Адрес шлюза {address}",
     sortByColumn: "Сортировать по этой колонке",
+    editKeyLabel: "Значение {key}",
+    keyUpdated: "{key} обновлён",
+    keyUpdateFailed: "Не удалось записать {key}",
     runNow: "Запустить сейчас",
     runNowTitle: "Запустить этот CronJob сейчас",
     runNowBody:

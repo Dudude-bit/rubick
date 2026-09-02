@@ -1307,6 +1307,9 @@ export const en = {
     copyResolvedIp: "Resolved address {ip}",
     copyGatewayAddress: "Gateway address {address}",
     sortByColumn: "Sort by this column",
+    editKeyLabel: "Value of {key}",
+    keyUpdated: "{key} updated",
+    keyUpdateFailed: "Could not write {key}",
     runNow: "Run now",
     runNowTitle: "Run this CronJob now",
     runNowBody:

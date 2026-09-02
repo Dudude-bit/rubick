@@ -1198,6 +1198,15 @@ export async function getConfigmapData(
   return invoke<ConfigData>("get_configmap_data", { name, namespace });
 }
 
+export async function setConfigmapKey(
+  name: string,
+  key: string,
+  value: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("set_configmap_key", { name, key, value, namespace });
+}
+
 export async function deleteConfigmap(
   name: string,
   namespace: string | null

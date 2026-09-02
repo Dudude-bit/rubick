@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table2, Tag, Trash2 } from "lucide-react";
 
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -6,6 +6,8 @@ import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { DataSection } from "@/components/resources/data-rows";
+import { useToast } from "@/components/ui/use-toast";
+import { errorWords } from "@/i18n/say";
 import { KeyValueSection } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
@@ -48,6 +50,28 @@ export function ConfigMapDetail() {
     enabled: !!name && !!namespace,
   });
 
+  // One key at a time rather than the whole object as YAML. The YAML editor
+  // is still there and is still the way to add or remove a key; this is for
+  // changing a value, which is what a reader was doing when the indentation
+  // got in the way (#107).
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const writeKey = async (key: string, value: string) => {
+    try {
+      await commands.setConfigmapKey(name!, key, value, namespace!);
+      await queryClient.invalidateQueries({
+        queryKey: ["configmap-data", name, namespace],
+      });
+      toast({ title: t("action", "keyUpdated", { key }) });
+    } catch (error) {
+      toast({
+        title: t("action", "keyUpdateFailed", { key }),
+        description: errorWords(error, t),
+        variant: "destructive",
+      });
+    }
+  };
+
   const deliveryQuery = deliveryOfKind(ResourceType.ConfigMap, configMap);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
@@ -73,6 +97,7 @@ export function ConfigMapDetail() {
           withheld={configMapData?.withheld}
           binary={configMapData?.binary}
           keys={dataKeys}
+          onEditKey={writeKey}
           isLoading={isDataLoading}
           emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "ConfigMap" })}
         />
