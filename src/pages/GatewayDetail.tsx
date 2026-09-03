@@ -387,11 +387,17 @@ export function GatewayDetail() {
           ? t("action", "yes")
           : (programmed.reason ?? programmed.status)
         : t("empty", "gwNoControllerShort"),
-      tone: programmed
-        ? programmed.status === "True"
+      // `Unknown` is the API's third answer — the controller has taken this
+      // and not decided — and red is the wrong end of the scale for it. The
+      // list column, the map and the trace all keep it neutral or amber; this
+      // page was the one still calling a Gateway mid-provisioning broken.
+      tone: !programmed
+        ? ("warn" as const)
+        : programmed.status === "True"
           ? undefined
-          : ("err" as const)
-        : ("warn" as const),
+          : programmed.status === "False"
+            ? ("err" as const)
+            : ("warn" as const),
     },
     {
       label: t("columns", "addresses"),

@@ -27,6 +27,15 @@ export interface ChildRow {
   namespace?: string | null;
   /** Raw status word from the API, shown as-is beside the name. */
   status: string;
+  /**
+   * Draw the status without its colour, keeping the word.
+   *
+   * For a reading nobody can vouch for — a pod whose kubelet stopped
+   * reporting keeps whatever it last wrote, and `Running` in confident green
+   * is a claim about a moment that has passed. The pods list and the pod page
+   * have always dropped the colour for it; the rows drawn here had not.
+   */
+  unverified?: boolean;
   /** Right-aligned facts: readiness, restarts, completions. */
   detail?: ReactNode;
   timestamp?: string | null;
@@ -107,7 +116,7 @@ export function ChildRows({
 
 function ChildRowItem({ row }: { row: ChildRow }) {
   const navigate = useNavigate();
-  const role = statusRole(row.status);
+  const role = row.unverified ? "neutral" : statusRole(row.status);
   const age = useRealtimeAge(row.timestamp ?? null);
 
   return (

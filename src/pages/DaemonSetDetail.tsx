@@ -5,6 +5,10 @@ import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+// The one place that turns replica counts into a word. These pages kept
+// their own comparison with no zero case, so a workload scaled to nothing
+// wore a green "Ready" here and a grey "Idle" in the list and the peek.
+import { workloadStatus } from "@/lib/workload-status";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
 import { TrafficChain } from "@/components/resources/TrafficChain";
@@ -111,7 +115,6 @@ export function DaemonSetDetail() {
   const ready = daemonSet?.ready ?? 0;
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;
-  const short = ready < desired;
 
   const tabs = useMemo(
     () => [
@@ -317,7 +320,7 @@ export function DaemonSetDetail() {
       createdAt={daemonSet?.createdAt}
       statusBadge={
         daemonSet && (
-          <StatusBadge status={short ? "Degraded" : "Ready"}>
+          <StatusBadge status={workloadStatus({ ready, desired })}>
             {t("count", "slashReady", { n: ready, total: desired })}
           </StatusBadge>
         )

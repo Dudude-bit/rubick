@@ -4610,9 +4610,8 @@ export const en = {
       other: "{n} short of desired",
     },
     gwParentUnresolved: {
-      one: "names a gateway parent this app could not resolve — the ListenerSets were not read.",
-      other:
-        "name a gateway parent this app could not resolve — the ListenerSets were not read.",
+      one: "names a gateway parent this app could not resolve to a Gateway.",
+      other: "name a gateway parent this app could not resolve to a Gateway.",
     },
     gwMeshAlsoNames: {
       one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",

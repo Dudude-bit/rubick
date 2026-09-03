@@ -1,4 +1,5 @@
 import { workloadStatus } from "@/lib/workload-status";
+import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ReactNode } from "react";
 import { load as parseYaml } from "js-yaml";
 
@@ -1195,7 +1196,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   Node: source(
     (name) => commands.getNode(name),
     (node, _target, t) => ({
-      status: node.status.ready ? "Ready" : "NotReady",
+      status: nodeReadyWord(node),
       createdAt: node.createdAt,
       groups: [
         {

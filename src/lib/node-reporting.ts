@@ -131,3 +131,22 @@ function ago(iso: string, now: Date): string | null {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+/**
+ * The word `kubectl get nodes` prints for a node's readiness.
+ *
+ * One place, because it was three and only one of them knew about cordons: a
+ * cordoned node keeps `Ready: True`, so a reader judging by conditions alone
+ * calls it healthy full stop while the overview says "Cordoned" about the
+ * same object.
+ *
+ * The words are `kubectl`'s and stay untranslated — `statusRole` looks them
+ * up to pick the colour, and the reader is comparing them against a terminal.
+ */
+export function nodeReadyWord(node: {
+  status: { ready: boolean };
+  unschedulable: boolean;
+}): string {
+  if (!node.status.ready) return "NotReady";
+  return node.unschedulable ? "Ready,SchedulingDisabled" : "Ready";
+}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { nodeReadyWord } from "@/lib/node-reporting";
 import { useNavigate } from "react-router-dom";
 import { BadgeCheck, Bug, Info, Tag } from "lucide-react";
 
@@ -325,11 +326,7 @@ export function NodeDetail() {
         resourceKind={ResourceType.Node}
         title={node?.name || ""}
         createdAt={node?.createdAt}
-        statusBadge={
-          node && (
-            <StatusBadge status={node.status.ready ? "Ready" : "NotReady"} />
-          )
-        }
+        statusBadge={node && <StatusBadge status={nodeReadyWord(node)} />}
         badges={[
           ...(node?.roles.map((role) => (
             <span key={role} className="text-[11px] text-fg-fnt">

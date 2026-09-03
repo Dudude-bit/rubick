@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useNavigate } from "react-router-dom";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
@@ -79,17 +80,11 @@ export const columns = (
     id: "status",
     header: () => <T section="columns" k="status" />,
     cell: ({ row }) => {
-      const ready = row.original.status.ready;
       // A cordoned node keeps `Ready: True`, so judging it by conditions
       // alone called it healthy full stop — the overview said "Cordoned"
-      // about the same node. `kubectl` spells this one word and the reader
-      // matches it against their terminal.
-      const word = !ready
-        ? "NotReady"
-        : row.original.unschedulable
-          ? "Ready,SchedulingDisabled"
-          : "Ready";
-      return <StatusBadge status={word} />;
+      // about the same node. The word is `kubectl`'s and is composed in one
+      // place, because this was three readers and only one of them knew.
+      return <StatusBadge status={nodeReadyWord(row.original)} />;
     },
   },
   {
