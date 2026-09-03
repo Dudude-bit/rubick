@@ -100,6 +100,11 @@ portable-pty = "0.9"
 tempfile = "3"
 
 
+# kill(2) on a process group: the login-shell probe in `shell::env` has to
+# take the profile's children down with the shell when the deadline passes.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
 

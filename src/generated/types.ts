@@ -1141,6 +1141,7 @@ export interface EventFilters {
 }
 
 export interface Diagnostics {
+  shell: ShellEnvReport;
   searchPath: SearchPathEntry[];
   plugins: PluginStatus[];
   contexts: DiagnosticContext[];
@@ -1757,6 +1758,13 @@ export type SearchContextStatus =
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
 
+export type ShellEnvReport =
+  | { outcome: "imported"; shell: string; adopted: number; removed: number }
+  | { outcome: "timedOut"; shell: string; seconds: number }
+  | { outcome: "couldNotStart"; shell: string; error: string }
+  | { outcome: "noAnswer"; shell: string; exit: number | null }
+  | { outcome: "notAsked" };
+
 export type TcpProbeReason = "refused" | "timedOut";
 
 export type ContainerState =
@@ -1838,7 +1846,7 @@ export type Usage =
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
 
-export type Severity = "blocking" | "misconfigured" | "optional";
+export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
 
 export type CertificateProblem =
   | { says: "noSecret" }

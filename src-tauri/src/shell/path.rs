@@ -1,46 +1,37 @@
-//! User PATH resolution.
+//! The PATH a spawned binary is searched in.
 //!
-//! GUI apps inherit a stripped-down PATH from launchd / desktop
-//! environment that doesn't include the user's homebrew, asdf,
-//! cargo etc. This module spawns the user's login shell once at
-//! startup, captures its PATH via `printenv`, then merges with
-//! known fallback locations and caches the result.
+//! Set once at startup by `env::import_login_shell_env`, from the login
+//! shell's PATH merged with the well-known locations below, and read by
+//! everything that spawns or looks for a binary. One value, so the
+//! Diagnostics screen and the spawn cannot disagree about where a plugin is.
 
 use std::path::PathBuf;
-use std::process::Stdio;
-use std::time::Duration;
-use tokio::process::Command;
-use tokio::sync::OnceCell;
+use std::sync::OnceLock;
 
-static USER_PATH: OnceCell<String> = OnceCell::const_new();
+static USER_PATH: OnceLock<String> = OnceLock::new();
 
-/// Initialize user PATH from shell. Call once at app startup.
-pub async fn init_user_path() {
-    let path = resolve_user_path().await;
-    // Ignore error if already set (idempotent)
+/// Record the merged PATH. A second call is ignored; there is one startup.
+pub(super) fn set_user_path(path: String) {
     let _ = USER_PATH.set(path);
 }
 
-/// Get the cached user PATH.
+/// The cached user PATH, or empty before startup has set it.
 pub fn get_user_path() -> &'static str {
     USER_PATH.get().map_or("", std::string::String::as_str)
 }
 
-/// Resolve user PATH by merging shell PATH with known common locations.
-/// This ensures paths like /opt/homebrew/bin are always included even when
-/// shell resolution returns an incomplete PATH (e.g., /bin/sh doesn't source user profiles).
-async fn resolve_user_path() -> String {
+/// The shell's entries first, then the fallback's, each directory once.
+///
+/// The shell's order is the user's own and is kept; the fallback exists for
+/// what a profile forgot, so it goes behind.
+#[must_use]
+pub(super) fn merge_path(shell_path: Option<&str>, fallback: &str) -> String {
     let separator = if cfg!(windows) { ';' } else { ':' };
     let mut all_paths: Vec<PathBuf> = Vec::new();
     let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
 
-    // First, add paths from user's shell (these take priority)
-    if let Some(shell_path) = get_path_from_shell().await {
-        tracing::info!(
-            "Resolved user PATH from shell ({} entries)",
-            shell_path.split(separator).count()
-        );
-        for entry in shell_path.split(separator) {
+    for list in [shell_path.unwrap_or(""), fallback] {
+        for entry in list.split(separator) {
             if !entry.is_empty() {
                 let path = PathBuf::from(entry);
                 if seen.insert(path.clone()) {
@@ -48,34 +39,17 @@ async fn resolve_user_path() -> String {
                 }
             }
         }
-    } else {
-        tracing::warn!("Failed to get PATH from shell");
     }
-
-    // Then merge with fallback paths to ensure common locations are included
-    let fallback = build_fallback_path();
-    for entry in fallback.split(separator) {
-        if !entry.is_empty() {
-            let path = PathBuf::from(entry);
-            if seen.insert(path.clone()) {
-                all_paths.push(path);
-            }
-        }
-    }
-
-    tracing::info!("Final PATH has {} entries", all_paths.len());
 
     std::env::join_paths(&all_paths)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default()
 }
 
-/// Build fallback PATH from known common locations.
 /// Where krew keeps the plugin symlinks: `$KREW_ROOT/bin`, or `~/.krew/bin`.
 ///
-/// `KREW_ROOT` is read from this process's environment, which is the same
-/// place krew itself reads it from; a value set only in an interactive shell
-/// profile is invisible here, and the default is then the right guess anyway.
+/// Read from this process's environment after the login shell's variables
+/// were adopted into it, so a `KREW_ROOT` set only in a profile counts.
 #[cfg(not(windows))]
 fn krew_bin() -> PathBuf {
     match std::env::var_os("KREW_ROOT").filter(|v| !v.is_empty()) {
@@ -86,8 +60,23 @@ fn krew_bin() -> PathBuf {
     }
 }
 
-fn build_fallback_path() -> String {
-    let mut paths: Vec<PathBuf> = Vec::new();
+/// The process's own PATH first, then the well-known locations.
+///
+/// The inherited PATH is a real answer, not a guess: from a terminal it is
+/// the terminal's own, and a well-known directory behind it must not shadow
+/// the kubectl the user actually installed. The well-known directories are
+/// for what a desktop launch's stripped PATH lacks.
+pub(super) fn build_fallback_path() -> String {
+    let separator = if cfg!(windows) { ';' } else { ':' };
+    let mut paths: Vec<PathBuf> = std::env::var("PATH")
+        .map(|current| {
+            current
+                .split(separator)
+                .filter(|entry| !entry.is_empty())
+                .map(PathBuf::from)
+                .collect()
+        })
+        .unwrap_or_default();
 
     #[cfg(not(windows))]
     {
@@ -106,11 +95,9 @@ fn build_fallback_path() -> String {
 
         // krew, which is how kubectl credential plugins are installed and
         // therefore where a missing `kubectl-oidc_login` most often already
-        // is. It has to be listed here rather than left to the shell: krew's
-        // own instructions put its PATH export in `.bashrc` / `.zshrc`, which
-        // an interactive shell reads and the login shell below does not. A
-        // user whose plugin works in their terminal was told by this app to
-        // install the thing they already had.
+        // is. Listed here as well as taken from the shell: a user who has no
+        // profile line for it at all was told by this app to install the
+        // thing they already had.
         paths.push(krew_bin());
 
         // User local paths
@@ -123,7 +110,6 @@ fn build_fallback_path() -> String {
 
     #[cfg(windows)]
     {
-        // Windows common paths
         if let Some(home) = dirs::home_dir() {
             paths.push(home.join(".cargo\\bin"));
             paths.push(home.join("scoop\\shims"));
@@ -133,78 +119,32 @@ fn build_fallback_path() -> String {
         }
     }
 
-    // Include current PATH entries
-    if let Ok(current) = std::env::var("PATH") {
-        let separator = if cfg!(windows) { ';' } else { ':' };
-        for entry in current.split(separator) {
-            if !entry.is_empty() {
-                paths.push(PathBuf::from(entry));
-            }
-        }
-    }
-
-    // Use std::env::join_paths for OS-specific separator
     std::env::join_paths(&paths)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default()
 }
 
-/// Timeout for shell PATH resolution to prevent blocking on slow login scripts.
-const SHELL_PATH_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Get PATH from user's login shell.
-#[cfg(not(windows))]
-async fn get_path_from_shell() -> Option<String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-
-    // Use printenv instead of echo $PATH for shell-agnostic behavior.
-    // Fish shell outputs PATH as space-separated when using echo $PATH,
-    // but printenv PATH works correctly across all shells.
-    let output_future = Command::new(&shell)
-        .args(["-l", "-c", "printenv PATH"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .stdin(Stdio::null())
-        .output();
-
-    // Add timeout to prevent blocking on slow/hanging login scripts
-    let output = match tokio::time::timeout(SHELL_PATH_TIMEOUT, output_future).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(e)) => {
-            tracing::warn!("Failed to execute shell for PATH: {}", e);
-            return None;
-        }
-        Err(_) => {
-            tracing::warn!(
-                "Shell PATH resolution timed out after {:?}, using fallback",
-                SHELL_PATH_TIMEOUT
-            );
-            return None;
-        }
-    };
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        None
-    } else {
-        Some(path)
-    }
-}
-
-/// Get PATH on Windows - just return current process PATH.
-/// Windows GUI apps typically inherit proper PATH from the system.
-#[cfg(windows)]
-async fn get_path_from_shell() -> Option<String> {
-    std::env::var("PATH").ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// From a terminal the inherited PATH begins with the user's shims and
+    /// wrappers; a well-known `/usr/bin` ahead of them would resolve a
+    /// different kubectl than the terminal the app was started from.
+    #[test]
+    fn the_inherited_path_comes_before_the_well_known_directories() {
+        let inherited = std::env::var("PATH").unwrap_or_default();
+        let first = inherited
+            .split(if cfg!(windows) { ';' } else { ':' })
+            .find(|e| !e.is_empty());
+        if let Some(first) = first {
+            assert!(
+                build_fallback_path().starts_with(first),
+                "the process's own PATH should lead: {}",
+                build_fallback_path()
+            );
+        }
+    }
 
     #[cfg(not(windows))]
     #[test]
@@ -266,29 +206,17 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_get_path_from_shell_returns_something() {
-        // This test verifies shell PATH resolution works on the dev machine
-        let path = get_path_from_shell().await;
-        // Should return Some on most systems, None is acceptable if shell fails
-        if let Some(p) = path {
-            assert!(!p.is_empty(), "PATH should not be empty");
-            let separator = if cfg!(windows) { ';' } else { ':' };
-            assert!(
-                p.contains(separator),
-                "PATH should contain multiple entries"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn test_init_user_path_caches_value() {
-        init_user_path().await;
-        let path = get_user_path();
-        assert!(!path.is_empty(), "User PATH should be initialized");
-
-        // Second call should return same value (cached)
-        let path2 = get_user_path();
-        assert_eq!(path, path2, "PATH should be cached");
+    /// The user's order is kept and a directory named by both sides appears
+    /// once, where the user put it.
+    #[cfg(not(windows))]
+    #[test]
+    fn the_shells_order_wins_and_nothing_is_listed_twice() {
+        let merged = merge_path(Some("/b:/a:/usr/bin"), "/usr/bin:/a:/c");
+        assert_eq!(merged, "/b:/a:/usr/bin:/c");
+        assert_eq!(
+            merge_path(None, "/x::/y"),
+            "/x:/y",
+            "empty entries are dropped"
+        );
     }
 }

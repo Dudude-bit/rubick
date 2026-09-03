@@ -4,6 +4,7 @@ import type { Diagnostics } from "@/generated/types";
 import { asMarkdown } from "./report";
 
 const base: Diagnostics = {
+  shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
   searchPath: [
     { path: "/opt/homebrew/bin", exists: true },
     { path: "~/.krew/bin", exists: false },
@@ -60,5 +61,21 @@ describe("asMarkdown", () => {
   it("says a kubeconfig was never loaded", () => {
     const out = asMarkdown({ ...base, kubeconfig: null });
     expect(out).toContain("None loaded.");
+  });
+
+  /**
+   * The first question a maintainer asks about "plugin not found" is
+   * whether the shell was read at all, so the answer goes above the search
+   * path it explains.
+   */
+  it("says whether the shell answered, above the search path", () => {
+    const out = asMarkdown({
+      ...base,
+      shell: { outcome: "noAnswer", shell: "/bin/tcsh", exit: 1 },
+    });
+    expect(out.indexOf("### Shell")).toBeLessThan(
+      out.indexOf("### Search path")
+    );
+    expect(out).toContain("/bin/tcsh exited with code 1");
   });
 });

@@ -2567,6 +2567,7 @@ dependencies = [
  "k8s-gui-common",
  "k8s-openapi",
  "kube",
+ "libc",
  "parking_lot",
  "portable-pty",
  "rand 0.10.2",

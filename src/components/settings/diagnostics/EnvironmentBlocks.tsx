@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { shellEnvSentence, shellEnvTone } from "./shell-env";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -32,12 +33,18 @@ export function EnvironmentBlocks({
 }: {
   diagnostics: Diagnostics;
 }) {
-  const { searchPath, plugins, contexts, kubeconfig, app } = diagnostics;
+  const { shell, searchPath, plugins, contexts, kubeconfig, app } = diagnostics;
   const t = useT();
 
   return (
     <div className="mt-6">
       <Block title={t("settings", "searchPathBlock", { n: searchPath.length })}>
+        {/* Where the list came from, before the list: a search path that
+            is a guess has to say so above the directories, or a reader
+            checking them one by one is checking the wrong thing. */}
+        <p className={`mb-2 text-xs ${shellEnvTone(shell)}`}>
+          {shellEnvSentence(shell, t)}
+        </p>
         <ul className="space-y-1">
           {searchPath.map((entry) => (
             <li key={entry.path} className="font-mono text-xs text-fg-mut">

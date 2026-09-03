@@ -5,6 +5,7 @@ import type { Diagnostics } from "@/generated/types";
 import { EnvironmentBlocks } from "./EnvironmentBlocks";
 
 const sample: Diagnostics = {
+  shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
   searchPath: [
     { path: "/opt/homebrew/bin", exists: true },
     { path: "~/.krew/bin", exists: false },
@@ -31,6 +32,31 @@ const sample: Diagnostics = {
 };
 
 describe("EnvironmentBlocks", () => {
+  /**
+   * The search path is a guess whenever the shell did not answer, and the
+   * directories below it are then the wrong thing to check one by one. The
+   * sentence has to sit above them, and it has to change tone: a reader
+   * skimming for what is wrong reads colour before words.
+   */
+  it("says where the search path came from, and warns when it is a guess", () => {
+    const { rerender } = render(<EnvironmentBlocks diagnostics={sample} />);
+    const answered = screen.getByText(/\/bin\/zsh/);
+    expect(answered).toHaveTextContent("3 variables changed, 0 removed");
+    expect(answered).not.toHaveClass("text-warn");
+
+    rerender(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          shell: { outcome: "timedOut", shell: "/bin/zsh", seconds: 30 },
+        }}
+      />
+    );
+    expect(screen.getByText(/did not print its environment/)).toHaveClass(
+      "text-warn"
+    );
+  });
+
   it("marks a search path directory that is not there", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.getByText("~/.krew/bin").closest("li")).toHaveTextContent(

@@ -1,4 +1,5 @@
 import type { Diagnostics } from "@/generated/types";
+import { shellEnvLine } from "./shell-env";
 
 /**
  * The report as markdown, which is what a chat message or an issue takes.
@@ -22,6 +23,9 @@ export function asMarkdown(d: Diagnostics): string {
     ...(d.findings.length === 0
       ? ["Nothing needs attention."]
       : d.findings.map((f) => `- **${f.title}** — ${f.detail}`)),
+    "",
+    "### Shell",
+    shellEnvLine(d.shell),
     "",
     "### Search path",
     ...d.searchPath.map(

@@ -21,10 +21,15 @@ fn main() {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // First: it writes the environment, which nothing else may be reading
+    // yet, and tracing below reads `RUST_LOG` from what the profile set.
+    let shell_env = shell::import_login_shell_env();
+
     // Initialize tracing
     init_tracing();
 
     tracing::info!("Starting Rubick application");
+    tracing::info!(?shell_env, "login shell environment");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -33,12 +38,6 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // Initialize user PATH for shell commands
-            tauri::async_runtime::block_on(async {
-                shell::init_user_path().await;
-            });
-            tracing::info!("User PATH initialized");
-
             // Initialize application state
             let state = AppState::new()?;
 

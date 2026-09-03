@@ -168,7 +168,6 @@ impl ShellCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::super::path::init_user_path;
     use super::*;
 
     #[test]
@@ -211,8 +210,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_command_run_echo() {
-        init_user_path().await;
-
         let output = ShellCommand::new("echo")
             .arg("hello")
             .run()
@@ -226,8 +223,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_command_run_timeout() {
-        init_user_path().await;
-
         let result = ShellCommand::new("sleep")
             .arg("10")
             .timeout(Duration::from_millis(100))
@@ -239,8 +234,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_command_run_success() {
-        init_user_path().await;
-
         let stdout = ShellCommand::new("echo")
             .arg("hello")
             .run_success()
@@ -252,8 +245,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_command_run_success_fails_on_error() {
-        init_user_path().await;
-
         let result = ShellCommand::new("sh")
             .args(["-c", "echo error >&2; exit 1"])
             .run_success()

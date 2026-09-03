@@ -2550,6 +2550,19 @@ export const en = {
       one: "Search path · {n} directory",
       other: "Search path · {n} directories",
     },
+    shellEnvImported: {
+      one: "Read from {shell}, started as an interactive login shell the way a terminal starts it: {n} variable changed, {removed} removed, PATH merged.",
+      other:
+        "Read from {shell}, started as an interactive login shell the way a terminal starts it: {n} variables changed, {removed} removed, PATH merged.",
+    },
+    shellEnvTimedOut:
+      "{shell} did not print its environment within {seconds} s, so this process kept the environment it was started with, and the PATH below is a list of well-known directories. A slow .zshrc or .bashrc is the usual cause.",
+    shellEnvCouldNotStart:
+      "{shell} could not be started ({error}), so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
+    shellEnvNoAnswer:
+      "{shell} exited with code {exit} without printing its environment, so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
+    shellEnvNotAsked:
+      "Not asked on this platform: Windows hands an app the environment from the system settings. Anything set only in a PowerShell profile is not in it.",
     notThere: "not there",
     pluginsBlock: "Plugins · {n}",
     notFoundInline: "not found",

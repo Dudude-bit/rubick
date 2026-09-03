@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::commands::binaries::{kubectl_plugin_binary, locate_on_user_path, search_directories};
+use crate::shell::ShellEnvReport;
 
 /// One directory a spawned binary is looked for in.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +92,9 @@ impl InstallationInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostics {
+    /// Whether the login shell's environment was adopted at startup. When it
+    /// was not, the search path below is a guess, and this says so first.
+    pub shell: ShellEnvReport,
     pub search_path: Vec<SearchPathEntry>,
     pub plugins: Vec<PluginStatus>,
     pub contexts: Vec<DiagnosticContext>,
@@ -197,6 +201,11 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
 /// and leaves every other block answering. A page that empties itself because
 /// one file is malformed would hide the very facts somebody came for.
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
+    // `None` only before `main` has run the import, which a test binary never
+    // does; drawn as not asked rather than invented.
+    let shell = crate::shell::env_report()
+        .cloned()
+        .unwrap_or(ShellEnvReport::NotAsked);
     let search_path = search_directories()
         .into_iter()
         .map(|path| SearchPathEntry::probe(&path))
@@ -214,7 +223,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         // finding and never produced one, so the panel built for exactly
         // this moment answered "no kubeconfig loaded" to somebody looking
         // at a kubeconfig.
-        let (kubeconfig, findings) = match client.kubeconfig_error().await {
+        let (kubeconfig, mut findings) = match client.kubeconfig_error().await {
             Some(why) => {
                 let path = client.kubeconfig_path().await.map_or_else(
                     || "unknown".to_string(),
@@ -231,7 +240,9 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             }
             None => (None, Vec::new()),
         };
+        findings.extend(super::shell_env_finding(&shell));
         return Diagnostics {
+            shell,
             search_path,
             plugins: Vec::new(),
             contexts: Vec::new(),
@@ -261,6 +272,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             )
         })
         .collect();
+    findings.extend(super::shell_env_finding(&shell));
     findings.sort_by(|a, b| {
         a.severity
             .cmp(&b.severity)
@@ -268,6 +280,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     });
 
     Diagnostics {
+        shell,
         search_path,
         plugins,
         contexts,

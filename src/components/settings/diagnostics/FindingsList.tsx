@@ -11,13 +11,21 @@ import { useT } from "@/i18n/useT";
 const RANK: Record<Severity, number> = {
   blocking: 0,
   misconfigured: 1,
-  optional: 2,
+  unverified: 2,
+  optional: 3,
 };
 
-/** Only the last rank is a shrug; the other two stop something working. */
-function toneFor(severity: Severity) {
-  return severity === "optional" ? "text-warn" : "text-err";
-}
+/**
+ * The first two stop something working; the last two do not, but one of
+ * them says the verdicts above may be wrong. Total, so a severity the
+ * backend learns to report has to be given a tone here.
+ */
+const TONE: Record<Severity, "text-err" | "text-warn"> = {
+  blocking: "text-err",
+  misconfigured: "text-err",
+  unverified: "text-warn",
+  optional: "text-warn",
+};
 
 export function FindingsList({ findings }: { findings: Finding[] }) {
   const t = useT();
@@ -42,7 +50,7 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
     <ul className="space-y-3">
       {ordered.map((finding, i) => (
         <li key={`${finding.title}-${finding.subject ?? i}`}>
-          <h4 className={`text-xs font-medium ${toneFor(finding.severity)}`}>
+          <h4 className={`text-xs font-medium ${TONE[finding.severity]}`}>
             {finding.title}
           </h4>
           <p className="mt-1 max-w-[72ch] text-xs text-fg-mut">

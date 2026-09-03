@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use super::Diagnostics;
+use crate::shell::ShellEnvReport;
 
 /// Replace every identifying string in the report.
 #[must_use]
@@ -37,6 +38,17 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         out
     };
 
+    // A shell under `~/.nix-profile` names the user as surely as a path does.
+    match &mut d.shell {
+        ShellEnvReport::Imported { shell, .. }
+        | ShellEnvReport::TimedOut { shell, .. }
+        | ShellEnvReport::NoAnswer { shell, .. } => *shell = scrub(shell),
+        ShellEnvReport::CouldNotStart { shell, error } => {
+            *shell = scrub(shell);
+            *error = scrub(error);
+        }
+        ShellEnvReport::NotAsked => {}
+    }
     for ctx in &mut d.contexts {
         ctx.context = scrub(&ctx.context);
         ctx.command_path = ctx.command_path.as_deref().map(&scrub);
@@ -69,6 +81,11 @@ mod tests {
 
     fn sample() -> Diagnostics {
         Diagnostics {
+            shell: ShellEnvReport::Imported {
+                shell: "/bin/zsh".into(),
+                adopted: 3,
+                removed: 0,
+            },
             search_path: Vec::new(),
             plugins: Vec::new(),
             contexts: vec![
@@ -132,6 +149,10 @@ mod tests {
         let mut d = sample();
         d.app.config_path = Some(format!("{home}/Library/Application Support/k8s-gui"));
         d.contexts[0].command_path = Some(format!("{home}/bin/kubectl"));
+        d.shell = ShellEnvReport::CouldNotStart {
+            shell: format!("{home}/.nix-profile/bin/zsh"),
+            error: format!("{home}/.nix-profile/bin/zsh: No such file"),
+        };
 
         let out = redacted(d);
         let all = serde_json::to_string(&out).expect("serialises");
