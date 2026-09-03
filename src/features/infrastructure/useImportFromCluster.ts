@@ -10,7 +10,7 @@ import { useInfrastructureBuilderStore } from "@/stores/infrastructureBuilderSto
 import { useT } from "@/i18n/useT";
 
 import type { ResourceNodeData, ServiceResourceData } from "./types";
-import { buildEdgesFromResources } from "./utils";
+import { buildEdgesFromResources, podResource } from "./utils";
 
 const GRID_SPACING_X = 260;
 const GRID_SPACING_Y = 180;
@@ -97,20 +97,7 @@ export function useImportFromCluster(
           }),
         ]);
 
-      const resources: ResourceNodeData[] = [];
-      pods.forEach((pod) => {
-        const container = pod.containers?.[0];
-        resources.push({
-          kind: ResourceType.Pod,
-          name: pod.name,
-          namespace: pod.namespace,
-          labels: pod.labels || {},
-          origin: "cluster",
-          image: container?.image || "nginx:latest",
-          ports: container?.ports?.map((port) => port.containerPort) || [],
-          status: pod.status?.phase,
-        });
-      });
+      const resources: ResourceNodeData[] = pods.map(podResource);
       deployments.forEach((deployment) => {
         const container = deployment.containers?.[0];
         resources.push({

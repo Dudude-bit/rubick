@@ -1,5 +1,6 @@
 import { dump, loadAll } from "js-yaml";
 import { Edge, Node } from "reactflow";
+import type { PodInfo } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   ResourceKind,
@@ -28,6 +29,44 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+/**
+ * The status a pasted Pod manifest carries, read the way kubectl reads it.
+ *
+ * A live pod arrives with kubectl's full derivation done in Rust; a pasted
+ * `kubectl get pod -o yaml` has no Rust behind it, and its `.status.phase`
+ * says Running for a pod whose only container has crashed six hundred
+ * times. Only the first rule of that derivation is applied: the lowest
+ * container that is waiting for a reason or has terminated names the pod.
+ * Init containers, `deletionTimestamp`, a pod-level reason and a Completed
+ * pod with a live sidecar are not read, so such a pod shows its phase
+ * where kubectl would say Init:0/2, Terminating, Evicted or Running.
+ */
+const manifestPodStatus = (
+  status: Record<string, unknown>
+): string | undefined => {
+  const statuses = Array.isArray(status.containerStatuses)
+    ? status.containerStatuses
+    : [];
+  for (const entry of statuses) {
+    const state = isRecord(entry) && isRecord(entry.state) ? entry.state : {};
+    const waiting = isRecord(state.waiting) ? state.waiting.reason : undefined;
+    if (typeof waiting === "string" && waiting && waiting !== "PodInitializing")
+      return waiting;
+    const terminated = isRecord(state.terminated)
+      ? state.terminated
+      : undefined;
+    if (!terminated) continue;
+    if (typeof terminated.reason === "string" && terminated.reason)
+      return terminated.reason;
+    if (typeof terminated.signal === "number" && terminated.signal !== 0)
+      return `Signal:${terminated.signal}`;
+    const code =
+      typeof terminated.exitCode === "number" ? terminated.exitCode : 0;
+    return `ExitCode:${code}`;
+  }
+  return typeof status.phase === "string" ? status.phase : undefined;
+};
 
 const toStringRecord = (value: unknown): Record<string, string> => {
   if (!isRecord(value)) {
@@ -217,10 +256,9 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
                 ? primary.image
                 : "nginx:latest",
             ports,
-            status:
-              isRecord(doc.status) && typeof doc.status.phase === "string"
-                ? doc.status.phase
-                : undefined,
+            status: isRecord(doc.status)
+              ? manifestPodStatus(doc.status)
+              : undefined,
             rawManifest,
           });
           break;
@@ -561,6 +599,27 @@ export const buildManifestYaml = (
     )
     .filter(Boolean)
     .join("\n---\n");
+};
+
+/**
+ * A live pod as a canvas node.
+ *
+ * The status is the one `kubectl get pod` prints, not `.status.phase`: a pod
+ * whose only container is crash-looping is in phase Running, and this canvas
+ * used to say so.
+ */
+export const podResource = (pod: PodInfo): PodResourceData => {
+  const container = pod.containers?.[0];
+  return {
+    kind: ResourceType.Pod,
+    name: pod.name,
+    namespace: pod.namespace,
+    labels: pod.labels || {},
+    origin: "cluster",
+    image: container?.image || "nginx:latest",
+    ports: container?.ports?.map((port) => port.containerPort) || [],
+    status: pod.status?.display,
+  };
 };
 
 export const buildEdgesFromResources = (nodes: Node<ResourceNodeData>[]) => {

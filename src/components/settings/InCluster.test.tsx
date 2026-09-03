@@ -61,7 +61,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   listServices.mockResolvedValue([vmsingle]);
   listPods.mockResolvedValue([
-    { name: "vmsingle-0", status: { phase: "Running", ready: true } },
+    {
+      name: "vmsingle-0",
+      status: { phase: "Running", display: "Running", ready: true },
+      containers: [{ phase: "app", state: { type: "running" } }],
+    },
   ]);
 });
 

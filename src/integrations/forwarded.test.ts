@@ -68,8 +68,32 @@ const service = (
     createdAt: null,
   }) as ServiceInfo;
 
-const pod = (name: string, ready: boolean, phase = "Running") =>
-  ({ name, status: { phase, ready } }) as never;
+type FakeContainer = {
+  phase?: "app" | "init" | "sidecar";
+  state: { type: string; reason?: string };
+};
+
+/**
+ * A pod is somewhere to forward to when one of its own containers is up.
+ * `display` is what kubectl prints for it: the first container that is not
+ * running names the whole pod, which is exactly why it cannot be the test.
+ */
+const pod = (
+  name: string,
+  ready: boolean,
+  containers: FakeContainer[] = [{ state: { type: "running" } }]
+) => {
+  const stuck = containers.find((c) => c.state.type !== "running");
+  const display = stuck ? (stuck.state.reason ?? "Error") : "Running";
+  return {
+    name,
+    status: { phase: "Running", display, ready },
+    containers: containers.map((container) => ({
+      phase: "app",
+      ...container,
+    })),
+  } as never;
+};
 
 beforeEach(() => {
   vi.mocked(commands.listServices).mockReset();
@@ -137,7 +161,51 @@ describe("which pod to forward to", () => {
 
   it("ignores a pod that is not running at all", async () => {
     vi.mocked(commands.listPods).mockResolvedValue([
-      pod("gone", false, "Succeeded"),
+      pod("gone", false, [{ state: { type: "terminated" } }]),
+    ]);
+    expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
+  });
+
+  /**
+   * A crash-looping pod is in phase Running, and this used to read the
+   * phase: with no ready pod behind the Service it forwarded onto the one
+   * container that was not there, and the metrics tab showed a connection
+   * refused instead of saying nothing was up.
+   */
+  it("does not settle for a pod that is crash-looping", async () => {
+    vi.mocked(commands.listPods).mockResolvedValue([
+      pod("looping", false, [
+        { state: { type: "waiting", reason: "CrashLoopBackOff" } },
+      ]),
+    ]);
+    expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
+  });
+
+  /**
+   * The crash-loop fix first read kubectl's whole-pod status, and that
+   * refused a prometheus whose config-reloader sidecar sat in
+   * ImagePullBackOff while 9090 answered. The verdict is the container's.
+   */
+  it("forwards to a pod whose sidecar is broken while its own container is up", async () => {
+    vi.mocked(commands.listPods).mockResolvedValue([
+      pod("serving", false, [
+        { state: { type: "running" } },
+        {
+          phase: "sidecar",
+          state: { type: "waiting", reason: "ImagePullBackOff" },
+        },
+      ]),
+    ]);
+    expect(await podFor(service("prom", "mon", [9090]))).toBe("serving");
+  });
+
+  /** An init container that is still running is setting the pod up, not serving. */
+  it("does not count a running init container", async () => {
+    vi.mocked(commands.listPods).mockResolvedValue([
+      pod("initialising", false, [
+        { phase: "init", state: { type: "running" } },
+        { state: { type: "waiting", reason: "PodInitializing" } },
+      ]),
     ]);
     expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
   });
