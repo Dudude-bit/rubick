@@ -1,4 +1,4 @@
-import { lazy, useCallback, useEffect } from "react";
+import { lazy, Suspense, useCallback, useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 
@@ -19,6 +19,8 @@ import { logInfo, flushLogs } from "@/lib/logger";
 import { useT } from "@/i18n/useT";
 
 // Lazy load all pages for code splitting
+import { SettingsRedirect } from "@/pages/Settings";
+
 const ClusterOverview = lazy(() =>
   import("@/pages/ClusterOverview").then((m) => ({
     default: m.ClusterOverview,
@@ -55,8 +57,10 @@ const Helm = lazy(() =>
 const HelmDetail = lazy(() =>
   import("@/pages/HelmDetail").then((m) => ({ default: m.HelmDetail }))
 );
-const Settings = lazy(() =>
-  import("@/pages/Settings").then((m) => ({ default: m.Settings }))
+const SettingsOverlay = lazy(() =>
+  import("@/components/settings/SettingsOverlay").then((m) => ({
+    default: m.SettingsOverlay,
+  }))
 );
 const PodDetail = lazy(() =>
   import("@/pages/PodDetail").then((m) => ({ default: m.PodDetail }))
@@ -264,8 +268,9 @@ export default function App() {
               path="helm/:source/:namespace/:name"
               element={<HelmDetail />}
             />
-            {/* A splat, because each settings section is its own URL. */}
-            <Route path="settings/*" element={<Settings />} />
+            {/* Settings is a layer, not a page: the old address opens it
+                and sends the tab home. */}
+            <Route path="settings/*" element={<SettingsRedirect />} />
             {/* One route for every vendor page: the shell resolves the slug
                 through the integrations registry and never names a vendor.
                 Which tab is open is a query parameter, so a scope tab parks
@@ -380,6 +385,12 @@ export default function App() {
             />
           </Route>
         </Routes>
+        {/* Beside the routes, not under them: Settings has to open over a
+            refused session, the front door and a tab mid-switch, the
+            screens where something in it is usually the fix. */}
+        <Suspense fallback={null}>
+          <SettingsOverlay />
+        </Suspense>
         {/* Auth terminal modal - shown when interactive auth requires terminal input */}
         {authTerminalSession && (
           <AuthTerminal

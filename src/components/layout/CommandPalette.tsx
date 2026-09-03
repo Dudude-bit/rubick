@@ -64,6 +64,7 @@ import {
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { SETTINGS_SHORTCUT, useSettingsStore } from "@/stores/settingsStore";
 import type { RecentItem } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -106,7 +107,6 @@ const quickActions: Array<{
   },
   { icon: Activity, label: "goToEvents", path: "/events" },
   { icon: Package, label: "goToHelm", path: "/helm" },
-  { icon: Settings, label: "goToSettings", path: "/settings" },
 ];
 
 /**
@@ -224,6 +224,8 @@ type Entry =
       label: string;
       icon: IconType;
     }
+  /** Settings is a layer too, and the one every screen has to be able to reach. */
+  | { id: string; kind: "settings"; label: string; icon: IconType }
   | {
       id: string;
       kind: "recent";
@@ -280,6 +282,7 @@ export function CommandPalette() {
   const isConnected = useClusterStore((s) => s.isConnected);
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const openActivityOn = useActivityPanelStore((s) => s.openOn);
+  const openSettings = useSettingsStore((s) => s.openSettings);
   const marks = useClusterIdentityStore((s) => s.marks);
   const openTab = useScopeTabStore((s) => s.openTab);
 
@@ -437,7 +440,10 @@ export function CommandPalette() {
         .filter(
           (action) => !hasQuery || action.label.toLowerCase().includes(needle)
         );
-      if (links.length > 0) {
+      const settingsLabel = t("action", "goToSettings");
+      const settings =
+        !hasQuery || settingsLabel.toLowerCase().includes(needle);
+      if (links.length > 0 || settings) {
         out.push({
           id: "cap:nav",
           kind: "caption",
@@ -450,6 +456,14 @@ export function CommandPalette() {
             path: action.path,
             label: action.label,
             icon: action.icon,
+          });
+        }
+        if (settings) {
+          out.push({
+            id: "settings",
+            kind: "settings",
+            label: settingsLabel,
+            icon: Settings,
           });
         }
       }
@@ -768,6 +782,10 @@ export function CommandPalette() {
           openActivityOn(entry.tab);
           close();
           return;
+        case "settings":
+          openSettings();
+          close();
+          return;
         default:
           return;
       }
@@ -777,6 +795,7 @@ export function CommandPalette() {
       currentContext,
       go,
       openActivityOn,
+      openSettings,
       openTab,
       pickScope,
       switchNamespace,
@@ -1210,17 +1229,19 @@ function EntryRow({
         </Row>
       );
     case "link":
+    case "panel":
       return (
         <Row {...shared}>
           <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
           <span className="min-w-0 truncate">{entry.label}</span>
         </Row>
       );
-    case "panel":
+    case "settings":
       return (
         <Row {...shared}>
           <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
           <span className="min-w-0 truncate">{entry.label}</span>
+          <Kbd shortcut={SETTINGS_SHORTCUT} className="ml-auto flex-none" />
         </Row>
       );
     default:

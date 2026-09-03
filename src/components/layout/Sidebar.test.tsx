@@ -3,6 +3,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
+
+import { useSettingsStore } from "@/stores/settingsStore";
 
 import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 
@@ -143,33 +146,45 @@ describe("the update dot", () => {
    * Appearance — the one pane that says nothing about updates. The dot is a
    * deep link; it has to land where the update is.
    */
-  it("sends the Settings row to About while an update is waiting", async () => {
+  it("opens Settings on About while an update is waiting", async () => {
     useUpdaterStore.setState({ available: true });
+    useSettingsStore.setState({ open: false, section: "appearance" });
     wrap(<Sidebar />);
 
-    expect(
-      await screen.findByRole("link", { name: "Settings" })
-    ).toHaveAttribute("href", "/settings/about");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Settings" })
+    );
+    expect(useSettingsStore.getState()).toMatchObject({
+      open: true,
+      section: "about",
+    });
   });
 
-  it("leaves the row alone when no update is waiting", async () => {
+  it("opens Settings where it was last when no update is waiting", async () => {
+    useSettingsStore.setState({ open: false, section: "registries" });
     wrap(<Sidebar />);
-    expect(
-      await screen.findByRole("link", { name: "Settings" })
-    ).toHaveAttribute("href", "/settings");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Settings" })
+    );
+    expect(useSettingsStore.getState()).toMatchObject({
+      open: true,
+      section: "registries",
+    });
   });
 
   /**
-   * The row points at one pane and owns five. Would break if the four panes
-   * it no longer names stopped marking it, leaving Settings open with no
-   * row in the rail lit.
+   * Settings is a layer, not a route, so the router cannot light this row.
+   * Would break if the row went back to reading the location, leaving
+   * Settings open with no row in the rail lit.
    */
-  it("still marks the row from a pane it does not point at", async () => {
-    useUpdaterStore.setState({ available: true });
-    wrap(<Sidebar />, ["/settings/registries"]);
+  it("marks the row while Settings is open, whatever the route", async () => {
+    useSettingsStore.setState({ open: true });
+    wrap(<Sidebar />, ["/workloads/pods"]);
 
-    const link = await screen.findByRole("link", { name: "Settings" });
-    expect(link.className).toContain("bg-sel");
+    const row = await screen.findByRole("button", { name: "Settings" });
+    expect(row.className).toContain("bg-sel");
+    expect(row).toHaveAttribute("aria-expanded", "true");
   });
 });
 

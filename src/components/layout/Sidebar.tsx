@@ -43,6 +43,7 @@ import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { inNamespace } from "@/lib/namespace-scope";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -67,18 +68,17 @@ type NavItem = NavName & {
   count?: keyof ResourceCounts;
   /** The kind this row lists, for the rows that list one. */
   kind?: ResourceKind;
-  /**
-   * The route prefix this row owns, where that is wider than where it goes.
-   * Settings has five panes and one row; whichever pane the row happens to
-   * open, all five must light it.
-   */
-  section?: string;
-  /** Whether a waiting update puts its dot on this row. */
-  updateBadge?: boolean;
 };
 
-/** Where a waiting update actually is. `/settings` opens on Appearance. */
-const UPDATES_PATH = "/settings/about";
+const ROW_CLASS =
+  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover";
+const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
+// The icon sits a step below the label in contrast: it aids recognition
+// without competing with it. Only the open row lifts it, which is what
+// marks the row rather than the fill.
+const ICON_CLASS =
+  "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut";
+const ICON_OPEN_CLASS = "text-info group-hover:text-info";
 
 /** A row whose label, route and icon all come from the resource registry. */
 function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
@@ -161,22 +161,43 @@ const NAV_KINDS: ResourceKind[] = GROUPS.flatMap((group) =>
 );
 
 /**
- * The app's own rows, pinned under the scroll rather than at the end of it.
+ * The app's own row, pinned under the scroll rather than at the end of it.
  *
  * Everything above this line is about the connected cluster — its
- * workloads, its network, what it has installed. These are about the app
+ * workloads, its network, what it has installed. This is about the app
  * itself, and the split is drawn where it is felt: a fixed strip at the
  * rail's foot, reachable without scrolling past eighty pods to find it.
+ *
+ * Not a link: Settings is a layer over the window, so the row opens it in
+ * place and the page behind stays where it was. The dot is a deep link,
+ * not a decoration: it says an update is waiting, so it opens where the
+ * update is, the one pane the last-open section may say nothing about.
  */
-const APP_ROWS: NavItem[] = [
-  {
-    labelKey: "settings",
-    path: "/settings",
-    icon: Settings,
-    section: "/settings",
-    updateBadge: true,
-  },
-];
+function SettingsRow() {
+  const open = useSettingsStore((state) => state.open);
+  const openSettings = useSettingsStore((state) => state.openSettings);
+  const updateAvailable = useUpdaterStore((state) => state.available);
+
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => openSettings(updateAvailable ? "about" : undefined)}
+      className={cn(ROW_CLASS, "w-full", open && ROW_OPEN_CLASS)}
+    >
+      <div className="relative flex-none">
+        <Settings className={cn(ICON_CLASS, open && ICON_OPEN_CLASS)} />
+        {updateAvailable && (
+          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
+        )}
+      </div>
+      <span>
+        <T section="nav" k="settings" />
+      </span>
+    </button>
+  );
+}
 
 export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
@@ -214,9 +235,7 @@ export function Sidebar() {
           cluster's and travel with it; these stay put on every screen. */}
       <div className="border-t border-hair px-1.5 pb-2.5">
         <GroupCaption k="app" />
-        {APP_ROWS.map((item) => (
-          <NavRow key={item.path} item={item} overview={overview} />
-        ))}
+        <SettingsRow />
       </div>
     </aside>
   );
@@ -672,50 +691,24 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
-  const { pathname } = useLocation();
-  const updateAvailable = useUpdaterStore((state) => state.available);
-  const badge = item.updateBadge === true && updateAvailable;
 
-  // The dot is a deep link, not a decoration. It says an update is waiting,
-  // so it goes where the update is; `/settings` redirects to Appearance,
-  // which is the one pane that says nothing about updates.
-  const to = badge ? UPDATES_PATH : item.path;
-
-  // ...and pointing at one pane must not stop the other four lighting the
-  // row, which is what the href alone would now decide.
-  const ownsRoute =
-    item.section !== undefined && pathname.startsWith(item.section);
-
-  const isOpen = (routerSaysActive: boolean) =>
-    (active ?? routerSaysActive) || ownsRoute;
+  const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
 
   return (
     <NavLink
-      to={to}
+      to={item.path}
       end={item.path === "/"}
       onClick={onPress}
       className={({ isActive }) =>
-        cn(
-          "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover",
-          isOpen(isActive) && "bg-sel font-medium text-fg"
-        )
+        cn(ROW_CLASS, isOpen(isActive) && ROW_OPEN_CLASS)
       }
     >
       {({ isActive }) => (
         <>
           <div className="relative flex-none">
             <item.icon
-              className={cn(
-                // The icon sits a step below the label in contrast — it aids
-                // recognition without competing with it. Only the active row
-                // lifts it, which is what marks the row rather than the fill.
-                "h-3.5 w-3.5 text-fg-fnt transition-colors group-hover:text-fg-mut",
-                isOpen(isActive) && "text-info group-hover:text-info"
-              )}
+              className={cn(ICON_CLASS, isOpen(isActive) && ICON_OPEN_CLASS)}
             />
-            {badge && (
-              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-err" />
-            )}
           </div>
           <span className={cn(denied && "text-fg-fnt")}>
             {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}

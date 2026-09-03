@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Search, X } from "lucide-react";
 
-import { RouteLink } from "@/components/ui/route-link";
 import { cn } from "@/lib/utils";
 import { SETTINGS_SECTIONS } from "./settings-sections";
 import { useSettingsSearch } from "./settings-search";
@@ -18,7 +17,13 @@ const ITEM_ATTR = "data-settings-nav-item";
  * its left edge and keeps its icon in the same grey as the label: page
  * furniture, not app furniture.
  */
-export function SettingsNav({ activeId }: { activeId: string }) {
+export function SettingsNav({
+  activeId,
+  onSelect,
+}: {
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
   const { query, setQuery, terms, counts } = useSettingsSearch();
   const t = useT();
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -99,12 +104,13 @@ export function SettingsNav({ activeId }: { activeId: string }) {
           // query is still somewhere the reader can go.
           const empty = searching && count === 0;
           return (
-            <RouteLink
+            <button
               key={section.id}
-              to={`/settings/${section.id}`}
+              type="button"
+              onClick={() => onSelect(section.id)}
               {...{ [ITEM_ATTR]: "" }}
               tabIndex={active ? 0 : -1}
-              aria-current={active ? "page" : undefined}
+              aria-current={active ? "true" : undefined}
               // The count sits flush against the label, so read aloud the
               // pair is "About1". Say what the number counts instead.
               aria-label={
@@ -116,7 +122,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
                   : t("settings", section.label)
               }
               className={cn(
-                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-xs text-fg-mut no-underline transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
+                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-left text-xs text-fg-mut transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
                 active && "border-l-fg bg-sel font-medium text-fg",
                 empty && "opacity-55"
               )}
@@ -134,7 +140,7 @@ export function SettingsNav({ activeId }: { activeId: string }) {
                   {count}
                 </span>
               )}
-            </RouteLink>
+            </button>
           );
         })}
       </div>
