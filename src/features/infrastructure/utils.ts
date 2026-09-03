@@ -3,6 +3,11 @@ import { Edge, Node } from "reactflow";
 import type { PodInfo } from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
+  Container,
+  IngressRule,
+  Manifest,
+  ManifestSpec,
+  ManifestStatus,
   ResourceKind,
   ResourceNodeData,
   PodResourceData,
@@ -25,21 +30,29 @@ export const RESOURCE_KINDS: ResourceKind[] = [
 
 const DEFAULT_NAMESPACE = "default";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
-/** The slice of a Pod's `.status` that names it, as `kubectl get -o yaml` writes it. */
-interface PodManifestStatus {
-  phase?: string;
-  containerStatuses?: {
-    state?: {
-      waiting?: { reason?: string };
-      terminated?: { reason?: string; exitCode?: number; signal?: number };
-    };
-  }[];
-}
+/** Labels and data as strings; YAML hands over numbers and booleans too. */
+const stringRecord = (value: Record<string, unknown> | undefined) =>
+  Object.fromEntries(
+    Object.entries(value ?? {})
+      .filter(([, item]) =>
+        ["string", "number", "boolean"].includes(typeof item)
+      )
+      .map(([key, item]) => [key, String(item)])
+  );
+
+/** A number that may have arrived quoted, or the fallback. */
+const count = (value: unknown, fallback: number) => {
+  const n = Number(value ?? fallback);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const portNumbers = (
+  ports: { [key: string]: unknown }[] | undefined,
+  key: string
+) =>
+  (ports ?? []).map((port) => count(port[key], 0)).filter((port) => port > 0);
 
 /**
  * The status a pasted Pod manifest carries, read the way kubectl reads it.
@@ -53,14 +66,14 @@ interface PodManifestStatus {
  * pod with a live sidecar are not read, so such a pod shows its phase
  * where kubectl would say Init:0/2, Terminating, Evicted or Running.
  */
-const manifestPodStatus = (status: PodManifestStatus | undefined) => {
+const manifestPodStatus = (status: ManifestStatus | undefined) => {
   const label = containerVerdict(status) ?? status?.phase;
   // Pasted YAML promises nothing about its types; a label is a string or nothing.
   return typeof label === "string" ? label : undefined;
 };
 
 /** The lowest container that is waiting for a reason or has died names the pod. */
-const containerVerdict = (status: PodManifestStatus | undefined) => {
+const containerVerdict = (status: ManifestStatus | undefined) => {
   for (const { state } of status?.containerStatuses ?? []) {
     const waiting = state?.waiting?.reason;
     if (waiting && waiting !== "PodInitializing") return waiting;
@@ -72,36 +85,6 @@ const containerVerdict = (status: PodManifestStatus | undefined) => {
       : `ExitCode:${dead.exitCode ?? 0}`;
   }
   return undefined;
-};
-
-const toStringRecord = (value: unknown): Record<string, string> => {
-  if (!isRecord(value)) {
-    return {};
-  }
-  return Object.entries(value).reduce<Record<string, string>>(
-    (acc, [key, val]) => {
-      if (typeof val === "string") {
-        acc[key] = val;
-      } else if (typeof val === "number" || typeof val === "boolean") {
-        acc[key] = String(val);
-      }
-      return acc;
-    },
-    {}
-  );
-};
-
-const toNumber = (value: unknown, fallback: number) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return fallback;
 };
 
 const filterEmptyRecord = (value: Record<string, string>) =>
@@ -213,192 +196,108 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
   }
 
   try {
-    loadAll(text, (doc) => {
-      if (!doc) {
+    loadAll(text, (raw) => {
+      if (!raw) {
         return;
       }
-      if (!isRecord(doc)) {
-        extraManifests.push(doc);
-        return;
-      }
-      const kind = doc.kind as ResourceKind | undefined;
-      if (!kind || !RESOURCE_KINDS.includes(kind)) {
-        extraManifests.push(doc);
+      // A document is anything YAML can spell; only an object can be a manifest.
+      const doc = typeof raw === "object" ? (raw as Manifest) : undefined;
+      const kind = doc?.kind as ResourceKind | undefined;
+      if (!doc || !kind || !RESOURCE_KINDS.includes(kind)) {
+        extraManifests.push(raw);
         return;
       }
 
-      const metadata = isRecord(doc.metadata) ? doc.metadata : {};
-      const name =
-        typeof metadata.name === "string"
-          ? metadata.name
-          : `${kind.toLowerCase()}-resource`;
-      const namespace =
-        typeof metadata.namespace === "string" ? metadata.namespace : "";
-      const labels = toStringRecord(metadata.labels);
-      const rawManifest = doc as Record<string, unknown>;
+      const spec = doc.spec ?? {};
+      const base = {
+        name: String(doc.metadata?.name ?? `${kind.toLowerCase()}-resource`),
+        namespace: String(doc.metadata?.namespace ?? ""),
+        labels: stringRecord(doc.metadata?.labels),
+        origin: "builder" as const,
+        rawManifest: doc,
+      };
 
       switch (kind) {
         case ResourceType.Pod: {
-          const spec = isRecord(doc.spec) ? doc.spec : {};
-          const containers = Array.isArray(spec.containers)
-            ? spec.containers
-            : [];
-          const primary = isRecord(containers[0]) ? containers[0] : {};
-          const ports = Array.isArray(primary.ports)
-            ? primary.ports
-                .map((port) =>
-                  toNumber(isRecord(port) ? port.containerPort : undefined, NaN)
-                )
-                .filter((port) => Number.isFinite(port))
-            : [];
+          const primary = spec.containers?.[0];
           resources.push({
+            ...base,
             kind,
-            name,
-            namespace,
-            labels,
-            origin: "builder",
-            image:
-              typeof primary.image === "string"
-                ? primary.image
-                : "nginx:latest",
-            ports,
-            status: manifestPodStatus(
-              doc.status as PodManifestStatus | undefined
-            ),
-            rawManifest,
+            image: String(primary?.image ?? "nginx:latest"),
+            ports: portNumbers(primary?.ports, "containerPort"),
+            status: manifestPodStatus(doc.status),
           });
           break;
         }
         case ResourceType.Deployment: {
-          const spec = isRecord(doc.spec) ? doc.spec : {};
-          const template = isRecord(spec.template) ? spec.template : {};
-          const templateMeta = isRecord(template.metadata)
-            ? template.metadata
-            : {};
-          const templateLabels = toStringRecord(templateMeta.labels);
-          const podSpec = isRecord(template.spec) ? template.spec : {};
-          const containers = Array.isArray(podSpec.containers)
-            ? podSpec.containers
-            : [];
-          const primary = isRecord(containers[0]) ? containers[0] : {};
-          const ports = Array.isArray(primary.ports)
-            ? primary.ports
-                .map((port) =>
-                  toNumber(isRecord(port) ? port.containerPort : undefined, NaN)
-                )
-                .filter((port) => Number.isFinite(port))
-            : [];
-          const status = isRecord(doc.status) ? doc.status : {};
-          const desired = toNumber(spec.replicas, 1);
-          const available = toNumber(status.availableReplicas, 0);
-          const statusText = available >= desired ? "Available" : "Progressing";
+          const template = spec.template;
+          const primary = template?.spec?.containers?.[0];
+          const templateLabels = stringRecord(template?.metadata?.labels);
+          const desired = count(spec.replicas, 1);
+          const available = count(doc.status?.availableReplicas, 0);
           resources.push({
+            ...base,
             kind,
-            name,
-            namespace,
             labels: Object.keys(templateLabels).length
               ? templateLabels
-              : labels,
-            origin: "builder",
+              : base.labels,
             replicas: desired,
-            image:
-              typeof primary.image === "string"
-                ? primary.image
-                : "nginx:latest",
-            ports,
-            status: statusText,
-            rawManifest,
+            image: String(primary?.image ?? "nginx:latest"),
+            ports: portNumbers(primary?.ports, "containerPort"),
+            status: available >= desired ? "Available" : "Progressing",
           });
           break;
         }
         case ResourceType.Service: {
-          const spec = isRecord(doc.spec) ? doc.spec : {};
-          const ports = Array.isArray(spec.ports)
-            ? spec.ports
-                .map((port) =>
-                  toNumber(isRecord(port) ? port.port : undefined, NaN)
-                )
-                .filter((port) => Number.isFinite(port))
-            : [];
           resources.push({
+            ...base,
             kind,
-            name,
-            namespace,
-            labels,
-            origin: "builder",
-            serviceType:
-              typeof spec.type === "string"
-                ? (spec.type as ServiceResourceData["serviceType"])
-                : "ClusterIP",
-            sessionAffinity:
-              typeof spec.sessionAffinity === "string"
-                ? (spec.sessionAffinity as ServiceResourceData["sessionAffinity"])
-                : "None",
-            ports,
-            selectors: toStringRecord(spec.selector),
-            rawManifest,
+            serviceType: String(
+              spec.type ?? "ClusterIP"
+            ) as ServiceResourceData["serviceType"],
+            sessionAffinity: String(
+              spec.sessionAffinity ?? "None"
+            ) as ServiceResourceData["sessionAffinity"],
+            ports: portNumbers(spec.ports, "port"),
+            selectors: stringRecord(spec.selector),
           });
           break;
         }
         case ResourceType.Ingress: {
-          const spec = isRecord(doc.spec) ? doc.spec : {};
-          const rules = Array.isArray(spec.rules) ? spec.rules : [];
-          const rule = isRecord(rules[0]) ? rules[0] : {};
-          const http = isRecord(rule.http) ? rule.http : {};
-          const paths = Array.isArray(http.paths) ? http.paths : [];
-          const path = isRecord(paths[0]) ? paths[0] : {};
-          const backend = isRecord(path.backend) ? path.backend : {};
-          const service = isRecord(backend.service) ? backend.service : {};
-          const port = isRecord(service.port) ? service.port : {};
-          const host = typeof rule.host === "string" ? rule.host : "";
-          const servicePort = toNumber(port.number ?? port.name, 80);
+          const rule = spec.rules?.[0];
+          const path = rule?.http?.paths?.[0];
+          const service = path?.backend?.service;
           resources.push({
+            ...base,
             kind,
-            name,
-            namespace,
-            labels,
-            origin: "builder",
-            host,
-            path: typeof path.path === "string" ? path.path : "/",
-            pathType:
-              typeof path.pathType === "string"
-                ? (path.pathType as IngressResourceData["pathType"])
-                : "Prefix",
-            serviceName: typeof service.name === "string" ? service.name : "",
-            servicePort,
-            rawManifest,
+            host: String(rule?.host ?? ""),
+            path: String(path?.path ?? "/"),
+            pathType: String(
+              path?.pathType ?? "Prefix"
+            ) as IngressResourceData["pathType"],
+            serviceName: String(service?.name ?? ""),
+            servicePort: count(
+              service?.port?.number ?? service?.port?.name,
+              80
+            ),
           });
           break;
         }
         case ResourceType.ConfigMap: {
-          const data = toStringRecord(doc.data);
-          resources.push({
-            kind,
-            name,
-            namespace,
-            labels,
-            origin: "builder",
-            data,
-            rawManifest,
-          });
+          resources.push({ ...base, kind, data: stringRecord(doc.data) });
           break;
         }
         case ResourceType.Secret: {
-          const data = toStringRecord(doc.data);
           resources.push({
+            ...base,
             kind,
-            name,
-            namespace,
-            labels,
-            origin: "builder",
-            secretType: typeof doc.type === "string" ? doc.type : "Opaque",
-            data,
-            rawManifest,
+            secretType: String(doc.type ?? "Opaque"),
+            data: stringRecord(doc.data),
           });
           break;
         }
         default:
-          extraManifests.push(doc);
+          extraManifests.push(raw);
       }
     });
   } catch (error) {
@@ -408,122 +307,89 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
   return { resources, extraManifests, errors };
 };
 
-const withMetadata = (
-  base: Record<string, unknown>,
-  data: ResourceNodeData
-) => {
-  const metadata = isRecord(base.metadata) ? { ...base.metadata } : {};
-  metadata.name = data.name;
-  if (data.namespace) {
-    metadata.namespace = data.namespace;
-  } else if ("namespace" in metadata) {
-    delete metadata.namespace;
-  }
+/**
+ * The pasted document with the canvas's edits written back over it: the
+ * fields the canvas owns are set, and a field the canvas has emptied is
+ * removed rather than left as it was.
+ */
+const manifestBase = (data: ResourceNodeData, kind: ResourceKind): Manifest => {
+  const base: Manifest = clone(data.rawManifest ?? {});
+  base.apiVersion ??= getApiVersion(kind);
+  base.kind = kind;
+  const metadata = { ...base.metadata, name: data.name };
+  if (data.namespace) metadata.namespace = data.namespace;
+  else delete metadata.namespace;
   const labels = filterEmptyRecord(data.labels);
-  if (labels) {
-    metadata.labels = labels;
-  } else if ("labels" in metadata) {
-    delete metadata.labels;
-  }
+  if (labels) metadata.labels = labels;
+  else delete metadata.labels;
   base.metadata = metadata;
+  return base;
 };
 
-const ensureApiVersion = (
-  base: Record<string, unknown>,
-  kind: ResourceKind
-) => {
-  base.apiVersion = base.apiVersion ?? getApiVersion(kind);
+const withPrimary = (
+  container: Container | undefined,
+  data: { image: string; ports: number[] }
+): Container => {
+  const next: Container = {
+    ...container,
+    name: container?.name ?? "app",
+    image: data.image || container?.image || "nginx:latest",
+  };
+  if (data.ports.length)
+    next.ports = data.ports.map((containerPort) => ({ containerPort }));
+  else delete next.ports;
+  return next;
 };
 
 const buildPodManifest = (data: PodResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.Pod;
-  withMetadata(base, data);
-  const spec = isRecord(base.spec) ? { ...base.spec } : {};
-  const containers = Array.isArray(spec.containers) ? [...spec.containers] : [];
-  const primary = isRecord(containers[0]) ? { ...containers[0] } : {};
-  primary.name = typeof primary.name === "string" ? primary.name : "app";
-  primary.image =
-    data.image ||
-    (typeof primary.image === "string" ? primary.image : "nginx:latest");
-  if (data.ports.length) {
-    primary.ports = data.ports.map((port) => ({ containerPort: port }));
-  } else if ("ports" in primary) {
-    delete primary.ports;
-  }
-  spec.containers = [primary, ...containers.slice(1)];
-  base.spec = spec;
+  const base = manifestBase(data, ResourceType.Pod);
+  const [primary, ...rest] = base.spec?.containers ?? [];
+  base.spec = {
+    ...base.spec,
+    containers: [withPrimary(primary, data), ...rest],
+  };
   return base;
 };
 
 const buildDeploymentManifest = (data: DeploymentResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.Deployment;
-  withMetadata(base, data);
-  const spec = isRecord(base.spec) ? { ...base.spec } : {};
-  spec.replicas = data.replicas;
+  const base = manifestBase(data, ResourceType.Deployment);
   const matchLabels = filterEmptyRecord(data.labels) ?? { app: data.name };
-  spec.selector = {
-    ...(isRecord(spec.selector) ? spec.selector : {}),
-    matchLabels,
+  const template = base.spec?.template;
+  const [primary, ...rest] = template?.spec?.containers ?? [];
+  base.spec = {
+    ...base.spec,
+    replicas: data.replicas,
+    selector: { ...base.spec?.selector, matchLabels },
+    template: {
+      ...template,
+      metadata: { ...template?.metadata, labels: matchLabels },
+      spec: {
+        ...template?.spec,
+        containers: [withPrimary(primary, data), ...rest],
+      },
+    },
   };
-  const template = isRecord(spec.template) ? { ...spec.template } : {};
-  const templateMetadata = isRecord(template.metadata)
-    ? { ...template.metadata }
-    : {};
-  templateMetadata.labels = matchLabels;
-  template.metadata = templateMetadata;
-  const podSpec = isRecord(template.spec) ? { ...template.spec } : {};
-  const containers = Array.isArray(podSpec.containers)
-    ? [...podSpec.containers]
-    : [];
-  const primary = isRecord(containers[0]) ? { ...containers[0] } : {};
-  primary.name = typeof primary.name === "string" ? primary.name : "app";
-  primary.image =
-    data.image ||
-    (typeof primary.image === "string" ? primary.image : "nginx:latest");
-  if (data.ports.length) {
-    primary.ports = data.ports.map((port) => ({ containerPort: port }));
-  } else if ("ports" in primary) {
-    delete primary.ports;
-  }
-  podSpec.containers = [primary, ...containers.slice(1)];
-  template.spec = podSpec;
-  spec.template = template;
-  base.spec = spec;
   return base;
 };
 
 const buildServiceManifest = (data: ServiceResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.Service;
-  withMetadata(base, data);
-  const spec = isRecord(base.spec) ? { ...base.spec } : {};
-  spec.type = data.serviceType;
-  spec.sessionAffinity = data.sessionAffinity;
+  const base = manifestBase(data, ResourceType.Service);
+  const spec: ManifestSpec = {
+    ...base.spec,
+    type: data.serviceType,
+    sessionAffinity: data.sessionAffinity,
+    ports: data.ports.map((port) => ({ port, targetPort: port })),
+  };
   const selectors = filterEmptyRecord(data.selectors);
-  if (selectors) {
-    spec.selector = selectors;
-  } else if ("selector" in spec) {
-    delete spec.selector;
-  }
-  spec.ports = data.ports.map((port) => ({ port, targetPort: port }));
+  if (selectors) spec.selector = selectors;
+  else delete spec.selector;
   base.spec = spec;
   return base;
 };
 
 const buildIngressManifest = (data: IngressResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.Ingress;
-  withMetadata(base, data);
-  const spec = isRecord(base.spec) ? { ...base.spec } : {};
-  const backendServiceName = data.serviceName || "service";
-  const backendPort = data.servicePort || 80;
-  const rule: Record<string, unknown> = {
+  const base = manifestBase(data, ResourceType.Ingress);
+  const rule: IngressRule = {
     http: {
       paths: [
         {
@@ -531,36 +397,27 @@ const buildIngressManifest = (data: IngressResourceData) => {
           pathType: data.pathType || "Prefix",
           backend: {
             service: {
-              name: backendServiceName,
-              port: { number: backendPort },
+              name: data.serviceName || "service",
+              port: { number: data.servicePort || 80 },
             },
           },
         },
       ],
     },
   };
-  if (data.host) {
-    rule.host = data.host;
-  }
-  spec.rules = [rule];
-  base.spec = spec;
+  if (data.host) rule.host = data.host;
+  base.spec = { ...base.spec, rules: [rule] };
   return base;
 };
 
 const buildConfigMapManifest = (data: ConfigMapResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.ConfigMap;
-  withMetadata(base, data);
+  const base = manifestBase(data, ResourceType.ConfigMap);
   base.data = data.data;
   return base;
 };
 
 const buildSecretManifest = (data: SecretResourceData) => {
-  const base = clone(data.rawManifest ?? {});
-  ensureApiVersion(base, data.kind);
-  base.kind = ResourceType.Secret;
-  withMetadata(base, data);
+  const base = manifestBase(data, ResourceType.Secret);
   base.type = data.secretType || "Opaque";
   base.data = data.data;
   return base;

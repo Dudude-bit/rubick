@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PodInfo } from "@/generated/types";
-import { parseManifestYaml, podResource } from "./utils";
+import { loadAll } from "js-yaml";
+
+import type { Manifest } from "./types";
+import { buildManifestYaml, parseManifestYaml, podResource } from "./utils";
 
 const pod = (status: Partial<PodInfo["status"]>): PodInfo =>
   ({
@@ -148,5 +151,136 @@ ${status}`;
           signal: 9`)
     );
     expect(killed.resources[0]?.status).toBe("Signal:9");
+  });
+});
+
+const PASTED = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: shop
+  annotations:
+    team: checkout
+  labels:
+    app: api
+spec:
+  replicas: "3"
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: shop/api:1.4
+          ports:
+            - containerPort: "8080"
+        - name: sidecar
+          image: envoy:1.30
+          env:
+            - name: MODE
+              value: sidecar
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: shop
+spec:
+  type: NodePort
+  selector:
+    app: api
+    tier: 2
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tls
+type: kubernetes.io/tls
+data:
+  tls.crt: abc
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api
+`;
+
+const docs = (yaml: string): Manifest[] => {
+  const out: Manifest[] = [];
+  loadAll(yaml, (doc) => out.push(doc as Manifest));
+  return out;
+};
+
+describe("a pasted manifest round-trips through the canvas", () => {
+  /**
+   * The builder reads six fields and writes six fields; everything else in
+   * a pasted document has to come back out untouched, or a paste-and-export
+   * silently strips the annotation somebody's controller keys on.
+   */
+  it("keeps what it does not read", () => {
+    const parsed = parseManifestYaml(PASTED);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.resources.map((r) => r.kind)).toEqual([
+      "Deployment",
+      "Service",
+      "Secret",
+    ]);
+    expect(parsed.extraManifests).toHaveLength(1);
+
+    const [deployment, service, secret, account] = docs(
+      buildManifestYaml(parsed.resources, parsed.extraManifests)
+    );
+    expect(deployment?.metadata?.annotations).toEqual({ team: "checkout" });
+    expect(deployment?.spec?.strategy).toEqual({ type: "Recreate" });
+    expect(deployment?.spec?.template?.spec?.containers?.[1]).toMatchObject({
+      name: "sidecar",
+      env: [{ name: "MODE", value: "sidecar" }],
+    });
+    expect(service?.spec?.type).toBe("NodePort");
+    expect(secret?.type).toBe("kubernetes.io/tls");
+    expect(account?.kind).toBe("ServiceAccount");
+  });
+
+  /** YAML quotes numbers as easily as not; the canvas counts either way. */
+  it("reads a quoted number as a number", () => {
+    const [deployment, service] = parseManifestYaml(PASTED).resources;
+    expect(deployment).toMatchObject({ replicas: 3, ports: [8080] });
+    expect(service).toMatchObject({
+      ports: [80],
+      selectors: { app: "api", tier: "2" },
+    });
+  });
+
+  /**
+   * An edit on the canvas is written over the pasted document: the first
+   * container takes the new image and loses its ports, the labels the reader
+   * emptied are removed rather than left, and the selector follows them.
+   */
+  it("writes the canvas's edits back over the document", () => {
+    const parsed = parseManifestYaml(PASTED);
+    const deployment = parsed.resources[0];
+    if (deployment?.kind !== "Deployment")
+      throw new Error("expected a Deployment");
+    const [built] = docs(
+      buildManifestYaml(
+        [{ ...deployment, image: "shop/api:2.0", ports: [], labels: {} }],
+        []
+      )
+    );
+    const [primary, sidecar] = built?.spec?.template?.spec?.containers ?? [];
+    expect(primary).toEqual({ name: "api", image: "shop/api:2.0" });
+    expect(sidecar?.image).toBe("envoy:1.30");
+    expect(built?.metadata?.labels).toBeUndefined();
+    expect(built?.spec?.selector?.matchLabels).toEqual({ app: "api" });
+    expect(built?.spec?.template?.metadata?.labels).toEqual({ app: "api" });
   });
 });
