@@ -30,6 +30,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
+/** The slice of a Pod's `.status` that names it, as `kubectl get -o yaml` writes it. */
+interface PodManifestStatus {
+  phase?: string;
+  containerStatuses?: {
+    state?: {
+      waiting?: { reason?: string };
+      terminated?: { reason?: string; exitCode?: number; signal?: number };
+    };
+  }[];
+}
+
 /**
  * The status a pasted Pod manifest carries, read the way kubectl reads it.
  *
@@ -42,30 +53,25 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
  * pod with a live sidecar are not read, so such a pod shows its phase
  * where kubectl would say Init:0/2, Terminating, Evicted or Running.
  */
-const manifestPodStatus = (
-  status: Record<string, unknown>
-): string | undefined => {
-  const statuses = Array.isArray(status.containerStatuses)
-    ? status.containerStatuses
-    : [];
-  for (const entry of statuses) {
-    const state = isRecord(entry) && isRecord(entry.state) ? entry.state : {};
-    const waiting = isRecord(state.waiting) ? state.waiting.reason : undefined;
-    if (typeof waiting === "string" && waiting && waiting !== "PodInitializing")
-      return waiting;
-    const terminated = isRecord(state.terminated)
-      ? state.terminated
-      : undefined;
-    if (!terminated) continue;
-    if (typeof terminated.reason === "string" && terminated.reason)
-      return terminated.reason;
-    if (typeof terminated.signal === "number" && terminated.signal !== 0)
-      return `Signal:${terminated.signal}`;
-    const code =
-      typeof terminated.exitCode === "number" ? terminated.exitCode : 0;
-    return `ExitCode:${code}`;
+const manifestPodStatus = (status: PodManifestStatus | undefined) => {
+  const label = containerVerdict(status) ?? status?.phase;
+  // Pasted YAML promises nothing about its types; a label is a string or nothing.
+  return typeof label === "string" ? label : undefined;
+};
+
+/** The lowest container that is waiting for a reason or has died names the pod. */
+const containerVerdict = (status: PodManifestStatus | undefined) => {
+  for (const { state } of status?.containerStatuses ?? []) {
+    const waiting = state?.waiting?.reason;
+    if (waiting && waiting !== "PodInitializing") return waiting;
+    const dead = state?.terminated;
+    if (!dead) continue;
+    if (dead.reason) return dead.reason;
+    return dead.signal
+      ? `Signal:${dead.signal}`
+      : `ExitCode:${dead.exitCode ?? 0}`;
   }
-  return typeof status.phase === "string" ? status.phase : undefined;
+  return undefined;
 };
 
 const toStringRecord = (value: unknown): Record<string, string> => {
@@ -256,9 +262,9 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
                 ? primary.image
                 : "nginx:latest",
             ports,
-            status: isRecord(doc.status)
-              ? manifestPodStatus(doc.status)
-              : undefined,
+            status: manifestPodStatus(
+              doc.status as PodManifestStatus | undefined
+            ),
             rawManifest,
           });
           break;
