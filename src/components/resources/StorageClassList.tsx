@@ -2,6 +2,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { createAgeColumn } from "./columns";
 import { ResourceType } from "@/lib/resource-registry";
 import {
   Tooltip,
@@ -98,11 +99,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
       );
     },
   },
-  {
-    size: 80,
-    accessorKey: "age",
-    header: () => <T section="columns" k="age" />,
-  },
+  createAgeColumn<StorageClassInfo>(),
 ];
 
 export const StorageClassList = createResourceListPage<StorageClassInfo>({

@@ -546,7 +546,9 @@ async fn mounts_demo_says_how_each_thing_is_used() {
         panic!("the claim hop carries no claim facts")
     };
     assert_eq!(phase, "Bound");
-    assert_eq!(capacity, "1Gi");
+    // `Some`, not just the string: a claim whose size went unread now says
+    // nothing rather than "Unknown", and this has to tell the two apart.
+    assert_eq!(capacity.as_deref(), Some("1Gi"));
 
     assert!(
         !usages("ServiceAccount", "k8s-gui-test").is_empty(),

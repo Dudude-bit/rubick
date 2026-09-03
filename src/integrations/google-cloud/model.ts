@@ -247,11 +247,6 @@ export function healthCheckTiming(
   };
 }
 
-/** The Secret an IAP-protected backend reads its OAuth client from. */
-export function iapSecretName(config: CustomResourceInfo): string | null {
-  return text(config, "spec.iap.oauthclientCredentials.secretName");
-}
-
 /** Headers this backend injects, which are otherwise invisible anywhere. */
 export function customHeaders(config: CustomResourceInfo): {
   request: string[];

@@ -106,7 +106,6 @@ fn main() {
             // Cluster management
             commands::cluster::list_contexts,
             commands::cluster::get_current_context,
-            commands::cluster::switch_context,
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,

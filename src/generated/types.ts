@@ -553,7 +553,7 @@ export interface StorageClassInfo {
   parameters: Record<string, string>;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeClaimInfo {
@@ -561,26 +561,26 @@ export interface PersistentVolumeClaimInfo {
   namespace: string;
   status: string;
   volume: string | null;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
   storageClass: string;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeInfo {
   name: string;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
-  reclaimPolicy: string;
+  reclaimPolicy: string | null;
   status: string;
   claim: string | null;
   storageClass: string;
   reason: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface NamespaceInfo {
@@ -1707,7 +1707,12 @@ export type ObjectFacts =
       revision: string | null;
       current: boolean | null;
     }
-  | { kind: "claim"; phase: string; capacity: string; storageClass: string }
+  | {
+      kind: "claim";
+      phase: string;
+      capacity: string | null;
+      storageClass: string;
+    }
   | {
       kind: "node";
       schedulable: boolean;

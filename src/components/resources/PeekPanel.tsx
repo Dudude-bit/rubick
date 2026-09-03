@@ -244,14 +244,10 @@ function PeekContent({
               <span>{namespace}</span>
             </>
           )}
-          {(summary?.createdAt || summary?.age) && (
+          {summary?.createdAt && (
             <>
               <span className="text-fg-fnt">·</span>
-              <span>
-                {summary.createdAt
-                  ? t("empty", "ageOld", { age })
-                  : summary.age}
-              </span>
+              <span>{t("empty", "ageOld", { age })}</span>
             </>
           )}
           <DeliveryMarks deliveries={deliveries} />

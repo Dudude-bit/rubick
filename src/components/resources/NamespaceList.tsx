@@ -6,7 +6,7 @@ import { Crosshair } from "lucide-react";
 import { ResourceList } from "./ResourceList";
 import { ResourceRef } from "./ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { RealtimeAge } from "@/components/ui/realtime";
+import { createAgeColumn } from "./columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -62,12 +62,7 @@ export const columns = (
       </span>
     ),
   },
-  {
-    size: 80,
-    accessorKey: "createdAt",
-    header: () => <T section="columns" k="age" />,
-    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
-  },
+  createAgeColumn<NamespaceInfo>(),
 ];
 
 /**

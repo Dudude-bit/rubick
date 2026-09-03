@@ -9,6 +9,7 @@ import { ClaimRef, StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
+  createAgeColumn,
   createNameColumn,
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
@@ -23,7 +24,13 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     accessorKey: "reclaimPolicy",
     header: () => <T section="columns" k="reclaimPolicy" />,
     cell: ({ row }) => (
-      <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
+      <span
+        className={row.original.reclaimPolicy ? "text-fg-mid" : "text-fg-mut"}
+      >
+        {row.original.reclaimPolicy ?? (
+          <T section="empty" k="nothingReportedYet" />
+        )}
+      </span>
     ),
   },
   {
@@ -45,11 +52,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     header: () => <T section="columns" k="storageClass" />,
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
-  {
-    size: 80,
-    accessorKey: "age",
-    header: () => <T section="columns" k="age" />,
-  },
+  createAgeColumn<PersistentVolumeInfo>(),
 ];
 
 export const PersistentVolumeList =

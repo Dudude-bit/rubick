@@ -18,14 +18,16 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
-import { createNameColumn } from "@/components/resources/columns";
+import {
+  createAgeColumn,
+  createNameColumn,
+} from "@/components/resources/columns";
 import { SpotMark } from "@/components/resources/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
 import type { NodeInfo, NodeMetrics } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
-import { RealtimeAge } from "@/components/ui/realtime";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
@@ -161,12 +163,7 @@ export const columns = (
     header: () => <T section="columns" k="podCap" />,
     cell: ({ row }) => row.original.capacity?.pods || "-",
   },
-  {
-    size: 80,
-    id: "age",
-    header: () => <T section="columns" k="age" />,
-    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
-  },
+  createAgeColumn<NodeInfo>(),
 ];
 
 export function NodeList() {

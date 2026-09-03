@@ -36,6 +36,7 @@
  * the API, the diff arrives through the same seam without this file changing.
  */
 
+import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
@@ -461,13 +462,7 @@ export function resourceTone(resource: ArgoResource): "err" | "warn" | null {
  * which is which; a status column that claimed to tell them apart would be
  * inventing a word Argo does not have.
  */
-export function appState(
-  app: ArgoApp,
-  t: T
-): {
-  text: string;
-  tone: "ok" | "warn" | "err";
-} {
+export function appState(app: ArgoApp, t: T): VendorVerdict {
   const words = [
     app.sync === "Synced"
       ? t("readings", "argoSynced")

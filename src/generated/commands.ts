@@ -1333,10 +1333,6 @@ export async function getCurrentContext(): Promise<string | null> {
   return invoke<string | null>("get_current_context");
 }
 
-export async function switchContext(context: string): Promise<void> {
-  return invoke<void>("switch_context", { context });
-}
-
 export async function connectCluster(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("connect_cluster", { context });
 }

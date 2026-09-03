@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ConditionBadge, StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 describe("StatusBadge", () => {
   it("renders the status text", () => {
@@ -46,14 +46,6 @@ describe("StatusBadge", () => {
     const { container } = render(<StatusBadge status="SomeCustomPhase" />);
     expect(screen.getByText("SomeCustomPhase")).toBeInTheDocument();
     expect(container.firstElementChild!.className).toContain("text-fg-mut");
-  });
-
-  it("maps conditions to roles", () => {
-    const { container } = render(
-      <ConditionBadge conditionStatus="False" conditionType="Ready" />
-    );
-    expect(screen.getByText("Ready")).toBeInTheDocument();
-    expect(container.firstElementChild!.className).toContain("text-err");
   });
 });
 

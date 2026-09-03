@@ -11,6 +11,7 @@ import { StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
+  createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
@@ -67,11 +68,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),
   },
-  {
-    size: 80,
-    accessorKey: "age",
-    header: () => <T section="columns" k="age" />,
-  },
+  createAgeColumn<PersistentVolumeClaimInfo>(),
 ];
 
 export function PersistentVolumeClaimList() {

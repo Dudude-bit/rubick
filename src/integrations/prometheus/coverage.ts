@@ -24,6 +24,7 @@
  * picture and very different repairs.
  */
 
+import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -238,13 +239,7 @@ export async function coverage(): Promise<Coverage> {
 }
 
 /** What the comparison amounts to, in one word for the row. */
-export function verdict(
-  found: Coverage,
-  t: T
-): {
-  text: string;
-  tone: "ok" | "warn" | "err";
-} {
+export function verdict(found: Coverage, t: T): VendorVerdict {
   if (found.problem !== null)
     return { text: t("readings", "promCouldNotTell"), tone: "warn" };
   if (found.clusterNodes === 0)

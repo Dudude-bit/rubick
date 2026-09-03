@@ -90,23 +90,3 @@ export function StatusBadge({
     </span>
   );
 }
-
-export interface ConditionBadgeProps extends Omit<StatusBadgeProps, "status"> {
-  /** Condition status: "True", "False" or "Unknown". */
-  conditionStatus: string;
-  /** Condition type, e.g. "Ready". */
-  conditionType?: string;
-}
-
-export function ConditionBadge({
-  conditionStatus,
-  conditionType,
-  children,
-  ...props
-}: ConditionBadgeProps) {
-  return (
-    <StatusBadge status={conditionStatus} {...props}>
-      {children ?? conditionType ?? conditionStatus}
-    </StatusBadge>
-  );
-}
