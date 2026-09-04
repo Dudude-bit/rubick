@@ -1,175 +1,31 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useParams } from "react-router-dom";
 
-import { RegistrySettings } from "@/components/registry/RegistrySettings";
-import { AboutSettings } from "@/components/settings/AboutSettings";
-import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
-import { ClustersSettings } from "@/components/settings/ClustersSettings";
-import { DiagnosticsSettings } from "@/components/settings/DiagnosticsSettings";
-import { SettingsNav } from "@/components/settings/SettingsNav";
-import { SettingsSearchable } from "@/components/settings/settings-row";
-import {
-  SettingsSearchProvider,
-  SettingsSectionScope,
-  useSettingsSearch,
-} from "@/components/settings/settings-search";
-import {
-  DEFAULT_SETTINGS_SECTION,
-  SETTINGS_SECTIONS,
-} from "@/components/settings/settings-sections";
-import { useClusterStore } from "@/stores/clusterStore";
-import { cn } from "@/lib/utils";
-import { useT, type T } from "@/i18n/useT";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 /**
- * The nav does not fold, and the arithmetic is why.
+ * The address Settings used to have.
  *
- * Three things share the width: the app's rail at 208, this page's own
- * padding at 32, the section nav at 184, and a pane that needs about 520
- * to still fit a path field with its browse button beside it. That puts
- * the fold at a 944px window — and the app's `minWidth` is 1024, so the
- * narrowest window anybody can drag to still leaves the pane 600px. A
- * strip layout here would be a branch that cannot run.
+ * Settings is a layer over the window now, not a page, but a tab persisted
+ * by an older build can still point here, and so can a link written before
+ * the move. The section in the address opens; the tab itself goes home,
+ * which is where a tab with no page belongs.
  */
+export function SettingsRedirect() {
+  const { "*": splat = "" } = useParams();
+  const openSettings = useSettingsStore((state) => state.openSettings);
+  const section = splat.split("/")[0] ?? "";
+  // Integrations moved out to its own door before Settings became a layer, and
+  // `/settings/integrations` kept working for every link and bookmark that
+  // predates that move. It is not a section name, so opening the layer with it
+  // falls back to the default one — the wrong screen and the wrong pane for a
+  // tab an older build persisted at this address.
+  const toCatalog = section === "integrations";
 
-function sectionContent(id: string, connected: boolean, active: boolean, t: T) {
-  void connected;
-  void active;
-  switch (id) {
-    case "appearance":
-      return <AppearanceSettings />;
-    case "clusters":
-      return <ClustersSettings />;
-    case "registries":
-      // Registries keeps its own editor, which is not built from rows —
-      // so the section is indexed as one thing.
-      return (
-        <SettingsSearchable keywords={t("settings", "searchRegistryWords")}>
-          <RegistrySettings />
-        </SettingsSearchable>
-      );
-    case "diagnostics":
-      return <DiagnosticsSettings />;
-    case "about":
-      return <AboutSettings />;
-    default:
-      return null;
-  }
-}
+  useEffect(() => {
+    if (toCatalog) return;
+    openSettings(section || undefined);
+  }, [toCatalog, section, openSettings]);
 
-function SettingsShell({ activeId }: { activeId: string }) {
-  const t = useT();
-  const { query, terms, counts } = useSettingsSearch();
-  const currentContext = useClusterStore((state) => state.currentContext);
-  const searching = terms.length > 0;
-
-  const active =
-    SETTINGS_SECTIONS.find((section) => section.id === activeId) ??
-    SETTINGS_SECTIONS[0];
-  const matched = counts[active.id] ?? 0;
-
-  return (
-    <div className="flex h-full min-h-0 flex-row">
-      <SettingsNav activeId={active.id} />
-
-      <div className="min-w-0 flex-1 overflow-auto scrollbar-thin pb-8 pl-5 pr-1 pt-1">
-        {/* Capped, because a row 950px wide puts the control it belongs to
-            at the other end of the screen from its label. */}
-        <div className="max-w-3xl">
-          <div className="flex items-baseline gap-2.5">
-            <h1 className="text-[13px] font-semibold text-fg">
-              {t("settings", active.label)}
-            </h1>
-            <span className="text-[11px] text-fg-fnt">
-              {searching ? (
-                matched === 0 ? (
-                  <>{t("settings", "nothingHereMatches", { query })}</>
-                ) : (
-                  <>
-                    {t("count", "settingsMatch", { n: matched })} &ldquo;
-                    {query}&rdquo;
-                  </>
-                )
-              ) : active.clusterScoped && currentContext ? (
-                <>
-                  {t("settings", "inWord")}{" "}
-                  <span className="font-mono">{currentContext}</span>
-                </>
-              ) : null}
-            </span>
-          </div>
-          <p className="mb-4 mt-0.5 max-w-[70ch] text-[11px] text-fg-fnt">
-            {t("settings", active.description)}
-          </p>
-
-          {SETTINGS_SECTIONS.map((section) => {
-            const isActive = section.id === active.id;
-            // A search that only counted the section you are standing in
-            // would dim the other four regardless of what they hold, so a
-            // query is what mounts them. Nothing is fetched for a section
-            // nobody has asked about until somebody starts typing.
-            if (!isActive && !searching) return null;
-            return (
-              <div
-                key={section.id}
-                className={cn(!isActive && "hidden")}
-                hidden={!isActive}
-              >
-                <SettingsSectionScope id={section.id}>
-                  {sectionContent(
-                    section.id,
-                    Boolean(currentContext),
-                    isActive,
-                    t
-                  )}
-                </SettingsSectionScope>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Settings, as five sections rather than one scroll of eight groups.
- *
- * Every section is a URL, because a settings page you cannot link
- * somebody to is the one screen in the app that cannot be pointed at —
- * and three places already link here meaning a particular part of it.
- *
- * An unknown section redirects to the default instead of rendering the
- * blank shell an unmatched child route otherwise leaves behind. `replace`
- * keeps the typo out of the history so Back still goes back.
- */
-export function Settings() {
-  return (
-    <SettingsSearchProvider>
-      <Routes>
-        <Route
-          index
-          element={<Navigate to={DEFAULT_SETTINGS_SECTION} replace />}
-        />
-        {SETTINGS_SECTIONS.map((section) => (
-          <Route
-            key={section.id}
-            path={section.id}
-            element={<SettingsShell activeId={section.id} />}
-          />
-        ))}
-        {/* Integrations moved out to its own door; the old address keeps
-            working for every link and bookmark that predates the move. */}
-        <Route
-          path="integrations"
-          element={<Navigate to="/integrations" replace />}
-        />
-        <Route
-          path="*"
-          element={
-            <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />
-          }
-        />
-      </Routes>
-    </SettingsSearchProvider>
-  );
+  return <Navigate to={toCatalog ? "/integrations" : "/"} replace />;
 }

@@ -1,9 +1,7 @@
+import { SettingsGroup } from "@/components/settings/settings-row";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { ConnectIntegration } from "@/components/settings/ConnectIntegration";
-import { SettingsGroup } from "@/components/settings/settings-row";
-import { useSettingSearchMatch } from "@/components/settings/settings-search";
 import { Button } from "@/components/ui/button";
 import {
   EXTENSION_NAMES,
@@ -15,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
+import { ConnectIntegration } from "./ConnectIntegration";
 
 /**
  * The one screen allowed to name an extension.
@@ -42,7 +41,7 @@ import type { en } from "@/i18n/catalogue";
  * editing beyond the address: every fact ends in a link to the objects that
  * own it, and the reader continues in the part of the app built for them.
  */
-export function IntegrationsSettings({ active = true }: { active?: boolean }) {
+export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   const t = useT();
   const { statuses, isPending, error } = useIntegrations({ facts: active });
   // The sidebar sends an extension that owns no screen here rather than
@@ -78,7 +77,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
   return (
     <div className="flex flex-col gap-6">
       {configured.length > 0 && (
-        <SettingsGroup title={t("settings", "configuredGroup")}>
+        <SettingsGroup title={t("cluster", "configuredGroup")}>
           {configured.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -92,7 +91,7 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
       {!isPending && !anyDetected ? (
         <NothingInstalled couldNotLook={couldNotLook} />
       ) : (
-        <SettingsGroup title={t("settings", "detectedGroup")}>
+        <SettingsGroup title={t("cluster", "detectedGroup")}>
           {detected.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -117,12 +116,8 @@ export function IntegrationsSettings({ active = true }: { active?: boolean }) {
  */
 function NothingInstalled({ couldNotLook }: { couldNotLook: boolean }) {
   const t = useT();
-  const visible = useSettingSearchMatch(
-    t("settings", "searchIntegrationsWords"),
-    EXTENSION_NAMES.join(" ")
-  );
   return (
-    <div className={cn("max-w-[64ch] py-8", !visible && "hidden")}>
+    <div className="max-w-[64ch] py-8">
       <h3 className="text-xs font-medium text-fg">
         {t(
           "empty",
@@ -171,20 +166,15 @@ function ExtensionRow({
   // here whenever some other extension did answer — which is when the
   // all-empty state that carries the honest wording never renders.
   const cannotTell = connection === null && installed === null;
-  // Searched on the words the reader sees, not on the key behind them.
-  const visible = useSettingSearchMatch(
-    vendor.name,
-    t("vendor", extension.gives)
-  );
   const [editing, setEditing] = React.useState(false);
   const row = React.useRef<HTMLDivElement>(null);
 
   // Scrolled to on arrival, and only then: doing it on every render would
   // fight the reader every time they scrolled away from it.
   React.useEffect(() => {
-    if (!asked || !visible) return;
+    if (!asked) return;
     row.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [asked, visible]);
+  }, [asked]);
 
   // A configured vendor is never "looking…": nothing is being detected, and
   // its own state says whether the address has been read yet.
@@ -206,10 +196,8 @@ function ExtensionRow({
         // A ring rather than a fill, and it stays: the reader came here for
         // this row and may sit on it for a while, so a flash that has already
         // faded by the time the pane settles would have said nothing.
-        asked && "-mx-2 rounded-[5px] px-2 ring-1 ring-info",
-        !visible && "hidden"
+        asked && "-mx-2 rounded-[5px] px-2 ring-1 ring-info"
       )}
-      hidden={!visible}
     >
       <Icon className="mt-0.5 size-4 text-fg-mut" aria-hidden />
       <div className="min-w-0">

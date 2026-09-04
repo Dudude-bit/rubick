@@ -39,6 +39,11 @@ const sheetVariants = cva(
         left: "inset-y-0 left-0 h-full w-3/4 border-r border-hair data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
           "inset-y-0 right-0 h-full w-3/4 border-l border-hair data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+        // The whole window, and a fade rather than a slide: a full-window
+        // panel that flies in from an edge reads as the window itself moving.
+        // Its own background, because a layer that covers everything is the
+        // app's own surface, not a card raised above the page.
+        full: "inset-0 h-full w-full max-w-none flex-col bg-canvas p-0 data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       },
     },
     defaultVariants: {
@@ -57,6 +62,12 @@ interface SheetContentProps
    * open while working behind it must not claim that.
    */
   showOverlay?: boolean;
+  /**
+   * The absolute close button in the corner. Off for a panel that puts its
+   * own close in a header row — the alternative was a third hand-written
+   * copy of this shell, which is what `side: "full"` exists to prevent.
+   */
+  showClose?: boolean;
 }
 
 const SheetContent = React.forwardRef<
@@ -64,7 +75,14 @@ const SheetContent = React.forwardRef<
   SheetContentProps
 >(
   (
-    { side = "right", showOverlay = true, className, children, ...props },
+    {
+      side = "right",
+      showOverlay = true,
+      showClose = true,
+      className,
+      children,
+      ...props
+    },
     ref
   ) => {
     const t = useT();
@@ -76,10 +94,12 @@ const SheetContent = React.forwardRef<
           className={cn(sheetVariants({ side }), className)}
           {...props}
         >
-          <SheetPrimitive.Close className="absolute right-3 top-3 rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none">
-            <X className="h-3.5 w-3.5" />
-            <span className="sr-only">{t("action", "close")}</span>
-          </SheetPrimitive.Close>
+          {showClose && (
+            <SheetPrimitive.Close className="absolute right-3 top-3 rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none">
+              <X className="h-3.5 w-3.5" />
+              <span className="sr-only">{t("action", "close")}</span>
+            </SheetPrimitive.Close>
+          )}
           {children}
         </SheetPrimitive.Content>
       </SheetPortal>
