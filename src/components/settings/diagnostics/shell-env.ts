@@ -2,18 +2,6 @@ import type { ShellEnvReport } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
-/**
- * Whether the search path was built from a real answer.
- *
- * The twin of `ShellEnvReport::answered()` in Rust, and the one place the
- * frontend asks. Everything that reports an absence — a plugin, a tool, a
- * binary a context names — rests on that path, and an absence verdict from a
- * list nobody filled in is a guess wearing a fact's clothes.
- */
-export function shellAnswered(report: ShellEnvReport): boolean {
-  return report.outcome === "imported" || report.outcome === "notAsked";
-}
-
 /** The one sentence about where the search path came from. */
 export function shellEnvSentence(report: ShellEnvReport, t: T): string {
   switch (report.outcome) {

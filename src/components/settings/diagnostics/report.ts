@@ -1,5 +1,5 @@
 import type { Diagnostics } from "@/generated/types";
-import { english, shellAnswered, shellEnvLine } from "./shell-env";
+import { english, shellEnvLine } from "./shell-env";
 
 /**
  * The report as markdown, which is what a chat message or an issue takes.
@@ -46,7 +46,7 @@ export function asMarkdown(d: Diagnostics): string {
     // maintainer reading a pasted report cannot see the machine, and
     // "not installed" from a search path nobody filled in would send them
     // looking for a missing binary that is sitting on the reader's PATH.
-    ...(shellAnswered(d.shell)
+    ...(d.searchPathIsReal
       ? []
       : [english("settings", "toolsPathIsGuess"), ""]),
     // The version too: half the reports that lead somewhere turn on which

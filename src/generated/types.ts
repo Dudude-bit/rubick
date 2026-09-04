@@ -1142,6 +1142,7 @@ export interface EventFilters {
 
 export interface Diagnostics {
   shell: ShellEnvReport;
+  searchPathIsReal: boolean;
   searchPath: SearchPathEntry[];
   tools: ToolStatus[];
   plugins: PluginStatus[];

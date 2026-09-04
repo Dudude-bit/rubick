@@ -21,6 +21,7 @@ const { DiagnosticsSettings } = await import("./DiagnosticsSettings");
 
 const empty: Diagnostics = {
   shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
+  searchPathIsReal: true,
   searchPath: [{ path: "/opt/homebrew/bin", exists: true }],
   tools: [
     {

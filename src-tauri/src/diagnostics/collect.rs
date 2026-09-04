@@ -116,6 +116,14 @@ pub struct Diagnostics {
     /// Whether the login shell's environment was adopted at startup. When it
     /// was not, the search path below is a guess, and this says so first.
     pub shell: ShellEnvReport,
+    /// Whether the search path below was built from the shell's answer.
+    ///
+    /// The fact, not the rule. `ShellEnvReport::answered()` decides it, and it
+    /// decides it once: a second `outcome === "imported" || ...` on the
+    /// frontend is one rule with two implementations across the IPC boundary,
+    /// and the outcome added the same day had to be excluded from both by
+    /// hand. The next one would be excluded from one.
+    pub search_path_is_real: bool,
     pub search_path: Vec<SearchPathEntry>,
     pub tools: Vec<ToolStatus>,
     pub plugins: Vec<PluginStatus>,
@@ -324,7 +332,8 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
-    let tools = tools_status(shell.answered()).await;
+    let search_path_is_real = shell.answered();
+    let tools = tools_status(search_path_is_real).await;
 
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
@@ -357,6 +366,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         findings.extend(super::shell_env_finding(&shell));
         return Diagnostics {
             shell,
+            search_path_is_real,
             search_path,
             tools,
             plugins: Vec::new(),
@@ -396,6 +406,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
 
     Diagnostics {
         shell,
+        search_path_is_real,
         search_path,
         tools,
         plugins,
@@ -582,6 +593,11 @@ users:
             d.shell
         );
         assert_eq!(d.findings.len(), 1, "{:?}", d.findings);
+        // And the fact the frontend reads follows the rule, rather than the
+        // frontend deciding it again: an import that never ran did not build
+        // the search path, so every absence below it is a guess.
+        assert!(!d.search_path_is_real);
+        assert_eq!(d.search_path_is_real, d.shell.answered());
         assert!(
             matches!(d.findings[0].shell, Some(ShellEnvReport::NotRecorded)),
             "the finding carries the outcome it is about: {:?}",

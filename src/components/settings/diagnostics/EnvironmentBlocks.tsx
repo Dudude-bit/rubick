@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { shellAnswered, shellEnvSentence, shellEnvTone } from "./shell-env";
+import { shellEnvSentence, shellEnvTone } from "./shell-env";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -33,8 +33,16 @@ export function EnvironmentBlocks({
 }: {
   diagnostics: Diagnostics;
 }) {
-  const { shell, searchPath, tools, plugins, contexts, kubeconfig, app } =
-    diagnostics;
+  const {
+    shell,
+    searchPathIsReal,
+    searchPath,
+    tools,
+    plugins,
+    contexts,
+    kubeconfig,
+    app,
+  } = diagnostics;
   const t = useT();
 
   return (
@@ -72,7 +80,7 @@ export function EnvironmentBlocks({
             directories and nothing a profile adds. Stated here rather
             than one block away, where a reader scanning tools will not
             look. */}
-        {!shellAnswered(shell) && (
+        {!searchPathIsReal && (
           <p className="mb-2 text-xs text-warn">
             {t("settings", "toolsPathIsGuess")}
           </p>

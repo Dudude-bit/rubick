@@ -5,6 +5,7 @@ import { asMarkdown } from "./report";
 
 const base: Diagnostics = {
   shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
+  searchPathIsReal: true,
   searchPath: [
     { path: "/opt/homebrew/bin", exists: true },
     { path: "~/.krew/bin", exists: false },

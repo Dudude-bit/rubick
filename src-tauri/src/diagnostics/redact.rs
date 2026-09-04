@@ -94,6 +94,7 @@ mod tests {
                 adopted: 3,
                 removed: 0,
             },
+            search_path_is_real: true,
             search_path: Vec::new(),
             tools: vec![ToolStatus {
                 name: "kubectl".into(),
