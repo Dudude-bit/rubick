@@ -1,3 +1,4 @@
+import { Reveal } from "../components/motion/reveal";
 import { COMPETITORS } from "../lib/compare";
 import { LINKS } from "../lib/site";
 
@@ -12,7 +13,7 @@ const FOOTER_LINKS = [
 export function Footer() {
   return (
     <footer className="border-t border-neutral-800/70">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12">
+      <Reveal className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12">
         <nav className="flex flex-wrap gap-x-8 gap-y-3">
           {FOOTER_LINKS.map((l) => (
             <a
@@ -39,9 +40,12 @@ export function Footer() {
           ))}
         </p>
         <p className="font-mono text-xs text-neutral-600">
-          No analytics on this page either. View source, it is just HTML.
+          <span className="underline-draw">
+            No analytics on this page either.
+          </span>{" "}
+          View source, it is just HTML.
         </p>
-      </div>
+      </Reveal>
     </footer>
   );
 }

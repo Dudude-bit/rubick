@@ -7,13 +7,343 @@
   --color-accent: #2563eb;
   --font-display: "Space Grotesk Variable", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-trace: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+@property --ring {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 ::selection {
   background: var(--color-accent);
   color: white;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Everything below is progressive enhancement: the prerendered page is complete
+   and still without JavaScript or under reduced motion. Only inside this media
+   block do elements start hidden and move into place. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  html {
+    --motion: 1;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+      filter: blur(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+  }
+
+  @keyframes settle {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.985);
+      filter: blur(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+  }
+
+  @keyframes claim-in {
+    from {
+      opacity: 0;
+      transform: translate(var(--fx), var(--fy))
+        rotate(calc(var(--rot) + 18deg)) scale(0.7);
+    }
+    to {
+      opacity: 1;
+      transform: rotate(var(--rot));
+    }
+  }
+
+  @keyframes claim-drift {
+    0%,
+    100% {
+      transform: rotate(var(--rot));
+    }
+    50% {
+      transform: translate(var(--dx), var(--dy))
+        rotate(calc(var(--rot) + var(--wob)));
+    }
+  }
+
+  @keyframes draw-x {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes draw-y {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes lock-in {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  [data-rise] {
+    animation: rise 0.6s var(--ease-enter) var(--d, 0s) both;
+  }
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(12px);
+    transition:
+      opacity 0.36s var(--ease-enter) var(--d, 0s),
+      transform 0.36s var(--ease-enter) var(--d, 0s);
+  }
+  [data-reveal="settle"] {
+    transform: translateY(12px) scale(0.985);
+  }
+  [data-reveal][data-in],
+  [data-reveal]:focus-within {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* claims: floating green things the cluster says, corrected one by one */
+  .claim-card {
+    animation:
+      claim-in 0.9s var(--ease-enter) var(--d) both,
+      claim-drift var(--dur) ease-in-out calc(var(--d) + 0.9s) infinite;
+  }
+  .claim {
+    translate: calc(var(--px, 0px) * var(--depth))
+      calc(var(--py, 0px) * var(--depth));
+    transition: translate 0.7s var(--ease-enter);
+  }
+  .claim-card {
+    transition:
+      border-color 0.2s var(--ease-state),
+      box-shadow 0.2s var(--ease-state);
+  }
+  .claim-said {
+    opacity: 1;
+    transition:
+      opacity 0.2s var(--ease-exit),
+      color 0.2s var(--ease-exit);
+  }
+  .claim-seen {
+    opacity: 0;
+    transition: opacity 0.25s var(--ease-enter) 0.15s;
+  }
+  .claim-card[data-state="inspecting"] {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+  .claim-card[data-state="inspecting"] .claim-said {
+    text-decoration: line-through;
+    text-decoration-color: var(--color-red-400);
+    color: var(--color-neutral-400);
+  }
+  .claim-card[data-state="busted"] {
+    border-color: color-mix(in srgb, var(--color-red-400) 60%, transparent);
+  }
+  .claim-card[data-state="busted"] .claim-said {
+    opacity: 0;
+  }
+  .claim-card[data-state="busted"] .claim-seen {
+    opacity: 1;
+  }
+
+  .hero-shot {
+    transform: perspective(2000px) rotateX(2deg)
+      translate(calc(var(--px, 0px) * 0.35), calc(var(--py, 0px) * 0.35));
+    transition: transform 0.7s var(--ease-enter);
+  }
+  .hero-shot:hover {
+    transform: perspective(2000px) rotateX(0deg)
+      translate(calc(var(--px, 0px) * 0.35), calc(var(--py, 0px) * 0.35));
+  }
+
+  /* truth swap: reported -> connector draws -> reported struck, observed settles */
+  .truth-conn {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .truth-said {
+    text-decoration: none;
+    color: inherit;
+  }
+  .truth-seen {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  [data-in] .truth-conn {
+    animation: draw-x 0.36s var(--ease-trace) calc(var(--d, 0s) + 0.2s) both;
+  }
+  [data-in] .truth-said {
+    transition:
+      color 0.16s var(--ease-exit) calc(var(--d, 0s) + 0.56s),
+      text-decoration-color 0.16s var(--ease-exit) calc(var(--d, 0s) + 0.56s);
+    text-decoration: line-through;
+    text-decoration-color: var(--color-red-400);
+    color: var(--color-neutral-500);
+  }
+  [data-in] .truth-seen {
+    transition:
+      opacity 0.22s var(--ease-enter) calc(var(--d, 0s) + 0.62s),
+      transform 0.22s var(--ease-enter) calc(var(--d, 0s) + 0.62s);
+    opacity: 1;
+    transform: none;
+  }
+
+  /* trace: a chain that draws itself link by link and can stop */
+  .trace-node {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .trace-link {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .trace-reason {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  [data-in] .trace-node {
+    transition:
+      opacity 0.24s var(--ease-enter) var(--d),
+      transform 0.24s var(--ease-enter) var(--d);
+    opacity: 1;
+    transform: none;
+  }
+  [data-in] .trace-link {
+    animation: draw-x 0.42s var(--ease-trace) var(--d) both;
+  }
+  [data-in] .trace-reason {
+    transition:
+      opacity 0.18s var(--ease-enter) var(--d),
+      transform 0.18s var(--ease-enter) var(--d);
+    opacity: 1;
+    transform: none;
+  }
+
+  .rule-x {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .rule-y {
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+  [data-in] .rule-x {
+    animation: draw-x 0.26s var(--ease-trace) var(--d, 0s) both;
+  }
+  [data-in] .rule-y {
+    animation: draw-y 0.36s var(--ease-trace) var(--d, 0s) both;
+  }
+  .lock {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  [data-in] .lock {
+    animation: lock-in 0.16s var(--ease-enter) calc(var(--d, 0s) + 0.2s) both;
+  }
+
+  @keyframes ring {
+    to {
+      --ring: 100%;
+    }
+  }
+  .ring::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from 0deg,
+      var(--color-accent) var(--ring),
+      transparent 0
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.4s var(--ease-exit) 0.6s;
+  }
+  [data-in].ring::before {
+    animation: ring 0.52s var(--ease-trace) both;
+    opacity: 0;
+  }
+
+  .underline-draw {
+    background: linear-gradient(var(--color-accent), var(--color-accent))
+      no-repeat 0 100% / 0% 1px;
+  }
+  [data-in] .underline-draw {
+    transition: background-size 0.38s var(--ease-trace) 0.2s;
+    background-size: 100% 1px;
+  }
+}
+
+/* interactive state changes stay interruptible transitions, in every mode */
+.tab-panel {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.18s var(--ease-enter),
+    transform 0.18s var(--ease-enter),
+    visibility 0s linear;
+}
+.tab-panel[inert] {
+  opacity: 0;
+  transform: translateY(6px);
+  visibility: hidden;
+  transition:
+    opacity 0.12s var(--ease-exit),
+    transform 0.12s var(--ease-exit),
+    visibility 0s linear 0.12s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel,
+  .tab-panel[inert] {
+    transition: none;
+  }
 }

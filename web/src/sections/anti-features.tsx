@@ -1,3 +1,4 @@
+import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 
 const ANTI = [
@@ -22,20 +23,33 @@ const ANTI = [
 export function AntiFeatures() {
   return (
     <Section eyebrow="Scope, defended">
-      <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
-        Features we are proud to not have.
-      </h2>
-      <ul className="mt-12 max-w-3xl divide-y divide-neutral-800/70">
-        {ANTI.map((a) => (
-          <li key={a.title} className="flex gap-5 py-6">
-            <span className="text-accent font-mono text-sm leading-6 select-none">
+      <Reveal>
+        <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
+          Features we are proud to not have.
+        </h2>
+      </Reveal>
+      <ul className="mt-12 max-w-3xl">
+        {ANTI.map((a, i) => (
+          <Reveal
+            key={a.title}
+            as="li"
+            delay={i * 65}
+            className="relative flex gap-5 py-6"
+          >
+            {i > 0 ? (
+              <span
+                aria-hidden
+                className="rule-x absolute inset-x-0 top-0 h-px bg-neutral-800/70"
+              />
+            ) : null}
+            <span className="lock text-accent font-mono text-sm leading-6 select-none">
               no
             </span>
             <div>
               <h3 className="font-display font-bold">{a.title}</h3>
               <p className="mt-2 text-sm text-neutral-400">{a.body}</p>
             </div>
-          </li>
+          </Reveal>
         ))}
       </ul>
     </Section>
