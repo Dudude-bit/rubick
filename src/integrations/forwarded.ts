@@ -134,11 +134,14 @@ export async function podFor(service: ServiceInfo): Promise<string | null> {
   // forward onto it connects to nothing. Ready first, then merely up: a
   // rollout should move the forward onto the new pod rather than refusing
   // to make one.
+  // `pod.containers` holds the app containers and only those: init
+  // containers and native sidecars go to `initContainers`, stamped `Init`
+  // and `Sidecar` (src-tauri/src/resources/types/pod.rs). No phase test is
+  // needed — the clause that stood here could not fire, and the test that
+  // covered it had to put an init container in a list the backend never
+  // puts one in.
   const up = pods.filter((pod) =>
-    pod.containers.some(
-      (container) =>
-        container.phase !== "init" && container.state.type === "running"
-    )
+    pod.containers.some((container) => container.state.type === "running")
   );
   const ready = up.find((pod) => pod.status.ready);
   return (ready ?? up[0])?.name ?? null;

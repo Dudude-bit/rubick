@@ -4,7 +4,12 @@ import type { PodInfo } from "@/generated/types";
 import { loadAll } from "js-yaml";
 
 import type { Manifest } from "./types";
-import { buildManifestYaml, parseManifestYaml, podResource } from "./utils";
+import {
+  buildManifestYaml,
+  deploymentStatus,
+  parseManifestYaml,
+  podResource,
+} from "./utils";
 
 const pod = (status: Partial<PodInfo["status"]>): PodInfo =>
   ({
@@ -282,5 +287,112 @@ describe("a pasted manifest round-trips through the canvas", () => {
     expect(built?.metadata?.labels).toBeUndefined();
     expect(built?.spec?.selector?.matchLabels).toEqual({ app: "api" });
     expect(built?.spec?.template?.metadata?.labels).toEqual({ app: "api" });
+  });
+});
+
+describe("a manifest whose container list is not a list", () => {
+  /**
+   * Would break if the parser went back to accepting it.
+   *
+   * `spec.containers` written as a mapping is the commonest slip in a
+   * hand-written manifest, and `Manifest` is a cast over `js-yaml` output
+   * rather than a proof — so it used to be accepted silently, and the throw
+   * landed later, in `buildPodManifest`'s destructure, when the reader
+   * switched back to the YAML tab or pressed Validate. An uncaught
+   * `TypeError` where the page already had somewhere to put a parse error.
+   */
+  it("is refused where the page can say so, not where it is destructured", () => {
+    const { resources, errors } = parseManifestYaml(
+      [
+        "apiVersion: v1",
+        "kind: Pod",
+        "metadata:",
+        "  name: api",
+        "spec:",
+        "  containers:",
+        "    api:",
+        "      image: nginx",
+        "",
+      ].join("\n")
+    );
+
+    expect(resources).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/spec\.containers must be a list/);
+    expect(errors[0]).toMatch(/mapping/);
+  });
+
+  /** The same slip one level down, where a Deployment keeps its pod. */
+  it("looks inside a template as well", () => {
+    const { errors } = parseManifestYaml(
+      [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: web",
+        "spec:",
+        "  template:",
+        "    spec:",
+        "      containers:",
+        "        web:",
+        "          image: nginx",
+        "",
+      ].join("\n")
+    );
+
+    expect(errors[0]).toMatch(
+      /spec\.template\.spec\.containers must be a list/
+    );
+  });
+
+  /** A manifest with no containers at all is not malformed, only empty. */
+  it("says nothing about a document that declares none", () => {
+    const { errors } = parseManifestYaml(
+      ["apiVersion: v1", "kind: Pod", "metadata:", "  name: api", ""].join("\n")
+    );
+
+    expect(errors).toHaveLength(0);
+  });
+});
+
+describe("the word a Deployment's replica counts add up to", () => {
+  /**
+   * Would break if either half went back to its own copy.
+   *
+   * The rule lived twice — here and in the cluster-import hook — and both
+   * spelled it `available >= desired`, which calls a Deployment scaled to
+   * zero **Available**: `0 >= 0`. That is the exact answer `workloadStatus`
+   * exists to stop giving, and the canvas gave it in two places at once.
+   */
+  it("calls a scale-down what it is rather than healthy", () => {
+    expect(deploymentStatus(0, 0)).toBe("Idle");
+  });
+
+  it("is ready only when every replica asked for is available", () => {
+    expect(deploymentStatus(3, 3)).toBe("Ready");
+    expect(deploymentStatus(3, 2)).toBe("Progressing");
+    expect(deploymentStatus(3, 0)).toBe("Progressing");
+  });
+
+  /** Pasted and imported have to agree about one object. */
+  it("is the one the paste path uses too", () => {
+    const { resources } = parseManifestYaml(
+      [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: web",
+        "spec:",
+        "  replicas: 0",
+        "  template:",
+        "    spec:",
+        "      containers:",
+        "        - name: web",
+        "          image: nginx",
+        "",
+      ].join("\n")
+    );
+
+    expect(resources[0]?.status).toBe(deploymentStatus(0, 0));
   });
 });

@@ -10,7 +10,11 @@ import { useInfrastructureBuilderStore } from "@/stores/infrastructureBuilderSto
 import { useT } from "@/i18n/useT";
 
 import type { ResourceNodeData, ServiceResourceData } from "./types";
-import { buildEdgesFromResources, podResource } from "./utils";
+import {
+  buildEdgesFromResources,
+  deploymentStatus,
+  podResource,
+} from "./utils";
 
 const GRID_SPACING_X = 260;
 const GRID_SPACING_Y = 180;
@@ -109,11 +113,15 @@ export function useImportFromCluster(
           replicas: deployment.replicas?.desired ?? 1,
           image: container?.image || "nginx:latest",
           ports: container?.ports || [],
-          status:
-            deployment.replicas?.available >=
-            (deployment.replicas?.desired ?? 1)
-              ? "Available"
-              : "Progressing",
+          // The same verdict the builder gives a pasted Deployment, and the
+          // same one every list gives a real one. It used to be spelled out
+          // here and again in `parseManifestYaml`, so the canvas could
+          // disagree with itself about one object depending on whether it
+          // arrived by import or by paste.
+          status: deploymentStatus(
+            deployment.replicas?.desired ?? 1,
+            deployment.replicas?.available ?? 0
+          ),
         });
       });
       services.forEach((service) => {

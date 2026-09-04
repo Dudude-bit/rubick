@@ -85,13 +85,19 @@ const pod = (
 ) => {
   const stuck = containers.find((c) => c.state.type !== "running");
   const display = stuck ? (stuck.state.reason ?? "Error") : "Running";
+  // Split the way the backend splits it: `containers` holds app containers
+  // and `initContainers` everything else. A fixture that files an init
+  // container under `containers` describes a pod the backend cannot
+  // produce, and a test written against it passes for the wrong reason.
+  const stamped = containers.map((container) => ({
+    phase: "app" as const,
+    ...container,
+  }));
   return {
     name,
     status: { phase: "Running", display, ready },
-    containers: containers.map((container) => ({
-      phase: "app",
-      ...container,
-    })),
+    containers: stamped.filter((c) => c.phase === "app"),
+    initContainers: stamped.filter((c) => c.phase !== "app"),
   } as never;
 };
 

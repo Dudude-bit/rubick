@@ -1,3 +1,4 @@
+import { workloadStatus } from "@/lib/workload-status";
 import { dump, loadAll } from "js-yaml";
 import { Edge, Node } from "reactflow";
 import type { PodInfo } from "@/generated/types";
@@ -66,7 +67,7 @@ const portNumbers = (
  * pod with a live sidecar are not read, so such a pod shows its phase
  * where kubectl would say Init:0/2, Terminating, Evicted or Running.
  */
-const manifestPodStatus = (status: ManifestStatus | undefined) => {
+export const manifestPodStatus = (status: ManifestStatus | undefined) => {
   const label = containerVerdict(status) ?? status?.phase;
   // Pasted YAML promises nothing about its types; a label is a string or nothing.
   return typeof label === "string" ? label : undefined;
@@ -186,6 +187,30 @@ export interface ManifestParseResult {
   errors: string[];
 }
 
+/**
+ * Whether a document's container list is something other than a list.
+ *
+ * Checked once at the boundary rather than guarded at each of the four places
+ * that read it: the reader who pasted the manifest wants to be told their YAML
+ * is wrong, and every one of those places would otherwise have to invent its
+ * own answer to a document that cannot be built.
+ */
+const containerListProblem = (doc: Manifest): string | null => {
+  const template = doc.spec?.template as Manifest | undefined;
+  const places: Array<[string, unknown]> = [
+    ["spec.containers", doc.spec?.containers],
+    ["spec.template.spec.containers", template?.spec?.containers],
+  ];
+  for (const [path, value] of places) {
+    if (value !== undefined && !Array.isArray(value)) {
+      const shape = value === null ? "null" : typeof value;
+      const name = doc.metadata?.name ? ` ${String(doc.metadata.name)}` : "";
+      return `${doc.kind ?? "resource"}${name}: ${path} must be a list, not a ${shape === "object" ? "mapping" : shape}.`;
+    }
+  }
+  return null;
+};
+
 export const parseManifestYaml = (text: string): ManifestParseResult => {
   const resources: ResourceNodeData[] = [];
   const extraManifests: unknown[] = [];
@@ -205,6 +230,17 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
       const kind = doc?.kind as ResourceKind | undefined;
       if (!doc || !kind || !RESOURCE_KINDS.includes(kind)) {
         extraManifests.push(raw);
+        return;
+      }
+
+      // `Manifest` is an assertion over what `js-yaml` produced, not a
+      // proof. A container list written as a mapping — the commonest slip in
+      // a hand-written manifest — satisfies the type and then throws where
+      // the builder destructures it, one tab switch later, with a stack
+      // trace instead of the parse error this page already renders.
+      const badContainers = containerListProblem(doc);
+      if (badContainers) {
+        errors.push(badContainers);
         return;
       }
 
@@ -244,7 +280,7 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
             replicas: desired,
             image: String(primary?.image ?? "nginx:latest"),
             ports: portNumbers(primary?.ports, "containerPort"),
-            status: available >= desired ? "Available" : "Progressing",
+            status: deploymentStatus(desired, available),
           });
           break;
         }
@@ -471,6 +507,18 @@ export const buildManifestYaml = (
  * whose only container is crash-looping is in phase Running, and this canvas
  * used to say so.
  */
+/**
+ * What a Deployment's replica counts add up to, for the canvas.
+ *
+ * The same `workloadStatus` every list and peek panel uses, rather than a
+ * third copy of `available >= desired`. That copy called a Deployment scaled
+ * to zero **Available** — `0 >= 0` — which is the exact answer
+ * `workloadStatus` was written to stop giving, and the canvas was giving it in
+ * two places at once: here and in the cluster-import hook.
+ */
+export const deploymentStatus = (desired: number, available: number): string =>
+  workloadStatus({ desired, ready: available, available });
+
 export const podResource = (pod: PodInfo): PodResourceData => {
   const container = pod.containers?.[0];
   return {
