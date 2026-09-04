@@ -6,6 +6,7 @@
  * @module hooks/useScopeTabs
  */
 
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -74,10 +75,20 @@ export function useScopeTabs(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const store = useScopeTabStore.getState();
+      // Settings is an opaque layer over the whole window, so a tab opened,
+      // closed or switched behind it happens where the reader cannot see it.
+      // This listener is on `window` and a Radix modal does not stop it, so
+      // the layer stands aside rather than being stepped over: the shortcut
+      // still does what it says, and the reader watches it happen.
+      const reveal = () => {
+        const settings = useSettingsStore.getState();
+        if (settings.open) settings.closeSettings();
+      };
       // Ctrl+Tab on both platforms — Cmd+Tab is the macOS app switcher and
       // never reaches a window, which is why browsers use Ctrl there too.
       if (event.ctrlKey && event.key === "Tab") {
         event.preventDefault();
+        reveal();
         void store.activateRelative(event.shiftKey ? -1 : 1);
         return;
       }
@@ -85,17 +96,20 @@ export function useScopeTabs(): void {
       const key = event.key.toLowerCase();
       if (key === "t") {
         event.preventDefault();
+        reveal();
         void store.openTab();
         return;
       }
       if (key === "w") {
         event.preventDefault();
+        reveal();
         void store.closeTab(store.activeId);
         return;
       }
       if (/^[1-9]$/.test(event.key)) {
         event.preventDefault();
         // 9 is the last tab, however many there are — the browser rule.
+        reveal();
         void store.activateIndex(
           event.key === "9" ? -1 : Number(event.key) - 1
         );

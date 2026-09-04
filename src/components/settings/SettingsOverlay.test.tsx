@@ -124,6 +124,45 @@ describe("SettingsOverlay", () => {
       expect(useSettingsStore.getState().section).toBe("about");
     });
 
+    /**
+     * Would break if Escape in the search box closed the layer again.
+     *
+     * The input has its own `stopPropagation` handler, written when Settings
+     * was a page. Radix listens on the document in the capture phase, so that
+     * handler never runs first: filtering the sections and pressing Escape to
+     * get the full list back closed the whole of Settings instead. The test
+     * above cannot see it — it fires Escape at `document.activeElement`, which
+     * `onOpenAutoFocus` has parked on a nav button, never in the field.
+     */
+    it("clears the filter on Escape rather than closing, when typing in it", async () => {
+      open("appearance");
+      renderOver();
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+      const box = screen.getByRole("searchbox");
+      fireEvent.change(box, { target: { value: "colour" } });
+      expect((box as HTMLInputElement).value).toBe("colour");
+
+      fireEvent.keyDown(box, { key: "Escape" });
+
+      expect(screen.queryByRole("dialog")).toBeInTheDocument();
+      expect(useSettingsStore.getState().open).toBe(true);
+      await waitFor(() => expect((box as HTMLInputElement).value).toBe(""));
+    });
+
+    /** And with nothing typed, Escape still closes — the ordinary way out. */
+    it("still closes on Escape from the search box when it is empty", async () => {
+      open("appearance");
+      renderOver();
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Escape" });
+
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      );
+    });
+
     it("closes on Escape", async () => {
       open("appearance");
       renderOver();

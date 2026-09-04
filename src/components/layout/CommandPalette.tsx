@@ -663,6 +663,11 @@ export function CommandPalette() {
           })
           .catch(() => {});
       }
+      // Settings is an opaque layer over the whole window: navigating under
+      // it moves the router and shows the reader nothing. The palette's own
+      // listener is on `window`, which a Radix modal does not stop, so the
+      // layer stands aside instead of being stepped over.
+      useSettingsStore.getState().closeSettings();
       close();
       requestAnimationFrame(() => navigate(path));
     },
@@ -758,6 +763,7 @@ export function CommandPalette() {
         }
         case "recent":
           if (newTab) {
+            useSettingsStore.getState().closeSettings();
             openTab({ href: entry.path, background: true });
             close();
             return;
@@ -770,6 +776,7 @@ export function CommandPalette() {
           return;
         case "link":
           if (newTab) {
+            useSettingsStore.getState().closeSettings();
             openTab({ href: entry.path, background: true });
             close();
             return;
@@ -779,6 +786,7 @@ export function CommandPalette() {
         case "panel":
           // Nothing to open in a tab: it is a panel over the current page,
           // not a page of its own.
+          useSettingsStore.getState().closeSettings();
           openActivityOn(entry.tab);
           close();
           return;

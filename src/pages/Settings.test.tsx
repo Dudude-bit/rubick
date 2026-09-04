@@ -10,6 +10,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/" element={<div>home page</div>} />
+        <Route path="/integrations" element={<div>catalog page</div>} />
         <Route path="/settings/*" element={<SettingsRedirect />} />
       </Routes>
     </MemoryRouter>
@@ -52,5 +53,23 @@ describe("the address Settings used to have", () => {
 
     expect(await screen.findByText("home page")).toBeInTheDocument();
     expect(useSettingsStore.getState().section).toBe("appearance");
+  });
+
+  /**
+   * Would break if the redirect were dropped with the section.
+   *
+   * Integrations moved out to its own door before Settings became a layer, and
+   * `/settings/integrations` has kept working for every link and bookmark that
+   * predates that move. It is not a section name, so without an arm of its own
+   * a tab an older build persisted here lands on the cluster overview with
+   * Settings open on Appearance — the wrong screen and the wrong pane. The
+   * test above cannot tell that apart: `/settings/nonsense` and this one look
+   * identical to a redirect that only knows section names.
+   */
+  it("still sends the old integrations address to the catalog", async () => {
+    renderAt("/settings/integrations");
+
+    expect(await screen.findByText("catalog page")).toBeInTheDocument();
+    expect(useSettingsStore.getState().open).toBe(false);
   });
 });

@@ -15,10 +15,17 @@ export function SettingsRedirect() {
   const { "*": splat = "" } = useParams();
   const openSettings = useSettingsStore((state) => state.openSettings);
   const section = splat.split("/")[0] ?? "";
+  // Integrations moved out to its own door before Settings became a layer, and
+  // `/settings/integrations` kept working for every link and bookmark that
+  // predates that move. It is not a section name, so opening the layer with it
+  // falls back to the default one — the wrong screen and the wrong pane for a
+  // tab an older build persisted at this address.
+  const toCatalog = section === "integrations";
 
   useEffect(() => {
+    if (toCatalog) return;
     openSettings(section || undefined);
-  }, [section, openSettings]);
+  }, [toCatalog, section, openSettings]);
 
-  return <Navigate to="/" replace />;
+  return <Navigate to={toCatalog ? "/integrations" : "/"} replace />;
 }

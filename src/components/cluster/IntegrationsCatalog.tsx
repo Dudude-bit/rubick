@@ -1,3 +1,4 @@
+import { SettingsGroup } from "@/components/settings/settings-row";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -76,7 +77,7 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   return (
     <div className="flex flex-col gap-6">
       {configured.length > 0 && (
-        <Group title={t("cluster", "configuredGroup")}>
+        <SettingsGroup title={t("cluster", "configuredGroup")}>
           {configured.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -85,12 +86,12 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
               asked={asked === status.vendor.id}
             />
           ))}
-        </Group>
+        </SettingsGroup>
       )}
       {!isPending && !anyDetected ? (
         <NothingInstalled couldNotLook={couldNotLook} />
       ) : (
-        <Group title={t("cluster", "detectedGroup")}>
+        <SettingsGroup title={t("cluster", "detectedGroup")}>
           {detected.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
@@ -99,27 +100,9 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
               asked={asked === status.vendor.id}
             />
           ))}
-        </Group>
+        </SettingsGroup>
       )}
     </div>
-  );
-}
-
-/** A caption and a hairline: enough to say "these belong together". */
-function Group({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col">
-      <h2 className="pb-1 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
-        {title}
-      </h2>
-      <div className="border-t border-hair">{children}</div>
-    </section>
   );
 }
 
