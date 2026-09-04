@@ -93,7 +93,6 @@ export interface PeekSummary {
   statusFrom?: string | null;
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
-  age?: string | null;
   groups: PeekGroup[];
 }
 
@@ -1065,7 +1064,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     commands.getPersistentVolumeClaim,
     (claim, _target, t) => ({
       status: claim.status,
-      age: claim.age,
+      createdAt: claim.createdAt,
       groups: [
         {
           title: t("nav", "storage"),
@@ -1104,15 +1103,16 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     (name) => commands.getPersistentVolume(name),
     (volume, _target, t) => ({
       status: volume.status,
-      age: volume.age,
+      createdAt: volume.createdAt,
       groups: [
         {
           title: t("nav", "storage"),
           items: [
             {
               label: t("columns", "capacity"),
-              value: volume.capacity,
-              mono: true,
+              value: volume.capacity || t("empty", "nothingReportedYet"),
+              mono: !!volume.capacity,
+              tone: volume.capacity ? undefined : "warn",
             },
             {
               label: t("columns", "claim"),
@@ -1134,7 +1134,8 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
             },
             {
               label: t("columns", "reclaimPolicy"),
-              value: volume.reclaimPolicy,
+              value: volume.reclaimPolicy || t("empty", "nothingReportedYet"),
+              tone: volume.reclaimPolicy ? undefined : "warn",
             },
             {
               label: t("columns", "accessModes"),
@@ -1159,7 +1160,7 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
   StorageClass: source(
     (name) => commands.getStorageClass(name),
     (storageClass, _target, t) => ({
-      age: storageClass.age,
+      createdAt: storageClass.createdAt,
       groups: [
         {
           title: t("columns", "provisioning"),

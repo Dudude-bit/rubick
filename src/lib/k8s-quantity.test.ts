@@ -6,7 +6,6 @@ import {
   formatCPU,
   formatMemory,
   formatBytes,
-  calculateUtilization,
 } from "./k8s-quantity";
 
 describe("parseQuantity", () => {
@@ -145,31 +144,6 @@ describe("formatBytes / formatMemory", () => {
     expect(formatMemory(1024 ** 3)).toMatch(/Gi$/);
   });
 });
-
-describe("calculateUtilization", () => {
-  it("returns null when limit is 0 or non-positive", () => {
-    // Caller is expected to handle the null sentinel and decide how to
-    // display "no limit" (typically as a dash or "unlimited").
-    expect(calculateUtilization(100, 0)).toBeNull();
-    expect(calculateUtilization(100, -1)).toBeNull();
-  });
-
-  it("returns the percentage usage of the limit", () => {
-    expect(calculateUtilization(50, 100)).toBe(50);
-    expect(calculateUtilization(75, 100)).toBe(75);
-  });
-
-  it("returns >100 for overcommit (Kubernetes lets pods exceed requests)", () => {
-    // Crucial for monitoring — clamping at 100 would hide overcommit.
-    expect(calculateUtilization(150, 100)).toBe(150);
-    expect(calculateUtilization(250, 100)).toBe(250);
-  });
-
-  it("clamps negative values to 0", () => {
-    expect(calculateUtilization(-10, 100)).toBe(0);
-  });
-});
-
 /**
  * The two parsers in this file read the same quantities, and one of them used
  * to know eight suffixes where the other knew thirteen. A PVC declaring `1Pi`

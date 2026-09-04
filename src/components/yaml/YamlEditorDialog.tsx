@@ -32,7 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TextSkeleton } from "@/components/ui/skeleton";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { Spinner } from "@/components/ui/spinner";
 import { ActionWarnings } from "@/components/resources/action-warnings";
@@ -105,17 +104,6 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 }
 
 // DropdownMenuItem-based action for use in action menus
-export function YamlEditorMenuAction(props: YamlEditorActionProps) {
-  const t = useT();
-  const open = useOpenEditor(props);
-  return (
-    <DropdownMenuItem onClick={open}>
-      <FileJson className="mr-2 h-4 w-4" />
-      {editorLabel(t, props)}
-    </DropdownMenuItem>
-  );
-}
-
 // Main Dialog Component
 export function YamlEditorDialog() {
   const t = useT();

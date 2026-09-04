@@ -42,6 +42,7 @@
  * what makes this page the only place the whole picture exists.
  */
 
+import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { conditionOf, conditionsOf, getValueByPath } from "../kit";
@@ -572,10 +573,7 @@ function worstOf(findings: FluxFinding[]): "err" | "warn" | null {
 export function reconcilerState(
   reconciler: FluxReconciler,
   t: T
-): {
-  text: string;
-  tone: "ok" | "warn" | "err";
-} {
+): VendorVerdict {
   if (reconciler.suspended) {
     return {
       text: t("action", "suspendedLower"),
@@ -602,13 +600,7 @@ export function reconcilerState(
   return { text: t("empty", "readyLower"), tone: reconciler.worst ?? "ok" };
 }
 
-export function sourceState(
-  source: FluxSource,
-  t: T
-): {
-  text: string;
-  tone: "ok" | "warn" | "err";
-} {
+export function sourceState(source: FluxSource, t: T): VendorVerdict {
   if (source.suspended)
     return { text: t("action", "suspendedLower"), tone: "warn" };
   if (source.ready === false) {

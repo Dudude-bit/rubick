@@ -21,6 +21,7 @@
  * A page that cost a hundred queries to say "yes" would not be worth opening.
  */
 
+import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { escapeLabel } from "./queries";
@@ -75,13 +76,7 @@ export async function coverage(namespaces: string[]): Promise<Coverage> {
   return { namespaces: namespacesRead, windowMs: WINDOW_MS };
 }
 
-export function verdict(
-  found: Coverage,
-  t: T
-): {
-  text: string;
-  tone: "ok" | "warn" | "err";
-} {
+export function verdict(found: Coverage, t: T): VendorVerdict {
   const asked = found.namespaces.filter((entry) => entry.problem === null);
   if (asked.length === 0)
     return { text: t("readings", "lokiCouldNotTell"), tone: "warn" };

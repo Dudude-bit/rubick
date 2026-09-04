@@ -42,6 +42,16 @@ const event = (namespace: string, index: number): EventInfo => ({
   lastTimestamp: `2026-08-05T10:${String(59 - index).padStart(2, "0")}:00Z`,
 });
 
+/**
+ * A filter no event can match.
+ *
+ * Two characters rather than twenty: `userEvent.type` fires a keystroke each,
+ * and each keystroke refilters the whole feed — which in the tests below is
+ * the five-hundred-event one. The characters are not what is under test; that
+ * nothing matches them is.
+ */
+const NO_MATCH = "zq";
+
 const feed = (namespace: string, count: number) =>
   Array.from({ length: count }, (_, index) => event(namespace, index));
 
@@ -208,7 +218,7 @@ describe("narrowing the feed", () => {
 
     await userEvent.type(
       screen.getByPlaceholderText(/filter events/i),
-      "nothing-matches-this"
+      NO_MATCH
     );
 
     await waitFor(() =>
@@ -260,12 +270,17 @@ describe("what the join costs", () => {
     await screen.findByText(/500 normal/);
     await userEvent.type(
       screen.getByPlaceholderText(/Filter events/i),
-      "nothing-matches-this"
+      NO_MATCH
     );
 
     const said = await screen.findByText(/latest 500 events/i);
     expect(said).toBeInTheDocument();
     // The honest half: it says what was searched, not what exists.
     expect(said.textContent).toMatch(/not read/i);
-  }, 30_000);
+    // The five-hundred-row render above, and a filter typed over it. This
+    // one used to spend twenty keystrokes on a string nothing asserts, and
+    // each keystroke refilters the whole feed: 33s, over the budget the
+    // test above set for a render alone. Two characters bring it to 23s,
+    // and the rest is headroom for the same loaded machine.
+  }, 45_000);
 });

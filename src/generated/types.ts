@@ -553,34 +553,34 @@ export interface StorageClassInfo {
   parameters: Record<string, string>;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeClaimInfo {
   name: string;
   namespace: string;
-  status: string;
+  status: string | null;
   volume: string | null;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
   storageClass: string;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeInfo {
   name: string;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
-  reclaimPolicy: string;
-  status: string;
+  reclaimPolicy: string | null;
+  status: string | null;
   claim: string | null;
   storageClass: string;
   reason: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface NamespaceInfo {
@@ -1142,6 +1142,7 @@ export interface EventFilters {
 
 export interface Diagnostics {
   searchPath: SearchPathEntry[];
+  tools: ToolStatus[];
   plugins: PluginStatus[];
   contexts: DiagnosticContext[];
   kubeconfig: KubeconfigInfo | null;
@@ -1180,6 +1181,13 @@ export interface PluginStatus {
   name: string;
   path: string | null;
   requiredBy: string[];
+}
+
+export interface ToolStatus {
+  name: string;
+  path: string | null;
+  version: string | null;
+  error: string | null;
 }
 
 export interface SearchPathEntry {
@@ -1707,7 +1715,12 @@ export type ObjectFacts =
       revision: string | null;
       current: boolean | null;
     }
-  | { kind: "claim"; phase: string; capacity: string; storageClass: string }
+  | {
+      kind: "claim";
+      phase: string | null;
+      capacity: string | null;
+      storageClass: string;
+    }
   | {
       kind: "node";
       schedulable: boolean;

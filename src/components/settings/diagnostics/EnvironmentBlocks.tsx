@@ -32,7 +32,7 @@ export function EnvironmentBlocks({
 }: {
   diagnostics: Diagnostics;
 }) {
-  const { searchPath, plugins, contexts, kubeconfig, app } = diagnostics;
+  const { searchPath, tools, plugins, contexts, kubeconfig, app } = diagnostics;
   const t = useT();
 
   return (
@@ -45,6 +45,42 @@ export function EnvironmentBlocks({
               {!entry.exists && (
                 <span className="ml-2 text-warn">
                   {t("settings", "notThere")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Block>
+
+      <Block
+        title={t("settings", "toolsBlock", {
+          found: tools.filter((tool) => tool.path).length,
+          total: tools.length,
+        })}
+      >
+        <ul className="space-y-1">
+          {tools.map((tool) => (
+            <li key={tool.name} className="text-xs text-fg-mut">
+              <span className="font-mono text-fg">{tool.name}</span>
+              {tool.path ? (
+                <span className="ml-2 font-mono">{tool.path}</span>
+              ) : (
+                // Muted, not red. Nothing here is required: somebody who never
+                // touches Azure is not missing `az`, and painting six absent
+                // cloud CLIs as faults would bury the one that matters.
+                <span className="ml-2">
+                  {t("settings", "notInstalledInline")}
+                </span>
+              )}
+              {tool.version && (
+                <span className="ml-2 font-mono text-fg">{tool.version}</span>
+              )}
+              {/* Present and silent is the state worth a colour: the file is
+                  there, so nobody will think to install it, and whatever
+                  wanted it will fail later saying something else. */}
+              {tool.path && !tool.version && (
+                <span className="ml-2 text-warn">
+                  {t("settings", "answeredNothing")}
                 </span>
               )}
             </li>

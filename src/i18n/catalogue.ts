@@ -610,6 +610,7 @@ export const en = {
     importedFromCluster: "Imported from cluster",
     suspendedLower: "suspended",
     inTime: "in {time}",
+    nowLower: "now",
     unknownLower: "unknown",
     resourceWatchFailed: "Resource watch failed",
     eventBridgeLagged: {
@@ -2550,6 +2551,9 @@ export const en = {
       other: "Search path · {n} directories",
     },
     notThere: "not there",
+    toolsBlock: "Tools · {found} of {total}",
+    notInstalledInline: "not installed",
+    answeredNothing: "found, but would not say its version",
     pluginsBlock: "Plugins · {n}",
     notFoundInline: "not found",
     neededBy: "· needed by {list}",

@@ -58,6 +58,9 @@ const PENDING_GRACE_SECONDS: i64 = 60;
 
 /// Cap on the problems list. A node outage produces one row per pod on it,
 /// and neither the IPC payload nor the two-second re-render survives that.
+///
+/// The frontend caps its own merge at the same number; the two are held
+/// equal by `shared/overview-limits.json` rather than by memory.
 const MAX_PROBLEMS: usize = 50;
 
 /// Restart count above which a pod is called out even while it is Running.
@@ -1120,6 +1123,24 @@ pub async fn get_cluster_overview(
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    /// The frontend caps the list it merges at the same number, and neither
+    /// side can see the other's constant. `shared/overview-limits.json` is
+    /// what holds them equal; this test and its twin in
+    /// `src/lib/overview-merge.test.ts` are what enforce it.
+    #[test]
+    fn the_problem_cap_is_the_number_the_shared_file_states() {
+        const LIMITS: &str = include_str!("../../../shared/overview-limits.json");
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Limits {
+            max_problems: usize,
+        }
+
+        let limits: Limits = serde_json::from_str(LIMITS).expect("shared limits parse");
+        assert_eq!(MAX_PROBLEMS, limits.max_problems);
+    }
     use crate::metrics::{MetricsStatus, NodeMetrics};
     use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
     use k8s_openapi::api::core::v1::{

@@ -8,8 +8,4 @@ export {
   YamlEditorToolbar,
   type YamlEditorToolbarProps,
 } from "./YamlEditorToolbar";
-export {
-  YamlEditorAction,
-  YamlEditorMenuAction,
-  YamlEditorDialog,
-} from "./YamlEditorDialog";
+export { YamlEditorAction, YamlEditorDialog } from "./YamlEditorDialog";

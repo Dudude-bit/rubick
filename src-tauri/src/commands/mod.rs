@@ -82,26 +82,3 @@ pub use settings::*;
 pub use storage::*;
 pub use terminal::*;
 pub use workloads::*;
-
-/// Debug command to check PATH and discovered plugins
-#[tauri::command]
-pub async fn debug_kubectl_plugins() -> std::result::Result<serde_json::Value, String> {
-    use crate::cli::PluginDiscovery;
-
-    let shell_path = crate::shell::get_user_path();
-    let process_path = std::env::var("PATH").unwrap_or_default();
-
-    let mut discovery = PluginDiscovery::new("kubectl-");
-    let plugins = discovery.discover().unwrap_or_default();
-
-    let plugin_names: Vec<String> = plugins.iter().map(|p| p.name.clone()).collect();
-
-    Ok(serde_json::json!({
-        "shellPath": shell_path,
-        "processPath": process_path,
-        "shellPathEntryCount": shell_path.split(':').filter(|s| !s.is_empty()).count(),
-        "processPathEntryCount": process_path.split(':').filter(|s| !s.is_empty()).count(),
-        "discoveredPlugins": plugin_names,
-        "hasOidcLogin": plugin_names.iter().any(|name| name.contains("oidc")),
-    }))
-}

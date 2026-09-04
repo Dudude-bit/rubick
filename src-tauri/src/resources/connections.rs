@@ -126,8 +126,11 @@ pub enum ObjectFacts {
         current: Option<bool>,
     },
     Claim {
-        phase: String,
-        capacity: String,
+        /// Absent when the cluster wrote none — see `PersistentVolumeClaimInfo`.
+        phase: Option<String>,
+        /// Absent when the cluster reported none: a claim that cannot
+        /// state its size says nothing rather than "Unknown".
+        capacity: Option<String>,
         #[serde(rename = "storageClass")]
         storage_class: String,
     },

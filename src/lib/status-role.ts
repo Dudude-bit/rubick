@@ -100,6 +100,11 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     // reader matches the word against their terminal. Amber, not red: a
     // cordon is somebody's decision, not a fault.
     "ready,schedulingdisabled",
+    // A PersistentVolume whose claim was deleted. The data is still there
+    // and nothing new can bind to it until somebody reclaims it, so it is a
+    // volume waiting on a person — amber, and certainly not the grey dash an
+    // unlisted status gets.
+    "released",
   ],
   err: [
     "error",
@@ -115,6 +120,9 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "false",
     // Gateway API: a controller looked and said no.
     "refused",
+    // A PersistentVolumeClaim whose volume is gone. Every pod that mounts it
+    // fails to start, which is as broken as this list gets.
+    "lost",
   ],
   neutral: [
     "completed",

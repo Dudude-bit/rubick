@@ -65,67 +65,6 @@ pub struct ContextInfo {
     pub auth: ContextAuth,
 }
 
-/// Represents a Kubernetes cluster context with connection details
-#[derive(Debug, Clone)]
-pub struct ClusterContext {
-    /// Context name
-    pub name: String,
-    /// Cluster endpoint URL
-    pub server: String,
-    /// Cluster CA certificate (base64 encoded)
-    pub certificate_authority_data: Option<String>,
-    /// Whether to skip TLS verification
-    pub insecure_skip_tls_verify: bool,
-    /// Default namespace for this context
-    pub default_namespace: String,
-}
-
-impl ClusterContext {
-    /// Create a new cluster context
-    pub fn new(name: impl Into<String>, server: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            server: server.into(),
-            certificate_authority_data: None,
-            insecure_skip_tls_verify: false,
-            default_namespace: "default".to_string(),
-        }
-    }
-
-    /// Set the CA certificate data
-    #[must_use]
-    pub fn with_ca_data(mut self, ca_data: impl Into<String>) -> Self {
-        self.certificate_authority_data = Some(ca_data.into());
-        self
-    }
-
-    /// Set insecure TLS verification
-    #[must_use]
-    pub fn with_insecure_tls(mut self, insecure: bool) -> Self {
-        self.insecure_skip_tls_verify = insecure;
-        self
-    }
-
-    /// Set the default namespace
-    #[must_use]
-    pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
-        self.default_namespace = namespace.into();
-        self
-    }
-}
-
-impl Default for ClusterContext {
-    fn default() -> Self {
-        Self {
-            name: "default".to_string(),
-            server: "https://localhost:6443".to_string(),
-            certificate_authority_data: None,
-            insecure_skip_tls_verify: false,
-            default_namespace: "default".to_string(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,16 +101,5 @@ mod tests {
             serde_json::to_string(&ContextAuth::Unrecognised).unwrap(),
             r#"{"kind":"unrecognised"}"#
         );
-    }
-
-    #[test]
-    fn test_cluster_context_builder() {
-        let ctx = ClusterContext::new("prod", "https://k8s.example.com:6443")
-            .with_namespace("production")
-            .with_insecure_tls(false);
-
-        assert_eq!(ctx.name, "prod");
-        assert_eq!(ctx.default_namespace, "production");
-        assert!(!ctx.insecure_skip_tls_verify);
     }
 }

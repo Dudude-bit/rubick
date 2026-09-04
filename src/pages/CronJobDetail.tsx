@@ -62,13 +62,15 @@ import { useT } from "@/i18n/useT";
 function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
   const t = useT();
   const lastAge = useRealtimeAge(cronJob.lastSchedule ?? null);
-  const next = useMemo(
-    () =>
-      cronJob.suspend
-        ? null
-        : nextCronRun(cronJob.schedule, new Date(), cronJob.timezone),
-    [cronJob.schedule, cronJob.timezone, cronJob.suspend]
-  );
+  // Every render, deliberately, where this was a `useMemo` keyed on the
+  // schedule string. The countdown below re-renders this component once a
+  // second; a next-run computed once at mount counts down to zero and stays
+  // there, so the page read «через expired» above a time that had already
+  // passed, for as long as it stayed open. One cron parse a second on one
+  // page is the whole cost of it being true instead.
+  const next = cronJob.suspend
+    ? null
+    : nextCronRun(cronJob.schedule, new Date(), cronJob.timezone);
   const countdown = useRealtimeCountdown(next);
   const description = describeCron(cronJob.schedule, t);
 
@@ -113,7 +115,9 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
           cronJob.suspend
             ? t("action", "suspendedLower")
             : next
-              ? t("action", "inTime", { time: countdown.display })
+              ? countdown.display
+                ? t("action", "inTime", { time: countdown.display })
+                : t("action", "nowLower")
               : t("action", "unknownLower")
         }
         tone={cronJob.suspend ? "warn" : undefined}

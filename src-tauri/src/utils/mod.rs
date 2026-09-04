@@ -4,17 +4,7 @@ pub mod quantities;
 
 pub use quantities::{format_cpu, format_memory, parse_cpu, parse_memory};
 
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use regex::Regex;
-
-/// Format age from Kubernetes Time.
-#[must_use]
-pub fn format_k8s_age(created_at: Option<&Time>) -> String {
-    let parsed = created_at
-        .and_then(|time| chrono::DateTime::parse_from_rfc3339(&time.0.to_rfc3339()).ok())
-        .map(|t| t.with_timezone(&chrono::Utc));
-    k8s_gui_common::datetime::format_age(parsed.as_ref())
-}
 
 /// Normalize namespace input, returning None for "all namespaces".
 #[must_use]

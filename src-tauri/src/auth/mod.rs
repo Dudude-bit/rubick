@@ -56,18 +56,6 @@ impl std::fmt::Debug for AuthResult {
     }
 }
 
-impl AuthResult {
-    /// Check if the token is expired
-    #[must_use]
-    pub fn is_expired(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
-            expires_at < chrono::Utc::now()
-        } else {
-            false
-        }
-    }
-}
-
 /// Trait for authentication providers
 #[async_trait::async_trait]
 pub trait AuthProvider: Send + Sync {
@@ -82,33 +70,4 @@ pub trait AuthProvider: Send + Sync {
 
     /// Get provider name
     fn name(&self) -> &'static str;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_auth_result_expiry() {
-        let result = AuthResult {
-            token: "test".to_string(),
-            expires_at: Some(chrono::Utc::now() - chrono::Duration::hours(1)),
-            refresh_token: None,
-            token_type: "Bearer".to_string(),
-        };
-
-        assert!(result.is_expired());
-    }
-
-    #[test]
-    fn test_auth_result_not_expired() {
-        let result = AuthResult {
-            token: "test".to_string(),
-            expires_at: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
-            refresh_token: None,
-            token_type: "Bearer".to_string(),
-        };
-
-        assert!(!result.is_expired());
-    }
 }
