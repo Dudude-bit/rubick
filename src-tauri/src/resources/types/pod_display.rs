@@ -241,6 +241,47 @@ pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The twin of `src/features/infrastructure/pod-status-conformance.test.ts`.
+    ///
+    /// The infrastructure builder derives this same status in TypeScript, for a
+    /// manifest somebody pasted, where no cluster read happened and there is no
+    /// Rust behind it. Two evaluators for one question drift, and nothing but
+    /// `shared/pod-status-conformance.json` says they must not: this walks the
+    /// container list backwards so the first container's verdict stands, and
+    /// the other walks it forwards and returns early — the same answer today,
+    /// by two different routes, which is exactly the pair worth pinning.
+    #[test]
+    fn the_shared_corpus_says_what_this_says() {
+        const CORPUS: &str = include_str!("../../../../shared/pod-status-conformance.json");
+
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            status: serde_json::Value,
+            expect: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct Corpus {
+            cases: Vec<Case>,
+        }
+
+        let corpus: Corpus = serde_json::from_str(CORPUS).expect("the corpus parses");
+        assert!(corpus.cases.len() >= 6, "the corpus lost cases");
+
+        for case in corpus.cases {
+            let pod: Pod = serde_json::from_value(serde_json::json!({
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "metadata": { "name": "corpus" },
+                "spec": { "containers": [{ "name": "app" }] },
+                "status": case.status,
+            }))
+            .unwrap_or_else(|e| panic!("{}: {e}", case.name));
+
+            assert_eq!(display_status(&pod), case.expect, "{}", case.name);
+        }
+    }
     use k8s_openapi::api::core::v1::{
         Container, ContainerState, ContainerStateRunning, ContainerStateTerminated,
         ContainerStateWaiting, PodCondition, PodSpec,

@@ -3954,6 +3954,7 @@ export const ru: Catalogue = {
     registeredByHand: "добавлен вручную",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
     containerTerminated: "Контейнер завершил работу · {detail}",
+    podIsNoLongerRunning: "Pod: {status}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
     noLongerAvailable: "{target} больше недоступен.",

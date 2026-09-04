@@ -15,7 +15,88 @@ export interface BaseResourceData {
   labels: Record<string, string>;
   origin?: "builder" | "cluster";
   status?: string;
-  rawManifest?: Record<string, unknown>;
+  rawManifest?: Manifest;
+}
+
+/**
+ * The slice of a manifest the builder reads and writes.
+ *
+ * Open on purpose: everything a pasted document carries that the canvas
+ * does not show rides along in `rawManifest` and comes back out in the
+ * YAML untouched. What is named here is what the canvas shows, not what a
+ * Pod is. Numbers may arrive quoted from YAML, so the numeric fields admit
+ * a string and are coerced where they are read.
+ */
+export interface Manifest {
+  apiVersion?: string;
+  kind?: string;
+  metadata?: ObjectMeta;
+  spec?: ManifestSpec;
+  status?: ManifestStatus;
+  data?: Record<string, unknown>;
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface ObjectMeta {
+  name?: string;
+  namespace?: string;
+  labels?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface Container {
+  name?: string;
+  image?: string;
+  ports?: { containerPort?: number | string; [key: string]: unknown }[];
+  [key: string]: unknown;
+}
+
+export interface PodTemplate {
+  metadata?: ObjectMeta;
+  spec?: { containers?: Container[]; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+export interface IngressRule {
+  host?: string;
+  http?: {
+    paths?: {
+      path?: string;
+      pathType?: string;
+      backend?: {
+        service?: {
+          name?: string;
+          port?: { number?: number | string; name?: string };
+        };
+      };
+    }[];
+  };
+}
+
+/** One spec type for the six kinds: a field the kind does not have is simply absent. */
+export interface ManifestSpec {
+  containers?: Container[];
+  replicas?: number | string;
+  selector?: Record<string, unknown>;
+  template?: PodTemplate;
+  type?: string;
+  sessionAffinity?: string;
+  ports?: { port?: number | string; [key: string]: unknown }[];
+  rules?: IngressRule[];
+  [key: string]: unknown;
+}
+
+export interface ManifestStatus {
+  phase?: string;
+  availableReplicas?: number | string;
+  containerStatuses?: {
+    state?: {
+      waiting?: { reason?: string };
+      terminated?: { reason?: string; exitCode?: number; signal?: number };
+    };
+  }[];
+  [key: string]: unknown;
 }
 
 export interface PodResourceData extends BaseResourceData {

@@ -3725,6 +3725,7 @@ export const en = {
     registeredByHand: "registered by hand",
     couldNotReadInScope: "Could not read {label} in this scope.",
     containerTerminated: "Container terminated · {detail}",
+    podIsNoLongerRunning: "Pod is {status}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
     noLongerAvailable: "{target} is no longer available.",

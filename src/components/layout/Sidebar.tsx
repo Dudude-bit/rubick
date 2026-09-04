@@ -46,6 +46,7 @@ import { inNamespace } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
+import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 
 type NavKey = keyof typeof en.nav;
@@ -498,9 +499,7 @@ function IntegrationsGroup() {
       // the address itself if the forward moved ports. A row that stayed
       // "asleep" after a successful wake is this cache, not the tunnel.
       .then(() => queryClient.invalidateQueries())
-      .catch((error: unknown) =>
-        setFailed(error instanceof Error ? error.message : String(error))
-      )
+      .catch((error: unknown) => setFailed(errorWords(error, t)))
       .finally(() => setWaking(null));
   };
 

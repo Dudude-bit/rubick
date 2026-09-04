@@ -194,8 +194,42 @@ describe("why a pod action cannot run", () => {
       ],
     } as Partial<PodInfo>);
     expect(find(all("Pod", done), "shell")?.reason).toMatch(
-      /has finished — Succeeded/
+      /has finished — Completed/
     );
+  });
+
+  /**
+   * The gate reads the phase, which is Running for a pod whose container has
+   * died; the sentence used to read it too, and said "this pod is Running"
+   * under an Error badge.
+   */
+  it("names the status the badge shows, not the phase behind it", () => {
+    const died = pod({
+      status: {
+        phase: "Running",
+        display: "Error",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      containers: [
+        container("app", {
+          type: "terminated",
+          termination: {
+            exitCode: 1,
+            signal: null,
+            reason: "Error",
+            message: null,
+            startedAt: null,
+            finishedAt: null,
+          },
+        }),
+      ],
+    } as Partial<PodInfo>);
+    const reason = find(all("Pod", died), "shell")?.reason;
+    expect(reason).toMatch(/this pod is Error/);
+    expect(reason).not.toMatch(/Running/);
   });
 
   it("says when there is no port declared to forward at all", () => {
