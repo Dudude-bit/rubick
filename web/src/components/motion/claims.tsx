@@ -109,10 +109,26 @@ function useBusting(count: number) {
   return states;
 }
 
+function useOffscreen<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(([e]) => {
+      el.toggleAttribute("data-offscreen", !e?.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return ref;
+}
+
 export function Claims() {
   const states = useBusting(CLAIMS.length);
+  const ref = useOffscreen<HTMLDivElement>();
   return (
     <div
+      ref={ref}
       aria-hidden
       className="pointer-events-none absolute inset-y-0 right-0 hidden w-[38%] lg:block"
     >
@@ -130,7 +146,7 @@ export function Claims() {
         >
           <span
             data-state={states[i]}
-            className="claim-card grid rounded-full border border-neutral-700/80 bg-neutral-900/90 px-3.5 py-1.5 font-mono text-[13px] shadow-xl shadow-black/40 backdrop-blur"
+            className="claim-card grid rounded-full border border-neutral-700/80 bg-neutral-900 px-3.5 py-1.5 font-mono text-[13px]"
             style={
               {
                 "--rot": c.rot,
