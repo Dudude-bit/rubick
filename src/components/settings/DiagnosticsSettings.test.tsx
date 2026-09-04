@@ -21,6 +21,14 @@ const { DiagnosticsSettings } = await import("./DiagnosticsSettings");
 
 const empty: Diagnostics = {
   searchPath: [{ path: "/opt/homebrew/bin", exists: true }],
+  tools: [
+    {
+      name: "kubectl",
+      path: "/usr/local/bin/kubectl",
+      version: "v1.31.0",
+      error: null,
+    },
+  ],
   plugins: [],
   contexts: [],
   kubeconfig: null,

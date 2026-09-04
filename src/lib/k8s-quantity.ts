@@ -214,22 +214,3 @@ export function formatKubernetesBytes(
 
   return formatBytes(bytes, decimals);
 }
-
-/**
- * Calculate utilization percentage.
- *
- * Returns the raw percentage (can exceed 100% — overcommit is a real
- * state in Kubernetes that callers need to see). Negative results are
- * clamped to 0 (treats them as "no usage" rather than nonsense).
- *
- * @param used - Used amount
- * @param total - Total/limit amount
- * @returns Percentage (>= 0) or null if `total` is missing or non-positive
- */
-export function calculateUtilization(
-  used: number,
-  total: number
-): number | null {
-  if (total <= 0) return null;
-  return Math.max(0, (used / total) * 100);
-}

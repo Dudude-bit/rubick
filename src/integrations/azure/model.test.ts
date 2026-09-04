@@ -4,7 +4,6 @@ import type { CustomResourceInfo } from "@/generated/types";
 import {
   bindingSummary,
   danglingBindings,
-  identitySummary,
   identityType,
   prohibitedTargetSummary,
 } from "./model";
@@ -49,22 +48,6 @@ describe("what an Azure identity is", () => {
       "9"
     );
     expect(identityType(object("AzureIdentity", "a", {}), t)).toBeNull();
-  });
-
-  it("shortens a resource id to the identity's own name", () => {
-    /** A full resource id is a subscription guid, a resource group and a
-     *  provider path — a hundred and sixty characters in which the only
-     *  part a reader is looking for is the last one. */
-    expect(
-      identitySummary(
-        object("AzureIdentity", "shop", {
-          type: 0,
-          resourceID:
-            "/subscriptions/0000/resourcegroups/prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shop-api",
-        }),
-        t
-      )
-    ).toBe("user-assigned MSI · shop-api");
   });
 });
 

@@ -81,15 +81,6 @@ export function identityResource(identity: CustomResourceInfo): string | null {
   return parts[parts.length - 1] ?? id;
 }
 
-export function identitySummary(identity: CustomResourceInfo, t: T): string {
-  const parts = [identityType(identity, t), identityResource(identity)].filter(
-    Boolean
-  );
-  return parts.length > 0
-    ? parts.join(" · ")
-    : t("readings", "azureNoIdentityNamedPlain");
-}
-
 /** The `AzureIdentity` a binding points at, by name and unvalidated. */
 export function bindingIdentity(binding: CustomResourceInfo): string | null {
   return text(binding, "spec.azureIdentity");

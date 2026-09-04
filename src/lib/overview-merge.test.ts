@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { mergeOverviews } from "./overview-merge";
+import { MAX_PROBLEMS, mergeOverviews } from "./overview-merge";
 import type {
   ClusterOverview,
   ClusterProblem,
@@ -391,5 +394,26 @@ describe("ranking the joined problems", () => {
     // headline still adds up to the 103 things that are wrong.
     expect(merged.problemsTruncated).toBe(53);
     expect(merged.problems.length + merged.problemsTruncated).toBe(103);
+  });
+});
+
+/**
+ * The cap the Overview applies is written in two languages, and neither can
+ * see the other's copy. Rust truncates the list it sends; this module
+ * truncates the list it merges. A reader whose cluster is unhealthy enough to
+ * hit the cap would see the number change depending on which path answered.
+ *
+ * The comment above `MAX_PROBLEMS` has always said "mirrored". This is the
+ * part that notices when it stops being true.
+ */
+describe("the cap both halves of the Overview agree on", () => {
+  const shared = JSON.parse(
+    // Read rather than imported, for the same reason the log-query corpus is:
+    // these are the bytes `include_str!` pulls into the Rust test.
+    readFileSync(resolve(process.cwd(), "shared/overview-limits.json"), "utf8")
+  ) as { maxProblems: number };
+
+  it("is the number the shared file states", () => {
+    expect(MAX_PROBLEMS).toBe(shared.maxProblems);
   });
 });

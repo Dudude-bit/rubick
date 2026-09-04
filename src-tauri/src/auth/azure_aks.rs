@@ -303,27 +303,6 @@ pub struct AksClusterInfo {
     pub environment: String,
 }
 
-impl AksClusterInfo {
-    /// Parse AKS cluster info from a kubeconfig context name
-    ///
-    /// AKS contexts typically follow the format: `CLUSTER_NAME` or `RESOURCE_GROUP_CLUSTER`
-    /// Unlike GKE, AKS doesn't encode as much info in the context name
-    #[must_use]
-    pub fn from_context_name(context: &str) -> Option<Self> {
-        // AKS context names don't have a standard format with embedded info
-        // We can only detect if it might be an AKS cluster
-        if context.contains("aks") || context.contains("azure") {
-            Some(Self {
-                server_id: None,
-                tenant_id: None,
-                environment: "AzurePublicCloud".to_string(),
-            })
-        } else {
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,14 +435,5 @@ mod tests {
             Some("6dae42f8-4368-4678-94ff-3960e28e3630".to_string())
         );
         assert_eq!(info.tenant_id, Some("my-tenant-id".to_string()));
-    }
-
-    #[test]
-    fn test_aks_cluster_info_from_context() {
-        let info = AksClusterInfo::from_context_name("my-aks-cluster");
-        assert!(info.is_some());
-
-        let info = AksClusterInfo::from_context_name("minikube");
-        assert!(info.is_none());
     }
 }

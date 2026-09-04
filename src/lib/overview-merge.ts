@@ -41,13 +41,15 @@ const SUMMED: ReadonlyArray<keyof ResourceCounts> = [
 ];
 
 /**
- * `MAX_PROBLEMS` in `src-tauri/src/commands/overview.rs`, mirrored.
+ * `MAX_PROBLEMS` in `src-tauri/src/commands/overview.rs`, mirrored —
+ * `shared/overview-limits.json` is what holds the two equal, and a test
+ * on each side is what notices when they stop being.
  *
  * Every part arrives ranked and already cut to it, so the join has to be cut
  * to the same number: a panel that grew by fifty rows per namespace watched
  * would defeat the cap on exactly the cluster the cap was written for.
  */
-const MAX_PROBLEMS = 50;
+export const MAX_PROBLEMS = 50;
 
 /**
  * A count is `null` where the cluster refused to say, and that has to survive

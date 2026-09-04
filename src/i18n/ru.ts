@@ -574,6 +574,7 @@ export const ru: Catalogue = {
     importedFromCluster: "Импортировано из кластера",
     suspendedLower: "приостановлен",
     inTime: "через {time}",
+    nowLower: "сейчас",
     unknownLower: "неизвестно",
     resourceWatchFailed: "Не удалось следить за ресурсом",
     eventBridgeLagged: {
@@ -2719,6 +2720,9 @@ export const ru: Catalogue = {
       other: "Пути поиска · {n} каталога",
     },
     notThere: "не существует",
+    toolsBlock: "Инструменты · {found} из {total}",
+    notInstalledInline: "не установлен",
+    answeredNothing: "найден, но версию не сообщил",
     pluginsBlock: "Плагины · {n}",
     notFoundInline: "не найден",
     neededBy: "· нужен для {list}",

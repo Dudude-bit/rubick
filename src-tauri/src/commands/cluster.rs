@@ -76,36 +76,6 @@ pub async fn get_current_context(state: State<'_, AppState>) -> Result<Option<St
         .map_err(|e| crate::error::Error::Config(e.to_string()))
 }
 
-/// Switch to a different context
-#[tauri::command]
-pub async fn switch_context(context: String, state: State<'_, AppState>) -> Result<()> {
-    // Disconnect from current context if connected
-    if let Some(current) = state.get_current_context() {
-        state.client_manager.disconnect(&current);
-    }
-
-    // Load kubeconfig if not already loaded
-    state
-        .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_overrides())
-        .await
-        .map_err(|e| crate::error::Error::Config(e.to_string()))?;
-
-    // Connect to new context
-    state
-        .client_manager
-        .connect(&context)
-        .await
-        .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
-
-    // Update state
-    state.set_current_context(Some(context.clone()));
-    state.create_session(&context);
-
-    tracing::info!("Switched to context: {}", context);
-    Ok(())
-}
-
 /// Connect to a cluster by context name
 #[tauri::command]
 pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Result<ClusterInfo> {

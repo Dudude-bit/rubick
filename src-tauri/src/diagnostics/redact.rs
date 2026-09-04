@@ -48,6 +48,12 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
     for entry in &mut d.search_path {
         entry.path = scrub(&entry.path);
     }
+    for tool in &mut d.tools {
+        // The path, and the error too: a spawn failure quotes the file it
+        // could not run, which is the home directory again in prose.
+        tool.path = tool.path.as_deref().map(&scrub);
+        tool.error = tool.error.as_deref().map(&scrub);
+    }
     for finding in &mut d.findings {
         finding.title = scrub(&finding.title);
         finding.detail = scrub(&finding.detail);
@@ -65,11 +71,18 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::ToolStatus;
     use crate::diagnostics::{DiagnosticContext, Diagnostics, Finding, InstallationInfo, Severity};
 
     fn sample() -> Diagnostics {
         Diagnostics {
             search_path: Vec::new(),
+            tools: vec![ToolStatus {
+                name: "kubectl".into(),
+                path: Some("/Users/someone/bin/kubectl".into()),
+                version: Some("v1.31.0".into()),
+                error: None,
+            }],
             plugins: Vec::new(),
             contexts: vec![
                 DiagnosticContext {
@@ -132,6 +145,11 @@ mod tests {
         let mut d = sample();
         d.app.config_path = Some(format!("{home}/Library/Application Support/k8s-gui"));
         d.contexts[0].command_path = Some(format!("{home}/bin/kubectl"));
+        // Both fields: a spawn that failed quotes the file it could not run,
+        // so the error carries the home directory in prose even when the path
+        // beside it has already been scrubbed.
+        d.tools[0].path = Some(format!("{home}/bin/kubectl"));
+        d.tools[0].error = Some(format!("{home}/bin/kubectl: permission denied"));
 
         let out = redacted(d);
         let all = serde_json::to_string(&out).expect("serialises");

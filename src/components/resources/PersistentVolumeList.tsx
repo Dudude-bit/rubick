@@ -4,11 +4,12 @@ import { T } from "@/i18n/T";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge } from "@/components/ui/status-badge";
 import { ClaimRef, StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
+  createAgeColumn,
   createNameColumn,
 } from "./columns";
 import { createResourceListPage } from "./createResourceListPage";
@@ -23,14 +24,20 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     accessorKey: "reclaimPolicy",
     header: () => <T section="columns" k="reclaimPolicy" />,
     cell: ({ row }) => (
-      <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
+      <span
+        className={row.original.reclaimPolicy ? "text-fg-mid" : "text-fg-mut"}
+      >
+        {row.original.reclaimPolicy ?? (
+          <T section="empty" k="nothingReportedYet" />
+        )}
+      </span>
     ),
   },
   {
     size: 110,
     accessorKey: "status",
     header: () => <T section="columns" k="status" />,
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
   },
   {
     // A namespace and a claim name together, so as wide as a name column.
@@ -45,11 +52,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     header: () => <T section="columns" k="storageClass" />,
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
-  {
-    size: 80,
-    accessorKey: "age",
-    header: () => <T section="columns" k="age" />,
-  },
+  createAgeColumn<PersistentVolumeInfo>(),
 ];
 
 export const PersistentVolumeList =

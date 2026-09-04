@@ -53,6 +53,21 @@ export function crdObjectPath(
  * own sentence about why. That message is never paraphrased anywhere in this
  * tree; a rewritten error is a second guess at somebody else's failure.
  */
+/**
+ * The one line a vendor row shows about itself, and how to colour it.
+ *
+ * Written out five times across four vendor folders before it had a name,
+ * which mattered less for the repetition than for what the repetition hid:
+ * there are three tones and four things to say, so every vendor that cannot
+ * reach its own backend files "could not look" under `warn` — the same tone
+ * as a real warning. Widening this to say so is one edit here instead of
+ * five, and the places to change are now the ones that reference this name.
+ */
+export interface VendorVerdict {
+  text: string;
+  tone: "ok" | "warn" | "err";
+}
+
 export interface VendorCondition {
   type: string;
   status: string;

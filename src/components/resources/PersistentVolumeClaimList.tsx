@@ -3,7 +3,7 @@ import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge } from "@/components/ui/status-badge";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
@@ -11,6 +11,7 @@ import { StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
+  createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
 } from "./columns";
@@ -39,7 +40,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     size: 110,
     accessorKey: "status",
     header: () => <T section="columns" k="status" />,
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
   },
   {
     // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
@@ -67,11 +68,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),
   },
-  {
-    size: 80,
-    accessorKey: "age",
-    header: () => <T section="columns" k="age" />,
-  },
+  createAgeColumn<PersistentVolumeClaimInfo>(),
 ];
 
 export function PersistentVolumeClaimList() {

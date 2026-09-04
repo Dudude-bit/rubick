@@ -1,6 +1,6 @@
 import { Info, Trash2 } from "lucide-react";
 
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { viewGlyph } from "@/components/resources/detail-tab";
@@ -121,7 +121,7 @@ export function PersistentVolumeDetail() {
       error={error}
       resourceKind={ResourceType.PersistentVolume}
       title={pv?.name || name || ""}
-      statusBadge={pv && <StatusBadge status={pv.status} />}
+      statusBadge={pv && <PhaseBadge phase={pv.status} />}
       badges={
         pv && (
           <>

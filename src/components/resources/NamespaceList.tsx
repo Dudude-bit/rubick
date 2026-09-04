@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { T } from "@/i18n/T";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
@@ -6,12 +6,14 @@ import { Crosshair } from "lucide-react";
 import { ResourceList } from "./ResourceList";
 import { ResourceRef } from "./ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { RealtimeAge } from "@/components/ui/realtime";
+import { createAgeColumn } from "./columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
+import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType } from "@/lib/resource-registry";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -62,12 +64,7 @@ export const columns = (
       </span>
     ),
   },
-  {
-    size: 80,
-    accessorKey: "createdAt",
-    header: () => <T section="columns" k="age" />,
-    cell: ({ row }) => <RealtimeAge timestamp={row.original.createdAt} />,
-  },
+  createAgeColumn<NamespaceInfo>(),
 ];
 
 /**
@@ -79,7 +76,46 @@ export function NamespaceList() {
   const t = useT();
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const isConnected = useClusterStore((s) => s.isConnected);
   const { namespaces } = useClusterSummary();
+  const { toast } = useToast();
+
+  // This page polled while every other cluster-scoped list watched, and the
+  // command it needed had been written and never called. A namespace is
+  // created and deleted rarely enough that the poll was never obviously
+  // wrong, and often enough — a `kubectl apply` of somebody's whole stack —
+  // that the delay was noticed and blamed on the cluster.
+  const queryKey = useMemo(
+    () => queryKeys.resources(ResourceType.Namespace, null),
+    []
+  );
+  const subscribeNamespaces = useCallback(
+    () => commands.subscribeNamespaceWatch(),
+    []
+  );
+
+  const [watchFailed, setWatchFailed] = useState(false);
+  const handleWatchError = useCallback(
+    (err: string) => {
+      if (watchFailed) return;
+      setWatchFailed(true);
+      toast({
+        title: t("action", "realtimeUnavailable"),
+        description: t("action", "realtimeFallback", {
+          kind: toPlural(ResourceType.Namespace),
+          error: err,
+        }),
+      });
+    },
+    [t, toast, watchFailed]
+  );
+  const { resyncing } = useResourceWatch<NamespaceInfo>({
+    enabled: isConnected,
+    subscribe: subscribeNamespaces,
+    queryKey,
+    onError: handleWatchError,
+    onRecovered: useCallback(() => setWatchFailed(false), []),
+  });
 
   const podCounts = useMemo(
     () => new Map(namespaces.map((ns) => [ns.name, ns.podCount])),
@@ -108,9 +144,12 @@ export function NamespaceList() {
     <ResourceList<NamespaceInfo>
       title="Namespaces"
       searchKey="name"
-      queryKey={queryKeys.resources(ResourceType.Namespace, null)}
+      queryKey={queryKey}
       queryFn={() => commands.listNamespaces()}
       staleTime={STALE_TIMES.slow}
+      refresh={watchFailed ? undefined : false}
+      live={!watchFailed}
+      resyncing={resyncing}
       getRowId={getResourceRowId}
       columns={namespaceColumns}
       emptyStateLabel="Namespaces"

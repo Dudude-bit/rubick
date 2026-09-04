@@ -81,7 +81,11 @@ export function useRealtimeAge(timestamp: string | null): string {
  * Format a countdown duration
  */
 function formatCountdown(seconds: number): string {
-  if (seconds <= 0) return "expired";
+  // Empty, not a word. This formats a duration, and "expired" is not one —
+  // it went straight into `t("action", "inTime", {time})` and reached a
+  // Russian reader as «через expired». What to say when the moment has
+  // passed is the caller's sentence to write; `isExpired` is what it reads.
+  if (seconds <= 0) return "";
 
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);

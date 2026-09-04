@@ -106,7 +106,6 @@ fn main() {
             // Cluster management
             commands::cluster::list_contexts,
             commands::cluster::get_current_context,
-            commands::cluster::switch_context,
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
@@ -245,7 +244,6 @@ fn main() {
             commands::watch::unsubscribe_resource_watch,
             // kubectl commands
             commands::kubectl::check_kubectl_availability,
-            commands::debug_kubectl_plugins,
             // Helm commands (native + CLI)
             commands::helm::check_helm_availability,
             commands::helm::list_helm_releases_native,

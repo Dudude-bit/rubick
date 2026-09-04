@@ -3,7 +3,6 @@ import type { LogLevel } from "@/generated/types";
 import { groupKeyFor } from "./normalize";
 import {
   groupConsecutive,
-  expandRun,
   expandRuns,
   runSpanMs,
   countCollapsed,
@@ -117,28 +116,6 @@ describe("groupConsecutive", () => {
     expect(runSpanMs(groupConsecutive([line("solo")])[0])).toBe(0);
   });
 });
-
-describe("expandRun", () => {
-  it("hands back exactly the lines the run stands for", () => {
-    const logs = [
-      line("prelude"),
-      line("flood line 1 traversing"),
-      line("flood line 2 traversing"),
-      line("flood line 3 traversing"),
-      line("coda"),
-    ];
-
-    const runs = groupConsecutive(logs);
-    const flood = runs.find((r) => r.count === 3)!;
-
-    expect(expandRun(logs, flood).map((l) => l.message)).toEqual([
-      "flood line 1 traversing",
-      "flood line 2 traversing",
-      "flood line 3 traversing",
-    ]);
-  });
-});
-
 describe("expandRuns", () => {
   const logs = [
     line("flood line 1 traversing"),

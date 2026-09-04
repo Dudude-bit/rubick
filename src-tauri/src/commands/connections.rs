@@ -1424,11 +1424,7 @@ async fn pod_connections(
         .pods
         .iter()
         .find(|pod| pod.name_any() == name)
-        .ok_or_else(|| Error::NotFound {
-            kind: "Pod".to_string(),
-            name: name.to_string(),
-            namespace: ns.to_string(),
-        })?;
+        .ok_or_else(|| Error::not_found("Pod", name, ns))?;
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
@@ -1779,11 +1775,7 @@ async fn service_connections(
         .services
         .iter()
         .find(|svc| svc.name_any() == name)
-        .ok_or_else(|| Error::NotFound {
-            kind: "Service".to_string(),
-            name: name.to_string(),
-            namespace: ns.to_string(),
-        })?;
+        .ok_or_else(|| Error::not_found("Service", name, ns))?;
 
     let subject = service_ref(svc, ns);
     out.subject = Some(subject.clone());
@@ -1837,11 +1829,7 @@ async fn ingress_connections(
         .ingresses
         .iter()
         .find(|ing| ing.name_any() == name)
-        .ok_or_else(|| Error::NotFound {
-            kind: "Ingress".to_string(),
-            name: name.to_string(),
-            namespace: ns.to_string(),
-        })?;
+        .ok_or_else(|| Error::not_found("Ingress", name, ns))?;
 
     let subject = ingress_ref(ing, ns);
     out.subject = Some(subject.clone());
