@@ -20,7 +20,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-const { IntegrationsSettings } = await import("./IntegrationsSettings");
+const { IntegrationsCatalog } = await import("./IntegrationsCatalog");
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -115,7 +115,7 @@ describe("the vendors that get a row", () => {
       { id: "istio", installed: true, version: "1.24.0" },
     ]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(await screen.findByText("detected")).toBeVisible();
     expect(screen.getByText("Istio")).toBeVisible();
@@ -141,7 +141,7 @@ describe("the vendors that get a row", () => {
       { id: "traefik", installed: null, version: null },
     ]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(await screen.findByText("detected")).toBeVisible();
 
@@ -168,7 +168,7 @@ describe("the vendors that get a row", () => {
   it("leaves the cluster's own flavour out of the list", async () => {
     detectInClusterExtensions.mockResolvedValue([]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     await screen.findByText(/Nothing installed/);
     for (const vendor of ["Google Cloud", "AWS", "Azure", "k3s", "minikube"]) {
@@ -191,7 +191,7 @@ describe("the empty state", () => {
       { id: "traefik", installed: false, version: null },
     ]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     const looked = await screen.findByText(/Looked for/);
     for (const name of ["cert-manager", "Traefik", "Flux", "Istio"]) {
@@ -208,7 +208,7 @@ describe("the empty state", () => {
   it("asks the cluster nothing when it has none of them", async () => {
     detectInClusterExtensions.mockResolvedValue([]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     await screen.findByText(/Nothing installed/);
     expect(listCustomResources).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe("the clouds' own controllers", () => {
   it("names the controller rather than the cloud", async () => {
     detectInClusterExtensions.mockResolvedValue([]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(await screen.findByText("GKE Ingress")).toBeVisible();
     expect(screen.getByText("AWS Load Balancer Controller")).toBeVisible();
@@ -271,7 +271,7 @@ describe("the clouds' own controllers", () => {
       return [];
     });
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(
       await screen.findByText(
@@ -308,7 +308,7 @@ describe("the clouds' own controllers", () => {
       return [];
     });
 
-    const view = wrap(<IntegrationsSettings />);
+    const view = wrap(<IntegrationsCatalog />);
 
     expect(
       await screen.findByText("1 TargetGroupBinding · 0 IngressClassParams")
@@ -337,7 +337,7 @@ describe("facts", () => {
       certificate("promo", NOT_READY),
     ]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(await screen.findByText("4 certificates")).toBeVisible();
     expect(screen.getByText("1 expires in 9 days")).toBeVisible();
@@ -359,7 +359,7 @@ describe("facts", () => {
       certificate("checkout", { ...READY, notAfter: inDays(80) }),
     ]);
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     const link = await screen.findByRole("link", { name: "Show them" });
     expect(link).toHaveAttribute(
@@ -381,7 +381,7 @@ describe("facts", () => {
     ]);
     listCustomResources.mockRejectedValue(new Error("connection refused"));
 
-    wrap(<IntegrationsSettings />);
+    wrap(<IntegrationsCatalog />);
 
     expect(
       await screen.findByText(/its objects could not be read/)
@@ -399,7 +399,7 @@ describe("facts", () => {
       { id: "cert-manager", installed: true, version: null },
     ]);
 
-    wrap(<IntegrationsSettings active={false} />);
+    wrap(<IntegrationsCatalog active={false} />);
 
     expect(await screen.findByText("cert-manager")).toBeVisible();
     expect(listCustomResources).not.toHaveBeenCalled();

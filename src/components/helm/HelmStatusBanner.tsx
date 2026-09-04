@@ -1,9 +1,9 @@
-import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
 
 interface HelmStatusBannerProps {
@@ -22,6 +22,7 @@ export function HelmStatusBanner({
   minimal = false,
 }: HelmStatusBannerProps) {
   const t = useT();
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const { helm, isChecking, checkHelmAvailability } = useDependenciesStore();
 
   if (!helm || helm.available) {
@@ -33,9 +34,13 @@ export function HelmStatusBanner({
       <p className={cn("flex items-center gap-1.5 text-[11px]", className)}>
         <AlertTriangle className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
         <span className="text-warn">{t("empty", "helmCliNotFound")}.</span>
-        <Link to="/settings/clusters" className="text-info hover:underline">
+        <button
+          type="button"
+          onClick={() => openSettings("clusters")}
+          className="text-info hover:underline"
+        >
           {t("action", "configureInSettings")}
-        </Link>
+        </button>
       </p>
     );
   }
@@ -59,9 +64,13 @@ export function HelmStatusBanner({
         <p>{t("empty", "helmWriteOpsNeedCli")}</p>
         {helm.error && <p className="text-fg-fnt">{helm.error}</p>}
         <p className="flex items-center gap-3 pt-0.5">
-          <Link to="/settings/clusters" className="text-info hover:underline">
+          <button
+            type="button"
+            onClick={() => openSettings("clusters")}
+            className="text-info hover:underline"
+          >
             {t("action", "configureInSettings")}
-          </Link>
+          </button>
           <a
             href="https://helm.sh/docs/intro/install/"
             target="_blank"

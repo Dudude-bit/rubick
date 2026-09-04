@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +25,7 @@ import type {
   RegistryImageResult,
   RegistrySearchRequest,
 } from "@/generated/types";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
 
 const SEARCH_MIN_LENGTH = 2;
@@ -45,6 +45,7 @@ export function ImageSearchInput({
   placeholder,
 }: ImageSearchInputProps) {
   const t = useT();
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const [results, setResults] = useState<RegistryImageResult[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [focused, setFocused] = useState(false);
@@ -160,12 +161,13 @@ export function ImageSearchInput({
           <Label className="text-[11px] font-normal text-fg-mut">
             {t("settings", "registryLabel")}
           </Label>
-          <Link
-            to="/settings/registries"
+          <button
+            type="button"
+            onClick={() => openSettings("registries")}
             className="text-[11px] text-info hover:underline"
           >
             {t("action", "manage")}
-          </Link>
+          </button>
         </div>
         <Select
           value={selectedRegistryId}
