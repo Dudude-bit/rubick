@@ -610,6 +610,7 @@ export const en = {
     importedFromCluster: "Imported from cluster",
     suspendedLower: "suspended",
     inTime: "in {time}",
+    nowLower: "now",
     unknownLower: "unknown",
     resourceWatchFailed: "Resource watch failed",
     eventBridgeLagged: {
