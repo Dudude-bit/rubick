@@ -6,6 +6,7 @@ import {
   LuShieldCheck,
   LuWaypoints,
 } from "react-icons/lu";
+import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
 
@@ -45,17 +46,23 @@ const INTEGRATIONS = [
 export function Integrations() {
   return (
     <Section eyebrow="Extensions">
-      <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
-        It knows what you installed.
-      </h2>
-      <p className="mt-6 max-w-2xl text-neutral-400">
-        Detected integrations need nothing from you. Their CRDs are in the
-        cluster or they are not. Configured ones need an address, and Rubick
-        never goes looking for one.
-      </p>
+      <Reveal>
+        <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
+          It knows what you installed.
+        </h2>
+        <p className="mt-6 max-w-2xl text-neutral-400">
+          Detected integrations need nothing from you. Their CRDs are in the
+          cluster or they are not. Configured ones need an address, and Rubick
+          never goes looking for one.
+        </p>
+      </Reveal>
       <dl className="mt-12 grid gap-x-12 gap-y-8 md:grid-cols-2">
-        {INTEGRATIONS.map((x) => (
-          <div key={x.name} className="border-l border-neutral-800 pl-5">
+        {INTEGRATIONS.map((x, i) => (
+          <Reveal key={x.name} delay={i * 45} className="relative pl-5">
+            <span
+              aria-hidden
+              className="rule-y absolute inset-y-0 left-0 w-px bg-neutral-700"
+            />
             <dt className="flex items-center gap-2.5 font-mono text-sm font-medium text-neutral-100">
               <x.Icon
                 aria-hidden
@@ -64,7 +71,7 @@ export function Integrations() {
               {x.name}
             </dt>
             <dd className="mt-2 text-sm text-neutral-400">{x.body}</dd>
-          </div>
+          </Reveal>
         ))}
       </dl>
       <p className="mt-12 font-mono text-sm text-neutral-500">
