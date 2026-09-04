@@ -69,14 +69,6 @@ export function runSpanMs(run: LogRun): number {
   return Math.max(0, run.tail.epoch - run.head.epoch);
 }
 
-/** The lines a run stands for, in order. */
-export function expandRun(
-  logs: readonly StreamedLogLine[],
-  run: LogRun
-): StreamedLogLine[] {
-  return logs.slice(run.start, run.start + run.count) as StreamedLogLine[];
-}
-
 /**
  * Replace each expanded run with one single-line run per line it holds,
  * so an expanded group and an ordinary line are the same row type to

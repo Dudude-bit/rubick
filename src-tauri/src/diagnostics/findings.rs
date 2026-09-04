@@ -35,6 +35,15 @@ pub struct Finding {
     /// The context or setting this is about; the tiebreak when two findings
     /// share a severity, so the order does not move between reads.
     pub subject: Option<String>,
+    /// The shell outcome this finding is about, when it is about one.
+    ///
+    /// Carried rather than described. The same five outcomes already have
+    /// catalogue entries the pane renders four lines below the findings
+    /// list, so composing English for them here put both on one screen —
+    /// the Rust sentence in the reader's second language above the
+    /// catalogue's in their first — and any wording fix had to be made in
+    /// three files or the halves disagreed.
+    pub shell: Option<ShellEnvReport>,
 }
 
 /// The finding for a kubeconfig the app could not read.
@@ -55,6 +64,7 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
              same file."
         ),
         subject: Some(path.to_string()),
+        shell: None,
     }
 }
 
@@ -66,38 +76,27 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
 /// the plugin may well be there, on a directory this app could not see.
 #[must_use]
 pub fn shell_env_finding(report: &ShellEnvReport) -> Option<Finding> {
-    let consequence = "Until it does, PATH is a list of well-known directories and \
-         nothing your profile adds, so a plugin reported missing below may be \
-         installed on a directory this app could not see.";
-    let (shell, what) = match report {
-        ShellEnvReport::Imported { .. } | ShellEnvReport::NotAsked => return None,
-        ShellEnvReport::TimedOut { shell, seconds } => (
-            shell,
-            format!(
-                "{shell} did not print its environment within {seconds} s. A slow or \
-                 blocking .zshrc or .bashrc is the usual cause; `{shell} -i -l -c true` \
-                 in a terminal shows what hangs."
-            ),
-        ),
-        ShellEnvReport::CouldNotStart { shell, error } => {
-            (shell, format!("{shell} could not be started: {error}."))
-        }
-        ShellEnvReport::NoAnswer { shell, exit } => (
-            shell,
-            format!(
-                "{shell} exited{} without printing its environment. A profile that \
-                 replaces PATH outright (so `env` is not found), or a shell whose \
-                 flags mean something else, does this.",
-                exit.map_or(String::new(), |code| format!(" with code {code}"))
-            ),
-        ),
-    };
-    Some(Finding {
-        severity: Severity::Unverified,
-        title: "The login shell did not answer, so the search path is a guess".to_string(),
-        detail: format!("{what} {consequence}"),
-        subject: Some(shell.clone()),
-    })
+    // No prose. The five outcomes already have catalogue entries — the pane
+    // renders one four lines below this list — so wording them here put the
+    // English sentence above the reader's own and made any fix a three-file
+    // edit. What travels is the outcome; the words are chosen where the
+    // language is known, which is the rule this project states for every
+    // sentence composed in Rust.
+    match report {
+        ShellEnvReport::Imported { .. } | ShellEnvReport::NotAsked => None,
+        other => Some(Finding {
+            severity: Severity::Unverified,
+            title: String::new(),
+            detail: String::new(),
+            subject: match other {
+                ShellEnvReport::TimedOut { shell, .. }
+                | ShellEnvReport::CouldNotStart { shell, .. }
+                | ShellEnvReport::NoAnswer { shell, .. } => Some(shell.clone()),
+                _ => None,
+            },
+            shell: Some(other.clone()),
+        }),
+    }
 }
 
 /// The finding for a context whose kubectl plugin is not installed.
@@ -153,6 +152,7 @@ fn missing_plugin_finding_given(
              {searched}.{caveat}"
         ),
         subject: Some(context.to_string()),
+        shell: None,
     })
 }
 
@@ -218,9 +218,13 @@ mod tests {
     }
 
     /// The case the panel used to be silent about: a shell that timed out
-    /// left the headline saying nothing needs attention while the search
-    /// path below was a guess. A shell that answered, or was never needed,
-    /// is not news.
+    /// left the headline saying nothing needs attention while the search path
+    /// below was a guess. A shell that answered, or was never needed, is not
+    /// news.
+    ///
+    /// What the finding carries is the outcome, not a sentence about it: the
+    /// same five outcomes are worded once, in the catalogue, and the pane and
+    /// the pasted report both read them from there.
     #[test]
     fn a_shell_that_did_not_answer_is_a_finding_and_one_that_did_is_not() {
         let timed_out = shell_env_finding(&ShellEnvReport::TimedOut {
@@ -229,20 +233,32 @@ mod tests {
         })
         .expect("a shell that timed out is worth a line");
         assert_eq!(timed_out.severity, Severity::Unverified);
-        assert!(
-            timed_out.detail.contains("/bin/zsh"),
-            "{}",
-            timed_out.detail
-        );
-        assert!(timed_out.detail.contains("30 s"), "{}", timed_out.detail);
         assert_eq!(timed_out.subject.as_deref(), Some("/bin/zsh"));
+        assert!(
+            matches!(
+                timed_out.shell,
+                Some(ShellEnvReport::TimedOut { seconds: 30, .. })
+            ),
+            "{:?}",
+            timed_out.shell
+        );
+        // No prose here — the words live in the catalogue, and a sentence
+        // composed in Rust is one no scanner in this project can see.
+        assert!(timed_out.detail.is_empty(), "{}", timed_out.detail);
 
         let no_answer = shell_env_finding(&ShellEnvReport::NoAnswer {
             shell: "/bin/tcsh".into(),
             exit: Some(1),
         })
         .expect("a shell that said nothing is worth a line");
-        assert!(no_answer.detail.contains("code 1"), "{}", no_answer.detail);
+        assert!(
+            matches!(
+                no_answer.shell,
+                Some(ShellEnvReport::NoAnswer { exit: Some(1), .. })
+            ),
+            "{:?}",
+            no_answer.shell
+        );
 
         assert!(shell_env_finding(&ShellEnvReport::Imported {
             shell: "/bin/zsh".into(),
@@ -251,6 +267,10 @@ mod tests {
         })
         .is_none());
         assert!(shell_env_finding(&ShellEnvReport::NotAsked).is_none());
+
+        // And the state that means nobody asked is news, unlike the one that
+        // means there was nothing to ask.
+        assert!(shell_env_finding(&ShellEnvReport::NotRecorded).is_some());
     }
 
     /// "Not installed" after a search the app could not complete is the

@@ -10,5 +10,5 @@ mod env;
 mod path;
 
 pub use command::{CommandOutput, ShellCommand, ShellError};
-pub use env::{env_report, import_login_shell_env, ShellEnvReport};
+pub use env::{env_report, import_login_shell_env, ShellEnvReport, SHELL_ENV_TIMEOUT};
 pub use path::get_user_path;

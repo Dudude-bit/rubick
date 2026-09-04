@@ -139,14 +139,24 @@ fn apply_exec_credentials(
     auth_info: &mut AuthInfo,
     status: ExecCredentialStatus,
 ) -> Option<chrono::DateTime<chrono::Utc>> {
+    use base64::Engine;
+
     if let Some(token) = status.token {
         auth_info.token = Some(SecretString::from(token));
     }
+    // A plugin hands back PEM, but the fields it lands in are kubeconfig
+    // fields, and kube reads those through a base64 decode. Storing the PEM
+    // as-is leaves the decode to fail, and the failure is swallowed — the
+    // client is then built with no certificate at all, and the server
+    // answers the anonymous request with a denial that names no cause.
     if let Some(cert) = status.client_certificate_data {
-        auth_info.client_certificate_data = Some(cert);
+        auth_info.client_certificate_data =
+            Some(base64::engine::general_purpose::STANDARD.encode(cert));
     }
     if let Some(key) = status.client_key_data {
-        auth_info.client_key_data = Some(SecretString::from(key));
+        auth_info.client_key_data = Some(SecretString::from(
+            base64::engine::general_purpose::STANDARD.encode(key),
+        ));
     }
     // A plugin that names no expiry, or names one this cannot parse, leaves
     // the deadline unknown — which is a different thing from "does not
@@ -155,4 +165,46 @@ fn apply_exec_credentials(
         .expiration_timestamp
         .and_then(|stamp| chrono::DateTime::parse_from_rfc3339(&stamp).ok())
         .map(|stamp| stamp.with_timezone(&chrono::Utc))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine;
+    use secrecy::ExposeSecret;
+
+    const CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+    const KEY: &str = "-----BEGIN EC PRIVATE KEY-----\nMHcC\n-----END EC PRIVATE KEY-----\n";
+
+    /// A plugin answers in PEM, and the kubeconfig fields this lands in are
+    /// read through a base64 decode: kube swallows the failure and builds
+    /// the client with no certificate at all, so the server refuses an
+    /// anonymous request and names no cause. Would break if the PEM went
+    /// into the fields as it came.
+    #[test]
+    fn a_plugins_pem_certificate_is_stored_the_way_kubeconfig_is_read() {
+        let mut auth_info = AuthInfo::default();
+        apply_exec_credentials(
+            &mut auth_info,
+            ExecCredentialStatus {
+                expiration_timestamp: None,
+                token: None,
+                client_certificate_data: Some(CERT.to_string()),
+                client_key_data: Some(KEY.to_string()),
+            },
+        );
+
+        let decoded = |field: &str| {
+            base64::engine::general_purpose::STANDARD
+                .decode(field)
+                .expect("a kubeconfig field is base64")
+        };
+        let cert = auth_info
+            .client_certificate_data
+            .as_deref()
+            .expect("the certificate");
+        assert_eq!(decoded(cert), CERT.as_bytes());
+        let key = auth_info.client_key_data.as_ref().expect("the key");
+        assert_eq!(decoded(key.expose_secret()), KEY.as_bytes());
+    }
 }

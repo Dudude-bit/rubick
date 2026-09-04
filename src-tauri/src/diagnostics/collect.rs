@@ -35,6 +35,27 @@ pub struct PluginStatus {
     pub required_by: Vec<String>,
 }
 
+/// One tool the app spawns itself, and what it answered.
+///
+/// Distinct from `PluginStatus` in the one way that matters: this list is
+/// fixed and compiled in, while that one is whatever the kubeconfig names.
+/// Only this one is ever executed — a settings pane that ran every `command`
+/// a context declared would be running arbitrary programs because somebody
+/// opened a tab.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolStatus {
+    pub name: String,
+    /// The file that would run. `None` means nothing was found on the search
+    /// path above, which is the first thing to check when it should be there.
+    pub path: Option<String>,
+    pub version: Option<String>,
+    /// Set when a path resolved and the version did not: a binary that is
+    /// present and will not answer is a different problem from an absent one,
+    /// and reads identically unless this says so.
+    pub error: Option<String>,
+}
+
 /// How one context authenticates, and whether that can work.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +117,7 @@ pub struct Diagnostics {
     /// was not, the search path below is a guess, and this says so first.
     pub shell: ShellEnvReport,
     pub search_path: Vec<SearchPathEntry>,
+    pub tools: Vec<ToolStatus>,
     pub plugins: Vec<PluginStatus>,
     pub contexts: Vec<DiagnosticContext>,
     pub kubeconfig: Option<KubeconfigInfo>,
@@ -200,17 +222,109 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
 /// Best-effort per block: a kubeconfig that will not parse becomes a finding
 /// and leaves every other block answering. A page that empties itself because
 /// one file is malformed would hide the very facts somebody came for.
+/// What one tool's answer amounts to.
+///
+/// Split out because the interesting part is a judgement, not the process
+/// launch: `check_availability` answers `available: false` for two different
+/// machines — one where the binary is absent, and one where it is right there
+/// and would not run (wrong architecture, no execute bit, a wrapper that exits
+/// non-zero). `try_path` returns `None` for both, and the message it builds,
+/// "not found in any search location", is untrue of the second.
+///
+/// That difference is most of why somebody opens this pane. One says install
+/// it; the other says the thing you already installed is broken, and
+/// reinstalling the same file will not fix it. So the caller looks for the
+/// file — which this module can do and that one does not — and this decides
+/// what the pair of answers means.
+fn tool_status(
+    name: &str,
+    found: crate::cli::CliAvailability,
+    located: Option<String>,
+    // Whether the search path behind `found` was built from the shell's
+    // answer. False makes every absence a guess rather than a verdict.
+    path_is_real: bool,
+) -> ToolStatus {
+    if found.available {
+        return ToolStatus {
+            name: name.to_string(),
+            path: found.path,
+            version: found.version,
+            error: None,
+        };
+    }
+    ToolStatus {
+        name: name.to_string(),
+        // Dropped when the file turned up: it says the search found nothing,
+        // which we have just disproved, and a false line in a report somebody
+        // pastes into an issue is worse than a missing one.
+        //
+        // Dropped too when the login shell never answered. The sentence names
+        // "any search location", and the locations it means are then the
+        // well-known list and nothing the profile adds — a complete search
+        // that did not happen. The pane and the report say so above the list
+        // instead, once, in the reader's language.
+        error: found.error.filter(|_| located.is_none() && path_is_real),
+        path: located,
+        version: None,
+    }
+}
+
+/// What each known tool resolved to, asked concurrently.
+///
+/// Fresh managers rather than the app's cached ones on purpose: those resolve
+/// once and hold it, which is right for a hot path and wrong for a panel whose
+/// whole job is to say what is true now. Somebody installing the plugin the
+/// findings named wants the next read to notice.
+///
+/// Concurrent because each answer costs a process launch with a five-second
+/// ceiling, and six of those in a row is a pane that takes half a minute to
+/// say everything is fine.
+async fn tools_status(path_is_real: bool) -> Vec<ToolStatus> {
+    use crate::cli::cloud::{AzTool, GcloudTool, GkeAuthPluginTool, KubeloginTool};
+    use crate::cli::helm::HelmTool;
+    use crate::cli::kubectl::KubectlTool;
+    use crate::cli::CliToolManager;
+
+    async fn ask<T: crate::cli::CliTool>(name: &str, tool: T, path_is_real: bool) -> ToolStatus {
+        let binary = tool.binary_name();
+        let found = CliToolManager::new(tool).check_availability().await;
+        let located = (!found.available)
+            .then(|| locate_on_user_path(binary))
+            .flatten();
+        tool_status(name, found, located, path_is_real)
+    }
+
+    let (kubectl, helm, gcloud, gke, az, kubelogin) = tokio::join!(
+        // The configured override, not a bare default: a reader who pointed
+        // the app at their own kubectl needs the panel to report that one.
+        ask("kubectl", KubectlTool::with_default_config(), path_is_real),
+        ask("helm", HelmTool::with_default_config(), path_is_real),
+        ask("gcloud", GcloudTool::new(), path_is_real),
+        ask(
+            "gke-gcloud-auth-plugin",
+            GkeAuthPluginTool::new(),
+            path_is_real
+        ),
+        ask("az", AzTool::new(), path_is_real),
+        ask("kubelogin", KubeloginTool::new(), path_is_real),
+    );
+    vec![kubectl, helm, gcloud, gke, az, kubelogin]
+}
+
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
-    // `None` only before `main` has run the import, which a test binary never
-    // does; drawn as not asked rather than invented.
+    // `None` before `main` has run the import — in a test binary, or in a
+    // build that stopped calling it. Its own state, not `NotAsked`: that one
+    // means Windows had nothing to ask and the path is right, which would
+    // suppress every caveat below on a machine where the path is a guess.
     let shell = crate::shell::env_report()
         .cloned()
-        .unwrap_or(ShellEnvReport::NotAsked);
+        .unwrap_or(ShellEnvReport::NotRecorded);
     let search_path = search_directories()
         .into_iter()
         .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
+    let tools = tools_status(shell.answered()).await;
 
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
@@ -244,6 +358,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         return Diagnostics {
             shell,
             search_path,
+            tools,
             plugins: Vec::new(),
             contexts: Vec::new(),
             kubeconfig,
@@ -282,6 +397,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     Diagnostics {
         shell,
         search_path,
+        tools,
         plugins,
         contexts,
         kubeconfig: Some(KubeconfigInfo {
@@ -297,6 +413,83 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn absent(name: &str) -> crate::cli::CliAvailability {
+        crate::cli::CliAvailability {
+            available: false,
+            version: None,
+            error: Some(format!("{name} not found in any search location")),
+            path: None,
+            searched_paths: vec!["/opt/homebrew/bin".into()],
+        }
+    }
+
+    /// A tool that answered is reported by what it answered.
+    #[test]
+    fn a_tool_that_ran_reports_its_path_and_version() {
+        let found = crate::cli::CliAvailability {
+            available: true,
+            version: Some("v1.31.0".into()),
+            error: None,
+            path: Some("/opt/homebrew/bin/kubectl".into()),
+            searched_paths: Vec::new(),
+        };
+
+        let out = tool_status("kubectl", found, None, true);
+        assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/kubectl"));
+        assert_eq!(out.version.as_deref(), Some("v1.31.0"));
+        assert_eq!(out.error, None);
+    }
+
+    /// Would break if the two ways of being unavailable were merged again.
+    ///
+    /// This one is the third state the panel exists for: the file is right
+    /// there and would not run. `check_availability` cannot see the
+    /// difference — it reports both as "not found in any search location" —
+    /// so a reader told that would go and install what they already have.
+    #[test]
+    fn a_tool_that_is_present_and_would_not_run_says_where_it_is() {
+        let out = tool_status(
+            "helm",
+            absent("helm"),
+            Some("/opt/homebrew/bin/helm".to_string()),
+            true,
+        );
+
+        assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/helm"));
+        assert_eq!(out.version, None);
+        // And not the message about a search that found nothing: we just
+        // found it, and a report pasted into an issue must not contradict
+        // itself two lines apart.
+        assert_eq!(out.error, None);
+    }
+
+    /// An absence found on a search path nobody filled in is a guess.
+    ///
+    /// The message says "not found in any search location", and without the
+    /// login shell's answer those locations are the well-known list and
+    /// nothing a profile adds. Stating it anyway puts a sentence in a pasted
+    /// report that sends a maintainer looking for a binary sitting on the
+    /// reader's own PATH — the same `Vec::new()`-on-a-403 shape, in prose.
+    /// The pane and the report say it once, above the list, instead.
+    #[test]
+    fn an_absence_from_a_path_that_was_guessed_asserts_nothing() {
+        let out = tool_status("az", absent("az"), None, false);
+
+        assert_eq!(out.path, None);
+        assert_eq!(out.error, None, "a guessed search proves no absence");
+    }
+
+    /// The ordinary absence keeps the message, which is the only thing that
+    /// distinguishes it from the case above once the path is `None` in both.
+    #[test]
+    fn a_tool_that_is_nowhere_keeps_the_reason_it_is_nowhere() {
+        let out = tool_status("az", absent("az"), None, true);
+
+        assert_eq!(out.path, None);
+        assert_eq!(out.version, None);
+        assert!(out.error.unwrap().contains("not found"));
+    }
 
     fn kubeconfig_with_exec() -> Kubeconfig {
         serde_yaml::from_str(
@@ -375,7 +568,25 @@ users:
             "nothing was loaded, so nothing is named"
         );
         assert!(!d.app.version.is_empty());
-        assert!(d.findings.is_empty());
+
+        // Exactly one finding, and it is the one that says nobody recorded
+        // whether the shell was asked — because in a test binary nobody did.
+        // This used to assert an empty list, which passed only because an
+        // un-run import was drawn as `NotAsked`: "Windows, nothing to ask",
+        // `answered()` true, every caveat below suppressed. So a `main()` that
+        // stopped calling the import would have kept this green while the
+        // panel told a Mac a story about PowerShell.
+        assert!(
+            matches!(d.shell, ShellEnvReport::NotRecorded),
+            "an import that never ran is its own state: {:?}",
+            d.shell
+        );
+        assert_eq!(d.findings.len(), 1, "{:?}", d.findings);
+        assert!(
+            matches!(d.findings[0].shell, Some(ShellEnvReport::NotRecorded)),
+            "the finding carries the outcome it is about: {:?}",
+            d.findings[0].shell
+        );
     }
 
     /// The case this panel was built for, and the one it used to be silent

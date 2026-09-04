@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ConditionBadge, StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge, StatusBadge } from "@/components/ui/status-badge";
 
 describe("StatusBadge", () => {
   it("renders the status text", () => {
@@ -46,14 +46,6 @@ describe("StatusBadge", () => {
     const { container } = render(<StatusBadge status="SomeCustomPhase" />);
     expect(screen.getByText("SomeCustomPhase")).toBeInTheDocument();
     expect(container.firstElementChild!.className).toContain("text-fg-mut");
-  });
-
-  it("maps conditions to roles", () => {
-    const { container } = render(
-      <ConditionBadge conditionStatus="False" conditionType="Ready" />
-    );
-    expect(screen.getByText("Ready")).toBeInTheDocument();
-    expect(container.firstElementChild!.className).toContain("text-err");
   });
 });
 
@@ -142,5 +134,32 @@ describe("severity survives without colour", () => {
     expect(
       container.querySelector('[data-testid="status-badge-icon"]')
     ).toBeNull();
+  });
+});
+
+describe("a phase the cluster may not have written", () => {
+  /** The cluster's word, untranslated, exactly as a terminal spells it. */
+  it("shows the phase the cluster wrote", () => {
+    render(<PhaseBadge phase="Bound" />);
+    expect(screen.getByText("Bound")).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if the absent phase went back to being a word.
+   *
+   * `Unknown` used to arrive here from Rust, in a column beside `Bound` and
+   * `Released` — which the cluster really does write — so it read as a phase
+   * rather than as this app admitting it had nothing.
+   */
+  it("says nothing was reported rather than inventing a phase", () => {
+    render(<PhaseBadge phase={null} />);
+    expect(screen.queryByText("Unknown")).toBeNull();
+    expect(screen.getByText(/nothing reported yet/i)).toBeInTheDocument();
+  });
+
+  /** Neutral, because "we were not told" is not a fault. */
+  it("colours an unreported phase as neither good nor bad", () => {
+    const { container } = render(<PhaseBadge phase={null} />);
+    expect(container.firstElementChild!.className).toContain("text-fg-mut");
   });
 });

@@ -657,8 +657,13 @@ async fn run(
                 }
                 Evicted::AlreadyGone => progress.already_gone += 1,
                 // The only refusal worth another pass, so the only one that
-                // stays in the set.
-                Evicted::No(DrainRefusal::NotNow, _) => still_waiting.push(target),
+                // stays in the set. Asked of the type rather than matched
+                // here: the rule and its reasoning live on `DrainRefusal`,
+                // and a variant added later that *is* worth retrying would
+                // otherwise be right there and wrong here.
+                Evicted::No(refusal, _) if refusal.worth_asking_again() => {
+                    still_waiting.push(target);
+                }
                 Evicted::No(refusal, message) => terminal.push(RefusedPod {
                     namespace: target.namespace,
                     name: target.name,

@@ -1,5 +1,5 @@
 ---
-title: "\"I don't know\" is a state your UI probably doesn't have"
+title: '"I don''t know" is a state your UI probably doesn''t have'
 published: false
 tags: kubernetes, ux, testing, rust
 ---
@@ -31,8 +31,8 @@ them in red.
 
 His setup runs on a private overlay network. The gateway there has no external
 address, because there is nowhere external to publish one. My code read an
-empty `status.addresses` and said: *"Gateway `private` has no address yet,
-traffic has nowhere to arrive."*
+empty `status.addresses` and said: _"Gateway `private` has no address yet,
+traffic has nowhere to arrive."_
 
 `status.addresses` is optional in the Gateway API spec. Plenty of
 implementations never fill it. I checked what my own code did by running it
@@ -60,8 +60,8 @@ further along.
 The route now stopped at the controller's verdict, and the reason my app gave
 was that either nothing claims the gateway's class or the controller isn't
 running. Both of those were contradicted by the two lines directly above them
-on his screen. The class *was* claimed, by a named controller. The gateway
-*was* programmed. The controller was there. It just doesn't write status for
+on his screen. The class _was_ claimed, by a named controller. The gateway
+_was_ programmed. The controller was there. It just doesn't write status for
 routes, which is common enough for the alpha kinds that I should have expected
 it.
 
@@ -71,8 +71,8 @@ treating these as separate bugs.
 A route rule can carry an `ExtensionRef` filter and no backend. Envoy Gateway's
 direct-response works this way: the filter answers, no backend needed. Rubick
 called that broken. A contributor sent a patch, and the patch over-corrected
-into the opposite claim: *"an extension filter answers, no backends, and none
-needed."*
+into the opposite claim: _"an extension filter answers, no backends, and none
+needed."_
 
 Also not knowable. `ExtensionRef` doesn't say what the filter does. A Kong
 plugin rate-limits and still needs somewhere to send the request, so a route
@@ -131,11 +131,11 @@ couldn't be read.
 
 All three bugs collapsed into the same fix:
 
-| | before | after |
-|---|---|---|
-| no published address | ✗ traffic has nowhere to arrive | ? publishes no address |
-| no route status | ✗ invisible to the data plane | ? controller wrote no verdict |
-| unread filter | ✗ nowhere to go / ✓ none needed | ? a filter is named, and no backend |
+|                      | before                          | after                               |
+| -------------------- | ------------------------------- | ----------------------------------- |
+| no published address | ✗ traffic has nowhere to arrive | ? publishes no address              |
+| no route status      | ✗ invisible to the data plane   | ? controller wrote no verdict       |
+| unread filter        | ✗ nowhere to go / ✓ none needed | ? a filter is named, and no backend |
 
 His route now reads as serving with an unverified step in the middle. Not an
 alarm, and not a promise either.
@@ -164,8 +164,38 @@ couldn't be reached at all: an earlier step already errored and suppressed it.
 I deleted the guard. Code that looks like a safety net without being
 one is worse than none, because you stop checking.
 
-Both fixes came out of the same week, and I still don't know how many more of
-these are sitting in the parts of the app nobody has an unusual enough cluster
-to expose. The three-state rule is easy to agree with in the abstract. What I
-actually changed was smaller: when I write a verdict now, I go looking for the
-read that produced it, and if there isn't one I have to say so.
+## Nine hours later
+
+I drafted the paragraph above at two in the afternoon. That evening the same
+shape came back, in code I had written that morning.
+
+A route can attach to a `ListenerSet` instead of directly to a Gateway — the
+Gateway stays bare and every hostname and certificate lives in a per-app set.
+Rubick was filing those routes under "not judged here". I fixed it, checked it
+against a live cluster, took a screenshot, shipped it.
+
+The same bug was alive in the next code path over. Not because anyone forgot
+the rule — because of this, in the constructor:
+
+```rust
+listener_sets_known: true,
+```
+
+Two callers read a Gateway and did not go on to merge the sets in. Both
+inherited a confident answer to a question nobody had asked. On a cluster where
+the ListenerSet sits there in `kubectl get`, the graph reported it `Missing`.
+
+The forgotten call was the shallow half of it. What mattered was the default:
+
+```rust
+listener_sets_known: false,
+```
+
+Only a real read sets it now, and forgetting produces "not looked at" — which
+the app already knows how to draw. I checked all three states on a live
+cluster: with the old default, `Missing`; with the new default and still no
+merge, `NotChecked`; with both, the route finds its Gateway.
+
+Naming the third state isn't enough if the default answer is the confident one.
+The question isn't whether you remember the rule. It's what the code says when
+you don't.

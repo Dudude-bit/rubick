@@ -610,6 +610,7 @@ export const en = {
     importedFromCluster: "Imported from cluster",
     suspendedLower: "suspended",
     inTime: "in {time}",
+    nowLower: "now",
     unknownLower: "unknown",
     resourceWatchFailed: "Resource watch failed",
     eventBridgeLagged: {
@@ -2561,9 +2562,20 @@ export const en = {
       "{shell} could not be started ({error}), so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
     shellEnvNoAnswer:
       "{shell} exited with code {exit} without printing its environment, so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
+    shellFindingTitle:
+      "The login shell did not answer, so the search path is a guess",
+    shellFindingConsequence:
+      "Until it does, PATH is a list of well-known directories and nothing your profile adds, so a plugin or tool reported missing below may be installed on a directory this app could not see.",
+    shellEnvNotRecorded:
+      "The app has not recorded whether it asked the login shell, so the search path below is the well-known directories and nothing your profile adds.",
     shellEnvNotAsked:
       "Not asked on this platform: Windows hands an app the environment from the system settings. Anything set only in a PowerShell profile is not in it.",
     notThere: "not there",
+    toolsPathIsGuess:
+      "The login shell did not answer, so anything below reported as not installed may be on a directory your profile adds.",
+    toolsBlock: "Tools · {found} of {total}",
+    notInstalledInline: "not installed",
+    answeredNothing: "found, but would not say its version",
     pluginsBlock: "Plugins · {n}",
     notFoundInline: "not found",
     neededBy: "· needed by {list}",

@@ -23,6 +23,17 @@ fn main() {
 
     // First: it writes the environment, which nothing else may be reading
     // yet, and tracing below reads `RUST_LOG` from what the profile set.
+    //
+    // On stderr rather than through tracing, because tracing is what this
+    // runs before. Sourcing a profile can block — a `kinit`, a `gcloud auth`
+    // refresh, `mise` fetching a toolchain — and the wait is up to the
+    // timeout with no window on screen. Without this line a hang produced no
+    // evidence at all, not even under `RUST_LOG=trace`, because the
+    // subscriber that would carry it does not exist yet.
+    eprintln!(
+        "rubick: asking the login shell for its environment (up to {}s)",
+        shell::SHELL_ENV_TIMEOUT.as_secs()
+    );
     let shell_env = shell::import_login_shell_env();
 
     // Initialize tracing
@@ -105,7 +116,6 @@ fn main() {
             // Cluster management
             commands::cluster::list_contexts,
             commands::cluster::get_current_context,
-            commands::cluster::switch_context,
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
@@ -244,7 +254,6 @@ fn main() {
             commands::watch::unsubscribe_resource_watch,
             // kubectl commands
             commands::kubectl::check_kubectl_availability,
-            commands::debug_kubectl_plugins,
             // Helm commands (native + CLI)
             commands::helm::check_helm_availability,
             commands::helm::list_helm_releases_native,

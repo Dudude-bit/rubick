@@ -5,6 +5,7 @@
 //! everything that spawns or looks for a binary. One value, so the
 //! Diagnostics screen and the spawn cannot disagree about where a plugin is.
 
+use crate::cli::PathResolver;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -20,53 +21,27 @@ pub fn get_user_path() -> &'static str {
     USER_PATH.get().map_or("", std::string::String::as_str)
 }
 
-/// The shell's entries first, then the fallback's, each directory once.
+/// The shell's entries first, then the well-known ones, each directory once.
 ///
-/// The shell's order is the user's own and is kept; the fallback exists for
-/// what a profile forgot, so it goes behind.
+/// `PathResolver::merge_paths` is the implementation — this used to be a second
+/// copy of it, with the same shell-first order, the same `HashSet` dedup and
+/// the same `join_paths` tail, in a crate that already had one.
 #[must_use]
-pub(super) fn merge_path(shell_path: Option<&str>, fallback: &str) -> String {
-    let separator = if cfg!(windows) { ';' } else { ':' };
-    let mut all_paths: Vec<PathBuf> = Vec::new();
-    let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
-
-    for list in [shell_path.unwrap_or(""), fallback] {
-        for entry in list.split(separator) {
-            if !entry.is_empty() {
-                let path = PathBuf::from(entry);
-                if seen.insert(path.clone()) {
-                    all_paths.push(path);
-                }
-            }
-        }
-    }
-
-    std::env::join_paths(&all_paths)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default()
-}
-
-/// Where krew keeps the plugin symlinks: `$KREW_ROOT/bin`, or `~/.krew/bin`.
-///
-/// Read from this process's environment after the login shell's variables
-/// were adopted into it, so a `KREW_ROOT` set only in a profile counts.
-#[cfg(not(windows))]
-fn krew_bin() -> PathBuf {
-    match std::env::var_os("KREW_ROOT").filter(|v| !v.is_empty()) {
-        Some(root) => PathBuf::from(root).join("bin"),
-        None => dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(".krew/bin"),
-    }
+pub(super) fn merge_path(shell_path: Option<&str>, fallback: &[PathBuf]) -> String {
+    PathResolver::merge_paths(shell_path, fallback)
 }
 
 /// The process's own PATH first, then the well-known locations.
 ///
-/// The inherited PATH is a real answer, not a guess: from a terminal it is
-/// the terminal's own, and a well-known directory behind it must not shadow
-/// the kubectl the user actually installed. The well-known directories are
-/// for what a desktop launch's stripped PATH lacks.
-pub(super) fn build_fallback_path() -> String {
+/// The inherited PATH is a real answer, not a guess: from a terminal it is the
+/// terminal's own, and a well-known directory behind it must not shadow the
+/// kubectl the user actually installed. The well-known directories are for what
+/// a desktop launch's stripped PATH lacks, and they come from
+/// `PathResolver::fallback_directories` — which is where krew's directory is
+/// resolved too, so the two lists cannot disagree about `KREW_ROOT` the way
+/// they did when each had its own copy.
+#[must_use]
+pub(super) fn build_fallback_path() -> Vec<PathBuf> {
     let separator = if cfg!(windows) { ';' } else { ':' };
     let mut paths: Vec<PathBuf> = std::env::var("PATH")
         .map(|current| {
@@ -77,51 +52,8 @@ pub(super) fn build_fallback_path() -> String {
                 .collect()
         })
         .unwrap_or_default();
-
-    #[cfg(not(windows))]
-    {
-        // Homebrew paths (macOS)
-        paths.push(PathBuf::from("/opt/homebrew/bin")); // ARM macOS
-        paths.push(PathBuf::from("/usr/local/bin")); // Intel macOS, Linux
-
-        // System paths
-        paths.push(PathBuf::from("/usr/bin"));
-        paths.push(PathBuf::from("/bin"));
-        paths.push(PathBuf::from("/usr/sbin"));
-        paths.push(PathBuf::from("/sbin"));
-
-        // Snap (Linux)
-        paths.push(PathBuf::from("/snap/bin"));
-
-        // krew, which is how kubectl credential plugins are installed and
-        // therefore where a missing `kubectl-oidc_login` most often already
-        // is. Listed here as well as taken from the shell: a user who has no
-        // profile line for it at all was told by this app to install the
-        // thing they already had.
-        paths.push(krew_bin());
-
-        // User local paths
-        if let Some(home) = dirs::home_dir() {
-            paths.push(home.join(".local/bin"));
-            paths.push(home.join(".asdf/shims"));
-            paths.push(home.join(".cargo/bin"));
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        if let Some(home) = dirs::home_dir() {
-            paths.push(home.join(".cargo\\bin"));
-            paths.push(home.join("scoop\\shims"));
-        }
-        if let Ok(program_files) = std::env::var("ProgramFiles") {
-            paths.push(PathBuf::from(program_files));
-        }
-    }
-
-    std::env::join_paths(&paths)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default()
+    paths.extend(PathResolver::fallback_directories());
+    paths
 }
 
 #[cfg(test)]
@@ -131,6 +63,15 @@ mod tests {
     /// From a terminal the inherited PATH begins with the user's shims and
     /// wrappers; a well-known `/usr/bin` ahead of them would resolve a
     /// different kubectl than the terminal the app was started from.
+    /// The fallback list as one string, for the tests that were written against
+    /// the string this used to return.
+    #[cfg(test)]
+    fn fallback_as_string() -> String {
+        std::env::join_paths(build_fallback_path())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    }
+
     #[test]
     fn the_inherited_path_comes_before_the_well_known_directories() {
         let inherited = std::env::var("PATH").unwrap_or_default();
@@ -139,9 +80,9 @@ mod tests {
             .find(|e| !e.is_empty());
         if let Some(first) = first {
             assert!(
-                build_fallback_path().starts_with(first),
+                fallback_as_string().starts_with(first),
                 "the process's own PATH should lead: {}",
-                build_fallback_path()
+                fallback_as_string()
             );
         }
     }
@@ -149,7 +90,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn test_fallback_path_contains_common_dirs() {
-        let path = build_fallback_path();
+        let path = fallback_as_string();
         assert!(path.contains("/usr/local/bin"), "Missing /usr/local/bin");
         assert!(path.contains("/usr/bin"), "Missing /usr/bin");
     }
@@ -162,9 +103,9 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn the_fallback_looks_where_krew_installs() {
-        let path = build_fallback_path();
+        let path = fallback_as_string();
         assert!(
-            path.contains(&krew_bin().to_string_lossy().to_string()),
+            path.contains(&PathResolver::krew_bin().to_string_lossy().to_string()),
             "krew's bin is not searched, and it is where `kubectl krew install` puts plugins"
         );
     }
@@ -176,7 +117,7 @@ mod tests {
     fn krew_root_moves_where_we_look() {
         // Not a std::env::set_var test — that races every other test in the
         // binary. The function's two branches are checked by shape instead.
-        let default = krew_bin();
+        let default = PathResolver::krew_bin();
         assert!(default.ends_with(".krew/bin"), "default is ~/.krew/bin");
         assert_eq!(
             PathBuf::from("/opt/krew").join("bin"),
@@ -188,7 +129,7 @@ mod tests {
     #[cfg(all(target_arch = "aarch64", not(windows)))]
     #[test]
     fn test_fallback_path_contains_homebrew_arm() {
-        let path = build_fallback_path();
+        let path = fallback_as_string();
         assert!(
             path.contains("/opt/homebrew/bin"),
             "Missing /opt/homebrew/bin on ARM"
@@ -198,7 +139,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn test_fallback_path_contains_windows_paths() {
-        let path = build_fallback_path();
+        let path = fallback_as_string();
         // On Windows, should use semicolon separator and include current PATH
         assert!(
             path.contains(';') || path.is_empty() || !path.contains(':'),
@@ -211,10 +152,13 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn the_shells_order_wins_and_nothing_is_listed_twice() {
-        let merged = merge_path(Some("/b:/a:/usr/bin"), "/usr/bin:/a:/c");
+        let merged = merge_path(
+            Some("/b:/a:/usr/bin"),
+            &["/usr/bin", "/a", "/c"].map(PathBuf::from),
+        );
         assert_eq!(merged, "/b:/a:/usr/bin:/c");
         assert_eq!(
-            merge_path(None, "/x::/y"),
+            merge_path(None, &["/x", "/y"].map(PathBuf::from)),
             "/x:/y",
             "empty entries are dropped"
         );

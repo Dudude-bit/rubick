@@ -40,7 +40,10 @@ use super::path::{build_fallback_path, merge_path, set_user_path};
 /// `.zshrc` that starts `nvm` takes seconds. A profile that hangs is what the
 /// cap is for.
 #[cfg(unix)]
-const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long the login shell gets to answer. Public so `main` can name it in
+/// the line it prints before the wait — a number in a message and a number
+/// in the code that disagree is worse than no message.
+pub const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// More than any environment can be. Hard: an answer that crosses it in its
 /// last read is still no answer.
@@ -151,14 +154,27 @@ pub enum ShellEnvReport {
         exit: Option<i32>,
     },
     /// Windows: a GUI app is started with the user's environment already in
-    /// place, so there is nothing to ask a shell for.
+    /// place, so there is nothing to ask a shell for. A real answer — the
+    /// search path below is the process's own and that is correct there.
     NotAsked,
+    /// Nobody asked, and nobody decided not to: `import_login_shell_env`
+    /// has not run in this process.
+    ///
+    /// Distinct from `NotAsked` on purpose. Both used to be `NotAsked`, so a
+    /// build that stopped calling the import at startup would have reported
+    /// a Windows story on a Mac, `answered()` would have said yes, and the
+    /// caveat on every "not installed" verdict would have been suppressed —
+    /// the third state folded into a confident second one.
+    NotRecorded,
 }
 
 impl ShellEnvReport {
     /// Whether the search path was built from a real answer.
     #[must_use]
     pub fn answered(&self) -> bool {
+        // `NotRecorded` is not here: an import that never ran did not answer,
+        // and the search path below it is the fallback list, not the
+        // shell's.
         matches!(self, Self::Imported { .. } | Self::NotAsked)
     }
 }
@@ -993,7 +1009,14 @@ mod tests {
             dir.path(),
             &format!("sleep 30 & echo $! > {}; wait", pid_file.display()),
         );
-        let report = unix::capture(&shell, Duration::from_millis(500));
+        // Three seconds, not five hundred milliseconds. The deadline has to
+        // outlast the shell's own startup, and under the parallel test binary
+        // on a loaded machine it did not: the group was killed before the
+        // profile reached `echo $!`, the pid file was never written, and this
+        // failed four runs out of five — but only when run beside its
+        // neighbours, which is why it looked green alone. Nothing here is
+        // waiting on the deadline being short; it is waiting on it passing.
+        let report = unix::capture(&shell, Duration::from_secs(3));
         assert!(matches!(report, Err(ShellEnvReport::TimedOut { .. })));
 
         let child = helper_pid(&pid_file);

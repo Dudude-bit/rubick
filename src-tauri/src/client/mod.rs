@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod context;
-pub use context::{ClusterContext, ContextAuth, ContextInfo};
+pub use context::{ContextAuth, ContextInfo};
 
 /// Manages Kubernetes client connections for multiple clusters
 pub struct K8sClientManager {

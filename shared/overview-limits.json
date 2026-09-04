@@ -1,0 +1,4 @@
+{
+  "_note": "Limits the Overview applies on both sides of the IPC boundary. Rust caps the list it sends; the frontend caps the list it merges from a second read. A reader who saw 50 problems and then 40 would be watching the cap change, not the cluster. Neither side imports the other's constant, so this file is what holds them equal, and a test on each side is what enforces it.",
+  "maxProblems": 50
+}

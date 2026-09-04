@@ -213,6 +213,10 @@ each has a contract nothing checks for you.
   nothing else states. When one fails, the code is wrong, not the table.
 - Touch a log query term and both evaluators must agree: add the cases to
   `shared/log-query-conformance.json` and run the Rust and the TypeScript side.
+- A number both halves of the IPC boundary apply lives in `shared/`, with a
+  test on **each** side asserting its own constant matches the file. A
+  comment saying "mirrored" is not a check; `MAX_PROBLEMS` was one for a
+  year. Changing the value means changing the shared file, not a constant.
 
 ## Tooling
 

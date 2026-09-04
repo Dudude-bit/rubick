@@ -868,10 +868,6 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
 }
 
-export async function debugKubectlPlugins(): Promise<unknown> {
-  return invoke<unknown>("debug_kubectl_plugins");
-}
-
 export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("list_pods", { filters });
 }
@@ -1331,10 +1327,6 @@ export async function listContexts(): Promise<ContextInfo[]> {
 
 export async function getCurrentContext(): Promise<string | null> {
   return invoke<string | null>("get_current_context");
-}
-
-export async function switchContext(context: string): Promise<void> {
-  return invoke<void>("switch_context", { context });
 }
 
 export async function connectCluster(context: string): Promise<ClusterInfo> {

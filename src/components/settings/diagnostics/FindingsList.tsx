@@ -1,5 +1,6 @@
 import type { Finding, Severity } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { shellEnvSentence } from "./shell-env";
 
 /**
  * How far down the page a finding belongs.
@@ -51,10 +52,19 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
       {ordered.map((finding, i) => (
         <li key={`${finding.title}-${finding.subject ?? i}`}>
           <h4 className={`text-xs font-medium ${TONE[finding.severity]}`}>
-            {finding.title}
+            {finding.shell ? t("settings", "shellFindingTitle") : finding.title}
           </h4>
           <p className="mt-1 max-w-[72ch] text-xs text-fg-mut">
-            {finding.detail}
+            {/* A finding that carries a shell outcome is worded here, from the
+                same catalogue entry the block below uses. It used to arrive as
+                English prose composed in Rust, four lines above the Russian
+                sentence saying the same thing. */}
+            {finding.shell
+              ? `${shellEnvSentence(finding.shell, t)} ${t(
+                  "settings",
+                  "shellFindingConsequence"
+                )}`
+              : finding.detail}
           </p>
         </li>
       ))}

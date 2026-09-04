@@ -158,6 +158,21 @@ impl PathResolver {
             .unwrap_or_default()
     }
 
+    /// Where krew keeps the plugin symlinks: `$KREW_ROOT/bin`, or `~/.krew/bin`.
+    ///
+    /// Read from this process's environment after the login shell's variables
+    /// were adopted into it, so a `KREW_ROOT` set only in a profile counts.
+    #[cfg(not(windows))]
+    #[must_use]
+    pub fn krew_bin() -> PathBuf {
+        match std::env::var_os("KREW_ROOT").filter(|v| !v.is_empty()) {
+            Some(root) => PathBuf::from(root).join("bin"),
+            None => dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("/"))
+                .join(".krew/bin"),
+        }
+    }
+
     /// Get the standard fallback directories for CLI tools.
     ///
     /// Returns common installation directories based on platform conventions.
@@ -185,8 +200,14 @@ impl PathResolver {
                 paths.push(home.join(".local/bin"));
                 paths.push(home.join(".asdf/shims"));
                 paths.push(home.join(".cargo/bin"));
-                paths.push(home.join(".krew/bin"));
             }
+            // krew, which is how kubectl credential plugins are installed and
+            // therefore where a missing `kubectl-oidc_login` most often already
+            // is. Through `krew_bin` so `KREW_ROOT` counts: this list used to
+            // hardcode `~/.krew/bin` while the shell path builder honoured the
+            // variable, so the two disagreed about where to look on exactly the
+            // machine that had moved it.
+            paths.push(Self::krew_bin());
         }
 
         #[cfg(windows)]

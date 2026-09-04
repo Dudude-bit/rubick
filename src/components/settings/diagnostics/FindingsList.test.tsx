@@ -9,6 +9,7 @@ const blocking: Finding = {
   title: "kubectl-oidc_login is not installed",
   detail: "The context context-1 authenticates with `kubectl oidc-login`.",
   subject: "context-1",
+  shell: null,
 };
 
 const optional: Finding = {
@@ -16,6 +17,7 @@ const optional: Finding = {
   title: "helm was not found",
   detail: "Chart browsing is unavailable until it is installed.",
   subject: null,
+  shell: null,
 };
 
 describe("FindingsList", () => {

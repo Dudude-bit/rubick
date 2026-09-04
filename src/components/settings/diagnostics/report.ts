@@ -1,5 +1,5 @@
 import type { Diagnostics } from "@/generated/types";
-import { shellEnvLine } from "./shell-env";
+import { english, shellAnswered, shellEnvLine } from "./shell-env";
 
 /**
  * The report as markdown, which is what a chat message or an issue takes.
@@ -22,7 +22,16 @@ export function asMarkdown(d: Diagnostics): string {
     "### Findings",
     ...(d.findings.length === 0
       ? ["Nothing needs attention."]
-      : d.findings.map((f) => `- **${f.title}** — ${f.detail}`)),
+      : d.findings.map((f) =>
+          // A finding carrying a shell outcome is worded from the catalogue,
+          // the same entry the pane renders — so the paste and the screen
+          // cannot say different things about one machine.
+          f.shell
+            ? `- **${english("settings", "shellFindingTitle")}** — ${shellEnvLine(
+                f.shell
+              )} ${english("settings", "shellFindingConsequence")}`
+            : `- **${f.title}** — ${f.detail}`
+        )),
     "",
     "### Shell",
     shellEnvLine(d.shell),
@@ -30,6 +39,24 @@ export function asMarkdown(d: Diagnostics): string {
     "### Search path",
     ...d.searchPath.map(
       (e) => `- \`${e.path}\`${e.exists ? "" : " — not there"}`
+    ),
+    "",
+    "### Tools",
+    // The caveat first, for the same reason the screen puts it first: a
+    // maintainer reading a pasted report cannot see the machine, and
+    // "not installed" from a search path nobody filled in would send them
+    // looking for a missing binary that is sitting on the reader's PATH.
+    ...(shellAnswered(d.shell)
+      ? []
+      : [english("settings", "toolsPathIsGuess"), ""]),
+    // The version too: half the reports that lead somewhere turn on which
+    // kubectl answered, and "installed" alone has never settled that.
+    ...d.tools.map((tool) =>
+      tool.path
+        ? `- \`${tool.name}\` — ${tool.path}${
+            tool.version ? ` · ${tool.version}` : " · no version reported"
+          }`
+        : `- \`${tool.name}\` — not installed`
     ),
     "",
     "### Plugins",

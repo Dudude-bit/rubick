@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { shellEnvSentence, shellEnvTone } from "./shell-env";
+import { shellAnswered, shellEnvSentence, shellEnvTone } from "./shell-env";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -33,7 +33,8 @@ export function EnvironmentBlocks({
 }: {
   diagnostics: Diagnostics;
 }) {
-  const { shell, searchPath, plugins, contexts, kubeconfig, app } = diagnostics;
+  const { shell, searchPath, tools, plugins, contexts, kubeconfig, app } =
+    diagnostics;
   const t = useT();
 
   return (
@@ -52,6 +53,53 @@ export function EnvironmentBlocks({
               {!entry.exists && (
                 <span className="ml-2 text-warn">
                   {t("settings", "notThere")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Block>
+
+      <Block
+        title={t("settings", "toolsBlock", {
+          found: tools.filter((tool) => tool.path).length,
+          total: tools.length,
+        })}
+      >
+        {/* The same caveat the plugins carry, on the same grounds: every
+            "not installed" below rests on the search path above, and
+            without the shell's answer that path is the well-known
+            directories and nothing a profile adds. Stated here rather
+            than one block away, where a reader scanning tools will not
+            look. */}
+        {!shellAnswered(shell) && (
+          <p className="mb-2 text-xs text-warn">
+            {t("settings", "toolsPathIsGuess")}
+          </p>
+        )}
+        <ul className="space-y-1">
+          {tools.map((tool) => (
+            <li key={tool.name} className="text-xs text-fg-mut">
+              <span className="font-mono text-fg">{tool.name}</span>
+              {tool.path ? (
+                <span className="ml-2 font-mono">{tool.path}</span>
+              ) : (
+                // Muted, not red. Nothing here is required: somebody who never
+                // touches Azure is not missing `az`, and painting six absent
+                // cloud CLIs as faults would bury the one that matters.
+                <span className="ml-2">
+                  {t("settings", "notInstalledInline")}
+                </span>
+              )}
+              {tool.version && (
+                <span className="ml-2 font-mono text-fg">{tool.version}</span>
+              )}
+              {/* Present and silent is the state worth a colour: the file is
+                  there, so nobody will think to install it, and whatever
+                  wanted it will fail later saying something else. */}
+              {tool.path && !tool.version && (
+                <span className="ml-2 text-warn">
+                  {t("settings", "answeredNothing")}
                 </span>
               )}
             </li>

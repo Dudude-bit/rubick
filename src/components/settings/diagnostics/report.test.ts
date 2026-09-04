@@ -9,6 +9,14 @@ const base: Diagnostics = {
     { path: "/opt/homebrew/bin", exists: true },
     { path: "~/.krew/bin", exists: false },
   ],
+  tools: [
+    {
+      name: "kubectl",
+      path: "/usr/local/bin/kubectl",
+      version: "v1.31.0",
+      error: null,
+    },
+  ],
   plugins: [
     { name: "kubectl-oidc_login", path: null, requiredBy: ["context-1"] },
   ],
@@ -33,6 +41,7 @@ const base: Diagnostics = {
       title: "kubectl-oidc_login is not installed",
       detail: "The context context-1 needs it.",
       subject: "context-1",
+      shell: null,
     },
   ],
 };
@@ -77,5 +86,38 @@ describe("asMarkdown", () => {
       out.indexOf("### Search path")
     );
     expect(out).toContain("/bin/tcsh exited with code 1");
+  });
+
+  /**
+   * Three states, three lines.
+   *
+   * The paste is read by somebody who cannot see the machine, so "kubectl is
+   * there" has to be distinguishable from "kubectl is there and would not say
+   * which one it is" — the second is the answer to half the reports that go
+   * anywhere, and both render as a present binary.
+   */
+  it("tells an absent tool from one that answered nothing", () => {
+    const out = asMarkdown({
+      ...base,
+      tools: [
+        {
+          name: "kubectl",
+          path: "/usr/local/bin/kubectl",
+          version: "v1.31.0",
+          error: null,
+        },
+        {
+          name: "helm",
+          path: "/usr/local/bin/helm",
+          version: null,
+          error: "exec format error",
+        },
+        { name: "az", path: null, version: null, error: null },
+      ],
+    });
+
+    expect(out).toContain("`kubectl` — /usr/local/bin/kubectl · v1.31.0");
+    expect(out).toContain("`helm` — /usr/local/bin/helm · no version reported");
+    expect(out).toContain("`az` — not installed");
   });
 });

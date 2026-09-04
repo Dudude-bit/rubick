@@ -553,34 +553,34 @@ export interface StorageClassInfo {
   parameters: Record<string, string>;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeClaimInfo {
   name: string;
   namespace: string;
-  status: string;
+  status: string | null;
   volume: string | null;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
   storageClass: string;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface PersistentVolumeInfo {
   name: string;
-  capacity: string;
+  capacity: string | null;
   accessModes: string[];
-  reclaimPolicy: string;
-  status: string;
+  reclaimPolicy: string | null;
+  status: string | null;
   claim: string | null;
   storageClass: string;
   reason: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
-  age: string;
+  createdAt: string | null;
 }
 
 export interface NamespaceInfo {
@@ -1143,6 +1143,7 @@ export interface EventFilters {
 export interface Diagnostics {
   shell: ShellEnvReport;
   searchPath: SearchPathEntry[];
+  tools: ToolStatus[];
   plugins: PluginStatus[];
   contexts: DiagnosticContext[];
   kubeconfig: KubeconfigInfo | null;
@@ -1155,6 +1156,7 @@ export interface Finding {
   title: string;
   detail: string;
   subject: string | null;
+  shell: ShellEnvReport | null;
 }
 
 export interface InstallationInfo {
@@ -1181,6 +1183,13 @@ export interface PluginStatus {
   name: string;
   path: string | null;
   requiredBy: string[];
+}
+
+export interface ToolStatus {
+  name: string;
+  path: string | null;
+  version: string | null;
+  error: string | null;
 }
 
 export interface SearchPathEntry {
@@ -1708,7 +1717,12 @@ export type ObjectFacts =
       revision: string | null;
       current: boolean | null;
     }
-  | { kind: "claim"; phase: string; capacity: string; storageClass: string }
+  | {
+      kind: "claim";
+      phase: string | null;
+      capacity: string | null;
+      storageClass: string;
+    }
   | {
       kind: "node";
       schedulable: boolean;
@@ -1757,13 +1771,6 @@ export type SearchContextStatus =
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
-
-export type ShellEnvReport =
-  | { outcome: "imported"; shell: string; adopted: number; removed: number }
-  | { outcome: "timedOut"; shell: string; seconds: number }
-  | { outcome: "couldNotStart"; shell: string; error: string }
-  | { outcome: "noAnswer"; shell: string; exit: number | null }
-  | { outcome: "notAsked" };
 
 export type TcpProbeReason = "refused" | "timedOut";
 
@@ -1847,6 +1854,14 @@ export type Usage =
   | { how: "ingressTls"; hosts: string[] };
 
 export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
+
+export type ShellEnvReport =
+  | { outcome: "imported"; shell: string; adopted: number; removed: number }
+  | { outcome: "timedOut"; shell: string; seconds: number }
+  | { outcome: "couldNotStart"; shell: string; error: string }
+  | { outcome: "noAnswer"; shell: string; exit: number | null }
+  | { outcome: "notAsked" }
+  | { outcome: "notRecorded" };
 
 export type CertificateProblem =
   | { says: "noSecret" }

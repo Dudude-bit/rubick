@@ -3,7 +3,7 @@ import { Info, Trash2 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
@@ -201,7 +201,7 @@ export function PersistentVolumeClaimDetail() {
       resourceKind={ResourceType.PersistentVolumeClaim}
       title={pvc?.name || name || ""}
       namespace={pvc?.namespace || namespace}
-      statusBadge={pvc && <StatusBadge status={pvc.status} />}
+      statusBadge={pvc && <PhaseBadge phase={pvc.status} />}
       badges={
         pvc && (
           <>

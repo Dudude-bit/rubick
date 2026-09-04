@@ -2,6 +2,18 @@ import type { ShellEnvReport } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
+/**
+ * Whether the search path was built from a real answer.
+ *
+ * The twin of `ShellEnvReport::answered()` in Rust, and the one place the
+ * frontend asks. Everything that reports an absence — a plugin, a tool, a
+ * binary a context names — rests on that path, and an absence verdict from a
+ * list nobody filled in is a guess wearing a fact's clothes.
+ */
+export function shellAnswered(report: ShellEnvReport): boolean {
+  return report.outcome === "imported" || report.outcome === "notAsked";
+}
+
 /** The one sentence about where the search path came from. */
 export function shellEnvSentence(report: ShellEnvReport, t: T): string {
   switch (report.outcome) {
@@ -30,6 +42,11 @@ export function shellEnvSentence(report: ShellEnvReport, t: T): string {
       });
     case "notAsked":
       return t("settings", "shellEnvNotAsked");
+    // Not a shell that failed — a build that never asked one. Its own
+    // sentence, because `notAsked` says the path is right and this says
+    // nobody knows.
+    case "notRecorded":
+      return t("settings", "shellEnvNotRecorded");
   }
 }
 
@@ -45,6 +62,8 @@ const TONES: Record<ShellEnvReport["outcome"], "text-fg-mut" | "text-warn"> = {
   couldNotStart: "text-warn",
   noAnswer: "text-warn",
   notAsked: "text-fg-mut",
+  // A guess, like the failures above: nothing filled the path in.
+  notRecorded: "text-warn",
 };
 
 export function shellEnvTone(report: ShellEnvReport): string {
@@ -55,7 +74,16 @@ export function shellEnvTone(report: ShellEnvReport): string {
  * The same sentence in English, for the pasted report. One catalogue entry
  * per outcome, not a second hand-written copy that drifts from the screen.
  */
-const english: T = (section, key, values) =>
+/**
+ * The catalogue in English, for the pasted report.
+ *
+ * Exported because the report needs it for anything that also appears on
+ * screen: a sentence written twice — once for the pane, once for the paste —
+ * is two places to fix a wording, and the halves disagree the first time
+ * somebody fixes one. Prose that exists only in the report has no catalogue
+ * key and stays inline there.
+ */
+export const english: T = (section, key, values) =>
   translate("en", section, key, values);
 
 export function shellEnvLine(report: ShellEnvReport): string {
