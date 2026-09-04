@@ -1,3 +1,4 @@
+import { ShellVisibility } from "@/components/settings/ShellVisibility";
 import { lazy, Suspense, useCallback, useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -246,145 +247,156 @@ export default function App() {
   return (
     <ErrorProvider>
       <ErrorBoundary resetKey={location.pathname} onError={handleError}>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<ClusterOverview />} />
-            <Route path="workloads/*" element={<Workloads />} />
-            <Route path="network/*" element={<Network />} />
-            <Route path="storage/*" element={<Storage />} />
-            <Route path="configuration/*" element={<Configuration />} />
-            <Route path={toPlural(ResourceType.Node)} element={<NodeList />} />
-            <Route
-              path={`${toPlural(ResourceType.Node)}/:name`}
-              element={<NodeDetail />}
-            />
-            <Route
-              path={toPlural(ResourceType.Namespace)}
-              element={<NamespaceList />}
-            />
-            <Route path="events" element={<Events />} />
-            <Route path="helm" element={<Helm />} />
-            <Route
-              path="helm/:source/:namespace/:name"
-              element={<HelmDetail />}
-            />
-            {/* Settings is a layer, not a page: the old address opens it
+        {/* The layer covers the whole window and is opaque, so the page
+            under it is polling at nobody. Where Settings used to be a
+            route — which unmounted the page it replaced — it is now a
+            sibling, and the routed shell stayed live behind it. This is
+            the mechanism that exists for a subtree that is mounted and
+            off screen. */}
+        <ShellVisibility>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<ClusterOverview />} />
+              <Route path="workloads/*" element={<Workloads />} />
+              <Route path="network/*" element={<Network />} />
+              <Route path="storage/*" element={<Storage />} />
+              <Route path="configuration/*" element={<Configuration />} />
+              <Route
+                path={toPlural(ResourceType.Node)}
+                element={<NodeList />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Node)}/:name`}
+                element={<NodeDetail />}
+              />
+              <Route
+                path={toPlural(ResourceType.Namespace)}
+                element={<NamespaceList />}
+              />
+              <Route path="events" element={<Events />} />
+              <Route path="helm" element={<Helm />} />
+              <Route
+                path="helm/:source/:namespace/:name"
+                element={<HelmDetail />}
+              />
+              {/* Settings is a layer, not a page: the old address opens it
                 and sends the tab home. */}
-            <Route path="settings/*" element={<SettingsRedirect />} />
-            {/* One route for every vendor page: the shell resolves the slug
+              <Route path="settings/*" element={<SettingsRedirect />} />
+              {/* One route for every vendor page: the shell resolves the slug
                 through the integrations registry and never names a vendor.
                 Which tab is open is a query parameter, so a scope tab parks
                 and restores the whole screen. */}
-            {/* The catalog first: the inventory of what this cluster has,
+              {/* The catalog first: the inventory of what this cluster has,
                 which used to hide inside Settings. */}
-            <Route path="integrations" element={<IntegrationsList />} />
-            <Route path="integrations/:slug" element={<IntegrationPage />} />
-            <Route
-              path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}
-              element={<PodDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Deployment)}/:namespace/:name`}
-              element={<DeploymentDetail />}
-            />
-            {/* A detail route and no list route: a ReplicaSet is somewhere
-                you land, never somewhere you browse. */}
-            <Route
-              path={`${toPlural(ResourceType.ReplicaSet)}/:namespace/:name`}
-              element={<ReplicaSetDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Service)}/:namespace/:name`}
-              element={<ServiceDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Ingress)}/:namespace/:name`}
-              element={<IngressDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}
-              element={<GatewayDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.GatewayClass)}/:name`}
-              element={<GatewayClassDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Namespace)}/:name`}
-              element={<NamespaceDetail />}
-            />
-            {[
-              ResourceType.HTTPRoute,
-              ResourceType.GRPCRoute,
-              ResourceType.TLSRoute,
-              ResourceType.TCPRoute,
-              ResourceType.UDPRoute,
-            ].map((kind) => (
+              <Route path="integrations" element={<IntegrationsList />} />
+              <Route path="integrations/:slug" element={<IntegrationPage />} />
               <Route
-                key={kind}
-                path={`${toPlural(kind)}/:namespace/:name`}
-                element={<GatewayRouteDetail kind={kind} />}
+                path={`${toPlural(ResourceType.Pod)}/:namespace/:name`}
+                element={<PodDetail />}
               />
-            ))}
-            <Route
-              path={`${toPlural(ResourceType.PersistentVolume)}/:name`}
-              element={<PersistentVolumeDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.PersistentVolumeClaim)}/:namespace/:name`}
-              element={<PersistentVolumeClaimDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.StorageClass)}/:name`}
-              element={<StorageClassDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Endpoints)}/:namespace/:name`}
-              element={<EndpointsDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.StatefulSet)}/:namespace/:name`}
-              element={<StatefulSetDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.DaemonSet)}/:namespace/:name`}
-              element={<DaemonSetDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Job)}/:namespace/:name`}
-              element={<JobDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.CronJob)}/:namespace/:name`}
-              element={<CronJobDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.ConfigMap)}/:namespace/:name`}
-              element={<ConfigMapDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.Secret)}/:namespace/:name`}
-              element={<SecretDetail />}
-            />
-            {/* CRD Routes */}
-            <Route
-              path={toPlural(ResourceType.CustomResourceDefinition)}
-              element={<Crds />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.CustomResourceDefinition)}/:name`}
-              element={<CrdDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.CustomResourceDefinition)}/:crdName/instances/:namespace/:name`}
-              element={<CustomResourceDetail />}
-            />
-            <Route
-              path={`${toPlural(ResourceType.CustomResourceDefinition)}/:crdName/instances/:name`}
-              element={<CustomResourceDetail />}
-            />
-          </Route>
-        </Routes>
+              <Route
+                path={`${toPlural(ResourceType.Deployment)}/:namespace/:name`}
+                element={<DeploymentDetail />}
+              />
+              {/* A detail route and no list route: a ReplicaSet is somewhere
+                you land, never somewhere you browse. */}
+              <Route
+                path={`${toPlural(ResourceType.ReplicaSet)}/:namespace/:name`}
+                element={<ReplicaSetDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Service)}/:namespace/:name`}
+                element={<ServiceDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Ingress)}/:namespace/:name`}
+                element={<IngressDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}
+                element={<GatewayDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.GatewayClass)}/:name`}
+                element={<GatewayClassDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Namespace)}/:name`}
+                element={<NamespaceDetail />}
+              />
+              {[
+                ResourceType.HTTPRoute,
+                ResourceType.GRPCRoute,
+                ResourceType.TLSRoute,
+                ResourceType.TCPRoute,
+                ResourceType.UDPRoute,
+              ].map((kind) => (
+                <Route
+                  key={kind}
+                  path={`${toPlural(kind)}/:namespace/:name`}
+                  element={<GatewayRouteDetail kind={kind} />}
+                />
+              ))}
+              <Route
+                path={`${toPlural(ResourceType.PersistentVolume)}/:name`}
+                element={<PersistentVolumeDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.PersistentVolumeClaim)}/:namespace/:name`}
+                element={<PersistentVolumeClaimDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.StorageClass)}/:name`}
+                element={<StorageClassDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Endpoints)}/:namespace/:name`}
+                element={<EndpointsDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.StatefulSet)}/:namespace/:name`}
+                element={<StatefulSetDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.DaemonSet)}/:namespace/:name`}
+                element={<DaemonSetDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Job)}/:namespace/:name`}
+                element={<JobDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.CronJob)}/:namespace/:name`}
+                element={<CronJobDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.ConfigMap)}/:namespace/:name`}
+                element={<ConfigMapDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.Secret)}/:namespace/:name`}
+                element={<SecretDetail />}
+              />
+              {/* CRD Routes */}
+              <Route
+                path={toPlural(ResourceType.CustomResourceDefinition)}
+                element={<Crds />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.CustomResourceDefinition)}/:name`}
+                element={<CrdDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.CustomResourceDefinition)}/:crdName/instances/:namespace/:name`}
+                element={<CustomResourceDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.CustomResourceDefinition)}/:crdName/instances/:name`}
+                element={<CustomResourceDetail />}
+              />
+            </Route>
+          </Routes>
+        </ShellVisibility>
         {/* Beside the routes, not under them: Settings has to open over a
             refused session, the front door and a tab mid-switch, the
             screens where something in it is usually the fix. */}
