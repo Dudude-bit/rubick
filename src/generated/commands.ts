@@ -868,10 +868,6 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
 }
 
-export async function debugKubectlPlugins(): Promise<unknown> {
-  return invoke<unknown>("debug_kubectl_plugins");
-}
-
 export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("list_pods", { filters });
 }

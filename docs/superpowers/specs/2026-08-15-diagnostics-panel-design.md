@@ -1,8 +1,15 @@
 # Diagnostics panel — design
 
-Status: not implemented. Scope and privacy default were chosen by the
-repository owner; the shape below was delegated.
+Status: implemented. The backend landed 2026-08-15 and the panel with it;
+the Tools block below was the last piece and landed 2026-09-04.
+Scope and privacy default were chosen by the repository owner; the shape
+below was delegated.
 Date: 2026-08-15
+
+> This header said "not implemented" for three weeks after it was. A stale
+> status is worse than none: it made `debug_kubectl_plugins` — the ad-hoc
+> command this panel replaced — look like the backend half of something
+> unfinished, and it survived a cleanup sweep on that reading.
 
 ## The problem
 

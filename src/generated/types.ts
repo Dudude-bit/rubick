@@ -1142,6 +1142,7 @@ export interface EventFilters {
 
 export interface Diagnostics {
   searchPath: SearchPathEntry[];
+  tools: ToolStatus[];
   plugins: PluginStatus[];
   contexts: DiagnosticContext[];
   kubeconfig: KubeconfigInfo | null;
@@ -1180,6 +1181,13 @@ export interface PluginStatus {
   name: string;
   path: string | null;
   requiredBy: string[];
+}
+
+export interface ToolStatus {
+  name: string;
+  path: string | null;
+  version: string | null;
+  error: string | null;
 }
 
 export interface SearchPathEntry {

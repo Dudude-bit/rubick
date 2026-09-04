@@ -12,7 +12,7 @@ pub mod redact;
 
 pub use collect::{
     collect, DiagnosticContext, Diagnostics, InstallationInfo, KubeconfigInfo, PluginStatus,
-    SearchPathEntry,
+    SearchPathEntry, ToolStatus,
 };
 pub use findings::{missing_plugin_finding, unreadable_kubeconfig_finding, Finding, Severity};
 pub use redact::redacted;
