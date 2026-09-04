@@ -77,6 +77,12 @@ export const manifestPodStatus = (status: ManifestStatus | undefined) => {
 const containerVerdict = (status: ManifestStatus | undefined) => {
   for (const { state } of status?.containerStatuses ?? []) {
     const waiting = state?.waiting?.reason;
+    // `PodInitializing` is skipped, and Rust is not: kubectl filters it in
+    // the *init* container loop (pod_display.rs:138) and not in this one
+    // (:155), so the two derivations differ here on purpose. This canvas
+    // cannot read init containers at all, and the phase is the nearest
+    // honest word where kubectl would print `Init:0/2`. The conformance
+    // corpus names this as an exclusion rather than pretending otherwise.
     if (waiting && waiting !== "PodInitializing") return waiting;
     const dead = state?.terminated;
     if (!dead) continue;

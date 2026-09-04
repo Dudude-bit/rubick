@@ -15,12 +15,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { RegistrySettings } from "@/components/registry/RegistrySettings";
@@ -172,50 +167,61 @@ function SettingsLayer({ onClose }: { onClose: () => void }) {
   const { query, setQuery } = useSettingsSearch();
 
   return (
-    <SheetContent
-      ref={contentRef}
-      side="full"
-      showOverlay={false}
-      showClose={false}
-      aria-describedby={undefined}
-      onEscapeKeyDown={(event) => {
-        if (!query) return;
-        event.preventDefault();
-        setQuery("");
-      }}
-      // Focus lands on the open section, not on the search box: arrows then
-      // move between sections, and typing is one Tab away.
-      onOpenAutoFocus={(event) => {
-        event.preventDefault();
-        contentRef.current
-          ?.querySelector<HTMLElement>('[aria-current="true"]')
-          ?.focus();
-      }}
-      className="text-fg-mid duration-150 motion-reduce:animate-none"
-    >
-      {/* Header and body share one centred column, so the title sits on the
-          nav's left edge and the close on the pane's right. */}
-      <header className="flex h-10 flex-none items-center border-b border-hair px-4">
-        <div className="mx-auto flex w-full max-w-5xl items-center">
-          <SheetTitle className="text-[13px] font-semibold text-fg">
-            {t("nav", "settings")}
-          </SheetTitle>
-          <SheetClose
-            aria-label={t("action", "close")}
-            onClick={onClose}
-            className="ml-auto flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-          >
-            <Kbd shortcut="Esc" />
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </SheetClose>
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Content
+        ref={contentRef}
+        aria-describedby={undefined}
+        onEscapeKeyDown={(event) => {
+          if (!query) return;
+          event.preventDefault();
+          setQuery("");
+        }}
+        // Focus lands on the open section, not on the search box: arrows then
+        // move between sections, and typing is one Tab away.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          contentRef.current
+            ?.querySelector<HTMLElement>('[aria-current="true"]')
+            ?.focus();
+        }}
+        // Opaque and app-coloured on purpose: Settings belongs to the app, not
+        // to the cluster whose colour runs along the top of the page
+        // underneath. A fade only: a full-window panel that zooms in reads as
+        // the window itself moving.
+        //
+        // Its own element rather than a `SheetContent` variant. A sheet is a
+        // panel anchored to an edge, raised above the page and sliding in; a
+        // variant for this would override the anchor, the raise, the padding
+        // and the animation — everything the base sets — which is a new
+        // component wearing a variant's name. The first attempt at that also
+        // dropped `display:flex`, so the header and the scrolling body below
+        // silently stopped laying out.
+        className="fixed inset-0 z-50 flex flex-col bg-canvas text-fg-mid duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none"
+      >
+        {/* Header and body share one centred column, so the title sits on the
+            nav's left edge and the close on the pane's right. */}
+        <header className="flex h-10 flex-none items-center border-b border-hair px-4">
+          <div className="mx-auto flex w-full max-w-5xl items-center">
+            <DialogPrimitive.Title className="text-[13px] font-semibold text-fg">
+              {t("nav", "settings")}
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Close
+              aria-label={t("action", "close")}
+              onClick={onClose}
+              className="ml-auto flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            >
+              <Kbd shortcut="Esc" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </DialogPrimitive.Close>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
+          <div className="mx-auto h-full w-full max-w-5xl">
+            <SettingsShell />
+          </div>
         </div>
-      </header>
-      <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3">
-        <div className="mx-auto h-full w-full max-w-5xl">
-          <SettingsShell />
-        </div>
-      </div>
-    </SheetContent>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
   );
 }
 
@@ -225,7 +231,7 @@ export function SettingsOverlay() {
   useSettingsShortcut();
 
   return (
-    <Sheet
+    <DialogPrimitive.Root
       open={open}
       onOpenChange={(next) => {
         if (!next) closeSettings();
@@ -237,6 +243,6 @@ export function SettingsOverlay() {
       <SettingsSearchProvider>
         <SettingsLayer onClose={closeSettings} />
       </SettingsSearchProvider>
-    </Sheet>
+    </DialogPrimitive.Root>
   );
 }

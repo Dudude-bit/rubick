@@ -49,10 +49,7 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         entry.path = scrub(&entry.path);
     }
     for tool in &mut d.tools {
-        // The path, and the error too: a spawn failure quotes the file it
-        // could not run, which is the home directory again in prose.
         tool.path = tool.path.as_deref().map(&scrub);
-        tool.error = tool.error.as_deref().map(&scrub);
     }
     for finding in &mut d.findings {
         finding.title = scrub(&finding.title);
@@ -81,7 +78,6 @@ mod tests {
                 name: "kubectl".into(),
                 path: Some("/Users/someone/bin/kubectl".into()),
                 version: Some("v1.31.0".into()),
-                error: None,
             }],
             plugins: Vec::new(),
             contexts: vec![
@@ -149,7 +145,6 @@ mod tests {
         // so the error carries the home directory in prose even when the path
         // beside it has already been scrubbed.
         d.tools[0].path = Some(format!("{home}/bin/kubectl"));
-        d.tools[0].error = Some(format!("{home}/bin/kubectl: permission denied"));
 
         let out = redacted(d);
         let all = serde_json::to_string(&out).expect("serialises");

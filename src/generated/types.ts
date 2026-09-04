@@ -1187,7 +1187,6 @@ export interface ToolStatus {
   name: string;
   path: string | null;
   version: string | null;
-  error: string | null;
 }
 
 export interface SearchPathEntry {
