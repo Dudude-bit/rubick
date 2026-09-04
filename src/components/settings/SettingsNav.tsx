@@ -70,12 +70,13 @@ export function SettingsNav({
           placeholder={t("settings", "searchSettings")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && query) {
-              event.stopPropagation();
-              setQuery("");
-            }
-          }}
+          // No Escape handler here. It was written when Settings was a page,
+          // and against a Radix layer it cannot run first: Radix listens on
+          // the document in the capture phase, so `stopPropagation` from a
+          // bubble handler never reaches it. The decision lives in
+          // `onEscapeKeyDown` on the content, once — leaving this here is the
+          // same rule in two places, each able to answer one keypress
+          // differently.
           className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt [&::-webkit-search-cancel-button]:hidden"
         />
         {query && (

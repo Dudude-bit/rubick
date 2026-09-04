@@ -13,7 +13,6 @@ const base: Diagnostics = {
       name: "kubectl",
       path: "/usr/local/bin/kubectl",
       version: "v1.31.0",
-      error: null,
     },
   ],
   plugins: [
@@ -86,15 +85,13 @@ describe("asMarkdown", () => {
           name: "kubectl",
           path: "/usr/local/bin/kubectl",
           version: "v1.31.0",
-          error: null,
         },
         {
           name: "helm",
           path: "/usr/local/bin/helm",
           version: null,
-          error: "exec format error",
         },
-        { name: "az", path: null, version: null, error: null },
+        { name: "az", path: null, version: null },
       ],
     });
 

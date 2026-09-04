@@ -49,10 +49,6 @@ pub struct ToolStatus {
     /// path above, which is the first thing to check when it should be there.
     pub path: Option<String>,
     pub version: Option<String>,
-    /// Set when a path resolved and the version did not: a binary that is
-    /// present and will not answer is a different problem from an absent one,
-    /// and reads identically unless this says so.
-    pub error: Option<String>,
 }
 
 /// How one context authenticates, and whether that can work.
@@ -242,15 +238,14 @@ fn tool_status(
             name: name.to_string(),
             path: found.path,
             version: found.version,
-            error: None,
         };
     }
+    // No error string. `check_availability` composes one in Rust — the wrong
+    // place for a sentence a reader sees — and it could only ever have survived
+    // where `path` is `None`, which is not the state the pane colours. The three
+    // states are `path` and `version`: both, path alone, neither.
     ToolStatus {
         name: name.to_string(),
-        // Dropped when the file turned up: it says the search found nothing,
-        // which we have just disproved, and a false line in a report somebody
-        // pastes into an issue is worse than a missing one.
-        error: found.error.filter(|_| located.is_none()),
         path: located,
         version: None,
     }
@@ -410,7 +405,6 @@ mod tests {
         let out = tool_status("kubectl", found, None);
         assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/kubectl"));
         assert_eq!(out.version.as_deref(), Some("v1.31.0"));
-        assert_eq!(out.error, None);
     }
 
     /// Would break if the two ways of being unavailable were merged again.
@@ -429,21 +423,18 @@ mod tests {
 
         assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/helm"));
         assert_eq!(out.version, None);
-        // And not the message about a search that found nothing: we just
-        // found it, and a report pasted into an issue must not contradict
-        // itself two lines apart.
-        assert_eq!(out.error, None);
     }
 
-    /// The ordinary absence keeps the message, which is the only thing that
-    /// distinguishes it from the case above once the path is `None` in both.
+    /// The ordinary absence: no path and no version, which is what tells it
+    /// apart from the case above. There is no third field to carry a reason —
+    /// the sentence `check_availability` composes for this is English written
+    /// in Rust, and nothing renders it.
     #[test]
-    fn a_tool_that_is_nowhere_keeps_the_reason_it_is_nowhere() {
+    fn a_tool_that_is_nowhere_says_so_with_both_fields_empty() {
         let out = tool_status("az", absent("az"), None);
 
         assert_eq!(out.path, None);
         assert_eq!(out.version, None);
-        assert!(out.error.unwrap().contains("not found"));
     }
 
     fn kubeconfig_with_exec() -> Kubeconfig {

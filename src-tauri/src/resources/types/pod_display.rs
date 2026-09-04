@@ -244,6 +244,9 @@ mod tests {
 
     /// The twin of `src/features/infrastructure/pod-status-conformance.test.ts`.
     ///
+    /// What the corpus covers, and the four things it deliberately does not,
+    /// are stated once — in the file's own `_note`, not here as well.
+    ///
     /// The infrastructure builder derives this same status in TypeScript, for a
     /// manifest somebody pasted, where no cluster read happened and there is no
     /// Rust behind it. Two evaluators for one question drift, and nothing but
