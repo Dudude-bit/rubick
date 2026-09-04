@@ -202,8 +202,13 @@ export function PodTerminal({
         // `PodShell` next door already reads `status.display`.
         const phase = pod.status.phase.toLowerCase();
         if (phase === "failed" || phase === "succeeded") {
+          // The sentence `PodShell` next door already uses for the same
+          // situation. Reading the same status word and then saying it in a
+          // second sentence would leave this pair — the peek, the shell and
+          // the terminal, all one click apart — describing one pod three
+          // ways, which is what this change was meant to stop.
           setUnavailableReason(
-            t("empty", "podIsNoLongerRunning", {
+            t("empty", "podIsStatusNoneRunning", {
               status: pod.status.display || pod.status.phase,
             })
           );
