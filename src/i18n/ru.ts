@@ -574,6 +574,7 @@ export const ru: Catalogue = {
     importedFromCluster: "Импортировано из кластера",
     suspendedLower: "приостановлен",
     inTime: "через {time}",
+    nowLower: "сейчас",
     unknownLower: "неизвестно",
     resourceWatchFailed: "Не удалось следить за ресурсом",
     eventBridgeLagged: {
