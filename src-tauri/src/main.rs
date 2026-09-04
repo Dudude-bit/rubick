@@ -30,6 +30,9 @@ fn main() {
     // timeout with no window on screen. Without this line a hang produced no
     // evidence at all, not even under `RUST_LOG=trace`, because the
     // subscriber that would carry it does not exist yet.
+    // Unix only, because that is where the wait exists: on Windows a GUI
+    // app already has the user's environment and the import returns at once.
+    #[cfg(unix)]
     eprintln!(
         "rubick: asking the login shell for its environment (up to {}s)",
         shell::SHELL_ENV_TIMEOUT.as_secs()
