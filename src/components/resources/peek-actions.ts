@@ -207,6 +207,9 @@ function waitingNote(pod: PodInfo, t: T): string {
 
 function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
   const phase = pod?.status.phase ?? "";
+  // The gates read the phase; the sentences name the status the badge
+  // shows, or "this pod is Running" sits under an Error badge.
+  const shown = pod?.status.display ?? phase;
   const lower = phase.toLowerCase();
   const finished = FINISHED_PHASES.has(lower);
   const failed = lower === "failed";
@@ -215,12 +218,12 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
 
   let shellReason: string | undefined;
   if (finished) {
-    shellReason = t("action", "podFinishedNoShell", { phase });
+    shellReason = t("action", "podFinishedNoShell", { phase: shown });
   } else if (failed) {
     shellReason = t("action", "podStoppedNoShell");
   } else if (pod && !live) {
     shellReason = t("action", "noContainerRunningYet", {
-      phase,
+      phase: shown,
       note: waitingNote(pod, t),
     });
   }
@@ -231,7 +234,7 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
     forwardReason = t("action", "podDeclaresNoPort");
   } else if (pod && !live) {
     forwardReason = t("action", "nothingListeningYet", {
-      phase,
+      phase: shown,
       note: waitingNote(pod, t),
     });
   }

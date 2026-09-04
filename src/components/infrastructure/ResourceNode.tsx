@@ -1,3 +1,4 @@
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Handle, NodeProps, Position } from "reactflow";
 import {
   Tooltip,
@@ -52,7 +53,11 @@ export function ResourceNode({ data, selected }: NodeProps<ResourceNodeData>) {
         <span className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
           {data.kind}
         </span>
-        <span className="text-[11px] text-fg-mut">{data.status ?? "Idle"}</span>
+        {/* Through the badge, not a muted span. This node now carries
+            CrashLoopBackOff, OOMKilled and ExitCode:1 — the whole point of
+            teaching the canvas the derived status — and one grey for all of
+            them drew the crashing pod exactly like the healthy one. */}
+        <StatusBadge status={data.status ?? "Idle"} />
       </div>
       <div className="mt-1.5 flex flex-col gap-0.5">
         <span className="truncate font-mono text-xs font-medium text-fg">

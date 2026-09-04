@@ -194,9 +194,19 @@ export function PodTerminal({
           return;
         }
 
+        // The word kubectl prints, not the raw phase, and through the
+        // catalogue rather than a template literal. This panel and the peek
+        // action beside it describe the same pod one click apart, and they
+        // said different words about it — «Pod Failed» here against the
+        // peek's «Error» — with this one staying English in every language.
+        // `PodShell` next door already reads `status.display`.
         const phase = pod.status.phase.toLowerCase();
         if (phase === "failed" || phase === "succeeded") {
-          setUnavailableReason(`Pod ${pod.status.phase}`);
+          setUnavailableReason(
+            t("empty", "podIsNoLongerRunning", {
+              status: pod.status.display || pod.status.phase,
+            })
+          );
           disconnect();
         }
       } catch (err) {
