@@ -134,4 +134,21 @@ describe("role marks", () => {
     expect(statusRole("Refused")).toBe("err");
     expect(statusRole("Unclaimed")).toBe("neutral");
   });
+
+  /**
+   * Would break if a storage phase went back to falling through the lookup.
+   *
+   * `statusRole` answers `neutral` for anything it does not know, so a status
+   * nobody added reads as "nothing to see here" — the same grey dash a
+   * completed job gets. These two are the opposite of that: `Lost` is a claim
+   * whose volume is gone, and every pod mounting it fails to start.
+   */
+  it("colours the storage phases that mean somebody has to act", () => {
+    expect(statusRole("Lost")).toBe("err");
+    expect(statusRole("Released")).toBe("warn");
+    // And the ones that were already right stay right.
+    expect(statusRole("Bound")).toBe("ok");
+    expect(statusRole("Available")).toBe("ok");
+    expect(statusRole("Failed")).toBe("err");
+  });
 });

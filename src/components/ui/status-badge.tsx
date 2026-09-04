@@ -14,6 +14,7 @@
  */
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 import {
   ROLE_DOT,
   ROLE_ICON,
@@ -88,5 +89,27 @@ export function StatusBadge({
       )}
       {children ?? status}
     </span>
+  );
+}
+
+/**
+ * A phase the cluster may not have written yet.
+ *
+ * Four places draw a volume's phase — two lists and the two detail pages they
+ * open — and they used to be handed the word `Unknown`, composed in Rust,
+ * because the field was a `String` and something had to go in it. Neither a
+ * PersistentVolume nor its claim has an `Unknown` phase, so that word read as
+ * one the cluster had chosen, in English, beside phases that really were.
+ *
+ * Written once because four copies of this decision is how three of them come
+ * to say something slightly different a year from now.
+ */
+export function PhaseBadge({ phase }: { phase: string | null }) {
+  const t = useT();
+  if (phase) return <StatusBadge status={phase} />;
+  // An empty code so the role lookup lands on `neutral` by its own rule
+  // rather than by a special case, and the words come from the catalogue.
+  return (
+    <StatusBadge status="">{t("empty", "nothingReportedYet")}</StatusBadge>
   );
 }

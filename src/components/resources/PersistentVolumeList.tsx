@@ -4,7 +4,7 @@ import { T } from "@/i18n/T";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge } from "@/components/ui/status-badge";
 import { ClaimRef, StorageClassRef } from "./storage-refs";
 import {
   createAccessModesColumn,
@@ -37,7 +37,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     size: 110,
     accessorKey: "status",
     header: () => <T section="columns" k="status" />,
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
   },
   {
     // A namespace and a claim name together, so as wide as a name column.
