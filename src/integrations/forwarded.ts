@@ -127,11 +127,24 @@ export async function podFor(service: ServiceInfo): Promise<string | null> {
     nodeName: null,
   });
 
-  // Ready first, then merely running: a rollout should move the forward onto
-  // the new pod rather than refusing to make one.
-  const running = pods.filter((pod) => pod.status.phase === "Running");
-  const ready = running.find((pod) => pod.status.ready);
-  return (ready ?? running[0])?.name ?? null;
+  // A container that is up, whatever the pod's headline says: kubectl's
+  // status is a whole-pod verdict, and a pod whose sidecar is in
+  // ImagePullBackOff still serves from the container that is running. A
+  // pod in a crash loop has its container waiting, not running, and a
+  // forward onto it connects to nothing. Ready first, then merely up: a
+  // rollout should move the forward onto the new pod rather than refusing
+  // to make one.
+  // `pod.containers` holds the app containers and only those: init
+  // containers and native sidecars go to `initContainers`, stamped `Init`
+  // and `Sidecar` (src-tauri/src/resources/types/pod.rs). No phase test is
+  // needed — the clause that stood here could not fire, and the test that
+  // covered it had to put an init container in a list the backend never
+  // puts one in.
+  const up = pods.filter((pod) =>
+    pod.containers.some((container) => container.state.type === "running")
+  );
+  const ready = up.find((pod) => pod.status.ready);
+  return (ready ?? up[0])?.name ?? null;
 }
 
 /**

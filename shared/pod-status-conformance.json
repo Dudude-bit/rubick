@@ -1,0 +1,81 @@
+{
+  "_note": "The status kubectl prints for a pod, in the one case both evaluators claim to answer: no init containers, no pod-level reason, no deletionTimestamp. Rust derives it for every live pod (src-tauri/src/resources/types/pod_display.rs); TypeScript derives it for a manifest somebody pasted into the infrastructure builder, where no cluster read happened (src/features/infrastructure/utils.ts). Two implementations in two languages, and this file is what holds them to the same answer. A case outside that subset — an init container blocking, a Completed pod with a live sidecar, a scheduling gate — belongs in the Rust tests alone; the TypeScript side does not claim it, and putting it here would only pin a disagreement.",
+  "cases": [
+    {
+      "name": "a container waiting for a reason names the pod",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": { "waiting": { "reason": "CrashLoopBackOff" } }
+          }
+        ]
+      },
+      "expect": "CrashLoopBackOff"
+    },
+    {
+      "name": "the first container's verdict is the one that stands",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": { "waiting": { "reason": "ImagePullBackOff" } }
+          },
+          {
+            "ready": false,
+            "state": { "waiting": { "reason": "CrashLoopBackOff" } }
+          }
+        ]
+      },
+      "expect": "ImagePullBackOff"
+    },
+    {
+      "name": "a running container leaves the phase standing",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [{ "ready": true, "state": { "running": {} } }]
+      },
+      "expect": "Running"
+    },
+    {
+      "name": "a terminated container names its reason",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "terminated": { "exitCode": 137, "reason": "OOMKilled" }
+            }
+          }
+        ]
+      },
+      "expect": "OOMKilled"
+    },
+    {
+      "name": "a terminated container with no reason names its exit code",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          { "ready": false, "state": { "terminated": { "exitCode": 2 } } }
+        ]
+      },
+      "expect": "ExitCode:2"
+    },
+    {
+      "name": "a container killed by a signal names the signal",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": { "terminated": { "exitCode": 0, "signal": 9 } }
+          }
+        ]
+      },
+      "expect": "Signal:9"
+    }
+  ]
+}
