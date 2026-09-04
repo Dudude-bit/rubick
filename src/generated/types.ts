@@ -559,7 +559,7 @@ export interface StorageClassInfo {
 export interface PersistentVolumeClaimInfo {
   name: string;
   namespace: string;
-  status: string;
+  status: string | null;
   volume: string | null;
   capacity: string | null;
   accessModes: string[];
@@ -574,7 +574,7 @@ export interface PersistentVolumeInfo {
   capacity: string | null;
   accessModes: string[];
   reclaimPolicy: string | null;
-  status: string;
+  status: string | null;
   claim: string | null;
   storageClass: string;
   reason: string | null;
@@ -1717,7 +1717,7 @@ export type ObjectFacts =
     }
   | {
       kind: "claim";
-      phase: string;
+      phase: string | null;
       capacity: string | null;
       storageClass: string;
     }

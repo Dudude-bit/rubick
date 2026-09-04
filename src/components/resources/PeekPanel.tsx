@@ -11,7 +11,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PhaseBadge, StatusBadge } from "@/components/ui/status-badge";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -230,12 +230,19 @@ function PeekContent({
           />
         </SheetTitle>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
-          {summary?.status && (
+          {/* Three cases, not two. `undefined` is a kind with no phase to
+              report and draws nothing; `null` is a kind that has one and
+              whose cluster wrote none, which the list and the detail page
+              both say out loud — this is the third path that draws the same
+              object, and it used to be silent where they spoke. */}
+          {summary?.status ? (
             <StatusBadge
               status={summary.status}
               roleOverride={silence ? "neutral" : undefined}
               title={silence ? silenceNote(silence, t) : undefined}
             />
+          ) : (
+            summary?.status === null && <PhaseBadge phase={null} />
           )}
           <span>{target.kind}</span>
           {namespace && (

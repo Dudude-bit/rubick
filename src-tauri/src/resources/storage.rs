@@ -27,7 +27,10 @@ pub struct PersistentVolumeInfo {
     pub capacity: Option<String>,
     pub access_modes: Vec<String>,
     pub reclaim_policy: Option<String>,
-    pub status: String,
+    /// The phase the cluster wrote. Absent when it wrote none: neither
+    /// `PersistentVolume` nor its claim has an `Unknown` phase, so a word
+    /// invented here would read as one the cluster chose.
+    pub status: Option<String>,
     pub claim: Option<String>,
     pub storage_class: String,
     pub reason: Option<String>,
@@ -69,9 +72,7 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
             capacity,
             access_modes,
             reclaim_policy: spec.and_then(|s| s.persistent_volume_reclaim_policy.clone()),
-            status: status
-                .and_then(|s| s.phase.clone())
-                .unwrap_or_else(|| "Unknown".to_string()),
+            status: status.and_then(|s| s.phase.clone()),
             claim,
             storage_class: spec
                 .and_then(|s| s.storage_class_name.clone())
@@ -90,7 +91,10 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
 pub struct PersistentVolumeClaimInfo {
     pub name: String,
     pub namespace: String,
-    pub status: String,
+    /// The phase the cluster wrote. Absent when it wrote none: neither
+    /// `PersistentVolume` nor its claim has an `Unknown` phase, so a word
+    /// invented here would read as one the cluster chose.
+    pub status: Option<String>,
     pub volume: Option<String>,
     /// What the cluster reported. Absent when it reported nothing —
     /// a hole the reader is told about, not filled with a word.
@@ -129,9 +133,7 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
         Self {
             name: pvc.name_any(),
             namespace: pvc.namespace().unwrap_or_default(),
-            status: status
-                .and_then(|s| s.phase.clone())
-                .unwrap_or_else(|| "Unknown".to_string()),
+            status: status.and_then(|s| s.phase.clone()),
             volume: spec.and_then(|s| s.volume_name.clone()),
             capacity,
             access_modes,
@@ -228,6 +230,21 @@ mod tests {
 
         let pvc = PersistentVolumeClaim::default();
         assert_eq!(PersistentVolumeClaimInfo::from(&pvc).capacity, None);
+    }
+
+    /// Neither kind has an `Unknown` phase, so the app must not invent one.
+    ///
+    /// It used to: the field was a `String`, something had to fill it, and
+    /// what filled it was the English word `Unknown` — sitting in a column
+    /// beside `Bound` and `Released`, which the cluster really does write,
+    /// and in a window whose other phases were in the reader's language.
+    #[test]
+    fn a_volume_the_cluster_gave_no_phase_sends_no_phase() {
+        let pv = PersistentVolume::default();
+        assert_eq!(PersistentVolumeInfo::from(&pv).status, None);
+
+        let pvc = PersistentVolumeClaim::default();
+        assert_eq!(PersistentVolumeClaimInfo::from(&pvc).status, None);
     }
 
     /// And when it did stamp one, what travels is the stamp — not a duration
