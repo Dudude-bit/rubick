@@ -62,11 +62,12 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         entry.path = scrub(&entry.path);
     }
     for tool in &mut d.tools {
-        // The path, and the error too: a spawn failure quotes the file it
-        // could not run, which is the home directory again in prose.
         tool.path = tool.path.as_deref().map(&scrub);
-        tool.error = tool.error.as_deref().map(&scrub);
     }
+    // No loop over a shell report inside a finding: there is not one. A
+    // finding says it is *about* the shell; the report itself lives once, on
+    // `Diagnostics`, and is scrubbed above. A second copy on the wire was a
+    // second thing to remember to scrub, and it was not remembered.
     for finding in &mut d.findings {
         finding.title = scrub(&finding.title);
         finding.detail = scrub(&finding.detail);
@@ -100,7 +101,6 @@ mod tests {
                 name: "kubectl".into(),
                 path: Some("/Users/someone/bin/kubectl".into()),
                 version: Some("v1.31.0".into()),
-                error: None,
             }],
             plugins: Vec::new(),
             contexts: vec![
@@ -129,7 +129,7 @@ mod tests {
                 title: "kubectl-oidc_login is not installed".into(),
                 detail: "The context orders-stage authenticates with kubectl oidc-login.".into(),
                 subject: Some("orders-stage".into()),
-                shell: None,
+                about_shell: false,
             }],
         }
     }
@@ -173,7 +173,6 @@ mod tests {
         // it could not run, so the error carries the home directory in prose
         // even when the path beside it has already been scrubbed.
         d.tools[0].path = Some(format!("{home}/bin/kubectl"));
-        d.tools[0].error = Some(format!("{home}/bin/kubectl: permission denied"));
 
         let out = redacted(d);
         let all = serde_json::to_string(&out).expect("serialises");

@@ -2354,6 +2354,10 @@ export const ru: Catalogue = {
     nodeCordonedWord: "закрыт для планирования",
   },
   cluster: {
+    integrationsHint:
+      "Что есть у этого кластера из того, чем приложение умеет пользоваться. Большая часть определяется по наличию CRD; всё, у чего есть собственный адрес, настраивается здесь, отдельно для каждого кластера.",
+    configuredGroup: "Настроены — адрес для каждого кластера",
+    detectedGroup: "Найдены в этом кластере",
     refusalNotNow: "Пока отказано",
     refusalNothingWouldReplaceIt: "Некому пересоздать",
     refusalHoldsLocalData: "Держит локальные данные",
@@ -2543,7 +2547,6 @@ export const ru: Catalogue = {
       "cloud profiles gcp google azure adc az login credentials облако профили вход учётные данные",
     searchNoContextsWords:
       "no contexts kubeconfig empty clusters нет контекстов пусто кластеры",
-    searchIntegrationsWords: "integrations extensions интеграции расширения",
     toolsNoProfiles: "— не заданы.",
     toolsNoGcp: "для GCP нет",
     toolsNoAzure: "для Azure нет",
@@ -2610,8 +2613,6 @@ export const ru: Catalogue = {
     noServiceForVendor:
       "В этом кластере нет ни одного Service с меткой или именем для {vendor}. Если он здесь под другим именем — пробросьте его сами и укажите адрес выше.",
     forwardingEllipsis: "проброс…",
-    integrationsHint:
-      "Что есть у этого кластера из того, чем приложение умеет пользоваться. Большая часть определяется по наличию CRD; всё, у чего есть собственный адрес, настраивается здесь, отдельно для каждого кластера.",
     noProfileBoundPrefix:
       "Профиль {vendor} не привязан, поэтому будет использовано то, что",
     noProfileBoundSuffix: " задаёт по умолчанию.",
@@ -2621,8 +2622,6 @@ export const ru: Catalogue = {
     awsNoProfilesMid: " задаёт по умолчанию —",
     awsNoProfilesSuffix: ", затем профиль по умолчанию.",
     inWord: "в",
-    configuredGroup: "Настроены — адрес для каждого кластера",
-    detectedGroup: "Найдены в этом кластере",
     registryLabel: "Реестр",
     selectRegistry: "Выберите реестр",
     importing: "Импорт…",

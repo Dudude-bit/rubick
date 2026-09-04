@@ -28,7 +28,6 @@ const empty: Diagnostics = {
       name: "kubectl",
       path: "/usr/local/bin/kubectl",
       version: "v1.31.0",
-      error: null,
     },
   ],
   plugins: [],

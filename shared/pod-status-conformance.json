@@ -1,0 +1,115 @@
+{
+  "_note": "The status kubectl prints for a pod, in the region where both evaluators claim the same answer. Rust derives it for every live pod (src-tauri/src/resources/types/pod_display.rs); TypeScript derives it for a manifest somebody pasted into the infrastructure builder, where no cluster read happened (src/features/infrastructure/utils.ts). Two implementations in two languages, and this file is what holds them to one answer.\n\nFOUR THINGS ARE OUTSIDE IT, and a case that touches one belongs in the Rust tests alone. Three because TypeScript does not implement them: an init container blocking, a pod-level reason, a deletionTimestamp. The fourth because the two disagree ON PURPOSE: an app container waiting `PodInitializing`. Rust keeps it — its app-container loop does not filter it, matching kubectl — while TypeScript falls through to the phase, because this canvas cannot read init containers and `Pending` is nearer the truth than `PodInitializing` where kubectl would print `Init:0/2`. That is argued in `utils.test.ts`'s \"falls back to the phase when no container says otherwise\". Adding it here would pin a disagreement, not an agreement.",
+  "cases": [
+    {
+      "name": "a container waiting for a reason names the pod",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "waiting": {
+                "reason": "CrashLoopBackOff"
+              }
+            }
+          }
+        ]
+      },
+      "expect": "CrashLoopBackOff"
+    },
+    {
+      "name": "the first container's verdict is the one that stands",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "waiting": {
+                "reason": "ImagePullBackOff"
+              }
+            }
+          },
+          {
+            "ready": false,
+            "state": {
+              "waiting": {
+                "reason": "CrashLoopBackOff"
+              }
+            }
+          }
+        ]
+      },
+      "expect": "ImagePullBackOff"
+    },
+    {
+      "name": "a running container leaves the phase standing",
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "ready": true,
+            "state": {
+              "running": {}
+            }
+          }
+        ]
+      },
+      "expect": "Running"
+    },
+    {
+      "name": "a terminated container names its reason",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "terminated": {
+                "exitCode": 137,
+                "reason": "OOMKilled"
+              }
+            }
+          }
+        ]
+      },
+      "expect": "OOMKilled"
+    },
+    {
+      "name": "a terminated container with no reason names its exit code",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "terminated": {
+                "exitCode": 2
+              }
+            }
+          }
+        ]
+      },
+      "expect": "ExitCode:2"
+    },
+    {
+      "name": "a container killed by a signal names the signal",
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "ready": false,
+            "state": {
+              "terminated": {
+                "exitCode": 0,
+                "signal": 9
+              }
+            }
+          }
+        ]
+      },
+      "expect": "Signal:9"
+    }
+  ]
+}

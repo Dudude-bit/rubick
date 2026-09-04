@@ -1157,7 +1157,7 @@ export interface Finding {
   title: string;
   detail: string;
   subject: string | null;
-  shell: ShellEnvReport | null;
+  aboutShell: boolean;
 }
 
 export interface InstallationInfo {
@@ -1190,7 +1190,6 @@ export interface ToolStatus {
   name: string;
   path: string | null;
   version: string | null;
-  error: string | null;
 }
 
 export interface SearchPathEntry {

@@ -26,9 +26,9 @@ export function asMarkdown(d: Diagnostics): string {
           // A finding carrying a shell outcome is worded from the catalogue,
           // the same entry the pane renders — so the paste and the screen
           // cannot say different things about one machine.
-          f.shell
+          f.aboutShell
             ? `- **${english("settings", "shellFindingTitle")}** — ${shellEnvLine(
-                f.shell
+                d.shell
               )} ${english("settings", "shellFindingConsequence")}`
             : `- **${f.title}** — ${f.detail}`
         )),

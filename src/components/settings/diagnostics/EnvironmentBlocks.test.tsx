@@ -18,15 +18,13 @@ const sample: Diagnostics = {
       name: "kubectl",
       path: "/opt/homebrew/bin/kubectl",
       version: "v1.31.0",
-      error: null,
     },
     {
       name: "helm",
       path: "/opt/homebrew/bin/helm",
       version: null,
-      error: "exec format error",
     },
-    { name: "az", path: null, version: null, error: null },
+    { name: "az", path: null, version: null },
   ],
   plugins: [
     { name: "kubectl-oidc_login", path: null, requiredBy: ["context-1"] },

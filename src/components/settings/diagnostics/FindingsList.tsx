@@ -1,4 +1,4 @@
-import type { Finding, Severity } from "@/generated/types";
+import type { Finding, Severity, ShellEnvReport } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { shellEnvSentence } from "./shell-env";
 
@@ -28,7 +28,15 @@ const TONE: Record<Severity, "text-err" | "text-warn"> = {
   optional: "text-warn",
 };
 
-export function FindingsList({ findings }: { findings: Finding[] }) {
+export function FindingsList({
+  findings,
+  shell,
+}: {
+  findings: Finding[];
+  /* The one report, the one the redactor walked. A finding says it is
+     about the shell; it does not carry its own copy. */
+  shell?: ShellEnvReport;
+}) {
   const t = useT();
   if (findings.length === 0) {
     return (
@@ -52,15 +60,17 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
       {ordered.map((finding, i) => (
         <li key={`${finding.title}-${finding.subject ?? i}`}>
           <h4 className={`text-xs font-medium ${TONE[finding.severity]}`}>
-            {finding.shell ? t("settings", "shellFindingTitle") : finding.title}
+            {finding.aboutShell
+              ? t("settings", "shellFindingTitle")
+              : finding.title}
           </h4>
           <p className="mt-1 max-w-[72ch] text-xs text-fg-mut">
             {/* A finding that carries a shell outcome is worded here, from the
                 same catalogue entry the block below uses. It used to arrive as
                 English prose composed in Rust, four lines above the Russian
                 sentence saying the same thing. */}
-            {finding.shell
-              ? `${shellEnvSentence(finding.shell, t)} ${t(
+            {finding.aboutShell && shell
+              ? `${shellEnvSentence(shell, t)} ${t(
                   "settings",
                   "shellFindingConsequence"
                 )}`

@@ -35,15 +35,17 @@ pub struct Finding {
     /// The context or setting this is about; the tiebreak when two findings
     /// share a severity, so the order does not move between reads.
     pub subject: Option<String>,
-    /// The shell outcome this finding is about, when it is about one.
+    /// Whether this finding is about the shell outcome the report carries.
     ///
-    /// Carried rather than described. The same five outcomes already have
-    /// catalogue entries the pane renders four lines below the findings
-    /// list, so composing English for them here put both on one screen —
-    /// the Rust sentence in the reader's second language above the
-    /// catalogue's in their first — and any wording fix had to be made in
-    /// three files or the halves disagreed.
-    pub shell: Option<ShellEnvReport>,
+    /// A mark, not a copy. The same five outcomes already have catalogue
+    /// entries the pane renders four lines below this list, so composing
+    /// English for them here put both on one screen. Carrying the report
+    /// instead put a second copy of it on the wire — one the redactor did
+    /// not walk, so a shell under the home directory reached a pasted
+    /// report unscrubbed while the block below it said `~`.
+    /// `Diagnostics::shell` is the one report, and it is the one that
+    /// gets scrubbed.
+    pub about_shell: bool,
 }
 
 /// The finding for a kubeconfig the app could not read.
@@ -64,7 +66,7 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
              same file."
         ),
         subject: Some(path.to_string()),
-        shell: None,
+        about_shell: false,
     }
 }
 
@@ -94,7 +96,7 @@ pub fn shell_env_finding(report: &ShellEnvReport) -> Option<Finding> {
                 | ShellEnvReport::NoAnswer { shell, .. } => Some(shell.clone()),
                 _ => None,
             },
-            shell: Some(other.clone()),
+            about_shell: true,
         }),
     }
 }
@@ -152,7 +154,7 @@ fn missing_plugin_finding_given(
              {searched}.{caveat}"
         ),
         subject: Some(context.to_string()),
-        shell: None,
+        about_shell: false,
     })
 }
 
@@ -234,14 +236,9 @@ mod tests {
         .expect("a shell that timed out is worth a line");
         assert_eq!(timed_out.severity, Severity::Unverified);
         assert_eq!(timed_out.subject.as_deref(), Some("/bin/zsh"));
-        assert!(
-            matches!(
-                timed_out.shell,
-                Some(ShellEnvReport::TimedOut { seconds: 30, .. })
-            ),
-            "{:?}",
-            timed_out.shell
-        );
+        // A mark, not a copy: the outcome it is about is the one on
+        // `Diagnostics`, which is also the one the redactor scrubs.
+        assert!(timed_out.about_shell);
         // No prose here — the words live in the catalogue, and a sentence
         // composed in Rust is one no scanner in this project can see.
         assert!(timed_out.detail.is_empty(), "{}", timed_out.detail);
@@ -251,14 +248,7 @@ mod tests {
             exit: Some(1),
         })
         .expect("a shell that said nothing is worth a line");
-        assert!(
-            matches!(
-                no_answer.shell,
-                Some(ShellEnvReport::NoAnswer { exit: Some(1), .. })
-            ),
-            "{:?}",
-            no_answer.shell
-        );
+        assert!(no_answer.about_shell);
 
         assert!(shell_env_finding(&ShellEnvReport::Imported {
             shell: "/bin/zsh".into(),

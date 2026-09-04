@@ -2208,6 +2208,10 @@ export const en = {
     nodeCordonedWord: "cordoned",
   },
   cluster: {
+    integrationsHint:
+      "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
+    configuredGroup: "Configured — an address per cluster",
+    detectedGroup: "Detected in this cluster",
     refusalNotNow: "Refused for now",
     refusalNothingWouldReplaceIt: "Nothing would replace it",
     refusalHoldsLocalData: "Holds local data",
@@ -2378,7 +2382,6 @@ export const en = {
     searchCloudWords:
       "cloud profiles gcp google azure adc az login credentials",
     searchNoContextsWords: "no contexts kubeconfig empty clusters",
-    searchIntegrationsWords: "integrations extensions",
     toolsNoProfiles: "— none defined.",
     toolsNoGcp: "none for GCP",
     toolsNoAzure: "none for Azure",
@@ -2445,8 +2448,6 @@ export const en = {
     noServiceForVendor:
       "No Service in this cluster is labelled or named for {vendor}. If it is here under another name, forward it yourself and give the address above.",
     forwardingEllipsis: "forwarding…",
-    integrationsHint:
-      "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
     noProfileBoundPrefix:
       "No {vendor} profile is bound, so it will use whatever",
     noProfileBoundSuffix: " defaults to.",
@@ -2456,8 +2457,6 @@ export const en = {
     awsNoProfilesMid: " defaults to —",
     awsNoProfilesSuffix: ", then the default profile.",
     inWord: "in",
-    configuredGroup: "Configured — an address per cluster",
-    detectedGroup: "Detected in this cluster",
     registryLabel: "Registry",
     selectRegistry: "Select registry",
     importing: "Importing...",

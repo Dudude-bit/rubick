@@ -50,10 +50,6 @@ pub struct ToolStatus {
     /// path above, which is the first thing to check when it should be there.
     pub path: Option<String>,
     pub version: Option<String>,
-    /// Set when a path resolved and the version did not: a binary that is
-    /// present and will not answer is a different problem from an absent one,
-    /// and reads identically unless this says so.
-    pub error: Option<String>,
 }
 
 /// How one context authenticates, and whether that can work.
@@ -248,30 +244,20 @@ fn tool_status(
     name: &str,
     found: crate::cli::CliAvailability,
     located: Option<String>,
-    // Whether the search path behind `found` was built from the shell's
-    // answer. False makes every absence a guess rather than a verdict.
-    path_is_real: bool,
 ) -> ToolStatus {
     if found.available {
         return ToolStatus {
             name: name.to_string(),
             path: found.path,
             version: found.version,
-            error: None,
         };
     }
+    // No error string. `check_availability` composes one in Rust — the wrong
+    // place for a sentence a reader sees — and it could only ever have survived
+    // where `path` is `None`, which is not the state the pane colours. The three
+    // states are `path` and `version`: both, path alone, neither.
     ToolStatus {
         name: name.to_string(),
-        // Dropped when the file turned up: it says the search found nothing,
-        // which we have just disproved, and a false line in a report somebody
-        // pastes into an issue is worse than a missing one.
-        //
-        // Dropped too when the login shell never answered. The sentence names
-        // "any search location", and the locations it means are then the
-        // well-known list and nothing the profile adds — a complete search
-        // that did not happen. The pane and the report say so above the list
-        // instead, once, in the reader's language.
-        error: found.error.filter(|_| located.is_none() && path_is_real),
         path: located,
         version: None,
     }
@@ -287,34 +273,30 @@ fn tool_status(
 /// Concurrent because each answer costs a process launch with a five-second
 /// ceiling, and six of those in a row is a pane that takes half a minute to
 /// say everything is fine.
-async fn tools_status(path_is_real: bool) -> Vec<ToolStatus> {
+async fn tools_status() -> Vec<ToolStatus> {
     use crate::cli::cloud::{AzTool, GcloudTool, GkeAuthPluginTool, KubeloginTool};
     use crate::cli::helm::HelmTool;
     use crate::cli::kubectl::KubectlTool;
     use crate::cli::CliToolManager;
 
-    async fn ask<T: crate::cli::CliTool>(name: &str, tool: T, path_is_real: bool) -> ToolStatus {
+    async fn ask<T: crate::cli::CliTool>(name: &str, tool: T) -> ToolStatus {
         let binary = tool.binary_name();
         let found = CliToolManager::new(tool).check_availability().await;
         let located = (!found.available)
             .then(|| locate_on_user_path(binary))
             .flatten();
-        tool_status(name, found, located, path_is_real)
+        tool_status(name, found, located)
     }
 
     let (kubectl, helm, gcloud, gke, az, kubelogin) = tokio::join!(
         // The configured override, not a bare default: a reader who pointed
         // the app at their own kubectl needs the panel to report that one.
-        ask("kubectl", KubectlTool::with_default_config(), path_is_real),
-        ask("helm", HelmTool::with_default_config(), path_is_real),
-        ask("gcloud", GcloudTool::new(), path_is_real),
-        ask(
-            "gke-gcloud-auth-plugin",
-            GkeAuthPluginTool::new(),
-            path_is_real
-        ),
-        ask("az", AzTool::new(), path_is_real),
-        ask("kubelogin", KubeloginTool::new(), path_is_real),
+        ask("kubectl", KubectlTool::with_default_config()),
+        ask("helm", HelmTool::with_default_config()),
+        ask("gcloud", GcloudTool::new()),
+        ask("gke-gcloud-auth-plugin", GkeAuthPluginTool::new()),
+        ask("az", AzTool::new()),
+        ask("kubelogin", KubeloginTool::new()),
     );
     vec![kubectl, helm, gcloud, gke, az, kubelogin]
 }
@@ -333,7 +315,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         .collect();
     let app = InstallationInfo::collect();
     let search_path_is_real = shell.answered();
-    let tools = tools_status(search_path_is_real).await;
+    let tools = tools_status().await;
 
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
@@ -446,10 +428,9 @@ mod tests {
             searched_paths: Vec::new(),
         };
 
-        let out = tool_status("kubectl", found, None, true);
+        let out = tool_status("kubectl", found, None);
         assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/kubectl"));
         assert_eq!(out.version.as_deref(), Some("v1.31.0"));
-        assert_eq!(out.error, None);
     }
 
     /// Would break if the two ways of being unavailable were merged again.
@@ -464,42 +445,22 @@ mod tests {
             "helm",
             absent("helm"),
             Some("/opt/homebrew/bin/helm".to_string()),
-            true,
         );
 
         assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/helm"));
         assert_eq!(out.version, None);
-        // And not the message about a search that found nothing: we just
-        // found it, and a report pasted into an issue must not contradict
-        // itself two lines apart.
-        assert_eq!(out.error, None);
     }
 
-    /// An absence found on a search path nobody filled in is a guess.
-    ///
-    /// The message says "not found in any search location", and without the
-    /// login shell's answer those locations are the well-known list and
-    /// nothing a profile adds. Stating it anyway puts a sentence in a pasted
-    /// report that sends a maintainer looking for a binary sitting on the
-    /// reader's own PATH — the same `Vec::new()`-on-a-403 shape, in prose.
-    /// The pane and the report say it once, above the list, instead.
+    /// The ordinary absence: no path and no version, which is what tells it
+    /// apart from the case above. There is no third field to carry a reason —
+    /// the sentence `check_availability` composes for this is English written
+    /// in Rust, and nothing renders it.
     #[test]
-    fn an_absence_from_a_path_that_was_guessed_asserts_nothing() {
-        let out = tool_status("az", absent("az"), None, false);
-
-        assert_eq!(out.path, None);
-        assert_eq!(out.error, None, "a guessed search proves no absence");
-    }
-
-    /// The ordinary absence keeps the message, which is the only thing that
-    /// distinguishes it from the case above once the path is `None` in both.
-    #[test]
-    fn a_tool_that_is_nowhere_keeps_the_reason_it_is_nowhere() {
-        let out = tool_status("az", absent("az"), None, true);
+    fn a_tool_that_is_nowhere_says_so_with_both_fields_empty() {
+        let out = tool_status("az", absent("az"), None);
 
         assert_eq!(out.path, None);
         assert_eq!(out.version, None);
-        assert!(out.error.unwrap().contains("not found"));
     }
 
     fn kubeconfig_with_exec() -> Kubeconfig {
@@ -599,9 +560,9 @@ users:
         assert!(!d.search_path_is_real);
         assert_eq!(d.search_path_is_real, d.shell.answered());
         assert!(
-            matches!(d.findings[0].shell, Some(ShellEnvReport::NotRecorded)),
-            "the finding carries the outcome it is about: {:?}",
-            d.findings[0].shell
+            d.findings[0].about_shell,
+            "the finding is marked as being about the shell, and the report it
+             is about is the one on `Diagnostics`"
         );
     }
 

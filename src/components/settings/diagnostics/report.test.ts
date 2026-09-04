@@ -15,7 +15,6 @@ const base: Diagnostics = {
       name: "kubectl",
       path: "/usr/local/bin/kubectl",
       version: "v1.31.0",
-      error: null,
     },
   ],
   plugins: [
@@ -42,7 +41,7 @@ const base: Diagnostics = {
       title: "kubectl-oidc_login is not installed",
       detail: "The context context-1 needs it.",
       subject: "context-1",
-      shell: null,
+      aboutShell: false,
     },
   ],
 };
@@ -105,15 +104,13 @@ describe("asMarkdown", () => {
           name: "kubectl",
           path: "/usr/local/bin/kubectl",
           version: "v1.31.0",
-          error: null,
         },
         {
           name: "helm",
           path: "/usr/local/bin/helm",
           version: null,
-          error: "exec format error",
         },
-        { name: "az", path: null, version: null, error: null },
+        { name: "az", path: null, version: null },
       ],
     });
 
