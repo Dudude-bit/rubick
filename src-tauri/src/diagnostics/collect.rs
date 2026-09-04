@@ -34,6 +34,27 @@ pub struct PluginStatus {
     pub required_by: Vec<String>,
 }
 
+/// One tool the app spawns itself, and what it answered.
+///
+/// Distinct from `PluginStatus` in the one way that matters: this list is
+/// fixed and compiled in, while that one is whatever the kubeconfig names.
+/// Only this one is ever executed — a settings pane that ran every `command`
+/// a context declared would be running arbitrary programs because somebody
+/// opened a tab.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolStatus {
+    pub name: String,
+    /// The file that would run. `None` means nothing was found on the search
+    /// path above, which is the first thing to check when it should be there.
+    pub path: Option<String>,
+    pub version: Option<String>,
+    /// Set when a path resolved and the version did not: a binary that is
+    /// present and will not answer is a different problem from an absent one,
+    /// and reads identically unless this says so.
+    pub error: Option<String>,
+}
+
 /// How one context authenticates, and whether that can work.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +113,7 @@ impl InstallationInfo {
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostics {
     pub search_path: Vec<SearchPathEntry>,
+    pub tools: Vec<ToolStatus>,
     pub plugins: Vec<PluginStatus>,
     pub contexts: Vec<DiagnosticContext>,
     pub kubeconfig: Option<KubeconfigInfo>,
@@ -196,12 +218,89 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
 /// Best-effort per block: a kubeconfig that will not parse becomes a finding
 /// and leaves every other block answering. A page that empties itself because
 /// one file is malformed would hide the very facts somebody came for.
+/// What one tool's answer amounts to.
+///
+/// Split out because the interesting part is a judgement, not the process
+/// launch: `check_availability` answers `available: false` for two different
+/// machines — one where the binary is absent, and one where it is right there
+/// and would not run (wrong architecture, no execute bit, a wrapper that exits
+/// non-zero). `try_path` returns `None` for both, and the message it builds,
+/// "not found in any search location", is untrue of the second.
+///
+/// That difference is most of why somebody opens this pane. One says install
+/// it; the other says the thing you already installed is broken, and
+/// reinstalling the same file will not fix it. So the caller looks for the
+/// file — which this module can do and that one does not — and this decides
+/// what the pair of answers means.
+fn tool_status(
+    name: &str,
+    found: crate::cli::CliAvailability,
+    located: Option<String>,
+) -> ToolStatus {
+    if found.available {
+        return ToolStatus {
+            name: name.to_string(),
+            path: found.path,
+            version: found.version,
+            error: None,
+        };
+    }
+    ToolStatus {
+        name: name.to_string(),
+        // Dropped when the file turned up: it says the search found nothing,
+        // which we have just disproved, and a false line in a report somebody
+        // pastes into an issue is worse than a missing one.
+        error: found.error.filter(|_| located.is_none()),
+        path: located,
+        version: None,
+    }
+}
+
+/// What each known tool resolved to, asked concurrently.
+///
+/// Fresh managers rather than the app's cached ones on purpose: those resolve
+/// once and hold it, which is right for a hot path and wrong for a panel whose
+/// whole job is to say what is true now. Somebody installing the plugin the
+/// findings named wants the next read to notice.
+///
+/// Concurrent because each answer costs a process launch with a five-second
+/// ceiling, and six of those in a row is a pane that takes half a minute to
+/// say everything is fine.
+async fn tools_status() -> Vec<ToolStatus> {
+    use crate::cli::cloud::{AzTool, GcloudTool, GkeAuthPluginTool, KubeloginTool};
+    use crate::cli::helm::HelmTool;
+    use crate::cli::kubectl::KubectlTool;
+    use crate::cli::CliToolManager;
+
+    async fn ask<T: crate::cli::CliTool>(name: &str, tool: T) -> ToolStatus {
+        let binary = tool.binary_name();
+        let found = CliToolManager::new(tool).check_availability().await;
+        let located = (!found.available)
+            .then(|| locate_on_user_path(binary))
+            .flatten();
+        tool_status(name, found, located)
+    }
+
+    let (kubectl, helm, gcloud, gke, az, kubelogin) = tokio::join!(
+        // The configured override, not a bare default: a reader who pointed
+        // the app at their own kubectl needs the panel to report that one.
+        ask("kubectl", KubectlTool::with_default_config()),
+        ask("helm", HelmTool::with_default_config()),
+        ask("gcloud", GcloudTool::new()),
+        ask("gke-gcloud-auth-plugin", GkeAuthPluginTool::new()),
+        ask("az", AzTool::new()),
+        ask("kubelogin", KubeloginTool::new()),
+    );
+    vec![kubectl, helm, gcloud, gke, az, kubelogin]
+}
+
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     let search_path = search_directories()
         .into_iter()
         .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
+    let tools = tools_status().await;
 
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
@@ -233,6 +332,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
         return Diagnostics {
             search_path,
+            tools,
             plugins: Vec::new(),
             contexts: Vec::new(),
             kubeconfig,
@@ -269,6 +369,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
 
     Diagnostics {
         search_path,
+        tools,
         plugins,
         contexts,
         kubeconfig: Some(KubeconfigInfo {
@@ -284,6 +385,66 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn absent(name: &str) -> crate::cli::CliAvailability {
+        crate::cli::CliAvailability {
+            available: false,
+            version: None,
+            error: Some(format!("{name} not found in any search location")),
+            path: None,
+            searched_paths: vec!["/opt/homebrew/bin".into()],
+        }
+    }
+
+    /// A tool that answered is reported by what it answered.
+    #[test]
+    fn a_tool_that_ran_reports_its_path_and_version() {
+        let found = crate::cli::CliAvailability {
+            available: true,
+            version: Some("v1.31.0".into()),
+            error: None,
+            path: Some("/opt/homebrew/bin/kubectl".into()),
+            searched_paths: Vec::new(),
+        };
+
+        let out = tool_status("kubectl", found, None);
+        assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/kubectl"));
+        assert_eq!(out.version.as_deref(), Some("v1.31.0"));
+        assert_eq!(out.error, None);
+    }
+
+    /// Would break if the two ways of being unavailable were merged again.
+    ///
+    /// This one is the third state the panel exists for: the file is right
+    /// there and would not run. `check_availability` cannot see the
+    /// difference — it reports both as "not found in any search location" —
+    /// so a reader told that would go and install what they already have.
+    #[test]
+    fn a_tool_that_is_present_and_would_not_run_says_where_it_is() {
+        let out = tool_status(
+            "helm",
+            absent("helm"),
+            Some("/opt/homebrew/bin/helm".to_string()),
+        );
+
+        assert_eq!(out.path.as_deref(), Some("/opt/homebrew/bin/helm"));
+        assert_eq!(out.version, None);
+        // And not the message about a search that found nothing: we just
+        // found it, and a report pasted into an issue must not contradict
+        // itself two lines apart.
+        assert_eq!(out.error, None);
+    }
+
+    /// The ordinary absence keeps the message, which is the only thing that
+    /// distinguishes it from the case above once the path is `None` in both.
+    #[test]
+    fn a_tool_that_is_nowhere_keeps_the_reason_it_is_nowhere() {
+        let out = tool_status("az", absent("az"), None);
+
+        assert_eq!(out.path, None);
+        assert_eq!(out.version, None);
+        assert!(out.error.unwrap().contains("not found"));
+    }
 
     fn kubeconfig_with_exec() -> Kubeconfig {
         serde_yaml::from_str(

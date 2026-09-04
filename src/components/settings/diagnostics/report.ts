@@ -28,6 +28,17 @@ export function asMarkdown(d: Diagnostics): string {
       (e) => `- \`${e.path}\`${e.exists ? "" : " — not there"}`
     ),
     "",
+    "### Tools",
+    // The version too: half the reports that lead somewhere turn on which
+    // kubectl answered, and "installed" alone has never settled that.
+    ...d.tools.map((tool) =>
+      tool.path
+        ? `- \`${tool.name}\` — ${tool.path}${
+            tool.version ? ` · ${tool.version}` : " · no version reported"
+          }`
+        : `- \`${tool.name}\` — not installed`
+    ),
+    "",
     "### Plugins",
     ...(d.plugins.length === 0
       ? ["No context needs one."]
