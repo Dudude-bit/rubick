@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-09-04
+
+### Added — sort a list by the column you are reading it for
+
+Pods sort by status, by restart count and by how many containers are short of
+ready; Nodes, Deployments and the rest sort by the columns worth sorting by.
+Only columns with something real to compare offer it — a header that sorts
+nothing when pressed is worse than a header that does not offer.
+
+Requested in [#107](https://github.com/Dudude-bit/rubick/issues/107).
+
+### Added — run a CronJob now, and edit one ConfigMap key
+
+A CronJob's detail page can start a Job from its template without waiting for
+the schedule, the same way `kubectl create job --from=cronjob/x` does, and the
+Job it creates is owned by the CronJob so it is cleaned up like any other.
+
+A ConfigMap key can be edited on its own instead of through the whole manifest.
+
+Both from [#107](https://github.com/Dudude-bit/rubick/issues/107).
+
+### Fixed — signing in through kubectl on Windows
+
+An OIDC login could fail on Windows with a credential that looked malformed.
+Windows consoles hand back the _rendered_ screen, so a token longer than the
+console is wide came back with line breaks inside it — breaking the JSON that
+carried it. Rubick now reads the credential the console meant rather than the
+one it drew.
+
+Reported in [#106](https://github.com/Dudude-bit/rubick/issues/106).
+
+### Fixed — screens that disagreed with each other about the same object
+
+The largest part of this release. One fact from the cluster is read in several
+places; a fix that reached one reader left the others answering the old way,
+and two screens said different things about one object:
+
+- A Gateway with no address held a red badge in the sidebar while its own page
+  said it was fine.
+- A pod on a node that had stopped reporting was drawn as running.
+- A cordoned node did not say so anywhere but its own page.
+- A workload mid-rollout read **Progressing** in the list and **Ready** in the
+  panel opened from it.
+- A probe that had already answered sat under a line still saying nobody had
+  checked.
+
+Each of these is now answered in one place that every screen reads.
+
+### Fixed — storage volumes spoke English in a translated window
+
+PersistentVolumes, their claims and StorageClasses reported an age, a size and
+a phase composed before the language was known, so a volume the cluster had not
+finished writing said `Unknown` beside neighbours that said it in the reader's
+language. They now send what the cluster wrote and the words are chosen where
+the reader is.
+
+`Released` and `Lost` are also coloured now. Both used to draw the same grey as
+a completed job — including a claim whose volume is gone, which stops every pod
+that mounts it.
+
+### Added — a Tools block in Diagnostics
+
+Settings → Diagnostics now lists kubectl, helm, kubelogin and the cloud CLIs
+with the file that would run and the version it reports. A tool that is present
+and will not answer is shown as exactly that, rather than as missing: the
+difference is between installing something and finding out what you installed
+is broken.
+
+### Changed — the Namespaces list updates as the cluster changes
+
+It polled while every other cluster-scoped list watched. It watches now, and
+falls back to polling — saying so — if the watch cannot be established.
+
 ## [4.7.3] - 2026-08-31
 
 ### Fixed — the Connections tab called an existing ListenerSet missing
