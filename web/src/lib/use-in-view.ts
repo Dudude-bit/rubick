@@ -1,8 +1,17 @@
+declare global {
+  interface Window {
+    __disarmReveal?: ReturnType<typeof setTimeout>;
+  }
+}
+
 import { useEffect, useRef } from "react";
 
 const observers = new Map<string, IntersectionObserver>();
 
 function observe(el: Element, margin: string) {
+  // The bundle is here, so the disarm timer in `__root.tsx` is not needed.
+  clearTimeout(window.__disarmReveal);
+
   if (!("IntersectionObserver" in window)) {
     el.setAttribute("data-in", "");
     return () => {};
