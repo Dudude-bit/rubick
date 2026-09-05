@@ -188,6 +188,28 @@
     --err: 4 66% 45%;
     --info: 210 67% 40%;
 
+    /* The sixteen ANSI colours a log line can name. Black is the
+     * foreground and white the faint grey: "white" on this canvas has to
+     * be readable, not white. Yellow is held down to amber for the same
+     * reason. The cube and truecolor are pulled toward black or white
+     * until they read instead (`logs/ansi.ts`). */
+    --ansi-0: 32 16% 11%;
+    --ansi-1: 4 66% 45%;
+    --ansi-2: 148 55% 29%;
+    --ansi-3: 38 80% 34%;
+    --ansi-4: 210 67% 40%;
+    --ansi-5: 300 45% 40%;
+    --ansi-6: 190 65% 30%;
+    --ansi-7: 32 8% 44%;
+    --ansi-8: 32 8% 37%;
+    --ansi-9: 4 70% 46%;
+    --ansi-10: 148 50% 33%;
+    --ansi-11: 40 85% 32%;
+    --ansi-12: 212 70% 46%;
+    --ansi-13: 300 50% 46%;
+    --ansi-14: 190 60% 35%;
+    --ansi-15: 32 10% 26%;
+
     /* Kind and identity hues. Hue is a number from TypeScript; saturation
      * and lightness live here so both palettes track the theme. Held well
      * below the status colours' saturation — a tinted identifier must never
@@ -268,6 +290,24 @@
     --warn: 44 82% 48%;
     --err: 358 81% 68%;
     --info: 212 66% 58%;
+    /* Black is the faint grey here, or a program that dims with black
+     * text vanishes; white is the foreground. */
+    --ansi-0: 213 6% 55%;
+    --ansi-1: 358 81% 68%;
+    --ansi-2: 152 44% 55%;
+    --ansi-3: 44 82% 55%;
+    --ansi-4: 212 66% 62%;
+    --ansi-5: 290 60% 72%;
+    --ansi-6: 185 55% 58%;
+    --ansi-7: 212 7% 79%;
+    --ansi-8: 213 6% 60%;
+    --ansi-9: 358 85% 74%;
+    --ansi-10: 152 50% 62%;
+    --ansi-11: 44 88% 62%;
+    --ansi-12: 212 72% 70%;
+    --ansi-13: 290 65% 78%;
+    --ansi-14: 185 60% 66%;
+    --ansi-15: 220 6% 93%;
     --ident-s: 52%;
     --ident-l: 66%;
     --kind-s: 38%;

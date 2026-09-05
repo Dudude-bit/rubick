@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
-import type { LogFormat, LogLevel, StreamLogConfig } from "@/generated/types";
+import type {
+  LogFormat,
+  LogLevel,
+  StreamLogConfig,
+  StyledSegment,
+} from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   listenForStreamFailures,
@@ -43,16 +48,20 @@ export interface ContainerFailure extends StreamFailure {
   container: string;
 }
 
+/** One line as the backend emits it, before it is given an id and a home. */
+export interface LogBatchLine {
+  message: string;
+  timestamp: string | null;
+  level: LogLevel | null;
+  format: LogFormat | null;
+  fields: Record<string, string> | null;
+  raw: string;
+  segments?: StyledSegment[];
+}
+
 interface LogBatchPayload {
   stream_id: string;
-  lines: Array<{
-    message: string;
-    timestamp: string | null;
-    level: LogLevel | null;
-    format: LogFormat | null;
-    fields: Record<string, string> | null;
-    raw: string;
-  }>;
+  lines: LogBatchLine[];
 }
 
 interface UseLogStreamOptions {
@@ -139,6 +148,42 @@ interface UseLogStreamResult {
 const NO_INTAKE: QueryTerm[] = [];
 /** What `intakeKey` reads as when nothing is being kept at the source. */
 const NO_INTAKE_KEY = JSON.stringify(NO_INTAKE);
+
+/**
+ * A wire line in the shape the buffer holds.
+ *
+ * Lifted out of the batch handler so the copy can be asserted on: every
+ * field here is optional on one side or the other, so dropping one — the
+ * runs most of all — is not a type error and nothing else notices.
+ */
+export function toStreamedLine(
+  line: LogBatchLine,
+  at: {
+    id: number;
+    epoch: number;
+    pod: string;
+    container: string;
+    namespace: string;
+  }
+): StreamedLogLine {
+  const streamed: StreamedLogLine = {
+    id: at.id,
+    epoch: at.epoch,
+    groupKey: "",
+    timestamp: line.timestamp,
+    message: line.message,
+    level: line.level,
+    format: line.format ?? "plain",
+    fields: line.fields,
+    raw: line.raw || line.message,
+    segments: line.segments,
+    pod: at.pod,
+    container: at.container,
+    namespace: at.namespace,
+  };
+  streamed.groupKey = groupKeyFor(streamed);
+  return streamed;
+}
 
 export function useLogStream({
   podName,
@@ -316,21 +361,13 @@ export function useLogStream({
               const parsed = Date.parse(line.timestamp);
               if (!Number.isNaN(parsed)) epoch = parsed;
             }
-            const streamedLine: StreamedLogLine = {
+            const streamedLine = toStreamedLine(line, {
               id: nextIdRef.current++,
               epoch,
-              groupKey: "",
-              timestamp: line.timestamp,
-              message: line.message,
-              level: line.level,
-              format: line.format ?? "plain",
-              fields: line.fields,
-              raw: line.raw || line.message,
               pod: podName,
               container,
               namespace,
-            };
-            streamedLine.groupKey = groupKeyFor(streamedLine);
+            });
             pending.push(streamedLine);
           }
           lastEpoch.set(event.payload.stream_id, epoch);

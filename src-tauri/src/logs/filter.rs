@@ -242,6 +242,7 @@ mod tests {
                 format: LogFormat::Plain,
                 fields: self.fields.clone(),
                 raw: self.raw.clone(),
+                segments: None,
                 pod: "pod".to_string(),
                 container: self.container.clone(),
                 namespace: "default".to_string(),

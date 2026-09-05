@@ -289,19 +289,25 @@ describe("LogViewer when a live stream dies", () => {
 
 /** One batch, as the backend emits it. Released after the reorder window. */
 function fireBatch(
-  lines: Array<{ at: number; level: string | null; message: string }>
+  lines: Array<{
+    at: number;
+    level: string | null;
+    message: string;
+    segments?: unknown;
+  }>
 ) {
   act(() => {
     listeners["log-batch"]!({
       payload: {
         stream_id: "stream-id-1",
-        lines: lines.map(({ at, level, message }) => ({
+        lines: lines.map(({ at, level, message, segments }) => ({
           message,
           timestamp: new Date(at).toISOString(),
           level,
           format: "plain",
           fields: null,
           raw: message,
+          segments,
         })),
       },
     });
