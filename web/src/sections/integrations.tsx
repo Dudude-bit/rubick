@@ -45,7 +45,7 @@ const INTEGRATIONS = [
 
 export function Integrations() {
   return (
-    <Section eyebrow="Extensions">
+    <Section id="integrations" eyebrow="Extensions">
       <Reveal>
         <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
           It knows what you installed.

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 type Claim = {
   said: string;
   seen: string;
+  href: string;
   x: string;
   y: string;
   depth: number;
@@ -16,6 +17,7 @@ type Claim = {
 const CLAIMS: Claim[] = [
   {
     said: "Running",
+    href: "#lie-1",
     seen: "CrashLoopBackOff",
     x: "4%",
     y: "0%",
@@ -28,6 +30,7 @@ const CLAIMS: Claim[] = [
   },
   {
     said: "1/1 Ready",
+    href: "#lie-1",
     seen: "0/1 Ready",
     x: "30%",
     y: "21%",
@@ -40,6 +43,7 @@ const CLAIMS: Claim[] = [
   },
   {
     said: "Endpoints: 3",
+    href: "#lie-2",
     seen: "Endpoints: 0",
     x: "2%",
     y: "42%",
@@ -52,6 +56,7 @@ const CLAIMS: Claim[] = [
   },
   {
     said: "Healthy",
+    href: "#integrations",
     seen: "Degraded",
     x: "28%",
     y: "63%",
@@ -64,6 +69,7 @@ const CLAIMS: Claim[] = [
   },
   {
     said: "Certificate Ready",
+    href: "#integrations",
     seen: "Renewal failed",
     x: "8%",
     y: "84%",
@@ -129,13 +135,14 @@ export function Claims() {
   return (
     <div
       ref={ref}
-      aria-hidden
       className="pointer-events-none absolute inset-y-0 right-0 hidden w-[38%] lg:block"
     >
       {CLAIMS.map((c, i) => (
-        <span
+        <a
           key={c.said}
-          className="claim absolute"
+          href={c.href}
+          aria-label={`${c.said}, actually ${c.seen}`}
+          className="claim group pointer-events-auto absolute rounded-full"
           style={
             {
               right: c.x,
@@ -146,7 +153,8 @@ export function Claims() {
         >
           <span
             data-state={states[i]}
-            className="claim-card grid rounded-full border border-neutral-700/80 bg-neutral-900 px-3.5 py-1.5 font-mono text-[13px]"
+            aria-hidden
+            className="claim-card grid rounded-full border border-neutral-700/80 bg-neutral-900 px-3.5 py-1.5 font-mono text-[13px] group-hover:border-neutral-400"
             style={
               {
                 "--rot": c.rot,
@@ -169,7 +177,7 @@ export function Claims() {
               {c.seen}
             </span>
           </span>
-        </span>
+        </a>
       ))}
     </div>
   );
