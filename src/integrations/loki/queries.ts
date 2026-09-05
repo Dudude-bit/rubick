@@ -4,33 +4,22 @@
  * Pure strings from pure inputs, so the part of this integration most likely
  * to be quietly wrong is the part that can be asserted on without a server.
  *
- * ## Only a stream selector, never a filter
+ * **Only a stream selector, never a filter.** Everything after `{...}` —
+ * `|=`, `| json`, `| level >= "warn"` — is deliberately not built here. The
+ * viewer already has a query language, evaluated in TypeScript over the
+ * buffer and in Rust at intake, with a conformance corpus keeping the two
+ * agreeing. A third evaluator would mean one typed query and two answers,
+ * depending on whether the line came live or from Loki. So LogQL selects
+ * streams and the app filters lines.
  *
- * Everything after `{...}` in LogQL — `|=`, `| json`, `| level >= "warn"` —
- * is deliberately not built here. The viewer already has a query language:
- * chips, evaluated over the buffer in TypeScript and at intake in Rust, with
- * a conformance corpus keeping the two evaluators saying the same thing. A
- * third evaluator with different semantics for the same chip would be a bug
- * generator with no upside — the reader would type one query and get two
- * answers depending on whether the lines came from the cluster or from Loki.
- *
- * So LogQL selects streams and the app filters lines. What comes back from a
- * range is put through the same buffer, the same chips and the same
- * highlighting as a live line.
- *
- * ## The label names are the correctness risk
- *
- * `namespace`, `pod` and `container` are what Promtail's and Alloy's stock
- * Kubernetes scrape configs write, and what every quick-start install ends
- * up with. They are *not* guaranteed: an install that relabels to
- * `k8s_namespace_name`, or drops `container` to keep cardinality down, will
- * answer every one of these queries with nothing at all.
- *
- * The answer to that is not to guess more label names — a query that tries
- * six spellings matches the wrong stream on the cluster that uses two of
- * them. It is to ask with the defaults, and to say which names were tried
- * when nothing comes back. See {@link LOKI_LABELS} and the sentence built
- * from it in `client.ts`.
+ * **The label names are the correctness risk.** `namespace`, `pod` and
+ * `container` are what stock Promtail and Alloy scrape configs write, not
+ * what Loki guarantees: an install that relabels to `k8s_namespace_name`, or
+ * drops `container` for cardinality, answers every query here with nothing.
+ * The answer is not to guess more spellings — six guesses match the wrong
+ * stream on the cluster that uses two — but to ask with the defaults and say
+ * which names were tried. See {@link LOKI_LABELS} and the sentence built from
+ * it in `client.ts`.
  */
 
 import { escapeRegex, podPattern } from "../pod-names";

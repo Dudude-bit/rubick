@@ -7,99 +7,56 @@
  *
  * ## Powers, and sometimes a page
  *
- * This file used to say a vendor contributes facets and never pages, and
- * used Prometheus to argue it: nobody opens a Prometheus page, they are
- * looking at a pod and want its last six hours. That is right about
- * Prometheus and wrong as a general rule, and the line it was missing is
- * this one — **a vendor gets a page when it owns objects and a topology no
- * core object can host.**
- *
- * "What hosts does this cluster serve, and where does each one go" is a real
- * question with no object to hang it off. It is not a property of a Service
- * or a Deployment; it is the routing layer's own shape, and that is what
- * earns {@link Vendor.page}. Prometheus still gets none: every fact it has
- * belongs on the pod or the node it is about, and a page would be a place to
- * go and find the same numbers with less context.
- *
- * Most vendors are both, and the halves stay honest about their jobs.
- * cert-manager's expiry belongs on the Ingress that serves the certificate —
- * a power, through {@link Capabilities} — and its list of every Certificate
- * with a failing chain belongs on a page. {@link Extension} is the third
- * thing: is it here, is it healthy, what does it give.
+ * A vendor gets a {@link Vendor.page} when it owns objects and a topology no
+ * core object can host — "what hosts does this cluster serve, and where does
+ * each one go" is the routing layer's own shape. Prometheus gets none: every
+ * fact it has belongs on the pod or node it is about. Most vendors are both.
+ * cert-manager's expiry is a power, through {@link Capabilities}, and its
+ * list of failing chains is a page. {@link Extension} is the third thing: is
+ * it here, is it healthy, what does it give.
  *
  * ## The three tiers
  *
- * The tier decides a facet's *runtime obligations*, not where its code
- * lives:
+ * The tier decides a facet's runtime obligations, not where its code lives.
  *
- * - **Tier 1 — free.** The cluster already says it. GKE writes
- *   `cloud.google.com/gke-nodepool` on every node whether anyone asked or
- *   not, and `NodeInfo` has carried those labels since the beginning. No
- *   account, no detection, no failure mode: {@link Vendor.nodeLabels} and
- *   {@link Vendor.flavours} are read on every cluster, always.
- * - **Tier 2 — detected.** Its whole state is CRDs on the same API server,
- *   so "is it there" has a yes or a no with nothing to fill in.
- *   {@link Vendor.crd} needs no detection call at all — a CRD group with no
- *   objects in it is never rendered — while {@link Vendor.provides} is
- *   gated on the backend's CRD scan.
+ * - **Tier 1 — free.** The cluster already says it. {@link Vendor.nodeLabels}
+ *   and {@link Vendor.flavours} are read on every cluster, always.
+ * - **Tier 2 — detected.** Its state is CRDs on the same API server.
+ *   {@link Vendor.crd} needs no detection call — a CRD group with no objects
+ *   is never rendered — while {@link Vendor.provides} is gated on the
+ *   backend's CRD scan.
  * - **Tier 3 — configured.** Needs its own address and usually a credential
- *   the kubeconfig does not carry, so "is it there" is a probe rather than a
- *   lookup — and the answer has three values, not two. {@link Connect} is
- *   that shape, and Prometheus is the first vendor to declare one. It stayed
- *   out of this file until there was an implementation on purpose: an
- *   abstraction for zero implementations is a costume, and a config schema
- *   with nothing behind it would have put a configured integration on screen
- *   that nobody configured. The row it produces is still the row
- *   {@link Extension} already described — a name, a power, and facts —
- *   because "connected · answered 2s ago" is a fact.
+ *   the kubeconfig does not carry, so presence is a probe, and the answer has
+ *   three values. {@link Connect} is that shape.
  *
- * ## Configured is three states, and the surface owes all three
+ * **Configured is three states and the surface owes all three.** Configured
+ * and not answering is the one that ruins a feature quietly: a broken
+ * Prometheus that falls back silently looks exactly like one nobody set up,
+ * and the reader concludes the app is broken rather than their monitoring.
+ * {@link CapabilityState} carries the difference and the reason.
  *
- * A detected vendor is present or absent, and absence has one answer. A
- * configured one adds a third: **configured and not answering**, which is
- * the state that quietly ruins a feature. Falling back silently makes a
- * broken Prometheus look identical to one nobody ever set up, and the reader
- * concludes the app is broken rather than their monitoring. So
- * {@link CapabilityState} hands the surface the difference and the reason,
- * and a surface that consumes a capability must draw all three — see
- * {@link Capabilities} for what each key's absence is allowed to mean.
- *
- * ## Why facts are a field and not a capability
- *
- * {@link Extension.facts} looks like it wants to be a {@link Capabilities}
- * key, and it fails both halves of what a capability key is for. A
- * capability exists so a surface can ask for a *power* without learning
- * which vendor answered; the Integrations pane is the one screen whose
- * whole job is to name the vendor, and it draws the facts directly under
- * that name. And a capability's absence must have a good answer on the
- * consuming surface — the absence of facts has no answer to give, it is
- * simply a shorter row. So it is a field on the vendor, beside the other
- * facets, and the pane reads it the same way the node list reads
- * {@link Vendor.nodeLabels}.
+ * {@link Extension.facts} is a field rather than a capability key because a
+ * capability exists so a surface can ask for a power without learning who
+ * answered, and the Integrations pane's whole job is to name the vendor.
  *
  * ## What decides that something lives here
  *
- * One question, and it is not the tier: **is this knowledge about a specific
- * vendor's product?** GKE's node-pool label spellings live here even though
- * reading node labels is tier 1 and needs no account. The generic machinery
- * that groups a table by any key does not — that is the app's, and works the
- * same for a vendor nobody has heard of.
+ * **Is this knowledge about a specific vendor's product?** GKE's node-pool
+ * label spellings qualify even though reading node labels is tier 1. Generic
+ * machinery that groups a table by any key does not.
  *
  * **A capability key is a contract, and the surface must have a real answer
  * for its absence.** `certificate.issuance` absent means the page shows the
- * expiry it read from `tls.crt` itself and says nothing about renewal, which
- * is a good answer. A capability with no good answer when absent does not
- * belong behind this seam at all — which is exactly why cloud *auth* is not
- * in this tree: without it there is no kubeconfig and so no app.
+ * expiry it read from `tls.crt` and says nothing about renewal. A capability
+ * with no good answer when absent does not belong behind this seam — which
+ * is why cloud *auth* is not in this tree: without it there is no kubeconfig.
  *
- * **And a vendor may never take something away.** The core answer is drawn
- * first and stays drawn; the facet extends it. A page that is worse when
- * cert-manager is absent than it was before cert-manager existed has failed
- * at the only thing this seam is for.
+ * **A vendor may never take something away.** The core answer is drawn first
+ * and stays drawn; the facet extends it.
  *
- * Deliberately absent, because a registry of a dozen static records is a
- * list and not a framework: registration order, priorities, lifecycle hooks,
- * an event bus, third-party loading. What has to be right is the boundary.
+ * Deliberately absent, because a dozen static records are a list and not a
+ * framework: registration order, priorities, lifecycle hooks, an event bus,
+ * third-party loading.
  */
 
 import type { Saying } from "@/i18n/say";

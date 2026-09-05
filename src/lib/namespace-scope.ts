@@ -2,58 +2,26 @@
  * Which namespaces the window is looking at, and the one string the backend
  * is told about.
  *
- * ## Two values, and why there have to be two
+ * A list command takes one `Option<String>`, because a `LIST` is scoped to
+ * one namespace or to none. The selection can be several, so it and the wire
+ * value are different things: none selected asks for the cluster, one asks
+ * for that one, several has no wire value at all.
  *
- * Every list command in this app takes one `Option<String>` namespace, and
- * that is the right shape for the API server: a `LIST` is scoped to one
- * namespace or to none. So the *selection* — which can be several — and the
- * *wire value* are different things:
+ * Lists are read once cluster-wide and narrowed here — a request and a watch
+ * per namespace per screen would multiply every page by the size of the
+ * selection. Aggregates cannot be narrowed after the fact, so the overview
+ * and the events feed's limit are asked per namespace and joined; those two
+ * are what {@link SCOPE_LIMIT} bounds, and the overview is the priciest query
+ * in the app (`lib/refresh.ts`).
  *
- * - **none selected** is the whole cluster, and asks for the whole cluster.
- * - **one selected** asks for that one, exactly as it always did. Nothing in
- *   the app changes shape for the case almost everybody is in.
- * - **several selected** has no wire value at all, so what it asks for
- *   depends on what is being asked — see below.
- *
- * ## What several namespaces actually costs
- *
- * Two kinds of answer, and only one of them is free:
- *
- * - A **list** is read once, cluster-wide, and narrowed here. Not because
- *   filtering in the browser is nice, but because the alternative — one
- *   request and one watch stream per namespace, per list, per page —
- *   multiplies the cost of every screen by the size of the selection. One
- *   read is never more than "All namespaces" already costs, which is a bill
- *   this app has always been willing to pay.
- * - An **aggregate** arrives already reduced and cannot be taken apart again:
- *   a cluster-wide `47 pods` under a two-namespace label states a number
- *   nobody measured. The overview and the events feed's limit are therefore
- *   asked once per namespace and joined here, and those two cost the size of
- *   the selection.
- *
- * The overview is the most expensive query in the app by a wide margin (see
- * `lib/refresh.ts`), so the second bullet is what {@link SCOPE_LIMIT} exists
- * to bound. The first is why the limit can be as generous as it is: nothing
- * else in the app gets dearer as the selection grows.
- *
- * ## What is stored, and what an older build reads back
- *
- * The selection is persisted in two places, and both of them are fields that
- * predate it: `ClusterPreferences.namespaces` holds one opaque string per
- * context, and a scope tab holds one more. A build without this feature reads
- * either straight into `currentNamespace` — handed `"prod,staging"` it would
- * ask the API server for a namespace that does not exist and show empty lists
- * on every screen without ever saying why.
- *
- * So neither field ever holds a joined list. Both hold {@link wireNamespace}:
- * `""` or one namespace, which every build back to the first one understands.
- * The selection itself rides beside them in `ScopeTab.scope`, which older
- * builds do not read. Downgrading therefore loses the extra namespaces and
- * says so — the window reopens on "All namespaces", a superset of what was
- * selected and labelled as exactly that — instead of on an empty screen.
- *
- * {@link decodeScope} still parses a joined list, because builds of this
- * feature before that was settled wrote one.
+ * Both places the selection persists are fields that predate it, and an older
+ * build reads either straight into `currentNamespace` — `"prod,staging"`
+ * would ask for a namespace that does not exist and empty every screen
+ * without saying why. So neither ever holds a joined list: both hold
+ * {@link wireNamespace}, and the selection rides in `ScopeTab.scope`, which
+ * older builds ignore. Downgrading loses the extra namespaces and reopens on
+ * "All namespaces" — a superset, labelled as one. {@link decodeScope} still
+ * parses a joined list because early builds of this feature wrote one.
  */
 
 import type { T } from "@/i18n/useT";

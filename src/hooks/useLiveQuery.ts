@@ -6,27 +6,21 @@
  * answer stopped changing, did the reader just touch something — and the one
  * output that keeps the screen honest about it.
  *
- * Two things make this a mechanism rather than a helper. A query written
- * tomorrow inherits all of it by asking for a *rate* (`refresh: "resourceList"`)
- * instead of a number, and `refetchInterval` is a lint error everywhere except
- * this file, so the number cannot be written by hand again. See the
- * `no-restricted-syntax` block in `eslint.config.js`.
- *
- * ## Coming back
+ * A query asks for a *rate* (`refresh: "resourceList"`) rather than a number,
+ * and `refetchInterval` is a lint error everywhere but this file, so the
+ * number cannot be written by hand again — see the `no-restricted-syntax`
+ * block in `eslint.config.js`.
  *
  * Every way of arriving back at a query refetches it before the reader can
- * read it: a detail tab being switched to, the window being un-minimised, the
- * window regaining focus. This is not an optimisation to be tuned away — the
- * whole licence to stop polling rests on it. A returning reader must never see
- * a number that stopped being true while they were gone.
- *
- * ## What it says about itself
+ * read it: switching to a detail tab, un-minimising, regaining focus. The
+ * whole licence to stop polling rests on that, so it is not tunable — a
+ * returning reader must never see a number that stopped being true while they
+ * were gone.
  *
  * A query re-reading more slowly than its rate reports `freshness.slowed`, and
- * `DataFreshness` draws "slowed" rather than "polling" for it. A *watch* is not
- * this: a stream that is still connected keeps its data live at any poll rate,
- * says so with `refresh: false`, and this hook never claims "live" on its own
- * behalf — that word belongs to the surface that owns the stream.
+ * `DataFreshness` draws "slowed" rather than "polling". A *watch* is not this:
+ * a connected stream stays live at any poll rate, says so with
+ * `refresh: false`, and this hook never claims "live" on its own behalf.
  *
  * @module hooks/useLiveQuery
  */
