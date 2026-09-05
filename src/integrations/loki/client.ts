@@ -57,6 +57,7 @@ export async function logHistory(input: LogHistory): Promise<LogHistoryPage> {
       epoch: line.timestamp ? Date.parse(line.timestamp) : 0,
       message: line.message,
       raw: line.raw,
+      segments: line.segments,
       pod: line.pod,
       container: line.container,
       namespace: line.namespace,

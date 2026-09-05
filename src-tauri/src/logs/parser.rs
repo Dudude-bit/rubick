@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+use super::ansi;
 use super::types::{LogFormat, LogLevel, LogLine};
 
 /// Parse a multi-line blob into one `LogLine` per line.
@@ -23,7 +24,10 @@ pub fn parse_logs(logs: &str, pod: &str, container: &str, namespace: &str) -> Ve
 /// true`), then delegates to the structured-message parsers.
 #[must_use]
 pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -> LogLine {
-    let raw = line.to_string();
+    // A level word wrapped in colour codes is not found; a coloured JSON line does not start with `{`.
+    let split = ansi::split(line);
+    let line = split.text.as_str();
+    let raw = split.text.clone();
     // Try to parse timestamp from the beginning of the line —
     // Kubernetes log timestamps are RFC3339 when `timestamps: true`.
     let (timestamp, message) = if line.len() > 30 {
@@ -53,6 +57,7 @@ pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -
         format,
         fields,
         raw,
+        segments: split.segments,
         pod: pod.to_string(),
         container: container.to_string(),
         namespace: namespace.to_string(),

@@ -1506,9 +1506,26 @@ export interface LogLine {
   format: LogFormat;
   fields: Record<string, string> | null;
   raw: string;
+  segments?: StyledSegment[];
   pod: string;
   container: string;
   namespace: string;
+}
+
+export interface StyledSegment {
+  text: string;
+  style?: TextStyle;
+}
+
+export interface TextStyle {
+  fg?: AnsiColor;
+  bg?: AnsiColor;
+  bold: boolean;
+  dim: boolean;
+  italic: boolean;
+  underline: boolean;
+  inverse: boolean;
+  strike: boolean;
 }
 
 export interface StreamLogConfig {
@@ -1863,6 +1880,11 @@ export type DebugStatus =
   | { type: "ready"; result: DebugResult }
   | { type: "failed"; error: string }
   | { type: "timeout" };
+
+export type AnsiColor =
+  | { kind: "named"; index: number }
+  | { kind: "indexed"; index: number }
+  | { kind: "rgb"; r: number; g: number; b: number };
 
 export type LogFormat = "plain" | "json" | "logfmt" | "klog" | "logback";
 

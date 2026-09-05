@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
-import type { LogFormat, LogLevel, StreamLogConfig } from "@/generated/types";
+import type {
+  LogFormat,
+  LogLevel,
+  StreamLogConfig,
+  StyledSegment,
+} from "@/generated/types";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   listenForStreamFailures,
@@ -52,6 +57,7 @@ interface LogBatchPayload {
     format: LogFormat | null;
     fields: Record<string, string> | null;
     raw: string;
+    segments?: StyledSegment[];
   }>;
 }
 
@@ -326,6 +332,7 @@ export function useLogStream({
               format: line.format ?? "plain",
               fields: line.fields,
               raw: line.raw || line.message,
+              segments: line.segments,
               pod: podName,
               container,
               namespace,

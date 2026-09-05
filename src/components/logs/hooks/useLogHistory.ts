@@ -213,6 +213,7 @@ function toStreamedLines(
       format: line.format,
       fields: line.fields,
       raw: line.raw,
+      segments: line.segments,
       pod: line.pod,
       container: line.container,
       namespace: line.namespace,

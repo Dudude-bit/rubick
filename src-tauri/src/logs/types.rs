@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use super::ansi::StyledSegment;
+
 /// Single parsed log line.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,8 +20,12 @@ pub struct LogLine {
     pub format: LogFormat,
     /// Parsed fields for structured formats
     pub fields: Option<BTreeMap<String, String>>,
-    /// Raw log line (before parsing)
+    /// The line as the terminal would show it: escapes taken out, colour
+    /// kept in `segments`.
     pub raw: String,
+    /// Style runs over `raw`, when the program coloured the line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segments: Option<Vec<StyledSegment>>,
     /// Source pod
     pub pod: String,
     /// Source container

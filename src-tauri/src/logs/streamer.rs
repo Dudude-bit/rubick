@@ -179,6 +179,7 @@ impl LogStreamer {
                                     format: log_line.format,
                                     fields: log_line.fields,
                                     raw: log_line.raw,
+                                    segments: log_line.segments,
                                 });
 
                                 if buffer.len() >= MAX_BATCH_SIZE {

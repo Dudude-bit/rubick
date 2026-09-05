@@ -1,6 +1,8 @@
 import { useT } from "@/i18n/useT";
 import { memo } from "react";
 import type { LogLevel, LogLine as LogLineType } from "@/generated/types";
+import { messageSegments } from "./ansi";
+import { AnsiText } from "./AnsiText";
 import { runSpanMs, type LogRun } from "./grouping";
 import {
   ViewMode,
@@ -94,6 +96,16 @@ function Fields({
   );
 }
 
+/**
+ * The message in the colours the program wrote it in, where the runs are
+ * known. Unstyled text inherits the level tint from the row, so a line
+ * that only coloured its level word is still tinted as a whole.
+ */
+function Message({ log }: { log: LogLineType }) {
+  const segments = messageSegments(log);
+  return segments ? <AnsiText segments={segments} /> : <>{log.message}</>;
+}
+
 interface LogLineProps {
   log: LogLineType;
   viewMode: ViewMode;
@@ -127,6 +139,8 @@ export const LogLineComponent = memo(function LogLineComponent({
         <span className="whitespace-pre-wrap break-all text-fg-mid">
           {searchQuery ? (
             <HighlightedText text={log.raw} query={searchQuery} />
+          ) : log.segments ? (
+            <AnsiText segments={log.segments} />
           ) : (
             log.raw
           )}
@@ -139,7 +153,7 @@ export const LogLineComponent = memo(function LogLineComponent({
   const message = searchQuery ? (
     <HighlightedText text={log.message} query={searchQuery} />
   ) : (
-    log.message
+    <Message log={log} />
   );
 
   return (
@@ -243,7 +257,7 @@ function LineDetail({
         </span>
       </div>
       <p className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-fg-mid">
-        {log.message}
+        <Message log={log} />
       </p>
       {fields.length > 0 && (
         <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
@@ -306,7 +320,7 @@ export const LogRunRow = memo(function LogRunRow({
         <span aria-hidden="true" className="mr-1 text-fg-fnt">
           {expanded ? "▾" : "▸"}
         </span>
-        {run.head.message}{" "}
+        <Message log={run.head} />{" "}
         <span className="text-fg-fnt">
           &times; {formatCount(run.count)} over {formatSpan(runSpanMs(run))}
         </span>

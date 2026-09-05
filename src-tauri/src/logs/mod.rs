@@ -5,12 +5,14 @@
 //! they can exercise the integration across modules through a
 //! single `super::*` import.
 
+pub mod ansi;
 pub mod config;
 pub mod filter;
 pub mod parser;
 pub mod streamer;
 pub mod types;
 
+pub use ansi::{AnsiColor, StyledSegment, TextStyle};
 pub use config::LogConfig;
 pub use filter::{FieldOp, IntakeFilter, LevelOp, QueryTerm};
 pub use streamer::LogStreamer;
@@ -78,6 +80,53 @@ mod tests {
 
         let time: QueryTerm = serde_json::from_str(r#"{"kind":"time","from":1,"to":2}"#).unwrap();
         assert_eq!(time, QueryTerm::Time { from: 1, to: 2 });
+    }
+
+    /// The whole point of stripping before parsing: a coloured line has
+    /// to parse the way its uncoloured twin does, and the level filter
+    /// and text search have to see the words, not the escape bytes.
+    #[test]
+    fn a_coloured_line_parses_and_filters_like_an_uncoloured_one() {
+        let plain = parser::parse_log_line(
+            r#"{"level":"error","msg":"dropping batch"}"#,
+            "flood",
+            "main",
+            "default",
+        );
+        let coloured = parser::parse_log_line(
+            "\u{1b}[31m{\"level\":\"error\",\"msg\":\"dropping batch\"}\u{1b}[0m",
+            "flood",
+            "main",
+            "default",
+        );
+        assert_eq!(coloured.level, plain.level);
+        assert_eq!(coloured.format, LogFormat::Json);
+        assert_eq!(coloured.message, plain.message);
+        assert_eq!(coloured.raw, plain.raw);
+        assert!(coloured.segments.is_some());
+        assert!(plain.segments.is_none());
+
+        let filter = IntakeFilter::new(&[QueryTerm::Text {
+            value: "dropping".to_string(),
+        }]);
+        assert!(filter.matches(&coloured, 0));
+    }
+
+    /// A JSON string may spell the escape as `\u001b`, which is not an
+    /// escape until the JSON is decoded. What reaches the message and the
+    /// fields has to be clean either way.
+    #[test]
+    fn escapes_decoded_from_json_strings_never_reach_the_message_or_the_fields() {
+        let log = parser::parse_log_line(
+            r#"{"level":"\u001b[31merror\u001b[0m","msg":"\u001b[1mdisk full\u001b[0m","dev":"\u001b[2msda\u001b[0m"}"#,
+            "flood",
+            "main",
+            "default",
+        );
+        assert_eq!(log.level, Some(LogLevel::Error));
+        assert_eq!(log.message, "disk full");
+        assert_eq!(log.fields.as_ref().unwrap()["dev"], "sda");
+        assert_eq!(log.segments, None);
     }
 
     #[test]

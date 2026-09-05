@@ -1,7 +1,7 @@
 //! `AppEvent` enum and the per-variant payload helpers carried over
 //! the broadcast channel to the frontend.
 
-use crate::logs::{LogFormat, LogLevel};
+use crate::logs::{LogFormat, LogLevel, StyledSegment};
 use std::collections::BTreeMap;
 
 /// One log line as carried inside a `LogBatch`. Mirrors the subset of
@@ -16,6 +16,8 @@ pub struct LogLineEvent {
     pub format: LogFormat,
     pub fields: Option<BTreeMap<String, String>>,
     pub raw: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<Vec<StyledSegment>>,
 }
 
 /// Operation type for a resource-watch event. Mirrors `kube::runtime::watcher::Event`

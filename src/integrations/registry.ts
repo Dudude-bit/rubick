@@ -109,7 +109,12 @@ import type { LucideIcon } from "lucide-react";
 import type { en } from "@/i18n/catalogue";
 import type { ComponentType, ReactNode } from "react";
 
-import type { IssuanceStory, LogFormat, LogLevel } from "@/generated/types";
+import type {
+  IssuanceStory,
+  LogFormat,
+  LogLevel,
+  StyledSegment,
+} from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type { Delivery, DeliveryQuery } from "./gitops";
 import type { CrdColumn, CrdStatus } from "./kit";
@@ -199,6 +204,7 @@ export interface HistoryLine {
   cursor: string;
   message: string;
   raw: string;
+  segments?: StyledSegment[];
   pod: string;
   container: string;
   namespace: string;
