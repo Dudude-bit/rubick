@@ -166,6 +166,18 @@ function SettingsLayer({ onClose }: { onClose: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const { query, setQuery } = useSettingsSearch();
 
+  // The provider has to sit above `DialogPrimitive.Root` so the Escape
+  // handler on the content can read the query — which also means neither it
+  // nor this component ever unmounts; only the portal inside does. So the
+  // filter is cleared on the close, not on an unmount that never comes.
+  // Without it the query outlived the screen: close with a filter typed and
+  // Settings reopened on a section filtered by something typed minutes ago,
+  // most rows hidden and the captions gone. A filter belongs to the visit.
+  const open = useSettingsStore((state) => state.open);
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open, setQuery]);
+
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Content

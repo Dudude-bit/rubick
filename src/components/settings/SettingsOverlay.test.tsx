@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -262,5 +268,42 @@ describe("SettingsOverlay", () => {
         await screen.findByText(/nothing here matches/)
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("what a filter belongs to", () => {
+  /**
+   * Would break if the query outlived the screen again.
+   *
+   * The search provider has to sit above the dialog root so the Escape handler
+   * on the content can read the query — which also means it never unmounts
+   * while the app is running. Closing with a filter typed and reopening then
+   * landed on a section filtered by something typed minutes ago, most rows
+   * hidden and the captions gone, with the stale text in the box the only clue.
+   *
+   * The close and the reopen happen on ONE mount, deliberately: unmounting the
+   * tree resets the provider whatever the code does, and a test that did that
+   * passed against this fix deleted.
+   */
+  it("is forgotten when the layer closes", async () => {
+    open("appearance");
+    renderOver();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "123" },
+    });
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe(
+      "123"
+    );
+
+    act(() => useSettingsStore.setState({ open: false }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+
+    act(() => useSettingsStore.setState({ open: true, section: "appearance" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
   });
 });

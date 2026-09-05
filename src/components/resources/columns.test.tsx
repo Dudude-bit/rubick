@@ -1,6 +1,6 @@
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { createAgeColumn } from "./columns";
 import { columns as persistentVolumeColumns } from "./PersistentVolumeList";
 import { columns as persistentVolumeClaimColumns } from "./PersistentVolumeClaimList";
 import { columns as storageClassColumns } from "./StorageClassList";
@@ -41,14 +41,34 @@ describe("how a list says how old something is", () => {
     expect("accessorKey" in age).toBe(false);
   });
 
-  /** All five are the same column, so a change to how age reads lands
-   *  everywhere at once rather than in four places out of five. */
-  it("gives every list the one shared column", () => {
-    const shared = createAgeColumn();
-    for (const [kind, cols] of lists) {
-      const age = ageColumnOf(cols);
-      expect(age.size, kind).toBe(shared.size);
-      expect(age.id, kind).toBe(shared.id);
-    }
+  /**
+   * Every list draws the age from a timestamp, and shows the same thing.
+   *
+   * Rendered rather than compared: an earlier version of this test asserted
+   * `size` and `id` matched the shared column, which a hand-rolled column
+   * mimicking two properties satisfies — I checked, by writing one. What only
+   * the shared column can do is turn a `createdAt` into a duration on screen.
+   */
+  it.each(lists)("draws %s's age from the timestamp", (_kind, cols) => {
+    const age = ageColumnOf(cols);
+    const cell = age.cell;
+    if (typeof cell !== "function")
+      throw new Error("the age column draws nothing");
+
+    render(
+      <>
+        {cell({
+          row: {
+            original: {
+              createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+            },
+          },
+        } as never)}
+      </>
+    );
+
+    // "5m", in whatever the catalogue spells it — a column reading a
+    // pre-formatted string off the row would render nothing here.
+    expect(screen.getByText(/\d+\s*[a-zA-Zа-яА-Я]/)).toBeInTheDocument();
   });
 });

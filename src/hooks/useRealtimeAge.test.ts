@@ -40,10 +40,26 @@ describe("what a countdown says when the moment has passed", () => {
     expect(result.current.display).toMatch(/\d+m/);
   });
 
-  /** Nothing to count down to is not the same as a countdown that ran out. */
+  /**
+   * Nothing to count down to is not the same as a countdown that ran out.
+   *
+   * A `null` target measures as zero seconds, so both used to answer
+   * `isExpired: true` and `warningLevel: "critical"` — a deadline nobody set,
+   * painted in the colour of one that has passed. The empty `display` cannot
+   * tell them apart, which is what the earlier version of this test asserted
+   * and why it did not notice.
+   */
   it("does not call a missing target expired", () => {
-    const { result } = renderHook(() => useRealtimeCountdown(null));
+    const missing = renderHook(() => useRealtimeCountdown(null));
+    expect(missing.result.current.display).toBe("");
+    expect(missing.result.current.isExpired).toBe(false);
+    expect(missing.result.current.warningLevel).toBe("none");
 
-    expect(result.current.display).toBe("");
+    const gone = renderHook(() =>
+      useRealtimeCountdown(new Date(Date.now() - 60_000).toISOString())
+    );
+    expect(gone.result.current.display).toBe("");
+    expect(gone.result.current.isExpired).toBe(true);
+    expect(gone.result.current.warningLevel).toBe("critical");
   });
 });
