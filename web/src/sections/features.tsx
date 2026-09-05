@@ -5,35 +5,46 @@ import {
 import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 
-const FEATURES: { title: string; icon: FeatureIconKind; body: string }[] = [
+const FEATURES: {
+  title: string;
+  icon: FeatureIconKind;
+  color: string;
+  body: string;
+}[] = [
   {
     title: "Logs",
     icon: "logs",
+    color: "#7dd3fc",
     body: "Virtualised, multi-container, filtered server-side, repeats collapsed. They open where the answer is.",
   },
   {
     title: "Shell",
     icon: "shell",
+    color: "#4ade80",
     body: "A real terminal tab per pod. The session survives you looking elsewhere.",
   },
   {
     title: "Gateway API",
     icon: "route",
+    color: "#60a5fa",
     body: "Gateways, all five route kinds, classes, policies. A route that is not serving says which of the eight links between listener and pod broke.",
   },
   {
     title: "Secrets",
     icon: "secret",
+    color: "#fbbf24",
     body: "Binary values shown as binary. Private keys never revealed. Boring on purpose.",
   },
   {
     title: "Custom resources",
     icon: "crd",
+    color: "#c084fc",
     body: "Every CRD in the cluster, with YAML editing and validation. Yours included.",
   },
   {
     title: "Helm",
     icon: "helm",
+    color: "#2dd4bf",
     body: "Releases, revisions, rollback, uninstall. No opinions about how you got here.",
   },
 ];
@@ -55,7 +66,7 @@ export function Features() {
               delay={i * 55}
               className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-6"
             >
-              <Icon className="size-6 text-neutral-400" />
+              <Icon className="size-6" style={{ color: f.color }} />
               <h3 className="mt-4 font-mono text-sm font-medium text-neutral-100">
                 {f.title}
               </h3>
