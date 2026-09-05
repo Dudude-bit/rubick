@@ -13,6 +13,10 @@ const OUTCOMES: ShellEnvReport[] = [
   { outcome: "couldNotStart", shell: "/opt/fish", error: "No such file" },
   { outcome: "noAnswer", shell: "/bin/tcsh", exit: 1 },
   { outcome: "notAsked" },
+  // Windows had nothing to ask; nobody asked at all. Both used to be
+  // `notAsked`, which said the path was right on a machine where it was a
+  // guess — so this belongs in every check the others get.
+  { outcome: "notRecorded" },
 ];
 
 describe("the sentence about the login shell", () => {

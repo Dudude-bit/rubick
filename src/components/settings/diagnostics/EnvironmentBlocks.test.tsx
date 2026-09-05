@@ -126,4 +126,35 @@ describe("EnvironmentBlocks", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.getByText(/Tools · 2 of 3/)).toBeInTheDocument();
   });
+
+  /**
+   * Would break if the caveat stopped reaching the tools.
+   *
+   * Every "not installed" below rests on the search path above, and without
+   * the shell's answer that path is the well-known directories and nothing a
+   * profile adds. Stated over the tool list as well as over the search path,
+   * because a reader scanning tools does not scroll up for it — and stated in
+   * the same words, so a wording fix is one place.
+   */
+  it("says the search path was a guess over the tools, not only over the path", () => {
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          searchPathIsReal: false,
+          shell: { outcome: "timedOut", shell: "/bin/zsh", seconds: 30 },
+        }}
+      />
+    );
+
+    // Twice: once over the directories, once over the tools that were looked
+    // for in them.
+    expect(screen.getAllByText(/\/bin\/zsh/)).toHaveLength(2);
+  });
+
+  /** And not at all when the shell did answer. */
+  it("says nothing of the sort when the path is real", () => {
+    render(<EnvironmentBlocks diagnostics={sample} />);
+    expect(screen.queryAllByText(/did not|не ответила/i)).toHaveLength(0);
+  });
 });

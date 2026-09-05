@@ -49,4 +49,38 @@ describe("FindingsList", () => {
       screen.getByText(/nothing here needs attention/i)
     ).toBeInTheDocument();
   });
+
+  /**
+   * Would break if the shell finding went back to carrying its own words.
+   *
+   * The finding says it is *about* the shell and nothing more: the report
+   * lives once, on `Diagnostics`, which is also the one the redactor scrubs.
+   * So `title` and `detail` are empty on it, and a renderer that printed them
+   * would draw a blank heading over a blank paragraph — which is what the
+   * backend sends and what nothing here noticed.
+   */
+  it("words a shell finding from the catalogue, not from the finding", () => {
+    render(
+      <FindingsList
+        findings={[
+          {
+            severity: "unverified",
+            title: "",
+            detail: "",
+            subject: "/bin/zsh",
+            aboutShell: true,
+          },
+        ]}
+        shell={{ outcome: "timedOut", shell: "/bin/zsh", seconds: 30 }}
+      />
+    );
+
+    const heading = screen.getByRole("heading", { level: 4 });
+    expect(heading.textContent).not.toBe("");
+    expect(heading).toHaveTextContent(/search path is a guess/i);
+    // And the sentence under it names the shell and the deadline, which only
+    // the report can supply.
+    expect(screen.getByText(/\/bin\/zsh/)).toBeInTheDocument();
+    expect(screen.getByText(/30/)).toBeInTheDocument();
+  });
 });
