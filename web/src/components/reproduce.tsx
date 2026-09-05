@@ -11,14 +11,15 @@ export function ReproducePanel({ className = "" }: { className?: string }) {
         Reproduce them
       </p>
       <h3 className="mt-3 font-display text-2xl font-bold tracking-tight md:text-3xl">
-        Three objects, one throwaway cluster.
+        Three lies, one throwaway cluster.
       </h3>
       <p className="mt-4 max-w-2xl text-neutral-400">
         kind or k3d is enough, and no ingress controller is needed: the lies
         live in the objects, not in the traffic. You get a pod whose phase is
         Running while its only container crashes on every start, a Service whose
-        three pods are Ready and which publishes no port, and an Ingress rule
-        pointing at a Service that does not exist.
+        three pods are Ready and which publishes no port next to a twin Service
+        on the same pods that publishes fine, and one host with three paths, one
+        of them pointing at a Service that does not exist.
       </p>
       <div className="mt-6 flex flex-col gap-3">
         <CommandLine command={`kubectl apply -f ${LINKS.lies}`} />

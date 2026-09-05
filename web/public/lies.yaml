@@ -79,10 +79,26 @@ spec:
       port: 80
       targetPort: htp
 ---
-# Lie 3. An Ingress rule for /api whose backend Service was never created.
-# The API server accepts it, nothing marks it, and the request dies on the
-# way in. No ingress controller is needed to see this: the gap is in the
-# objects, not in the traffic.
+# The same pods behind a Service that names the port correctly. Nothing
+# else differs, which is the point: the pods were fine all along.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-ok
+  namespace: rubick-lies
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Lie 3. One host, three paths. / reaches three ready pods through api-ok.
+# /legacy points at api, whose port name matches nothing, so it stops at
+# what is published. /api points at api-v2, a Service that was never
+# created; the API server accepts the rule and nothing marks it. No ingress
+# controller is needed to see any of this: the gaps are in the objects.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -93,6 +109,20 @@ spec:
     - host: shop.example.test
       http:
         paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-ok
+                port:
+                  number: 80
+          - path: /legacy
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
           - path: /api
             pathType: Prefix
             backend:
