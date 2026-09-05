@@ -16,4 +16,16 @@
     <loc>https://rubick.tech/vs/headlamp</loc>
     <changefreq>monthly</changefreq>
   </url>
+  <url>
+    <loc>https://rubick.tech/lies/running</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/lies/all-green</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://rubick.tech/lies/no-route</loc>
+    <changefreq>monthly</changefreq>
+  </url>
 </urlset>
