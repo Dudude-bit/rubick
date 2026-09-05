@@ -426,16 +426,11 @@ export function Connections() {
                 </span>
               </h3>
               <div className="mt-2 flex flex-wrap items-center gap-x-1 gap-y-1">
-                {subject.chain.map((r, i) => (
+                {subject.chain.map((r) => (
                   <span
                     key={keyOf(r)}
                     className="inline-flex items-center gap-x-1"
                   >
-                    {i > 0 ? (
-                      <span aria-hidden className="mx-1 text-neutral-600">
-                        →
-                      </span>
-                    ) : null}
                     <RefRow r={r} onOpen={open} current={current} />
                   </span>
                 ))}
