@@ -16,9 +16,10 @@ export function ReproducePanel({ className = "" }: { className?: string }) {
       <p className="mt-4 max-w-2xl text-neutral-400">
         kind or k3d is enough, and no ingress controller is needed: the lies
         live in the objects, not in the traffic. You get a pod whose phase is
-        Running while its only container crashes on every start, a Service whose
-        three pods are Ready and which publishes no port next to a twin Service
-        on the same pods that publishes fine, and one host with four paths: one
+        Running while its only container crashes on every start, with the
+        ConfigMap, Secret and volume its page will list, a Service whose three
+        pods are Ready and which publishes no port next to a twin Service on the
+        same pods that publishes fine, and one host with four paths: one
         healthy, one behind the crashlooping pod, one behind the mistyped port,
         one pointing at a Service that does not exist.
       </p>

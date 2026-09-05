@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --port 21734",
-    "build": "vite build",
+    "build": "vite build && node scripts/receipt.mjs",
     "check": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0"
   },

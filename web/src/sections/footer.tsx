@@ -45,6 +45,11 @@ export function Footer() {
           </span>{" "}
           View source, it is just HTML.
         </p>
+        <p className="font-mono text-xs text-neutral-600">
+          <span data-receipt suppressHydrationWarning>
+            Sizes are measured at build and written here.
+          </span>
+        </p>
       </Reveal>
     </footer>
   );

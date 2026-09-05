@@ -1,3 +1,4 @@
+import { Correction } from "../components/correction";
 import { Reveal } from "../components/motion/reveal";
 import { ReproducePanel } from "../components/reproduce";
 import { TrafficChain } from "../components/traffic-chain";
@@ -39,6 +40,7 @@ export function Lies() {
                   {l.evidence}
                 </div>
               )}
+              {l.correction ? <Correction /> : null}
               <a
                 href={`/lies/${l.slug}`}
                 className="mt-4 inline-flex min-h-11 items-center font-mono text-sm text-neutral-400 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
