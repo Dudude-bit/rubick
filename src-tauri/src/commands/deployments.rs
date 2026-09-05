@@ -97,7 +97,6 @@ pub async fn update_deployment_image(
 
     let api: kube::Api<Deployment> = ctx.namespaced_api();
 
-    // Get current deployment
     let deployment = api.get(&name).await?;
 
     // Find and update the container image

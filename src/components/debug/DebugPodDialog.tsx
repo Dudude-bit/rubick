@@ -77,7 +77,6 @@ export function DebugPodDialog({
   const image = selectedImage === "custom" ? customImage : selectedImage;
   const isImageValid = image.trim().length > 0;
 
-  // Timeout dialog state
   const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
   const [timeoutOperation, setTimeoutOperation] =
     useState<DebugOperation | null>(null);
@@ -211,7 +210,6 @@ export function DebugPodDialog({
     onOpenChange(false);
   };
 
-  // Render timeout dialog
   if (showTimeoutDialog && timeoutOperation) {
     return (
       <Dialog open={open} onOpenChange={() => {}}>

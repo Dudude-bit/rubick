@@ -146,7 +146,6 @@ export function useGenericTerminalSession({
       if (cleanupCalled) return;
 
       try {
-        // Listen for output
         const unlistenOutput = await listen<{
           session_id: string;
           data: string;

@@ -100,7 +100,6 @@ impl RecentItemsConfig {
         self.items.retain(|i| i.path != item.path);
         // Add to front
         self.items.insert(0, item);
-        // Truncate to max
         self.items.truncate(MAX_RECENT_ITEMS);
     }
 }

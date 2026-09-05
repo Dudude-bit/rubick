@@ -73,7 +73,6 @@ export interface UseResourceDetailResult<T> {
   goBack: () => void;
   navigate: ReturnType<typeof useNavigate>;
 
-  // Delete mutation
   deleteMutation: ReturnType<typeof useMutation<void, Error, void>> | null;
 
   // Toast
@@ -161,19 +160,16 @@ export function useResourceDetail<T>(
     refetch: refetchYaml,
   } = useResourceYaml(resourceKind, name, namespace, activeTab);
 
-  // Copy YAML to clipboard
   const copyYaml = useCallback(() => {
     if (yaml) {
       copyToClipboard(yaml, t("action", "yamlCopied"));
     }
   }, [yaml, copyToClipboard, t]);
 
-  // Go back navigation
   const goBack = useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!name || !deleteResource) return;

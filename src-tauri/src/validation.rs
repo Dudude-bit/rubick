@@ -107,7 +107,6 @@ mod tests {
 
     #[test]
     fn test_validate_dns_label() {
-        // Valid DNS labels
         assert!(validate_dns_label("valid-name").is_ok());
         assert!(validate_dns_label("valid-name-123").is_ok());
         assert!(validate_dns_label("a").is_ok());
@@ -123,7 +122,6 @@ mod tests {
 
     #[test]
     fn test_validate_dns_subdomain() {
-        // Valid DNS subdomains
         assert!(validate_dns_subdomain("valid-name").is_ok());
         assert!(validate_dns_subdomain("gateways.networking.istio.io").is_ok());
         assert!(validate_dns_subdomain("node-1.example.com").is_ok());

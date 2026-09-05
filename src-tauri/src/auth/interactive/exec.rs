@@ -195,7 +195,6 @@ pub(super) async fn run_exec_auth(
             )))
         })?;
 
-    // Emit AuthTerminalSessionCreated event
     state.emit(AppEvent::AuthTerminalSessionCreated {
         auth_session_id: session_id.clone(),
         terminal_session_id: terminal_session_id.clone(),

@@ -68,7 +68,6 @@ impl PodFilters {
             }
         }
 
-        // Add node_name filter
         if let Some(node) = &self.node_name {
             parts.push(format!("spec.nodeName={node}"));
         }

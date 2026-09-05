@@ -9,7 +9,6 @@ pub fn clean_yaml_for_editor(yaml: &str) -> Result<String> {
         .map_err(|e| Error::Serialization(format!("Failed to parse YAML: {e}")))?;
 
     if let Some(mapping) = value.as_mapping_mut() {
-        // Remove status (server-managed)
         mapping.remove("status");
 
         // Remove server-managed metadata fields

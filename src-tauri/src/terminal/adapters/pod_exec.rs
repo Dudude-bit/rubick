@@ -125,10 +125,7 @@ impl TerminalAdapter for PodExecAdapter {
                     // Data available (n > 0)
                     Ok(Some(buf[..n].to_vec()))
                 }
-                Ok(Err(e)) => {
-                    // Read error
-                    Err(crate::error::Error::Terminal(format!("Read error: {e}")))
-                }
+                Ok(Err(e)) => Err(crate::error::Error::Terminal(format!("Read error: {e}"))),
                 Err(_) => {
                     // Timeout - no data available
                     Ok(None)

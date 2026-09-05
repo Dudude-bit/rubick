@@ -123,7 +123,6 @@ class LogQueueImpl {
       const data = JSON.stringify(this.queue.slice(0, 50)); // Limit size
       localStorage.setItem(key, data);
 
-      // Clean up old pending logs
       this.cleanupOldPendingLogs();
     } catch {
       // localStorage might be full or unavailable
@@ -173,7 +172,6 @@ class LogQueueImpl {
       }
     }
 
-    // Remove processed keys
     for (const key of keysToRemove) {
       localStorage.removeItem(key);
     }

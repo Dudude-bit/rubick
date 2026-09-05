@@ -277,7 +277,6 @@ export function CustomResourceList({
   );
 }
 
-// Helper function to get value from JSON path
 function getValueFromJsonPath(
   obj: CustomResourceInfo,
   jsonPath: string

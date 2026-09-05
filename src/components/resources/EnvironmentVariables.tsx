@@ -243,7 +243,6 @@ export function EnvironmentVariables({
       }
     }
 
-    // From envFrom
     for (const ef of envFrom) {
       if (ef.secretRef) {
         envFromSecrets.add(ef.secretRef);
@@ -266,7 +265,6 @@ export function EnvironmentVariables({
     return [...new Set([...secretNames, ...envFromSecretNames])];
   }, [secretNames, envFromSecretNames]);
 
-  // Combine all configMap names for fetching
   const allConfigMapNames = useMemo(() => {
     return [...new Set([...configMapNames, ...envFromConfigMapNames])];
   }, [configMapNames, envFromConfigMapNames]);
@@ -426,7 +424,6 @@ export function EnvironmentVariables({
       ev.sourceType === "secret" || ev.sourceType === "envFromSecret";
     const isRevealed = revealedSecrets.has(ev.name);
 
-    // For envFrom placeholders
     if (ev.isFromEnvFrom && ev.name.endsWith("*")) {
       if (isSecret && !showSecrets) {
         return t("empty", "enableShowSecrets");
@@ -437,7 +434,6 @@ export function EnvironmentVariables({
       return t("empty", "noDataFound");
     }
 
-    // For secrets from envFrom
     if (ev.sourceType === "envFromSecret") {
       if (!isRevealed) return ""; // MaskedValue will handle placeholder
       return ev.value || "";

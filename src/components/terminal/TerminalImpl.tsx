@@ -204,7 +204,6 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
       sendRef.current(data);
     });
 
-    // Handle resize
     const handleResize = () => {
       fitAddon.fit();
       resizeRef.current(xterm.cols, xterm.rows);

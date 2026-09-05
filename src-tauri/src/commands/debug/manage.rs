@@ -40,7 +40,6 @@ pub async fn delete_debug_pod(
         )));
     }
 
-    // Delete the pod
     api.delete(&pod_name, &kube::api::DeleteParams::default())
         .await?;
 
@@ -75,7 +74,6 @@ pub async fn get_debug_status(
     let ctx = ResourceContext::for_command(&state, Some(operation.namespace.clone()))?;
     let api: Api<Pod> = Api::namespaced(ctx.client.clone(), &operation.namespace);
 
-    // Get pod status
     let pod = match api.get(&operation.pod_name).await {
         Ok(p) => p,
         Err(kube::Error::Api(e)) if e.code == 404 => {

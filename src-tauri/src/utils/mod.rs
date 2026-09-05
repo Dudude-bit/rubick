@@ -106,7 +106,6 @@ mod tests {
 
     #[test]
     fn test_is_valid_dns_label() {
-        // Valid DNS labels
         assert!(is_valid_dns_label("my-app"));
         assert!(is_valid_dns_label("app123"));
         assert!(is_valid_dns_label("a"));
@@ -123,7 +122,6 @@ mod tests {
 
     #[test]
     fn test_is_valid_dns_subdomain() {
-        // Valid DNS subdomains
         assert!(is_valid_dns_subdomain("my-app"));
         assert!(is_valid_dns_subdomain("gateways.networking.istio.io"));
         assert!(is_valid_dns_subdomain("node-1.example.com"));
@@ -139,7 +137,6 @@ mod tests {
         assert!(!is_valid_dns_subdomain("-app.name")); // segment starts with dash
         assert!(!is_valid_dns_subdomain("app-.name")); // segment ends with dash
 
-        // Segment too long (> 63 chars)
         let long_segment = "a".repeat(64);
         assert!(!is_valid_dns_subdomain(&format!(
             "{long_segment}.example.com"

@@ -48,7 +48,6 @@ export const queryKeys = {
     scope(namespace),
   ],
 
-  // Resource detail
   resourceDetail: (
     type: ResourceKind,
     namespace: string,

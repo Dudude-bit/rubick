@@ -210,7 +210,6 @@ async fn helm_install_or_upgrade(
     let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
     let result = exec_helm_cli_with_context(&args_refs, 300, context).await;
 
-    // Clean up temp file
     if let Some(path) = temp_file {
         let _ = std::fs::remove_file(path);
     }
