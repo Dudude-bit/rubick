@@ -1,5 +1,6 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useInView } from "../lib/use-in-view";
+import { useHydrated } from "../lib/use-hydrated";
 
 const COLUMNS = ["path", "service", "published", "pod"] as const;
 
@@ -32,6 +33,41 @@ const TEXT: Record<Tone, string> = {
 const GRID =
   "md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.1fr)]";
 
+const LEGACY: Lane = {
+  cells: [
+    { label: "/legacy", tone: "neutral" },
+    { label: "api:80", sub: "targetPort: htp", tone: "neutral", chip: true },
+    { label: "no port", tone: "stop" },
+    { label: "not inspected", tone: "unknown", chip: true },
+  ],
+  inspected: 2,
+  lead: "Blocked.",
+  verdict:
+    "Target port htp matches no container, so the addresses are published with no port and the Service stays green.",
+  tone: "bad",
+};
+
+// The same Service after `kubectl patch`: targetPort http. Read on k3d six
+// seconds after the patch; the endpoint controller had published port 80.
+const LEGACY_FIXED: Lane = {
+  cells: [
+    { label: "/legacy", tone: "neutral" },
+    {
+      label: "api:80",
+      sub: "targetPort: http, was htp",
+      tone: "neutral",
+      chip: true,
+    },
+    { label: "3 ready · :80", tone: "ok" },
+    { label: "api ×3", tone: "ok", chip: true },
+  ],
+  inspected: 3,
+  lead: "Resolved.",
+  verdict:
+    "One letter. The endpoint controller published port 80 on its next pass, and nothing else changed.",
+  tone: "ok",
+};
+
 const LANES: Lane[] = [
   {
     cells: [
@@ -49,19 +85,6 @@ const LANES: Lane[] = [
     lead: "Resolved.",
     verdict: "Every object resolves, all the way to three ready pods.",
     tone: "ok",
-  },
-  {
-    cells: [
-      { label: "/legacy", tone: "neutral" },
-      { label: "api:80", sub: "targetPort: htp", tone: "neutral", chip: true },
-      { label: "no port", tone: "stop" },
-      { label: "not inspected", tone: "unknown", chip: true },
-    ],
-    inspected: 2,
-    lead: "Blocked.",
-    verdict:
-      "Target port htp matches no container, so the addresses are published with no port and the Service stays green.",
-    tone: "bad",
   },
   {
     cells: [
@@ -165,6 +188,8 @@ function LaneView({ lane }: { lane: Lane }) {
 }
 
 export function TrafficChain({ className = "" }: { className?: string }) {
+  const interactive = useHydrated();
+  const [fixed, setFixed] = useState(false);
   return (
     <div className={`chain ${className}`}>
       <p className="sr-only">
@@ -190,7 +215,30 @@ export function TrafficChain({ className = "" }: { className?: string }) {
           ))}
         </div>
         <div className="mt-3 flex flex-col gap-8 md:gap-6">
-          {LANES.map((lane) => (
+          <LaneView lane={LANES[0]!} />
+          <div className="flex flex-col gap-3">
+            <LaneView
+              key={fixed ? "fixed" : "broken"}
+              lane={fixed ? LEGACY_FIXED : LEGACY}
+            />
+            {interactive ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFixed((f) => !f)}
+                  className="min-h-9 rounded-md border border-neutral-700 px-3 py-1.5 font-mono text-[13px] text-neutral-200 hover:border-neutral-400 focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  {fixed ? "Put the typo back" : "Fix the port, inspect again"}
+                </button>
+                <span className="font-mono text-[12px] text-neutral-500">
+                  {fixed
+                    ? "kubectl patch svc api: targetPort http. Recorded on k3d; this page is not connected to a cluster."
+                    : "the same edit, recorded on k3d"}
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {LANES.slice(1).map((lane) => (
             <LaneView key={lane.cells[0].label} lane={lane} />
           ))}
         </div>
