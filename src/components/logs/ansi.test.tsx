@@ -10,6 +10,7 @@ import {
   tailSegments,
 } from "./ansi";
 import { AnsiText } from "./AnsiText";
+import { LogLineComponent } from "./LogLine";
 
 const plain: TextStyle = {
   bold: false,
@@ -107,6 +108,52 @@ describe("styleToCss", () => {
       background: "hsl(var(--ansi-2))",
     });
     expect(styleToCss({ ...plain, inverse: true }, true)).toEqual({
+      color: "hsl(var(--canvas))",
+      background: "hsl(var(--fg))",
+    });
+  });
+
+  /// `\e[37m\e[41m` — white on red — is how chalk and most Java and Go
+  /// formatters write a banner, and it is the pair this got wrong: both
+  /// halves are tuned against the canvas and never against each other, so
+  /// the light theme drew 1.19:1 and 464 of the 480 named pairs fell under
+  /// 3:1 on one canvas or the other. Would break if the foreground the
+  /// program asked for were kept whenever it also asked for a background.
+  it("a foreground is never drawn on a background the pair was not measured against", () => {
+    for (const dark of [true, false]) {
+      for (const [fgIndex, bgIndex] of [
+        [7, 1],
+        [10, 12],
+        [0, 0],
+      ]) {
+        expect(
+          styleToCss(
+            {
+              ...plain,
+              fg: { kind: "named", index: fgIndex },
+              bg: { kind: "named", index: bgIndex },
+            },
+            dark
+          )
+        ).toEqual({
+          color: "hsl(var(--canvas))",
+          background: `hsl(var(--ansi-${bgIndex}))`,
+        });
+      }
+    }
+  });
+
+  /// Inverse over a background nobody gave a foreground for used to paint
+  /// the text in that background's own colour — `\e[40mctx\e[7m important`
+  /// came out invisible. The swap still happens; the text still comes from
+  /// the canvas.
+  it("inverse over a background keeps the text readable", () => {
+    expect(
+      styleToCss(
+        { ...plain, inverse: true, bg: { kind: "named", index: 0 } },
+        false
+      )
+    ).toEqual({
       color: "hsl(var(--canvas))",
       background: "hsl(var(--fg))",
     });
@@ -222,5 +269,50 @@ describe("AnsiText", () => {
     expect(mark?.textContent).toBe("disk");
     expect(container.querySelectorAll("span[style]")).toHaveLength(1);
     expect(container.textContent).toBe("ERR disk full");
+  });
+});
+
+describe("the row draws what the parser found", () => {
+  const coloured = (text: string): StyledSegment[] => [
+    { text, style: { ...plain, fg: { kind: "named", index: 1 } } },
+  ];
+
+  /**
+   * The parts are covered and the row is not, so both call sites in
+   * `LogLine.tsx` — the raw view and the message — can be unwired to plain
+   * text with the whole suite green, and #116 is back with nothing red.
+   * Would break if either branch stopped asking for the runs.
+   */
+  it("a coloured line reaches the raw view and the message as runs", () => {
+    const log = line({
+      // `raw` is the cleaned line after this change, not the bytes the
+      // container wrote; the runs are what carries the colour.
+      raw: "ERROR disk full",
+      message: "ERROR disk full",
+      segments: coloured("ERROR disk full"),
+    });
+
+    for (const viewMode of ["raw", "compact"] as const) {
+      const { container, unmount } = render(
+        <LogLineComponent
+          log={log}
+          viewMode={viewMode}
+          searchQuery=""
+          containerColor={undefined}
+          expanded={false}
+          onToggleDetail={() => {}}
+          lineId={0}
+        />
+      );
+      const painted = [...container.querySelectorAll("span")].filter(
+        (el) => el.style.color !== ""
+      );
+      expect(
+        painted.length,
+        `${viewMode}: the row drew the text with no colour on it`
+      ).toBeGreaterThan(0);
+      expect(container.textContent).toContain("ERROR");
+      unmount();
+    }
   });
 });
