@@ -459,20 +459,51 @@ p {
 }
 
 /* traffic chain: the intended route is dashed, the inspected one is solid
-   and advances with --progress while the stage crosses the viewport */
+   and draws link by link once the lane is in view, then the verdict fades in */
 .link-seen {
   transform-origin: left;
 }
+@media (max-width: 767px) {
+  .link-seen {
+    transform-origin: top;
+  }
+}
 @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
-  .chain[data-driven] .link-seen {
-    transform: scaleX(
-      clamp(0, calc((var(--progress, 0) - var(--i) * 0.16) / 0.16), 1)
-    );
+  @keyframes draw-link {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
   }
-  .chain[data-driven] .verdict {
-    opacity: clamp(0, calc((var(--progress, 0) - 0.8) / 0.12), 1);
+  @keyframes draw-link-down {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
   }
-  .chain[data-done] {
-    --progress: 1;
+  .lane .link-seen {
+    transform: scaleX(0);
+  }
+  .lane .verdict {
+    opacity: 0;
+  }
+  .lane[data-in] .link-seen {
+    animation: draw-link 0.24s linear calc(var(--i) * 0.24s) both;
+  }
+  .lane[data-in] .verdict {
+    transition: opacity 0.18s var(--ease-enter) calc(var(--n) * 0.24s + 0.1s);
+    opacity: 1;
+  }
+  @media (max-width: 767px) {
+    .lane .link-seen {
+      transform: scaleY(0);
+    }
+    .lane[data-in] .link-seen {
+      animation-name: draw-link-down;
+    }
   }
 }
