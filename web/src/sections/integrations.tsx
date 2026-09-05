@@ -20,12 +20,14 @@ const INTEGRATIONS = [
   },
   {
     name: "cert-manager",
+    href: "/certificates",
     Icon: LuShieldCheck,
     color: "#4f8ef7",
     body: "expiry wherever TLS is named, and the issuance chain when renewal fails",
   },
   {
     name: "Argo CD / Flux",
+    href: "/delivery",
     Icon: LuGitBranch,
     color: "#ef7b4d",
     body: "every object says whether it is delivered, from which revision, and whether your edit will survive",
@@ -78,7 +80,19 @@ export function Integrations() {
                 className="size-4 shrink-0"
                 style={{ color: x.color }}
               />
-              {x.name}
+              {x.href ? (
+                <a
+                  href={x.href}
+                  className="inline-flex min-h-9 items-center gap-1.5 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+                >
+                  {x.name}
+                  <span aria-hidden className="text-neutral-500">
+                    ›
+                  </span>
+                </a>
+              ) : (
+                x.name
+              )}
             </dt>
             <dd className="mt-2 text-sm text-neutral-400">{x.body}</dd>
           </Reveal>

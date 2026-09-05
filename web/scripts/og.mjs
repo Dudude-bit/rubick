@@ -33,6 +33,20 @@ const CARDS = [
     observed: "no port published",
   },
   {
+    file: "og/delivery.png",
+    eyebrow: "Delivered by",
+    title: "Argo CD and Flux, and whether your edit survives.",
+    reported: "Ready",
+    observed: "suspended, frozen at dd50717",
+  },
+  {
+    file: "og/certificates.png",
+    eyebrow: "cert-manager",
+    title: "Valid. For somebody else.",
+    reported: "Ready, 89 days left",
+    observed: "not covering api.shop.k8s-gui.test",
+  },
+  {
     file: "og/no-route.png",
     eyebrow: "Lie #3 of 3",
     title: "“No route to host”, says nobody at all.",
