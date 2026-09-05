@@ -1,0 +1,206 @@
+# Three objects that draw green on a dashboard and are not fine.
+# From https://rubick.tech, the landing page of a Kubernetes client that
+# tries not to lie to you. Any throwaway cluster works; kind or k3d is enough.
+#
+#   kubectl apply -f https://rubick.tech/lies.yaml
+#   kubectl -n rubick-lies get pod,svc,endpointslice,ingress
+#   kubectl delete -f https://rubick.tech/lies.yaml
+#
+# kubectl reads the same objects Rubick does, so it is not fooled either.
+# The dashboards that are fooled read .status.phase, or the selector, or
+# the Ingress rule, and stop there.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rubick-lies
+---
+# What the checkout pod needs to run: a ConfigMap it reads, a Secret it
+# mounts, a volume it claims. None of them is the reason it crashes,
+# and all of them show up on its page, which is the point.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-config
+  namespace: rubick-lies
+data:
+  CHECKOUT_REGION: eu-west
+  CHECKOUT_CURRENCY: EUR
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: checkout-tls
+  namespace: rubick-lies
+type: Opaque
+stringData:
+  tls.crt: "not a real certificate"
+  tls.key: "not a real key"
+---
+# Needs a default StorageClass; kind and k3d ship one.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: checkout-data
+  namespace: rubick-lies
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Lie 1. .status.phase says Running. The only container crashes on every
+# start and settles into CrashLoopBackOff after a few restarts; the log
+# that explains why is the previous run's, which most log viewers never open.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout
+  namespace: rubick-lies
+  labels:
+    app: checkout
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - >-
+          echo starting checkout in $CHECKOUT_REGION;
+          echo 'FATAL: PAYMENT_KEY is not set' >&2;
+          exit 1
+      envFrom:
+        - configMapRef:
+            name: checkout-config
+      volumeMounts:
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: tls
+      secret:
+        secretName: checkout-tls
+    - name: data
+      persistentVolumeClaim:
+        claimName: checkout-data
+---
+# Lie 2. Three Ready pods, a selector that matches them, and a Service that
+# publishes nothing usable: it asks for a port named "htp" and no container
+# declares one, so the EndpointSlice carries the addresses with no port.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: rubick-lies
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: rubick-lies
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: htp
+---
+# The same pods behind a Service that names the port correctly. Nothing
+# else differs, which is the point: the pods were fine all along.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-ok
+  namespace: rubick-lies
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The crashlooping pod from lie 1, behind a Service. The selector matches,
+# the Service is green, and the pod has never been Ready, so nothing is
+# published behind it and every request gets a connection refused.
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: rubick-lies
+spec:
+  selector:
+    app: checkout
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+# Lie 3. One host, four paths. / reaches three ready pods through api-ok.
+# /legacy points at api, whose port name matches nothing, so it stops at
+# what is published. /checkout points at a Service whose only pod never
+# became Ready. /api points at api-v2, a Service that was never created;
+# the API server accepts the rule and nothing marks it. No ingress
+# controller is needed to see any of this: the gaps are in the objects.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: rubick-lies
+spec:
+  rules:
+    - host: shop.example.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-ok
+                port:
+                  number: 80
+          - path: /legacy
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-v2
+                port:
+                  number: 80

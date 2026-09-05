@@ -1,16 +1,36 @@
+import { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 import { LINKS, SITE } from "../lib/site";
 import { ButtonLink } from "../components/button-link";
+import { LogoMark } from "../components/logo-mark";
+
+function useScrolled() {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const read = () => setScrolled(window.scrollY > 8);
+    read();
+    window.addEventListener("scroll", read, { passive: true });
+    return () => window.removeEventListener("scroll", read);
+  }, []);
+  return scrolled;
+}
 
 export function Nav() {
+  const scrolled = useScrolled();
   return (
-    <header className="sticky top-0 z-50 border-b border-neutral-800/60 bg-neutral-950/80 backdrop-blur">
+    <header
+      className={`sticky top-0 z-50 border-b backdrop-blur transition-[border-color,background-color] duration-200 ${
+        scrolled
+          ? "border-neutral-800/80 bg-neutral-950/85"
+          : "border-transparent bg-neutral-950/40"
+      }`}
+    >
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
         <a
           href="/"
           className="flex items-center gap-2.5 font-display text-lg font-bold tracking-tight"
         >
-          <img src="/logo.svg" alt="" className="size-6 rounded-md" />
+          <LogoMark className="size-6" />
           {SITE.name}
         </a>
         <nav className="flex items-center gap-6">
@@ -21,7 +41,7 @@ export function Nav() {
             <FaGithub aria-hidden className="size-4" />
             GitHub
           </a>
-          <ButtonLink href="#install">Download</ButtonLink>
+          <ButtonLink href="/#install">Download</ButtonLink>
         </nav>
       </div>
     </header>

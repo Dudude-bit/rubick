@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { buttonClass, ButtonLink } from "./button-link";
+import { Trace } from "./motion/trace";
 import { Section } from "./section";
 import { Footer } from "../sections/footer";
 import { Nav } from "../sections/nav";
@@ -15,6 +17,8 @@ const PAGES = [
 ];
 
 export function NotFound() {
+  const [path, setPath] = useState("this address");
+  useEffect(() => setPath(location.pathname), []);
   return (
     <>
       <Nav />
@@ -28,6 +32,17 @@ export function NotFound() {
             know, and here is a live demonstration: we do not know this address,
             and no dashboard will draw it green for you.
           </p>
+          <div className="mt-8 max-w-2xl rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+            <Trace
+              steps={[
+                { label: `GET ${path}` },
+                { label: "route lookup" },
+                { label: "no match", tone: "bad" },
+              ]}
+              linkTone="bad"
+              reason="Nothing on this site answers to it. Nothing past this point was looked at."
+            />
+          </div>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <button
               type="button"

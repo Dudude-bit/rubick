@@ -25,7 +25,7 @@ export function WindowFrame({
           height={img.height}
           alt={alt}
           loading={eager ? "eager" : "lazy"}
-          className="block h-auto w-full"
+          className="block h-auto w-full outline-1 -outline-offset-1 outline-white/10"
         />
       </div>
       {caption ? (

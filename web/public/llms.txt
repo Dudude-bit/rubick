@@ -7,6 +7,12 @@ Key facts: reads your kubeconfig like Lens, k9s or Headlamp; warns who will undo
 ## Pages
 
 - [Home](https://rubick.tech/): what Rubick shows that dashboards miss, and downloads for every platform
+- [Lie 1, "Running"](https://rubick.tech/lies/running): a crashlooping pod that reports phase Running, and how Rubick reads it
+- [Lie 2, "All green"](https://rubick.tech/lies/all-green): a Service with a mistyped port name that publishes nothing
+- [Lie 3, "No route"](https://rubick.tech/lies/no-route): an Ingress rule to a Service that does not exist
+- [Reproduce the three lies](https://rubick.tech/lies.yaml): a manifest for any throwaway cluster
+- [Delivered by Argo CD or Flux](https://rubick.tech/delivery): what each Application and Kustomization says about a hand edit, read from live controllers
+- [Certificates](https://rubick.tech/certificates): cert-manager chains, renewal dates and the host a certificate does not cover
 - [Rubick vs Lens](https://rubick.tech/vs/lens): an honest comparison with Lens by Mirantis
 - [Rubick vs k9s](https://rubick.tech/vs/k9s): an honest comparison with the k9s terminal UI
 - [Rubick vs Headlamp](https://rubick.tech/vs/headlamp): an honest comparison with the Headlamp web UI

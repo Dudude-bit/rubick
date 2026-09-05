@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa6";
+import { CommandLine } from "../components/command-line";
+import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
 import {
@@ -28,40 +30,6 @@ function Comment({ children }: { children: React.ReactNode }) {
   return <p className="font-mono text-sm text-neutral-500"># {children}</p>;
 }
 
-function CommandLine({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  function copy() {
-    void navigator.clipboard.writeText(command).then(() => {
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1500);
-    });
-  }
-
-  return (
-    <div className="flex items-start gap-3">
-      <span className="text-accent font-mono text-sm leading-6 select-none">
-        $
-      </span>
-      <code className="min-w-0 flex-1 font-mono text-sm leading-6 break-all whitespace-pre-wrap text-neutral-100">
-        {command}
-      </code>
-      <button
-        type="button"
-        onClick={copy}
-        aria-label="Copy command"
-        className="-my-1 shrink-0 rounded-md border border-neutral-700 px-2.5 py-1.5 font-mono text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
-      >
-        {copied ? "copied" : "copy"}
-      </button>
-    </div>
-  );
-}
-
 function DownloadRow({
   asset,
   fallbackLabel,
@@ -86,7 +54,7 @@ function DownloadRow({
         </span>
         <span
           aria-hidden="true"
-          className="font-mono text-sm text-neutral-500 transition-colors group-hover:text-accent"
+          className="inline-block font-mono text-sm text-neutral-500 transition-[color,transform] duration-150 group-hover:translate-y-0.5 group-hover:text-accent motion-reduce:group-hover:translate-y-0"
         >
           {"↓"}
         </span>
@@ -95,15 +63,47 @@ function DownloadRow({
   );
 }
 
+function Panel({
+  os,
+  active,
+  children,
+}: {
+  os: OS;
+  active: OS;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      id={`install-${os}`}
+      role="tabpanel"
+      inert={active !== os}
+      className="tab-panel flex flex-col gap-5"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function Install() {
   const { version, assets } = useLatestRelease();
   const [active, setActive] = useState<OS>("macos");
   const tabRefs = useRef<Partial<Record<OS, HTMLButtonElement | null>>>({});
+  const [bar, setBar] = useState({ left: 0, width: 0 });
 
   useEffect(() => {
     const mine = detect();
     if (mine) setActive(mine);
   }, []);
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = tabRefs.current[active];
+      if (el) setBar({ left: el.offsetLeft, width: el.offsetWidth });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [active]);
 
   function onTabKeyDown(e: React.KeyboardEvent) {
     const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -119,11 +119,16 @@ export function Install() {
 
   return (
     <Section id="install" eyebrow="Install">
-      <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
-        Get it.
-      </h2>
-      <div className="mt-12 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl shadow-black/50">
-        <div className="flex items-center gap-4 border-b border-neutral-800 px-4">
+      <Reveal>
+        <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
+          Get it.
+        </h2>
+      </Reveal>
+      <Reveal
+        settle
+        className="mt-12 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl shadow-black/50"
+      >
+        <div className="relative flex items-center gap-4 border-b border-neutral-800 px-4">
           <div className="hidden gap-1.5 sm:flex" aria-hidden="true">
             <span className="size-3 rounded-full bg-neutral-700" />
             <span className="size-3 rounded-full bg-neutral-700" />
@@ -133,7 +138,7 @@ export function Install() {
             role="tablist"
             aria-label="Operating system"
             onKeyDown={onTabKeyDown}
-            className="flex"
+            className="relative flex"
           >
             {TABS.map((t) => (
               <button
@@ -147,120 +152,107 @@ export function Install() {
                 aria-controls={`install-${t.os}`}
                 tabIndex={active === t.os ? 0 : -1}
                 onClick={() => setActive(t.os)}
-                className={`-mb-px flex min-h-11 items-center gap-2 border-b-2 px-3 font-mono text-sm transition-colors sm:px-4 ${
+                className={`flex min-h-11 items-center gap-2 px-3 font-mono text-sm transition-colors sm:px-4 ${
                   active === t.os
-                    ? "border-accent text-white"
-                    : "border-transparent text-neutral-500 hover:text-neutral-300"
+                    ? "text-white"
+                    : "text-neutral-500 hover:text-neutral-300"
                 }`}
               >
                 <t.Icon aria-hidden className="hidden size-4 sm:block" />
                 {t.label}
               </button>
             ))}
+            <span
+              aria-hidden
+              className="bg-accent absolute -bottom-px h-0.5 transition-[left,width] duration-150 ease-[var(--ease-state)] motion-reduce:transition-none"
+              style={{ left: bar.left, width: bar.width }}
+            />
           </div>
-          <span className="ml-auto hidden font-mono text-xs text-neutral-600 sm:block">
+          <span className="ml-auto hidden font-mono text-xs text-neutral-600 transition-opacity duration-200 sm:block">
             {version ?? "latest"}
           </span>
         </div>
 
-        <div className="min-h-64 bg-neutral-950/60 p-6 md:p-8">
-          {active === "macos" && (
-            <div
-              id="install-macos"
-              role="tabpanel"
-              className="flex flex-col gap-5"
-            >
-              <div className="flex flex-col gap-2">
-                <CommandLine command={LINKS.brew} />
-                <Comment>
-                  signed with a Developer ID certificate, notarised by Apple.
-                  Opens on a double-click, like software should.
-                </Comment>
-              </div>
-              <Comment>or take the .dmg straight:</Comment>
-              <div className="grid gap-3 md:grid-cols-2">
-                <DownloadRow
-                  asset={assets.dmgArm}
-                  fallbackLabel="Rubick.dmg"
-                  meta="Apple silicon"
-                />
-                <DownloadRow
-                  asset={assets.dmgIntel}
-                  fallbackLabel="Rubick.dmg"
-                  meta="Intel"
-                />
-              </div>
-            </div>
-          )}
-
-          {active === "windows" && (
-            <div
-              id="install-windows"
-              role="tabpanel"
-              className="flex flex-col gap-5"
-            >
-              <DownloadRow
-                asset={assets.exe}
-                fallbackLabel="Rubick-setup.exe"
-                meta="installer"
-              />
-              <div className="border-l-2 border-amber-400/60 py-1 pl-4">
-                <p className="text-sm text-neutral-300">
-                  The installer is not signed, so SmartScreen will warn you on
-                  first launch. More info, then Run anyway.
-                </p>
-                <p className="mt-1 text-sm text-neutral-500">
-                  We would rather tell you that here than let the dialog
-                  surprise you.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {active === "linux" && (
-            <div
-              id="install-linux"
-              role="tabpanel"
-              className="flex flex-col gap-5"
-            >
-              <div className="grid gap-3">
-                <DownloadRow
-                  asset={assets.appimage}
-                  fallbackLabel="Rubick.AppImage"
-                  meta="needs nothing installed"
-                />
-                <DownloadRow
-                  asset={assets.deb}
-                  fallbackLabel="Rubick.deb"
-                  meta="Debian, Ubuntu"
-                />
-                <DownloadRow
-                  asset={assets.rpm}
-                  fallbackLabel="Rubick.rpm"
-                  meta="Fedora, openSUSE"
-                />
-              </div>
+        <div className="grid bg-neutral-950/60 p-6 md:p-8">
+          <Panel os="macos" active={active}>
+            <div className="flex flex-col gap-2">
+              <CommandLine command={LINKS.brew} />
               <Comment>
-                Arch:{" "}
-                <a
-                  href={LINKS.aur}
-                  className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
-                >
-                  rubick-kubernetes-bin
-                </a>{" "}
-                is on the AUR, maintained by{" "}
-                <a
-                  href="https://github.com/Prototik"
-                  className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
-                >
-                  @Prototik
-                </a>{" "}
-                from the same .deb we publish. Thanks to him for it.
+                signed with a Developer ID certificate, notarised by Apple.
+                Opens on a double-click, like software should.
               </Comment>
             </div>
-          )}
+            <Comment>or take the .dmg straight:</Comment>
+            <div className="grid gap-3 md:grid-cols-2">
+              <DownloadRow
+                asset={assets.dmgArm}
+                fallbackLabel="Rubick.dmg"
+                meta="Apple silicon"
+              />
+              <DownloadRow
+                asset={assets.dmgIntel}
+                fallbackLabel="Rubick.dmg"
+                meta="Intel"
+              />
+            </div>
+          </Panel>
+
+          <Panel os="windows" active={active}>
+            <DownloadRow
+              asset={assets.exe}
+              fallbackLabel="Rubick-setup.exe"
+              meta="installer"
+            />
+            <div className="border-l-2 border-amber-400/60 py-1 pl-4">
+              <p className="text-sm text-neutral-300">
+                The installer is not signed, so SmartScreen will warn you on
+                first launch. More info, then Run anyway.
+              </p>
+              <p className="mt-1 text-sm text-neutral-500">
+                We would rather tell you that here than let the dialog surprise
+                you.
+              </p>
+            </div>
+          </Panel>
+
+          <Panel os="linux" active={active}>
+            <div className="grid gap-3">
+              <DownloadRow
+                asset={assets.appimage}
+                fallbackLabel="Rubick.AppImage"
+                meta="needs nothing installed"
+              />
+              <DownloadRow
+                asset={assets.deb}
+                fallbackLabel="Rubick.deb"
+                meta="Debian, Ubuntu"
+              />
+              <DownloadRow
+                asset={assets.rpm}
+                fallbackLabel="Rubick.rpm"
+                meta="Fedora, openSUSE"
+              />
+            </div>
+            <Comment>
+              Arch:{" "}
+              <a
+                href={LINKS.aur}
+                className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+              >
+                rubick-kubernetes-bin
+              </a>{" "}
+              is on the AUR, maintained by{" "}
+              <a
+                href="https://github.com/Prototik"
+                className="text-neutral-300 underline decoration-neutral-700 underline-offset-4 transition-colors hover:text-white"
+              >
+                @Prototik
+              </a>{" "}
+              from the same .deb we publish. Thanks to him for it.
+            </Comment>
+          </Panel>
         </div>
-      </div>
+      </Reveal>
       <p className="mt-6 font-mono text-sm text-neutral-500">
         Every version, with signatures, lives on{" "}
         <a

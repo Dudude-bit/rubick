@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 const styles = {
   primary:
-    "border border-transparent bg-accent text-white hover:bg-blue-500 active:scale-[0.97] shadow-lg shadow-accent/25",
+    "border border-transparent bg-accent text-white hover:bg-blue-500 active:scale-[0.96] shadow-lg shadow-accent/25",
   ghost:
-    "border border-neutral-700 text-neutral-200 hover:border-neutral-500 hover:text-white active:scale-[0.97]",
+    "border border-neutral-700 text-neutral-200 hover:border-neutral-500 hover:text-white active:scale-[0.96]",
 } as const;
 
 export function buttonClass(variant: keyof typeof styles = "primary") {

@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SITE } from "../lib/site";
 import { AntiFeatures } from "../sections/anti-features";
+import { Anywhere } from "../sections/anywhere";
+import { Connections } from "../sections/connections";
 import { Features } from "../sections/features";
 import { Footer } from "../sections/footer";
 import { Hero } from "../sections/hero";
@@ -9,7 +11,9 @@ import { Integrations } from "../sections/integrations";
 import { Lies } from "../sections/lies";
 import { Nav } from "../sections/nav";
 import { OpenSource } from "../sections/open-source";
+import { Quiz } from "../sections/quiz";
 import { Testimonials } from "../sections/testimonials";
+import { Unknown } from "../sections/unknown";
 import { Warns } from "../sections/warns";
 
 export const Route = createFileRoute("/")({
@@ -24,9 +28,13 @@ function Landing() {
       <main>
         <Hero />
         <Lies />
+        <Connections />
         <Warns />
+        <Unknown />
+        <Quiz />
         <Features />
         <Integrations />
+        <Anywhere />
         <Testimonials />
         <AntiFeatures />
         <OpenSource />
