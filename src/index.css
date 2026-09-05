@@ -191,8 +191,8 @@
     /* The sixteen ANSI colours a log line can name. Black is the
      * foreground and white the faint grey: "white" on this canvas has to
      * be readable, not white. Yellow is held down to amber for the same
-     * reason. The cube and truecolor are lifted toward the foreground by
-     * `--ansi-lift` instead (`logs/ansi.tsx`). */
+     * reason. The cube and truecolor are pulled toward black or white
+     * until they read instead (`logs/ansi.ts`). */
     --ansi-0: 32 16% 11%;
     --ansi-1: 4 66% 45%;
     --ansi-2: 148 55% 29%;
@@ -209,7 +209,6 @@
     --ansi-13: 300 50% 46%;
     --ansi-14: 190 60% 35%;
     --ansi-15: 32 10% 26%;
-    --ansi-lift: 45%;
 
     /* Kind and identity hues. Hue is a number from TypeScript; saturation
      * and lightness live here so both palettes track the theme. Held well
@@ -309,7 +308,6 @@
     --ansi-13: 290 65% 78%;
     --ansi-14: 185 60% 66%;
     --ansi-15: 220 6% 93%;
-    --ansi-lift: 35%;
     --ident-s: 52%;
     --ident-l: 66%;
     --kind-s: 38%;

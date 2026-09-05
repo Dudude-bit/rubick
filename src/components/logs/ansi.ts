@@ -5,46 +5,95 @@ import type {
   StyledSegment,
   TextStyle,
 } from "@/generated/types";
+import { useThemeStore } from "@/stores/themeStore";
 
 /**
  * The sixteen named colours are theme tokens, not the colours a terminal
  * would use: black on this dark canvas and yellow on the light one are
  * invisible, and a program that picked "red" meant "red", not the hex
  * its author's terminal happened to render. The cube and truecolor keep
- * the colour the program chose, lifted toward the foreground far enough
- * to read; how far is the theme's call (`--ansi-lift`).
+ * the colour the program chose, pulled toward the canvas's opposite
+ * just far enough to read on it.
  */
-export function cssColor(color: AnsiColor): string {
+export function cssColor(color: AnsiColor, dark: boolean): string {
   if (color.kind === "named") return `hsl(var(--ansi-${color.index & 15}))`;
-  if (color.kind === "rgb") return lifted(color.r, color.g, color.b);
+  if (color.kind === "rgb") return readable([color.r, color.g, color.b], dark);
   if (color.index < 16) return `hsl(var(--ansi-${color.index}))`;
   if (color.index >= 232) {
     const grey = 8 + (color.index - 232) * 10;
-    return lifted(grey, grey, grey);
+    return readable([grey, grey, grey], dark);
   }
   const cube = color.index - 16;
   const step = (n: number) => (n === 0 ? 0 : 55 + n * 40);
-  return lifted(
-    step(Math.floor(cube / 36)),
-    step(Math.floor(cube / 6) % 6),
-    step(cube % 6)
+  return readable(
+    [
+      step(Math.floor(cube / 36)),
+      step(Math.floor(cube / 6) % 6),
+      step(cube % 6),
+    ],
+    dark
   );
 }
 
-const lifted = (r: number, g: number, b: number) =>
-  `color-mix(in oklab, rgb(${r} ${g} ${b}), hsl(var(--fg)) var(--ansi-lift))`;
+type Rgb = [number, number, number];
 
-export function styleToCss(style: TextStyle): CSSProperties {
+/**
+ * 4.5:1 against the canvas, as WCAG counts it for 12px text. The dark
+ * canvas has a relative luminance near 0.015 and the light one near
+ * 0.96, so these are the luminances a colour has to reach on each.
+ */
+const MIN_LUMINANCE_ON_DARK = 0.25;
+const MAX_LUMINANCE_ON_LIGHT = 0.165;
+
+export function luminance([r, g, b]: Rgb): number {
+  const channel = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+/** The colour, mixed toward white or black until it reads on the canvas. */
+function readable(rgb: Rgb, dark: boolean): string {
+  const ok = (c: Rgb) =>
+    dark
+      ? luminance(c) >= MIN_LUMINANCE_ON_DARK
+      : luminance(c) <= MAX_LUMINANCE_ON_LIGHT;
+  let mixed = rgb;
+  if (!ok(rgb)) {
+    const target = dark ? 255 : 0;
+    const mix = (t: number): Rgb =>
+      rgb.map((v) => Math.round(v + (target - v) * t)) as Rgb;
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 10; i++) {
+      const mid = (lo + hi) / 2;
+      if (ok(mix(mid))) hi = mid;
+      else lo = mid;
+    }
+    mixed = mix(hi);
+  }
+  return `rgb(${mixed[0]} ${mixed[1]} ${mixed[2]})`;
+}
+
+/**
+ * A background with no foreground draws the text in the canvas colour:
+ * every palette colour reads against the canvas, so the canvas reads
+ * against every palette colour. Inverse swaps the two the same way.
+ */
+export function styleToCss(style: TextStyle, dark: boolean): CSSProperties {
   const css: CSSProperties = {};
-  let fg = style.fg ? cssColor(style.fg) : undefined;
-  let bg = style.bg ? cssColor(style.bg) : undefined;
+  let fg = style.fg ? cssColor(style.fg, dark) : undefined;
+  let bg = style.bg ? cssColor(style.bg, dark) : undefined;
   if (style.inverse) {
     [fg, bg] = [bg ?? "hsl(var(--canvas))", fg ?? "hsl(var(--fg))"];
+  } else if (bg && !fg) {
+    fg = "hsl(var(--canvas))";
   }
   if (fg) css.color = fg;
   if (bg) css.background = bg;
   if (style.bold) css.fontWeight = 600;
-  if (style.dim) css.opacity = 0.6;
+  if (style.dim) css.opacity = 0.7;
   if (style.italic) css.fontStyle = "italic";
   const decoration = [
     style.underline && "underline",
@@ -79,11 +128,25 @@ export function tailSegments(
 }
 
 /**
- * The message's runs, or nothing when they cannot be known. A message
- * lifted out of a JSON or logfmt field is not a piece of the line, so no
- * run maps onto it; it keeps the level tint the row gives it instead.
+ * The message's runs, or nothing when they cannot be known. Only for the
+ * formats whose message is the tail of the line. A message lifted out of
+ * a JSON or logfmt field is not a piece of the line even when the line
+ * happens to end with the same characters (`msg=hello other=hello`), so
+ * it keeps the level tint the row gives it instead.
  */
 export function messageSegments(log: LogLine): StyledSegment[] | null {
-  if (!log.segments || !log.raw.endsWith(log.message)) return null;
+  if (!log.segments) return null;
+  if (log.format === "json" || log.format === "logfmt") return null;
+  if (!log.raw.endsWith(log.message)) return null;
   return tailSegments(log.segments, log.message.length);
+}
+
+/**
+ * Whether the canvas is the dark one, resolved the way `App` resolves
+ * the class on the root: a `system` theme asks the OS.
+ */
+export function useIsDark(): boolean {
+  const theme = useThemeStore((state) => state.theme);
+  if (theme !== "system") return theme === "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }

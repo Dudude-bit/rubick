@@ -25,9 +25,8 @@ pub fn parse_logs(logs: &str, pod: &str, container: &str, namespace: &str) -> Ve
 #[must_use]
 pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -> LogLine {
     // A level word wrapped in colour codes is not found; a coloured JSON line does not start with `{`.
-    let split = ansi::split(line);
-    let line = split.text.as_str();
-    let raw = split.text.clone();
+    let ansi::Split { text, segments } = ansi::split(line);
+    let line = text.as_str();
     // Try to parse timestamp from the beginning of the line —
     // Kubernetes log timestamps are RFC3339 when `timestamps: true`.
     let (timestamp, message) = if line.len() > 30 {
@@ -56,8 +55,8 @@ pub fn parse_log_line(line: &str, pod: &str, container: &str, namespace: &str) -
         level,
         format,
         fields,
-        raw,
-        segments: split.segments,
+        raw: text,
+        segments,
         pod: pod.to_string(),
         container: container.to_string(),
         namespace: namespace.to_string(),
@@ -148,10 +147,12 @@ fn parse_json_message(message: &str) -> Option<ParsedMessage> {
         return None;
     }
 
+    // `"\u001b[31m"` inside a JSON string is an escape the line did not
+    // carry until it was decoded.
     let mut fields = BTreeMap::new();
     for (key, value) in object {
         let entry = match value {
-            Value::String(inner) => inner.clone(),
+            Value::String(inner) => ansi::strip(inner).into_owned(),
             _ => value.to_string(),
         };
         fields.insert(key.clone(), entry);
@@ -169,7 +170,7 @@ fn extract_json_value(object: &serde_json::Map<String, Value>, keys: &[&str]) ->
     for key in keys {
         if let Some(value) = object.get(*key) {
             return Some(match value {
-                Value::String(inner) => inner.clone(),
+                Value::String(inner) => ansi::strip(inner).into_owned(),
                 _ => value.to_string(),
             });
         }
