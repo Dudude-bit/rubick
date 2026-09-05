@@ -10,7 +10,7 @@ mod cred;
 mod exec;
 mod oidc;
 
-use crate::error::{Error, Result};
+use crate::error::{AuthError, Error, Result};
 use crate::state::AppState;
 use kube::config::{AuthInfo, ExecAuthCluster, Kubeconfig};
 use secrecy::SecretString;
@@ -66,7 +66,7 @@ pub async fn prepare_kubeconfig_for_context(
 
     if let Some(exec_config) = exec_config {
         let status = exec::run_exec_auth(state, context_name, &exec_config, exec_cluster).await?;
-        let expires_at = apply_exec_credentials(auth_info, status);
+        let expires_at = apply_exec_credentials(auth_info, status)?;
         auth_info.exec = None;
         auth_info.auth_provider = None;
         return Ok(PreparedContext {
@@ -135,13 +135,50 @@ fn resolve_exec_cluster(
 }
 
 /// Applies what the plugin returned, and hands back the deadline it named.
+///
+/// Refuses a token this cannot make into a credential rather than handing the
+/// server something it will answer with a bare `Unauthorized`. A 401 reads as
+/// "your login is wrong", and reaches the reader identically whether the
+/// cluster refused a good token or we sent a broken one — the two have
+/// nothing in common to do about them.
 fn apply_exec_credentials(
     auth_info: &mut AuthInfo,
     status: ExecCredentialStatus,
-) -> Option<chrono::DateTime<chrono::Utc>> {
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
     use base64::Engine;
 
-    if let Some(token) = status.token {
+    if let Some(mut token) = status.token {
+        match cred::mend_bearer_token(&mut token) {
+            // Said out loud on purpose. When the cluster then answers
+            // `Unauthorized`, this line is what separates "we sent it
+            // something broken" from "the cluster refused a credential that
+            // left the plugin whole" — the two look identical from the
+            // outside and have nothing in common to do about them. The
+            // length only: a token is a credential and does not go in a log.
+            cred::TokenShape::Intact => tracing::info!(
+                "Applied a {} character token from the credential plugin, intact.",
+                token.len()
+            ),
+            cred::TokenShape::Mended { removed } => {
+                // Worth a line in the log: it says the credential arrived
+                // broken and was repaired, which is the difference between
+                // "the cluster refused you" and "your console wrapped a
+                // kilobyte of JWT at eighty columns".
+                tracing::warn!(
+                    "The credential plugin's token carried {removed} whitespace \
+                     characters a bearer token cannot have — the console that \
+                     drew it put them there. Removed."
+                );
+            }
+            cred::TokenShape::Unusable { first_bad } => {
+                return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                    "The credential plugin's token contains {first_bad:?}, which a \
+                     bearer token cannot carry, so the cluster would refuse it \
+                     without saying why. This is the terminal the plugin ran \
+                     under corrupting its output, not a rejected login."
+                ))));
+            }
+        }
         auth_info.token = Some(SecretString::from(token));
     }
     // A plugin hands back PEM, but the fields it lands in are kubeconfig
@@ -161,10 +198,10 @@ fn apply_exec_credentials(
     // A plugin that names no expiry, or names one this cannot parse, leaves
     // the deadline unknown — which is a different thing from "does not
     // expire", and is why the caller gets an `Option` rather than a guess.
-    status
+    Ok(status
         .expiration_timestamp
         .and_then(|stamp| chrono::DateTime::parse_from_rfc3339(&stamp).ok())
-        .map(|stamp| stamp.with_timezone(&chrono::Utc))
+        .map(|stamp| stamp.with_timezone(&chrono::Utc)))
 }
 
 #[cfg(test)]
@@ -192,7 +229,8 @@ mod tests {
                 client_certificate_data: Some(CERT.to_string()),
                 client_key_data: Some(KEY.to_string()),
             },
-        );
+        )
+        .expect("a certificate is not a token and has nothing to mend");
 
         let decoded = |field: &str| {
             base64::engine::general_purpose::STANDARD
@@ -206,5 +244,49 @@ mod tests {
         assert_eq!(decoded(cert), CERT.as_bytes());
         let key = auth_info.client_key_data.as_ref().expect("the key");
         assert_eq!(decoded(key.expose_secret()), KEY.as_bytes());
+    }
+
+    fn token_status(token: &str) -> ExecCredentialStatus {
+        ExecCredentialStatus {
+            expiration_timestamp: None,
+            token: Some(token.to_string()),
+            client_certificate_data: None,
+            client_key_data: None,
+        }
+    }
+
+    /// A console that pads a wrapped row leaves spaces inside the `id_token`,
+    /// and a space is ordinary data inside a JSON string — so the credential
+    /// parses, the token is stored as drawn, and the API server answers
+    /// `Unauthorized` naming nothing (#106 on Windows). Would break if the
+    /// token reached `AuthInfo` with the console's spaces still in it.
+    #[test]
+    fn a_token_a_console_padded_is_stored_without_the_padding() {
+        let mut auth_info = AuthInfo::default();
+        apply_exec_credentials(&mut auth_info, token_status("header.pay load.sig \nnature"))
+            .expect("whitespace is not a reason to refuse — it is one to remove");
+
+        assert_eq!(
+            auth_info.token.as_ref().expect("the token").expose_secret(),
+            "header.payload.signature"
+        );
+    }
+
+    /// Whitespace is the one thing removal explains. Anything else in there
+    /// is damage this cannot undo, and sending it buys a 401 that reads as a
+    /// rejected login. Would break if an unrepairable token were stored and
+    /// left to the server to refuse.
+    #[test]
+    fn a_token_carrying_what_no_console_explains_is_refused_here() {
+        let mut auth_info = AuthInfo::default();
+        let err = apply_exec_credentials(&mut auth_info, token_status("header.pay<load>.sig"))
+            .expect_err("a token that cannot be a bearer credential is not sent");
+
+        assert!(auth_info.token.is_none(), "nothing half-applied");
+        let text = err.to_string();
+        assert!(
+            text.contains('<'),
+            "the message names the character found: {text}"
+        );
     }
 }

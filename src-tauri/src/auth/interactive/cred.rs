@@ -46,6 +46,58 @@ pub(super) struct ExecTerminalParams {
     pub env: HashMap<String, String>,
 }
 
+/// What a bearer token turned out to be once the console had finished
+/// drawing it.
+///
+/// Three states, because the alternative is one: `Unauthorized`. A token the
+/// console broke and a token the cluster refuses reach the reader as the same
+/// bare 401, and only one of them is theirs to fix.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum TokenShape {
+    /// Nothing to say: every byte is one a bearer token may carry.
+    Intact,
+    /// The plugin's value carried whitespace, which a bearer token never
+    /// does. Removed — the count is what the report says.
+    Mended { removed: usize },
+    /// Something is in there that whitespace removal does not explain.
+    Unusable { first_bad: char },
+}
+
+/// Repair what a console put inside a bearer token, and say what was found.
+///
+/// A bearer token is `token68` (RFC 7235): letters, digits, and
+/// `-._~+/`, with `=` padding. **Whitespace is never part of one** — it
+/// cannot be, because the value travels in an HTTP header. So removing
+/// whitespace from a token cannot destroy a value that was ever valid; it can
+/// only rescue one a terminal wrapped or padded.
+///
+/// This exists because `ConPTY` hands back the *rendered screen* rather than
+/// the bytes the child wrote (see `unwrap_console_breaks`). That pass removes
+/// the control bytes, which is what stopped the JSON parsing. What it cannot
+/// remove is a space, because a space inside a JSON string is ordinary data —
+/// and a space inside a `kubectl oidc-login` `id_token` is a credential the API
+/// server answers with `Unauthorized`, naming nothing.
+pub(super) fn mend_bearer_token(token: &mut String) -> TokenShape {
+    let before = token.len();
+    token.retain(|c| !c.is_whitespace());
+    let removed = before - token.len();
+
+    if let Some(bad) = token.chars().find(|c| !is_token68(*c)) {
+        return TokenShape::Unusable { first_bad: bad };
+    }
+    if removed > 0 {
+        return TokenShape::Mended { removed };
+    }
+    TokenShape::Intact
+}
+
+/// The characters RFC 7235 allows in a `token68`, which is what a bearer
+/// credential is. Deliberately not "any printable byte": the point is to
+/// separate a token a console mangled from one it did not.
+fn is_token68(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '~' | '+' | '/' | '=')
+}
+
 /// Extract an `ExecCredential` JSON object from a (possibly noisy)
 /// stdout buffer.
 ///
@@ -216,6 +268,76 @@ fn find_balanced_object_end(slice: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ordinary case has to stay ordinary: a token that arrived whole is
+    /// reported as whole and comes back byte-identical. Would break if
+    /// mending rewrote a value it had no business touching.
+    #[test]
+    fn a_token_that_arrived_whole_is_left_alone() {
+        let mut token = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln-_~+/=".to_string();
+        let before = token.clone();
+
+        assert_eq!(mend_bearer_token(&mut token), TokenShape::Intact);
+        assert_eq!(token, before);
+    }
+
+    /// The reported failure, one layer below where it is felt: `ConPTY` hands
+    /// back the rendered screen, and what `unwrap_console_breaks` cannot
+    /// remove is the padding, because a space inside a JSON string is data.
+    /// A space inside an `id_token` is not — it is a credential the API server
+    /// answers `Unauthorized` without naming a cause. Would break if
+    /// whitespace survived into the header.
+    #[test]
+    fn a_token_the_console_broke_across_rows_comes_back_in_one_piece() {
+        // A row that ends short is padded out to the console width, and the
+        // next one starts after a hard break: five whitespace characters per
+        // row boundary.
+        const BREAK: &str = "   \r\n";
+        let whole = format!("{}.{}.{}", "e".repeat(40), "p".repeat(40), "s".repeat(40));
+        let rows: Vec<String> = whole
+            .as_bytes()
+            .chunks(32)
+            .map(|c| String::from_utf8_lossy(c).into_owned())
+            .collect();
+        let mut token = rows.join(BREAK);
+
+        assert_eq!(
+            mend_bearer_token(&mut token),
+            TokenShape::Mended {
+                removed: (rows.len() - 1) * BREAK.len()
+            }
+        );
+        assert_eq!(token, whole);
+    }
+
+    /// Removing whitespace is safe because a bearer token never contains
+    /// any. That argument does not extend one character further, so anything
+    /// else stops here with the character named rather than reaching the
+    /// cluster. Would break if an unusable token were reported as mended.
+    #[test]
+    fn a_token_holding_more_than_whitespace_is_reported_unusable() {
+        let mut token = "abc.def\u{1b}[0m.ghi".to_string();
+
+        assert_eq!(
+            mend_bearer_token(&mut token),
+            TokenShape::Unusable {
+                first_bad: '\u{1b}'
+            }
+        );
+    }
+
+    /// The count in the report is the number of characters taken out, not
+    /// the number of rows or bytes — it is what a reader compares against
+    /// the console width to recognise their own terminal in it.
+    #[test]
+    fn the_report_counts_the_characters_removed() {
+        let mut token = " a b ".to_string();
+        assert_eq!(
+            mend_bearer_token(&mut token),
+            TokenShape::Mended { removed: 3 }
+        );
+        assert_eq!(token, "ab");
+    }
 
     /// Reported against 4.7.3 on Windows (#106): "Exec credentials missing
     /// status" from a `kubectl oidc-login get-token` that works under

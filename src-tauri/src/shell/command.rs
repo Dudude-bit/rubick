@@ -11,6 +11,22 @@ use tokio::process::Command;
 
 use super::path::get_user_path;
 
+/// `CREATE_NO_WINDOW` — a console app spawned from a GUI gets no console of
+/// its own.
+///
+/// Windows gives a subsystem-windows process no console, so `CreateProcess`
+/// allocates one for every console child and it appears on screen. Nothing
+/// here is meant to be looked at: these are `--version` probes and `kubectl`
+/// calls whose pipes we read ourselves. Reported against 4.9.0 — opening
+/// Settings → Diagnostics fires six tool probes at once and six windows
+/// flash over whatever the reader was doing.
+///
+/// This is `run`'s business rather than each caller's: one spawn point, one
+/// place to decide. The auth PTY is deliberately not this — `ConPTY` has no
+/// window to begin with, and its child is one the reader can watch.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Errors that can occur during shell command execution.
 #[derive(Debug, Error)]
 pub enum ShellError {
@@ -135,6 +151,8 @@ impl ShellCommand {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.stdin(Stdio::null());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
 
         // Apply user PATH
         let user_path = get_user_path();
