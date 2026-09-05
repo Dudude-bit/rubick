@@ -35,12 +35,6 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/logo.svg" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-      {
-        rel: "preload",
-        as: "image",
-        href: "/images/hero-workload-detail.webp",
-        type: "image/webp",
-      },
     ],
     scripts: [{ type: "application/ld+json", children: JSON_LD }],
   }),
