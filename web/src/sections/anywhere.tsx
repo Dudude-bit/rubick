@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { FaAws } from "react-icons/fa6";
+import { LuKeyRound, LuLaptop } from "react-icons/lu";
+import { SiGooglecloud, SiKubernetes, SiRancher } from "react-icons/si";
+import { VscAzure } from "react-icons/vsc";
 import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
@@ -12,16 +16,10 @@ type Provider = {
   signIn: string;
   reads: string;
   labels: Label[];
-  exercised:
-    "Daily" | "Least exercised" | "Fixture verified" | "Not documented";
-  evidence: string;
+  Icon: typeof LuKeyRound;
+  color: string;
 };
 
-const UNDOCUMENTED = {
-  exercised: "Not documented",
-  evidence:
-    "The README does not state a live-cluster testing level for this path.",
-} as const;
 const LOCAL_AUTH = {
   credential: "Client certificate or token",
   signIn: "Rubick uses the credentials in your kubeconfig, as kubectl does.",
@@ -29,6 +27,8 @@ const LOCAL_AUTH = {
 const PROVIDERS: Provider[] = [
   {
     id: "gke",
+    Icon: SiGooglecloud,
+    color: "#4285f4",
     name: "GKE",
     credential: "gke-gcloud-auth-plugin",
     signIn:
@@ -47,12 +47,11 @@ const PROVIDERS: Provider[] = [
         reads: "spot or preemptible",
       },
     ],
-    exercised: "Daily",
-    evidence:
-      "Rubick is developed against a GKE cluster running Traefik and cert-manager, inspected every day.",
   },
   {
     id: "eks",
+    Icon: FaAws,
+    color: "#ff9900",
     name: "EKS",
     credential: "aws eks get-token",
     signIn:
@@ -69,12 +68,11 @@ const PROVIDERS: Provider[] = [
       { key: "karpenter.sh/provisioner-name", reads: "older Karpenter pool" },
       { key: "karpenter.sh/capacity-type", reads: "spot when spot" },
     ],
-    exercised: "Least exercised",
-    evidence:
-      "The README names AWS among the least exercised paths. The ALB integration has unit tests, without live EKS verification.",
   },
   {
     id: "aks",
+    Icon: VscAzure,
+    color: "#3ca4f0",
     name: "AKS",
     credential: "kubelogin",
     signIn:
@@ -89,50 +87,51 @@ const PROVIDERS: Provider[] = [
         reads: "older spot label",
       },
     ],
-    exercised: "Least exercised",
-    evidence:
-      "The README names Azure among the least exercised paths. The AKS add-ons have unit tests, without live AKS verification.",
   },
   {
     id: "k3s",
+    Icon: SiRancher,
+    color: "#2bb0d9",
     name: "k3s",
     ...LOCAL_AUTH,
     reads:
       "A k3s word in the context name reads as K3S before cloud names are considered. This integration adds no provider-specific node label keys.",
     labels: [],
-    ...UNDOCUMENTED,
   },
   {
     id: "k3d",
+    Icon: SiRancher,
+    color: "#2bb0d9",
     name: "k3d",
     ...LOCAL_AUTH,
     reads:
       "A context starting with k3d- reads as K3D, even if its name also says eks. This integration adds no provider-specific node label keys.",
     labels: [],
-    exercised: "Fixture verified",
-    evidence:
-      "The lies.yaml fixture on this page was applied and read on a k3d cluster while this page was built.",
   },
   {
     id: "kind",
+    Icon: SiKubernetes,
+    color: "#326ce5",
     name: "kind",
     ...LOCAL_AUTH,
     reads:
       "Rubick reads Kubernetes objects through the configured context. There is no kind-specific flavour or node label reader in the integration registry.",
     labels: [],
-    ...UNDOCUMENTED,
   },
   {
     id: "minikube",
+    Icon: LuLaptop,
+    color: "#a3e635",
     name: "minikube",
     ...LOCAL_AUTH,
     reads:
       "A context name containing minikube reads as LOCAL before cloud names are considered. This integration adds no provider-specific node label keys.",
     labels: [],
-    ...UNDOCUMENTED,
   },
   {
     id: "other",
+    Icon: LuKeyRound,
+    color: "#a3a3a3",
     name: "Anything else with a kubeconfig",
     credential: "Token, certificate, OIDC or exec plugin",
     signIn:
@@ -140,7 +139,6 @@ const PROVIDERS: Provider[] = [
     reads:
       "Kubernetes objects and recognised node labels, where present and permitted. An unrecognised label does not establish a cloud, pool or spot status.",
     labels: [],
-    ...UNDOCUMENTED,
   },
 ];
 
@@ -204,8 +202,13 @@ export function Anywhere() {
                 aria-pressed={selected === provider.id}
                 aria-controls={`provider-${provider.id}`}
                 onClick={() => setSelected(provider.id)}
-                className={`min-h-11 rounded-md border px-4 py-2 text-sm ${FOCUS} ${selected === provider.id ? "border-neutral-300 bg-neutral-800 text-neutral-100" : "border-neutral-700 text-neutral-400 hover:border-neutral-400 hover:text-neutral-200"}`}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-4 py-2 text-sm ${FOCUS} ${selected === provider.id ? "border-neutral-300 bg-neutral-800 text-neutral-100" : "border-neutral-700 text-neutral-400 hover:border-neutral-400 hover:text-neutral-200"}`}
               >
+                <provider.Icon
+                  aria-hidden
+                  className="size-4 shrink-0"
+                  style={{ color: provider.color }}
+                />
                 {provider.name}
               </button>
             ))}
@@ -227,7 +230,12 @@ export function Anywhere() {
                 <h3 className="inline">{provider.name}</h3>
               </summary>
               {interactive ? (
-                <h3 className="font-display text-xl font-bold">
+                <h3 className="flex items-center gap-2.5 font-display text-xl font-bold">
+                  <provider.Icon
+                    aria-hidden
+                    className="size-5 shrink-0"
+                    style={{ color: provider.color }}
+                  />
                   {provider.name}
                 </h3>
               ) : null}
@@ -241,17 +249,6 @@ export function Anywhere() {
                   </p>
                   <p className="mt-3 text-sm text-neutral-400">
                     {provider.signIn}
-                  </p>
-                  <h4 className="mt-6 text-sm font-medium text-neutral-200">
-                    How exercised
-                  </h4>
-                  <p
-                    className={`mt-3 inline-block rounded-md border px-2.5 py-1 font-mono text-xs ${provider.exercised === "Daily" ? "border-green-400/60 text-green-300" : provider.exercised === "Fixture verified" ? "border-neutral-500 text-neutral-200" : provider.exercised === "Least exercised" ? "border-amber-400/60 text-amber-300" : "border-dashed border-neutral-600 text-neutral-300"}`}
-                  >
-                    {provider.exercised}
-                  </p>
-                  <p className="mt-3 text-sm text-neutral-400">
-                    {provider.evidence}
                   </p>
                 </div>
                 <div className="min-w-0">
@@ -282,7 +279,9 @@ export function Anywhere() {
           <LabelKeys labels={SHARED_LABELS} />
         </details>
       </Reveal>
-      <p className="mt-6 text-sm text-neutral-400">
+      <p className="mt-6 max-w-2xl text-sm text-neutral-400">
+        Rubick is developed every day against a GKE cluster; AWS and Azure are
+        the least exercised paths.{" "}
         <a
           href={LINKS.issues}
           className={`underline decoration-neutral-600 underline-offset-4 hover:text-neutral-200 ${FOCUS}`}
