@@ -12,6 +12,7 @@ export type Lie = {
   reported: string;
   observed: string;
   evidence: ReactNode;
+  visual?: "chain";
   img: (typeof IMG)[keyof typeof IMG];
   alt: string;
 };
@@ -79,6 +80,7 @@ export const LIES: Lie[] = [
         reason="Service api-v2 does not exist. Nothing past it was looked at."
       />
     ),
+    visual: "chain",
     img: IMG.chain,
     alt: "A traffic chain that stops, with the reason named at the broken link",
   },

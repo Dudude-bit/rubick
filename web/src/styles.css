@@ -457,3 +457,22 @@ p {
 .logo-scan {
   opacity: 0;
 }
+
+/* traffic chain: the intended route is dashed, the inspected one is solid
+   and advances with --progress while the stage crosses the viewport */
+.link-seen {
+  transform-origin: left;
+}
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .chain[data-driven] .link-seen {
+    transform: scaleX(
+      clamp(0, calc((var(--progress, 0) - var(--i) * 0.16) / 0.16), 1)
+    );
+  }
+  .chain[data-driven] .verdict {
+    opacity: clamp(0, calc((var(--progress, 0) - 0.8) / 0.12), 1);
+  }
+  .chain[data-done] {
+    --progress: 1;
+  }
+}

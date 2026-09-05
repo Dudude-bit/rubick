@@ -1,6 +1,7 @@
 import { ButtonLink } from "./button-link";
 import { Reveal } from "./motion/reveal";
 import { ReproducePanel } from "./reproduce";
+import { TrafficChain } from "./traffic-chain";
 import { Section } from "./section";
 import { WindowFrame } from "./window-frame";
 import { Footer } from "../sections/footer";
@@ -26,6 +27,11 @@ export function LiePage({ lie }: { lie: Lie }) {
               {lie.evidence}
             </div>
           </Reveal>
+          {lie.visual === "chain" ? (
+            <Reveal className="mt-10 rounded-xl border border-neutral-800 bg-neutral-900/60 p-5 md:p-7">
+              <TrafficChain />
+            </Reveal>
+          ) : null}
           <Reveal settle className="mt-12">
             <WindowFrame img={lie.img} alt={lie.alt} eager />
           </Reveal>
